@@ -266,7 +266,7 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	if !ok || LeaseOwnsGate(me) {
 		return ""
 	}
-	if me.Validation == "" && me.Check == nil && len(me.CompletionGates) == 0 {
+	if me.Validation == "" && me.Check == nil && len(me.Goals) == 0 {
 		return fmt.Sprintf(
 			"magus workspace: lease %s declares no check, so the `%s` gate is not yours to run. The orchestrator gates once, in its own tree, after every unit lands.\n"+
 				"Run the narrowest target covering your paths and report what it said. "+leaseActorClause("record a check on this row"),
@@ -693,7 +693,7 @@ func cliFork(args []string, stdin string) childFork {
 		}
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.WritePaths) > 0,
-			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.CompletionGates) > 0 ||
+			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.Goals) > 0 ||
 				row.Check != nil || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
 		}
 	}
@@ -919,15 +919,14 @@ func LeaseOwnsGate(row types.Job) bool {
 //
 // It exists because the refusal quoted row.Validation whatever had actually matched, and a
 // row can now name the gate from any of several places: told that its check `go-test api`
-// names `ci`, a reader goes looking for a bug in a line that is fine while the completion
-// gate that really did it goes unmentioned.
+// names `ci`, a reader goes looking for a bug in a line that is fine while the goal that
+// really did it goes unmentioned.
 func LeaseGateSource(row types.Job) (string, bool) {
-	// EVERY gate is asked, and the primary check no longer answers for the row. Returning
+	// EVERY goal is asked, and the primary check no longer answers for the row. Returning
 	// on row.Check alone meant a job whose check was some narrow target stopped the walk
-	// before its completion gates were read, so `--check go-test api --gate-check ci` --
-	// the shape the two flags invite -- took the gate through the door the check rule
-	// holds shut.
-	for _, gate := range row.EffectiveCompletionGates() {
+	// before its goals were read, so a narrow check beside a `ci` check goal took the gate
+	// through the door the check rule holds shut.
+	for _, gate := range row.EffectiveGoals() {
 		if gate.Kind != types.GateKindCheck {
 			continue
 		}
@@ -936,7 +935,7 @@ func LeaseGateSource(row types.Job) (string, bool) {
 			if gate.ID == types.PrimaryCompletionGateID {
 				return gate.Check.String(), true
 			}
-			return fmt.Sprintf("completion gate %q (%s)", gate.ID, gate.Check.String()), true
+			return fmt.Sprintf("goal %q (%s)", gate.ID, gate.Check.String()), true
 		}
 	}
 	if validationNamesGate(row.Validation) {

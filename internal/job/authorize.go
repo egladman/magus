@@ -189,7 +189,7 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
 func runsTheGate(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveCompletionGates(), func(gate types.CompletionGate) bool {
+	return slices.ContainsFunc(row.EffectiveGoals(), func(gate types.CompletionGate) bool {
 		return gate.Check.Target == types.TargetCI
 	})
 }
@@ -218,7 +218,7 @@ func gateCommand(c types.LeaseCheck) string {
 
 // checkLine names a row's check as a refusal quotes it.
 func checkLine(row types.Job) string {
-	gates := row.EffectiveCompletionGates()
+	gates := row.EffectiveGoals()
 	if len(gates) == 0 {
 		return "no check at all"
 	}
@@ -267,7 +267,7 @@ func changedFields(prev, next types.Job) []string {
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
 	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
-	add("completion_gates", !completionGatesEqual(prev.CompletionGates, next.CompletionGates))
+	add("goals", !goalsEqual(prev.Goals, next.Goals))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("reported_base", prev.ReportedBase != next.ReportedBase)
@@ -277,14 +277,17 @@ func changedFields(prev, next types.Job) []string {
 	return out
 }
 
-// completionGatesEqual is deliberately explicit instead of reflect.DeepEqual: this
-// path grades every bound worker mutation, and the model is small, typed, and stable.
-func completionGatesEqual(a, b []types.CompletionGate) bool {
+// goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
+// bound worker mutation, and the model is small, typed, and stable. Every field counts: a
+// holder that could rewrite a goal's kind, expectation or subject could grade itself done.
+func goalsEqual(a, b []types.CompletionGate) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
 		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
+			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
+			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
 			a[i].Check.Target != b[i].Check.Target || a[i].Check.Project != b[i].Check.Project ||
 			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
 			return false

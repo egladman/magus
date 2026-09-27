@@ -106,8 +106,8 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"model":      func(u *types.Job) { u.Model = "principal" },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
-		"completion_gates": func(u *types.Job) {
-			u.CompletionGates = []types.CompletionGate{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
+		"goals": func(u *types.Job) {
+			u.Goals = []types.CompletionGate{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},
 	}
 	for field, apply := range cases {
@@ -117,6 +117,33 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", apply)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "may not change "+field)
+		})
+	}
+}
+
+// A holder that could loosen its own goal could grade itself done. The kind, the
+// expectation and the subject were once left out of the comparison, so each one alone
+// went through.
+func TestBoundWorkerCannotLoosenItsGoals(t *testing.T) {
+	t.Parallel()
+
+	row := workerRow()
+	row.Goals = []types.CompletionGate{{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}
+	loc := declared(t, row)
+	for name, loosen := range map[string]func(*types.CompletionGate){
+		"kind": func(g *types.CompletionGate) {
+			g.Kind, g.Symbols, g.Paths = types.GateKindPaths, nil, []string{"nothing"}
+		},
+		"expect":  func(g *types.CompletionGate) { g.Expect = types.ExpectPresent },
+		"symbols": func(g *types.CompletionGate) { g.Symbols = []string{"NeverExisted"} },
+		"paths":   func(g *types.CompletionGate) { g.Paths = []string{"x"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { loosen(&u.Goals[0]) })
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "may not change goals")
 		})
 	}
 }

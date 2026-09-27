@@ -147,17 +147,17 @@ func (o Observed) holds(kind types.GateKind, expect types.GateExpect, declared s
 			if o.covering(declared, o.Changed) {
 				return true, ""
 			}
-			return false, fmt.Sprintf("nothing matching %q changed since %s, so this gate is unmet", declared, from)
+			return false, fmt.Sprintf("nothing matching %q changed since %s, so this goal is unmet", declared, from)
 		case types.ExpectPresent:
 			if o.covering(declared, o.Present) {
 				return true, ""
 			}
-			return false, fmt.Sprintf("nothing matching %q is in the tree, so this gate is unmet", declared)
+			return false, fmt.Sprintf("nothing matching %q is in the tree, so this goal is unmet", declared)
 		default:
 			if !o.covering(declared, o.Present) {
 				return true, ""
 			}
-			return false, fmt.Sprintf("%q is still in the tree, and this gate expects it gone", declared)
+			return false, fmt.Sprintf("%q is still in the tree, and this goal expects it gone", declared)
 		}
 	default:
 		return o.symbolHolds(expect, declared, from)
@@ -165,23 +165,34 @@ func (o Observed) holds(kind types.GateKind, expect types.GateExpect, declared s
 }
 
 func (o Observed) symbolHolds(expect types.GateExpect, declared, from string) (bool, string) {
-	fact := o.Symbols[declared]
+	fact, asked := o.Symbols[declared]
+	if !asked {
+		// A name nobody asked the graph about reads as undefined and unreferenced, which
+		// would satisfy `absent` and `unreferenced` on no evidence.
+		return false, fmt.Sprintf("magus did not ask the symbol graph about %q, so this goal is unmet", declared)
+	}
 	switch expect {
 	case types.ExpectPresent:
 		if fact.Defined() {
 			return true, ""
 		}
-		return false, fmt.Sprintf("%q is defined nowhere the graph can see, so this gate is unmet", declared)
+		return false, fmt.Sprintf("%q is defined nowhere the graph can see, so this goal is unmet", declared)
 	case types.ExpectAbsent:
 		if !fact.Defined() {
 			return true, ""
 		}
-		return false, fmt.Sprintf("%q is still defined in %s, and this gate expects it gone", declared, strings.Join(fact.DefinedIn, ", "))
+		return false, fmt.Sprintf("%q is still defined in %s, and this goal expects it gone", declared, strings.Join(fact.DefinedIn, ", "))
 	case types.ExpectUnreferenced:
+		if !fact.Defined() {
+			// The graph counts references into a definition, so with none left a caller
+			// that still names it is invisible here, and zero is not evidence.
+			return false, fmt.Sprintf("%q is defined nowhere the graph can see, so it cannot count what still names it;"+
+				" hold a removal to `absent` and a check that builds its callers", declared)
+		}
 		if fact.ReferenceCount == 0 {
 			return true, ""
 		}
-		return false, fmt.Sprintf("%d place(s) still reference %q, and this gate expects none", fact.ReferenceCount, declared)
+		return false, fmt.Sprintf("%d place(s) still reference %q, and this goal expects none", fact.ReferenceCount, declared)
 	default:
 		if !fact.Defined() {
 			return false, fmt.Sprintf("%q is defined nowhere the graph can see, so nothing of it could have changed", declared)
@@ -205,7 +216,7 @@ func (o Observed) covering(declared string, paths []string) bool {
 // VerifyGates checks a holder's result against the job it was given: every changed path
 // inside the declared write paths, outside the deny list and in the diff magus observed, no
 // descendant still live, descendants the store carries, and a recorded passing run behind
-// the primary check and every explicit completion gate.
+// the primary check and every goal.
 //
 // IT VERIFIES EVIDENCE, NOT ASSERTIONS: every rule turns on something magus already holds,
 // and GateEvidence has no passed bit by design. Whether the work is GOOD, and whether the
@@ -269,23 +280,24 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 	}
 
-	if row.Check == nil && len(row.CompletionGates) == 0 {
-		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no completion gate, so no recorded run can be bound to it. Declare one with a typed check", row.ID))
+	if row.Check == nil && len(row.Goals) == 0 {
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no goal, so nothing magus can grade says it is done."+
+			" Declare one in the job record's check or goals", row.ID))
 	}
 
-	declaredGates := make(map[string]types.CompletionGate, len(row.CompletionGates))
-	for _, gate := range row.CompletionGates {
+	declaredGates := make(map[string]types.CompletionGate, len(row.Goals))
+	for _, gate := range row.Goals {
 		declaredGates[gate.ID] = gate
 	}
 
 	attemptByGate := make(map[string]types.JobAttempt, len(gateAttempts))
 	for _, snapshot := range gateAttempts {
 		if _, declared := declaredGates[snapshot.GateID]; !declared {
-			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries an attempt snapshot for undeclared completion gate %q", row.ID, snapshot.GateID))
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries an attempt snapshot for undeclared goal %q", row.ID, snapshot.GateID))
 			continue
 		}
 		if _, exists := attemptByGate[snapshot.GateID]; exists {
-			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries duplicate attempt snapshots for completion gate %q", row.ID, snapshot.GateID))
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries duplicate attempt snapshots for goal %q", row.ID, snapshot.GateID))
 			continue
 		}
 		attemptByGate[snapshot.GateID] = snapshot.Attempt
@@ -293,21 +305,21 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	evidenceByGate := make(map[string]string, len(rep.GateEvidence))
 	for _, evidence := range rep.GateEvidence {
 		if _, declared := declaredGates[evidence.GateID]; !declared {
-			v.Violations = append(v.Violations, fmt.Sprintf("the result carries evidence for undeclared completion gate %q", evidence.GateID))
+			v.Violations = append(v.Violations, fmt.Sprintf("the result carries evidence for undeclared goal %q", evidence.GateID))
 			continue
 		}
 		if _, exists := evidenceByGate[evidence.GateID]; exists {
-			v.Violations = append(v.Violations, fmt.Sprintf("the result carries duplicate evidence for completion gate %q", evidence.GateID))
+			v.Violations = append(v.Violations, fmt.Sprintf("the result carries duplicate evidence for goal %q", evidence.GateID))
 			continue
 		}
 		evidenceByGate[evidence.GateID] = evidence.OutputRef
 	}
 
-	// ONE list, from EffectiveCompletionGates, so the primary check is graded by the same
-	// loop as every other gate and lands in Gates like one. Grading it separately meant a
-	// job declaring only `--check` reported no gates at all to anything that read Gates,
-	// which is how `describe job --gates` came to exit 0 on a job with a gate.
-	gates := row.EffectiveCompletionGates()
+	// ONE list, from EffectiveGoals, so the primary check is graded by the same loop as
+	// every other goal and lands in Gates like one. Grading it separately meant a job
+	// declaring only `--check` reported no goals at all to anything that read Gates,
+	// which is how `describe job --gates` came to exit 0 on a job with a goal.
+	gates := row.EffectiveGoals()
 	evidenceByGate[types.PrimaryCompletionGateID] = rep.Validation.OutputRef
 	attemptByGate[types.PrimaryCompletionGateID] = att
 
@@ -327,7 +339,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 				if ok && dependencyStatus.Verified {
 					continue
 				}
-				violation := fmt.Sprintf("depends_on completion gate %q has not verified", dependency)
+				violation := fmt.Sprintf("depends_on goal %q has not verified", dependency)
 				if !slices.Contains(status.Violations, violation) {
 					status.Violations = append(status.Violations, violation)
 				}
@@ -387,7 +399,7 @@ func prefixedGateViolations(status types.GateStatus) []string {
 	}
 	out := make([]string, 0, len(status.Violations))
 	for _, violation := range status.Violations {
-		out = append(out, fmt.Sprintf("completion gate %q: %s", status.ID, violation))
+		out = append(out, fmt.Sprintf("goal %q: %s", status.ID, violation))
 	}
 	return out
 }
@@ -422,7 +434,7 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 		}
 	}
 	if !bindsTo(gate.Check, attempt) {
-		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this gate's check is `%s`, so the evidence is from a different run", status.OutputRef, attempt, gate.Check))
+		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check is `%s`, so the evidence is from a different run", status.OutputRef, attempt, gate.Check))
 	}
 	if attempt.Failed {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", status.OutputRef))
@@ -613,13 +625,18 @@ func verifySubjectGate(gate types.CompletionGate, seen Observed) types.GateStatu
 		status.Violations = append(status.Violations, why)
 		return status
 	}
+	graded := 0
 	for _, declared := range gate.Subject() {
 		if declared = strings.TrimSpace(declared); declared == "" {
 			continue
 		}
+		graded++
 		if held, why := seen.holds(kind, expect, declared); !held {
 			status.Violations = append(status.Violations, why)
 		}
+	}
+	if graded == 0 {
+		status.Violations = append(status.Violations, "names nothing to examine, so nothing could satisfy it")
 	}
 	status.Verified = len(status.Violations) == 0
 	return status

@@ -219,7 +219,11 @@ import (
 // 89: magus-multi-agent drops `magus job exec --session`. The guard binds whoever runs
 // exec, keyed on the host's session and subagent ids, and a worker its spawn title
 // attributed needs no exec at all.
-const SkillVersion = 89
+// 90: magus-multi-agent declares goals in the job record's `goals`, since the --gate-*
+// flags are gone and a writing job with neither a check nor a goal is refused. It grades
+// `unreferenced` while the old definition still exists, because once it is gone the
+// graph cannot count what names it and the goal fails.
+const SkillVersion = 90
 
 const skillLicense = "GPL-3.0-or-later"
 

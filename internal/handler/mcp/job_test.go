@@ -101,7 +101,7 @@ func TestJobTool(t *testing.T) {
 	t.Run("a lifecycle fork touches only the fields it names", func(t *testing.T) {
 		invoke(t, map[string]any{
 			"op": "fork", "id": "job-life", "criteria": "the declared goal",
-			"checkpoint": "abc123", "write_paths": "internal/job", "model": "opus",
+			"checkpoint": "abc123", "write_paths": "internal/job", "model": "opus", "check": "test .",
 		})
 		resp := invoke(t, map[string]any{"op": "fork", "id": "job-life", "state": "pass"})
 		got, ok := resp.Data.(types.Job)
@@ -115,7 +115,7 @@ func TestJobTool(t *testing.T) {
 
 	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "fork", "id": "job-arr", "write_paths": []any{"a/b", "c d"},
+			"op": "fork", "id": "job-arr", "write_paths": []any{"a/b", "c d"}, "check": "test .",
 		})
 		got, ok := resp.Data.(types.Job)
 		require.True(t, ok)
@@ -335,10 +335,11 @@ func TestJobToolWaitAdmitsAHolderOnlyBelowItsLease(t *testing.T) {
 	}, got)
 }
 
-// TestJobToolCompletionGatesRoundTripThroughMCP pins that fork accepts
-// completion_gates the same way CLI --stdin and Buzz put do, and that wait
-// verifies every declared gate against gate_evidence.
-func TestJobToolCompletionGatesRoundTripThroughMCP(t *testing.T) {
+// TestJobToolGoalsRoundTripThroughMCP pins that fork accepts goals the same way CLI
+// --stdin and Buzz put do, and that wait verifies every declared goal against
+// gate_evidence. The goals arrive as a JSON string, the shape the tool's descriptor
+// declares for a client held to scalar params.
+func TestJobToolGoalsRoundTripThroughMCP(t *testing.T) {
 	t.Parallel()
 
 	attempts := map[string]types.JobAttempt{
@@ -361,14 +362,12 @@ func TestJobToolCompletionGatesRoundTripThroughMCP(t *testing.T) {
 
 	forked := invoke(map[string]any{
 		"op": "fork", "id": "gated", "state": "running", "write_paths": "internal/job",
-		"completion_gates": []any{
-			map[string]any{"id": "unit", "check": map[string]any{"target": "go::go-test", "project": "."}},
-			map[string]any{"id": "docs", "check": map[string]any{"target": "test", "project": "docs"}, "depends_on": []any{"unit"}},
-		},
+		"goals": `[{"id":"unit","check":{"target":"go::go-test","project":"."}},` +
+			`{"id":"docs","check":{"target":"test","project":"docs"},"depends_on":["unit"]}]`,
 	}).Data.(types.Job)
-	require.Len(t, forked.CompletionGates, 2)
-	assert.Equal(t, "unit", forked.CompletionGates[0].ID)
-	assert.Equal(t, "docs", forked.CompletionGates[1].ID)
+	require.Len(t, forked.Goals, 2)
+	assert.Equal(t, "unit", forked.Goals[0].ID)
+	assert.Equal(t, "docs", forked.Goals[1].ID)
 
 	result := map[string]any{
 		"schema_version": types.JobResultSchemaVersion,
@@ -405,8 +404,8 @@ func TestJobToolListAnswersOverlapsAndReleases(t *testing.T) {
 		require.NoError(t, err)
 		return resp
 	}
-	invoke(map[string]any{"op": "fork", "id": "u1", "write_paths": "shared.go docs", "state": "running"})
-	invoke(map[string]any{"op": "fork", "id": "u2", "write_paths": "shared.go", "state": "declared"})
+	invoke(map[string]any{"op": "fork", "id": "u1", "write_paths": "shared.go docs", "state": "running", "check": "test ."})
+	invoke(map[string]any{"op": "fork", "id": "u2", "write_paths": "shared.go", "state": "declared", "check": "test ."})
 
 	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.JobList)
 	require.True(t, ok)

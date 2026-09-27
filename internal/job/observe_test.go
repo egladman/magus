@@ -22,7 +22,7 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db", "api"},
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
@@ -42,7 +42,7 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db", "api"},
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
 	}
@@ -63,7 +63,7 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db"},
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "both", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
 	}
@@ -86,7 +86,7 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db"},
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
@@ -152,12 +152,13 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 			}
 			graded++
 			status := verifySubjectGate(gate, seen)
-			// `absent` and `unreferenced` of something that is not there ARE satisfied,
-			// which are the verified cases in this sweep and are correct.
-			if expect == types.ExpectAbsent || expect == types.ExpectUnreferenced {
+			if kind == types.GateKindPaths && expect == types.ExpectAbsent {
+				// A path the tree was read for and holds nothing of IS absent.
 				assert.True(t, status.Verified, "%s/%s: nothing named is present, so it holds", kind, expect)
 				continue
 			}
+			// A symbol nobody asked the graph about is no evidence of anything, so even
+			// `absent` and `unreferenced` stay unmet.
 			assert.False(t, status.Verified, "%s/%s verified against an observation holding nothing", kind, expect)
 			assert.NotEmpty(t, status.Violations, "%s/%s failed without saying why", kind, expect)
 		}

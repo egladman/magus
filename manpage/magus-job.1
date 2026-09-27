@@ -46,7 +46,8 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and a recorded run of every declared completion gate that passed.
+store carries, and every declared goal held: a recorded passing run for a check,
+the diff since the checkpoint and the knowledge graph for paths and symbols.
 Evidence must have been captured after the job was declared, so an old green run
 cannot satisfy new work. A target's own run policy bounds its execution; wait does
 not add a competing wall\-clock timeout. There is no field for whether the holder
@@ -74,37 +75,13 @@ The one check this job runs, as `<target> <project> [\-\- args]` (the `magus run
 The working state this job is handed, as `magus vcs checkpoint \-o name` prints it
 .TP
 \fB\-\-criteria\fR \fIstring\fR
-What this job is for and what done means, as prose; the machine\-checkable half is the completion gates (\-\-check and every \-\-gate\-* flag)
+What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
 .TP
 \fB\-\-deny\-paths\fR \fIstring\fR
 A path inside the write paths this job may not write; repeatable or comma\-separated
 .TP
 \fB\-\-depends\-on\fR \fIstring\fR
 A job this one waits on; repeatable or comma\-separated
-.TP
-\fB\-\-gate\-check\fR \fI<id>=<target> <project>\fR
-A further check this job must pass, as `<id>=<target> <project>`; repeatable
-.TP
-\fB\-\-gate\-paths\fR \fI<id>=<glob>[,<glob>...]\fR
-Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable
-.TP
-\fB\-\-gate\-paths\-absent\fR \fI<id>=<glob>[,<glob>...]\fR
-Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable
-.TP
-\fB\-\-gate\-paths\-present\fR \fI<id>=<glob>[,<glob>...]\fR
-Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable
-.TP
-\fB\-\-gate\-symbol\fR \fI<id>=<name>[,<name>...]\fR
-Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable
-.TP
-\fB\-\-gate\-symbol\-absent\fR \fI<id>=<name>[,<name>...]\fR
-Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable
-.TP
-\fB\-\-gate\-symbol\-present\fR \fI<id>=<name>[,<name>...]\fR
-Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable
-.TP
-\fB\-\-gate\-symbol\-unreferenced\fR \fI<id>=<name>[,<name>...]\fR
-Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable
 .TP
 \fB\-\-model\fR \fIstring\fR
 The model the work was matched to

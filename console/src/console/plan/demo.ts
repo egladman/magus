@@ -110,7 +110,7 @@ export function demoJobs(nowMs: number): Job[] {
       // A finished job with both halves of what the drawer now shows: the gate it was held to
       // (its own check, plus a paths gate the check cannot express - the wire contract has to
       // actually be written down) and what it filed on exit.
-      completionGates: [
+      goals: [
         { id: "check", kind: "check", expect: "passed", check: "magus run test libs/authkit ." },
         {
           id: "contract-documented",

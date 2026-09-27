@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 39480
-skill_short_bytes: 29674
+skill_full_bytes: 40344
+skill_short_bytes: 30549
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `89` |
+| `agent-skill-version` | `90` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `e7ad8a026083` |
+| `skill-content` | `4db8a94f2cf6` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -313,7 +313,7 @@ person at a terminal.
 A worker holding a lease forks its own units the same way, naming its job with
 `--parent`, and the job store refuses a child that claims more than its parent:
 
-| Job | Parent | Checkpoint | Criteria | Completion gates | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+| Job | Parent | Checkpoint | Criteria | Goals | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
@@ -402,7 +402,7 @@ bound.
 since its checkpoint: every claimed path must be in it, something in it must be
 inside the write paths, and a diff it cannot read FAILS. So fork writing jobs with
 a checkpoint. It also refuses pass while any descendant is still live, and grades
-a child against its ancestors' symbol gates as well as its own.
+a child against its ancestors' symbol goals as well as its own.
 
 The store RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
@@ -444,18 +444,29 @@ evaluate its descendants before reporting upward.
 
 ## Declare the criteria magus can check for you
 
-A job's acceptance criteria are prose a reader grades. A COMPLETION GATE is the
-part magus grades itself, from evidence the worker cannot author, and `magus job
-wait` refuses to record pass until every one verifies. Declare them at fork:
+A job's acceptance criteria are prose a reader grades. A GOAL is the part magus
+grades itself, from evidence the worker cannot author, and `magus job wait`
+refuses to record pass until every one verifies. Goals are data: write them in
+the job record's `goals`, never as flags. `magus job fork` refuses a job that
+writes and declares neither a check nor a goal.
 
 ```sh
-magus job fork api/migrate \
-  --gate-check green='go-test api' \
-  --gate-paths migration='db/migrations/**' \
-  --gate-symbol-unreferenced unused='LegacyAccountStore'
+magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "api/migrate", "parent": "api",
+ "criteria": "accounts move to the new store; nothing names the old one",
+ "write_paths": ["api", "db/migrations"], "check": {"target": "go-test", "project": "api"},
+ "goals": [
+   {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
+   {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
+   {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
+ ]}
+EOF
 ```
 
-A gate names WHAT it examines and what must be true of it:
+The magus_job tool's fork op and `magus\job.put` take the same `goals` array.
+`magus job fork --schema` prints every field.
+
+A goal names WHAT it examines and what must be true of it:
 
 | kind     | expects                                         | read from                                      |
 | -------- | ----------------------------------------------- | ---------------------------------------------- |
@@ -463,23 +474,26 @@ A gate names WHAT it examines and what must be true of it:
 | `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
 | `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
 
-Each kind has a default expectation, so the common gate declares only its
-subject; the other flags spell it out (`--gate-paths-present`,
-`--gate-symbol-absent`, ...). `magus job fork -h` lists them all.
+Each kind has a default expectation (`passed` for a check, `changed` otherwise),
+so the common goal names only its kind and subject.
 
 Reach for `symbol` + `unreferenced` when partitioning a rename. It is the REMAINDER rule
 made checkable: split per project and the callers in no project belong to no job,
-so every job passes and the rename is unfinished.
+so every job passes and the rename is unfinished. Grade it while the old name is
+still defined: the graph counts references into a definition, so once the
+definition is gone `unreferenced` FAILS rather than guess. The job that deletes it
+declares `absent` beside a check that builds the callers.
 
-Every kind reads what magus already holds, which is what makes a gate a contract
+Every kind reads what magus already holds, which is what makes a goal a contract
 rather than an attestation. There is no escape hatch for "this command exited 0",
 deliberately: magus did not record that run and cannot attribute it, so it would
-be the easiest gate of all to satisfy falsely. Declare a target and use `check`.
+be the easiest goal of all to satisfy falsely. Declare a target and use `check`.
 
 The worker's own `changed_paths` is its account of its work and is never the
-evidence. An observation magus could not MAKE fails the gate rather than passing
-it, because the cheapest way past a gate that shrugged would be to break the
-observation.
+evidence. The diff and the tree are read in the checkout that took the job, so
+wait from your own tree while the worker's still exists. An observation magus
+could not MAKE fails the goal rather than passing it, because the cheapest way
+past a goal that shrugged would be to break the observation.
 
 Ask where a job stands without advancing it:
 
@@ -487,18 +501,18 @@ Ask where a job stands without advancing it:
 magus describe job <job> --gates
 ```
 
-Same grading `magus job wait` does, recording nothing, exit 1 while any gate is
+Same grading `magus job wait` does, recording nothing, exit 1 while any goal is
 unmet. Use it instead of asking a worker how it is going: the answer is graded
 from evidence rather than composed by the thing being asked about.
 
-SEQUENCE gates with `depends_on` between them, which is how one is cleared
+SEQUENCE goals with `depends_on` between them, which is how one is cleared
 before another is approached; a failed prerequisite propagates. Do NOT nest
-them: a gate that wants children is a JOB that wants splitting, and the rule
-above already covers it. Gates stay flat so the job tree stays the only
+them: a goal that wants children is a JOB that wants splitting, and the rule
+above already covers it. Goals stay flat so the job tree stays the only
 hierarchy with an owner.
 
-A gate is not the gate. `--gate-check` still may not name `ci` or anything that
-chains to it, for the reason the check rule gives above.
+A `check` goal still may not name `ci` or anything that chains to it, for the
+reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the
@@ -689,7 +703,7 @@ Run this control loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
-3. Give every job its own criteria, ownership boundary, and completion gates.
+3. Give every job its own criteria, ownership boundary, and goals.
 4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
@@ -934,7 +948,7 @@ A worker holding a lease forks its own units the same way, naming its job with
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
 
-| Job | Parent | Checkpoint | Criteria | Completion gates | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+| Job | Parent | Checkpoint | Criteria | Goals | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
@@ -1048,14 +1062,14 @@ ending those stays yours.
 `--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
 denies every write graded under that lease, and its paths stop blocking other
 jobs; the row stays live until you end it. A job with acceptance criteria needs no
-bound: the gates end it, and a timeout only helps where a stuck worker
+bound: the goals end it, and a timeout only helps where a stuck worker
 would otherwise hold paths nobody else can write.
 
 `magus job wait` holds a writing job's `changed_paths` to the diff magus observes
 since its checkpoint: every claimed path must be in it, something in it must be
 inside the write paths, and a diff it cannot read FAILS. So fork writing jobs with
 a checkpoint. It also refuses pass while any descendant is still live, and grades
-a child against its ancestors' symbol gates as well as its own.
+a child against its ancestors' symbol goals as well as its own.
 
 The store RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
@@ -1114,18 +1128,29 @@ result independently.
 
 ## Declare the criteria magus can check for you
 
-A job's acceptance criteria are prose a reader grades. A COMPLETION GATE is the
-part magus grades itself, from evidence the worker cannot author, and `magus job
-wait` refuses to record pass until every one verifies. Declare them at fork:
+A job's acceptance criteria are prose a reader grades. A GOAL is the part magus
+grades itself, from evidence the worker cannot author, and `magus job wait`
+refuses to record pass until every one verifies. Goals are data: write them in
+the job record's `goals`, never as flags. `magus job fork` refuses a job that
+writes and declares neither a check nor a goal.
 
 ```sh
-magus job fork api/migrate \
-  --gate-check green='go-test api' \
-  --gate-paths migration='db/migrations/**' \
-  --gate-symbol-unreferenced unused='LegacyAccountStore'
+magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "api/migrate", "parent": "api",
+ "criteria": "accounts move to the new store; nothing names the old one",
+ "write_paths": ["api", "db/migrations"], "check": {"target": "go-test", "project": "api"},
+ "goals": [
+   {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
+   {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
+   {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
+ ]}
+EOF
 ```
 
-A gate names WHAT it examines and what must be true of it:
+The magus_job tool's fork op and `magus\job.put` take the same `goals` array.
+`magus job fork --schema` prints every field.
+
+A goal names WHAT it examines and what must be true of it:
 
 | kind     | expects                                         | read from                                      |
 | -------- | ----------------------------------------------- | ---------------------------------------------- |
@@ -1133,23 +1158,26 @@ A gate names WHAT it examines and what must be true of it:
 | `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
 | `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
 
-Each kind has a default expectation, so the common gate declares only its
-subject; the other flags spell it out (`--gate-paths-present`,
-`--gate-symbol-absent`, ...). `magus job fork -h` lists them all.
+Each kind has a default expectation (`passed` for a check, `changed` otherwise),
+so the common goal names only its kind and subject.
 
 Reach for `symbol` + `unreferenced` when partitioning a rename. It is the REMAINDER rule
 made checkable: split per project and the callers in no project belong to no job,
-so every job passes and the rename is unfinished.
+so every job passes and the rename is unfinished. Grade it while the old name is
+still defined: the graph counts references into a definition, so once the
+definition is gone `unreferenced` FAILS rather than guess. The job that deletes it
+declares `absent` beside a check that builds the callers.
 
-Every kind reads what magus already holds, which is what makes a gate a contract
+Every kind reads what magus already holds, which is what makes a goal a contract
 rather than an attestation. There is no escape hatch for "this command exited 0",
 deliberately: magus did not record that run and cannot attribute it, so it would
-be the easiest gate of all to satisfy falsely. Declare a target and use `check`.
+be the easiest goal of all to satisfy falsely. Declare a target and use `check`.
 
 The worker's own `changed_paths` is its account of its work and is never the
-evidence. An observation magus could not MAKE fails the gate rather than passing
-it, because the cheapest way past a gate that shrugged would be to break the
-observation.
+evidence. The diff and the tree are read in the checkout that took the job, so
+wait from your own tree while the worker's still exists. An observation magus
+could not MAKE fails the goal rather than passing it, because the cheapest way
+past a goal that shrugged would be to break the observation.
 
 Ask where a job stands without advancing it:
 
@@ -1157,18 +1185,18 @@ Ask where a job stands without advancing it:
 magus describe job <job> --gates
 ```
 
-Same grading `magus job wait` does, recording nothing, exit 1 while any gate is
+Same grading `magus job wait` does, recording nothing, exit 1 while any goal is
 unmet. Use it instead of asking a worker how it is going: the answer is graded
 from evidence rather than composed by the thing being asked about.
 
-SEQUENCE gates with `depends_on` between them, which is how one is cleared
+SEQUENCE goals with `depends_on` between them, which is how one is cleared
 before another is approached; a failed prerequisite propagates. Do NOT nest
-them: a gate that wants children is a JOB that wants splitting, and the rule
-above already covers it. Gates stay flat so the job tree stays the only
+them: a goal that wants children is a JOB that wants splitting, and the rule
+above already covers it. Goals stay flat so the job tree stays the only
 hierarchy with an owner.
 
-A gate is not the gate. `--gate-check` still may not name `ci` or anything that
-chains to it, for the reason the check rule gives above.
+A `check` goal still may not name `ci` or anything that chains to it, for the
+reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the

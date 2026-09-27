@@ -154,9 +154,14 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	}, got)
 }
 
+// A row with no state can no longer be written through the store, which stores it as
+// declared; one an older magus wrote is planted as the file it left.
 func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	seed(t, store, types.Job{ID: "adj/stateless"})
+	path, err := store.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/stateless","created":1,"updated":1}]}`), 0o644))
 	bindCheckout(t, cacheDir, "adj/stateless")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)

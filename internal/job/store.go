@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -540,6 +541,11 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		}
 		row = row.Clone()
 		row.ID = id
+		// Every door into the store declares here, so a record that names no state is
+		// stored as declared: the guard reads an empty state as ended.
+		if kind == asDeclaration && row.State == "" {
+			row.State = types.StateDeclared
+		}
 		if kind == asDeclaration && i >= 0 && widensInPlace(prev, row) {
 			row.State = prev.State
 		}
@@ -938,11 +944,39 @@ const (
 // file's stamp never drops below what it read.
 func (s *Store) write(f jobsFile) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
+	rows, err := mirrorLegacyGoals(f.Jobs)
+	if err != nil {
+		return err
+	}
+	f.Jobs = rows
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
 	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
+}
+
+// mirrorLegacyGoals writes each row's goals under their old name too, on a copy.
+//
+// compat: see foldStoredNames. One store serves every magus on the machine, and one that
+// reads only completion_gates would grade a row's goals as absent and pass it on its check.
+func mirrorLegacyGoals(rows []types.Job) ([]types.Job, error) {
+	out := slices.Clone(rows)
+	for i := range out {
+		if len(out[i].Goals) == 0 {
+			continue
+		}
+		raw, err := json.Marshal(out[i].Goals)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Unknown = maps.Clone(out[i].Unknown)
+		if out[i].Unknown == nil {
+			out[i].Unknown = map[string]json.RawMessage{}
+		}
+		out[i].Unknown["completion_gates"] = raw
+	}
+	return out, nil
 }
 
 // Delete removes ONE row and returns it, or reports that no such row exists.

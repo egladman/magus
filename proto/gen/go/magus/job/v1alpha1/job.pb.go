@@ -251,9 +251,9 @@ type Job struct {
 	Releases   []*JobRelease `protobuf:"bytes,19,rep,name=releases,proto3" json:"releases,omitempty"`
 	Created    int64         `protobuf:"varint,20,opt,name=created,proto3" json:"created,omitempty"` // unix SECONDS, as the store records them
 	Updated    int64         `protobuf:"varint,21,opt,name=updated,proto3" json:"updated,omitempty"`
-	// CompletionGates are the declared machine-verifiable acceptance conditions, empty on a job
-	// that named none beyond its primary check. See CompletionGate.
-	CompletionGates []*CompletionGate `protobuf:"bytes,22,rep,name=completion_gates,json=completionGates,proto3" json:"completion_gates,omitempty"`
+	// Goals are the job's declared definition of done, graded by `magus job wait`, empty on a
+	// job that named none beyond its primary check. See CompletionGate.
+	Goals []*CompletionGate `protobuf:"bytes,22,rep,name=goals,proto3" json:"goals,omitempty"`
 	// Result is what the holder filed on exit, unset until it has.
 	Result *JobResult `protobuf:"bytes,23,opt,name=result,proto3" json:"result,omitempty"`
 	// Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
@@ -440,9 +440,9 @@ func (x *Job) GetUpdated() int64 {
 	return 0
 }
 
-func (x *Job) GetCompletionGates() []*CompletionGate {
+func (x *Job) GetGoals() []*CompletionGate {
 	if x != nil {
-		return x.CompletionGates
+		return x.Goals
 	}
 	return nil
 }
@@ -1089,7 +1089,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xd0\x06\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xbb\x06\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -1118,8 +1118,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"checkpoint\x12:\n" +
 	"\breleases\x18\x13 \x03(\v2\x1e.magus.job.v1alpha1.JobReleaseR\breleases\x12\x18\n" +
 	"\acreated\x18\x14 \x01(\x03R\acreated\x12\x18\n" +
-	"\aupdated\x18\x15 \x01(\x03R\aupdated\x12M\n" +
-	"\x10completion_gates\x18\x16 \x03(\v2\".magus.job.v1alpha1.CompletionGateR\x0fcompletionGates\x125\n" +
+	"\aupdated\x18\x15 \x01(\x03R\aupdated\x128\n" +
+	"\x05goals\x18\x16 \x03(\v2\".magus.job.v1alpha1.CompletionGateR\x05goals\x125\n" +
 	"\x06result\x18\x17 \x01(\v2\x1d.magus.job.v1alpha1.JobResultR\x06result\x12\x1a\n" +
 	"\bdeadline\x18\x18 \x01(\x03R\bdeadline\"\xd3\x01\n" +
 	"\x0eCompletionGate\x12\x0e\n" +
@@ -1224,7 +1224,7 @@ var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	9,  // 3: magus.job.v1alpha1.Job.target:type_name -> magus.job.v1alpha1.ResourceSize
 	1,  // 4: magus.job.v1alpha1.Job.holder:type_name -> magus.job.v1alpha1.JobHolder
 	6,  // 5: magus.job.v1alpha1.Job.releases:type_name -> magus.job.v1alpha1.JobRelease
-	4,  // 6: magus.job.v1alpha1.Job.completion_gates:type_name -> magus.job.v1alpha1.CompletionGate
+	4,  // 6: magus.job.v1alpha1.Job.goals:type_name -> magus.job.v1alpha1.CompletionGate
 	5,  // 7: magus.job.v1alpha1.Job.result:type_name -> magus.job.v1alpha1.JobResult
 	13, // 8: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
 	14, // 9: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration

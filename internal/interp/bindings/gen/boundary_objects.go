@@ -1692,11 +1692,11 @@ func ObjectJob(v types.Job) vm.Value {
 	}
 	out.MapSet("check", optCheck)
 	out.MapSet("validation", vm.StrValue(v.Validation))
-	itemsCompletionGates := make([]vm.Value, len(v.CompletionGates))
-	for indexCompletionGates := range v.CompletionGates {
-		itemsCompletionGates[indexCompletionGates] = ObjectCompletionGate(v.CompletionGates[indexCompletionGates])
+	itemsGoals := make([]vm.Value, len(v.Goals))
+	for indexGoals := range v.Goals {
+		itemsGoals[indexGoals] = ObjectCompletionGate(v.Goals[indexGoals])
 	}
-	out.MapSet("completionGates", vm.ListValue(itemsCompletionGates))
+	out.MapSet("goals", vm.ListValue(itemsGoals))
 	out.MapSet("state", vm.StrValue(string(v.State)))
 	out.MapSet("holder", vm.StrValue(string(v.Holder)))
 	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))

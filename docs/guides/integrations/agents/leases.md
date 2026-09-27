@@ -152,10 +152,10 @@ refuses an unescaped entry that names an existing path, and names both
 spellings.
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
-`criteria` (the prose half; the machine-checkable half is `completion_gates`),
+`criteria` (the prose half; the machine-checkable half is `goals`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
-`deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `state`, and
-`read_only`. The
+`deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `goals`, `state`,
+and `read_only`. A record naming no `state` is stored `declared`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
 outside it wrote, noticed by the guard), `entries` (see
@@ -191,7 +191,7 @@ session fork a NEW row that names its own job as `parent`, as flags, as a
 parent is refused there, once. The store grades a child only when it writes as
 that lease, which it reads from the checkout's binding; a worker the guard
 identified in a checkout bound to nobody may fork only a `--read-only` child
-that declares no paths, check or gates. A child neither read-only nor handed
+that declares no paths, check or goals. A child neither read-only nor handed
 write paths is refused either way, since an empty write set scopes nothing.
 The guard also lets `magus job wait` through for the session's own
 descendants, and refuses it for any other job.
@@ -598,7 +598,7 @@ observes since the job's checkpoint: every claimed path must appear in it, at
 least one change in it must fall inside `write_paths`, and a diff magus cannot
 read fails the job rather than passing it. A read-only job has no diff to check.
 `wait` also refuses `pass` while any descendant (by `parent` chain) is still
-live, naming each, and grades a job against its ancestors' symbol gates as well
+live, naming each, and grades a job against its ancestors' symbol goals as well
 as its own.
 
 Two failing statuses, because they send a caller somewhere different. Exit 1 is
@@ -610,22 +610,29 @@ It checks what is mechanical. Whether the work is GOOD stays the reading of
 whoever forked it. How much of the job's acceptance criteria magus checks for
 you is the next section's subject.
 
-## Completion gates
+## Goals
 
-A job's acceptance criteria are prose a person grades. A **completion gate** is
-the part magus grades itself, and `magus job wait` will not record `pass` until
-every one verifies. Declare them when the job is forked:
+A job's acceptance criteria are prose a person grades. A **goal** is the part
+magus grades itself, and `magus job wait` will not record `pass` until every one
+verifies. Goals are data: they live in the job record's `goals`, which
+`magus job fork --stdin`, the `magus_job` tool's `fork` op and `magus\job.put`
+all accept. There are no flags for them. `fork` refuses a job that writes and
+declares neither a `check` nor a goal, since `wait` would have nothing to grade
+it by; a `read_only` job is exempt.
 
 ```sh
-magus job fork api/migrate \
-  --criteria "move the accounts table to the new schema" \
-  --write-paths 'db/**,api/**' \
-  --gate-check green='go-test api' \
-  --gate-paths migration='db/migrations/**' \
-  --gate-symbol-unreferenced unused='LegacyAccountStore'
+magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "api/migrate",
+ "criteria": "move the accounts table to the new schema",
+ "write_paths": ["db", "api"], "check": {"target": "go-test", "project": "api"},
+ "goals": [
+   {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
+   {"id": "old-gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
+ ]}
+EOF
 ```
 
-A gate names a **kind** (what it examines) and an **expect** (what must be true
+A goal names a **kind** (what it examines) and an **expect** (what must be true
 of it). Two fields rather than a kind per pair, so `absent` means the same thing
 of a file and of a symbol:
 
@@ -635,40 +642,52 @@ of a file and of a symbol:
 | `paths`  | `changed`, `present`, `absent`                 | the diff since the checkpoint, or the tree as it is now                     |
 | `symbol` | `changed`, `present`, `absent`, `unreferenced` | the knowledge graph, at the granularity below a file                        |
 
-Each kind has a natural expectation, so the common gate declares only its
-subject: a check is asked whether it passed, files and symbols whether this job
-changed them. The flags spell the others out (`--gate-paths-present`,
-`--gate-symbol-absent`, `--gate-symbol-unreferenced`), and `magus job fork -h`
-lists them.
+Each kind has a natural expectation, so the common goal declares only its kind
+and subject: a check is asked whether it passed, files and symbols whether this
+job changed them. `kind` defaults to `check`. `magus job fork --schema` prints
+every field.
 
-Every kind reads something magus already holds, which is what separates a gate
+Every kind reads something magus already holds, which is what separates a goal
 from an attestation. There is deliberately no escape hatch for "this command
-exited 0": magus did not record that run and cannot attribute it, so such a gate
+exited 0": magus did not record that run and cannot attribute it, so such a goal
 would be the easiest of all to satisfy falsely. Declare a target and use `check`.
 
-`symbol` + `unreferenced` is the one worth knowing about: the symbol may still
-exist, and nothing may name it. That is the remainder a partitioned rename leaks.
+`symbol` + `unreferenced` is the one worth knowing about: the symbol still
+exists, and nothing may name it. That is the remainder a partitioned rename leaks.
 Split the work per project and the callers that live in no project belong to no
-job, so every job passes and the rename is unfinished.
+job, so every job passes and the rename is unfinished. Grade it while the old
+definition is still there: the graph counts references into a definition, so
+once it is deleted `unreferenced` fails rather than report a zero it cannot
+vouch for. The job that deletes it declares `absent` beside a check that builds
+the callers.
 
-The single `--check` is one of these gates, under the id `check`.
+A symbol goal takes the name the graph gives the symbol, and only that symbol
+answers for it: a deleted `Legacy` is absent even while `LegacyAdapter` exists.
 
-A gate is graded against what magus observes and never against the result's own
-`changed_paths`. The holder's account of its work is the thing the gate replaces,
-so a result claiming a file the tree does not carry is rejected, and the refusal
-names each subject that failed rather than only that the gate failed:
+The single `check` is one of these goals, under the id `check`.
+
+A goal is graded against what magus observes and never against the result's own
+`changed_paths`. The holder's account of its work is the thing the goal
+replaces, so a result claiming a file the tree does not carry is rejected, and
+the refusal names each subject that failed rather than only that the goal
+failed:
 
 ```text
 rejected api/migrate, and its state is unchanged
-  completion gate "migration": nothing matching "db/migrations/**" changed since
-  4a1c0cc8, so this gate is unmet
+  goal "migration": nothing matching "db/migrations/**" changed since
+  4a1c0cc8, so this goal is unmet
 ```
 
-An observation magus could not make FAILS the gate: an unreadable diff, a symbol
-graph that will not open. That is the opposite of how the guard treats an
-unanswerable question, and deliberately: a guard that cannot ask must not refuse
-a person's own command, while a gate that cannot verify must not certify, or the
-cheapest way past it is to break the observation.
+The diff and the tree are read in the checkout that took the job, while it
+still exists, so an orchestrator can wait from its own tree before it
+integrates.
+
+An observation magus could not make FAILS the goal: an unreadable diff, a symbol
+graph that will not open, a name nobody asked the graph about. That is the
+opposite of how the guard treats an unanswerable question, and deliberately: a
+guard that cannot ask must not refuse a person's own command, while a goal that
+cannot verify must not certify, or the cheapest way past it is to break the
+observation.
 
 ### Asking where a job stands
 
@@ -679,28 +698,27 @@ anything:
 magus describe job api/migrate --gates
 ```
 
-It grades every gate against the evidence magus holds right now, writes nothing,
-and exits 1 while any gate is unmet. Because it runs the same grading `wait`
+It grades every goal against the evidence magus holds right now, writes nothing,
+and exits 1 while any goal is unmet. Because it runs the same grading `wait`
 does, the two cannot disagree; because it records nothing, an orchestrator may
 ask while the holder is still working, and asking never blocks that holder. The
-gates that read the tree and the graph answer even for a job that has filed no
+goals that read the tree and the graph answer even for a job that has filed no
 result at all.
 
-Sequence gates with `depends_on` between them when one has to be cleared before
+Sequence goals with `depends_on` between them when one has to be cleared before
 another is approached. A failed prerequisite propagates, and the declaration
-refuses a cycle. Gates do not nest: one wanting children is a JOB wanting
+refuses a cycle. Goals do not nest: one wanting children is a JOB wanting
 splitting, which the multi-agent skill's "every level narrows" rule already
-covers, and keeping gates flat leaves the job tree as the only hierarchy with an
+covers, and keeping goals flat leaves the job tree as the only hierarchy with an
 owner.
 
-A gate may not name the release gate. `--gate-check ci` is refused by the same
-rule that refuses `--check ci`, for the same reason: the gate runs once, in the
-forking session's tree, after every job lands.
+A `check` goal may not name the release gate. A `ci` check goal is refused by
+the same rule that refuses `--check ci`, for the same reason: the gate runs
+once, in the forking session's tree, after every job lands.
 
-### Declaring gates from Buzz
+### Declaring goals from Buzz
 
-A magusfile or a `magus buzz` script declares them through the same store, as
-records rather than flags:
+A magusfile or a `magus buzz` script declares them through the same store:
 
 ```buzz
 import "magus";
@@ -711,10 +729,10 @@ fun declare() > void {
     magus\job.put("api/migrate", {
       "criteria": "move the accounts table to the new schema",
       "write_paths": ["db", "api"],
-      "completion_gates": [
+      "goals": [
         {"id": "green", "check": {"target": "go-test", "project": "api"}},
         {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
-        {"id": "old-gone", "kind": "symbol", "expect": "unreferenced", "symbols": ["LegacyAccountStore"]},
+        {"id": "old-gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]},
       ],
     });
   } catch (e) {
@@ -724,9 +742,9 @@ fun declare() > void {
 ```
 
 `kind` defaults to `check` and `expect` to the kind's natural expectation, so
-the first gate above needs neither. The records are validated on the way in: a gate
-carrying both a check and paths is refused, and so is one naming paths nothing
-could ever match.
+the first goal above needs neither. The records are validated on the way in: a
+goal carrying both a check and paths is refused, and so is one naming nothing to
+examine.
 
 ## Watch it: the console Jobs view
 

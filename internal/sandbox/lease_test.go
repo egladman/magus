@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -28,9 +29,20 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}
-	if row.ID != "" {
-		_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
-			Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	switch {
+	case row.ID == "":
+	case row.State == "":
+		// The store stores a row naming no state as declared, so the legacy row an older
+		// magus left is planted as the file it wrote.
+		path, err := store.Path()
+		require.NoError(t, err)
+		body, err := json.Marshal(map[string]any{"jobs": []types.Job{row}})
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, body, 0o644))
+	default:
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	return root, cacheDir

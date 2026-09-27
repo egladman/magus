@@ -195,7 +195,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
-		row.CompletionGates = []types.CompletionGate{
+		row.Goals = []types.CompletionGate{
 			{
 				ID:     "lint",
 				Kind:   types.GateKindCheck,
@@ -249,14 +249,14 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
 	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
 
-	require.Len(t, got.CompletionGates, 2)
-	require.Equal(t, "lint", got.CompletionGates[0].Id)
-	require.Equal(t, "check", got.CompletionGates[0].Kind)
-	require.Equal(t, "passed", got.CompletionGates[0].Expect)
-	require.Equal(t, "magus run lint .", got.CompletionGates[0].Check, "check is rendered as the command that runs it")
-	require.Equal(t, "store-touched", got.CompletionGates[1].Id)
-	require.Equal(t, []string{"internal/job/store.go"}, got.CompletionGates[1].Paths)
-	require.Empty(t, got.CompletionGates[1].Check, "a paths gate carries no check to render")
+	require.Len(t, got.Goals, 2)
+	require.Equal(t, "lint", got.Goals[0].Id)
+	require.Equal(t, "check", got.Goals[0].Kind)
+	require.Equal(t, "passed", got.Goals[0].Expect)
+	require.Equal(t, "magus run lint .", got.Goals[0].Check, "check is rendered as the command that runs it")
+	require.Equal(t, "store-touched", got.Goals[1].Id)
+	require.Equal(t, []string{"internal/job/store.go"}, got.Goals[1].Paths)
+	require.Empty(t, got.Goals[1].Check, "a paths gate carries no check to render")
 
 	require.NotNil(t, got.Result)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Result.ChangedPaths)

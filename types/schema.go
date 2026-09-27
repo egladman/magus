@@ -86,10 +86,10 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"entries": 11},
-	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
-	// and lane_proof, write_proof's spelling through schema 8.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "lane_proof"},
+	Added:   map[string]int{"entries": 11, "goals": 11},
+	// The four boundary renames and completion_gates, still folded from stored rows (see
+	// job.foldStoredNames), and lane_proof, write_proof's spelling through schema 8.
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "lane_proof", "completion_gates"},
 	Requires: map[int]string{
 		10: "dead-job-end",
 		11: "claim-declarations",
@@ -99,10 +99,13 @@ var JobSchema = SchemaLedger{
 // DeclarationSchema is the ledger of the job a caller declares on stdin. It shares the
 // row's version and features.
 var DeclarationSchema = SchemaLedger{
-	Name:     "declaration",
-	Type:     reflect.TypeFor[Declaration](),
-	Version:  JobSchemaVersion,
-	Added:    map[string]int{"enter": 11},
+	Name:    "declaration",
+	Type:    reflect.TypeFor[Declaration](),
+	Version: JobSchemaVersion,
+	Added:   map[string]int{"enter": 11, "goals": 11},
+	// goals' old spelling. A declaration is not stored, so nothing folds it: a record
+	// sending it is refused as an unknown member.
+	Reserved: []string{"completion_gates"},
 	Requires: JobSchema.Requires,
 }
 
