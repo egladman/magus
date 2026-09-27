@@ -81,13 +81,15 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 }
 
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads
-// with the runnable query and says why it is the same answer.
+// with the runnable query, says why it is the same answer, and carries the answer.
 func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	t.Chdir("../..")
 	v := Evaluate(Dependencies{}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
 	assert.Contains(t, v.Deny, "MGS3020, MGS3021")
+	assert.Contains(t, v.Deny, "Its answer (")
+	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3020\n")
 }
 
 // writeTree lays files out under a fresh root and returns it with symlinks resolved.
@@ -159,13 +161,17 @@ func TestSearchTranslationHeadings(t *testing.T) {
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
 	}
 
+	// The answer is the section ids the query prints.
+	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^#' docs/a.md`))
+	assert.Contains(t, v.Deny, "Its answer (2 results):\n  docsection:docs/a.md#alpha\n  docsection:docs/a.md#beta\n")
+
 	// A directory walk proves over every Markdown file grep would read.
 	full := Dependencies{GraphIDs: graphOf(map[string][]string{"docsection": {
 		"docsection:docs/a.md#alpha", "docsection:docs/a.md#beta", "docsection:docs/b.md#gamma",
 	}}), scope: workspaceScope{root: root}}
 	walkRoot := writeTree(t, map[string]string{"docs/a.md": "# Alpha\n## Beta\n", "docs/b.md": "# Gamma\n"})
 	full.scope.root = walkRoot
-	v, _ := translateSearches(full, walkRoot, parseForTest(t, `grep -rn --include='*.md' '^#' docs`))
+	v, _ = translateSearches(full, walkRoot, parseForTest(t, `grep -rn --include='*.md' '^#' docs`))
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=docsection 'id=~^docsection:docs/[^#]*\.md#' -o name`}, v.Rule)
 	assert.Contains(t, v.Deny, "3 heading lines across 2 files")
 }
@@ -206,6 +212,69 @@ func TestSearchTranslationTargets(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, "Its answer (")
+	}
+}
+
+// TestSearchTranslationDeclarations pins the Go declaration arm: a listing of one file's
+// declarations is answered by its file node and the names inline, a lookup of one name
+// stays the symbol-search rule's, and a hit that is not a declaration keeps it silent.
+func TestSearchTranslationDeclarations(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/store/store.go": "package store\n\n// func helper is documented here\ntype Store struct{}\n\n" +
+			"func (s *Store) Open() error { return nil }\n\nfunc (s *Store) Close() error { return nil }\n\n" +
+			"func helper() {}\n\nvar (\n\tdefaultStore = &Store{}\n)\n\nfunc use() { helper() }\n",
+		"internal/store/store_test.go": "package store\n\nfunc TestOpen(t *testing.T) {}\n\nfunc TestClose(t *testing.T) {}\n\nfunc setup() {}\n",
+	})
+	indexed := map[string]bool{"Store": true, "Open": true, "Close": true, "helper": true, "use": true, "TestOpen": true, "TestClose": true, "setup": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, scope: workspaceScope{root: root}}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, scope: workspaceScope{root: root}}
+	partial := Dependencies{SymbolDefined: func(name string) (bool, bool) { return name == "Open", true }, scope: workspaceScope{root: root}}
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		rule    denyRule
+		answer  string
+	}{
+		{`grep -n '^func ' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"Its answer (4 results):\n  6: Open\n  8: Close\n  10: helper\n  16: use\n"},
+		{`grep -n '^func Test' internal/store/store_test.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store_test.go"},
+			"Its answer (2 results):\n  3: TestOpen\n  5: TestClose\n"},
+		{`grep -n 'func (s \*Store)' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"  6: Open\n  8: Close\n"},
+		{`grep -n '^func \|^type ' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"  4: Store\n  6: Open\n"},
+		// One name is a definition lookup, and refs prints the body.
+		{`grep -n 'func helper' internal/store/store.go`, deps, denyRule{Name: denyRuleSymbolSearch, Arg: "helper"}, "refs helper --definition --source"},
+
+		// The comment mentions `func helper` and the call site names helper: text.
+		{`grep -n 'helper' internal/store/store.go`, deps, denyRule{}, ""},
+		{`grep -n 'func' internal/store/store.go`, deps, denyRule{}, ""},
+		// A block opener declares nothing.
+		{`grep -n '^var' internal/store/store.go`, deps, denyRule{}, ""},
+		// A name the index cannot vouch for.
+		{`grep -n '^func ' internal/store/store.go`, partial, denyRule{}, ""},
+		{`grep -n '^func ' internal/store/store.go`, stale, denyRule{}, ""},
+		// Context, count and list flags ask a different question.
+		{`grep -n -A2 '^func ' internal/store/store.go`, deps, denyRule{}, ""},
+		{`grep -c '^func ' internal/store/store.go`, deps, denyRule{}, ""},
+		// Two files, a glob, or a tree is not one file node.
+		{`grep -n '^func ' internal/store/store.go internal/store/store_test.go`, deps, denyRule{}, ""},
+		{`grep -n '^func ' internal/store/*.go`, deps, denyRule{}, ""},
+		{`grep -rn '^func ' internal/store`, deps, denyRule{}, ""},
+	} {
+		cmds := parseForTest(t, tt.command)
+		v, ok := translateSearches(tt.deps, root, cmds)
+		if !ok {
+			v, ok = searchVerdictAt(tt.deps, root, cmds)
+		}
+		if tt.rule == (denyRule{}) {
+			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
+			continue
+		}
+		assert.Equal(t, tt.rule, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
 	}
 }
 
