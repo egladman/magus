@@ -242,6 +242,8 @@ func TestPrecedentsJudgeTestPackagesOnlyWhereALanguagePackagesByDirectory(t *tes
 	assert.Empty(t, f.g.Precedents(PrecedentOptions{}))
 }
 
+// TestPrecedentsFanoutIsADistributionOverImporters holds a cohort of 20, the smallest whose
+// nearest-rank p95 sits below its max, so the one heavy importer departs.
 func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 	t.Parallel()
 
@@ -253,7 +255,7 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 		f.pkg(dir, 1)
 	}
 	slices.Sort(all)
-	for i := range 20 {
+	for i := range 19 {
 		f.pkg(fmt.Sprintf("cmd/c%02d", i), 1)
 		f.imports(fmt.Sprintf("cmd/c%02d", i), "internal/p0")
 	}
@@ -267,7 +269,7 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
-		Follow: 20, Cohort: 21, Share: 20.0 / 21, Established: true,
+		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},

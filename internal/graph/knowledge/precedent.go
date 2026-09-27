@@ -210,7 +210,9 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 			counts[i] = len(byDir[d])
 		}
 		slices.Sort(counts)
-		bound := counts[min(len(counts)-1, int(0.95*float64(len(counts))))]
+		// Nearest rank, ceil(0.95n)-1 in integers. A floor index is the max for every cohort
+		// under 21, so no case there could ever depart.
+		bound := counts[(95*len(counts)+99)/100-1]
 		row := types.Precedent{
 			Family: types.PrecedentDepFanout,
 			Scope:  types.PrecedentScope{Layers: []string{layer}},
