@@ -12,6 +12,8 @@ import "./tools/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
 import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
+// The advisory verdict `security` reaches; console/ and docs/ share it.
+import "./tools/advisories" as advisories;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
 // This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
@@ -1043,6 +1045,10 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    // On a change it fails only on what the change introduced, unless args carry
+    // `--inherited=fatal` (tools/advisories.buzz). Read first so a bad argument fails
+    // before generate runs.
+    final inheritedFatal = advisories\inheritedFatal(args);
     // govulncheck loads PACKAGES, so it parses every .go file this target's sources
     // glob - generated ones included. Without this edge it is free to run beside the
     // target writing them: measured 2026-08-18, when it read types/gen/mocks while
@@ -1061,7 +1067,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // against sources. govulncheck sat in `lint` for a while, which spread that uncacheable
     // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
     // child builds with the same fingerprint as the rest of the workspace.
-    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+    advisories\govulncheck(ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), go: go, inheritedFatal: inheritedFatal);
     proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
@@ -3073,17 +3079,20 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
     // registry.buzz and gha-queue.buzz are invoked bare by workflows, gha-run.buzz by a
-    // person, and lint.buzz by lint-files, so they are the ones that have to survive strict (lint.buzz imports every
-    // tools/lint rule, so its run is theirs); advisories, drift and toolchain-policy are magusfile imports and
-    // therefore always embedded, and running THEM strict would fail a top-level `if`
-    // or an unlabeled second argument that is legal everywhere they actually load - a
-    // red for a defect that does not exist. (toolchain.buzz has no importer and no
-    // invoker at all; it is gated embedded on the assumption it is meant to be one.)
+    // person, pull-requests.buzz and labels.buzz the same way (workflows and the shepherd
+    // skill run them directly), and lint.buzz by lint-files, so those are the ones that
+    // have to survive strict (lint.buzz imports every tools/lint rule, so its run is
+    // theirs); advisories, drift and toolchain-policy are magusfile imports and therefore
+    // always embedded, and running THEM strict would fail a top-level `if` or an unlabeled
+    // second argument that is legal everywhere they actually load - a red for a defect
+    // that does not exist. (toolchain.buzz has no importer and no invoker at all; it is
+    // gated embedded on the assumption it is meant to be one.)
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
     foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz" or mod.value == "tools/gha-run.buzz" or mod.value == "tools/lint.buzz") {
+        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz" or mod.value == "tools/gha-run.buzz" or mod.value == "tools/lint.buzz"
+            or mod.value == "tools/pull-requests.buzz" or mod.value == "tools/labels.buzz") {
             cover_for(mod.value, [], {});
         } else {
             cover_for(mod.value, ["--embedded"], {});
@@ -3381,8 +3390,17 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 
 // Runs the CI gates through their declared dependencies.
-export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, security);
+//
+// `-- --inherited=fatal` is for a run whose head is about to become the base, the merge
+// queue's. ctx.needs hands a dependency no args, so security is called in the body then,
+// after the rest rather than beside them.
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    if (!advisories\inheritedFatal(args)) {
+        ctx.needs(lint, build, test, security);
+        return;
+    }
+    ctx.needs(lint, build, test);
+    security(ctx, args: args);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its

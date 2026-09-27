@@ -58,10 +58,10 @@ stop without committing that opinion to everyone forever.
 
 Label the pull request:
 
-| label                     | effect                                   |
-| ------------------------- | ---------------------------------------- |
-| `magus:silence`           | mutes every advisor on this pull request |
-| `magus:silence:unclaimed` | mutes one, by its input name             |
+| label                       | effect                                   |
+| --------------------------- | ---------------------------------------- |
+| `advice: silence`           | mutes every advisor on this pull request |
+| `advice: silence unclaimed` | mutes one, by its input name             |
 
 A silenced advisor retracts its section rather than freezing the last thing it said, so
 the comment never shows a finding nobody is still checking. Remove the label and it comes
@@ -85,7 +85,7 @@ where acting on a finding still costs one edit rather than a review round trip.
 
 Four things differ, all deliberate:
 
-**Labels do not apply.** `magus:silence` is a fact about a pull request, and a local run
+**Labels do not apply.** `advice: silence` is a fact about a pull request, and a local run
 has none. Nothing is silenced at the keyboard, on purpose: you asked for the report, so
 you want everything in it. Silencing is a decision to record where the next reader can
 see it, which is the pull request.
