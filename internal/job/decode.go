@@ -18,7 +18,7 @@ import (
 //go:embed gen/job.schema.json
 var DeclarationSchema string
 
-// foldStoredNames moves the four renamed fields a previous magus wrote out of each row's
+// foldStoredNames moves the renamed fields a previous magus wrote out of each row's
 // unknown members onto their current spelling, then drops every name [types.JobSchema]
 // reserves, so a reserved name is never carried back out as data.
 //
@@ -34,6 +34,11 @@ func foldStoredNames(rows []types.Job) error {
 			DenyPaths  []string `json:"forbidden_paths"`
 			ReadPaths  []string `json:"focus"`
 			Model      string   `json:"tier"`
+			// compat(until: no job store row written by a magus older than this change
+			// remains; magus doctor reports no row carrying completion_gates): a row an older
+			// magus wrote would come back with no goals, and wait would pass it on its check
+			// alone. mirrorLegacyGoals is the write half.
+			Goals []types.CompletionGate `json:"completion_gates"`
 		}
 		bag, err := json.Marshal(rows[i].Unknown)
 		if err != nil {
@@ -67,6 +72,11 @@ func foldStoredNames(rows []types.Job) error {
 				return fmt.Errorf("row %s carries tier and its renamed spelling, and nothing here can say which one it meant", rows[i].ID)
 			}
 			rows[i].Model = old.Model
+		}
+		// Both spellings differ only when an older magus rewrote the old one after this one
+		// mirrored them, so the old spelling is the newer write.
+		if len(old.Goals) > 0 {
+			rows[i].Goals = old.Goals
 		}
 	}
 	return nil

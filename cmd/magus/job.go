@@ -627,7 +627,7 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 func describeJob(ctx context.Context, root string, args []string) error {
 	var gates bool
 	pos, err := cmdParse("describe job", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&gates, "gates", false, "Grade this job's completion gates against the evidence magus holds now, and record nothing")
+		fs.BoolVar(&gates, "gates", false, "Grade this job's goals against the evidence magus holds now, and record nothing")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus describe job <job> --gates")
@@ -638,11 +638,11 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
 			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job, the way `magus diff --prompt` does.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--gates is the exception, and it is still a READ: it grades this job's completion")
-			fmt.Fprintln(os.Stderr, "gates against the evidence magus holds right now and records nothing, so asking")
+			fmt.Fprintln(os.Stderr, "--gates is the exception, and it is still a READ: it grades this job's goals")
+			fmt.Fprintln(os.Stderr, "against the evidence magus holds right now and records nothing, so asking")
 			fmt.Fprintln(os.Stderr, "never advances a job and never blocks the holder still working on it. It is the")
 			fmt.Fprintln(os.Stderr, "same grading `"+hint.JobWait.String()+"` does, so the two cannot disagree.")
-			fmt.Fprintln(os.Stderr, "Exit 1 means a gate is unmet, so a caller branches on the status rather than")
+			fmt.Fprintln(os.Stderr, "Exit 1 means a goal is unmet, so a caller branches on the status rather than")
 			fmt.Fprintln(os.Stderr, "reading the text.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -756,29 +756,26 @@ type forkFlags struct {
 	timeout                                    string
 	writePaths, readPaths, denyPaths           listFlag
 	dependsOn                                  listFlag
-	gates                                      []types.CompletionGate
 	readOnly                                   bool
 }
 
+// row names no state: the store stores a declaration that names none as declared, so a
+// flag fork and a record fork land the same.
 func (f forkFlags) row(id string) types.Declaration {
 	return types.Declaration{
-		Schema:          types.Schema{Version: types.JobSchemaVersion},
-		ID:              id,
-		Parent:          f.parent,
-		Criteria:        f.criteria,
-		Checkpoint:      f.checkpoint,
-		WritePaths:      f.writePaths,
-		DenyPaths:       f.denyPaths,
-		ReadPaths:       f.readPaths,
-		DependsOn:       f.dependsOn,
-		Check:           f.declaredCheck(),
-		CompletionGates: f.gates,
-		Model:           f.model,
-		ReadOnly:        f.readOnly,
-		Timeout:         f.timeout,
-		// A row a person declares is one nobody has picked up yet, which is what the
-		// state vocabulary already has a word for.
-		State: types.StateDeclared,
+		Schema:     types.Schema{Version: types.JobSchemaVersion},
+		ID:         id,
+		Parent:     f.parent,
+		Criteria:   f.criteria,
+		Checkpoint: f.checkpoint,
+		WritePaths: f.writePaths,
+		DenyPaths:  f.denyPaths,
+		ReadPaths:  f.readPaths,
+		DependsOn:  f.dependsOn,
+		Check:      f.declaredCheck(),
+		Model:      f.model,
+		ReadOnly:   f.readOnly,
+		Timeout:    f.timeout,
 	}
 }
 
@@ -818,7 +815,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
-		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-* flag)")
+		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
 		fs.StringVar(&declared.timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
 		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
@@ -827,14 +824,6 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-		fs.Var(gateList{kind: types.GateKindCheck, gates: &declared.gates}, "gate-check", "A further check this job must pass, as `<id>=<target> <project>`; repeatable")
-		fs.Var(gateList{kind: types.GateKindPaths, gates: &declared.gates}, "gate-paths", "Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable")
-		fs.Var(gateList{kind: types.GateKindPaths, expect: types.ExpectPresent, gates: &declared.gates}, "gate-paths-present", "Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable")
-		fs.Var(gateList{kind: types.GateKindPaths, expect: types.ExpectAbsent, gates: &declared.gates}, "gate-paths-absent", "Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable")
-		fs.Var(gateList{kind: types.GateKindSymbol, gates: &declared.gates}, "gate-symbol", "Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable")
-		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectPresent, gates: &declared.gates}, "gate-symbol-present", "Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
-		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectAbsent, gates: &declared.gates}, "gate-symbol-absent", "Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
-		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectUnreferenced, gates: &declared.gates}, "gate-symbol-unreferenced", "Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
 		fs.StringVar(&declared.model, "model", "", "The model the work was matched to")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 		fs.Usage = func() {
@@ -843,6 +832,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Declare one job: what its holder is handed, where it may write, and the one")
 			fmt.Fprintln(os.Stderr, "check it runs. It replaces any job with the same id.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
+			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobWait.String()+"` grades them. `--schema` prints the record. A job that")
+			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal; a read-only one is exempt.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
@@ -892,6 +886,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if row.Enter != "" {
 		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
+	var probe types.Job
+	row.Apply(&probe)
+	probe.ID = row.ID
+	if err := job.RefuseUngraded(probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	plan, err := store.List()
 	if err != nil {
 		return err
@@ -900,7 +900,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return usagef("magus job fork: %s", err)
 	}
 	// The reader loads the graph only when a gate names a symbol.
-	if err := job.RefuseAmbiguousSymbols(ctx, row.CompletionGates, jobSymbolReader(root)); err != nil {
+	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, Parent: row.Parent, DependsOn: row.DependsOn}
@@ -1193,9 +1193,10 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Verify the result a job was exited with, against the job it was handed: every")
 			fmt.Fprintln(os.Stderr, "changed path inside its write paths and outside its denied ones, a change set")
-			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and PASSING output for every")
-			fmt.Fprintln(os.Stderr, "completion gate. Evidence must be newer than this job's declaration; each target")
-			fmt.Fprintln(os.Stderr, "keeps its own execution timeout. A job that verifies is recorded "+string(types.StatePass)+".")
+			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and every goal held: PASSING")
+			fmt.Fprintln(os.Stderr, "output for a check, the diff and the graph for the rest. Evidence must be newer")
+			fmt.Fprintln(os.Stderr, "than this job's declaration; each target keeps its own execution timeout. A job")
+			fmt.Fprintln(os.Stderr, "that verifies is recorded "+string(types.StatePass)+".")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Exit 1 is a status: the result was read and rejected, and every rule that failed")
 			fmt.Fprintln(os.Stderr, "is named. Exit 2 is magus unable to answer: nothing was filed and nothing was")
@@ -1476,7 +1477,7 @@ func printJobStatus(out io.Writer, s job.Status) {
 		if gate.Verified {
 			state = "verified"
 		}
-		fmt.Fprintf(out, "completion gate %s: %s", gate.ID, state)
+		fmt.Fprintf(out, "goal %s: %s", gate.ID, state)
 		if gate.OutputRef != "" {
 			fmt.Fprintf(out, " (%s)", gate.OutputRef)
 		}
@@ -1845,66 +1846,6 @@ func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool)
 	return job.TermsEvidence{}, false
 }
 
-// gateList collects `--gate-paths` and `--gate-check`, each `<id>=<spec>` and repeatable.
-//
-// Two flags rather than one taking a kind, because the spec after the `=` has a different
-// shape per kind and a single flag would have to name the kind inside its own value. A
-// reader would then be typing `--gate done=paths:db/**` where the word `paths` is neither
-// the id nor the spec, which is the shape that gets mistyped.
-type gateList struct {
-	kind   types.GateKind
-	expect types.GateExpect
-	gates  *[]types.CompletionGate
-}
-
-func (g gateList) String() string {
-	if g.gates == nil {
-		return ""
-	}
-	var ids []string
-	for _, gate := range *g.gates {
-		if gate.Kind == g.kind {
-			ids = append(ids, gate.ID)
-		}
-	}
-	return strings.Join(ids, ",")
-}
-
-// Set parses one `<id>=<spec>`. A spec that does not parse is carried through rather than
-// refused here, so types.Declaration.Validate stays the one place a declaration is
-// refused: the same rule declaredCheck follows.
-func (g gateList) Set(value string) error {
-	id, spec, ok := strings.Cut(value, "=")
-	if !ok {
-		return fmt.Errorf("a gate is `<id>=<spec>` and %q names no id", value)
-	}
-	gate := types.CompletionGate{ID: strings.TrimSpace(id), Kind: g.kind, Expect: g.expect}
-	if g.kind == types.GateKindCheck {
-		// A check is one `<target> <project>`, not a list, and a spec that does not parse
-		// is carried through rather than refused here so types.Declaration.Validate stays
-		// the one place a declaration is refused: the same rule declaredCheck follows.
-		parsed, err := types.ParseLeaseCheck(spec)
-		if err != nil {
-			gate.Check = types.LeaseCheck{Target: spec}
-		} else {
-			gate.Check = parsed
-		}
-		*g.gates = append(*g.gates, gate)
-		return nil
-	}
-	var items listFlag
-	if err := items.Set(spec); err != nil {
-		return fmt.Errorf("gate %q: %w", gate.ID, err)
-	}
-	if g.kind == types.GateKindPaths {
-		gate.Paths = items
-	} else {
-		gate.Symbols = items
-	}
-	*g.gates = append(*g.gates, gate)
-	return nil
-}
-
 // jobSymbolReader loads the knowledge graph ONCE and answers every symbol a job's gates
 // name from it.
 //
@@ -1947,7 +1888,7 @@ func jobObserver(root string) job.Observer {
 }
 
 func gatesOnCI(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveCompletionGates(), func(g types.CompletionGate) bool {
+	return slices.ContainsFunc(row.EffectiveGoals(), func(g types.CompletionGate) bool {
 		return g.Kind == types.GateKindCheck && g.Check.Target == types.TargetCI
 	})
 }
@@ -1993,7 +1934,7 @@ func latestGreenGate(ctx context.Context, root string) job.GreenGate {
 	return job.GreenGate{Commit: rec.Commit, Projects: rec.Projects, Tier: rep.Tier}
 }
 
-// jobGates is `magus describe job <job> --gates`: each completion gate graded against the
+// jobGates is `magus describe job <job> --gates`: each goal graded against the
 // evidence magus holds right now.
 //
 // A READ. It records nothing, so an orchestrator may ask while the holder is still
@@ -2051,7 +1992,7 @@ func gradesSymbols(rows []types.Job, id string) bool {
 		return false
 	}
 	for _, r := range append([]types.Job{rows[i]}, types.JobAncestors(rows, id)...) {
-		if slices.ContainsFunc(r.CompletionGates, func(g types.CompletionGate) bool { return g.Resolve().Kind == types.GateKindSymbol }) {
+		if slices.ContainsFunc(r.Goals, func(g types.CompletionGate) bool { return g.Resolve().Kind == types.GateKindSymbol }) {
 			return true
 		}
 	}

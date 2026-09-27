@@ -240,7 +240,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
-	info.CompletionGates = wireCompletionGates(row.CompletionGates)
+	info.Goals = wireGoals(row.Goals)
 	info.Result = wireJobResult(row.Result)
 	return info
 }
@@ -254,25 +254,25 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 // running flag this service refuses to keep for the catalog.
 func delegatedJob(row types.Job) *jobv1.Job {
 	j := &jobv1.Job{
-		Name:            jobsPrefix + row.ID,
-		Id:              row.ID,
-		Holder:          jobv1.JobHolder_JOB_HOLDER_SESSION,
-		State:           string(row.State),
-		Criteria:        row.Criteria,
-		Parent:          row.Parent,
-		Model:           row.Model,
-		Check:           row.Validation,
-		WritePaths:      row.WritePaths,
-		DenyPaths:       row.DenyPaths,
-		ReadPaths:       row.ReadPaths,
-		DependsOn:       row.DependsOn,
-		ReadOnly:        row.ReadOnly,
-		Checkpoint:      row.Checkpoint,
-		Created:         row.Created,
-		Updated:         row.Updated,
-		CompletionGates: wireCompletionGates(row.CompletionGates),
-		Result:          wireJobResult(row.Result),
-		Deadline:        row.Deadline,
+		Name:       jobsPrefix + row.ID,
+		Id:         row.ID,
+		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
+		State:      string(row.State),
+		Criteria:   row.Criteria,
+		Parent:     row.Parent,
+		Model:      row.Model,
+		Check:      row.Validation,
+		WritePaths: row.WritePaths,
+		DenyPaths:  row.DenyPaths,
+		ReadPaths:  row.ReadPaths,
+		DependsOn:  row.DependsOn,
+		ReadOnly:   row.ReadOnly,
+		Checkpoint: row.Checkpoint,
+		Created:    row.Created,
+		Updated:    row.Updated,
+		Goals:      wireGoals(row.Goals),
+		Result:     wireJobResult(row.Result),
+		Deadline:   row.Deadline,
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -319,10 +319,10 @@ func lastRun(e trail.Event) *jobv1.JobRun {
 	return run
 }
 
-// wireCompletionGates maps the stored gates to the wire shape. check is rendered as the command
-// that runs it, the same way the row's Validation already is for the primary Check field: the
+// wireGoals maps the stored goals to the wire shape. check is rendered as the command that
+// runs it, the same way the row's Validation already is for the primary Check field: the
 // wire never carries the unrendered LeaseCheck, so a client needs no second parser for it.
-func wireCompletionGates(gates []types.CompletionGate) []*jobv1.CompletionGate {
+func wireGoals(gates []types.CompletionGate) []*jobv1.CompletionGate {
 	if len(gates) == 0 {
 		return nil
 	}

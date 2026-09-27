@@ -55,7 +55,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tmpLoc(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
-				u.State, u.WritePaths = types.StateDeclared, tc.paths
+				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
 			if tc.want == "" {
 				require.NoError(t, err)

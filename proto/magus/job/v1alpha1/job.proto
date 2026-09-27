@@ -107,9 +107,9 @@ message Job {
   int64 created = 20; // unix SECONDS, as the store records them
   int64 updated = 21;
 
-  // CompletionGates are the declared machine-verifiable acceptance conditions, empty on a job
-  // that named none beyond its primary check. See CompletionGate.
-  repeated CompletionGate completion_gates = 22;
+  // Goals are the job's declared definition of done, graded by `magus job wait`, empty on a
+  // job that named none beyond its primary check. See CompletionGate.
+  repeated CompletionGate goals = 22;
   // Result is what the holder filed on exit, unset until it has.
   JobResult result = 23;
   // Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork

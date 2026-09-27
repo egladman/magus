@@ -133,7 +133,7 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 
 	status := job.Status{
 		Job:        "plan",
-		Violations: []string{`completion gate "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
+		Violations: []string{`goal "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
 		Gates: []types.GateStatus{
 			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
 			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
@@ -144,7 +144,7 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	printJobStatus(&out, status)
 	got := out.String()
 
-	assert.Contains(t, got, "completion gate ci: rejected (outdeadbeef)")
+	assert.Contains(t, got, "goal ci: rejected (outdeadbeef)")
 	assert.Contains(t, got, "magus query output outdeadbeef", "a failed gate must name how to read its ref")
 	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
 }
@@ -328,8 +328,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "read_paths": ["internal/trail"],
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
-	  "model": "principal",
-	  "state": "declared"
+	  "model": "principal"
 	}`))
 	require.NoError(t, err)
 

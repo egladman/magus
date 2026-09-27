@@ -57,8 +57,8 @@ func jobJSONFields() []string {
 // state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
 // the row untouched under all four.
 func jobMergeApplies(key string) bool {
-	// The last value is a well-formed completion gate. Without it the probe reports
-	// completion_gates as unmerged, because none of the scalar shapes decodes into one,
+	// The last value is a well-formed goal. Without it the probe reports goals as
+	// unmerged, because none of the scalar shapes decodes into one,
 	// and the judged list would have to drop the very field an agent rewrites when it
 	// changes what another job must satisfy.
 	for _, value := range []any{

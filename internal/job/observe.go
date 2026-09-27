@@ -35,16 +35,30 @@ type SymbolReader func(ctx context.Context, name string) (SymbolFact, bool)
 // a re-run; certifying on an unread diff is the attestation the gate replaced.
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
 	return func(ctx context.Context, row types.Job) (Observed, error) {
+		tree := workTree(root, row)
 		var driver types.VCSDriver
 		unresolved := ""
 		if checkpointRevision(row.Checkpoint) != "" {
-			driver, unresolved = resolveDriver(ctx, root)
+			driver, unresolved = resolveDriver(ctx, tree)
 		}
-		seen := changedSince(ctx, driver, unresolved, root, row.Checkpoint)
-		seen.Present, seen.PresentKnown = presentIn(root, row)
+		seen := changedSince(ctx, driver, unresolved, tree, row.Checkpoint)
+		seen.Present, seen.PresentKnown = presentIn(tree, row)
 		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
 		return seen, nil
 	}
+}
+
+// workTree is the checkout a job's work lives in: the one that took it, while it still
+// exists, else root. The waiter usually sits in another checkout, and grading that one's
+// diff held the job to work it never did.
+func workTree(root string, row types.Job) string {
+	if row.CheckoutRoot == "" || root == "" {
+		return root
+	}
+	if info, err := os.Stat(row.CheckoutRoot); err != nil || !info.IsDir() {
+		return root
+	}
+	return row.CheckoutRoot
 }
 
 // resolveDriver is the VCS answering for root, or nil and why none is.
@@ -225,7 +239,7 @@ func presentIn(root string, row types.Job) ([]string, bool) {
 	}
 	tree := os.DirFS(root)
 	var out []string
-	for _, gate := range row.EffectiveCompletionGates() {
+	for _, gate := range row.EffectiveGoals() {
 		if gate.Kind != types.GateKindPaths {
 			continue
 		}
@@ -252,7 +266,7 @@ func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[str
 		return nil, false
 	}
 	out := map[string]SymbolFact{}
-	for _, gate := range row.EffectiveCompletionGates() {
+	for _, gate := range row.EffectiveGoals() {
 		if gate.Kind != types.GateKindSymbol {
 			continue
 		}
@@ -291,6 +305,11 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 			return SymbolFact{}, false
 		}
 		out, ok := g.Refs(name)
+		if ok && !namesSymbol(out, name) {
+			// Refs ranks fuzzily, so a deleted Foo resolves to a surviving FooBar and
+			// `present` passes on it. Only a symbol carrying the name answers for it.
+			out, ok = exactSymbol(g, name)
+		}
 		if !ok {
 			// The graph was readable and holds no such symbol. A real answer, so the
 			// reader SUCCEEDS with Defined false; reporting failure here would make a
@@ -307,6 +326,26 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 		}
 		return fact, true
 	}
+}
+
+// namesSymbol reports whether a resolved symbol is the one name declares: its id, its
+// label, or a qualified tail of its id such as `Declaration#Validate`.
+func namesSymbol(out types.KnowledgeRefsOutput, name string) bool {
+	if out.Symbol == name || out.Label == name {
+		return true
+	}
+	id := strings.TrimRight(strings.TrimPrefix(out.Symbol, types.KindSymbol+":"), "().#:")
+	return id == name || strings.HasSuffix(id, "/"+name) || strings.HasSuffix(id, " "+name)
+}
+
+// exactSymbol is the top-ranked symbol whose label is name.
+func exactSymbol(g SymbolGraph, name string) (types.KnowledgeRefsOutput, bool) {
+	for _, m := range g.Resolve(name, 0) {
+		if m.Kind == types.KindSymbol && m.Label == name {
+			return g.Refs(m.ID)
+		}
+	}
+	return types.KnowledgeRefsOutput{}, false
 }
 
 // sameNameDefinitions is one defining file per symbol whose label IS name, or nil when

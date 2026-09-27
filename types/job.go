@@ -236,12 +236,11 @@ var gateAccepts = map[GateKind][]GateExpect{
 	GateKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced},
 }
 
-// EffectiveCompletionGates returns the declared gates plus the historical primary
-// Check as a gate. Keeping the projection at the model boundary means guards that
-// still read Check retain their capability semantics while every verifier has one
-// complete gate collection to grade.
-func (u Job) EffectiveCompletionGates() []CompletionGate {
-	gates := cloneCompletionGates(u.CompletionGates)
+// EffectiveGoals returns the declared goals plus the primary Check as a goal. Keeping the
+// projection at the model boundary means guards that still read Check retain their
+// capability semantics while every verifier has one complete collection to grade.
+func (u Job) EffectiveGoals() []CompletionGate {
+	gates := cloneGoals(u.Goals)
 	if u.Check != nil {
 		primary := CompletionGate{ID: PrimaryCompletionGateID, Check: *u.Check}.Resolve()
 		gates = append([]CompletionGate{primary}, gates...)
@@ -605,9 +604,9 @@ type Job struct {
 	// empty field would read as "none required" rather than as "the author did not write
 	// any".
 	//
-	// PROSE, graded by a reader. The machine-checkable half is CompletionGates, and the
-	// two are deliberately separate: a condition magus can verify belongs in a gate, where
-	// it is a contract, rather than in a sentence here that nothing reads.
+	// PROSE, graded by a reader. The machine-checkable half is Goals, and the two are
+	// deliberately separate: a condition magus can verify belongs in a goal, where it is a
+	// contract, rather than in a sentence here that nothing reads.
 	Criteria string `json:"criteria,omitempty" yaml:"criteria,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
 	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
@@ -649,10 +648,10 @@ type Job struct {
 	// on every put so the two cannot disagree, and a client that sends it instead of
 	// Check is still understood.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
-	// CompletionGates are additional evidence-backed acceptance conditions. Check
-	// remains the primary gate projection for rows declared before this collection
-	// existed; no caller can mark either kind passed without a recorded output ref.
-	CompletionGates []CompletionGate `json:"completion_gates,omitempty" yaml:"completion_gates,omitempty"`
+	// Goals are the job's definition of done that magus grades: a check that passed, paths
+	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
+	// goals rather than gates so the word never collides with the CI gate.
+	Goals []CompletionGate `json:"goals,omitempty" yaml:"goals,omitempty"`
 	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
 	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
@@ -783,7 +782,7 @@ type Declaration struct {
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
 	Parent string `json:"parent,omitempty"`
 	// Criteria is what this lease is for and what done means, as one block of prose. The
-	// machine-checkable half is CompletionGates.
+	// machine-checkable half is Goals.
 	Criteria string `json:"criteria,omitempty"`
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
@@ -832,8 +831,8 @@ type Declaration struct {
 	// before the check record existed, so it is accepted and parsed into Check. Sending
 	// both is refused rather than merged, since nothing here can say which one meant it.
 	Validation string `json:"validation,omitempty"`
-	// CompletionGates declare additional evidence-backed acceptance conditions.
-	CompletionGates []CompletionGate `json:"completion_gates,omitempty"`
+	// Goals are what done means, graded by `magus job wait`. See [Job.Goals].
+	Goals []CompletionGate `json:"goals,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
@@ -906,29 +905,29 @@ func (r Declaration) Validate() error {
 		_ = check
 		seen[PrimaryCompletionGateID] = true
 	}
-	for i, gate := range r.CompletionGates {
+	for i, gate := range r.Goals {
 		if err := gate.Validate(); err != nil {
-			return fmt.Errorf("job: completion_gates[%d]: %w", i, err)
+			return fmt.Errorf("job: goals[%d]: %w", i, err)
 		}
 		if seen[gate.ID] {
-			return fmt.Errorf("job: completion_gates carries duplicate id %q", gate.ID)
+			return fmt.Errorf("job: goals carries duplicate id %q", gate.ID)
 		}
 		seen[gate.ID] = true
 	}
-	for _, gate := range r.CompletionGates {
+	for _, gate := range r.Goals {
 		for _, dep := range gate.DependsOn {
 			if !seen[dep] {
-				return fmt.Errorf("job: completion gate %q depends_on unknown gate %q", gate.ID, dep)
+				return fmt.Errorf("job: goal %q depends_on unknown goal %q", gate.ID, dep)
 			}
 			if dep == gate.ID {
-				return fmt.Errorf("job: completion gate %q cannot depend on itself", gate.ID)
+				return fmt.Errorf("job: goal %q cannot depend on itself", gate.ID)
 			}
 		}
 	}
-	visiting := make(map[string]bool, len(r.CompletionGates))
-	visited := make(map[string]bool, len(r.CompletionGates))
-	byID := make(map[string]CompletionGate, len(r.CompletionGates))
-	for _, gate := range r.CompletionGates {
+	visiting := make(map[string]bool, len(r.Goals))
+	visited := make(map[string]bool, len(r.Goals))
+	byID := make(map[string]CompletionGate, len(r.Goals))
+	for _, gate := range r.Goals {
 		byID[gate.ID] = gate
 	}
 	var visit func(string) error
@@ -937,7 +936,7 @@ func (r Declaration) Validate() error {
 			return nil
 		}
 		if visiting[id] {
-			return fmt.Errorf("job: completion gate dependencies contain a cycle at %q", id)
+			return fmt.Errorf("job: goal dependencies contain a cycle at %q", id)
 		}
 		if visited[id] {
 			return nil
@@ -952,7 +951,7 @@ func (r Declaration) Validate() error {
 		visited[id] = true
 		return nil
 	}
-	for _, gate := range r.CompletionGates {
+	for _, gate := range r.Goals {
 		if err := visit(gate.ID); err != nil {
 			return err
 		}
@@ -969,7 +968,7 @@ func (g CompletionGate) Validate() error {
 	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
 	// been through Resolve yet, and refusing it for naming no kind would refuse the
 	// shorthand the defaults exist to allow. Resolving here is not read-time defaulting;
-	// the stored row is resolved by cloneCompletionGates on the way in.
+	// the stored row is resolved by cloneGoals on the way in.
 	g = g.Resolve()
 	accepted, known := gateAccepts[g.Kind]
 	if !known {
@@ -1092,12 +1091,12 @@ func (r Declaration) Apply(u *Job) {
 	if declared {
 		u.Check, u.Validation = &check, check.String()
 	}
-	u.CompletionGates = cloneCompletionGates(r.CompletionGates)
+	u.Goals = cloneGoals(r.Goals)
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 }
 
-func cloneCompletionGates(in []CompletionGate) []CompletionGate {
+func cloneGoals(in []CompletionGate) []CompletionGate {
 	if in == nil {
 		return nil
 	}
@@ -1659,7 +1658,7 @@ func (u Job) Clone() Job {
 	c.DenyPaths = slices.Clone(u.DenyPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
-	c.CompletionGates = cloneCompletionGates(u.CompletionGates)
+	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)

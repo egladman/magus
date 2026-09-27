@@ -33,7 +33,7 @@
     },
     "criteria": {
       "type": "string",
-      "description": "Criteria is what this lease is for and what done means, as one block of prose. The machine-checkable half is CompletionGates."
+      "description": "Criteria is what this lease is for and what done means, as one block of prose. The machine-checkable half is Goals."
     },
     "checkpoint": {
       "type": "string",
@@ -132,7 +132,7 @@
       "type": "string",
       "description": "Validation is the check as a rendered `magus run` line."
     },
-    "completion_gates": {
+    "goals": {
       "type": "array",
       "items": {
         "type": "object",
@@ -199,7 +199,7 @@
           }
         }
       },
-      "description": "CompletionGates declare additional evidence-backed acceptance conditions."
+      "description": "Goals are what done means, graded by `magus job wait`. See [Job.Goals]."
     },
     "timeout": {
       "type": "string",

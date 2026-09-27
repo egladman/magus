@@ -55,7 +55,7 @@ func completionGateRow() types.Job {
 		ID:         "harness/gated",
 		WritePaths: []string{"internal/job"},
 		State:      types.StateRunning,
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "unit", Description: "job package tests pass", Check: types.LeaseCheck{Target: "go::go-test", Project: "."}},
 			{ID: "docs", Description: "docs checks pass", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
 		},
@@ -95,7 +95,7 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 	}, verifyClaim(acceptRow(), passingResult(), passingRun, nil))
 }
 
-func TestVerifyCompletionGatesRequireEvidenceForEveryDeclaredGate(t *testing.T) {
+func TestVerifyGoalsRequireEvidenceForEveryDeclaredGate(t *testing.T) {
 	t.Parallel()
 
 	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil, claimed(completionGateResult()))
@@ -105,14 +105,14 @@ func TestVerifyCompletionGatesRequireEvidenceForEveryDeclaredGate(t *testing.T) 
 	assert.True(t, status.Gates[1].Verified)
 }
 
-func TestVerifyCompletionGatesRejectMissingOrWrongEvidence(t *testing.T) {
+func TestVerifyGoalsRejectMissingOrWrongEvidence(t *testing.T) {
 	t.Parallel()
 
 	rep := completionGateResult()
 	rep.GateEvidence = rep.GateEvidence[:1]
 	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, completionGateAttempts()[:1], nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, strings.Join(status.Violations, "\n"), `completion gate "docs"`)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "docs"`)
 
 	rep = completionGateResult()
 	attempts := completionGateAttempts()
@@ -122,7 +122,7 @@ func TestVerifyCompletionGatesRejectMissingOrWrongEvidence(t *testing.T) {
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "different run")
 }
 
-func TestVerifyCompletionGatesRejectUndeclaredEvidence(t *testing.T) {
+func TestVerifyGoalsRejectUndeclaredEvidence(t *testing.T) {
 	t.Parallel()
 
 	rep := completionGateResult()
@@ -133,7 +133,7 @@ func TestVerifyCompletionGatesRejectUndeclaredEvidence(t *testing.T) {
 	})
 	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared completion gate \"invented\"")
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared goal \"invented\"")
 }
 
 // TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta: a check gate on ci passes on a
@@ -195,7 +195,7 @@ func TestVerifyCompletionGateDependenciesPropagate(t *testing.T) {
 	t.Parallel()
 
 	row := completionGateRow()
-	row.CompletionGates = append(row.CompletionGates, types.CompletionGate{
+	row.Goals = append(row.Goals, types.CompletionGate{
 		ID: "publish", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
 	})
 	rep := completionGateResult()
@@ -206,11 +206,11 @@ func TestVerifyCompletionGateDependenciesPropagate(t *testing.T) {
 	attempts[0].Attempt.Failed = true
 	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, status.Gates[1].Violations, `depends_on completion gate "unit" has not verified`)
-	assert.Contains(t, status.Gates[2].Violations, `depends_on completion gate "docs" has not verified`)
+	assert.Contains(t, status.Gates[1].Violations, `depends_on goal "unit" has not verified`)
+	assert.Contains(t, status.Gates[2].Violations, `depends_on goal "docs" has not verified`)
 }
 
-func TestVerifyCompletionGatesEnforceJobDependencies(t *testing.T) {
+func TestVerifyGoalsEnforceJobDependencies(t *testing.T) {
 	t.Parallel()
 
 	row := completionGateRow()
@@ -289,7 +289,7 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 
 	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
-	assert.Contains(t, v.Violations[0], "declares no completion gate")
+	assert.Contains(t, v.Violations[0], "declares no check and no goal")
 }
 
 // The binary's spelling and the args after `--` are ways of running one target, so

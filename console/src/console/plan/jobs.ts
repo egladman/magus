@@ -157,7 +157,7 @@ export function lastRunLine(job: Job, nowMs: number): string {
   return "last run " + (age ? age + " ago" : "just now") + (last.ok ? "" : " (failed)");
 }
 
-// gateSubject is what a completion gate examines, rendered for the detail sheet - the TS mirror
+// gateSubject is what a goal examines, rendered for the detail sheet - the TS mirror
 // of CompletionGate.Subject() in types/job.go, so the two surfaces name a gate's subject the same
 // way. check is already rendered as the command that runs it (the server does that, the same way
 // it renders the primary Check field), so this never re-renders it.

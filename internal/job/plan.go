@@ -52,10 +52,13 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
 		candidate := types.Job{ID: id}
 		merge(&candidate)
+		if err := RefuseUngraded(candidate); err != nil {
+			return types.Job{}, err
+		}
 		if err := RefuseForkLimits(rows, id, candidate.Parent, limits); err != nil {
 			return types.Job{}, err
 		}
-		if err := RefuseAmbiguousSymbols(ctx, candidate.CompletionGates, read); err != nil {
+		if err := RefuseAmbiguousSymbols(ctx, candidate.Goals, read); err != nil {
 			return types.Job{}, err
 		}
 		if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
@@ -82,6 +85,20 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 			u.WriteProof = proof
 		}
 	})
+}
+
+// RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`
+// could never pass it, so the row would end by `job exit` on the holder's word. A read-only
+// job writes nothing to grade and is exempt.
+func RefuseUngraded(row types.Job) error {
+	if row.ReadOnly || len(row.WritePaths) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
+		return nil
+	}
+	return fmt.Errorf("job: %s writes %s and declares neither a check nor a goal, so `%s` has nothing to grade it by."+
+		` Add "check" (the target that proves it, as "<target> <project>") or "goals" to the record, such as`+
+		` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]}; `+"`%s`"+` prints every field.`+
+		` A job that writes nothing is "read_only"`,
+		row.ID, strings.Join(row.WritePaths, ", "), hint.JobWait.With(row.ID), hint.JobFork.With("--schema"))
 }
 
 // RefuseForkLimits refuses a fork that would put the job deeper below its root, or leave
@@ -162,8 +179,8 @@ func RefuseAmbiguousSymbols(ctx context.Context, gates []types.CompletionGate, r
 // says when the symbol index those gates were graded against was stale.
 func RenderGates(out io.Writer, status types.JobStatus) {
 	if len(status.Gates) == 0 {
-		fmt.Fprintf(out, "%s declares no completion gate, so there is nothing here to grade.\n", status.Job)
-		fmt.Fprintf(out, "Declare one with `%s`.\n", hint.JobFork.With(status.Job, "--gate-paths", "<id>=<glob>"))
+		fmt.Fprintf(out, "%s declares no check and no goal, so there is nothing here to grade.\n", status.Job)
+		fmt.Fprintf(out, "Declare one in the record's goals: `%s` prints the shape.\n", hint.JobFork.With("--schema"))
 		return
 	}
 	met := 0
@@ -172,7 +189,7 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 			met++
 		}
 	}
-	fmt.Fprintf(out, "%s: %d of %d completion gate(s) met\n", status.Job, met, len(status.Gates))
+	fmt.Fprintf(out, "%s: %d of %d goal(s) met\n", status.Job, met, len(status.Gates))
 	for _, gate := range status.Gates {
 		mark := "unmet"
 		if gate.Verified {
@@ -197,7 +214,7 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 func inheritGates(row types.Job, rows []types.Job) types.Job {
 	var inherited []types.CompletionGate
 	for _, ancestor := range types.JobAncestors(rows, row.ID) {
-		for _, gate := range ancestor.CompletionGates {
+		for _, gate := range ancestor.Goals {
 			if gate = gate.Resolve(); gate.Kind != types.GateKindSymbol {
 				continue
 			}
@@ -211,6 +228,6 @@ func inheritGates(row types.Job, rows []types.Job) types.Job {
 		return row
 	}
 	row = row.Clone()
-	row.CompletionGates = append(row.CompletionGates, inherited...)
+	row.Goals = append(row.Goals, inherited...)
 	return row
 }

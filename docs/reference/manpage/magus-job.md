@@ -56,7 +56,8 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and a recorded run of every declared completion gate that passed.
+store carries, and every declared goal held: a recorded passing run for a check,
+the diff since the checkpoint and the knowledge graph for paths and symbols.
 Evidence must have been captured after the job was declared, so an old green run
 cannot satisfy new work. A target's own run policy bounds its execution; wait does
 not add a competing wall-clock timeout. There is no field for whether the holder
@@ -81,37 +82,13 @@ them and magus describe job prints one job's terms.
 : The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
 
 **--criteria** *string*
-: What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-\* flag)
+: What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
 
 **--deny-paths** *string*
 : A path inside the write paths this job may not write; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
-
-**--gate-check** *\<id\>=\<target\> \<project\>*
-: A further check this job must pass, as \`\<id\>=\<target\> \<project\>\`; repeatable
-
-**--gate-paths** *\<id\>=\<glob\>[,\<glob\>...]*
-: Files this job must have CHANGED, as \`\<id\>=\<glob\>[,\<glob\>...]\`, proven against its checkpoint; repeatable
-
-**--gate-paths-absent** *\<id\>=\<glob\>[,\<glob\>...]*
-: Files that must be GONE when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
-
-**--gate-paths-present** *\<id\>=\<glob\>[,\<glob\>...]*
-: Files that must EXIST when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
-
-**--gate-symbol** *\<id\>=\<name\>[,\<name\>...]*
-: Symbols whose definition this job must have CHANGED, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
-
-**--gate-symbol-absent** *\<id\>=\<name\>[,\<name\>...]*
-: Symbols that must resolve NOWHERE when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
-
-**--gate-symbol-present** *\<id\>=\<name\>[,\<name\>...]*
-: Symbols that must resolve when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
-
-**--gate-symbol-unreferenced** *\<id\>=\<name\>[,\<name\>...]*
-: Symbols nothing may reference when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
 
 **--model** *string*
 : The model the work was matched to

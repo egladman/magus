@@ -38,7 +38,7 @@ step at a time.
 ### describe job options
 
 **--gates**
-: Grade this job's completion gates against the evidence magus holds now, and record nothing
+: Grade this job's goals against the evidence magus holds now, and record nothing
 
 ### describe target options
 

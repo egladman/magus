@@ -238,7 +238,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = "test internal/job"
 		case "validation":
 			value = "magus run test internal/job"
-		case "completion_gates":
+		case "goals":
 			value = []any{map[string]any{
 				"id":    "unit",
 				"check": map[string]any{"target": "test", "project": "internal/job"},

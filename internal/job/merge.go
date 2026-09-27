@@ -59,10 +59,10 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
 	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
-	if gates, ok, e := mergeCompletionGates(params, "completion_gates"); e != nil {
+	if goals, ok, e := mergeGoals(params, "goals"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		set = append(set, func(u *types.Job) { u.CompletionGates = gates })
+		set = append(set, func(u *types.Job) { u.Goals = goals })
 	}
 
 	// check and validation are two spellings of one field, and the row stores both halves,
@@ -162,7 +162,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only", "timeout",
+	"depends_on", "model", "check", "validation", "goals", "state", "read_only", "timeout",
 	"enter",
 }
 
@@ -229,23 +229,27 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 	return nil, false, badType
 }
 
-// mergeCompletionGates accepts the natural JSON/Buzz object array and validates it
-// through the same typed declaration boundary stdin uses. Authorization then treats
-// the collection as a declared plan field, so a bound holder cannot rewrite it.
-func mergeCompletionGates(params map[string]any, key string) ([]types.CompletionGate, bool, error) {
+// mergeGoals accepts the natural JSON/Buzz object array, or that array as a JSON string for
+// a client the MCP descriptor holds to scalars, and validates it through the same typed
+// declaration boundary stdin uses. Authorization then treats the collection as a declared
+// plan field, so a bound holder cannot rewrite it.
+func mergeGoals(params map[string]any, key string) ([]types.CompletionGate, bool, error) {
 	v, present := params[key]
 	if !present {
 		return nil, false, nil
 	}
 	body, err := json.Marshal(v)
+	if s, ok := v.(string); ok {
+		body, err = []byte(s), nil
+	}
 	if err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of completion gates: %w", key, err)
+		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
 	}
 	var gates []types.CompletionGate
 	if err := json.Unmarshal(body, &gates); err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of completion gates: %w", key, err)
+		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
 	}
-	if err := (types.Declaration{ID: "merge", CompletionGates: gates}).Validate(); err != nil {
+	if err := (types.Declaration{ID: "merge", Goals: gates}).Validate(); err != nil {
 		return nil, false, err
 	}
 	return gates, true, nil

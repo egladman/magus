@@ -127,7 +127,7 @@ step at a time.`,
 		{
 			Name:        "job",
 			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
-			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its completion gates, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
+			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -144,11 +144,11 @@ gate, or a target that chains to it, has no terms printed at all. The gate runs
 once, in the forking session's tree, after every job lands.
 
 --gates is the one exception to "context, never a status", and it is still a
-READ: it grades the job's completion gates against the evidence magus holds now
-and records nothing, so asking never advances a job and never blocks the holder
-still working on it. Exit 1 means a gate is unmet.`,
+READ: it grades the job's goals against the evidence magus holds now and records
+nothing, so asking never advances a job and never blocks the holder still working
+on it. Exit 1 means a goal is unmet.`,
 			Flags: []Flag{
-				{Name: "gates", Kind: FlagBool, Doc: "Grade this job's completion gates against the evidence magus holds now, and record nothing"},
+				{Name: "gates", Kind: FlagBool, Doc: "Grade this job's goals against the evidence magus holds now, and record nothing"},
 			},
 			Usage: "magus describe job <job> [flags]",
 		},
@@ -2297,7 +2297,8 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and a recorded run of every declared completion gate that passed.
+store carries, and every declared goal held: a recorded passing run for a check,
+the diff since the checkpoint and the knowledge graph for paths and symbols.
 Evidence must have been captured after the job was declared, so an old green run
 cannot satisfy new work. A target's own run policy bounds its execution; wait does
 not add a competing wall-clock timeout. There is no field for whether the holder
@@ -2326,7 +2327,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
-				{Name: "criteria", Kind: FlagString, Doc: "What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-* flag)"},
+				{Name: "criteria", Kind: FlagString, Doc: "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares"},
 				{Name: "timeout", Kind: FlagDuration, Doc: "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout"},
 				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
@@ -2335,14 +2336,6 @@ them and magus describe job prints one job's terms.`,
 				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
 				{Name: "depends-on", Kind: FlagCustom, Doc: "A job this one waits on; repeatable or comma-separated"},
 				{Name: "check", Kind: FlagString, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
-				{Name: "gate-check", Kind: FlagCustom, Doc: "A further check this job must pass, as `<id>=<target> <project>`; repeatable"},
-				{Name: "gate-paths", Kind: FlagCustom, Doc: "Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable"},
-				{Name: "gate-paths-present", Kind: FlagCustom, Doc: "Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable"},
-				{Name: "gate-paths-absent", Kind: FlagCustom, Doc: "Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable"},
-				{Name: "gate-symbol", Kind: FlagCustom, Doc: "Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable"},
-				{Name: "gate-symbol-present", Kind: FlagCustom, Doc: "Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
-				{Name: "gate-symbol-absent", Kind: FlagCustom, Doc: "Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
-				{Name: "gate-symbol-unreferenced", Kind: FlagCustom, Doc: "Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
 				{Name: "model", Kind: FlagString, Doc: "The model the work was matched to"},
 				{Name: "read-only", Kind: FlagBool, Doc: "A job that gathers evidence and writes nothing"},
 			},

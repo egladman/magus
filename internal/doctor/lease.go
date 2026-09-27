@@ -123,6 +123,9 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 	// check exists to report.
 	if !row.State.Live() {
 		state := string(row.State)
+		// compat(until: no job store row carries an empty state; observe: this check never
+		// reports "no state"): the store stores a declaration naming no state as declared,
+		// so only a row an older magus wrote still has none.
 		if state == "" {
 			state = "no state"
 		}

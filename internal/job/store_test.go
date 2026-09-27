@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -462,6 +464,56 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 	}
 }
 
+// TestAForkNamingNoStateIsStoredDeclared pins every door that declares a row: a record
+// naming no state is stored as declared, exactly as a flag fork is, because the guard
+// reads an empty state as ended and would deny the holder every write.
+func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
+	t.Parallel()
+
+	check := types.LeaseCheck{Target: "go-test", Project: "."}
+	for _, tc := range []struct {
+		name  string
+		fork  func(t *testing.T, s *Store) (types.Job, error)
+		proof types.JobWriteProof
+	}{
+		{name: "job fork --stdin", fork: func(t *testing.T, s *Store) (types.Job, error) {
+			row, err := DecodeDeclaration(strings.NewReader(fmt.Sprintf(
+				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":"abc123","write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				types.JobSchemaVersion)))
+			require.NoError(t, err)
+			return s.Update(t.Context(), row.ID, Declare(row, 0))
+		}},
+		{name: "the magus_job fork op and magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
+			merge, err := ParseMerge(map[string]any{
+				"criteria": "goal", "checkpoint": "abc123", "write_paths": []any{"a.go"}, "check": "go-test .",
+			})
+			require.NoError(t, err)
+			return ForkMerge(t.Context(), s, "a", merge, config.Jobs{}, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stored, err := tc.fork(t, tmpStore(t, t.TempDir()))
+			require.NoError(t, err)
+			assert.Equal(t, types.Job{
+				Schema:       types.Schema{Version: types.JobSchemaVersion},
+				ID:           "a",
+				Criteria:     "goal",
+				Checkpoint:   "abc123",
+				WritePaths:   []string{"a.go"},
+				Check:        &check,
+				Validation:   check.String(),
+				State:        types.StateDeclared,
+				WriteProof:   tc.proof,
+				Created:      stored.Created,
+				Updated:      stored.Updated,
+				RegisteredBy: stored.RegisteredBy,
+			}, stored)
+		})
+	}
+}
+
 // plantRaw writes body as the store's file, byte for byte.
 func plantRaw(t *testing.T, s *Store, body string) string {
 	t.Helper()
@@ -607,6 +659,38 @@ func TestStoreReadsAPlanWrittenBeforeTheRename(t *testing.T) {
 	assert.Equal(t, []string{"MAGUS.md"}, rows[0].DenyPaths)
 	assert.Equal(t, []string{"internal/hint"}, rows[0].ReadPaths)
 	assert.Equal(t, "principal", rows[0].Model)
+}
+
+// A row an older magus wrote keeps its goals: read back under the new name and written
+// out under both, so that magus, sharing the store, still grades them. Where the two
+// spellings differ the older magus wrote last, and its spelling wins.
+func TestStoreReadsGoalsStoredUnderTheirOldName(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path := plantRaw(t, s, `{"jobs":[{"id":"a","schema_version":11,"state":"running","created":1,"updated":1,`+
+		`"completion_gates":[{"id":"gone","kind":"symbol","expect":"absent","symbols":["Legacy"]}]}]}`)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []types.CompletionGate{{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}, rows[0].Goals)
+
+	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "rewritten" })
+	require.NoError(t, err)
+	stored := storedRow(t, path, "a")
+	want := []any{map[string]any{
+		"id": "gone", "kind": "symbol", "expect": "absent", "symbols": []any{"Legacy"}, "check": map[string]any{"target": ""},
+	}}
+	assert.Equal(t, want, stored["goals"])
+	assert.Equal(t, want, stored["completion_gates"], "an older magus sharing the store reads this spelling")
+
+	plantRaw(t, s, `{"jobs":[{"id":"b","state":"running","created":1,"updated":1,`+
+		`"completion_gates":[{"id":"x","kind":"paths","expect":"changed","paths":["a"]}],`+
+		`"goals":[{"id":"y","kind":"paths","expect":"changed","paths":["b"]}]}]}`)
+	rows, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []types.CompletionGate{{ID: "x", Kind: types.GateKindPaths, Expect: types.ExpectChanged, Paths: []string{"a"}}}, rows[0].Goals)
 }
 
 func TestStoreClear(t *testing.T) {

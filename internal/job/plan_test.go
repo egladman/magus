@@ -190,7 +190,7 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 		Gates:        []types.GateStatus{{ID: "sym", Verified: true}},
 		StaleIndexes: []string{".", "console"},
 	})
-	assert.Contains(t, out.String(), "1 of 1 completion gate(s) met")
+	assert.Contains(t, out.String(), "1 of 1 goal(s) met")
 	assert.Contains(t, out.String(), "stale")
 	assert.Contains(t, out.String(), "., console")
 	assert.Contains(t, out.String(), "graph build")
@@ -219,14 +219,14 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 
 	parent := types.Job{
 		ID: "rename", State: types.StateRunning, WritePaths: []string{"."},
-		CompletionGates: []types.CompletionGate{
+		Goals: []types.CompletionGate{
 			{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OldName"}},
 			{ID: "tests", Check: types.LeaseCheck{Target: "test", Project: "."}},
 		},
 	}
 	child := types.Job{
 		ID: "rename/api", Parent: "rename", State: types.StateRunning, WritePaths: []string{"api"},
-		CompletionGates: []types.CompletionGate{{ID: "moved", Kind: types.GateKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
+		Goals: []types.CompletionGate{{ID: "moved", Kind: types.GateKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
 	}
 	loc := declared(t, parent, child)
 	read := func(_ context.Context, name string) (SymbolFact, bool) {
@@ -315,4 +315,39 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Model = "opus" }, config.Jobs{MaxLive: 1}, nil)
 	require.NoError(t, err, "an update is not a fork")
 	assert.Equal(t, "opus", updated.Model)
+}
+
+// A job that writes is held to something wait can grade; one that writes nothing is not.
+func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
+	t.Parallel()
+
+	check := types.LeaseCheck{Target: "test", Project: "."}
+	goal := types.CompletionGate{ID: "done", Kind: types.GateKindPaths, Paths: []string{"a.go"}}
+	for name, tc := range map[string]struct {
+		row     types.Job
+		refused bool
+	}{
+		"a writing job with neither":    {row: types.Job{ID: "w", WritePaths: []string{"a.go"}}, refused: true},
+		"a writing job with a check":    {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Check: &check}},
+		"a writing job with a goal":     {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.CompletionGate{goal}}},
+		"a read-only job":               {row: types.Job{ID: "r", ReadOnly: true}},
+		"a job declaring no write path": {row: types.Job{ID: "r"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := RefuseUngraded(tc.row)
+			if !tc.refused {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `declares neither a check nor a goal`)
+			assert.Contains(t, err.Error(), `"goals"`, "the refusal names what to add")
+		})
+	}
+
+	_, err := ForkMerge(t.Context(), NewStore(tmpLoc(t, t.TempDir())), "w",
+		func(u *types.Job) { u.WritePaths = []string{"a.go"} }, config.Jobs{}, nil)
+	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job\\put hold a new row to it")
 }

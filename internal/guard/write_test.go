@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -201,9 +202,17 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 	})
 
 	t.Run("no state recorded", func(t *testing.T) {
+		// The store stores a row naming no state as declared, so the legacy row an older
+		// magus left is planted as the file it wrote.
+		ctx, root := fleetFixture(t)
 		leases := fleetLeases()
 		leases[0].State, leases[1].State = "", ""
-		ctx, root := fleetFixture(t, leases...)
+		body, err := json.Marshal(map[string]any{"jobs": leases})
+		require.NoError(t, err)
+		path, err := job.NewStore(job.Location{CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, body, 0o644))
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 

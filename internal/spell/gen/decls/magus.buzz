@@ -652,7 +652,7 @@ export object Job {
     model: str = "",
     check: LeaseCheck? = null,
     validation: str = "",
-    completionGates: [CompletionGate] = [],
+    goals: [CompletionGate] = [],
     state: str = "",
     holder: str = "",
     readOnly: bool = false,

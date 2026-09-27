@@ -1,6 +1,7 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -624,4 +625,149 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 	assert.Equal(t, types.StateExited, stored.State)
 	require.NotNil(t, stored.Attempt)
 	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
+}
+
+// goalSymbol is one symbol the goalGraph holds.
+type goalSymbol struct {
+	id, label, file string
+	refs            int
+}
+
+// goalGraph resolves the way the knowledge graph does: Refs takes the first symbol whose
+// id is ref or whose label CONTAINS it, so a bare name can land on a longer one.
+type goalGraph []goalSymbol
+
+func (g goalGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
+	for _, s := range g {
+		if s.id == ref || strings.Contains(s.label, ref) {
+			return types.KnowledgeRefsOutput{Symbol: s.id, Label: s.label, RefCount: s.refs,
+				Defs: []types.KnowledgeRefSite{{File: s.file}}}, true
+		}
+	}
+	return types.KnowledgeRefsOutput{}, false
+}
+
+func (g goalGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
+	var out []types.KnowledgeMatch
+	for _, s := range g {
+		if strings.Contains(s.label, input) {
+			out = append(out, types.KnowledgeMatch{ID: s.id, Kind: types.KindSymbol, Label: s.label})
+		}
+	}
+	return out
+}
+
+// TestWaitGradesEveryGoal is the audit of every kind and expectation a goal can declare,
+// end to end: a real diff since the checkpoint, a real tree, and a graph that resolves
+// fuzzily. Each pair passes job wait when it holds and fails it when it does not.
+//
+// The work sits in the worker's own checkout while wait runs in a clean one, which is
+// how an orchestrator waits; grading the waiter's tree failed every writing job.
+func TestWaitGradesEveryGoal(t *testing.T) {
+	t.Parallel()
+
+	repo := gitRepo(t, map[string]string{
+		"api.go": "package a\n\nfunc Api() {}\n", "keep.go": "package a\n\nfunc Keep() {}\n",
+		"legacy.go": "package a\n\nfunc Legacy() {}\n",
+	})
+	checkpoint := commitRepo(t, repo)
+	worker := filepath.Join(t.TempDir(), "worker")
+	git(t, repo, "worktree", "add", "-q", "-b", "worker", worker, checkpoint)
+	require.NoError(t, os.WriteFile(filepath.Join(worker, "api.go"), []byte("package a\n\nfunc Api() { Keep() }\n"), 0o644))
+	require.NoError(t, os.Remove(filepath.Join(worker, "legacy.go")))
+	require.NoError(t, os.WriteFile(filepath.Join(worker, "new.go"), []byte("package a\n"), 0o644))
+	changed := []string{"api.go", "legacy.go", "new.go"}
+
+	// Legacy is gone and LegacyAdapter survives, which a fuzzy lookup of Legacy lands on.
+	graph := goalGraph{
+		{id: "symbol:go a/Api().", label: "Api", file: "api.go"},
+		{id: "symbol:go a/Keep().", label: "Keep", file: "keep.go", refs: 2},
+		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
+		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
+	}
+	paths := func(expect types.GateExpect, p string) types.CompletionGate {
+		return types.CompletionGate{ID: "goal", Kind: types.GateKindPaths, Expect: expect, Paths: []string{p}}
+	}
+	symbol := func(expect types.GateExpect, name string) types.CompletionGate {
+		return types.CompletionGate{ID: "goal", Kind: types.GateKindSymbol, Expect: expect, Symbols: []string{name}}
+	}
+	check := types.CompletionGate{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
+	run := types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
+	failed := run
+	failed.Failed = true
+
+	for _, tc := range []struct {
+		name       string
+		goal       types.CompletionGate
+		checkpoint string
+		checkout   string
+		blind      bool
+		run        types.JobAttempt
+		holds      bool
+		why        string
+	}{
+		{name: "paths changed holds when the diff touches it", goal: paths("", "api.go"), holds: true},
+		{name: "paths changed fails when it is untouched", goal: paths("", "keep.go"), why: `nothing matching "keep.go" changed`},
+		{name: "paths changed fails when the diff is unreadable", goal: paths("", "api.go"), checkpoint: "0123456789abcdef0123456789abcdef01234567",
+			why: "could not read what this job changed"},
+		{name: "paths changed fails when the job's checkout is gone and the waiter's is clean", goal: paths("", "api.go"),
+			checkout: filepath.Join(t.TempDir(), "removed"), why: `nothing matching "api.go" changed`},
+		{name: "paths present holds when it is there", goal: paths(types.ExpectPresent, "new.go"), holds: true},
+		{name: "paths present fails when it is gone", goal: paths(types.ExpectPresent, "legacy.go"), why: `nothing matching "legacy.go" is in the tree`},
+		{name: "paths absent holds when it is gone", goal: paths(types.ExpectAbsent, "legacy.go"), holds: true},
+		{name: "paths absent fails while it is there", goal: paths(types.ExpectAbsent, "keep.go"), why: `"keep.go" is still in the tree`},
+		{name: "symbol changed holds when its definition changed", goal: symbol("", "Api"), holds: true},
+		{name: "symbol changed fails when its definition is untouched", goal: symbol("", "Keep"), why: "none of that changed"},
+		{name: "symbol changed fails when the graph is unreadable", goal: symbol("", "Api"), blind: true,
+			why: "could not read the symbol graph"},
+		{name: "symbol present holds while it resolves", goal: symbol(types.ExpectPresent, "Keep"), holds: true},
+		{name: "symbol present fails on a longer name that survives", goal: symbol(types.ExpectPresent, "Legacy"),
+			why: `"Legacy" is defined nowhere`},
+		{name: "symbol absent holds once it resolves nowhere", goal: symbol(types.ExpectAbsent, "Legacy"), holds: true},
+		{name: "symbol absent fails while it still resolves", goal: symbol(types.ExpectAbsent, "Keep"), why: `"Keep" is still defined in keep.go`},
+		{name: "symbol unreferenced holds when nothing references it", goal: symbol(types.ExpectUnreferenced, "Lonely"), holds: true},
+		{name: "symbol unreferenced fails while a reference remains", goal: symbol(types.ExpectUnreferenced, "Keep"),
+			why: `2 place(s) still reference "Keep"`},
+		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(types.ExpectUnreferenced, "Legacy"),
+			why: "cannot count what still names it"},
+		{name: "check passed holds on a passing run", goal: check, run: run, holds: true},
+		{name: "check passed fails on a failed run", goal: check, run: failed, why: "did not pass"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			row := types.Job{
+				ID: "goal", Criteria: "the goal holds", WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
+				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
+				Goals: []types.CompletionGate{tc.goal.Resolve()},
+			}
+			loc := tmpLoc(t, t.TempDir())
+			plant(t, NewStore(loc), row)
+			result := types.JobResult{Schema: types.Schema{Version: types.JobResultSchemaVersion}, Job: "goal", ChangedPaths: changed}
+			if tc.run.Found {
+				result.GateEvidence = []types.GateEvidence{{GateID: "goal", OutputRef: "ref"}}
+			}
+			read := GraphSymbols(graph)
+			if tc.blind {
+				read = nil
+			}
+
+			status, err := Wait(t.Context(), NewStore(loc), "goal", &result,
+				func(context.Context, string) (types.JobAttempt, error) { return tc.run, nil },
+				CheckpointObserver(repo, read))
+			require.NoError(t, err)
+			require.Len(t, status.Gates, 1)
+			rows, err := NewStore(loc).List()
+			require.NoError(t, err)
+			if tc.holds {
+				assert.True(t, status.Verified, "violations: %v", status.Violations)
+				assert.Equal(t, types.StatePass, rows[0].State)
+				return
+			}
+			assert.False(t, status.Gates[0].Verified)
+			assert.Contains(t, strings.Join(status.Gates[0].Violations, "\n"), tc.why)
+			// Not StateRunning: the sweep ends a job whose checkout is gone before wait grades it.
+			assert.NotEqual(t, types.StatePass, rows[0].State, "an unmet goal never passes the job")
+		})
+	}
 }
