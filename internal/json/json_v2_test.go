@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -112,9 +111,9 @@ func TestDurationRoundTrips(t *testing.T) {
 // this package exists to absorb (see TestDurationRoundTrips) passes its tests and breaks
 // the CLI.
 func TestNoDirectEncodingJSONImport(t *testing.T) {
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	// go test's cwd is this package dir, regardless of -trimpath.
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
 	allowed := map[string]bool{
 		"internal/json/json_v2.go":                  true,
 		"libs/gopherbuzz/internal/codec/json.go":    true,

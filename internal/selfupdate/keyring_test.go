@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -15,11 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// repoRoot resolves relative to this package's directory, which is go test's cwd
+// regardless of -trimpath (runtime.Caller(0) would return the module path under it).
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	_, sourceFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	return filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	return root
 }
 
 // TestReleaseTrustAnchorMatchesInstallerAndCI keeps the ring's copies in step.

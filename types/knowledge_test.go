@@ -5,7 +5,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -93,9 +92,9 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink,
 	}
 
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	repoRoot := filepath.Join(filepath.Dir(thisFile), "..")
+	// go test's cwd is this package dir, regardless of -trimpath.
+	repoRoot, err := filepath.Abs("..")
+	require.NoError(t, err)
 
 	read := func(parts ...string) string {
 		p := filepath.Join(append([]string{repoRoot}, parts...)...)
