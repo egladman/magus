@@ -224,14 +224,20 @@ func hookChangedFiles(ctx context.Context, root, gitDir string, op HookOperation
 	return splitLines([]byte(out)), nil
 }
 
-// HookDirtyFiles lists the paths modified or untracked in root as the operation's index
-// sees them: what a regeneration run after GitHookOperation wrote.
+// HookDirtyFiles lists the paths whose working tree differs from the operation's index,
+// untracked ones included: what a regeneration run after GitHookOperation wrote, and so
+// what HookStage has left to add. A path the index already holds as the tree has it is
+// not listed, since staging it again adds nothing and, for one the merge deleted, names
+// a path git add cannot match.
 func HookDirtyFiles(ctx context.Context, root string, op HookOperation) ([]string, error) {
 	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{KeepLeadingSpace: true}), "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
 		return nil, fmt.Errorf("vcs: git status: %w", err)
 	}
-	return gitStatusPaths(splitStatusLines(out)), nil
+	lines := slices.DeleteFunc(splitStatusLines(out), func(line string) bool {
+		return len(line) < 2 || line[1] == ' '
+	})
+	return gitStatusPaths(lines), nil
 }
 
 // HookStage stages paths into the operation's index, so a commit git has not made yet
