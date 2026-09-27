@@ -35,11 +35,6 @@ only, so a step that itself composes is described by its own ref. Add a charm
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.
 
-### describe job options
-
-**--gates**
-: Grade this job's goals against the evidence magus holds now, and record nothing
-
 ### describe target options
 
 **--against** *ref*

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40344
-skill_short_bytes: 30549
+skill_full_bytes: 40362
+skill_short_bytes: 30567
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `90` |
+| `agent-skill-version` | `91` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `4db8a94f2cf6` |
+| `skill-content` | `71f4f358513b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -498,12 +498,13 @@ past a goal that shrugged would be to break the observation.
 Ask where a job stands without advancing it:
 
 ```sh
-magus describe job <job> --gates
+magus describe job <job>
 ```
 
-Same grading `magus job wait` does, recording nothing, exit 1 while any goal is
-unmet. Use it instead of asking a worker how it is going: the answer is graded
-from evidence rather than composed by the thing being asked about.
+It always prints where each goal stands, alongside the terms: the same grading
+`magus job wait` does, recording nothing. Use it instead of asking a worker how
+it is going: the answer is graded from evidence rather than composed by the
+thing being asked about.
 
 SEQUENCE goals with `depends_on` between them, which is how one is cleared
 before another is approached; a failed prerequisite propagates. Do NOT nest
@@ -548,7 +549,7 @@ worker.
 | --- | --- |
 | to hand the question to a person | the console link every verb that names a job prints |
 | to watch it happen | `magus job watch <job>` |
-| to know whether it is finished | `magus describe job <job> --gates` |
+| to know whether it is finished | `magus describe job <job>` |
 
 `magus job watch` merges files changed under the job's write paths, the tool
 calls the guard saw under its lease, and the runs recorded against it, one line
@@ -1182,12 +1183,13 @@ past a goal that shrugged would be to break the observation.
 Ask where a job stands without advancing it:
 
 ```sh
-magus describe job <job> --gates
+magus describe job <job>
 ```
 
-Same grading `magus job wait` does, recording nothing, exit 1 while any goal is
-unmet. Use it instead of asking a worker how it is going: the answer is graded
-from evidence rather than composed by the thing being asked about.
+It always prints where each goal stands, alongside the terms: the same grading
+`magus job wait` does, recording nothing. Use it instead of asking a worker how
+it is going: the answer is graded from evidence rather than composed by the
+thing being asked about.
 
 SEQUENCE goals with `depends_on` between them, which is how one is cleared
 before another is approached; a failed prerequisite propagates. Do NOT nest
@@ -1234,7 +1236,7 @@ magus is holding anyway.
 | --- | --- |
 | to hand the question to a person | the console link every verb that names a job prints |
 | to watch it happen | `magus job watch <job>` |
-| to know whether it is finished | `magus describe job <job> --gates` |
+| to know whether it is finished | `magus describe job <job>` |
 
 `magus job watch` merges files changed under the job's write paths, the tool
 calls the guard saw under its lease, and the runs recorded against it, one line

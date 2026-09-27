@@ -127,7 +127,7 @@ step at a time.`,
 		{
 			Name:        "job",
 			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
-			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
+			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, the graph's blast radius for each write path, and where each goal stands graded against the evidence magus holds now.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -143,13 +143,10 @@ same shape magus diff --prompt has, with one refusal: a job whose check is the c
 gate, or a target that chains to it, has no terms printed at all. The gate runs
 once, in the forking session's tree, after every job lands.
 
---gates is the one exception to "context, never a status", and it is still a
-READ: it grades the job's goals against the evidence magus holds now and records
-nothing, so asking never advances a job and never blocks the holder still working
-on it. Exit 1 means a goal is unmet.`,
-			Flags: []Flag{
-				{Name: "gates", Kind: FlagBool, Doc: "Grade this job's goals against the evidence magus holds now, and record nothing"},
-			},
+It also grades where each declared goal stands against the evidence magus holds
+right now, which is still a READ: it records nothing, so asking never advances a
+job and never blocks the holder still working on it. It is the same grading
+` + "`magus job wait`" + ` does, so the two cannot disagree.`,
 			Usage: "magus describe job <job> [flags]",
 		},
 		{
@@ -2385,7 +2382,7 @@ worker; where two live jobs somehow cover one path the line says so and
 attributes it to neither, because there is nothing in a path to break the tie.
 
 It reads this checkout and needs no server. The same feed is served over the
-console's Jobs view, which every verb that names a job prints a link to.` + "\n\n`magus describe job <job> --gates`" + ` grades what a job has finished; this
+console's Jobs view, which every verb that names a job prints a link to.` + "\n\n`magus describe job <job>`" + ` grades what a job has finished; this
 shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},

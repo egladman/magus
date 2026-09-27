@@ -695,15 +695,15 @@ observation.
 anything:
 
 ```sh
-magus describe job api/migrate --gates
+magus describe job api/migrate
 ```
 
-It grades every goal against the evidence magus holds right now, writes nothing,
-and exits 1 while any goal is unmet. Because it runs the same grading `wait`
-does, the two cannot disagree; because it records nothing, an orchestrator may
-ask while the holder is still working, and asking never blocks that holder. The
-goals that read the tree and the graph answer even for a job that has filed no
-result at all.
+It always grades every goal against the evidence magus holds right now,
+alongside the job's terms, and writes nothing. Because it runs the same grading
+`wait` does, the two cannot disagree; because it records nothing, an
+orchestrator may ask while the holder is still working, and asking never blocks
+that holder. The goals that read the tree and the graph answer even for a job
+that has filed no result at all.
 
 Sequence goals with `depends_on` between them when one has to be cleared before
 another is approached. A failed prerequisite propagates, and the declaration

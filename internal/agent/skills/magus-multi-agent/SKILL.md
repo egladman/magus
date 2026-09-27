@@ -565,12 +565,13 @@ past a goal that shrugged would be to break the observation.
 Ask where a job stands without advancing it:
 
 ```sh
-magus describe job <job> --gates
+magus describe job <job>
 ```
 
-Same grading `magus job wait` does, recording nothing, exit 1 while any goal is
-unmet. Use it instead of asking a worker how it is going: the answer is graded
-from evidence rather than composed by the thing being asked about.
+It always prints where each goal stands, alongside the terms: the same grading
+`magus job wait` does, recording nothing. Use it instead of asking a worker how
+it is going: the answer is graded from evidence rather than composed by the
+thing being asked about.
 
 SEQUENCE goals with `depends_on` between them, which is how one is cleared
 before another is approached; a failed prerequisite propagates. Do NOT nest
@@ -618,7 +619,7 @@ worker{{end}}.
 | --- | --- |
 | to hand the question to a person | the console link every verb that names a job prints |
 | to watch it happen | `{{cmd "job watch"}} <job>` |
-| to know whether it is finished | `{{cmd "describe job"}} <job> --gates` |
+| to know whether it is finished | `{{cmd "describe job"}} <job>` |
 
 `{{cmd "job watch"}}` merges files changed under the job's write paths, the tool
 calls the guard saw under its lease, and the runs recorded against it, one line
