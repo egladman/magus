@@ -1266,3 +1266,71 @@ type KnowledgeGraphOutput struct {
 	Nodes []KnowledgeNode `json:"nodes"         yaml:"nodes" jsonl:"primary"`
 	Links []KnowledgeEdge `json:"links"         yaml:"links"`
 }
+
+// The norm families the miner reports. Each slug names a rule, its reference page and its
+// opt-out alike.
+const (
+	// NormDepDirection is which way package imports run between two top-level directories.
+	NormDepDirection = "dep-direction"
+	// NormDepFanout is how many distinct packages under one top-level directory a package
+	// imports.
+	NormDepFanout = "dep-fanout"
+	// NormErrSentinelName is whether a package-level error value's name leads with err.
+	NormErrSentinelName = "err-sentinel-name"
+	// NormTestPackageName is whether a test file declares the package its directory's
+	// sources declare.
+	NormTestPackageName = "test-package-name"
+)
+
+// Norm is one row of the norm table: how many members of a cohort agree on one shape. A row
+// is a norm only when Cohort and Share clear the table's minimums; below either it is Silent,
+// a count and never a rule. Deviations are the members that disagree, so a reader can check
+// each one against the count.
+type Norm struct {
+	Family string `json:"family" yaml:"family"`
+	// Scope is where the cohort was drawn: a directory pair, a directory, or a language.
+	Scope string `json:"scope" yaml:"scope"`
+	// Key is the shape the agreeing members share.
+	Key    string  `json:"key"    yaml:"key"`
+	Agree  int     `json:"agree"  yaml:"agree"`
+	Cohort int     `json:"cohort" yaml:"cohort"`
+	Share  float64 `json:"share"  yaml:"share"`
+	Silent bool    `json:"silent" yaml:"silent"`
+	// Quantiles is set on a distribution row (dep-fanout), whose Key names the p95 bound and
+	// whose deviations are the members above it. The bound is a fact; where to draw a ceiling
+	// is a decision the row does not make.
+	Quantiles  *NormQuantiles `json:"quantiles,omitempty"  yaml:"quantiles,omitempty"`
+	Examples   []string       `json:"examples,omitempty"   yaml:"examples,omitempty"`
+	Deviations []NormSite     `json:"deviations,omitempty" yaml:"deviations,omitempty"`
+}
+
+// NormQuantiles summarizes a per-member count across a cohort.
+type NormQuantiles struct {
+	P50 int `json:"p50" yaml:"p50"`
+	P90 int `json:"p90" yaml:"p90"`
+	P95 int `json:"p95" yaml:"p95"`
+	Max int `json:"max" yaml:"max"`
+}
+
+// NormSite is one member a norm row names: what it is, and where it is (a workspace-relative
+// path, with a line when the index recorded one).
+type NormSite struct {
+	Subject string `json:"subject" yaml:"subject"`
+	Source  string `json:"source"  yaml:"source"`
+}
+
+// NormTable is what `magus graph stats --norms` prints and `magus graph build` writes to the
+// cache dir. Rows are ordered by family, scope and key.
+type NormTable struct {
+	Definition string  `json:"definition" yaml:"definition"`
+	MinCohort  int     `json:"min_cohort" yaml:"min_cohort"`
+	MinShare   float64 `json:"min_share"  yaml:"min_share"`
+	Norms      []Norm  `json:"norms"      yaml:"norms" jsonl:"primary"`
+}
+
+// NormTableDefinition is the human-readable description of the norm table.
+const NormTableDefinition = "Norms are the shapes most of this workspace already agrees on, " +
+	"counted from the knowledge graph: which way imports run between top-level directories, " +
+	"how many packages under each directory a package imports, how error values are named, " +
+	"and which package a test file declares. A row is a norm when its cohort and share clear " +
+	"the minimums; otherwise it is silent, a count and never a rule."
