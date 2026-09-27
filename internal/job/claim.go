@@ -95,35 +95,16 @@ func driverPattern(p string) string {
 	return "`" + path.Base(p) + "`"
 }
 
-// RefuseUnorderedFileShare refuses a fork whose write paths would hand a single claimable
-// file to two live, unordered jobs at once (MGS3032): one of candidate's entries and an
-// entry of another live row, held in a DIFFERENT checkout, name the same single literal
-// file (no glob, not a directory, not a project root), that file has a diff driver, the two
-// entries still intersect (see types.PathsIntersect, so two different declaration claims
-// pass each other), and neither row is the other's ancestor, descendant, or a depends_on
-// partner.
+// RefuseUnorderedFileShare refuses a fork whose write paths would hand one claimable file
+// (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
+// jobs at once (MGS3032): a candidate entry and a holder's entry name the same file, still
+// intersect (types.PathsIntersect), and neither row is the other's ancestor, descendant, or
+// depends_on partner.
 //
-// A FILE HAS ONE OWNER, unless the two rows say otherwise. Two whole-file leases on it both
-// read "mine wins" and neither refuses the other, which is what makes the whole-file
-// spelling look free; this is the fork-time cost that makes it not, once a file is
-// genuinely shared. Runs after RefuseSharedCheckout, so the same-checkout workspace-load
-// case keeps its own worktree message.
-//
-// SAME-CHECKOUT SHARING IS LEFT ALONE, on purpose: two rows one caller declared side by
-// side, or a worker fork of its own child, are the checkout RefuseSharedCheckout already
-// watches and WriteProof already records as overlapping, and
-// TestForkRecordsWhetherTheWritePathsWereProvenDisjoint pins that an overlap there is the
-// orchestrator's call, not a refusal. What nothing previously caught, and what this closes,
-// is the pair sitting in two DIFFERENT checkouts: WriteProof is scoped to "this checkout"
-// (heldHere) and reads a cross-checkout pair as WriteProofAlone, so the only trace of it
-// was an `ls jobs` overlap line nobody acted on.
-//
-// Narrow by construction otherwise. It says nothing about a glob, a directory, or a project
-// root (RefuseDirectoryWritePaths and the overlap report already cover those), nothing
-// about a file with no diff driver (recorded only, never refused: the only move for those
-// is depends_on), and nothing about a pair already ordered by parent or depends_on.
-//
-// A nil store, or one with no workspace root, has no tree to stat and refuses nothing.
+// Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
+// RefuseSharedCheckout and the overlap report already watch; a holder blocked on
+// depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
+// no diff driver, for which depends_on is the only move.
 func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, id string, candidate types.Job) error {
 	if store == nil || store.root == "" || len(candidate.WritePaths) == 0 {
 		return nil
@@ -142,9 +123,12 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 			if holder.ID == id || !holder.State.Live() || len(holder.WritePaths) == 0 {
 				continue
 			}
-			if here != "" && holder.CheckoutRoot == here {
+			// A row nobody has taken yet is not in a different checkout from anyone.
+			if holder.CheckoutRoot == "" || (here != "" && holder.CheckoutRoot == here) {
 				continue
 			}
+			// Blocked means holder owns none of its write paths yet; the fork that
+			// unblocks it runs this same check again, against whatever holds the file then.
 			if _, blocked := types.JobBlockedOn(rows, holder); blocked {
 				continue
 			}

@@ -108,6 +108,8 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		aWrite      []string
+		aCheckout   *string // nil: aRoot (a different checkout than the store's); &"": untaken
+		aDependsOn  []string
 		bWrite      []string
 		bParent     string
 		bDependsOn  []string
@@ -119,13 +121,20 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 		{name: "a child of the holder", aWrite: []string{"magusfile.buzz"}, bWrite: []string{"magusfile.buzz"}, bParent: "A"},
 		{name: "a glob is not a literal file", aWrite: []string{"docs/x.md"}, bWrite: []string{"docs/**"}},
 		{name: "a file with no diff driver", aWrite: []string{"notes.txt"}, bWrite: []string{"notes.txt"}},
+		{name: "an untaken holder is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: strPtr(""), bWrite: []string{"magusfile.buzz"}},
+		{name: "a holder in the same checkout is left alone", aWrite: []string{"magusfile.buzz"}, aCheckout: strPtr(bRoot), bWrite: []string{"magusfile.buzz"}},
+		{name: "a holder blocked on depends_on is left alone", aWrite: []string{"magusfile.buzz"}, aDependsOn: []string{"C"}, bWrite: []string{"magusfile.buzz"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			loc := tmpLoc(t, bRoot)
 			s := NewStore(loc)
-			a := types.Job{ID: "A", State: types.StateRunning, WritePaths: tc.aWrite, Checkpoint: aRev, CheckoutRoot: aRoot}
+			checkout := aRoot
+			if tc.aCheckout != nil {
+				checkout = *tc.aCheckout
+			}
+			a := types.Job{ID: "A", State: types.StateRunning, WritePaths: tc.aWrite, DependsOn: tc.aDependsOn, Checkpoint: aRev, CheckoutRoot: checkout}
 			seed(t, s, a)
 			rows, err := s.List()
 			require.NoError(t, err)
@@ -144,3 +153,7 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 		})
 	}
 }
+
+// strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
+// apart from "given as empty".
+func strPtr(s string) *string { return &s }
