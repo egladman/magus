@@ -621,16 +621,15 @@ const (
 // compared for change only; magus never interprets either, so nothing here
 // lockstep-couples a magus release to a model name.
 type Agent struct {
-	// Model is the model that produced this event, as the host's own record names it
-	// (Claude Code: message.model on the assistant record). Empty when the host's
+	// Model is the model that produced this event, as the host's own record names it,
+	// such as message.model on an assistant record. Empty when the host's
 	// record does not carry one; an adapter's coverage line says so under the
 	// "model" dimension rather than leaving a reader to read the empty string as
 	// a fact.
 	Model string `json:"model,omitempty"`
 	// HostVersion is the agent host's own release at the moment of this event
-	// (Claude Code: the transcript record's top-level "version"). Distinct from
-	// AgentEvent.Host, which names the PROGRAM ("claude-code"); this is the
-	// version OF it.
+	// (a transcript record's top-level "version", for instance). Distinct from
+	// AgentEvent.Host, which names the PROGRAM; this is the version OF it.
 	HostVersion string `json:"host_version,omitempty"`
 }
 
