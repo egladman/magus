@@ -276,7 +276,7 @@ func redirectsStdout(r *syntax.Redirect) bool {
 		return false
 	}
 	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.DplOut, syntax.ClbOut:
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.DplOut, syntax.RdrClob:
 		return true
 	}
 	return false
@@ -456,7 +456,7 @@ func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 		if fence != "" {
 			continue
 		}
-		if m := headingRe.FindStringSubmatch(text); m != nil && m[2] != "" {
+		if m := headingRe.FindStringSubmatch(text); len(m) > 2 && m[2] != "" {
 			entries = append(entries, mapEntry{name: m[1] + " " + m[2], first: lines})
 		}
 	}
