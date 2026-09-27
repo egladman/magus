@@ -13,15 +13,18 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 ## The loop
 
-1. Read the board:
+1. Read the pinned "Merge queue" issue first: every open pull request's place in
+   the queue, with its reason and a person's command (`./magus buzz
+   tools/pull-requests.buzz -- dashboard --all` renders it locally). Then read
+   the board:
 
    ```sh
    ./magus buzz tools/pull-requests.buzz -- status [--pr <n>]... [--author <login>]
    ```
 
-   With no selector it reads your own open pull requests. It prints one JSON
-   record per pull request: `state`, `stage`, `reason`, `action`, `model`,
-   `evidence`, and sometimes `merge`.
+   With no selector it reads your own open pull requests; `--all` reads
+   everyone's. It prints one JSON record per pull request: `state`, `stage`,
+   `reason`, `action`, `model`, `evidence`, and sometimes `merge`.
 
    `state` is what the checks on the head say:
 
