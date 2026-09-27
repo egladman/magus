@@ -211,6 +211,31 @@ func wordCompletions(src, before string) []Completion {
 	return out
 }
 
+// ModuleCallCandidates returns every module and namespace-member name in the
+// manifest, spelled the way Buzz source actually calls it: the bare module
+// name, and "module\name" for each field or method. Sig already carries that
+// call form up to its arguments (generated once, from the same declaration
+// BuzzSignature renders it from), so cutting it there is what keeps this list
+// from drifting into the dotted, snake_case form the Go descriptor declares
+// members under. The interactive REPL reads this manifest through this
+// function; `magus buzz lsp` reads it through CompleteAt, so a spelling fix to
+// the generated manifest reaches both.
+func ModuleCallCandidates() []string {
+	out := make([]string, 0, len(modules)*4)
+	for _, m := range modules {
+		out = append(out, m.Name)
+		for _, f := range m.Fields {
+			out = append(out, m.Name+`\`+f.Name)
+		}
+		for _, meth := range m.Methods {
+			if name, _, ok := strings.Cut(meth.Sig, "("); ok {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
+}
+
 func completionKind(k symbolKind) CompletionKind {
 	switch k {
 	case symFunction:

@@ -105,3 +105,21 @@ func TestComplete_OffsetClamped(t *testing.T) {
 		CompleteAt("fs.", -5)
 	})
 }
+
+// TestModuleCallCandidates_SpelledWithBackslash pins the fix this exists for:
+// the REPL used to offer "fs.write_file" (dotted, snake_case), which is not a
+// name Buzz accepts. A module's members are namespaced with a backslash and
+// camelCased.
+func TestModuleCallCandidates_SpelledWithBackslash(t *testing.T) {
+	got := ModuleCallCandidates()
+	assert.Contains(t, got, "fs", "the bare module name is still offered")
+	assert.Contains(t, got, `fs\writeFile`)
+	assert.NotContains(t, got, "fs.write_file")
+	assert.NotContains(t, got, `fs\write_file`)
+}
+
+// TestModuleCallCandidates_MagusRun is the exact call the REPL's target and
+// flag completion builds on top of.
+func TestModuleCallCandidates_MagusRun(t *testing.T) {
+	assert.Contains(t, ModuleCallCandidates(), `magus\run`)
+}
