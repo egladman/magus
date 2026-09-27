@@ -301,3 +301,45 @@ jobs:
           APP: ${{ steps.magus.outputs.queue-app-slug }}
           COMMITTER: ${{ steps.magus.outputs.queue-committer }}
         run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
+
+  # Renders the queue as one page into this run's summary and, once a person has set
+  # MAGUS_QUEUE_DASHBOARD_ISSUE, into that pinned issue's body. It follows apply whatever
+  # apply's result, since a failed apply is what the page most needs to show. The Actions
+  # token, never the app's: the queue app has no issues permission, and an edit this token
+  # makes starts no workflow, so the page cannot trigger itself. queue-advice.yaml renders
+  # the same page on pull request events; the shared group keeps the newest render.
+  dashboard:
+    name: queue dashboard
+    needs: [planned, apply]
+    if: always() && needs.planned.outputs.ran == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: queue-dashboard
+      cancel-in-progress: true
+    permissions:
+      contents: read # check out main; read its tip
+      pull-requests: read # every open and recently merged pull request
+      checks: read # their checks, which say green
+      statuses: read # the merge-queue status, which says why one waits
+      actions: read # queue.yaml's running validation jobs
+      issues: write # the pinned issue's body
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # An unset variable arrives as an empty --issue, and the page goes to the summary alone.
+      - name: Render the merge queue into the run summary and the pinned issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          ISSUE: ${{ vars.MAGUS_QUEUE_DASHBOARD_ISSUE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: magus buzz tools/pull-requests.buzz -- dashboard --all --base "$MAIN" --out "$GITHUB_STEP_SUMMARY" --issue "$ISSUE" --run-url "$RUN_URL"

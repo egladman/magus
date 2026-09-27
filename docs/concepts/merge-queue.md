@@ -70,6 +70,7 @@ about to see that pull request merged.
 | queue a stack                   | label its top pull request `merge-queue: squash`        |
 | take it out                     | `gh pr merge <n> --disable-auto`, or remove the label   |
 | list what is queued             | `magus queue ls --provider github --base main`          |
+| see the queue                   | the pinned "Merge queue" issue (see below)              |
 | see why one is waiting          | its `merge-queue` status, which reads `waiting: <why>`  |
 | see why one was kicked back     | the queue's newest comment on it                        |
 | land it past the queue          | `gh pr merge <n> --admin`: an admin's bypass, see below |
@@ -90,6 +91,14 @@ which lists the closed pull requests still carrying any. The intent label is a p
 and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squash`,
 `merge-queue: rebase` or `merge-queue: merge`. The status labels are the queue's answer
 and read `queue:`, so none ever reads as intent.
+
+In this repository a `queue dashboard` job keeps one pinned issue, "Merge queue", whose
+body shows every open pull request: a Mermaid chart of the queue with each stack boxed,
+then a table per section (in flight, queued, needs the author, needs a manual merge,
+could join, drafts and forks) with each one's reason and a person's command. It is
+rewritten whole after every apply run and on every label, review or auto-merge event,
+and the same page goes to the run's summary. To render it locally:
+`magus buzz tools/pull-requests.buzz -- dashboard --all`.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label
