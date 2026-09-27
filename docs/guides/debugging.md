@@ -33,12 +33,12 @@ The REPL accepts Buzz expressions and evaluates them against the magusfile runti
 // example session
 > os\execSh("git rev-parse --short HEAD").stdout
 abc1234
-> go.name
-go
+> vcs\name()
+git
 > proc\exec("go", ["build", "./..."])
 ```
 
-The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
+The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit. Ctrl-C clears the current line instead of quitting; pressed while a call such as `magus\run(...)` is still running, it interrupts that call instead.
 
 ### `--no-autoload`
 
@@ -84,8 +84,8 @@ The prompt is `pry>` at the innermost frame; `pry[N]>` after `.up`/`.down` to fr
 | `.exit` / `.quit`       |  ✓   |  ✓  | Quit the REPL (or resume execution, for pry)           |
 | `.continue`             |      |  ✓  | Resume execution                                       |
 | `.load <path>`          |  ✓   |  ✓  | Execute a file in the current session                  |
-| `.history [N]`          |      |  ✓  | Show the last N (default 50) commands across sessions  |
-| `.history!N`            |      |  ✓  | Print the Nth-most-recent command for copy-paste       |
+| `.history [N]`          |  ✓   |  ✓  | Show the last N (default 50) commands across sessions  |
+| `.history!N`            |  ✓   |  ✓  | Print the Nth-most-recent command for copy-paste       |
 | `.whereami`             |      |  ✓  | Print source lines surrounding the call site           |
 | `.where` / `.backtrace` |      |  ✓  | Print the call stack                                   |
 | `.up` / `.down`         |      |  ✓  | Move the inspected frame up or down                    |
@@ -96,7 +96,7 @@ The prompt is `pry>` at the innermost frame; `pry[N]>` after `.up`/`.down` to fr
 | `.next`                 |      |  ✓  | Step over the current line                             |
 | `.finish`               |      |  ✓  | Run until the current frame returns                    |
 
-Pry history is persisted at `$XDG_STATE_HOME/magus/pry_history` (or `~/.local/state/magus/pry_history`) and is shared across pry sessions. The standalone `magus buzz` REPL does not record to or read from this file.
+History is persisted at `$XDG_STATE_HOME/magus/pry_history` (or `~/.local/state/magus/pry_history`) and shared between the standalone `magus buzz` REPL and pry, so either one recalls what the other left behind.
 
 Color output is enabled when stdout is a TTY; set `NO_COLOR=1` to disable. The continuation prompt (`>>` / `pry>>`) is green-tinted on color terminals.
 
