@@ -277,10 +277,10 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 	assert.NotEmpty(t, c.Short)
 	assert.Truef(t, strings.HasPrefix(c.ID, c.Short), "ID/Short inconsistent: %q / %q", c.ID, c.Short)
 
-	hist, err := res.VCS.History(context.Background(), dir, 10)
+	hist, err := res.VCS.History(context.Background(), dir, types.HistoryQuery{Limit: 10})
 	require.NoError(t, err, "History")
 	require.Len(t, hist, 2)
-	assert.Equal(t, "second line", hist[0].Subject, "History order wrong (want newest first)")
+	assert.Equal(t, c, hist[0], "History's one-pass parse must agree with FindCommit on an empty commit")
 	assert.Equal(t, "first", hist[1].Subject, "History order wrong (want newest first)")
 }
 

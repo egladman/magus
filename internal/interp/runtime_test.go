@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -203,4 +206,62 @@ func TestReportImportError(t *testing.T) {
 	assert.True(t, ReportImportError(ctx, assert.AnError))
 	require.ErrorIs(t, sink.take(), assert.AnError)
 	assert.NoError(t, sink.take(), "take drains the sink")
+}
+
+// stepProbe records the policy a target body's ctx carries; TimeCall hands it the
+// ctx the body runs under.
+type stepProbe struct {
+	observability.Provider
+	policies []*sandbox.Policy
+}
+
+func (p *stepProbe) Enabled() bool { return true }
+
+func (p *stepProbe) RecordBuzzExec(ctx context.Context, _ float64, _, _ string) {
+	p.policies = append(p.policies, sandbox.PolicyFromContext(ctx))
+}
+
+func (p *stepProbe) RecordBuzzJITRun(context.Context) {}
+
+// A ctx.needs child never passes through runTarget, so its body must scope its own
+// step: here ci is the caller, as when ci composes test, and only test declares the
+// grant, as the root magusfile's test declares /proc.
+func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
+	root := t.TempDir()
+	const magusfile = "export fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
+		"export fun test(ctx: magus\\Context, args: [str]) > void {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	granted := t.TempDir()
+	probe := filepath.Join(granted, "stat")
+
+	base, err := sandbox.FromConfig(root, "", config.SandboxConfig{}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(base.TempDir) })
+	require.Error(t, base.CheckRead(t.Context(), probe), "the grant must be the test's alone to prove")
+
+	ws := &ceilingWorkspace{projects: []*types.Project{{
+		Dir: root,
+		TargetPolicies: map[string]types.Target{
+			"ci":   {},
+			"test": {Sandbox: &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: granted, Mode: spells.SandboxAccessRO}}}},
+		},
+	}}}
+	src, err := Find(root)
+	require.NoError(t, err)
+	load, err := execBuzzSrc(t.Context(), src, false)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = load.Session.Close() })
+
+	rec := &stepProbe{}
+	ctx := observability.WithProvider(types.WithWorkspace(sandbox.WithPolicy(t.Context(), base), ws), rec)
+	parent := withDeclaredStep(ctx, root, "ci")
+	_, err = load.Targets["test"](parent, nil)
+	require.NoError(t, err)
+	_, err = load.Targets["ci"](parent, nil)
+	require.NoError(t, err)
+
+	require.Len(t, rec.policies, 2)
+	assert.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
+	assert.Error(t, rec.policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
+	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
 }

@@ -801,14 +801,15 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 // negotiation, and a worker that has to describe its own row in prose makes the
 // orchestrator reconstruct what the ledger already knows.
 //
-// The call carries the paths the row already had, because op=put REPLACES the row: a call
-// naming only the blocked path hands back a narrower boundary than the worker started with.
+// The call carries the paths the row already had, because a put's write_paths REPLACES the
+// row's: a call naming only the blocked path hands back a narrower boundary than the worker
+// started with. It names the op the tool accepts, which is `fork`.
 func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
 	require.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "magus_job op=put id=lease-b")
+	assert.Contains(t, got.Reason, "magus_job op=fork id=lease-b write_paths=")
 	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
 	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
 	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
@@ -818,13 +819,13 @@ func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	t.Run("a path another live lease owns wants re-partitioning", func(t *testing.T) {
 		owned := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "deny", owned.Decision)
-		assert.NotContains(t, owned.Reason, "op=put")
+		assert.NotContains(t, owned.Reason, "write_paths=")
 	})
 
 	t.Run("a path the row's own deny list names was refused on purpose", func(t *testing.T) {
 		refused := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", refused.Decision)
-		assert.NotContains(t, refused.Reason, "op=put")
+		assert.NotContains(t, refused.Reason, "write_paths=")
 	})
 }
 
@@ -937,4 +938,233 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	assert.Contains(t, other.Context, "if you are lease lease-b")
 
 	assert.Equal(t, string(advisoryLeasedPath), write("s2", "internal/ledger/store.go").Rule, "a new session has heard nothing")
+}
+
+// entryFleet is an orchestrator lease and a worker forked beneath it, whose holder took
+// its job in the fixture's workspace so the guard reads its trail from there.
+func entryFleet(root string) []types.Job {
+	return []types.Job{
+		{ID: "orch", WritePaths: []string{"cmd/**"}, State: types.StateRunning, Registered: 1},
+		{ID: "orch/worker", Parent: "orch", WritePaths: []string{"internal/ledger/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: root},
+	}
+}
+
+// holderCalled plants a tool call the guard graded under lease, ago before now.
+func holderCalled(t *testing.T, ctx context.Context, lease string, ago time.Duration) {
+	t.Helper()
+	trail.Append(ctx, hookLocation(ctx, Dependencies{}).cacheDir, trail.Event{
+		Ts: time.Now().Add(-ago).UnixMilli(), Kind: trail.KindAgentCommand, Action: "Edit", Lease: lease, Outcome: trail.OutcomeOK,
+	})
+}
+
+// TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath pins the entry: denied without one,
+// held while the holder works, one write through once it is idle, and the next write
+// denied again.
+func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
+	ctx, root := fleetFixture(t)
+	store := storeAt(ctx)
+	for _, row := range entryFleet(root) {
+		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	target := filepath.Join(root, "internal/ledger/store.go")
+
+	denied := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
+	require.Equal(t, "deny", denied.Decision)
+	assert.Contains(t, denied.Reason, "magus_job op=fork id=orch/worker enter=internal/ledger/store.go")
+
+	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/store.go")
+	require.NoError(t, err)
+
+	holderCalled(t, ctx, "orch/worker", 5*time.Second)
+	busy := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
+	require.Equal(t, "deny", busy.Decision, "the holder is mid-turn")
+	assert.Contains(t, busy.Reason, "idle")
+
+	require.NoError(t, os.RemoveAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, "activity")))
+	holderCalled(t, ctx, "orch/worker", 2*time.Minute)
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "one write through")
+
+	rows, err := store.List()
+	require.NoError(t, err)
+	entries := job.EntriesOf(rows, "orch/worker")
+	require.Len(t, entries, 1)
+	assert.NotZero(t, entries[0].Consumed)
+	assert.Equal(t, "deny", gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "the entry is single-use")
+
+	t.Run("the holder is told to re-read", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, Dependencies{}, "orch/worker", target)
+		assert.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "re-read internal/ledger/store.go")
+		assert.NotEmpty(t, got.Key)
+	})
+
+	t.Run("an unattributed writer consumes an entry without the advisory", func(t *testing.T) {
+		other := filepath.Join(root, "internal/ledger/other.go")
+		_, err := store.Enter(ctx, "orch/worker", "internal/ledger/other.go")
+		require.NoError(t, err)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", other).Decision)
+		assert.Equal(t, advisoryLeasedPath, gradeLeasedWrite(ctx, Dependencies{}, "", other).Kind)
+	})
+}
+
+// TestEnterRefuses pins what the store will not record as an entry.
+func TestEnterRefuses(t *testing.T) {
+	ctx, root := fleetFixture(t)
+	store := storeAt(ctx)
+	for _, row := range append(entryFleet(root), types.Job{ID: "done", WritePaths: []string{"docs/**"}, State: types.StatePass}) {
+		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+
+	for name, tc := range map[string]struct{ id, rel, want string }{
+		"no such job":            {"nobody", "internal/ledger/a.go", "nothing to enter"},
+		"an ended job":           {"done", "docs/a.md", "free to write"},
+		"outside write paths":    {"orch/worker", "cmd/main.go", "widened into it"},
+		"not workspace-relative": {"orch/worker", "../elsewhere.go", "workspace-relative"},
+	} {
+		_, err := store.Enter(ctx, tc.id, tc.rel)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), tc.want, name)
+	}
+
+	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/a.go")
+	require.NoError(t, err)
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/a.go")
+	require.ErrorContains(t, err, "not yet written", "an open entry is not entered twice")
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/b.go")
+	require.NoError(t, err)
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/c.go")
+	require.ErrorContains(t, err, "resume its holder", "a job takes two")
+
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Len(t, job.EntriesOf(rows, "orch/worker"), job.MaxJobEntries)
+}
+
+// storeAt is the job store the fixture's context pins.
+func storeAt(ctx context.Context) *job.Store {
+	at := hookLocation(ctx, Dependencies{})
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+}
+
+// vcsOffSwitchWorkspace puts the test in a workspace magus.FindRoot resolves, the way
+// TestDenyNotesWrite does: a marker file magus.FindRoot's own walk recognizes, so the rule
+// reaches its real decision instead of bailing out on "no workspace" and passing for the
+// wrong reason.
+func vcsOffSwitchWorkspace(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	t.Chdir(root)
+	return root
+}
+
+// vcsOffSwitchSpawned is a well-formed W3C traceparent, the same fixture value
+// TestAdviseUnleasedWorker uses for "some tool started this process deliberately".
+const vcsOffSwitchSpawned = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+// TestVCSOffSwitchDeniesLeasedWrite is finding 3 of the guard-boundary audit (U8): a
+// leased write that leaves the workspace's own magus.yaml with vcs.enabled: false is
+// denied, since vcs.Resolve then returns no VCS at all and the guard's approval
+// authority (HEAD of whatever VCS resolves) goes with it.
+func TestVCSOffSwitchDeniesLeasedWrite(t *testing.T) {
+	root := vcsOffSwitchWorkspace(t)
+	fields := writeFields{Content: "concurrency: 4\nvcs:\n  enabled: false\n"}
+
+	got := denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields)
+
+	require.Equal(t, "deny", got.Decision)
+	assert.Equal(t, string(denyRuleVCSOffSwitch), got.Rule)
+	assert.Contains(t, got.Reason, "vcs.enabled", "names the field the write is denied over")
+	assert.Contains(t, got.Reason, "lease-a", "leaseActorClause names the acting lease")
+	assert.Contains(t, got.Reason, "orchestrator", "a leased write is told its orchestrator can do this, it cannot")
+}
+
+// TestVCSOffSwitchDeniesAgentAttributedEdit covers the other half of "leased or
+// agent-attributed": no lease is named, but the process carries spawn ancestry
+// (trail.SpawnFromEnv), the same claim adviseUnleasedWorker already reads elsewhere on
+// this path surface. The edit is a replacement applied to what the file holds on disk,
+// not a whole-file write, so this also proves resolvedWriteContent applies it correctly.
+func TestVCSOffSwitchDeniesAgentAttributedEdit(t *testing.T) {
+	root := vcsOffSwitchWorkspace(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
+		[]byte("concurrency: 4\nvcs:\n  enabled: true\n"), 0o644))
+	t.Setenv(trail.EnvTraceparent, vcsOffSwitchSpawned)
+	fields := writeFields{OldText: "enabled: true", NewText: "enabled: false"}
+
+	got := denyVCSOffSwitch("", filepath.Join(root, "magus.yaml"), fields)
+
+	require.Equal(t, "deny", got.Decision)
+	assert.Contains(t, got.Reason, "by hand", "an unleased writer is told a person makes this edit, not it")
+}
+
+// TestVCSOffSwitchDeniesUserTierFile covers the other tier config.Load reads:
+// $XDG_CONFIG_HOME/magus/magus.yaml is in effect in every workspace on the machine
+// (internal/config/load.go tier 2), and a workspace magus.yaml that never mentions vcs
+// still inherits whatever it sets, so a write there is in scope exactly like the repo's
+// own file.
+func TestVCSOffSwitchDeniesUserTierFile(t *testing.T) {
+	root := vcsOffSwitchWorkspace(t)
+	udc := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", udc)
+	userConfig := filepath.Join(udc, "magus", "magus.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(userConfig), 0o755))
+	fields := writeFields{Content: "vcs:\n  enabled: false\n"}
+
+	got := denyVCSOffSwitch("lease-a", userConfig, fields)
+
+	require.Equal(t, "deny", got.Decision, "root is %q", root)
+}
+
+// TestVCSOffSwitchPassesEverythingElse is the negative space: every case this rule must
+// leave exactly as it was before it existed.
+func TestVCSOffSwitchPassesEverythingElse(t *testing.T) {
+	t.Run("unleased and unattributed is a person in their own checkout", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		t.Setenv(trail.EnvTraceparent, "")
+		fields := writeFields{Content: "vcs:\n  enabled: false\n"}
+		assert.Empty(t, denyVCSOffSwitch("", filepath.Join(root, "magus.yaml"), fields).Decision,
+			"a run carrying no lease and no trace context IS a person, owed silence like every other rule here")
+	})
+
+	t.Run("vcs.enabled left true passes", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		fields := writeFields{Content: "vcs:\n  enabled: true\n"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields).Decision)
+	})
+
+	t.Run("vcs.enabled unset passes", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		fields := writeFields{Content: "concurrency: 8\n"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields).Decision)
+	})
+
+	t.Run("a path that is not a magus.yaml tier passes, whatever it says", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		fields := writeFields{Content: "vcs:\n  enabled: false\n"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "internal", "config.go"), fields).Decision)
+	})
+
+	t.Run("decided by parsing, not by grepping: the text lives under an unrelated key", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		fields := writeFields{Content: "notes: \"remember to set vcs:\\n  enabled: false somewhere\"\n"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields).Decision,
+			"the literal text appears in the document but never under the vcs key, so a parse finds nothing to fire on")
+	})
+
+	t.Run("malformed YAML fails open", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		fields := writeFields{Content: "vcs: [not a mapping\n"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields).Decision,
+			"a document this rule cannot parse must not be guessed at")
+	})
+
+	t.Run("an edit whose OldText is not on disk fails open", func(t *testing.T) {
+		root := vcsOffSwitchWorkspace(t)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency: 4\n"), 0o644))
+		fields := writeFields{OldText: "enabled: true", NewText: "enabled: false"}
+		assert.Empty(t, denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields).Decision,
+			"a replacement that would not apply is one the host itself refuses; nothing here guesses at the result")
+	})
 }

@@ -173,7 +173,6 @@ flag query/publish
 flag query/refresh
 flag query/secrets
 flag query/url
-flag refs/check
 flag refs/definition
 flag refs/limit
 flag refs/no-generated
@@ -219,6 +218,7 @@ flag status/compact
 flag status/probe
 flag status/socket
 flag status/symbols
+flag status/wait
 flag status/watch
 flag status/workspace
 flag version/client

@@ -149,6 +149,7 @@ decisions/
 decisions/0001-bounded-concurrency-with-recursive-invocation/
 decisions/0002-remote-spells-are-imported-by-registry-path/
 decisions/0003-running-an-invocation-on-another-operating-system/
+decisions/0004-running-a-branch-on-a-hosted-runner/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -520,6 +521,7 @@ reference/codes/sandbox/MGS3028/
 reference/codes/sandbox/MGS3029/
 reference/codes/sandbox/MGS3030/
 reference/codes/sandbox/MGS3031/
+reference/codes/sandbox/MGS3032/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -623,6 +625,8 @@ reference/rules/push-gate/
 reference/rules/push-ungated/
 reference/rules/raw-tool/
 reference/rules/read-ack/
+reference/rules/read-navigation/
+reference/rules/read-symbol/
 reference/rules/regen-source/
 reference/rules/revert-classify/
 reference/rules/scope-drift/
@@ -738,6 +742,7 @@ tags/charm/
 tags/charms/
 tags/ci-provider/
 tags/ci/
+tags/claims/
 tags/claude-code/
 tags/claude/
 tags/cli/
@@ -852,6 +857,7 @@ tags/jsonl/
 tags/keep-warm/
 tags/kernel/
 tags/knowledge-graph/
+tags/knowledge/
 tags/landlock/
 tags/leases/
 tags/ledger/
@@ -945,6 +951,7 @@ tags/pull-request/
 tags/pytest/
 tags/python/
 tags/query/
+tags/queue/
 tags/race/
 tags/readiness/
 tags/reads-files/

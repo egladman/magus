@@ -46,11 +46,12 @@ func Activated(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := servesAddr(ln, addr); err != nil {
+	served, err := servesAddr(ln, addr)
+	if err != nil {
 		_ = ln.Close()
 		return nil, err
 	}
-	return ln, nil
+	return served, nil
 }
 
 // listenFDs is how many descriptors the protocol handed to the process pid: 0 when none
@@ -84,19 +85,39 @@ func listenFDs(lookup func(string) (string, bool), pid int) (int, error) {
 	return n, nil
 }
 
-// servesAddr refuses a socket bound anywhere but addr: runs dial addr, so a broker on
-// another path holds capacity nobody asks for.
-func servesAddr(ln net.Listener, addr string) error {
+// servesAddr is ln reporting addr, and refuses a socket bound anywhere but addr: runs
+// dial addr, so a broker on another path holds capacity nobody asks for.
+func servesAddr(ln net.Listener, addr string) (net.Listener, error) {
 	ep, err := endpoint.Parse(addr)
 	if err != nil {
-		return fmt.Errorf("broker: %w", err)
+		return nil, fmt.Errorf("broker: %w", err)
 	}
 	got := ln.Addr().String()
 	if samePath(got, ep.Addr) {
-		return nil
+		return ln, nil
 	}
-	return fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s; point the unit's ListenStream there", got, ep.Addr)
+	// A socket bound through a directory descriptor, as a path past sun_path is, is
+	// named after that descriptor; only the file it is bound to places it.
+	if ul, ok := ln.(*net.UnixListener); ok {
+		at, err := endpoint.BoundAt(ul, ep.Addr)
+		if err != nil {
+			return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, and whether it is %s cannot be told: %w", got, ep.Addr, err)
+		}
+		if at {
+			return &adoptedListener{Listener: ln, addr: &net.UnixAddr{Name: ep.Addr, Net: "unix"}}, nil
+		}
+	}
+	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s; point the unit's ListenStream there", got, ep.Addr)
 }
+
+// adoptedListener is a supervisor's socket reporting the path runs dial, which its
+// own name may not.
+type adoptedListener struct {
+	net.Listener
+	addr *net.UnixAddr
+}
+
+func (l *adoptedListener) Addr() net.Addr { return l.addr }
 
 // samePath compares socket paths through a symlinked directory (macOS's /var is
 // /private/var), which a socket file itself cannot be resolved through.

@@ -64,10 +64,15 @@ stdout 'magus vcs add'
 stdout 'magus vcs add --dry-run'
 stdout 'git add -- <paths>'
 
+# A worktree removal is judged rather than refused outright, so its refusal names each
+# condition it failed and what a removal needs to pass. Outside a workspace the session's
+# own checkout is unknown, which is the condition that fails here.
 stdin worktree-remove.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Check it is clean first with .git -C <path> status'
-stdout 'git worktree remove deletes that worktree'
+stdout 'deny \[worktree-remove\]: Removing .*wt is refused'
+stdout '- which checkout this session runs in is unknown'
+stdout 'A removal passes when the worktree is a linked worktree of this repository other than your own, clean, unlocked'
+stdout '--force changes nothing'
 
 # The non-git backends reach the same rule, and the replacement is REWRITTEN for them:
 # an hg user cannot follow advice to add a git worktree, and it would be the first thing

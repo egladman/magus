@@ -27,7 +27,14 @@ func guardFixture(t *testing.T) (root, cacheDir string, g *Graph) {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 	}
 	g = NewGraph()
-	g.AddNode(types.KnowledgeNode{ID: "symbol:go pkg/Judge().", Kind: types.KindSymbol, Label: "Judge"})
+	g.AddNode(types.KnowledgeNode{ID: "symbol:go pkg/Judge().", Kind: types.KindSymbol, Label: "Judge", Source: "pkg/a.go:2"})
+	g.AddNode(types.KnowledgeNode{ID: "symbol:go other/Judge().", Kind: types.KindSymbol, Label: "Judge", Source: "other/j.go:1"})
+	g.AddNode(types.KnowledgeNode{ID: "file:pkg/a.go", Kind: types.KindFile})
+	g.AddNode(types.KnowledgeNode{ID: "file:pkg/b_test.go", Kind: types.KindFile})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/a.go", Target: "symbol:go pkg/Judge().", Relation: types.RelationDefines, Provenance: "pkg/a.go"})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/b_test.go", Target: "symbol:go pkg/Judge().", Relation: types.RelationReferences, Provenance: "scip count=2 lines=4,9"})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/b_test.go", Target: "symbol:go other/Judge().", Relation: types.RelationReferences, Provenance: "scip count=1 lines=12"})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/a.go", Target: "symbol:go pkg/Judge().", Relation: types.RelationCalls, Provenance: "scip count=1"})
 	g.AddNode(types.KnowledgeNode{ID: "docsection:docs/x.md#title", Kind: types.KindDocSection})
 	g.AddNode(types.KnowledgeNode{ID: "target:.:lint", Kind: types.KindTarget})
 	g.AddNode(types.KnowledgeNode{ID: "diagnostic:MGS1001", Kind: types.KindDiagnostic})
@@ -49,10 +56,23 @@ func TestGuardIndexRoundTrip(t *testing.T) {
 	assert.Equal(t, []string{"docsection:docs/x.md#title"}, x.IDs(types.KindDocSection))
 	assert.Equal(t, []string{"target:.:lint"}, x.IDs(types.KindTarget))
 	assert.Equal(t, []string{"diagnostic:MGS1001"}, x.IDs(types.KindDiagnostic))
+	assert.Equal(t, []string{"file:pkg/a.go", "file:pkg/b_test.go"}, x.IDs(types.KindFile))
 	assert.Empty(t, x.IDs(types.KindSpell))
-	for _, kind := range []string{GuardSymbol, types.KindDocSection, types.KindTarget, types.KindDiagnostic} {
+	for _, kind := range []string{GuardSymbol, types.KindDocSection, types.KindTarget, types.KindDiagnostic, types.KindFile} {
 		assert.True(t, x.Fresh(kind), kind)
 	}
+
+	// Sites are keyed by name and folded per file across every symbol of that name; a
+	// definition contributes its declaring line, and a call edge contributes nothing.
+	sites, err := x.RefSites("Judge")
+	require.NoError(t, err)
+	assert.Equal(t, []types.KnowledgeRefSite{
+		{File: "pkg/a.go", Count: 1, Lines: []int{2}},
+		{File: "pkg/b_test.go", Count: 3, Lines: []int{4, 9, 12}},
+	}, sites)
+	sites, err = x.RefSites("Jud")
+	require.NoError(t, err)
+	assert.Empty(t, sites)
 }
 
 // TestGuardIndexFreshness pins what makes a kind non-definitive: an edit to a file of its
@@ -75,6 +95,7 @@ func TestGuardIndexFreshness(t *testing.T) {
 		assert.False(t, x.Fresh(GuardSymbol))
 		assert.True(t, x.Fresh(types.KindDocSection), "a Go edit says nothing about docs")
 		assert.True(t, x.Fresh(types.KindTarget))
+		assert.False(t, x.Fresh(types.KindFile), "a file node may come from any indexed source")
 	})
 	t.Run("added file", func(t *testing.T) {
 		root, cacheDir, g := guardFixture(t)

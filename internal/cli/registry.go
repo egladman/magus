@@ -895,7 +895,16 @@ concurrency pool (current slot usage, queued waiters).
 
 When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
-snapshot on its own line for log capture.`,
+snapshot on its own line for log capture.
+
+--wait prints no snapshot: it exits 0 once this machine's build budget can
+seat a run, and it is how a run refused with MGS3009 waits without a retry
+loop. Piped into a magus run (magus status --wait | magus run test .) it reads
+that run's command from the pipe, waits until the budget can seat the claims
+that run will make, and holds the run from starting until it exits; the run
+then proceeds as usual, or starts nothing (MGS3030) if the wait failed. On
+its own it waits for a free slot. A claim larger than the whole budget exits
+78 at once; no broker means nothing to wait for, and it exits 0.`,
 	Usage: "magus status [flags]",
 	Flags: []Flag{
 		{Name: "watch", Kind: FlagDuration, Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
@@ -906,9 +915,11 @@ snapshot on its own line for log capture.`,
 		{Name: "socket", Kind: FlagString, Doc: "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one"},
 		{Name: "probe", Kind: FlagString, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
 		{Name: "workspace", Kind: FlagString, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
+		{Name: "wait", Kind: FlagBool, Doc: "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then"},
 	},
 	Examples: []Example{
 		{"One-shot status snapshot", "magus status"},
+		{"Run tests once the build budget can seat them", "magus status --wait | magus run test ."},
 		{"Live updates every 15 seconds", "magus status --watch=15s"},
 		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=15s"},
 		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/server.sock"},
@@ -1588,9 +1599,9 @@ to exactly one symbol defined in the workspace; pass the symbol ID
 otherwise. Before anything is written, every file is checked and graded
 under the acting lease by the rules a host edit meets: a stale or
 missing index, an unverified site, a declared output, or a guard deny
-refuses the whole rename. Then every file is written or none is. --check
-prints the sites and writes nothing. The inverse is the same command with
-the two names swapped.`,
+refuses the whole rename. Then every file is written or none is. The
+global --dry-run resolves and grades every site and prints them, writing
+nothing. The inverse is the same command with the two names swapped.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
@@ -1602,7 +1613,6 @@ the two names swapped.`,
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
 		{Name: "limit", Kind: FlagInt, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},
 		{Name: "rename", Kind: FlagString, Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
-		{Name: "check", Kind: FlagBool, Doc: "With --rename, resolve and grade every site and print them; write nothing"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{
@@ -1612,7 +1622,7 @@ the two names swapped.`,
 		{"Where a symbol's body starts and ends", "magus refs Open --definition"},
 		{"A symbol's body, by name", "magus refs Open --source"},
 		{"Raw text search, no index needed", "magus refs TODO --text"},
-		{"Preview a rename", "magus refs parseQuery --rename parseTerms --check"},
+		{"Preview a rename", "magus refs parseQuery --rename parseTerms --dry-run"},
 		{"Rename a symbol at every verified site", "magus refs parseQuery --rename parseTerms"},
 	},
 }
@@ -2300,9 +2310,12 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
+rm removes one row that should never have been written. prune ENDS every job
+nobody is working, as exit would abandon it, and keeps each row as the record.
+
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2396,6 +2409,19 @@ shows what it is doing.`,
 			},
 			Usage: "magus job rm <job> [flags]",
 		},
+		{
+			Name:  "prune",
+			Short: "End every job nobody is working",
+			Description: "End, as no_return with an end_reason, every job the store can show nobody is working: exited " +
+				"and never collected with `magus job wait`, overdue, orphaned by an ancestor that ended, or declared and " +
+				"never taken past jobs.stale_after. Each ended job prints with its reason, then the count. A job a holder " +
+				"took and touched within jobs.stale_after is never ended, nor is its parent. --all also ends a taken job " +
+				"nobody touched within jobs.stale_after. The global --dry-run lists what would end and ends nothing.",
+			Flags: []Flag{
+				{Name: "all", Kind: FlagBool, Doc: "Also end a job a holder took and nobody touched within jobs.stale_after"},
+			},
+			Usage: "magus job prune [--all] [flags]",
+		},
 	},
 	Examples: []Example{
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
@@ -2405,6 +2431,7 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
+		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }
 

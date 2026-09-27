@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -480,6 +481,25 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 	}
 }
 
+// TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt pins the one put on another row a
+// holder may make: an entry into a job forked beneath its own, which the store grades.
+func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
+	me := narrowLease().ID
+	child := types.Job{ID: me + "/child", Parent: me, WritePaths: []string{"cmd/magus/x/**"}, State: types.StateDeclared}
+	ctx, _ := fleetFixture(t, narrowLease(), child)
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, "magus_job op=fork id="+child.ID+" enter=cmd/magus/x/a.go"))
+	for _, command := range []string{
+		"magus_job op=fork id=harness/other enter=a.go",
+		"magus_job op=fork id=" + me + " enter=cmd/magus/a.go",
+	} {
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), "enter a job not forked beneath", "%q", command)
+	}
+
+	_, err := job.ParseMerge(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
+	assert.ErrorContains(t, err, "write_paths does not belong beside it", "an entry carries nothing else for the store to apply")
+}
+
 // TestDenyLeaseScopedRebindStaysQuiet covers every silence. A read is not a rebind, an
 // unbound caller is the party that writes rows, and `op=exec` is the worker's own
 // procedure, demanded by the checkpoint denial on the write surface.
@@ -534,6 +554,105 @@ func TestJobToolRebindLetsAWritePathBeGivenBack(t *testing.T) {
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
 		"both spellings at once leaves nothing saying which the store would apply")
+}
+
+// childFleet is a lease with a child already forked beneath it, beside another row, and a
+// store that writes as the lease: the checkout a worker took its own job in.
+func childFleet(t *testing.T, readOnly bool) (context.Context, types.Job, *job.Store) {
+	t.Helper()
+	me := narrowLease()
+	me.ReadOnly = readOnly
+	if readOnly {
+		me.WritePaths = nil
+	}
+	scout := types.Job{ID: me.ID + "/scout", Parent: me.ID, ReadOnly: true, State: types.StateExited}
+	other := types.Job{ID: "harness/other", WritePaths: []string{"docs/**"}, State: types.StateRunning}
+	ctx, root := fleetFixture(t, me, scout, other)
+	location, _ := ctx.Value(locationKey{}).(location)
+	unbound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
+	require.NoError(t, unbound.Bind(job.Caller{}, me.ID))
+	bound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
+	return ctx, me, bound
+}
+
+// TestDenyLeaseScopedRebindHandsAChildToTheStore pins U0 of the orchestration topology
+// plan: a bound caller forks a child of its own lease and waits on its own descendant, and
+// the store alone grades the child's boundary, so a widening child meets one refusal.
+func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
+	ctx, me, bound := childFleet(t, true)
+
+	for _, command := range []string{
+		"magus job fork " + me.ID + "/research --parent " + me.ID + " --read-only --criteria 'read the store'",
+		"./magus job fork --parent=" + me.ID + " " + me.ID + "/research --read-only",
+		"magus_job op=fork id=" + me.ID + "/research parent=" + me.ID + " read_only=true",
+		"magus job fork --stdin <<'EOF'\n{\"schema_version\": " + strconv.Itoa(types.JobSchemaVersion) + ", \"id\": \"" + me.ID + "/research\", \"parent\": \"" + me.ID + "\", \"read_only\": true}\nEOF",
+		"magus job wait " + me.ID + "/scout",
+		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths docs/**",
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "%q", command)
+	}
+
+	_, err := bound.Update(t.Context(), me.ID+"/research", func(u *types.Job) {
+		*u = types.Job{ID: me.ID + "/research", Parent: me.ID, ReadOnly: true, State: types.StateDeclared}
+	})
+	require.NoError(t, err, "the child the guard passed is one the store accepts")
+
+	_, err = bound.Update(t.Context(), me.ID+"/wide", func(u *types.Job) {
+		*u = types.Job{ID: me.ID + "/wide", Parent: me.ID, WritePaths: []string{"docs/**"}, State: types.StateDeclared}
+	})
+	var refused *job.RefusedError
+	require.ErrorAs(t, err, &refused, "the store is the one refusal for a child reaching past its parent")
+	assert.Contains(t, refused.Rule, "paths its parent owns")
+}
+
+// TestDenyLeaseScopedRebindRefusesWhatIsNotAChild: every fork that is not a new child of
+// the caller's own lease, and every wait off its own tree, stays refused, and a refusal
+// naming another parent carries the store's own sentence.
+func TestDenyLeaseScopedRebindRefusesWhatIsNotAChild(t *testing.T) {
+	ctx, me, bound := childFleet(t, false)
+	other := "harness/other"
+
+	for command, what := range map[string]string{
+		"magus job fork " + me.ID + "/x --parent " + other + " --read-only":                   "must name " + me.ID + " as its parent",
+		"magus job fork " + me.ID + "/x --read-only":                                          "must name " + me.ID + " as its parent",
+		"magus_job op=fork id=" + me.ID + "/x parent=" + other + " read_only=true":            "must name " + me.ID + " as its parent",
+		"magus job fork " + other + " --parent " + me.ID + " --read-only":                     "already exists",
+		"magus job fork " + me.ID + " --parent " + me.ID:                                      "rewrite the job it holds",
+		"magus job fork " + me.ID + "/x --parent " + me.ID:                                    "can write anywhere",
+		"magus job fork --stdin < job.json":                                                   "cannot read",
+		"magus job fork --stdin <<EOF\n{\"id\": \"$ID\", \"parent\": \"" + me.ID + "\"}\nEOF": "cannot read",
+		"magus job wait " + other:                                                             "verify a job",
+		"magus job wait " + me.ID:                                                             "verify a job",
+	} {
+		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, what, "%q", command)
+	}
+
+	_, err := bound.Update(t.Context(), me.ID+"/x", func(u *types.Job) {
+		*u = types.Job{ID: me.ID + "/x", Parent: other, ReadOnly: true, State: types.StateDeclared}
+	})
+	var refused *job.RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Contains(t, refused.Rule, "must name "+me.ID+" as its parent", "the guard and the store say the same thing")
+}
+
+// TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot: a worker the hook identified
+// in a checkout bound to nobody writes to a store that grades nothing, so only a child
+// that can widen nothing passes.
+func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
+	me := narrowLease()
+	ctx, _ := fleetFixture(t, me)
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
+		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --model opus"))
+	for _, command := range []string{
+		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths cmd/magus/**",
+		"magus job fork " + me.ID + "/scout --parent " + me.ID + " --read-only --read-paths **",
+		"magus_job op=fork id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
+	} {
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "nothing would grade", "%q", command)
+	}
 }
 
 // TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal
@@ -778,6 +897,35 @@ func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
 	} {
 		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
 	}
+
+	t.Run("flags and descriptors beside a lease owning the root", func(t *testing.T) {
+		ctx, root := fleetFixture(t,
+			types.Job{ID: "owns-root", WritePaths: []string{"**"}, State: types.StateRunning, Registered: 1},
+			types.Job{ID: "reader", ReadOnly: true, State: types.StateRunning, Registered: 1},
+		)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README"), nil, 0o644))
+		for _, command := range []string{
+			"./magus ls jobs 2>&1",
+			"mkdir -p /tmp/scratch",
+			"python3 - < script.py",
+			"find /tmp/scratch -type f -delete",
+			"echo hi",
+			"python3 -c 'print(1)'",
+			`python3 -c 'print("hello")'`,
+			"mkdir -m 755 /tmp/scratch",
+		} {
+			assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
+		}
+		for _, command := range []string{
+			"echo x > notes.txt",
+			"echo x > out 2>&1",
+			"touch internal/new.go",
+			"rm README",
+			`python3 -c 'open("out.txt", "w")'`,
+		} {
+			assert.NotEmpty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
+		}
+	})
 
 	t.Run("no lease", func(t *testing.T) {
 		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "", "echo x > internal/ledger/store.go"))

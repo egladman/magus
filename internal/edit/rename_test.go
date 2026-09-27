@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func TestRenameTarget(t *testing.T) {
+func TestResolveRenameSymbol(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -63,7 +63,7 @@ func TestRenameTarget(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := RenameTarget(tc.ref, tc.matches, defined)
+			got, err := ResolveRenameSymbol(tc.ref, tc.matches, defined)
 			if tc.err != "" {
 				assert.EqualError(t, err, tc.err)
 				return
@@ -106,6 +106,10 @@ func TestRenameSitesRefusals(t *testing.T) {
 
 	verified := types.SymbolOccurrenceVerified
 	good := types.SymbolOccurrenceFile{File: "a.go", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
+	ts := types.SymbolOccurrenceFile{File: "web/a.ts", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
+	py := types.SymbolOccurrenceFile{File: "tools/a.py", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
+	rs := types.SymbolOccurrenceFile{File: "src/a.rs", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
+	other := types.SymbolOccurrenceFile{File: "a.kt", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
 
 	for _, tc := range []struct {
 		name  string
@@ -113,8 +117,19 @@ func TestRenameSitesRefusals(t *testing.T) {
 		to    string
 		want  []types.EditRefusal
 	}{
-		{"not an identifier", []types.SymbolOccurrenceFile{good}, "de code", []types.EditRefusal{{Reason: `"de code" is not an identifier`}}},
-		{"syntax in the name", []types.SymbolOccurrenceFile{good}, "x()", []types.EditRefusal{{Reason: `"x()" is not an identifier`}}},
+		{"not an identifier", []types.SymbolOccurrenceFile{good}, "de code", []types.EditRefusal{{Reason: `"de code" is not a Go identifier`}}},
+		{"syntax in the name", []types.SymbolOccurrenceFile{good}, "x()", []types.EditRefusal{{Reason: `"x()" is not a Go identifier`}}},
+		{"a Go keyword", []types.SymbolOccurrenceFile{good}, "func", []types.EditRefusal{{Reason: `"func" is a Go keyword`}}},
+		{"a dollar in Go", []types.SymbolOccurrenceFile{good}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not a Go identifier`}}},
+		{"the blank identifier", []types.SymbolOccurrenceFile{good}, "_", []types.EditRefusal{{Reason: `"_" is not a Go identifier`}}},
+		{"a dollar in TypeScript", []types.SymbolOccurrenceFile{ts}, "$parse", nil},
+		{"a keyword of one language the rename writes", []types.SymbolOccurrenceFile{ts, py}, "class", []types.EditRefusal{
+			{Reason: `"class" is a Python keyword`}, {Reason: `"class" is a TypeScript keyword`},
+		}},
+		{"a keyword of the other only", []types.SymbolOccurrenceFile{py}, "type", nil},
+		{"a Rust keyword", []types.SymbolOccurrenceFile{rs}, "fn", []types.EditRefusal{{Reason: `"fn" is a Rust keyword`}}},
+		{"an unknown language takes the shared shape", []types.SymbolOccurrenceFile{other}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not an identifier`}}},
+		{"an unknown language takes every keyword", []types.SymbolOccurrenceFile{other}, "def", []types.EditRefusal{{Reason: `"def" is a Python keyword`}}},
 		{"the same name", []types.SymbolOccurrenceFile{good}, "parse", []types.EditRefusal{{Reason: `the symbol is already named "parse"`}}},
 		{"no occurrences", nil, "decode", []types.EditRefusal{{Reason: "the index records no occurrence of the symbol"}}},
 		{
@@ -127,13 +142,13 @@ func TestRenameSitesRefusals(t *testing.T) {
 			"an unverified site",
 			[]types.SymbolOccurrenceFile{{File: "a.go", Occurrences: []types.SymbolOccurrence{occurrence(4, 2, "other", types.SymbolOccurrenceMismatch)}}},
 			"decode",
-			[]types.EditRefusal{{Path: "a.go", Line: 4, Col: 2, Reason: "the site is mismatch, not verified; refresh with `magus graph build`"}},
+			[]types.EditRefusal{{Path: "a.go", Line: 4, Column: 2, Reason: "the site is mismatch, not verified; refresh with `magus graph build`"}},
 		},
 		{
 			"another spelling",
 			[]types.SymbolOccurrenceFile{good, {File: "c.go", Occurrences: []types.SymbolOccurrence{occurrence(3, 8, "example.com/parse", verified)}}},
 			"decode",
-			[]types.EditRefusal{{Path: "c.go", Line: 3, Col: 8, Reason: `the site spells the symbol "example.com/parse", which renaming "parse" does not rewrite; edit it by hand`}},
+			[]types.EditRefusal{{Path: "c.go", Line: 3, Column: 8, Reason: `the site spells the symbol "example.com/parse", which renaming "parse" does not rewrite; edit it by hand`}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,4 +157,40 @@ func TestRenameSitesRefusals(t *testing.T) {
 			assert.Equal(t, tc.want, refused)
 		})
 	}
+}
+
+func TestRenameCollisions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sameFile    = "symbol:gomod example.com/a `example.com/a`/decode()."
+		samePackage = "symbol:gomod example.com/a `example.com/a`/decodeAll()."
+		elsewhere   = "symbol:gomod example.com/a `example.com/a/c`/decode()."
+		pySibling   = "symbol:python tools/b.py decode()."
+	)
+	defs := map[string][]string{
+		sameFile:    {"a.go"},
+		samePackage: {"a_other.go"},
+		elsewhere:   {"c/c.go"},
+		pySibling:   {"tools/b.py"},
+	}
+	definedIn := func(id string) []string { return defs[id] }
+	match := func(id, label string) types.KnowledgeMatch {
+		return types.KnowledgeMatch{ID: id, Kind: types.KindSymbol, Label: label}
+	}
+	sites := []Site{site("a.go", 1, 1, "parse", "decode"), site("./tools/a.py", 1, 1, "parse", "decode")}
+
+	got := RenameCollisions("decode", []types.KnowledgeMatch{
+		match(sameFile, "decode"),
+		match(samePackage, "decode"),
+		match(elsewhere, "decode"),
+		match(pySibling, "decode"),
+		match("symbol:gomod example.com/a `example.com/a`/decoder().", "decoder"),
+		{ID: "target:.:decode", Kind: types.KindTarget, Label: "decode"},
+	}, definedIn, sites)
+
+	assert.Equal(t, []types.EditRefusal{
+		{Path: "a.go", Reason: `already defines "decode" (` + sameFile + `), which the new name would collide with`},
+		{Path: "a_other.go", Reason: `already defines "decode" (` + samePackage + `), which the new name would collide with`},
+	}, got, "a Go package is one scope; another directory or a Python sibling module is not")
 }

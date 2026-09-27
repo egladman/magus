@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // The sibling-checkout rule: a magus command aimed at a DIFFERENT CHECKOUT of the
@@ -58,6 +61,56 @@ func denySiblingCheckout(command string, d Dialect) string {
 		return siblingCheckoutDenial(hereRoot, root)
 	}
 	return ""
+}
+
+// siblingCheckoutRemedy serves `cd <tree> && magus <args>` as that tree's own binary rooted
+// at it, which judges that tree with the sources it was linked from.
+//
+// Only a verb that selects no projects and names no relative path: both resolve against
+// the working directory, which the cd moved and the remedy does not.
+func siblingCheckoutRemedy(command string, d Dialect) (string, []hint.Next) {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok || len(cmds) != 2 || !isCdInvocation(cmds[0]) || len(cmds[0].Args) != 1 || !isMagusInvocation(cmds[1]) {
+		return "", nil
+	}
+	targets := magusCdTargets(command, d)
+	if len(targets) != 1 {
+		return "", nil
+	}
+	_, hereCommon, ok := gitCheckout(".")
+	if !ok {
+		return "", nil
+	}
+	abs, err := filepath.Abs(targets[0])
+	if err != nil {
+		return "", nil
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	root, common, ok := gitCheckout(abs)
+	if !ok || common != hereCommon || root != abs {
+		return "", nil
+	}
+	args := cmds[1].Args
+	if magusFlag(args, "root") {
+		return "", nil
+	}
+	if words := magusSubcommandWords(args); len(words) == 0 || isRunVerb(words[0]) || words[0] == "ls" {
+		return "", nil
+	}
+	for _, a := range args {
+		if a == "." || a == ".." || strings.HasPrefix(a, "./") || strings.HasPrefix(a, "../") {
+			return "", nil
+		}
+	}
+	bin := filepath.Join(root, "magus")
+	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		return "", nil
+	}
+	return "`" + root + "` is another checkout of this repository, and only its own binary judges it.",
+		[]hint.Next{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
+			"that tree's binary, rooted there, keeps its verdicts and its cache about that tree.")}
 }
 
 // gitCheckout resolves dir to the checkout containing it: the working tree's root,

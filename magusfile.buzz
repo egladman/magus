@@ -2786,12 +2786,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "benchmarks/agent/internal/bench/testdata/*",
                    "internal/registry/registry-keys.json",
                    "internal/selfupdate/release-keys.json");
-    // libs/pricing is a PROJECT, so the globs above stop at its directory, but it is
-    // also a package of THIS module: `go test ./...` compiles and runs it, and the
-    // benchmark's own tests price a run through it. Undeclared, a price edit leaves
-    // this key unmoved and the suite replays a pass computed against the old table.
-    // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
-    ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
+    // The benchmark's embedded price table, named for the same reason go:embed'd key
+    // rings are: undeclared, a price edit leaves this key unmoved.
+    ctx.readsFiles("benchmarks/agent/internal/pricing/rates.json");
     // The setup action, the installer and the workflows: the release trust anchor, the
     // queue app's credential rules and the no-cache rule for trusted jobs are asserted
     // against them. The installer is committed under docs/gen but is a script, not a page.
@@ -3200,12 +3197,17 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.readsFiles("tools/lint.buzz", "tools/lint/*.buzz",
+                   // provider-io-is-buzz's own reads(): the Buzz files the boundary's
+                   // table names or this project owns near them, not "**/*.buzz",
+                   // which would reach into every nested project's own magusfile.
+                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "tools/**/*.buzz",
+                   ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
                    "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
                    "libs/diagnostics/magusfile.buzz", "libs/diagram/magusfile.buzz",
-                   "libs/gopherbuzz/magusfile.buzz", "libs/pricing/magusfile.buzz",
+                   "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
@@ -3251,12 +3253,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // golangci-lint release and the in-repo linter globs cover the rules, while
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
-    // libs/ holds the linters' own modules, the other modules the conventions run
-    // below lints, and libs/pricing: a project, so the tree globs below stop at its
-    // directory, but also a package of this module that golangci-lint and go vet compile.
+    // libs/ holds the linters' own modules and the other modules the conventions run
+    // below lints.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
-                   "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
-                   "libs/pricing/pricing.json");
+                   "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
@@ -3472,7 +3472,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
         results = "results-synthetic/results";
     }
-    // No -p: the price table is compiled into the binary from libs/pricing, so a
+    // No -p: the price table is compiled into the binary from its pricing package, so a
     // published dollar figure cannot depend on the working directory a report ran
     // from. The flag stays for re-pricing an old results tree against an old table.
     steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl")]);

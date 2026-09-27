@@ -335,6 +335,8 @@ const (
 	FlagJobForkTimeout = "timeout"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
+	// job prune: --all
+	FlagJobPruneAll = "all"
 	// job rm: --force
 	FlagJobRmForce = "force"
 	// job wait: --schema
@@ -495,8 +497,6 @@ const (
 	FlagQueueValidateVCS = "vcs"
 	// queue validate: --verdicts
 	FlagQueueValidateVerdicts = "verdicts"
-	// refs: --check
-	FlagRefsCheck = "check"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
 	// refs: --limit
@@ -645,6 +645,8 @@ const (
 	FlagStatusSocket = "socket"
 	// status: --symbols
 	FlagStatusSymbols = "symbols"
+	// status: --wait
+	FlagStatusWait = "wait"
 	// status: --watch
 	FlagStatusWatch = "watch"
 	// status: --workspace
@@ -1135,7 +1137,6 @@ type RefsFlags struct {
 	Text        bool   // --text
 	Limit       int    // --limit
 	Rename      string // --rename
-	Check       bool   // --check
 }
 
 // BindRefs registers `magus refs`'s flags on fs and returns the destination.
@@ -1148,7 +1149,6 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
-	fs.BoolVar(&f.Check, FlagRefsCheck, false, "With --rename, resolve and grade every site and print them; write nothing")
 	return &f
 }
 
@@ -1200,6 +1200,7 @@ type StatusFlags struct {
 	Socket    string        // --socket
 	Probe     string        // --probe
 	Workspace string        // --workspace
+	Wait      bool          // --wait
 }
 
 // BindStatus registers `magus status`'s flags on fs and returns the destination.
@@ -1213,6 +1214,7 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then")
 	return &f
 }
 
@@ -1794,6 +1796,18 @@ type JobRmFlags struct {
 func BindJobRm(fs *flag.FlagSet) *JobRmFlags {
 	var f JobRmFlags
 	fs.BoolVar(&f.Force, FlagJobRmForce, false, "Remove a row that already ended, destroying the record of what happened")
+	return &f
+}
+
+// JobPruneFlags are the flags declared for `magus job prune`.
+type JobPruneFlags struct {
+	All bool // --all
+}
+
+// BindJobPrune registers `magus job prune`'s flags on fs and returns the destination.
+func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
+	var f JobPruneFlags
+	fs.BoolVar(&f.All, FlagJobPruneAll, false, "Also end a job a holder took and nobody touched within jobs.stale_after")
 	return &f
 }
 

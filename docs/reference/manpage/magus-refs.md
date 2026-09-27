@@ -52,14 +52,11 @@ to exactly one symbol defined in the workspace; pass the symbol ID
 otherwise. Before anything is written, every file is checked and graded
 under the acting lease by the rules a host edit meets: a stale or
 missing index, an unverified site, a declared output, or a guard deny
-refuses the whole rename. Then every file is written or none is. --check
-prints the sites and writes nothing. The inverse is the same command with
-the two names swapped.
+refuses the whole rename. Then every file is written or none is. The
+global --dry-run resolves and grades every site and prints them, writing
+nothing. The inverse is the same command with the two names swapped.
 
 ## Options
-
-**--check**
-: With --rename, resolve and grade every site and print them; write nothing
 
 **--definition**
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
@@ -126,7 +123,7 @@ magus refs TODO --text
 *Preview a rename*
 
 ```sh
-magus refs parseQuery --rename parseTerms --check
+magus refs parseQuery --rename parseTerms --dry-run
 ```
 
 *Rename a symbol at every verified site*

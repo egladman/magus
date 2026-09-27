@@ -8,9 +8,11 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -32,7 +34,9 @@ import (
 // operations delegate to internal/job, the single capability boundary shared with the
 // CLI and Buzz; this adapter only decodes MCP's JSON-shaped result map.
 type jobTool struct {
-	store   *job.Store
+	store *job.Store
+	// root is the workspace whose queue snapshot the list op joins, "" to join none.
+	root    string
 	resolve job.AttemptResolver
 	observe job.Observer
 	// limits and symbols hold a fork to the same jobs limits and symbol-gate check the CLI
@@ -53,7 +57,14 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// The report, not the bare rows: the overlaps ride along, derived on this read
 		// by the same constructor the console's route uses, so the two doors cannot
 		// disagree about whether two jobs claim the same path.
-		return spells.InvokeResponse{Data: types.NewJobList(jobs)}, nil
+		list := types.NewJobList(jobs)
+		if t.root != "" {
+			me := job.Identity{Lease: t.store.Actor().Lease, Login: bindings.ReviewViewer()}
+			if list, err = queue.JoinInflight(ctx, t.root, list, me); err != nil {
+				return spells.InvokeResponse{}, err
+			}
+		}
+		return spells.InvokeResponse{Data: list}, nil
 
 	case "fork":
 		merge, err := job.ParseMerge(req.Params)
@@ -67,6 +78,9 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		stored, err := job.ForkMerge(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), merge, t.limits, t.symbols)
 		if err != nil {
 			return spells.InvokeResponse{}, err
+		}
+		if rel := paramString(req.Params, "enter", ""); rel != "" {
+			return spells.InvokeResponse{Text: job.EntryAdvice(stored, rel), Data: stored}, nil
 		}
 		return spells.InvokeResponse{Data: stored}, nil
 
@@ -108,6 +122,9 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve, t.observe)
 		if err != nil {
 			return spells.InvokeResponse{}, err
+		}
+		if rows, err := t.store.List(); err == nil {
+			status.Entries = job.EntriesOf(rows, status.Job)
 		}
 		return spells.InvokeResponse{Data: status}, nil
 

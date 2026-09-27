@@ -472,7 +472,11 @@ type loadEvent struct {
 	Ref        string `json:"ref"`
 	Text       string `json:"text"`
 	Transcript string `json:"transcript"`
-	Outcome    struct {
+	// Agent is the adapter-supplied model/host-version pair, absent (or null,
+	// which decodes the same as absent) when an adapter's host does not carry
+	// either; see sessions.Agent.
+	Agent   sessions.Agent `json:"agent,omitzero"`
+	Outcome struct {
 		Exit        int  `json:"exit"`
 		Denied      bool `json:"denied"`
 		Interrupted bool `json:"interrupted"`
@@ -696,6 +700,7 @@ func validateLoadEvent(ev loadEvent) string {
 func storedEvent(ev loadEvent) sessions.AgentEvent {
 	out := sessions.AgentEvent{
 		Host:        ev.Host,
+		Agent:       ev.Agent,
 		Kind:        ev.Kind,
 		Ref:         ev.Ref,
 		AtMs:        ev.Ts,
@@ -820,8 +825,12 @@ type commandGroup struct {
 }
 
 type sessionShowOutput struct {
-	Session      string         `json:"session"`
-	Host         string         `json:"host,omitempty"`
+	Session string `json:"session"`
+	Host    string `json:"host,omitempty"`
+	// Agent is the pair off the newest event that named one: what this session
+	// ended on, which is what today's guard rules would be checked against. Zero
+	// when no loaded event named either.
+	Agent        sessions.Agent `json:"agent,omitzero"`
 	Events       int            `json:"events"`
 	FirstMs      int64          `json:"first_ms,omitempty"`
 	LastMs       int64          `json:"last_ms,omitempty"`
@@ -916,6 +925,7 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 	byProgram := map[string]*commandGroup{}
 	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
 
+	var pairAtMs int64
 	for _, ev := range events {
 		out.ByKind[ev.Kind]++
 		if out.Host == "" {
@@ -931,6 +941,9 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 			if ev.AtMs > out.LastMs {
 				out.LastMs = ev.AtMs
 			}
+		}
+		if ev.Agent != (sessions.Agent{}) && ev.AtMs >= pairAtMs {
+			out.Agent, pairAtMs = ev.Agent, ev.AtMs
 		}
 		switch ev.Kind {
 		case sessions.EventShellCommand:
@@ -1001,6 +1014,9 @@ const showListCap = 10
 
 func renderSessionShow(w io.Writer, s sessionShowOutput) {
 	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, orDash(s.Host), s.Events)
+	if s.Agent != (sessions.Agent{}) {
+		fmt.Fprintf(w, "model %s  host version %s\n", orDash(s.Agent.Model), orDash(s.Agent.HostVersion))
+	}
 	if s.FirstMs > 0 {
 		fmt.Fprintf(w, "%s to %s\n",
 			time.UnixMilli(s.FirstMs).Format("2006-01-02 15:04:05"),

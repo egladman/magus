@@ -127,6 +127,7 @@ linters:
     - filenames
     - nameoutput
     - testisolation
+    - providerio
 
     # types is the near-leaf domain package; see the rule below.
     - depguard
@@ -290,10 +291,11 @@ linters:
             # cmd/magus's references to the root package rose 71 -> 189; the
             # concurrency clamp exists in both cmd/magus/main.go and magus.go. 67
             # since the merge queue's packages moved from libs/mergequeue to
-            # internal/queue. Raising it is a sentence in the commit message.
+            # internal/queue, 68 since refs --rename imports internal/edit. Raising it
+            # is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 67
+              max: 68
 
       stutter:
         type: module
@@ -346,6 +348,65 @@ linters:
           package: github.com/egladman/magus/internal/proc/sockdir
           calls: [testkit.Main, testkit.Isolated]
 
+      # A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
+      # invokes - a provider spell, a queue provider script, a tools/*.buzz driver -
+      # which names the act and reports host and elapsed on the line. Go opens no
+      # provider socket; it invokes the Buzz op through bindings instead (see
+      # internal/interp/bindings/review_spell.go for the shape). This governs the
+      # packages nearest that boundary and nearest a "quick fetch" landing in Go by
+      # accident; magus's own remote services elsewhere (internal/oci, internal/proc,
+      # internal/httpx, internal/server, internal/selfupdate, std/http.go, ...) are not
+      # governed at all, so they carry no entry here. docs/doctrine.md, "provider I/O
+      # is Buzz".
+      providerio:
+        type: module
+        description: reports Go source outside an allowlist that reaches toward a CI/VCS provider
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
+          # Known CI/VCS provider client SDKs. None is a dependency today (go.mod has
+          # none of these); the entry stands so the day one is added, this is what
+          # refuses it rather than a review catching it by eye.
+          provider-imports:
+            - google/go-github
+            - xanzy/go-gitlab
+            - gitlab.com/gitlab-org/api/client-go
+            - ktrysmt/go-bitbucket
+            - shurcooL/githubv4
+          allow:
+            # Loopback to magus's OWN server, not a provider: the diff bridge and the
+            # MCP readiness probe.
+            - file: cmd/magus/diff.go
+              reason: talks to magus's own local diff-bridge server over loopback
+            - file: cmd/magus/graph.go
+              reason: probes magus's own local graph bridge over loopback
+            - file: cmd/magus/notes.go
+              reason: talks to magus's own local diff-bridge server over loopback
+            - file: cmd/magus/probe.go
+              reason: probes magus's own local MCP server's /readyz over loopback
+            # magus's own remote services, reached from cmd/magus's CLI wiring.
+            - file: cmd/magus/graph_registry.go
+              reason: the OCI registry the graph publishes to and pulls from
+            - file: cmd/magus/spell.go
+              reason: the OCI registry a spell pulls from
+            - file: cmd/magus/self_update.go
+              reason: downloads magus's own release artifacts from GitHub Releases; distribution, not provider I/O
+            # internal/queue/provider/host.go implements mergequeue\request, the Go
+            # binding a provider spell's Buzz calls to reach a host - the same shape as
+            # std/http.go, not an exception to the rule the rule is checking.
+            - file: internal/queue/provider/host.go
+              reason: the Go binding behind the mergequeue Buzz host module, the queue provider script's own primitive
+            # The next two are genuine exceptions, not the intended pattern, kept here
+            # with the plan (inflight-view-2026-09-27.md sec 3) named rather than moved
+            # silently: report them, do not pretend they are clean.
+            - file: internal/queue/cache.go
+              reason: proxies GitHub Actions cache reads on loopback so the runner's write-capable token never reaches Buzz; a deliberate exception, not yet a spell
+            - file: internal/queue/artifacts.go
+              reason: downloads a validation run's CI artifacts by the URL a Buzz provider listing returns; a pre-existing exception, not yet a spell
+            - file: cmd/magus/queue.go
+              reason: CLI wiring for internal/queue/artifacts.go's client; see that entry
+
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a
       # function that already holds one, which leaves the more dangerous case standing -
@@ -394,6 +455,7 @@ linters:
       rules:
         - name: var-naming
         - name: receiver-naming
+        - name: context-as-argument
         - name: exported
           arguments:
             - "disableStutteringCheck"

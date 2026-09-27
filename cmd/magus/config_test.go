@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -184,8 +183,9 @@ var affectedOnlyFlags = map[string]string{
 //
 //	go test ./cmd/magus/ -run TestRunAffectedFlagParity -v
 func TestRunAffectedFlagParity(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
+	// This file's own name, so the error messages below can point back to it
+	// without runtime.Caller, which returns a module path under -trimpath.
+	const thisFile = "config_test.go"
 
 	runFlags := registryFlagNames(t, "run")
 	affectedFlags := registryFlagNames(t, "affected")
@@ -208,13 +208,13 @@ func TestRunAffectedFlagParity(t *testing.T) {
 		assert.Contains(t, affectedShared, name,
 			"flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
 				"\tAdd it to affected.go, or add an entry to affectedOnlyFlags in %s",
-			name, filepath.Base(thisFile))
+			name, thisFile)
 	}
 	for name := range affectedShared {
 		assert.Contains(t, runShared, name,
 			"flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
 				"\tAdd it to run.go, or add an entry to runOnlyFlags in %s",
-			name, filepath.Base(thisFile))
+			name, thisFile)
 	}
 }
 

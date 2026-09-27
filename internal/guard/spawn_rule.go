@@ -111,8 +111,18 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		}
 		asked := askWorkspaceRules(ctx, seamSpawn, deps.LoadFailure, resolve, bind(deps.SpawnRule))
 		failures = asked.failures
+		// A continuation hands a running child more work; only a spawn creates one the rule
+		// exists to bind.
+		verb := ""
+		if env.IsSpawn {
+			verb = "a subagent spawn"
+		}
+		// The unloaded deny names the failures itself.
+		denied := asked.unloaded && denyUnloaded(&asked, seamSpawn, verb, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
-		verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+		if !denied && !asked.timedOut {
+			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+		}
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		policyDigest: digest,
@@ -159,7 +169,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	if env.IsContinue {
 		req.Kind = types.SpawnKindContinue
-		req.Target = continueTarget(facts, env.Target, time.Now())
+		req.Target = continueTarget(ctx, at, facts, env.Target, time.Now())
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
@@ -503,12 +513,15 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id
-// or by its name.
-func continueTarget(facts hint.Gate, addressed string, now time.Time) *types.SpawnTarget {
+// or by its name, with the entries on the job its title names.
+func continueTarget(ctx context.Context, at location, facts hint.Gate, addressed string, now time.Time) *types.SpawnTarget {
 	id := resolveAgentID(facts, addressed)
 	target := &types.SpawnTarget{Agent: addressed, IdleMs: agentIdle(facts, id, now)}
 	if rec, ok := readSpawnedAgent(facts, id); ok {
 		target.Description, target.Model, target.ContextTokens = rec.Description, rec.Model, rec.ContextTokens
+		if row, ok := spawnTitleJob(ctx, at, rec.Description); ok {
+			target.Entries = row.Entries
+		}
 	}
 	return target
 }

@@ -769,6 +769,30 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	}
 }
 
+// A subagent's first call registers its job in the checkout that call runs in, which the
+// sweep later stats: a registration in the spawner's checkout would outlive the worker's
+// worktree and keep the job live forever.
+func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	_, spawnerRoot := fleetFixture(t, row)
+	workerRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workerRoot, ".git"),
+		[]byte("gitdir: "+filepath.Join(spawnerRoot, ".git", "worktrees", "worker")+"\n"), 0o644))
+	worker := location{cacheDir: t.TempDir(), workspace: workerRoot, dir: workerRoot}
+	deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+
+	require.True(t, registerAgentBase(t.Context(), deps, worker, row.ID))
+	assert.False(t, registerAgentBase(t.Context(), deps, worker, row.ID), "a job registers once")
+
+	rows, err := job.NewStore(job.Location{CacheDir: worker.cacheDir, Root: workerRoot}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	abs, err := filepath.Abs(workerRoot)
+	require.NoError(t, err)
+	assert.Equal(t, abs, rows[0].CheckoutRoot)
+	assert.Equal(t, "9c0ffee", rows[0].ReportedBase)
+}
+
 // The command and path glue forward one field of the event, not the envelope, so the
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.

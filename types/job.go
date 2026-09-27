@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -364,9 +365,17 @@ func (s JobState) Terminal() bool {
 // EXITED IS LIVE, which reads oddly next to Terminal and is the safe direction. A holder
 // that filed its result still holds the lease on its checkout, and a verification that
 // rejects sends it back to the same write paths; dropping the job out of live here would
-// leave every write after `job exit` graded by nothing at all.
+// leave every write after `job exit` graded by nothing at all. What an exited job no
+// longer does is claim its paths against another job: it blocks no other fork and is in
+// no overlap (see [JobState.Editing]).
 func (s JobState) Live() bool {
 	return s == StateDeclared || s == StateRunning || s == StateExited
+}
+
+// Editing reports whether a holder may still be writing the job's paths: declared or
+// running. Only an editing job claims its write paths against another job's.
+func (s JobState) Editing() bool {
+	return s == StateDeclared || s == StateRunning
 }
 
 // MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
@@ -523,6 +532,9 @@ type JobStatus struct {
 	// names. A file's Preamble is exempt: every job that adds an import lands there. Each
 	// is also a violation.
 	FootprintUnclaimed []string `json:"footprint_unclaimed,omitempty" yaml:"footprint_unclaimed,omitempty"`
+	// Entries are the job's recorded entries, so a footprint line in an entered path reads
+	// as the entrant's write rather than the holder's.
+	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -673,6 +685,9 @@ type Job struct {
 	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
 	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
+	// Entries are the acknowledged writes into this row's write paths by somebody other
+	// than its holder, oldest first, at most two per job. Store-computed like Releases.
+	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
 	// WriteProof is what the fork could prove about this job's write paths against the
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
@@ -831,6 +846,10 @@ type Declaration struct {
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
 	Timeout string `json:"timeout,omitempty"`
+	// Enter turns the record into an entry rather than a declaration: it acknowledges one
+	// write into this path, inside the write paths of the live job ID names, by somebody
+	// other than its holder. A record carrying it declares nothing else.
+	Enter string `json:"enter,omitempty"`
 }
 
 // FoldLegacyNames moves a field declared under its old name onto the one that carries it,
@@ -871,6 +890,14 @@ func (r *Declaration) FoldLegacyNames() error {
 func (r Declaration) Validate() error {
 	if !ValidJobID(strings.TrimSpace(r.ID)) {
 		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, MaxJobIDLen)
+	}
+	if r.Enter != "" {
+		rest := r
+		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
+		if !reflect.ValueOf(rest).IsZero() {
+			return errors.New("job: a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter")
+		}
+		return nil
 	}
 	if r.State != "" && !ValidJobState(r.State) {
 		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
@@ -1181,6 +1208,18 @@ type JobUnattributedWrite struct {
 	At int64 `json:"at" yaml:"at"`
 }
 
+// JobEntry is a party other than a job's holder acknowledging, on the record, that it
+// will write one path inside the job's write paths. The guard lets exactly one such
+// write through and stamps Consumed.
+type JobEntry struct {
+	Path string `json:"path" yaml:"path"`
+	// By is where the acknowledging call came from, stamped by the store.
+	By Origin `json:"by" yaml:"by"`
+	// At and Consumed are unix seconds; Consumed is zero until the write lands.
+	At       int64 `json:"at" yaml:"at"`
+	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
+}
+
 // JobOverlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
@@ -1253,6 +1292,95 @@ type JobList struct {
 	// ReadOnly are the rows requiring a feature this magus lacks. It lists and honors them
 	// and refuses every write to them.
 	ReadOnly []JobReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	// Changes are the open changes against the queue's base, joined to the jobs whose
+	// checkouts are on their branches, in the order the provider listed them. Read from
+	// the snapshot `magus queue ls` leaves; a list never fetches them.
+	Changes []InflightChange `json:"changes,omitempty" yaml:"changes,omitempty"`
+	// Fetched is when and where that snapshot was read, nil when none was.
+	Fetched *InflightFetch `json:"fetched,omitempty" yaml:"fetched,omitempty"`
+	// Unproposed are the caller's live jobs whose checkout is on a branch no change
+	// carries: work in flight that has no change yet.
+	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
+}
+
+// InflightChange is one open change as a person reads it: the provider's record joined to
+// the jobs working on its branch and to the queue's newest plan for it. The queue's own
+// Change is the record it acts on; this one is what it is waiting on and whose turn it is.
+type InflightChange struct {
+	ID     string `json:"id"               yaml:"id"`
+	Title  string `json:"title,omitempty"  yaml:"title,omitempty"`
+	Author string `json:"author,omitempty" yaml:"author,omitempty"`
+	Head   string `json:"head"             yaml:"head"`
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	Base   string `json:"base,omitempty"   yaml:"base,omitempty"`
+	Fork   bool   `json:"fork,omitempty"   yaml:"fork,omitempty"`
+	// Jobs are the ids of the jobs whose checkout is on Branch, in store order.
+	Jobs []string `json:"jobs,omitempty" yaml:"jobs,omitempty"`
+	// Intent is the merge method the change is queued with, empty when it carries no
+	// merge intent.
+	Intent string `json:"intent,omitempty" yaml:"intent,omitempty"`
+	// Mark is the queue's mark the provider shows on a change carrying no intent:
+	// queued, kicked_back or needs_regeneration.
+	Mark string `json:"mark,omitempty" yaml:"mark,omitempty"`
+	// Decision, Code and Reason are the plan's verdict on this head, empty when it
+	// settled none.
+	Decision string `json:"decision,omitempty" yaml:"decision,omitempty"`
+	Code     string `json:"code,omitempty"     yaml:"code,omitempty"`
+	Reason   string `json:"reason,omitempty"   yaml:"reason,omitempty"`
+	// Partition and Position place the change in the plan, both counted from 1; zero
+	// when the plan admitted no change at this head. Below is the change it is stacked on.
+	Partition int    `json:"partition,omitempty" yaml:"partition,omitempty"`
+	Position  int    `json:"position,omitempty"  yaml:"position,omitempty"`
+	Below     string `json:"below,omitempty"     yaml:"below,omitempty"`
+	// Mine is whether the caller is on the change: a job of the caller's job tree works
+	// on its branch, or its author is the caller's forge login.
+	Mine bool `json:"mine,omitempty" yaml:"mine,omitempty"`
+	// Attention is whose turn the change is. See [InflightAttention].
+	Attention InflightAttention `json:"attention" yaml:"attention"`
+	// Neighbours are the other in-flight changes this one touches, on the caller's
+	// changes only, strongest evidence first.
+	Neighbours []InflightNeighbour `json:"neighbours,omitempty" yaml:"neighbours,omitempty"`
+}
+
+// InflightAttention is whose turn an in-flight change is, derived from its facts and
+// never written by hand.
+type InflightAttention string
+
+const (
+	// AttentionAuthor: the queue kicked it back, so its author acts next.
+	AttentionAuthor InflightAttention = "author"
+	// AttentionReview: it waits for an approval at its head.
+	AttentionReview InflightAttention = "review"
+	// AttentionQueue: it carries merge intent and the queue acts next.
+	AttentionQueue InflightAttention = "queue"
+	// AttentionNone: it carries no merge intent and nothing waits on anyone.
+	AttentionNone InflightAttention = "none"
+)
+
+// InflightNeighbour is another in-flight change a change touches, by the strongest
+// evidence that holds: merge_conflict, then declaration, file, affected.
+type InflightNeighbour struct {
+	// ID is the other change, or a job id when that work has no change yet.
+	ID           string   `json:"id"                     yaml:"id"`
+	Evidence     string   `json:"evidence"               yaml:"evidence"`
+	Paths        []string `json:"paths,omitempty"        yaml:"paths,omitempty"`
+	Declarations []string `json:"declarations,omitempty" yaml:"declarations,omitempty"`
+	Units        []string `json:"units,omitempty"        yaml:"units,omitempty"`
+	// Base is the merge base the comparison ran on.
+	Base string `json:"base,omitempty" yaml:"base,omitempty"`
+}
+
+// InflightFetch is the network read an in-flight list rests on.
+type InflightFetch struct {
+	// Provider is the queue provider that answered, as `magus queue ls --provider` named it.
+	Provider string `json:"provider"         yaml:"provider"`
+	Host     string `json:"host,omitempty"   yaml:"host,omitempty"`
+	Base     string `json:"base"             yaml:"base"`
+	// Tip is the base commit the plan was built on, empty when no plan was recorded.
+	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
+	// At is unix seconds, and ElapsedMS how long the provider took to answer.
+	At        int64 `json:"at"         yaml:"at"`
+	ElapsedMS int64 `json:"elapsed_ms" yaml:"elapsed_ms"`
 }
 
 // JobReadOnly names a row this magus will not write and the features it lacks for it.
@@ -1396,7 +1524,7 @@ func NewJobList(jobs []Job) JobList {
 // jobOverlaps reports every pair of jobs whose declared write paths
 // intersect, in ledger order.
 //
-// A job in a terminal state is not in any pair. A released or finished job is not
+// Only a [JobState.Editing] job is in a pair. A released, exited or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
 // would make the surface noisiest exactly when the plan is winding down. A job blocked on
@@ -1404,7 +1532,7 @@ func NewJobList(jobs []Job) JobList {
 func jobOverlaps(jobs []Job) []JobOverlap {
 	claims := func(j Job) bool {
 		_, blocked := JobBlockedOn(jobs, j)
-		return !j.State.Terminal() && len(j.WritePaths) > 0 && !blocked
+		return j.State.Editing() && len(j.WritePaths) > 0 && !blocked
 	}
 	var out []JobOverlap
 	for i, a := range jobs {
@@ -1542,6 +1670,7 @@ func (u Job) Clone() Job {
 	c.CompletionGates = cloneCompletionGates(u.CompletionGates)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
+	c.Entries = slices.Clone(u.Entries)
 	if u.Result != nil {
 		result := *u.Result
 		result.Schema = u.Result.clone()

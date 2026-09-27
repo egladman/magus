@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/pricing"
 )
 
 func loadTestPricing(t *testing.T) pricing.Table {

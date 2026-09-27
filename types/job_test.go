@@ -197,6 +197,19 @@ func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	}
 }
 
+// An exited holder returned, so its write paths collide with nobody's while it waits to be
+// graded.
+func TestJobOverlapsSkipsAnExitedJob(t *testing.T) {
+	t.Parallel()
+
+	live := owner("live", StateRunning, "internal/ledger")
+	exited := owner("exited", StateExited, "internal/ledger")
+	assert.Empty(t, jobOverlaps([]Job{live, exited}))
+	assert.Empty(t, jobOverlaps([]Job{exited, live}), "whichever order the rows sit in")
+	assert.True(t, StateExited.Live(), "an exited job stays live until it is graded")
+	assert.False(t, StateExited.Editing())
+}
+
 func TestNewJobListDerivesOverlapsFromTheRows(t *testing.T) {
 	t.Parallel()
 
@@ -300,6 +313,47 @@ func TestDeclarationRejectsCyclicCompletionGates(t *testing.T) {
 	}).Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "dependencies contain a cycle")
+}
+
+// entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
+// reads such a row, acts on the rest, and writes entries back untouched.
+func TestAnOlderReaderKeepsEntries(t *testing.T) {
+	t.Parallel()
+
+	type olderJob struct {
+		Schema
+		ID    string   `json:"id"`
+		State JobState `json:"state"`
+	}
+	in := Job{
+		Schema:  Schema{Version: JobSchemaVersion},
+		ID:      "worker",
+		State:   StateRunning,
+		Entries: []JobEntry{{Path: "a.go", By: Origin{User: "eli"}, At: 1, Consumed: 2}},
+	}
+	raw, err := json.Marshal(in)
+	require.NoError(t, err)
+
+	var old olderJob
+	require.NoError(t, json.Unmarshal(raw, &old))
+	old.State = StatePass
+	rewritten, err := json.Marshal(old)
+	require.NoError(t, err)
+
+	var back Job
+	require.NoError(t, json.Unmarshal(rewritten, &back))
+	assert.Equal(t, JobSchemaVersion, back.Version, "the stamp an older reader sees is one it accepts")
+	assert.Equal(t, in.Entries, back.Entries)
+	assert.Equal(t, StatePass, back.State)
+}
+
+func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
+	t.Parallel()
+
+	schema := Schema{Version: JobSchemaVersion}
+	assert.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
+	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
+	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
 }
 
 // The parse is what makes a check comparable with a stored run, so the shapes it refuses

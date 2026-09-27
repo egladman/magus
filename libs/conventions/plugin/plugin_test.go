@@ -17,6 +17,7 @@ func TestPluginsRegister(t *testing.T) {
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}},
 		"importceiling": map[string]any{"rules": []any{map[string]any{"package": "a", "prefix": "b/", "max": 1}}},
 		"nameoutput":    map[string]any{"package": "a", "case": "outputName", "emitters": []any{"emitNames"}},
+		"providerio":    map[string]any{"dirs": []any{"internal/queue"}},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:"},
 		"stutter":       map[string]any{"min-package": 3},
 		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}},

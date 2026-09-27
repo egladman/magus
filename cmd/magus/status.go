@@ -15,6 +15,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -51,6 +52,13 @@ func status(ctx context.Context, args []string) error {
 	var f *gen.StatusFlags
 	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
 		return err
+	}
+
+	if f.Wait {
+		if f.Probe != "" || f.Watch != 0 {
+			return usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
+		}
+		return awaitBudget(ctx, extractRootFlag(args))
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.
@@ -120,6 +128,78 @@ func status(ctx context.Context, args []string) error {
 			snapshot = buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 		}
 	}
+}
+
+// awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
+// reading the pipe looks for it once, on its way to its locks.
+func awaitBudget(ctx context.Context, rootOverride string) error {
+	if root, err := magus.FindRoot(rootOverride); err == nil {
+		magus.GatePipe(root, globalCfg)
+	}
+	start := time.Now()
+	waited := false
+	err := cache.AwaitMachine(ctx, queryCapacity, pipedRunClaims(ctx, rootOverride), func(msg string) {
+		waited = true
+		fmt.Fprintln(os.Stderr, "magus: "+msg)
+	})
+	if err == nil && waited {
+		fmt.Fprintf(os.Stderr, "magus: the build budget can seat it now, after %s\n", time.Since(start).Round(time.Second))
+	}
+	return err
+}
+
+func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
+	st, err := queryBroker(ctx)
+	return st.Capacity, err
+}
+
+// pipedRunClaims is what the magus run reading stdout will claim, read from its argv the
+// way run reads its own. Anything else, or nothing, reading stdout waits for one free
+// slot, as does a run this cannot follow: that run reports its own error once it starts.
+func pipedRunClaims(ctx context.Context, rootOverride string) []types.MachineClaim {
+	slot := []types.MachineClaim{{Slots: 1}}
+	argv, ok := magus.ReaderArgv(ctx, os.Stdout)
+	if !ok || len(argv) == 0 {
+		return slot
+	}
+	sub, subArgs := peekSub(argv[1:])
+	if sub != "run" || runReadsPlan(subArgs) {
+		return slot
+	}
+	prescan := func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
+	raw, rest, ok := splitTargetFromArgs(subArgs, prescan)
+	if !ok {
+		return slot
+	}
+	_, name := parseTarget(raw)
+	t, err := types.ParseTarget(name)
+	if err != nil {
+		return slot
+	}
+	t.Name = canonicalTarget(t.Name)
+	flagArgs, extraArgs := splitOnDashDash(rest)
+	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
+	gen.BindFlags(fs, &globalCfg)
+	bindDisplayFlags(fs)
+	prescan(fs)
+	_, projects := partitionFlags(fs, flagArgs)
+
+	m, err := loadMagus(ctx, rootOverride)
+	if err != nil {
+		return slot
+	}
+	targets, _, err := resolveTargets(ctx, m, t, runSelection{projects: projects, cwd: clientCwd(ctx)})
+	if err == nil && len(targets) > 0 {
+		targets, err = filterServedTargets(ctx, m, targets, t.Name)
+	}
+	if err != nil {
+		return slot
+	}
+	charms := withDefaultCharms(t.Charms, globalCfg.DefaultCharms, hasModeFlag(flagArgs, "no-default-charms"))
+	if t.Name == "ci" {
+		charms = magus.CharmsForCI(charms)
+	}
+	return m.MachineClaims(ctx, targets, charms, extraArgs)
 }
 
 // clampStatusWatch floors the poll interval at statusWatchMin. Zero passes

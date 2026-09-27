@@ -24,6 +24,7 @@ import "tools/lint/landing-rotator-slots-match-headline-count" as landing;
 import "tools/lint/lockfiles-are-sorted" as lockfiles;
 import "tools/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "tools/lint/package-install-targets-never-replay" as installs;
+import "tools/lint/provider-io-is-buzz" as providerio;
 import "tools/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
 import "tools/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
 import "tools/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
@@ -52,6 +53,7 @@ export fun rules() > [Rule] {
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
+        Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
     ];
 }
 

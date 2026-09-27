@@ -81,9 +81,9 @@ func splitMessage(msg string) (subject, body string) {
 	return msg, ""
 }
 
-// resolveEach maps revision ids to commits via v.FindCommit, the shared back end
-// of every driver's History (list the ids, then resolve each through the one
-// tested FindCommit path rather than a second, divergent multi-commit parser).
+// resolveEach maps revision ids to commits via v.FindCommit, one spawn per id: the
+// back end of RangeCommits, where ranges are short. History reads hundreds, so each
+// driver's History makes one log call and feeds every record to parseCommit instead.
 func resolveEach(ctx context.Context, dir string, v types.VCSDriver, ids []string) ([]types.Commit, error) {
 	commits := make([]types.Commit, 0, len(ids))
 	for _, id := range ids {

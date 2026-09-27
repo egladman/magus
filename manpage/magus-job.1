@@ -3,7 +3,7 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|exec|exit|wait|watch|run> [flags]"
+.RI "job <fork|exec|exit|wait|watch|run|rm|prune> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read paths, plus the one check
@@ -58,6 +58,9 @@ write. Whether the work is GOOD stays the reading of whoever forked it.
 run submits one of the server's own jobs, the housekeeping magus does for itself,
 and returns. It is a no\-op when no server is running, so a VCS hook can
 call it unconditionally.
+.PP
+rm removes one row that should never have been written. prune ENDS every job
+nobody is working, as exit would abandon it, and keeps each row as the record.
 .PP
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.
@@ -157,6 +160,12 @@ Read the result from stdin instead of from the job, for one that was never filed
 \fB\-\-force\fR
 Remove a row that already ended, destroying the record of what happened
 .RE
+.SS job prune options
+.RS
+.TP
+\fB\-\-all\fR
+Also end a job a holder took and nobody touched within jobs.stale_after
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -180,6 +189,9 @@ Submit one of the server's own jobs and return
 .TP
 \fBrm\fR
 Remove one job from the plan
+.TP
+\fBprune\fR
+End every job nobody is working
 .RE
 .SH EXAMPLES
 \fIDeclare a job\fR
@@ -222,6 +234,12 @@ magus job exit --schema
 .PP
 .EX
 magus job run sync-graph
+.EE
+.PP
+\fISee which jobs a prune would end\fR
+.PP
+.EX
+magus job prune --dry-run
 .EE
 .PP
 .SH SEE ALSO

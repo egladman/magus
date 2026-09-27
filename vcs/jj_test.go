@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -91,4 +92,42 @@ func TestJJMergeDriverRegistersTheToolInTheRepoConfig(t *testing.T) {
 	changed, err = jjVCS{}.EnsureMergeDriver(ctx, dir, globs)
 	require.NoError(t, err)
 	assert.False(t, changed, "installing twice is idempotent")
+}
+
+func TestJJHistoryFollowsPathsAndFirstParent(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) { vcsTestRun(t, dir, "jj", args...) }
+	jjInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	run("describe", "-r", "@-", "-m", "init")
+	run("edit", "@-")
+	run("new", "-m", "side adds docs")
+	writeRepoFile(t, dir, "docs/b.md", "b\n")
+	run("new", `subject(exact:"init")`, "-m", "main edits docs")
+	writeRepoFile(t, dir, "docs/a.md", "a2\n")
+	run("new", "@", `subject(exact:"side adds docs")`, "-m", "merge side")
+	run("new", "-m", "main edits x")
+	writeRepoFile(t, dir, "x.txt", "x2\n")
+
+	assertHistoryScenario(t, jjVCS{}, dir)
+}
+
+// A path marker is only ever read after the fields, so a subject starting with "F" and a
+// path starting with "F" both survive.
+func TestParseJJHistory(t *testing.T) {
+	rec := func(id string, files ...string) string {
+		fields := []string{id, id[:2], "n", "e", "2026-01-02T03:04:05Z", "", "Fix the F key"}
+		for _, f := range files {
+			fields = append(fields, "F"+f)
+		}
+		return strings.Join(fields, commitDelim) + commitDelim
+	}
+	got := parseJJHistory(rec("abcd", "docs/a.md", "Fnamed") + rec("ef01"))
+	require.Len(t, got, 2)
+	assert.Equal(t, "Fix the F key", got[0].Subject)
+	assert.Equal(t, []string{"docs/a.md", "Fnamed"}, got[0].Files)
+	assert.Equal(t, "ef01", got[1].ID)
+	assert.Nil(t, got[1].Files)
 }

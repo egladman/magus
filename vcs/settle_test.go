@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,35 @@ func TestGitHookOperationHonorsTheExportedIndex(t *testing.T) {
 	dirty, err := HookDirtyFiles(ctx, dir, op)
 	require.NoError(t, err)
 	assert.Empty(t, dirty, "the operation's index holds g and h as the tree has them; the default index would call h untracked")
+}
+
+// TestSettleReadsWriteNoIndex: a settle hook, the merge driver and every other magus
+// read run while the person's git may hold index.lock. A status that refreshes the index
+// takes that lock, so reads must leave the index exactly as git left it.
+func TestSettleReadsWriteNoIndex(t *testing.T) {
+	dir := settleRepo(t)
+	ctx := t.Context()
+	gitRun(t, dir, "merge", "-q", "--no-commit", "--no-ff", "side")
+	// Same content, new stat data: a refreshing status would rewrite this entry.
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(filepath.Join(dir, "f"), later, later))
+	index := filepath.Join(gitDirOf(t, dir), "index")
+	before, err := os.ReadFile(index)
+	require.NoError(t, err)
+
+	op, ok, err := GitHookOperation(ctx, dir, HookEvent{Hook: HookPreCommit})
+	require.NoError(t, err)
+	require.True(t, ok)
+	dirty, err := HookDirtyFiles(ctx, dir, op)
+	require.NoError(t, err)
+	assert.Empty(t, dirty)
+	dirty, err = gitVCS{}.DirtyFiles(ctx, dir, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"g"}, dirty)
+
+	after, err := os.ReadFile(index)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "a magus read rewrote the index, so it held index.lock")
 }
 
 // A merge that deletes a generated file stages the deletion itself. The regeneration

@@ -17,14 +17,17 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -49,7 +52,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run or rm)")
+		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run, rm or prune)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -69,13 +72,15 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
+	case "prune":
+		return jobPrune(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run|rm|prune> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -91,6 +96,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
+	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
@@ -179,14 +185,40 @@ func openJobs(root string) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn}), nil
+}
+
+// outputsIn resolves a ref against the output store of the checkout at root. That
+// checkout's own magus.yaml places its cache dir, and loadMagus cannot open a second root.
+func outputsIn(root string) job.AttemptResolver {
+	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		if strings.TrimSpace(ref) == "" {
+			return types.JobAttempt{}, nil
+		}
+		dir, err := magus.ResolveCacheDir(root)
+		if err != nil {
+			return types.JobAttempt{}, err
+		}
+		switch d, err := cache.NewOutputStore(dir).DescriptorByRef(ref); {
+		case err == nil:
+			return types.JobAttempt{
+				Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
+			}, nil
+		case errors.Is(err, fs.ErrNotExist):
+			return types.JobAttempt{}, nil
+		default:
+			return types.JobAttempt{}, err
+		}
+	}
 }
 
 // lsJobs is `magus ls jobs`: every job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
+	var all bool
 	rest, err := cmdParse("ls jobs", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&all, "all", false, "List every in-flight change, not only yours")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--all] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
 			fmt.Fprintln(os.Stderr, "its fork could prove about its write paths (PROOF) and its check, followed by every")
@@ -194,6 +226,11 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "PROOF is what the checkout looked like when the job was forked: alone (nothing")
 			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Then the open changes in flight against the queue's base, as the last")
+			fmt.Fprintln(os.Stderr, "`magus queue ls --provider <provider> --base <branch>` read them; this never")
+			fmt.Fprintln(os.Stderr, "fetches. A change is yours when a job of your job tree works on its branch or")
+			fmt.Fprintln(os.Stderr, "your forge login opened it; the others print as one count line unless --all.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -217,13 +254,21 @@ func lsJobs(root string, args []string) error {
 	// the magus_job list op and the console's route use, so the three doors cannot
 	// disagree about whether two jobs claim one path.
 	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
+	ctx := context.Background()
+	list, me, err := joinInflight(ctx, root, store, list)
+	if err != nil {
+		return err
+	}
+	// Nothing names a caller with no lease and no login, so none of the changes is theirs
+	// and the list is everyone's.
+	all = all || !me.Known()
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
 	if opts.Format != outputName {
-		list.Overlaps = overlapFootprints(context.Background(), root, list.Jobs, list.Overlaps)
+		list.Overlaps = overlapFootprints(ctx, root, list.Jobs, list.Overlaps)
 	}
 	switch opts.Format {
 	case outputName:
@@ -234,11 +279,230 @@ func lsJobs(root string, args []string) error {
 		return emitNames(ids)
 	case outputText:
 		printJobTree(os.Stdout, list)
+		fmt.Fprintln(os.Stdout)
+		printInflight(os.Stdout, list, all)
 		printConsoleJobLine(os.Stdout, "")
 		return nil
 	default:
+		list.Changes = inflightScope(list.Changes, all)
 		return emitFormatted(opts, list)
 	}
+}
+
+// joinInflight joins list to the queue snapshot as the caller sees it: the job it acts
+// under, and the forge login this process has already learned.
+func joinInflight(ctx context.Context, root string, store *job.Store, list types.JobList) (types.JobList, job.Identity, error) {
+	me := job.Identity{Lease: store.Actor().Lease, Login: bindings.ReviewViewer()}
+	if root == "" {
+		return list, me, nil
+	}
+	joined, err := queue.JoinInflight(ctx, root, list, me)
+	return joined, me, err
+}
+
+// inflightScope keeps the caller's changes, or every change when all is set. Never nil,
+// so an empty scope encodes as [].
+func inflightScope(changes []types.InflightChange, all bool) []types.InflightChange {
+	if all {
+		return append([]types.InflightChange{}, changes...)
+	}
+	mine := []types.InflightChange{}
+	for _, c := range changes {
+		if c.Mine {
+			mine = append(mine, c)
+		}
+	}
+	return mine
+}
+
+// printInflight renders the in-flight changes grouped by whose turn each is, the ones
+// waiting on the reader first. Unless all is set it lists the reader's changes and
+// counts the rest on one line.
+func printInflight(out io.Writer, list types.JobList, all bool) {
+	f := list.Fetched
+	if f == nil {
+		fmt.Fprintf(out, "in flight: never fetched; `%s queue ls --provider <provider> --base <branch>` reads the open changes\n", hint.BinaryName())
+		return
+	}
+	at := f.Base
+	if f.Tip != "" {
+		at += " at " + shortRev(f.Tip)
+	}
+	fmt.Fprintf(out, "in flight on %s, as of %s (%s, %s, %dms)\n",
+		at, time.Unix(f.At, 0).UTC().Format("2006-01-02 15:04 UTC"), f.Provider, orDash(f.Host), f.ElapsedMS)
+
+	shown := inflightScope(list.Changes, all)
+	partitions := 0
+	for _, c := range list.Changes {
+		partitions = max(partitions, c.Partition)
+	}
+	needs := "needs me"
+	if all {
+		needs = "needs the author"
+	}
+	groups := []struct {
+		title     string
+		attention types.InflightAttention
+	}{
+		{needs, types.AttentionAuthor},
+		{"waiting on review", types.AttentionReview},
+		{"queued, in plan order", types.AttentionQueue},
+		{"not queued", types.AttentionNone},
+	}
+	for _, g := range groups {
+		var rows []types.InflightChange
+		for _, c := range shown {
+			if c.Attention == g.attention {
+				rows = append(rows, c)
+			}
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		if g.attention == types.AttentionQueue {
+			slices.SortStableFunc(rows, queueOrder)
+		}
+		fmt.Fprintf(out, "%s (%d)\n", g.title, len(rows))
+		var table strings.Builder
+		w := tabwriter.NewWriter(&table, 0, 0, 2, ' ', 0)
+		for _, c := range rows {
+			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), inflightDetail(c, partitions), inflightJobs(c.Jobs))
+		}
+		_ = w.Flush()
+		// An empty last column leaves the padding before it at the end of the line.
+		for line := range strings.Lines(table.String()) {
+			fmt.Fprintln(out, strings.TrimRight(line, " \n"))
+		}
+	}
+	if len(list.Unproposed) > 0 {
+		fmt.Fprintf(out, "jobs without a change (%d)\n", len(list.Unproposed))
+		for _, id := range list.Unproposed {
+			fmt.Fprintf(out, "  %s\n", id)
+		}
+	}
+	switch {
+	case len(shown) > 0 || len(list.Unproposed) > 0:
+	case all:
+		fmt.Fprintln(out, "nothing in flight")
+	default:
+		fmt.Fprintln(out, "nothing of yours in flight")
+	}
+	if !all {
+		printInflightOthers(out, list.Changes)
+	}
+	fmt.Fprintf(out, "refetch: %s queue ls --provider %s --base %s\n", hint.BinaryName(), f.Provider, f.Base)
+}
+
+// printInflightOthers counts the changes that are not the reader's on one line.
+func printInflightOthers(out io.Writer, changes []types.InflightChange) {
+	counts := map[types.InflightAttention]int{}
+	for _, c := range changes {
+		if !c.Mine {
+			counts[c.Attention]++
+		}
+	}
+	var parts []string
+	for _, a := range []struct {
+		attention types.InflightAttention
+		word      string
+	}{
+		{types.AttentionQueue, "queued"},
+		{types.AttentionAuthor, "kicked back"},
+		{types.AttentionReview, "waiting on review"},
+		{types.AttentionNone, "not queued"},
+	} {
+		if n := counts[a.attention]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, a.word))
+		}
+	}
+	if len(parts) > 0 {
+		fmt.Fprintf(out, "others: %s\n", strings.Join(parts, ", "))
+	}
+}
+
+// queueOrder puts planned changes first, by partition then position, and keeps the
+// provider's order among the rest.
+func queueOrder(a, b types.InflightChange) int {
+	switch {
+	case a.Position == 0 && b.Position == 0:
+		return 0
+	case a.Position == 0:
+		return 1
+	case b.Position == 0:
+		return -1
+	case a.Partition != b.Partition:
+		return a.Partition - b.Partition
+	}
+	return a.Position - b.Position
+}
+
+// inflightDetail is why a change is where it is: its place in the plan, and the
+// verdict's code and reason or the mark it shows.
+func inflightDetail(c types.InflightChange, partitions int) string {
+	var parts []string
+	if c.Position > 0 {
+		place := fmt.Sprintf("pos %d", c.Position)
+		if partitions > 1 {
+			place = fmt.Sprintf("partition %d pos %d", c.Partition, c.Position)
+		}
+		parts = append(parts, place)
+	}
+	switch {
+	case c.Code != "" && c.Reason != "":
+		parts = append(parts, c.Code+": "+c.Reason)
+	case c.Code != "":
+		parts = append(parts, c.Code)
+	case c.Mark != "":
+		parts = append(parts, strings.ReplaceAll(c.Mark, "_", " "))
+	}
+	return strings.Join(parts, "  ")
+}
+
+// printJobChange names the change job id's checkout carries, whose turn it is, and the
+// changes it touches.
+func printJobChange(out io.Writer, changes []types.InflightChange, id string) {
+	turns := map[types.InflightAttention]string{
+		types.AttentionAuthor: "its author's turn",
+		types.AttentionReview: "waiting on review",
+		types.AttentionQueue:  "the queue's turn",
+		types.AttentionNone:   "not queued",
+	}
+	for _, c := range changes {
+		if !slices.Contains(c.Jobs, id) {
+			continue
+		}
+		line := fmt.Sprintf("\nchange: #%s %s, %s", c.ID, clipTitle(c.Title, 48), turns[c.Attention])
+		if d := inflightDetail(c, 0); d != "" {
+			line += ", " + d
+		}
+		fmt.Fprintln(out, line)
+		for _, n := range c.Neighbours {
+			touched := slices.Concat(n.Paths, n.Declarations, n.Units)
+			fmt.Fprintf(out, "  touches #%s: %s %s\n", n.ID, n.Evidence, strings.Join(touched, ", "))
+		}
+	}
+}
+
+func inflightJobs(ids []string) string {
+	switch len(ids) {
+	case 0:
+		return ""
+	case 1:
+		return "job " + ids[0]
+	}
+	return "jobs " + strings.Join(ids, ", ")
+}
+
+// clipTitle cuts s to at most n bytes at a word boundary, marking the cut.
+func clipTitle(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := strings.LastIndexByte(s[:n], ' ')
+	if cut <= 0 {
+		cut = n
+	}
+	return strings.TrimRight(s[:cut], " ") + "..."
 }
 
 func printJobTree(out io.Writer, report types.JobList) {
@@ -454,6 +718,12 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		printJobEntries(os.Stdout, row.Entries)
+		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
+		if err != nil {
+			return err
+		}
+		printJobChange(os.Stdout, joined.Changes, row.ID)
 		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:
@@ -605,6 +875,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
+			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
+			fmt.Fprintln(os.Stderr, "job records it. The guard lets that one write through once the holder has been")
+			fmt.Fprintln(os.Stderr, "idle for a minute. A job takes two entries; past that, resume its holder.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
 			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A holder moves its own job with `"+hint.JobExec.String()+"` and `"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
@@ -641,6 +916,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	store, err := openJobs(root)
 	if err != nil {
 		return err
+	}
+	if row.Enter != "" {
+		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
 	plan, err := store.List()
 	if err != nil {
@@ -699,6 +977,44 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return nil
 	default:
 		return emitFormatted(opts, stored)
+	}
+}
+
+// jobEnter records an entry into job id's path rel, the --stdin record's other shape.
+func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
+	stored, err := store.Enter(ctx, id, rel)
+	if err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames([]string{stored.ID})
+	case outputText:
+		fmt.Println(job.EntryAdvice(stored, rel))
+		printConsoleJobLine(os.Stdout, stored.ID)
+		return nil
+	default:
+		return emitFormatted(opts, stored)
+	}
+}
+
+// printJobEntries lists a job's entries, one line each, or nothing when it has none.
+func printJobEntries(out io.Writer, entries []types.JobEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "entries: writes into its paths by somebody other than its holder")
+	for _, e := range entries {
+		written := "not yet written"
+		if e.Consumed != 0 {
+			written = "written " + time.Unix(e.Consumed, 0).UTC().Format(time.RFC3339)
+		}
+		fmt.Fprintf(out, "  %s  entered %s by %s, %s\n", e.Path,
+			time.Unix(e.At, 0).UTC().Format(time.RFC3339), e.By.Label(), written)
 	}
 }
 
@@ -816,7 +1132,8 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "fill in while you are still deciding what to do.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no --stdin the job is ABANDONED and recorded "+string(types.StateNoReturn)+": nobody")
-			fmt.Fprintln(os.Stderr, "returned it, which is not the same as returning it and failing.")
+			fmt.Fprintln(os.Stderr, "returned it, which is not the same as returning it and failing. To end every job")
+			fmt.Fprintln(os.Stderr, "nobody is working in one call, use `magus job prune`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -886,10 +1203,10 @@ func jobExit(ctx context.Context, root string, args []string) error {
 // cited a run from somewhere else reads exactly like one that did the work, and this is
 // where that stops being true.
 //
-// THE VERIFIER IS NEVER THE VERIFIED. A session holding the lease is refused before
-// anything is read: a holder that can verify its own job is the loop's one remaining
-// self-assessment, and the store would refuse the resulting write anyway, so it is refused
-// here where the message can say why.
+// THE VERIFIER IS NEVER THE VERIFIED. A session holding a lease is refused before the
+// result is read unless the job sits below that lease: a holder that can verify its own
+// job, a sibling's or an ancestor's is the loop's one remaining self-assessment. Waiting
+// on a child it forked is the orchestrator's seat, one level down.
 //
 // Two failing statuses, because the caller is a shell step and the two send it somewhere
 // different: 2 for a result magus could not read at all (fix the result), 1 for one that
@@ -937,7 +1254,11 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if actor := store.Actor(); actor.Bound() {
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	if actor := store.Actor(); !actor.Verifies(rows, pos[0]) {
 		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
 			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
@@ -955,6 +1276,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}, jobObserver(root))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
+	}
+	if rows, err := store.List(); err == nil {
+		status.Entries = job.EntriesOf(rows, status.Job)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -1193,6 +1517,7 @@ func printJobStatus(out io.Writer, s job.Status) {
 		}
 	}
 	printJobFootprint(out, s)
+	printJobEntries(out, s.Entries)
 	if len(s.Risks) > 0 {
 		fmt.Fprintln(out, "unresolved risks its holder reported")
 		for _, risk := range s.Risks {
@@ -1229,6 +1554,9 @@ func printJobFootprint(out io.Writer, s job.Status) {
 			continue
 		}
 		printed = append(printed, line)
+		if slices.ContainsFunc(s.Entries, func(e types.JobEntry) bool { return e.Consumed != 0 && job.Covers(e.Path, r.File.Path) }) {
+			line += "  (entered: may be the entrant's write, not the holder's)"
+		}
 		fmt.Fprintf(out, "  %s\n", line)
 	}
 }
@@ -1309,9 +1637,9 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 	return out
 }
 
-// leasedBoundary is every path another LIVE lease claims. A terminal row claims nothing:
-// that is the same rule the overlap report follows, and the reason a worker releasing a
-// path early lets a waiter start against it.
+// leasedBoundary is every path another [job.Editing] lease claims. A terminal or exited
+// row claims nothing: that is the same rule the overlap report follows, and the reason a
+// worker releasing a path early lets a waiter start against it.
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
 // parent's boundary, so listing the parent's paths would put the child's own out of reach.
@@ -1319,7 +1647,7 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !other.State.Live() || blocked ||
+		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !job.Editing(other) || blocked ||
 			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
@@ -1682,7 +2010,7 @@ func latestGreenGate(ctx context.Context, root string) job.GreenGate {
 		return job.GreenGate{}
 	}
 	if meta.ID != rec.Commit {
-		history, err := res.VCS.History(ctx, m.Root(), gateMergeScanLimit)
+		history, err := res.VCS.History(ctx, m.Root(), types.HistoryQuery{Limit: gateMergeScanLimit})
 		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
 			return job.GreenGate{}
 		}
@@ -1784,6 +2112,9 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "written. A row that already ended is refused unless --force, because deleting it")
 			fmt.Fprintln(os.Stderr, "destroys the only record that the work ran.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Rows left over from finished work want `magus job prune`, which ENDS every job")
+			fmt.Fprintln(os.Stderr, "nobody is working and keeps each row as the record.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The dropped rows are archived beside the plan first, so this is recoverable.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -1818,4 +2149,86 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, dropped)
 	}
+}
+
+// jobPrune is `magus job prune`: end every job nobody is working, the way `job exit`
+// abandons one, so rows left over from finished work stop refusing new forks.
+//
+// --all is `docker system prune -a`'s knob and `ls jobs --all`'s word: the wider set.
+func jobPrune(ctx context.Context, root string, args []string) error {
+	var all bool
+	pos, err := cmdParse("job prune", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "End, as "+string(types.StateNoReturn)+", every job the store can show nobody is working:")
+			fmt.Fprintln(os.Stderr, "exited and never collected with `"+hint.JobWait.String()+"`, overdue, orphaned by an")
+			fmt.Fprintln(os.Stderr, "ancestor that ended, or declared and never taken past jobs.stale_after. Each row")
+			fmt.Fprintln(os.Stderr, "keeps its end_reason, as `"+hint.JobExit.String()+"` would leave it.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A job a holder took and touched within jobs.stale_after is never ended, nor is")
+			fmt.Fprintln(os.Stderr, "its parent. --all also ends a taken job nobody touched within jobs.stale_after.")
+			fmt.Fprintln(os.Stderr, "The global --dry-run lists what would end and ends nothing.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("magus job prune: takes no arguments (got %q)", pos[0])
+	}
+	store, err := openJobs(resolveRootOrEmpty(root))
+	if err != nil {
+		return err
+	}
+	ended, err := store.Prune(ctx, job.PruneOptions{All: all, DryRun: globalCfg.DryRun})
+	if err != nil {
+		return fmt.Errorf("magus job prune: %w", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		ids := make([]string, len(ended))
+		for i, e := range ended {
+			ids[i] = e.ID
+		}
+		return emitNames(ids)
+	case outputText:
+		printPruned(os.Stdout, ended, globalCfg.DryRun)
+		return nil
+	default:
+		if ended == nil {
+			ended = []job.Ending{}
+		}
+		return emitFormatted(opts, pruneReport{Ended: ended, DryRun: globalCfg.DryRun})
+	}
+}
+
+// pruneReport is `job prune`'s structured output.
+type pruneReport struct {
+	Ended  []job.Ending `json:"ended"   yaml:"ended"`
+	DryRun bool         `json:"dry_run" yaml:"dry_run"`
+}
+
+func printPruned(out io.Writer, ended []job.Ending, dryRun bool) {
+	verb := "ended"
+	if dryRun {
+		verb = "would end"
+	}
+	for _, e := range ended {
+		fmt.Fprintf(out, "%s %s: %s\n", verb, e.ID, e.Reason)
+	}
+	if dryRun {
+		fmt.Fprintf(out, "would end %d job(s); --dry-run ended nothing\n", len(ended))
+		return
+	}
+	fmt.Fprintf(out, "ended %d job(s)\n", len(ended))
 }

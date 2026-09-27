@@ -200,6 +200,24 @@ func NextForDenial(ref string) Next {
 		ref)
 }
 
+// DenyRemedyPrefix starts the id of every deny's own remedy, so `session hints` counts
+// uptake per rule beside deny-verdict.
+const DenyRemedyPrefix = "deny-"
+
+// NextForDenyRemedy breadcrumbs the command a guard rule computed from the line it
+// refused. argv is complete and argv[0] is the binary as the reader spelled it, so the
+// served command is the reader's own with the pipe or wrapper replaced.
+//
+// Not a breadcrumb template: each argv is derived from a refused line, so the guard's
+// tests grade it by driving the rule rather than by sweeping this file's ids.
+func NextForDenyRemedy(rule string, argv []string, why string) Next {
+	quoted := make([]string, len(argv))
+	for i, a := range argv {
+		quoted[i] = matcherArg(a)
+	}
+	return Next{ID: DenyRemedyPrefix + rule, Run: strings.Join(quoted, " "), Argv: slices.Clone(argv), Why: why}
+}
+
 // Role is who a result is being served to, read off the acting lease's row by
 // [RoleFor].
 //
@@ -348,8 +366,10 @@ func withinWritePaths(writePaths []string, argv []string) bool {
 // writeProjects names the project operands of a write, or nothing when the command
 // takes none. Nothing is the conservative answer: a write that names no project
 // touches whatever the workspace resolves, which is wider than any declared boundary.
+//
+// `vcs add` names paths rather than projects; a write path covers them the same way.
 func writeProjects(argv []string) []string {
-	if len(argv) < 4 || argv[1] != Run.Head() {
+	if len(argv) < 4 || (argv[1] != Run.Head() && !VCSAdd.MatchedBy(argv[1:])) {
 		return nil
 	}
 	var projects []string

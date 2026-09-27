@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -11,6 +12,8 @@ import (
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/queue"
+	qtypes "github.com/egladman/magus/internal/queue/types"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -215,6 +218,25 @@ func diffShows(paths ...string) job.Observer {
 	}
 }
 
+// The list op carries the in-flight changes the queue snapshot holds, joined by the same
+// constructor `magus ls jobs` uses.
+func TestJobToolListJoinsTheQueueSnapshot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	head := strings.Repeat("a", 40)
+	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{
+		Fetched: types.InflightFetch{Provider: "github", Base: "main", At: 5},
+		Changes: qtypes.Changes{Base: "main", Changes: []qtypes.Change{{ID: "7", Head: head, Base: "main", Method: qtypes.MethodSquash}}},
+	}))
+	tool := &jobTool{store: tmpJobStore(t, root), root: root}
+	resp, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "list"}})
+	require.NoError(t, err)
+	got, ok := resp.Data.(types.JobList)
+	require.True(t, ok)
+	assert.Equal(t, &types.InflightFetch{Provider: "github", Base: "main", At: 5}, got.Fetched)
+	assert.Equal(t, []types.InflightChange{{ID: "7", Head: head, Base: "main", Intent: "squash", Attention: types.AttentionQueue}}, got.Changes)
+}
+
 func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -250,6 +272,67 @@ func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 	_, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "exit", "id": "evidence", "result": "not-an-object"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "result must be an object")
+}
+
+func TestJobToolWaitAdmitsAHolderOnlyBelowItsLease(t *testing.T) {
+	t.Parallel()
+
+	loc := job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{}}
+	orchestrator := job.NewStore(loc)
+	check := types.LeaseCheck{Target: "go::go-test", Project: "."}
+	for _, row := range []types.Job{
+		{ID: "root", WritePaths: []string{"internal"}},
+		{ID: "root/worker", Parent: "root", WritePaths: []string{"internal/job"}},
+		{ID: "root/sibling", Parent: "root", WritePaths: []string{"internal/guard"}},
+		{ID: "root/worker/child", Parent: "root/worker", WritePaths: []string{"internal/job"}},
+		{ID: "root/worker/child/leaf", Parent: "root/worker/child", WritePaths: []string{"internal/job"}},
+		{ID: "other", WritePaths: []string{"cmd"}},
+	} {
+		row.Check, row.Validation, row.State = &check, check.String(), types.StateRunning
+		_, err := orchestrator.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+
+	loc.Actor = &job.Actor{Lease: "root/worker"}
+	tool := &jobTool{
+		store: job.NewStore(loc),
+		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}, nil
+		},
+		observe: diffShows("internal/job/verify.go"),
+	}
+	wait := func(id string) (spells.InvokeResponse, error) {
+		return tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "wait", "id": id, "result": map[string]any{
+			"schema_version":   types.JobResultSchemaVersion,
+			"job":              id,
+			"changed_paths":    []any{"internal/job/verify.go"},
+			"validation":       map[string]any{"command": "magus run go::go-test .", "output_ref": "out-" + id},
+			"unresolved_risks": []any{},
+		}}})
+	}
+
+	for _, id := range []string{"root/worker", "root/sibling", "root", "other"} {
+		_, err := wait(id)
+		require.EqualError(t, err, "job: this checkout holds the lease on root/worker and a holder does not verify its own work", id)
+	}
+	// The leaf first: a child is not done while a descendant is live.
+	for _, id := range []string{"root/worker/child/leaf", "root/worker/child"} {
+		resp, err := wait(id)
+		require.NoError(t, err, id)
+		status := resp.Data.(types.JobStatus)
+		assert.True(t, status.Verified, status.Violations)
+	}
+
+	rows, err := orchestrator.List()
+	require.NoError(t, err)
+	got := map[string]types.JobState{}
+	for _, row := range rows {
+		got[row.ID] = row.State
+	}
+	assert.Equal(t, map[string]types.JobState{
+		"root": types.StateRunning, "root/worker": types.StateRunning, "root/sibling": types.StateRunning,
+		"root/worker/child": types.StatePass, "root/worker/child/leaf": types.StatePass, "other": types.StateRunning,
+	}, got)
 }
 
 // TestJobToolCompletionGatesRoundTripThroughMCP pins that fork accepts

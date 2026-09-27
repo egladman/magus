@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
@@ -18,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"gopkg.in/yaml.v3"
 )
 
 // The path surface of `magus shell`: every rule that judges a file an edit is
@@ -290,7 +293,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			return writeGrade{Decision: "deny", Reason: reason}
 		}
 		owners := owningLeases(leases, live)
-		g := gradeAgainstOwnLease(me, owners, rel)
+		g := gradeAgainstOwnLease(me, owners, rel, func(owner types.Job) (writeGrade, bool) {
+			return gradeEntry(ctx, deps, location, owner, rel)
+		})
 		if g.Decision == "deny" {
 			return g
 		}
@@ -307,6 +312,11 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		return adviseMalformedDeclaration(err)
 	}
 	if owned {
+		// An unattributed writer is never blocked, so a holder mid-turn leaves the entry
+		// open and the write falls through to the advisory below.
+		if g, entered := gradeEntry(ctx, deps, location, owner, rel); entered && g.Decision == "" {
+			return g
+		}
 		// Recorded as well as reported, so the lease whose file just moved can find out by
 		// asking the store. Telling only the writer left the one party who needed it (the agent
 		// still holding a stale read of this path) as the only party never informed.
@@ -319,8 +329,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// repeats a fact the writer already has, while a different lease is a new one.
 		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, take it with `%s` so the guard grades your writes (a process no hook sees sets %s=%s instead); if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
-				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
-			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
+				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.\n"+
+				"For one small change once its holder is done, record it on the job first: `%s`.",
+			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State, enterCall(owner.ID, rel))}
 	}
 	return writeGrade{}
 }
@@ -361,8 +372,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // the orchestrator handed out, and a worker that widens its own is the failure the
 // declaration exists to catch. An EMPTY write set is not a boundary of size zero, it is a
 // boundary nobody declared, so it scopes nothing. owners are the live leases that claim
-// their paths, see owningLeases.
-func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGrade {
+// their paths, see owningLeases. enter grades a write into another lease's path against the
+// entries that lease carries, reporting whether one covered it.
+func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool)) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -403,6 +415,12 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGra
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
 	if mine {
+		if e, ok := enteredBefore(me, rel); ok {
+			return writeGrade{Decision: "advise", Key: enteredPathKey(me.ID, e), Context: fmt.Sprintf(
+				"magus workspace: re-read %s before you write it.\n"+
+					"%s entered %s on your lease %s at %s, a write into your paths recorded on the job. Anything you read of it before then may be stale.",
+				rel, e.By.Label(), e.Path, me.ID, time.Unix(e.At, 0).UTC().Format(time.RFC3339))}
+		}
 		// Advisory rather than a block: an orchestrator may have rebased the plan deliberately,
 		// and magus cannot tell that from a worker that wandered. What it can do is refuse to let
 		// the divergence stay silent until the merge finds it.
@@ -419,12 +437,17 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGra
 		return adviseMalformedDeclaration(err)
 	}
 	if owned {
+		if g, entered := enter(owner); entered {
+			return g
+		}
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
-				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.",
+				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
+				"For one small change once its holder is done, enter the path instead: `%s` records it on the job and lets one write through. A job takes %d.",
 			rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
-			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID))}
+			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
+			enterCall(owner.ID, rel), job.MaxJobEntries)}
 	}
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
@@ -440,17 +463,89 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGra
 // blocked worker reports a paste rather than a paragraph and whoever owns the plan acts
 // without reconstructing the row from a denial.
 //
-// It carries every path the row already declared alongside the new one, because op=put
-// REPLACES the row: a call naming only the blocked path would hand back a narrower set of
-// paths than the worker started with.
+// It carries every path the row already declared alongside the new one, because a put's
+// write_paths REPLACES the row's: a call naming only the blocked path would hand back a
+// narrower set of paths than the worker started with. The tool's put op is `fork`.
 //
 // Only this denial offers it. A path another live row owns wants the plan re-partitioned
 // rather than a second owner, and a path the row's own deny list names was refused on
 // purpose; printing the undo for either would teach the reader that a boundary is a
 // formality.
 func widenCall(me types.Job, rel string) string {
-	return fmt.Sprintf("%s op=put id=%s write_paths=%q",
+	return fmt.Sprintf("%s op=fork id=%s write_paths=%q",
 		hint.ToolJob.String(), me.ID, strings.Join(append(slices.Clone(me.WritePaths), rel), " "))
+}
+
+// enterCall renders the job-store call that enters rel on lease id.
+func enterCall(id, rel string) string {
+	return fmt.Sprintf("%s op=fork id=%s enter=%s", hint.ToolJob.String(), id, rel)
+}
+
+// entryIdle is how long a holder must go without a tool call before an entry into its
+// paths is honored: the tenant is not mid-edit.
+const entryIdle = time.Minute
+
+// holderTrailWindow bounds how much of the holder's trail is read for its last call.
+const holderTrailWindow = 2000
+
+// gradeEntry grades a write into owner's paths by somebody other than its holder against
+// the entries owner carries, reporting whether an open one covered rel. A covered write
+// passes and consumes the entry when the holder is idle, and is denied while it is not.
+func gradeEntry(ctx context.Context, deps Dependencies, at location, owner types.Job, rel string) (writeGrade, bool) {
+	entry, ok := job.OpenEntry(owner, rel)
+	if !ok {
+		return writeGrade{}, false
+	}
+	if last, seen := holderLastCall(deps, at, owner); seen {
+		if idle := time.Since(last); idle < entryIdle {
+			return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+				"magus workspace: retry once lease %s's holder has been idle for %s; the entry for %s stays open.\n"+
+					"Its holder made a tool call %s ago, so it may be mid-edit on the path you entered. An entry lets one write through while the holder is not working.",
+				owner.ID, entryIdle, entry.Path, idle.Round(time.Second))}, true
+		}
+	}
+	_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).ConsumeEntry(ctx, owner.ID, rel)
+	return writeGrade{}, true
+}
+
+// holderLastCall is when the guard last graded a tool call under owner's lease, read from
+// the trail of the checkout its holder took it in. False when nothing says, which honors
+// the entry: a holder magus never saw working is not one it can call busy.
+func holderLastCall(deps Dependencies, at location, owner types.Job) (time.Time, bool) {
+	if owner.CheckoutRoot == "" {
+		return time.Time{}, false
+	}
+	cacheDir := at.cacheDir
+	if resolveSymlinks(owner.CheckoutRoot) != resolveSymlinks(at.workspace) {
+		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
+	}
+	events, err := trail.ReadRecent(cacheDir, holderTrailWindow)
+	if err != nil {
+		return time.Time{}, false
+	}
+	var last int64
+	for _, e := range events {
+		if e.Kind == trail.KindAgentCommand && e.Lease == owner.ID {
+			last = max(last, e.Ts)
+		}
+	}
+	return time.UnixMilli(last), last != 0
+}
+
+// enteredBefore is the newest entry on me covering rel, consumed or not.
+func enteredBefore(me types.Job, rel string) (types.JobEntry, bool) {
+	for _, e := range slices.Backward(me.Entries) {
+		if job.Covers(e.Path, rel) {
+			return e, true
+		}
+	}
+	return types.JobEntry{}, false
+}
+
+// enteredPathKey holds the holder's advisory about one entry to once per session.
+func enteredPathKey(lease string, e types.JobEntry) hint.MarkerKind {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%d", lease, e.Path, e.At))
+	return hint.MarkerKind("entered-path-" + hex.EncodeToString(sum[:6]))
 }
 
 // liveLeases are the rows a write can still collide with: declared and running.
@@ -781,4 +876,120 @@ func workspaceRelativeFile(path string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// vcsOffSwitchDoc is the one field a magus.yaml candidate is read for here, unmarshaled on
+// its own rather than into config.Config: unrelated schema drift elsewhere in that struct
+// (a new required key, a stricter tag) must never make this rule's own parse fail, and
+// yaml.Unmarshal already ignores keys a struct does not name.
+type vcsOffSwitchDoc struct {
+	VCS struct {
+		Enabled *bool `yaml:"enabled"`
+	} `yaml:"vcs"`
+}
+
+// vcsOffSwitchTargets are the magus.yaml locations internal/config/load.go Load actually
+// reads for root: the workspace's own file and the user-global tier Load merges beneath
+// it, both spellings. Both are in scope because a pointer field means "unset, inherit":
+// a workspace magus.yaml that never mentions vcs still gets whatever the user-global tier
+// set, so a write to EITHER can flip what this workspace resolves.
+func vcsOffSwitchTargets(root string) []string {
+	targets := []string{
+		filepath.Join(root, config.Filename),
+		filepath.Join(root, config.DottedFilename),
+	}
+	if udc, err := config.UserConfigDir(); err == nil {
+		targets = append(targets,
+			filepath.Join(udc, "magus", config.Filename),
+			filepath.Join(udc, "magus", config.DottedFilename))
+	}
+	return targets
+}
+
+// resolvedWriteContent is what target holds once fields lands, or "", false when that
+// cannot be computed: a Write's Content is used whole; an Edit's replacements are applied
+// to what target holds on disk now (applyEdits, claim.go); anything that will not apply
+// (an OldText that is not there, a target that does not exist yet for an Edit) fails
+// open rather than guessing at a result the host itself would have refused.
+func resolvedWriteContent(target string, fields writeFields) (string, bool) {
+	if fields.Content != "" {
+		return fields.Content, true
+	}
+	before, err := os.ReadFile(target)
+	if err != nil {
+		return "", false
+	}
+	return applyEdits(string(before), fields)
+}
+
+// denyVCSOffSwitch is finding 3 of the guard-boundary audit (U8): a leased or
+// agent-attributed write that leaves vcs.enabled: false in a magus.yaml tier this
+// workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
+// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
+// with none resolved there is no HEAD to compare a policy edit against, so from that
+// write on every tools/policy/*.buzz rule stops being checked against an approved copy
+// before it takes effect. That is the guard's own foundational safety, so it is judged
+// here whether or not a job store is running to grade ordinary path boundaries.
+//
+// Decided by PARSING the proposed content into the same shape config.Load reads, never
+// by matching text against it: an anchor, a merge key, or any other YAML spelling of
+// false is caught exactly like a literal `enabled: false`, and a comment or a value
+// under an unrelated key never fires it. Every other edit to these files passes exactly
+// as before, and so does this same edit from a session naming no lease and carrying no
+// spawn ancestry: a person editing their own checkout is owed silence, the same
+// exemption every other rule on this path surface gives them.
+//
+// "Agent-attributed" reads trail.SpawnFromEnv, the ancestry claim adviseUnleasedWorker
+// above already teaches an unleased worker to declare: a parent span id means some tool
+// started this process deliberately, and nothing here can turn a false claim into a
+// worse verdict than the deny a true one earns, since a person's own edit carries no
+// such claim at all.
+func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGrade {
+	writePath = strings.TrimSpace(writePath)
+	if writePath == "" {
+		return writeGrade{}
+	}
+	if actingLease == "" && trail.SpawnFromEnv().ParentSpanID == "" {
+		return writeGrade{}
+	}
+	root, err := magus.FindRoot("")
+	if err != nil {
+		return writeGrade{}
+	}
+	abs := writePath
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(root, abs)
+	}
+	real := resolveSymlinks(filepath.Clean(abs))
+	target := ""
+	for _, candidate := range vcsOffSwitchTargets(root) {
+		if resolveSymlinks(candidate) == real {
+			target = candidate
+			break
+		}
+	}
+	if target == "" {
+		return writeGrade{}
+	}
+	after, ok := resolvedWriteContent(target, fields)
+	if !ok {
+		return writeGrade{}
+	}
+	var doc vcsOffSwitchDoc
+	if err := yaml.Unmarshal([]byte(after), &doc); err != nil {
+		return writeGrade{}
+	}
+	if doc.VCS.Enabled == nil || *doc.VCS.Enabled {
+		return writeGrade{}
+	}
+	remedy := "Have the person holding this checkout make the change by hand, outside a lease and outside a spawned run, if the workspace genuinely wants no VCS."
+	actor := "This session carries spawn ancestry and names no lease."
+	if actingLease != "" {
+		remedy = leaseActorClause("turn vcs off")
+		actor = fmt.Sprintf("Lease %s is bound to this checkout.", actingLease)
+	}
+	return writeGrade{Decision: "deny", Rule: string(denyRuleVCSOffSwitch), Reason: fmt.Sprintf(
+		"magus workspace: leave vcs.enabled alone here. %s\n"+
+			"%s sets vcs.enabled: false, in a magus.yaml tier this workspace reads. vcs.Resolve (vcs/vcs.go) then resolves no VCS at all, and the guard's own approval authority is HEAD of whatever VCS resolves: with none resolved, no policy edit is ever checked against an approved copy again. %s No write paths anybody hands out include this switch.",
+		remedy, writePath, actor)}
 }

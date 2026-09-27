@@ -2,9 +2,12 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,14 +121,112 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	assert.Equal(t, types.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
 }
 
-func TestWaitRefusesTheBoundHolder(t *testing.T) {
+// lineageRow is acceptRow renamed into a tree under parent.
+func lineageRow(id, parent string) types.Job {
+	row := acceptRow()
+	row.ID, row.Parent = id, parent
+	return row
+}
+
+// lineage is a worker's tree: its root, the worker, a sibling, a row outside the tree,
+// and below the worker whatever the case adds.
+func lineage(below ...types.Job) []types.Job {
+	return append([]types.Job{
+		lineageRow("root", ""),
+		lineageRow("root/worker", "root"),
+		lineageRow("root/sibling", "root"),
+		lineageRow("other", ""),
+	}, below...)
+}
+
+// waitAs waits on target as the worker leased to holder, with a result that verifies.
+func waitAs(t *testing.T, loc Location, holder, target string) (types.JobStatus, error) {
+	t.Helper()
+	result := passingResult()
+	result.Job = target
+	attempt := passingRun
+	attempt.Ref = result.Validation.OutputRef
+	attempt.TimestampMs = 9_999_999_999_999
+	return Wait(t.Context(), boundStore(loc, holder), target, &result, func(context.Context, string) (types.JobAttempt, error) {
+		return attempt, nil
+	}, observeClaim(result))
+}
+
+// jobStates maps each row in loc's store to its state.
+func jobStates(t *testing.T, loc Location) map[string]types.JobState {
+	t.Helper()
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	out := map[string]types.JobState{}
+	for _, row := range rows {
+		out[row.ID] = row.State
+	}
+	return out
+}
+
+func TestWaitLetsAHolderVerifyItsDescendants(t *testing.T) {
 	t.Parallel()
 
-	row := acceptRow()
-	loc := declared(t, row)
-	_, err := Wait(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not verify its own work")
+	tests := map[string]struct {
+		rows   []types.Job
+		target string
+	}{
+		"child": {
+			rows:   lineage(lineageRow("root/worker/child", "root/worker")),
+			target: "root/worker/child",
+		},
+		"grandchild": {
+			rows: lineage(
+				lineageRow("root/worker/child", "root/worker"),
+				lineageRow("root/worker/child/leaf", "root/worker/child"),
+			),
+			target: "root/worker/child/leaf",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			loc := declared(t, tt.rows...)
+			status, err := waitAs(t, loc, "root/worker", tt.target)
+			require.NoError(t, err)
+			assert.True(t, status.Verified, status.Violations)
+
+			want := map[string]types.JobState{}
+			for _, row := range tt.rows {
+				want[row.ID] = types.StateRunning
+			}
+			want[tt.target] = types.StatePass
+			assert.Equal(t, want, jobStates(t, loc))
+		})
+	}
+}
+
+func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
+	t.Parallel()
+
+	for name, target := range map[string]string{
+		"its own row": "root/worker",
+		"a sibling":   "root/sibling",
+		"an ancestor": "root",
+		"unrelated":   "other",
+		"undeclared":  "root/worker/ghost",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			rows := lineage(lineageRow("root/worker/child", "root/worker"))
+			loc := declared(t, rows...)
+			_, err := waitAs(t, loc, "root/worker", target)
+			require.EqualError(t, err, "job: this checkout holds the lease on root/worker and a holder does not verify its own work")
+
+			want := map[string]types.JobState{}
+			for _, row := range rows {
+				want[row.ID] = types.StateRunning
+			}
+			assert.Equal(t, want, jobStates(t, loc), "a refused wait writes nothing")
+		})
+	}
 }
 
 // plant writes rows exactly as given, timestamps included, which no write door allows.
@@ -225,6 +326,14 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				{ID: "maintenance", Holder: types.HolderServer, State: types.StateDeclared, Updated: old},
 			},
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+		},
+		{
+			name:       "a checkout_root with no registration is not a holder",
+			staleAfter: 2 * time.Hour,
+			rows: []types.Job{
+				{ID: "forked", State: types.StateDeclared, CheckoutRoot: here, Updated: old},
+			},
+			ended: map[string]string{"forked": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name: "a zero stale_after ends nothing for age",
@@ -374,4 +483,253 @@ func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 
 	_, err := s.List()
 	assert.ErrorContains(t, err, "jobs.stale_after")
+}
+
+// An exited row the landing probe proves is on the base ends as no_return with the
+// probe's reason; one with a live child, one another write moved since the probe, and one
+// the probe does not prove all stay.
+func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
+	s, notices := sweepStore(t, 100_000, 0)
+	result := &types.JobResult{ChangedPaths: []string{"a.go"}}
+	exited := func(id string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Result: result, Checkpoint: "c0", CheckoutRoot: "/w/" + id, Updated: 90_000}
+	}
+	busy := exited("busy")
+	plant(t, s,
+		exited("landed"),
+		busy,
+		types.Job{ID: "busy/child", Parent: "busy", State: types.StateRunning, Updated: 90_000},
+		exited("pending"),
+		types.Job{ID: "reader", State: types.StateExited, ReadOnly: true, Updated: 90_000},
+	)
+	var probed []string
+	s.landed = func(_ context.Context, row types.Job) string {
+		probed = append(probed, row.ID)
+		if row.ID == "pending" {
+			return ""
+		}
+		return "its work landed on origin/main at base1"
+	}
+
+	got := states(t, s)
+	assert.Equal(t, []string{"landed", "busy", "pending"}, probed, "only exited rows with changed paths in a checkout are probed")
+	assert.Equal(t, types.StateNoReturn, got["landed"].State)
+	assert.Equal(t, "its work landed on origin/main at base1", got["landed"].EndReason)
+	for _, id := range []string{"busy", "pending", "reader"} {
+		assert.Equal(t, types.StateExited, got[id].State, id)
+	}
+	assert.Equal(t, "ended landed: its work landed on origin/main at base1\n", notices.String())
+}
+
+// git runs one git command in dir with the box's own config shut out, and returns its
+// trimmed output.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+	return strings.TrimSpace(string(out))
+}
+
+// Two jobs whose branches were squashed into ONE base commit both end, judged by content
+// alone: no ancestry joins either branch to the squash. A job whose commit is not on the
+// base, and one whose change was never committed, both stay exited.
+func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
+	root := gitRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
+	seedRev := commitRepo(t, root)
+	worktree := func(name, file, body string, commit bool) string {
+		dir := filepath.Join(t.TempDir(), name)
+		git(t, root, "worktree", "add", "-q", "-b", name, dir, seedRev)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644))
+		if commit {
+			git(t, dir, "commit", "-q", "-am", name)
+		}
+		return dir
+	}
+	wa := worktree("job-a", "a.go", "package a // landed\n", true)
+	wb := worktree("job-b", "b.go", "package b // landed\n", true)
+	wc := worktree("job-c", "c.go", "package c // not merged\n", true)
+	wd := worktree("job-d", "d.go", "package d // uncommitted\n", false)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a // landed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "b.go"), []byte("package b // landed\n"), 0o644))
+	git(t, root, "commit", "-q", "-am", "squash of job-a and job-b")
+	squash := git(t, root, "rev-parse", "HEAD")
+	git(t, root, "update-ref", "refs/remotes/origin/main", squash)
+
+	s := tmpStore(t, root)
+	var notices strings.Builder
+	s.notices = &notices
+	exited := func(id, dir, file string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: dir,
+			WritePaths: []string{file}, Result: &types.JobResult{ChangedPaths: []string{file}}, Updated: 1}
+	}
+	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"), exited("job-c", wc, "c.go"), exited("job-d", wd, "d.go"))
+
+	got := states(t, s)
+	for id, dir := range map[string]string{"job-a": wa, "job-b": wb} {
+		head := git(t, dir, "rev-parse", "HEAD")
+		assert.Equal(t, types.StateNoReturn, got[id].State, id)
+		var base, short string
+		_, err := fmt.Sscanf(got[id].EndReason, "its work landed on origin/main at %s the 1 changed path(s) at %s", &base, &short)
+		require.NoError(t, err, got[id].EndReason)
+		assert.True(t, strings.HasPrefix(squash, strings.TrimSuffix(base, ":")), "names the squash commit: %s", got[id].EndReason)
+		assert.True(t, strings.HasPrefix(head, short), "names the job's own HEAD: %s", got[id].EndReason)
+		assert.True(t, strings.HasSuffix(got[id].EndReason, " in "+dir+" read the same there"), got[id].EndReason)
+	}
+	assert.Equal(t, types.StateExited, got["job-c"].State, "a commit the base never took")
+	assert.Equal(t, types.StateExited, got["job-d"].State, "HEAD reads as the checkpoint, so it says nothing of the change")
+
+	jobs, err := s.Path()
+	require.NoError(t, err)
+	probes, err := os.ReadFile(filepath.Join(filepath.Dir(jobs), landingProbesFile))
+	require.NoError(t, err)
+	assert.Contains(t, string(probes), `"job-c"`, "an unproven row waits out the interval before its next probe")
+}
+
+// Exit resolves a ref the caller's checkout never recorded in the checkout the job was
+// taken in, so an orchestrator can file its worker's result; with no Outputs it refuses.
+func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
+	t.Parallel()
+
+	worker := t.TempDir()
+	row := acceptRow()
+	row.CheckoutRoot, row.Registered = worker, 1
+	result := passingResult()
+	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+
+	loc := declared(t)
+	plant(t, NewStore(loc), row)
+	_, err := Exit(t.Context(), NewStore(loc), row.ID, &result, here)
+	require.EqualError(t, err, `job: the result's output ref "a1b2c3d4" names no run this checkout recorded`)
+
+	var asked []string
+	loc.Outputs = func(root string) AttemptResolver {
+		return func(_ context.Context, ref string) (types.JobAttempt, error) {
+			asked = append(asked, root)
+			if root != worker {
+				return types.JobAttempt{}, nil
+			}
+			found := passingRun
+			found.Ref = ref
+			return found, nil
+		}
+	}
+	stored, err := Exit(t.Context(), NewStore(loc), row.ID, &result, here)
+	require.NoError(t, err)
+	assert.Equal(t, []string{worker}, asked)
+	assert.Equal(t, types.StateExited, stored.State)
+	require.NotNil(t, stored.Attempt)
+	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
+}
+
+// pruneRows is a plan with one row for each reason prune ends a job and each it keeps one.
+func pruneRows(now int64) []types.Job {
+	fresh, old, deadline := now-60, now-int64((3*time.Hour).Seconds()), now-600
+	return []types.Job{
+		{ID: "exited", State: types.StateExited, Registered: old, Updated: old},
+		{ID: "late", State: types.StateDeclared, Deadline: deadline, Updated: fresh},
+		{ID: "late-held", State: types.StateRunning, Registered: fresh, Deadline: deadline, Updated: fresh},
+		{ID: "late-idle", State: types.StateRunning, Registered: old, Deadline: deadline, Updated: old},
+		{ID: "idle", State: types.StateRunning, Registered: old, Updated: old},
+		{ID: "busy", State: types.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "plan", State: types.StateDeclared, Updated: old},
+		{ID: "plan/w", Parent: "plan", State: types.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "old-plan", State: types.StateDeclared, Updated: old},
+		{ID: "old-plan/w", Parent: "old-plan", State: types.StateRunning, Registered: old, Updated: old},
+		{ID: "done", State: types.StateExited, Updated: fresh},
+		{ID: "done/c", Parent: "done", State: types.StateDeclared, Updated: fresh},
+		{ID: "fresh", State: types.StateDeclared, Updated: fresh},
+		{ID: "maint", Holder: types.HolderServer, State: types.StateExited, Updated: old},
+		{ID: "graded", State: types.StatePass, Updated: old},
+	}
+}
+
+func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
+	const now = int64(100_000)
+	const exited = "exited 3h0m0s ago and nobody collected its result with `magus job wait`"
+	const overdue = "overdue: its deadline passed 10m0s ago"
+	const taken = "taken, then untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"
+	defaults := []Ending{
+		{ID: "exited", Reason: exited},
+		{ID: "late", Reason: overdue},
+		{ID: "late-idle", Reason: overdue},
+		{ID: "done", Reason: "exited 1m0s ago and nobody collected its result with `magus job wait`"},
+		{ID: "done/c", Reason: "parent done ended as no_return, and its tree ends with it"},
+	}
+	tests := []struct {
+		name string
+		all  bool
+		want []Ending
+	}{
+		{name: "the default ends what is provably not worked", want: defaults},
+		{
+			name: "all also ends a taken job nobody touched, and the root above it",
+			all:  true,
+			want: append(slices.Clone(defaults[:3]),
+				Ending{ID: "idle", Reason: taken},
+				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+				Ending{ID: "old-plan/w", Reason: taken},
+				defaults[3], defaults[4],
+			),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, notices := sweepStore(t, now, 2*time.Hour)
+			s.landed = func(context.Context, types.Job) string { return "" }
+			rows := pruneRows(now)
+			plant(t, s, rows...)
+
+			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
+
+			f, err := s.read()
+			require.NoError(t, err)
+			for i, row := range f.Jobs {
+				at := slices.IndexFunc(tt.want, func(e Ending) bool { return e.ID == row.ID })
+				if at < 0 {
+					assert.Equal(t, rows[i].State, row.State, "%s is left as it was", row.ID)
+					assert.Equal(t, rows[i].Updated, row.Updated, row.ID)
+					assert.Empty(t, row.EndReason, row.ID)
+					continue
+				}
+				assert.Equal(t, types.StateNoReturn, row.State, row.ID)
+				assert.Equal(t, tt.want[at].Reason, row.EndReason, row.ID)
+				assert.Equal(t, now, row.Updated, row.ID)
+			}
+		})
+	}
+}
+
+func TestJobPruneDryRunEndsNothing(t *testing.T) {
+	const now = int64(100_000)
+	s, _ := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s, pruneRows(now)...)
+	path, err := s.Path()
+	require.NoError(t, err)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	got, err := s.Prune(t.Context(), PruneOptions{DryRun: true})
+	require.NoError(t, err)
+	assert.Len(t, got, 5, "a dry run lists what a prune would end")
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+}
+
+func TestJobPruneRefusesABoundWorker(t *testing.T) {
+	loc := declared(t, types.Job{ID: "w", State: types.StateExited})
+	_, err := boundStore(loc, "w").Prune(t.Context(), PruneOptions{})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, types.StateExited, jobStates(t, loc)["w"])
 }

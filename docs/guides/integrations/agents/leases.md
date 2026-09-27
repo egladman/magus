@@ -158,12 +158,13 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), `write_proof`, `checkout_root` (where
+outside it wrote, noticed by the guard), `entries` (see
+[entering a job's path](#entering-a-jobs-path)), `write_proof`, `checkout_root` (where
 `magus job exec` took the job), and `end_reason` (why magus ended it, see
 [jobs magus ends itself](#jobs-magus-ends-itself)), all output-only: a
 timestamp a client sent would be a fact about that client's clock. `updated`
-moves only on the job's own writes; the guard recording an unattributed write
-leaves it alone.
+moves only on the job's own writes; the guard recording an unattributed write,
+and an entry, leave it alone.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -182,6 +183,18 @@ session's. The rule lives in the store rather than in a guard pattern because
 the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
 the orchestrator or a person at a terminal, writes anything.
+
+**A child is forked with `--parent <your job>`.** The guard lets a leased
+session fork a NEW row that names its own job as `parent`, as flags, as a
+`--stdin` record in a quoted heredoc, or as `magus_job` `op=fork` with
+`parent`, and leaves its boundary to the store: a child claiming more than its
+parent is refused there, once. The store grades a child only when it writes as
+that lease, which it reads from the checkout's binding; a worker the guard
+identified in a checkout bound to nobody may fork only a `--read-only` child
+that declares no paths, check or gates. A child neither read-only nor handed
+write paths is refused either way, since an empty write set scopes nothing.
+The guard also lets `magus job wait` through for the session's own
+descendants, and refuses it for any other job.
 
 **Taking a lease is one-way while the job is in flight.** `magus job exec` from a
 caller whose job is still `declared` or `running` is refused when it names a
@@ -431,6 +444,31 @@ cannot see.
 A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any
 more. A job past its deadline owns nothing against other jobs.
+
+### Entering a job's path
+
+A small change to a path a live job owns does not need a new worker or the
+job ended. Enter the path first, then write it:
+
+```sh
+magus_job op=fork id=<job> enter=<path>
+echo '{"schema_version": 11, "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
+```
+
+The store records the entry on the job's `entries` and refuses one it cannot
+honor: a job that is not live, a caller that holds the job, a holder entering a
+job not forked beneath its own, a path outside the job's write paths (that wants
+widening), a second open entry for one path, and a third entry on one job.
+
+The guard then lets ONE write into that path through and stamps the entry
+`consumed`. It refuses the write while the job's holder is working: a tool call
+graded under the job in the last minute, read from the trail of the checkout the
+holder took it in. The next write needs another entry.
+
+The holder learns of it three ways: `magus describe job` lists the entries, its
+next write to an entered path is advised to re-read the file first, and a
+continue addressed to it carries the entries. `magus job wait` lists them too,
+and marks each footprint line in an entered path.
 
 The declaration row ([claimed-declaration](../../../reference/rules/claimed-declaration.md))
 reads the edit itself. When the host's payload carries the replacement (an

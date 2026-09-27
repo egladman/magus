@@ -11,7 +11,9 @@
 #   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
 #    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
 #    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
-#    "transcript":"<abs>","outcome":{"exit":null,"denied":false,"interrupted":false}}
+#    "transcript":"<abs>",
+#    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
+#    "outcome":{"exit":null,"denied":false,"interrupted":false}}
 #
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
@@ -44,7 +46,7 @@
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
 # magus-guard-template: 18
-# magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
+# magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a
 # reason to abandon the ones it can: a single malformed line would otherwise end
@@ -133,6 +135,7 @@ extract() {
     def event($r; $kind; $ref; $text):
       {host: $host, session: ($r.sessionId // ""), ts: ($r.timestamp // "" | ms),
        cwd: ($r.cwd // ""), kind: $kind, ref: $ref, text: $text, transcript: $transcript,
+       agent: {model: ($r.message.model // null), host_version: ($r.version // null)},
        outcome: {exit: null, denied: false, interrupted: false}};
     foreach (inputs, null) as $r ({p: {}, e: []};
       .e = []

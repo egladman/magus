@@ -390,8 +390,8 @@ type locatedCall struct {
 	// args are the call's words after the program, nil when the invocation was reached
 	// through a wrapper, whose arguments arrive only as rendered text.
 	args []*syntax.Word
-	// unfollowed is set for a call inside a conditional, loop or function, which the walk
-	// finds but does not locate.
+	// unfollowed is set for a call inside a conditional, function or loop other than a
+	// literalLoop, which the walk finds but does not locate.
 	unfollowed bool
 }
 
@@ -403,7 +403,13 @@ func locateCalls(command string, d Dialect, cwd string, match func(hint.Invocati
 	if err != nil {
 		return nil, false
 	}
-	w := callWalk{d: d, match: match, first: first}
+	w := callWalk{d: d, match: match, first: first, vars: map[string]string{}}
+	// A function defined on the line may rebind a loop variable from inside the body.
+	syntax.Walk(f, func(n syntax.Node) bool {
+		_, fn := n.(*syntax.FuncDecl)
+		w.funcs = w.funcs || fn
+		return !w.funcs
+	})
 	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
 	return w.calls, true
 }
@@ -415,6 +421,10 @@ type callWalk struct {
 	match func(hint.Invocation) bool
 	first bool
 	calls []locatedCall
+	// vars binds each variable of the literal loops the walk is inside to this
+	// iteration's word.
+	vars  map[string]string
+	funcs bool
 }
 
 func (w *callWalk) done() bool { return w.first && len(w.calls) > 0 }
@@ -467,12 +477,25 @@ func (w *callWalk) cmd(c syntax.Command, at shellDir) shellDir {
 		return at
 	case *syntax.Block:
 		return w.stmts(c.Stmts, at)
+	case *syntax.ForClause:
+		if name, words, ok := literalLoop(c); ok && !w.funcs {
+			for _, word := range words {
+				if w.done() {
+					break
+				}
+				w.vars[name] = word
+				at = w.stmts(c.Do, at)
+			}
+			// The shell leaves the variable set, but an unbound one only refuses more.
+			delete(w.vars, name)
+			return at
+		}
 	}
-	// Conditionals, loops and functions are not followed: a match inside one is found but
-	// not located, and a cd inside one leaves the directory unknown.
+	// Conditionals, other loops and functions are not followed: a match inside one is found
+	// but not located, and a cd inside one leaves the directory unknown.
 	syntax.Walk(c, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok && !w.done() {
-			for _, inv := range peelWrappers(literalWords(call.Args), w.d) {
+			for _, inv := range peelWrappers(literalWords(w.bound(call.Args)), w.d) {
 				switch {
 				case w.match(inv):
 					w.calls = append(w.calls, locatedCall{inv: inv, at: at, unfollowed: true})
@@ -487,7 +510,8 @@ func (w *callWalk) cmd(c syntax.Command, at shellDir) shellDir {
 }
 
 func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
-	words := literalWords(c.Args)
+	args := w.bound(c.Args)
+	words := literalWords(args)
 	if len(words) == 0 {
 		return at
 	}
@@ -495,11 +519,11 @@ func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 	if len(invs) == 1 && invs[0].Name == path.Base(words[0]) {
 		switch inv := invs[0]; {
 		case isCdInvocation(inv):
-			return cdInto(c.Args[1:], at)
+			return cdInto(args[1:], at)
 		case changesDir(inv):
 			at.known = false
 		case w.match(inv):
-			w.calls = append(w.calls, locatedCall{inv: inv, at: at, args: c.Args[1:]})
+			w.calls = append(w.calls, locatedCall{inv: inv, at: at, args: args[1:]})
 		}
 		return at
 	}
@@ -515,6 +539,101 @@ func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 		}
 	}
 	return at
+}
+
+// bound is words with each plain $NAME or ${NAME} of a bound loop variable replaced by its
+// word, so the literal readers downstream see the value this iteration passes.
+func (w *callWalk) bound(words []*syntax.Word) []*syntax.Word {
+	if len(w.vars) == 0 {
+		return words
+	}
+	out := make([]*syntax.Word, len(words))
+	for i, word := range words {
+		out[i] = &syntax.Word{Parts: w.boundParts(word.Parts)}
+	}
+	return out
+}
+
+func (w *callWalk) boundParts(parts []syntax.WordPart) []syntax.WordPart {
+	out := make([]syntax.WordPart, len(parts))
+	for i, part := range parts {
+		out[i] = part
+		switch p := part.(type) {
+		case *syntax.ParamExp:
+			if !plainParam(p) {
+				continue
+			}
+			if v, ok := w.vars[p.Param.Value]; ok {
+				out[i] = &syntax.Lit{Value: v}
+			}
+		case *syntax.DblQuoted:
+			out[i] = &syntax.DblQuoted{Dollar: p.Dollar, Parts: w.boundParts(p.Parts)}
+		}
+	}
+	return out
+}
+
+// plainParam reports $NAME or ${NAME} with no operator, whose value is the variable's own.
+func plainParam(p *syntax.ParamExp) bool {
+	return p.Param != nil && p.Flags == nil && !p.Excl && !p.Length && !p.Width && !p.IsSet &&
+		p.NestedParam == nil && p.Index == nil && len(p.Modifiers) == 0 &&
+		p.Slice == nil && p.Repl == nil && p.Names == 0 && p.Exp == nil
+}
+
+// literalLoop is the variable and words of a `for NAME in WORDS` loop the walk unrolls.
+// False unless every word is literal and expands unchanged wherever the body reads it
+// unquoted (no glob, brace, tilde, escape or blank), and nothing in the body can rebind
+// NAME or skip the rest of an iteration.
+func literalLoop(c *syntax.ForClause) (string, []string, bool) {
+	iter, ok := c.Loop.(*syntax.WordIter)
+	if !ok || c.Select || !iter.InPos.IsValid() {
+		return "", nil, false
+	}
+	name := iter.Name.Value
+	words := make([]string, 0, len(iter.Items))
+	for _, item := range iter.Items {
+		v, ok := literalArg(item.Parts)
+		if !ok || v == "" || strings.ContainsAny(v, "*?[]{}~\\ \t\n") {
+			return "", nil, false
+		}
+		words = append(words, v)
+	}
+	escapes := false
+	for _, s := range c.Do {
+		syntax.Walk(s, func(n syntax.Node) bool {
+			switch n := n.(type) {
+			case *syntax.Assign:
+				escapes = n.Name != nil && n.Name.Value == name
+			case *syntax.WordIter:
+				escapes = n.Name.Value == name
+			case *syntax.DeclClause, *syntax.LetClause, *syntax.ArithmCmd, *syntax.ArithmExp:
+				escapes = true
+			case *syntax.CallExpr:
+				escapes = rebindsOrLeaves(literalWords(n.Args))
+			}
+			return !escapes
+		})
+		if escapes {
+			return "", nil, false
+		}
+	}
+	return name, words, true
+}
+
+// rebindsOrLeaves reports a builtin that can set a variable by name or cut an iteration
+// short, after which the unrolled body no longer matches what the shell runs.
+func rebindsOrLeaves(words []string) bool {
+	if len(words) == 0 {
+		return false
+	}
+	switch words[0] {
+	case "break", "continue", "read", "mapfile", "readarray", "getopts", "unset", "eval", "source", ".",
+		"export", "declare", "typeset", "local", "readonly", "let":
+		return true
+	case "printf":
+		return slices.ContainsFunc(words[1:], func(a string) bool { return strings.HasPrefix(a, "-v") })
+	}
+	return false
 }
 
 // changesDir reports a builtin that moves the shell's working directory.

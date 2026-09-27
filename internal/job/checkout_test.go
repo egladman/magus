@@ -188,28 +188,35 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 
 // TestSharedCheckoutRefusalIgnoresAJobThatIsOver is why the rule reads the STATE: a
 // checkout a job that passed was taken in is a checkout nobody is working in, and
-// refusing the next fork over it would strand the worktree.
+// refusing the next fork over it would strand the worktree. An exited job's holder
+// returned, so its editing is over too, though the row waits on its grade.
 func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	root := loadableRoot(t)
-	s := NewStore(tmpLoc(t, root))
+	for _, over := range []types.JobState{types.StatePass, types.StateExited} {
+		t.Run(string(over), func(t *testing.T) {
+			t.Parallel()
 
-	done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
-		u.State, u.WritePaths = types.StateRunning, []string{"internal/job/store.go"}
-	}, config.Jobs{}, nil)
-	require.NoError(t, err)
-	_, err = s.Exec(ctx, done.ID, "rev")
-	require.NoError(t, err)
-	_, err = s.Update(ctx, done.ID, func(u *types.Job) { u.State = types.StatePass })
-	require.NoError(t, err)
+			ctx := context.Background()
+			root := loadableRoot(t)
+			s := NewStore(tmpLoc(t, root))
 
-	next, err := ForkMerge(ctx, s, "wave/next", func(u *types.Job) {
-		u.State, u.WritePaths = types.StateDeclared, []string{"magus.yaml"}
-	}, config.Jobs{}, nil)
-	require.NoError(t, err)
-	assert.Equal(t, types.WriteProofAlone, next.WriteProof)
+			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
+				u.State, u.WritePaths = types.StateRunning, []string{"magus.yaml"}
+			}, config.Jobs{}, nil)
+			require.NoError(t, err)
+			_, err = s.Exec(ctx, done.ID, "rev")
+			require.NoError(t, err)
+			_, err = s.Update(ctx, done.ID, func(u *types.Job) { u.State = over })
+			require.NoError(t, err)
+
+			next, err := ForkMerge(ctx, s, "wave/next", func(u *types.Job) {
+				u.State, u.WritePaths = types.StateDeclared, []string{"magus.yaml"}
+			}, config.Jobs{}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, types.WriteProofAlone, next.WriteProof)
+		})
+	}
 }
 
 // TestLeaseQueryResolvesInOneOrder pins the order every caller grades by. The claim ranks

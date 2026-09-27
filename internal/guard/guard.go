@@ -103,6 +103,9 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// SymbolSites lists each file defining or referencing ident, with its count and first
+	// lines, from SymbolDefined's index and definitive on the same terms.
+	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
 	// Revision is the revision rev names in the checkout holding dir, abbreviated, or ""
 	// when there is no VCS to ask or rev names nothing. Empty rev is the checkout's current
 	// revision; empty dir is the process's working directory. The push gate matches it
@@ -125,6 +128,19 @@ type Dependencies struct {
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
 	scope workspaceScope
+	// callDir is the directory the judged call runs in, where its relative paths resolve.
+	// Judge fills it from the envelope's cwd; empty means the hook process's own.
+	callDir string
+}
+
+// workingDir is where a relative path on the judged line resolves. The hook process's cwd
+// is only the fallback: a host runs its hooks from wherever it likes.
+func (d Dependencies) workingDir() (string, bool) {
+	if d.callDir != "" {
+		return d.callDir, true
+	}
+	wd, err := os.Getwd()
+	return wd, err == nil
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -182,6 +198,14 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 	return d.SymbolDefined(ident)
 }
 
+// symbolSites answers not-definitive for an unset resolver, like symbolDefined.
+func (d Dependencies) symbolSites(ident string) ([]types.KnowledgeRefSite, bool) {
+	if d.SymbolSites == nil {
+		return nil, false
+	}
+	return d.SymbolSites(ident)
+}
+
 // graphIDs answers not-definitive for an unset resolver, so a caller that supplies none
 // never gains a deny.
 func (d Dependencies) graphIDs(ctx context.Context, kind string) ([]string, bool) {
@@ -199,6 +223,12 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
+	// DryRun reaches the verdict the call would and writes nothing: the session state the
+	// rules spend is read from a discarded copy, and no trail line, policy record, binding
+	// or registration is made. One difference in wording: a repeated deny is shown in full,
+	// since the short form cites a stored verdict. A spawn or continuation is refused, as
+	// judging one records it.
+	DryRun bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
@@ -261,6 +291,9 @@ type Verdict struct {
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see types.LeaseSource.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	// Next is a deny's remedy, served only when it passes the guard for the acting
+	// lease, and pre-authorized for the calls after it. Reason renders it too.
+	Next []hint.Next `json:"next,omitempty"`
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -324,6 +357,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Agent == "" {
 			who.Agent = env.Who.Agent
 		}
+		if req.DryRun && (env.LoadedSkill != "" || env.NothingToJudge) {
+			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		}
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
@@ -348,6 +384,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			isPath = true
 		}
 		if env.IsSpawn || env.IsContinue {
+			if req.DryRun {
+				return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
+					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
+			}
 			return judgeAgentEvent(ctx, deps, req, env, who)
 		}
 	}
@@ -358,13 +398,27 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
-	policyDigest := recordPolicy(ctx, deps, location, false)
+	policyDigest := ""
+	if !req.DryRun {
+		policyDigest = recordPolicy(ctx, deps, location, false)
+	}
 	ctx = withJobStoreRows(ctx, location)
-	markers := hint.NewGate(location.cacheDir, who.callerKey())
-	facts := hint.NewGate(location.cacheDir, who.factsKey())
+	// Where the gates and the workspace rules keep session state. The rest of location is
+	// what the rules judge against, so a check swaps only the cache dir.
+	stateAt := location
+	if req.DryRun {
+		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey())
+		defer os.RemoveAll(stateAt.cacheDir)
+	}
+	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
+	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	bound := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
-	if bound != "" && actingLease == bound && registerAgentBase(ctx, deps, location, bound) {
+	switch {
+	case bound == "" || actingLease != bound:
+	case req.DryRun:
+		ctx = withRegisteredBase(ctx, deps, location, bound)
+	case registerAgentBase(ctx, deps, location, bound):
 		ctx = withJobStoreRows(ctx, location)
 	}
 	tool := hookToolCommand
@@ -399,6 +453,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
 	// denies do not, and they are the ones whose reasons say why (see internal/guard/preauth.go).
 	var ruleRecord workspaceRuleRecord
+	// remedy is the shell deny that carried a computed next, graded for the acting lease
+	// once every rule has spoken.
+	var remedy ShellVerdict
 	preauth := ""
 	if hasInput && !req.Observe && !isPath {
 		preauth = servedNextPreauthorizes(markers, input)
@@ -457,7 +514,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		if verdict.Decision != "deny" {
-			switch g := gradeHookWiringWrite(actingLease, input); g.Decision {
+			if g := denyVCSOffSwitch(actingLease, input, write); g.Decision == "deny" {
+				verdict.Decision, verdict.Reason, verdict.Rule = "deny", g.Reason, g.Rule
+			}
+		}
+		if verdict.Decision != "deny" {
+			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
 			case "deny":
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":
@@ -558,7 +620,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Rule = string(adviceKind)
 		}
 		// The workspace's magus\guard.write rule, last because it may only add.
-		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, location)
+		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, stateAt)
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
 			drift.record()
@@ -572,16 +634,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if callDir == "" {
 			callDir = location.dir
 		}
-		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
-		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
-		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
-		v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, location, callDir, input, shellD))
-		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
-		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
-		v = rankTokenState(v, denyTokenStateCommand(location, input, shellD))
-		// Outside Evaluate for the same reason the two rules above are: it reads session
-		// state (which skills have loaded) rather than the line alone, and Evaluate's
-		// verdict is a pure function of what was handed in.
+		deps.callDir = callDir
+		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
+		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
+		// than the line alone, and a remedy graded by that function never writes Buzz.
 		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
@@ -591,6 +647,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 			verdict.Rule = v.RuleName()
+			if v.Rule.Name == denyRuleSiblingCheckout {
+				lead, next := siblingCheckoutRemedy(input, shellD)
+				v = v.withRemedy(lead, next...)
+			}
+			remedy = v
 		case v.Context != "" && preauth == "":
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
@@ -604,7 +665,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease} {
+		for _, rule := range roleScopedCommandRules() {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
@@ -693,9 +754,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			dialect:     shellD,
 			preauth:     preauth,
 			lease:       actingLease,
-		}, who, location)
+		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
-		if verdict.Decision == "pass" || verdict.Decision == "advise" {
+		if !req.DryRun && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 			bindOnExec(ctx, location, who, input)
 		}
 	}
@@ -728,7 +789,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if tool == hookToolCommand {
 			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
 		}
-		verdict.Reason, verdictRef = shapeDeny(ctx, markers, verdict.Rule, verdict.Reason, note)
+		shapeGate := markers
+		if req.DryRun {
+			shapeGate = hint.Gate{} // spends and stores nothing, so the deny is worded in full
+		}
+		// Only while the deny that computed the remedy is still the one standing: a later
+		// rule's refusal is about something else.
+		var next []hint.Next
+		if len(remedy.Next) > 0 && verdict.Reason == remedy.Deny {
+			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
+			if len(next) > 0 {
+				verdict.Reason = remedy.Lead
+			}
+		}
+		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note, next)
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
@@ -739,8 +813,59 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+	if !req.DryRun {
+		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+	}
 	return verdict
+}
+
+// judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
+// holds: Evaluate's, then the ones that read the filesystem.
+func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
+	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(deps, callDir, line, d))
+	// A remedy computed from a script's line would run outside the directory and the
+	// lines around it that the script sets up.
+	script := denyScriptContent(deps, callDir, line, d)
+	script.Next, script.Lead = nil, ""
+	v = rankScriptContent(v, script)
+	v = rankSiblingCheckout(v, denySiblingCheckout(line, d))
+	v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, at, callDir, line, d))
+	v = rankInterpreterRewrite(v, denyInterpreterRewrite(at, line, d))
+	v = rankCacheDirWrite(v, denyCacheDirCommand(at, line, d))
+	return rankTokenState(v, denyTokenStateCommand(at, line, d))
+}
+
+// roleScopedCommandRules are the command rules a served next stands down, so each is
+// asked of a remedy before it is served.
+func roleScopedCommandRules() []func(context.Context, Dependencies, string, string) string {
+	return []func(context.Context, Dependencies, string, string) string{
+		denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease,
+	}
+}
+
+// servableRemedy keeps the remedies the acting lease may run. A served next is
+// pre-authorized and the role-scoped rules stand down for it, so one they would refuse
+// is dropped here: serving it would clear a command the role may not run.
+//
+// Graded by the rules the next call meets, rather than filtered by a list of its own,
+// so a rule added later grades remedies without anyone remembering to.
+func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []hint.Next) []hint.Next {
+	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
+	d := effectiveDialect(deps.ShellDialect)
+	var kept []hint.Next
+	for _, n := range hint.ServableTo(role, writePaths, next) {
+		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run) != "" {
+			continue
+		}
+		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule func(context.Context, Dependencies, string, string) string) bool {
+			return rule(ctx, deps, actingLease, n.Run) != ""
+		})
+		if refused || gradeFocusRead(ctx, deps, actingLease, n.Run).Decision == "deny" {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return kept
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to
@@ -1168,6 +1293,87 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 		return pinned.Rows, pinned.Err
 	}
 	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+}
+
+// copySessionState copies into a new temporary directory what the gates keyed on keys hold
+// under cacheDir, and the served-next journal, keeping modification times, since an
+// anonymous marker expires on its age. "" when there is nothing to copy or the copy cannot
+// be made: a dry run then reads a session nothing was told yet, rather than write the real one.
+func copySessionState(cacheDir string, keys ...string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	dir, err := os.MkdirTemp("", "magus-guard-dry-run-")
+	if err != nil {
+		return ""
+	}
+	copyFile := func(src, dst string) error {
+		info, err := os.Stat(src)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, body, 0o644); err != nil {
+			return err
+		}
+		return os.Chtimes(dst, info.ModTime(), info.ModTime())
+	}
+	copyAll := func() error {
+		if err := copyFile(hint.ServedNextPath(cacheDir), hint.ServedNextPath(dir)); err != nil {
+			return err
+		}
+		for _, key := range keys {
+			from, to := hint.MarkerPath(cacheDir, key, ""), hint.MarkerPath(dir, key, "")
+			entries, _ := os.ReadDir(filepath.Dir(from))
+			for _, e := range entries {
+				if !strings.HasPrefix(e.Name(), filepath.Base(from)) {
+					continue
+				}
+				if err := copyFile(filepath.Join(filepath.Dir(from), e.Name()), filepath.Join(filepath.Dir(to), e.Name())); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if copyAll() != nil {
+		_ = os.RemoveAll(dir)
+		return ""
+	}
+	return dir
+}
+
+// withRegisteredBase is registerAgentBase for a check: the row is registered in the pinned
+// snapshot only. Its base verdict stays unset, so a diverged base is not reported.
+func withRegisteredBase(ctx context.Context, deps Dependencies, at location, agentJob string) context.Context {
+	snap, ok := job.SnapshotFromContext(ctx)
+	if !ok || snap.Err != nil {
+		return ctx
+	}
+	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == agentJob })
+	if i < 0 || !snap.Rows[i].State.Live() || snap.Rows[i].Registered != 0 {
+		return ctx
+	}
+	base := deps.checkoutBase(ctx, at.workspace)
+	if base == "" {
+		return ctx
+	}
+	snap = snap.Clone()
+	row := &snap.Rows[i]
+	row.Registered, row.ReportedBase, row.CheckoutRoot = time.Now().Unix(), base, ""
+	if abs, err := filepath.Abs(at.workspace); err == nil && at.workspace != "" {
+		row.CheckoutRoot = abs
+	}
+	return job.WithSnapshot(ctx, snap)
 }
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook
