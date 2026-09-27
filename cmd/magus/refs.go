@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -64,9 +63,6 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
 		return usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
 	}
-	if rf.Check && rf.Rename == "" {
-		return usagef("magus refs: --check previews a rename; pass --rename <new>")
-	}
 
 	if rf.Text {
 		// Computed here, once, and passed down: the same shape the symbol-miss
@@ -91,7 +87,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if rf.Rename != "" {
-		return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, rf.Check)
+		return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 	}
 	out, ok := g.Refs(pos[0])
 	if !ok {
@@ -676,7 +672,7 @@ func linesSuffix(lines []int) string {
 
 // refsRenameCmd is `magus refs <symbol> --rename <new>`: glue between the graph, the
 // occurrence read, the guard and internal/edit, which owns what a write may do.
-func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *knowledge.Graph, ref, to string, check bool) error {
+func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *knowledge.Graph, ref, to string, dryRun bool) error {
 	out := types.KnowledgeRenameOutput{
 		Definition:    types.KnowledgeRenameDefinition,
 		SchemaVersion: types.KnowledgeSchemaVersion,
@@ -696,7 +692,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		return errSilent{exitCode: 1}
 	}
 
-	id, err := edit.RenameTarget(ref, g.Resolve(ref, 0), func(id string) bool {
+	id, err := edit.ResolveRenameSymbol(ref, g.Resolve(ref, 0), func(id string) bool {
 		refs, ok := g.Refs(id)
 		return ok && len(refs.Defs) > 0
 	})
@@ -733,17 +729,26 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		out.From = read.Names[0]
 	}
 	sites, refused := edit.RenameSites(read.Files, out.From, to)
+	refused = append(refused, edit.RenameCollisions(to, g.Resolve(to, 0), func(id string) []string {
+		var files []string
+		if refs, ok := g.Refs(id); ok {
+			for _, d := range refs.Defs {
+				files = append(files, d.File)
+			}
+		}
+		return files
+	}, sites)...)
 	if refused = append(blind, refused...); len(refused) > 0 {
 		return refuse(refused...)
 	}
 
-	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws)))
+	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws, dryRun)))
 	if refused := plan.Refused(); len(refused) > 0 {
 		return refuse(refused...)
 	}
 	out.Files, out.Sites = plan.Files(), plan.Spans()
 	out.FileCount, out.SiteCount = len(out.Files), len(out.Sites)
-	if !check {
+	if !dryRun {
 		if err := plan.Apply(); err != nil {
 			return err
 		}
@@ -767,37 +772,27 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 	}
 	fmt.Printf("%s %s to %s: %d site(s) in %d file(s)\n", verb, out.From, out.To, out.SiteCount, out.FileCount)
 	for _, s := range out.Sites {
-		fmt.Printf("  %s:%d:%d\n", s.Path, s.Start.Line, s.Start.Col)
+		fmt.Printf("  %s:%d:%d\n", s.Path, s.Start.Line, s.Start.Column)
 	}
 	if !out.Applied {
-		fmt.Println("nothing written (--check)")
+		fmt.Println("nothing written (--dry-run)")
 	}
 	return nil
 }
 
 // renameGrade refuses a declared output, then asks the guard about each rewritten file
-// exactly as a host edit hook would, so the lease and claimed-declaration verdicts cannot
-// differ between the two. The edit replaces the whole file, which is what lets the guard
-// place every changed line in its declaration.
-func renameGrade(ctx context.Context, ws types.WorkspaceRepository) func(string, []byte, []byte) (string, string) {
+// exactly as a host edit hook would (see [guard.JudgeEdit] for which lease that is), so the
+// lease and claimed-declaration verdicts cannot differ between the two. The edit replaces
+// the whole file, which is what lets the guard place every changed line in its declaration.
+// Under a dry run the guard records nothing, so a preview leaves no trace.
+func renameGrade(ctx context.Context, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
 	deps := guardDependencies()
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
 		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {
 			return "", reason
 		}
-		envelope, err := json.Marshal(map[string]any{
-			"cwd": ws.Root(),
-			"tool_input": map[string]any{
-				"file_path":  filepath.Join(ws.Root(), filepath.FromSlash(rel)),
-				"old_string": string(before),
-				"new_string": string(after),
-			},
-		})
-		if err != nil {
-			return "", "could not describe the edit to the guard: " + err.Error()
-		}
-		v := guard.Judge(ctx, deps, guard.Request{Input: string(envelope)})
+		v := guard.JudgeEdit(ctx, deps, ws.Root(), rel, before, after, dryRun)
 		switch v.Decision {
 		case "deny", "ask":
 			return v.Rule, strings.TrimSpace(v.Reason)
@@ -810,8 +805,11 @@ func renameGrade(ctx context.Context, ws types.WorkspaceRepository) func(string,
 // classification failure refuses too: an unknown role is not a license to hand-edit.
 func declaredOutputRefusal(ctx context.Context, ws types.WorkspaceRepository, path string) string {
 	entries, err := ws.ClassifyFiles(ctx, []string{path})
-	if err != nil || len(entries) != 1 {
+	switch {
+	case err != nil:
 		return fmt.Sprintf("could not classify it against the workspace's declarations: %v", err)
+	case len(entries) != 1:
+		return fmt.Sprintf("classifying it against the workspace's declarations gave %d answers, not 1", len(entries))
 	}
 	e := entries[0]
 	if e.Role != types.DiffRoleOutput {

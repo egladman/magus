@@ -1588,9 +1588,9 @@ to exactly one symbol defined in the workspace; pass the symbol ID
 otherwise. Before anything is written, every file is checked and graded
 under the acting lease by the rules a host edit meets: a stale or
 missing index, an unverified site, a declared output, or a guard deny
-refuses the whole rename. Then every file is written or none is. --check
-prints the sites and writes nothing. The inverse is the same command with
-the two names swapped.`,
+refuses the whole rename. Then every file is written or none is. The
+global --dry-run resolves and grades every site and prints them, writing
+nothing. The inverse is the same command with the two names swapped.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
@@ -1602,7 +1602,6 @@ the two names swapped.`,
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
 		{Name: "limit", Kind: FlagInt, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},
 		{Name: "rename", Kind: FlagString, Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
-		{Name: "check", Kind: FlagBool, Doc: "With --rename, resolve and grade every site and print them; write nothing"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{
@@ -1612,7 +1611,7 @@ the two names swapped.`,
 		{"Where a symbol's body starts and ends", "magus refs Open --definition"},
 		{"A symbol's body, by name", "magus refs Open --source"},
 		{"Raw text search, no index needed", "magus refs TODO --text"},
-		{"Preview a rename", "magus refs parseQuery --rename parseTerms --check"},
+		{"Preview a rename", "magus refs parseQuery --rename parseTerms --dry-run"},
 		{"Rename a symbol at every verified site", "magus refs parseQuery --rename parseTerms"},
 	},
 }

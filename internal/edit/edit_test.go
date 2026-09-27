@@ -49,8 +49,8 @@ func dirEntries(t *testing.T, root string) []string {
 func site(path string, line, col int, old, repl string) Site {
 	return Site{
 		Path:  path,
-		Start: types.EditPosition{Line: line, Col: col},
-		End:   types.EditPosition{Line: line, Col: col + len(old)},
+		Start: types.EditPosition{Line: line, Column: col},
+		End:   types.EditPosition{Line: line, Column: col + len(old)},
 		Old:   old,
 		New:   repl,
 	}
@@ -66,7 +66,7 @@ func TestEditRefusedPlanWritesNothing(t *testing.T) {
 
 	require.ErrorIs(t, p.Apply(), ErrRefused)
 	assert.Equal(t, []types.EditRefusal{
-		{Path: "b/b.go", Line: 3, Col: 5, Reason: `holds "y", not "w": the file changed since it was read`},
+		{Path: "b/b.go", Line: 3, Column: 5, Reason: `holds "y", not "w": the file changed since it was read`},
 	}, p.Refused())
 	assert.Nil(t, p.Files())
 	assert.Nil(t, p.Spans())
@@ -96,13 +96,13 @@ func TestEditApplyWritesEveryFile(t *testing.T) {
 	assert.Equal(t, "package a\n\nfunc f() { longer(); longer() }\n", readFile(t, root, "a.go"))
 	assert.Equal(t, "package b\n\nvar _ = a.longer\n", readFile(t, root, "b/b.go"))
 	assert.Equal(t, []types.EditedFile{
-		{Path: "a.go", DigestBefore: Digest([]byte(files["a.go"])), DigestAfter: Digest([]byte(readFile(t, root, "a.go")))},
-		{Path: "b/b.go", DigestBefore: Digest([]byte(files["b/b.go"])), DigestAfter: Digest([]byte(readFile(t, root, "b/b.go")))},
+		{Path: "a.go", DigestBefore: digest([]byte(files["a.go"])), DigestAfter: digest([]byte(readFile(t, root, "a.go")))},
+		{Path: "b/b.go", DigestBefore: digest([]byte(files["b/b.go"])), DigestAfter: digest([]byte(readFile(t, root, "b/b.go")))},
 	}, p.Files())
 	assert.Equal(t, []types.EditSpan{
-		{Path: "a.go", Start: types.EditPosition{Line: 3, Col: 12}, End: types.EditPosition{Line: 3, Col: 13}},
-		{Path: "a.go", Start: types.EditPosition{Line: 3, Col: 17}, End: types.EditPosition{Line: 3, Col: 18}},
-		{Path: "b/b.go", Start: types.EditPosition{Line: 3, Col: 11}, End: types.EditPosition{Line: 3, Col: 12}},
+		{Path: "a.go", Start: types.EditPosition{Line: 3, Column: 12}, End: types.EditPosition{Line: 3, Column: 13}},
+		{Path: "a.go", Start: types.EditPosition{Line: 3, Column: 17}, End: types.EditPosition{Line: 3, Column: 18}},
+		{Path: "b/b.go", Start: types.EditPosition{Line: 3, Column: 11}, End: types.EditPosition{Line: 3, Column: 12}},
 	}, p.Spans())
 	assert.ElementsMatch(t, []string{"a.go", "b/b.go"}, dirEntries(t, root))
 }
@@ -225,11 +225,11 @@ func TestEditResolveRefusals(t *testing.T) {
 		{"missing", []Site{site("nope.go", 1, 1, "a", "b")}, []types.EditRefusal{{Path: "nope.go", Reason: "no such file"}}},
 		{"directory", []Site{site("dir", 1, 1, "a", "b")}, []types.EditRefusal{{Path: "dir", Reason: "not a regular file (d---------)"}}},
 		{"symlink", []Site{site("link.go", 1, 1, "a", "b")}, []types.EditRefusal{{Path: "link.go", Reason: "not a regular file (L---------)"}}},
-		{"line past the end", []Site{site("a.go", 3, 1, "", "b")}, []types.EditRefusal{{Path: "a.go", Line: 3, Col: 1, Reason: "3:1 is not a position in the file"}}},
-		{"column past the terminator", []Site{site("a.go", 1, 3, "\n", "")}, []types.EditRefusal{{Path: "a.go", Line: 1, Col: 3, Reason: "1:4 is not a position in the file after the start"}}},
-		{"old differs", []Site{site("a.go", 2, 1, "cx", "b")}, []types.EditRefusal{{Path: "a.go", Line: 2, Col: 1, Reason: `holds "cd", not "cx": the file changed since it was read`}}},
-		{"overlap", []Site{site("over.go", 1, 1, "ab", "x"), site("over.go", 1, 2, "bc", "y")}, []types.EditRefusal{{Path: "over.go", Line: 1, Col: 2, Reason: "overlaps the site at 1:1"}}},
-		{"same start", []Site{site("over.go", 1, 1, "a", "x"), site("over.go", 1, 1, "ab", "y")}, []types.EditRefusal{{Path: "over.go", Line: 1, Col: 1, Reason: "overlaps the site at 1:1"}}},
+		{"line past the end", []Site{site("a.go", 3, 1, "", "b")}, []types.EditRefusal{{Path: "a.go", Line: 3, Column: 1, Reason: "3:1 is not a position in the file"}}},
+		{"column past the terminator", []Site{site("a.go", 1, 3, "\n", "")}, []types.EditRefusal{{Path: "a.go", Line: 1, Column: 3, Reason: "1:4 is not a position in the file after the start"}}},
+		{"old differs", []Site{site("a.go", 2, 1, "cx", "b")}, []types.EditRefusal{{Path: "a.go", Line: 2, Column: 1, Reason: `holds "cd", not "cx": the file changed since it was read`}}},
+		{"overlap", []Site{site("over.go", 1, 1, "ab", "x"), site("over.go", 1, 2, "bc", "y")}, []types.EditRefusal{{Path: "over.go", Line: 1, Column: 2, Reason: "overlaps the site at 1:1"}}},
+		{"same start", []Site{site("over.go", 1, 1, "a", "x"), site("over.go", 1, 1, "ab", "y")}, []types.EditRefusal{{Path: "over.go", Line: 1, Column: 1, Reason: "overlaps the site at 1:1"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -251,7 +251,7 @@ func TestEditUnterminatedLastLine(t *testing.T) {
 func TestEditFormatRefusal(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "a.go:3:5: gone [claimed-declaration]", FormatRefusal(types.EditRefusal{Path: "a.go", Line: 3, Col: 5, Rule: "claimed-declaration", Reason: "gone"}))
+	assert.Equal(t, "a.go:3:5: gone [claimed-declaration]", FormatRefusal(types.EditRefusal{Path: "a.go", Line: 3, Column: 5, Rule: "claimed-declaration", Reason: "gone"}))
 	assert.Equal(t, "a.go: no such file", FormatRefusal(types.EditRefusal{Path: "a.go", Reason: "no such file"}))
 	assert.Equal(t, "nothing to edit", FormatRefusal(types.EditRefusal{Reason: "nothing to edit"}))
 }

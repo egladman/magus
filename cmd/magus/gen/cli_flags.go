@@ -495,8 +495,6 @@ const (
 	FlagQueueValidateVCS = "vcs"
 	// queue validate: --verdicts
 	FlagQueueValidateVerdicts = "verdicts"
-	// refs: --check
-	FlagRefsCheck = "check"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
 	// refs: --limit
@@ -1135,7 +1133,6 @@ type RefsFlags struct {
 	Text        bool   // --text
 	Limit       int    // --limit
 	Rename      string // --rename
-	Check       bool   // --check
 }
 
 // BindRefs registers `magus refs`'s flags on fs and returns the destination.
@@ -1148,7 +1145,6 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
-	fs.BoolVar(&f.Check, FlagRefsCheck, false, "With --rename, resolve and grade every site and print them; write nothing")
 	return &f
 }
 
