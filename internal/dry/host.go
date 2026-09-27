@@ -436,6 +436,56 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("job", job)
 
+	// The knowledge-graph reads, output, memory and vcs.checkpoint read real state the
+	// dry run never opens, so each answers with its snake_case record shaped and empty.
+	shaped := func(name string, fields map[string]vm.Value) vm.Value {
+		return fn(name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+			res := vm.NewMap()
+			for k, v := range fields {
+				res.MapSet(k, v)
+			}
+			return res, nil
+		})
+	}
+	empty := vm.ListValue(nil)
+	m.MapSet("query", shaped("magus.query", map[string]vm.Value{
+		"definition": vm.StrValue(""), "query": vm.StrValue(""), "match_count": vm.IntValue(0),
+		"matches": empty, "nodes": empty, "links": empty, "answer": vm.NewMap(),
+	}))
+	m.MapSet("explain", shaped("magus.explain", map[string]vm.Value{
+		"definition": vm.StrValue(""), "node": vm.NewMap(), "blast_radius": vm.NewMap(), "out": empty, "in": empty,
+	}))
+	m.MapSet("path", shaped("magus.path", map[string]vm.Value{
+		"definition": vm.StrValue(""), "from": vm.StrValue(""), "to": vm.StrValue(""), "found": vm.BoolValue(false), "steps": empty,
+	}))
+	m.MapSet("refs", shaped("magus.refs", map[string]vm.Value{
+		"definition": vm.StrValue(""), "symbol": vm.StrValue(""), "file_count": vm.IntValue(0),
+		"ref_count": vm.IntValue(0), "defs": empty, "refs": empty, "answer": vm.NewMap(),
+	}))
+	m.MapSet("stats", shaped("magus.stats", map[string]vm.Value{
+		"definition": vm.StrValue(""), "node_count": vm.IntValue(0), "edge_count": vm.IntValue(0),
+		"gods": empty, "orphans": empty, "coverage": empty,
+	}))
+	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
+		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
+		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StrValue(""),
+	}))
+	memory := vm.NewMap()
+	for _, name := range []string{"list", "verify"} {
+		memory.MapSet(name, shaped("magus.memory."+name, map[string]vm.Value{"records": empty, "issues": empty}))
+	}
+	for _, name := range []string{"get", "put"} {
+		memory.MapSet(name, shaped("magus.memory."+name, map[string]vm.Value{"name": vm.StrValue(""), "type": vm.StrValue("")}))
+	}
+	memory.MapSet("delete", fn("magus.memory.delete", retNull))
+	m.MapSet("memory", memory)
+	vcs := vm.NewMap()
+	vcs.MapSet("checkpoint", shaped("magus.vcs.checkpoint", map[string]vm.Value{
+		"revision": vm.StrValue(""), "branch": vm.StrValue(""), "dirty": vm.BoolValue(false), "patchDigest": vm.StrValue(""),
+		"untrackedDigest": vm.StrValue(""), "vcs": vm.StrValue(""), "preserved": vm.StrValue(""),
+	}))
+	m.MapSet("vcs", vcs)
+
 	addPureMagus(m)
 
 	// magus.modules()/magus.module(name) introspect the real host module registry,
