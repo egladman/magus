@@ -203,7 +203,7 @@ it, because the new hash restales the footer it just recorded. Rendering at
 deploy time knows the final commit already.
 
 What still gates on drift is the generated Markdown that _is_ tracked:
-`MAGUS.md`, the root `CHANGELOG.md`, `docs/src/gen`, and the derived pages under
+`MAGUS.md`, `docs/src/gen`, and the derived pages under
 `docs/reference/`. A plain `magus run generate docs` fails if any of those was
 left un-regenerated, so CI still catches a forgotten regen for everything a
 reader can find in the repository.
@@ -495,11 +495,12 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
 
 **Fragments.** The entry is its own file, `changes/unreleased/<branch>.md`: a
 `### <group>` heading and one entry, exactly as it will read in the changelog.
-Never edit `CHANGELOG.md`'s `[Unreleased]`; it stays empty so concurrent pull
-requests never touch one shared file, and regenerating it refuses while it holds
-entries. The docs changelog page renders the fragments, and cutting a release
-folds them into its manifest. `changes/README.md` has the format; a malformed
-fragment or an unknown group fails the check.
+There is no changelog file to edit: concurrent pull requests add different files
+and never touch a shared one. The docs changelog page renders the fragments and
+the release manifests (`magus run changelog-page docs`), and cutting a release
+folds the fragments into its manifest. `changes/README.md` has the format, and
+`tools/changelog.buzz` is its one parser; a malformed fragment or an unknown
+group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase
 imperative style with no prefix. `magus run git-hooks-install .` installs this

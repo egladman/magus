@@ -363,23 +363,23 @@ test "reads the module path and ignores a require of a similar name" {
 }
 
 // releaseIndexPaths lists every tracked path a release-index publish commit may
-// carry: the manifests, the signed pair, the changelog regenerated from them, and
-// the fragments the cut folded and deleted. The commit stages exactly this list, so
+// carry: the manifests, the signed pair, and the fragments the cut folded and
+// deleted. The commit stages exactly this list, so
 // a stray dirty file elsewhere in the tree can never be swept into the automation's
 // commit. docs/gen/public/release names the directory, not the two files: .gitignore
 // re-includes exactly index.json and index.json.sig under it. changes, not
 // changes/unreleased: the cut can delete every fragment, and git refuses a pathspec
 // that matches nothing, while changes/README.md always matches.
 export fun releaseIndexPaths() > [str] {
-    return ["releases", "docs/gen/public/release", "CHANGELOG.md", "changes"];
+    return ["releases", "docs/gen/public/release", "changes"];
 }
 
-test "the publish paths carry the index pair, the changelog and the folded fragments" {
+test "the publish paths carry the index pair, the manifests and the folded fragments" {
     final paths = releaseIndexPaths();
     std\assert(paths.indexOf("docs/gen/public/release") != null, message: "the signed pair's directory");
     std\assert(paths.indexOf("releases") != null, message: "the manifests the index derives from");
-    std\assert(paths.indexOf("CHANGELOG.md") != null, message: "regenerated from the manifests");
     std\assert(paths.indexOf("changes") != null, message: "the fragments the cut deleted");
+    std\assert(paths.indexOf("CHANGELOG.md") == null, message: "the changelog is rendered, never committed");
 }
 
 // releaseIndexBranch names the branch a publish rides. Derived from the commit the

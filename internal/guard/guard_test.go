@@ -346,26 +346,6 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		})
 	}
 
-	// changelog-unreleased-edit reads the checkout it lands in, so it gets one of its own.
-	covered["changelog-unreleased-edit"] = true
-	t.Run("changelog-unreleased-edit", func(t *testing.T) {
-		ctx, ws, _ := writeFixture(t)
-		changelog := filepath.Join(ws, "CHANGELOG.md")
-		require.NoError(t, os.WriteFile(changelog, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- one\n\n## [0.4.0]\n\n- old\n"), 0o644))
-		require.NoError(t, os.MkdirAll(filepath.Join(ws, "changes", "unreleased"), 0o755))
-		edit := func(oldText, newText string) Verdict {
-			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
-				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
-				"tool_input": map[string]any{"file_path": changelog, "old_string": oldText, "new_string": newText},
-			})})
-		}
-		v := edit("- one\n", "- one\n- two\n")
-		assert.Equal(t, "deny", v.Decision)
-		assert.Equal(t, workspaceWriteRule, v.Rule)
-		assert.Contains(t, v.Reason, "changes/unreleased/")
-		assert.NotEqual(t, "deny", edit("- old\n", "- old, fixed\n").Decision, "a released section's fix passes")
-	})
-
 	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main.
 	shellIn := func(t *testing.T, branch string) func(command string) Verdict {
 		t.Helper()

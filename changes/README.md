@@ -1,7 +1,7 @@
 # Changelog fragments
 
-Each unreleased change adds its changelog entry as one file under `unreleased/`,
-never by editing `CHANGELOG.md`. Concurrent pull requests then add different
+Each unreleased change adds its changelog entry as one file under `unreleased/`.
+There is no changelog file to edit, so concurrent pull requests add different
 files instead of colliding on one section.
 
 A fragment is the entry exactly as it will read under `[Unreleased]`: one Keep a
@@ -24,9 +24,11 @@ Changelog group heading, a blank line, and one entry.
   files. Within a group, entries render in file-name order.
 
 A malformed fragment or an unknown group is an error:
-`go run ./cmd/magus-utils lint-fragments changes/unreleased/<name>.md` checks one, and
-`magus run pr-changelog . -- "<title>"` checks a branch.
+`magus run pr-changelog . -- "<title>"` checks a branch's fragments, and
+`magus run lint .` checks them all.
+`tools/changelog.buzz` holds the grammar, and `testdata/fragments.txtar` holds the
+cases it and `magus-utils cut` are both tested against.
 
-`CHANGELOG.md` keeps an empty `[Unreleased]`. The docs changelog page renders the
-fragments there at build time, and `magus-utils cut` folds them into the release
-manifest and deletes them when a release is cut.
+`magus run changelog-page docs` renders the changelog page from these fragments
+and the release manifests under `releases/`. `magus-utils cut` folds the fragments
+into the release manifest and deletes them when a release is cut.

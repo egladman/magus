@@ -37,15 +37,13 @@
 //     person, credits a tool, narrates its session, runs past the word budget its diff
 //     earns, has no lead paragraph or has a heading, or has a title the pr-title check
 //     would fail. Prose outside the lead-and-bullets shape is advised once per pull request.
-//   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
-//     [Unreleased] section, once changes/unreleased/ exists.
 //   code-comments (write): a Go comment block the write adds over the owner's budget is
 //     advised, over twice it or above the package clause denied; the first write of a
 //     session adding comments to any code file is advised once.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
 // five), cadence.buzz (the gate and the push), binaries.buzz (foreign-binary and
-// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz, unreleased.buzz and
+// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz and
 // comments.buzz. helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
 // already binds (github, changelog) shadows the one here, so these avoid them.
@@ -59,7 +57,6 @@ import "./tools/policy/cadence" as cadence;
 import "./tools/policy/binaries" as binaries;
 import "./tools/policy/stale" as stale;
 import "./tools/policy/spawn" as spawn;
-import "./tools/policy/unreleased" as unreleased;
 import "./tools/policy/commits" as subjects;
 import "./tools/policy/pull_requests" as pullRequests;
 import "./tools/policy/comments" as comments;
@@ -171,11 +168,10 @@ fun errorText(e: any) > str {
     return "{e}";
 }
 
-// judgeWrite is the write rule the root magusfile registers. The two facts it reads from
-// disk for CHANGELOG.md, whether this checkout collects fragments and what the file holds
-// now, are read only for a write to it. Any other file is read only when the write carries
-// a comment, to tell the comments it adds from the ones it keeps: an edit is applied to
-// the file's text so a comment is graded beside the declaration it documents.
+// judgeWrite is the write rule the root magusfile registers. It reads the file from disk
+// only when the write carries a comment, to tell the comments it adds from the ones it
+// keeps: an edit is applied to the file's text so a comment is graded beside the
+// declaration it documents.
 export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
     if (req.workspace == "") {
         return magus\guard.allow();
@@ -183,33 +179,25 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
     final once = fun (key: str) > bool {
         return magus\guard.once(key);
     };
-    if (req.path != req.workspace + "/CHANGELOG.md") {
-        var before = req.oldText;
-        var after = req.newText;
-        if (req.content != "") {
-            before = "";
-            after = req.content;
-        }
-        if (!comments\hasComment(after)) {
-            return magus\guard.allow();
-        }
-        if (fs\exists(req.path)) {
-            final current = fs\readFile(req.path);
-            if (req.content != "") {
-                before = current;
-            } else if (req.oldText != "" and current.indexOf(req.oldText) != null) {
-                before = current;
-                after = current.replace(req.oldText, with: req.newText);
-            }
-        }
-        return comments\decideComments(req.path, before: before, after: after, once: once);
+    var before = req.oldText;
+    var after = req.newText;
+    if (req.content != "") {
+        before = "";
+        after = req.content;
     }
-    final fragments = fs\exists(req.workspace + "/changes/unreleased");
-    var current = "";
+    if (!comments\hasComment(after)) {
+        return magus\guard.allow();
+    }
     if (fs\exists(req.path)) {
-        current = fs\readFile(req.path);
+        final current = fs\readFile(req.path);
+        if (req.content != "") {
+            before = current;
+        } else if (req.oldText != "" and current.indexOf(req.oldText) != null) {
+            before = current;
+            after = current.replace(req.oldText, with: req.newText);
+        }
     }
-    return unreleased\decideChangelog(fragments, current: current, content: req.content, oldText: req.oldText, newText: req.newText);
+    return comments\decideComments(req.path, before: before, after: after, once: once);
 }
 
 // decide is judge over plain records. The order is the verdict: the gate and push denials

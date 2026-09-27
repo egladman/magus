@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,29 +17,45 @@ func writeFragment(t *testing.T, dir, name, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 }
 
+// TestParseFragment runs the cases tools/changelog.buzz's tests run, so cut's
+// parser and every other reader's agree on what a fragment is.
 func TestParseFragment(t *testing.T) {
-	got, err := parseFragment("f.md", []byte("### Removed\n\n- **Breaking: the `exclusive` option.** Delete\n  the key.\n\n"))
+	archive, err := txtar.ParseFile(filepath.Join("..", "..", "changes", "testdata", "fragments.txtar"))
+	require.NoError(t, err)
+	files := map[string]string{}
+	for _, f := range archive.Files {
+		files[f.Name] = string(f.Data)
+	}
+
+	var valid, invalid int
+	for name, body := range files {
+		switch {
+		case strings.HasPrefix(name, "valid/"):
+			valid++
+			t.Run(name, func(t *testing.T) {
+				_, err := parseFragment("f.md", []byte(body))
+				require.NoError(t, err)
+			})
+		case strings.HasPrefix(name, "invalid/") && strings.HasSuffix(name, ".md"):
+			invalid++
+			want := strings.TrimSpace(files[strings.TrimSuffix(name, ".md")+".want"])
+			require.NotEmpty(t, want, "%s has a .want beside it", name)
+			t.Run(name, func(t *testing.T) {
+				_, err := parseFragment("f.md", []byte(body))
+				require.ErrorContains(t, err, want)
+			})
+		}
+	}
+	require.GreaterOrEqual(t, valid, 3)
+	require.GreaterOrEqual(t, invalid, 10)
+
+	got, err := parseFragment("f.md", []byte(files["valid/removed-breaking.md"]))
 	require.NoError(t, err)
 	assert.Equal(t, fragment{
 		path:    "f.md",
 		section: "Removed",
 		entry:   "- **Breaking: the `exclusive` option.** Delete\n  the key.",
 	}, got)
-
-	for _, tc := range []struct{ name, body, want string }{
-		{"empty", "", "opens with no `### <group>` heading"},
-		{"no heading", "- **A thing.**\n", "sits under a section heading"},
-		{"unknown group", "### Fix\n\n- **A thing.**\n", `f.md: line 1: "Fix" is not a Keep a Changelog section`},
-		{"heading alone", "### Added\n", "holds 0 entries"},
-		{"two entries", "### Added\n\n- **One.**\n- **Two.**\n", "holds 2 entries"},
-		{"two sections", "### Added\n\n- **One.**\n\n### Fixed\n\n- **Two.**\n", "more than one section heading"},
-		{"no headline", "### Added\n\n- plain.\n", "opens with a **bold headline**"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseFragment("f.md", []byte(tc.body))
-			require.ErrorContains(t, err, tc.want)
-		})
-	}
 }
 
 func TestReadFragments(t *testing.T) {
@@ -70,15 +88,4 @@ func TestRenderUnreleased(t *testing.T) {
 	assert.Equal(t, want, renderUnreleased(frags))
 	assert.Empty(t, lintUnreleased(want))
 	assert.Equal(t, "", renderUnreleased(nil))
-}
-
-func TestRunLintFragments(t *testing.T) {
-	dir := t.TempDir()
-	writeFragment(t, dir, "ok.md", "### Security\n\n- **Patched.**\n")
-	writeFragment(t, dir, "bad.md", "### Added\n\n- no headline\n")
-	require.NoError(t, runLintFragments([]string{filepath.Join(dir, "ok.md")}))
-	err := runLintFragments([]string{filepath.Join(dir, "ok.md"), filepath.Join(dir, "bad.md"), filepath.Join(dir, "x.txt")})
-	require.ErrorContains(t, err, "bad.md: line 3: an entry opens with a **bold headline**")
-	require.ErrorContains(t, err, "x.txt: not a fragment")
-	require.Error(t, runLintFragments(nil))
 }

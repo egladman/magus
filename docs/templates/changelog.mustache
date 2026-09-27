@@ -1,0 +1,29 @@
+---
+title: Changelog
+generated_from: changes/README.md, changes/unreleased/*.md, releases/*.yaml
+description: Every change to magus, newest first, in Keep a Changelog format, starting with the unreleased entries. Generated from changes/unreleased/ and releases/*.yaml.
+tags: [changelog, releases, versions, upgrade, breaking-changes]
+---
+
+# Changelog
+
+All notable changes to this project are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
+[Semantic Versioning](https://semver.org/). Entries for the next release wait as one file
+each under `changes/unreleased/`.
+
+## [Unreleased]
+{{#unreleased}}
+
+### {{group}}
+
+{{#entries}}
+{{{.}}}
+{{/entries}}
+{{/unreleased}}
+{{#releases}}
+
+## [{{version}}] - {{date}}
+
+{{{body}}}
+{{/releases}}

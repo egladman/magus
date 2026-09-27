@@ -1084,9 +1084,13 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Both lines below COMPILE the module, so this races every sibling that writes Go
-    // under internal/ or types/gen. Declaring the reads is what lets MGS4008 see it.
-    // The reasoning is written out once, at changelog_generate.
+    // Both lines below COMPILE the module, and internal/spell go:embeds files
+    // spells-generate writes. Without the edge the two race inside generate's fan-out and
+    // the compile fails with "pattern gen/types/<name>.buzz: no matching files found",
+    // naming whichever file was mid-rewrite: a message that reads as a missing file rather
+    // than a concurrent one. Every sibling that writes Go under internal/ or types/gen
+    // races the same way, and MGS4008 refuses the run rather than letting it, so each is
+    // declared and the compile runs after all of them.
     ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
               config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
@@ -1095,33 +1099,6 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
     proc\exec("go", ["generate", "./internal/cli/..."]);
-}
-
-// CHANGELOG.md is a root artifact, generated from releases/*.yaml alone: its [Unreleased]
-// stays empty because unreleased entries are fragments under changes/unreleased/, which
-// the docs changelog page renders at build time. Keeping its generator beside the file
-// avoids a reverse docs -> root output edge while letting docs publication depend on the
-// same execution stage.
-export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // This target COMPILES the module (`go run ./cmd/magus-utils`), and internal/spell
-    // go:embeds files spells-generate writes. Without the edge the two race inside generate's
-    // fan-out and the compile fails with "pattern gen/types/<name>.buzz: no matching files
-    // found" naming whichever file was mid-rewrite - a different one each run, and a message
-    // that reads as a missing file rather than a concurrent one.
-    //
-    // It was latent for as long as machine-budget contention happened to serialize the two.
-    // Nothing declared that ordering, so nothing kept it.
-    //
-    // The same race exists against every sibling that writes Go under internal/ or
-    // types/gen while this compile reads it, and MGS4008 now refuses the run rather than
-    // letting the fan-out race, so each one is declared: the compile runs after all of them.
-    ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
-              config_generate, mocks_generate);
-    ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
-        "go.mod", "go.sum", "go.work", "go.work.sum");
-    ctx.modifiesExistingFiles("CHANGELOG.md");
-    proc\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
-        "-releases", "./releases", "-changelog", "./CHANGELOG.md"]);
 }
 
 // The pull_request payload GitHub Actions wrote for this run. Read only under the gha
@@ -1172,8 +1149,10 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     foreach (path in changelog\fragments(changed)) {
         if (fs\exists(path)) { added.append(path); }
     }
-    if (added.len() > 0) {
-        proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + added);
+    final malformed = changelog\lint(added);
+    if (malformed.len() > 0) {
+        throw "pr-changelog: malformed changelog fragment(s); changes/README.md has the format:\n  "
+            + malformed.join("\n  ");
     }
     final problem = changelog\problem(title, changed: changed, added: added);
     if (problem != "") {
@@ -2119,8 +2098,8 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
         buildArgs.append("-no-sign");
     }
     proc\exec("go", buildArgs);
-    // The cut added a manifest, and CHANGELOG.md and the knowledge graph are derived
-    // from it, so publish them regenerated or the pull request is born failing
+    // The cut added a manifest, and the knowledge graph is derived from it, so publish
+    // it regenerated or the pull request is born failing
     // its own drift gate (the v0.4.2 index PR was). Two compositions, deliberately
     // different. The root's regeneration is `generate`'s *-generate fan-out rather
     // than ctx.needs(generate), because the gate half of generate would throw at
@@ -2368,15 +2347,13 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         // ADDS, so one merged from another branch, or hand-edited after landing, could
         // carry more than one entry and still count here - and fail `cut` after the
         // binaries are already built, in the publish job, with the version already tagged.
-        // allow_failure surfaces every malformed fragment as one check instead of failing
-        // this whole preflight function before the checks after it get to run.
+        // Every malformed fragment is one check, so the checks after this one still run.
         var paths = mut [<str>];
         foreach (f in fragments) { paths.append(f.value); }
-        final lint = proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + paths,
-            opts: {"allow_failure": true, "quiet": true});
-        if (!lint.ok) {
+        final malformed = changelog\lint(paths);
+        if (malformed.len() > 0) {
             checks.append(failed("changelog", "`magus-utils cut` would refuse " + changelog\FRAGMENT_DIR
-                + ": " + lint.stderr.trim()));
+                + ": " + malformed.join("\n")));
         } else {
             checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
         }
@@ -2751,7 +2728,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //                                     (exists, names a next step, titled as its Help
     //                                     link) with the Go check `magus doctor` runs
     //
-    // Nothing else here reads docs/, CHANGELOG.md or changes/. A check of what a page says
+    // Nothing else here reads docs/ or changes/, except the fragment cases in
+    // changes/testdata/fragments.txtar that **/*.txtar keys. A check of what a page says
     // runs in the docs project's conventions target, and a page generated from Go is gated
     // by the generate target that writes it, so a docs edit outside the code pages re-runs
     // no part of this suite. A test that opens one of those roots breaks that.
@@ -3010,7 +2988,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
         "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz",
-        "tools/lint/*.buzz");
+        "tools/lint/*.buzz", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -3307,13 +3286,13 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // workspace - so it would grade console's CSS and every other project's markdown as
     // part of the Go tree's lint. _typos.toml already narrows typos to prose by turning
     // the code types off; naming the files is the other half, and it is what this gate was
-    // missing when `unlabeled` reached main through CHANGELOG.md. It surfaced one shard
-    // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
-    // root file - so the error pointed at generated output while the fix belonged here.
-    // Unreleased entries live in changes/, so that directory is prose too.
-    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "changes"];
-    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md",
-        "changes/**/*.md");
+    // missing when `unlabeled` reached main through a changelog entry. It surfaced one
+    // shard over, in the docs project, because docs/changelog.md is rendered from the
+    // entries - so the error pointed at generated output while the fix belonged here.
+    // The entries live in changes/, so that directory is prose too.
+    final prose = ["README.md", "CONTRIBUTING.md", "AGENTS.md", "changes"];
+    ctx.readsFiles("_typos.toml", "README.md", "CONTRIBUTING.md", "AGENTS.md",
+        "changes/**/*.md", "changes/testdata/*");
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
     proc\exec("actionlint", []);
@@ -3321,13 +3300,14 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // Every unreleased fragment, not only the ones a pull request ADDS: pr-changelog
     // lints those and nothing else, so a fragment merged from another branch, or edited
     // after landing, went unchecked until `magus-utils cut` refused it in the publish job,
-    // after the release binaries were already built. Same lint-fragments entry point
-    // pr-changelog calls, over the whole directory.
-    final fragments = fs\glob(changelog\FRAGMENT_DIR + "*.md");
-    if (fragments.len() > 0) {
-        var paths = mut [<str>];
-        foreach (f in fragments) { paths.append(f.value); }
-        proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + paths);
+    // after the release binaries were already built. Same grammar pr-changelog checks,
+    // over the whole directory.
+    var paths = mut [<str>];
+    foreach (f in fs\glob(changelog\FRAGMENT_DIR + "*.md")) { paths.append(f.value); }
+    final malformed = changelog\lint(paths);
+    if (malformed.len() > 0) {
+        throw "lint: malformed changelog fragment(s); changes/README.md has the format:\n  "
+            + malformed.join("\n  ");
     }
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
@@ -3350,7 +3330,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // markdown happened to be formatted already.
     //
     // Passing paths scopes it (10 files, none in a child project). The excludes in
-    // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
+    // dprint.json still apply, so MAGUS.md stays out. Keep this list in
     // step with that file's `includes`.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
         "internal/agent/agents-section.md");

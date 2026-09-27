@@ -9,7 +9,7 @@ name: Release index
 # Manual only, and that is the whole risk budget: this is the one workflow outside
 # release.yaml that reads MAGUS_SIGNING_KEY, so it is reachable by nothing automatic.
 #
-# The whole flow (build, sign, regenerate the changelog's derived files, branch, push,
+# The whole flow (build, sign, regenerate the manifests' derived files, branch, push,
 # open the pull request) is the magusfile's release-index target; see release_index()
 # in magusfile.buzz. That target regenerates through magus, so this job builds the
 # magus this commit defines rather than getting by on a bare Go toolchain.
@@ -94,7 +94,6 @@ jobs:
           grep -v '^version:' dist/SHA256SUMS > "$RUNNER_TEMP/sums"
           (cd dist && sha256sum -c "$RUNNER_TEMP/sums")
           go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
-          go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
           rm -rf dist
 
       - name: Publish the release index

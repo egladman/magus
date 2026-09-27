@@ -161,9 +161,6 @@ It holds rules magus does not ship, because they are that repository's preferenc
 - **A code-changing worker gets its own checkout.** A spawn titled
   `<parent>/<role> <job>` with a change role (feat, fix, refactor, perf, docs, test,
   chore) and no isolation is denied.
-- **Changelog entries are fragments.** Once `changes/unreleased/` exists in the checkout,
-  a write that adds a line to CHANGELOG.md's `[Unreleased]` section is denied; a fix to a
-  released section is not.
 - **Each checkout runs its own binary.** A `magus` named by a path that sits at the root
   of one checkout of magus, run against another, is denied, as is `go -C` into another
   checkout of magus for a verb its targets cover; the bootstrap link into a checkout with
