@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"gopkg.in/yaml.v3"
 )
 
 // The path surface of `magus shell`: every rule that judges a file an edit is
@@ -875,4 +876,126 @@ func workspaceRelativeFile(path string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// denyRuleVCSOffSwitch names the deny below. Not yet wired into Judge's dispatch
+// (internal/guard/guard.go), which is held by another lease as this is written: see the
+// job report for the one-line call this needs and the catalog.go row it needs to pass
+// TestEveryRuleIsCatalogued.
+const denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"
+
+// vcsOffSwitchDoc is the one field a magus.yaml candidate is read for here, unmarshaled on
+// its own rather than into config.Config: unrelated schema drift elsewhere in that struct
+// (a new required key, a stricter tag) must never make this rule's own parse fail, and
+// yaml.Unmarshal already ignores keys a struct does not name.
+type vcsOffSwitchDoc struct {
+	VCS struct {
+		Enabled *bool `yaml:"enabled"`
+	} `yaml:"vcs"`
+}
+
+// vcsOffSwitchTargets are the magus.yaml locations internal/config/load.go Load actually
+// reads for root: the workspace's own file and the user-global tier Load merges beneath
+// it, both spellings. Both are in scope because a pointer field means "unset, inherit":
+// a workspace magus.yaml that never mentions vcs still gets whatever the user-global tier
+// set, so a write to EITHER can flip what this workspace resolves.
+func vcsOffSwitchTargets(root string) []string {
+	targets := []string{
+		filepath.Join(root, config.Filename),
+		filepath.Join(root, config.DottedFilename),
+	}
+	if udc, err := config.UserConfigDir(); err == nil {
+		targets = append(targets,
+			filepath.Join(udc, "magus", config.Filename),
+			filepath.Join(udc, "magus", config.DottedFilename))
+	}
+	return targets
+}
+
+// resolvedWriteContent is what target holds once fields lands, or "", false when that
+// cannot be computed: a Write's Content is used whole; an Edit's replacements are applied
+// to what target holds on disk now (applyEdits, claim.go); anything that will not apply
+// (an OldText that is not there, a target that does not exist yet for an Edit) fails
+// open rather than guessing at a result the host itself would have refused.
+func resolvedWriteContent(target string, fields writeFields) (string, bool) {
+	if fields.Content != "" {
+		return fields.Content, true
+	}
+	before, err := os.ReadFile(target)
+	if err != nil {
+		return "", false
+	}
+	return applyEdits(string(before), fields)
+}
+
+// denyVCSOffSwitch is finding 3 of the guard-boundary audit (U8): a leased or
+// agent-attributed write that leaves vcs.enabled: false in a magus.yaml tier this
+// workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
+// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
+// with none resolved there is no HEAD to compare a policy edit against, so from that
+// write on every tools/policy/*.buzz rule stops being checked against an approved copy
+// before it takes effect. That is the guard's own foundational safety, so it is judged
+// here whether or not a job store is running to grade ordinary path boundaries.
+//
+// Decided by PARSING the proposed content into the same shape config.Load reads, never
+// by matching text against it: an anchor, a merge key, or any other YAML spelling of
+// false is caught exactly like a literal `enabled: false`, and a comment or a value
+// under an unrelated key never fires it. Every other edit to these files passes exactly
+// as before, and so does this same edit from a session naming no lease and carrying no
+// spawn ancestry: a person editing their own checkout is owed silence, the same
+// exemption every other rule on this path surface gives them.
+//
+// "Agent-attributed" reads trail.SpawnFromEnv, the ancestry claim adviseUnleasedWorker
+// above already teaches an unleased worker to declare: a parent span id means some tool
+// started this process deliberately, and nothing here can turn a false claim into a
+// worse verdict than the deny a true one earns, since a person's own edit carries no
+// such claim at all.
+func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGrade {
+	writePath = strings.TrimSpace(writePath)
+	if writePath == "" {
+		return writeGrade{}
+	}
+	if actingLease == "" && trail.SpawnFromEnv().ParentSpanID == "" {
+		return writeGrade{}
+	}
+	root, err := magus.FindRoot("")
+	if err != nil {
+		return writeGrade{}
+	}
+	abs := writePath
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(root, abs)
+	}
+	real := resolveSymlinks(filepath.Clean(abs))
+	target := ""
+	for _, candidate := range vcsOffSwitchTargets(root) {
+		if resolveSymlinks(candidate) == real {
+			target = candidate
+			break
+		}
+	}
+	if target == "" {
+		return writeGrade{}
+	}
+	after, ok := resolvedWriteContent(target, fields)
+	if !ok {
+		return writeGrade{}
+	}
+	var doc vcsOffSwitchDoc
+	if err := yaml.Unmarshal([]byte(after), &doc); err != nil {
+		return writeGrade{}
+	}
+	if doc.VCS.Enabled == nil || *doc.VCS.Enabled {
+		return writeGrade{}
+	}
+	remedy := "Have the person holding this checkout make the change by hand, outside a lease and outside a spawned run, if the workspace genuinely wants no VCS."
+	actor := "This session carries spawn ancestry and names no lease."
+	if actingLease != "" {
+		remedy = leaseActorClause("turn vcs off")
+		actor = fmt.Sprintf("Lease %s is bound to this checkout.", actingLease)
+	}
+	return writeGrade{Decision: "deny", Rule: string(denyRuleVCSOffSwitch), Reason: fmt.Sprintf(
+		"magus workspace: leave vcs.enabled alone here. %s\n"+
+			"%s sets vcs.enabled: false, in a magus.yaml tier this workspace reads. vcs.Resolve (vcs/vcs.go) then resolves no VCS at all, and the guard's own approval authority is HEAD of whatever VCS resolves: with none resolved, no policy edit is ever checked against an approved copy again. %s No write paths anybody hands out include this switch.",
+		remedy, writePath, actor)}
 }
