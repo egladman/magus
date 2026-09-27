@@ -15,8 +15,12 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,6 +61,12 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		}
 		return errSilent{exitCode: 2}
 	}
+	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
+		return usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
+	}
+	if rf.Check && rf.Rename == "" {
+		return usagef("magus refs: --check previews a rename; pass --rename <new>")
+	}
 
 	if rf.Text {
 		// Computed here, once, and passed down: the same shape the symbol-miss
@@ -79,6 +89,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	g, err := loadKnowledgeGraphForRefs(ctx, root, rf.Refresh, pos[0])
 	if err != nil {
 		return err
+	}
+	if rf.Rename != "" {
+		return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, rf.Check)
 	}
 	out, ok := g.Refs(pos[0])
 	if !ok {
@@ -659,4 +672,156 @@ func linesSuffix(lines []int) string {
 		parts[i] = strconv.Itoa(ln)
 	}
 	return "  lines " + strings.Join(parts, ",")
+}
+
+// refsRenameCmd is `magus refs <symbol> --rename <new>`: glue between the graph, the
+// occurrence read, the guard and internal/edit, which owns what a write may do.
+func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *knowledge.Graph, ref, to string, check bool) error {
+	out := types.KnowledgeRenameOutput{
+		Definition:    types.KnowledgeRenameDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		To:            to,
+	}
+	refuse := func(refused ...types.EditRefusal) error {
+		out.Refused = refused
+		if opts.Format != outputText && opts.Format != outputName {
+			if err := emitFormatted(opts, out); err != nil {
+				return err
+			}
+		}
+		fmt.Fprintln(os.Stderr, "magus refs: rename refused, nothing written")
+		for _, r := range refused {
+			fmt.Fprintln(os.Stderr, "  "+edit.FormatRefusal(r))
+		}
+		return errSilent{exitCode: 1}
+	}
+
+	id, err := edit.RenameTarget(ref, g.Resolve(ref, 0), func(id string) bool {
+		refs, ok := g.Refs(id)
+		return ok && len(refs.Defs) > 0
+	})
+	if err != nil {
+		return refuse(types.EditRefusal{Reason: err.Error()})
+	}
+	refs, _ := g.Refs(id)
+	out.Symbol, out.Label = refs.Symbol, refs.Label
+
+	// A project whose index is missing or older than its sources can hold call sites the
+	// occurrence list never names, and no per-site check sees a site that is not listed.
+	answer := knowledge.Answer(id, true, symbolCoverage(ctx, root, id, true))
+	var blind []types.EditRefusal
+	for _, gap := range answer.Gaps {
+		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; build it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
+	}
+	for _, project := range answer.StaleIndexes {
+		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s changed after its index was built; refresh with `%s`", project, hint.GraphBuild)})
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimPrefix(id, types.KindSymbol+":")
+	read, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), globalCfg, slog.Default(), key)
+	if !probed {
+		return refuse(append(blind, types.EditRefusal{Reason: "cannot read the symbol indexes"})...)
+	}
+	for _, gap := range read.Unreadable {
+		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; rebuild it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
+	}
+	if len(read.Names) > 0 {
+		out.From = read.Names[0]
+	}
+	sites, refused := edit.RenameSites(read.Files, out.From, to)
+	if refused = append(blind, refused...); len(refused) > 0 {
+		return refuse(refused...)
+	}
+
+	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws)))
+	if refused := plan.Refused(); len(refused) > 0 {
+		return refuse(refused...)
+	}
+	out.Files, out.Sites = plan.Files(), plan.Spans()
+	out.FileCount, out.SiteCount = len(out.Files), len(out.Sites)
+	if !check {
+		if err := plan.Apply(); err != nil {
+			return err
+		}
+		out.Applied = true
+	}
+
+	switch opts.Format {
+	case outputText:
+	case outputName:
+		names := make([]string, 0, len(out.Files))
+		for _, f := range out.Files {
+			names = append(names, f.Path)
+		}
+		return emitNames(names)
+	default:
+		return emitFormatted(opts, out)
+	}
+	verb := "would rename"
+	if out.Applied {
+		verb = "renamed"
+	}
+	fmt.Printf("%s %s to %s: %d site(s) in %d file(s)\n", verb, out.From, out.To, out.SiteCount, out.FileCount)
+	for _, s := range out.Sites {
+		fmt.Printf("  %s:%d:%d\n", s.Path, s.Start.Line, s.Start.Col)
+	}
+	if !out.Applied {
+		fmt.Println("nothing written (--check)")
+	}
+	return nil
+}
+
+// renameGrade refuses a declared output, then asks the guard about each rewritten file
+// exactly as a host edit hook would, so the lease and claimed-declaration verdicts cannot
+// differ between the two. The edit replaces the whole file, which is what lets the guard
+// place every changed line in its declaration.
+func renameGrade(ctx context.Context, ws types.WorkspaceRepository) func(string, []byte, []byte) (string, string) {
+	deps := guardDependencies()
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
+	return func(rel string, before, after []byte) (string, string) {
+		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {
+			return "", reason
+		}
+		envelope, err := json.Marshal(map[string]any{
+			"cwd": ws.Root(),
+			"tool_input": map[string]any{
+				"file_path":  filepath.Join(ws.Root(), filepath.FromSlash(rel)),
+				"old_string": string(before),
+				"new_string": string(after),
+			},
+		})
+		if err != nil {
+			return "", "could not describe the edit to the guard: " + err.Error()
+		}
+		v := guard.Judge(ctx, deps, guard.Request{Input: string(envelope)})
+		switch v.Decision {
+		case "deny", "ask":
+			return v.Rule, strings.TrimSpace(v.Reason)
+		}
+		return "", ""
+	}
+}
+
+// declaredOutputRefusal refuses a path the workspace declares as a target's output. A
+// classification failure refuses too: an unknown role is not a license to hand-edit.
+func declaredOutputRefusal(ctx context.Context, ws types.WorkspaceRepository, path string) string {
+	entries, err := ws.ClassifyFiles(ctx, []string{path})
+	if err != nil || len(entries) != 1 {
+		return fmt.Sprintf("could not classify it against the workspace's declarations: %v", err)
+	}
+	e := entries[0]
+	if e.Role != types.DiffRoleOutput {
+		return ""
+	}
+	var by []string
+	for _, c := range e.Claims {
+		if c.Role == types.DiffRoleOutput {
+			by = append(by, strings.TrimSuffix(c.Project+":"+c.Target, ":"))
+		}
+	}
+	return "a declared output of " + strings.Join(by, ", ") + ": change its source and regenerate it"
 }
