@@ -1,7 +1,7 @@
 ---
 title: "ADR 0003: running an invocation on another operating system"
 order: 3
-description: Whether magus should learn to run an invocation on a kernel other than the host's, so a macOS checkout can reproduce a Linux-only failure (landlock, /proc, the unix socket path limit) before CI does. Weighs a repository-local development target against an execution-platform flag relayed through a provider spell, records the benefits and the responsibility each takes on, and the conditions under which the smaller one is promoted to the larger.
+description: Whether magus should learn to run an invocation on a kernel other than the host's, so a macOS checkout can reproduce a Linux-only failure (landlock, /proc, the unix socket path limit) before CI does. Decides on a prefix script in this repository only, records an execution-platform flag as considered and not planned, and lists what six reviewer archetypes found the first draft got wrong.
 tags: [adr, decision, platform, linux, macos, containers, podman, sandbox, providers, scope]
 ---
 
@@ -19,212 +19,181 @@ Some of magus's behavior exists on one kernel only:
 - **`/proc`**, which `internal/sys/pipepeer` reads to prove a pipe's peers, and which the
   root `test` target is granted.
 - **the 108-byte `sun_path` limit** on unix sockets, which the daemon, the broker and the
-  proc socket all bind.
+  proc socket all bind. macOS has a limit too, a few bytes shorter, so this one is about
+  paths more than kernels.
 
-CI's shards now run inside `magus queue gate --sandbox=required`, the box the merge queue
-gates a candidate in. When that box fails on Linux, a person on a Mac cannot run the same
-command: `required` refuses before anything starts. Today the only way to see what CI sees
-is to push and wait for CI.
+CI's shards run inside `magus queue gate --sandbox=required`, the box the merge queue gates
+a candidate in. When that box fails on Linux, a person on a Mac cannot run the same
+command: `required` refuses before anything starts. The only way to see what CI sees today
+is to push and wait.
 
-A prototype proved the mechanism. It is a `linux` target in the root magusfile that runs
-the podman spell's `podman-run` op with the repository mounted at its own path, the Go
-image `mise.toml` pins, named volumes for the Go caches, magus's cache kept out of the
-host's `.magus/`, `MAGUS_NO_BOOTSTRAP_EXEC=1` so the host's darwin `./magus` is not
-exec'd, and magus built from the tree inside the container. It works on a podman machine
-whose kernel has landlock.
+A prototype proved the mechanism: a `linux` target in the root magusfile that runs the
+podman spell's `podman-run` op with the repository mounted at its own path, the Go image
+`mise.toml` pins, and magus built from the tree inside. It works on a podman machine whose
+kernel has landlock. Its shape is the question.
 
 ### Why this is a hard call
 
 Build tools at magus's layer mostly have no concept of "where this runs". Make, Turborepo,
-Nx and Gradle run on the host and stop there. The tools that do have one made it a large
-part of their identity:
+Nx and Gradle run on the host and stop there. The tools that have one made it a large part
+of their identity: Bazel's host, execution and target platforms; Pants' environments; Nix's
+`system` and builders; cross-rs's container-per-target. Each spells it as one modifier on an
+otherwise unchanged command and names the runtime explicitly. Each also paid for it in
+concepts its users must learn, and in expectations of equivalence it then had to meet.
 
-| Tool | Concept | What it cost them |
-|---|---|---|
-| Bazel | host, execution and target platforms; toolchains resolved from constraints | platforms and toolchain resolution are among its hardest concepts to learn |
-| Pants | environments: a target can run its processes in a Docker or remote environment | an environment is a target type with its own configuration surface |
-| Nix | a derivation's `system`; builds run locally only when it matches, else on declared builders | builders are explicit configuration, never inferred |
-| cross-rs | `cross build --target X` is `cargo build --target X` run in a container | a separate binary, not a cargo feature |
-| act | reproduces the GitHub runner locally in Docker | reproduces the whole runner, not a kernel |
-
-The pattern across them: every mature tool spells it as one modifier on an otherwise
-unchanged command, names the runtime explicitly, keeps "where it runs" separate from "what
-it builds for", and treats "same as the host" as "run here". None makes the user nest one
-command line inside another.
-
-The pattern also shows the risk. Once a build tool can run somewhere else, people expect
-it to be hermetic, to manage the runtime, and to make the other place feel identical. magus
-states the opposite on purpose: `docs/scope.md` says a container gives environment
-reproducibility, not hermeticity, and that magus offers no opt-in container isolation.
+`docs/scope.md` states that a container gives environment reproducibility, not
+hermeticity, and that magus offers no opt-in container isolation. Any answer here argues
+with that page.
 
 ## Options
 
 ### A. Document the container command, build nothing
 
-A guide carries the podman command by hand. magus learns nothing.
+A guide carries the podman command by hand. magus learns nothing. Rejected: the command is
+nine flags long and drifts from `mise.toml`; the guard's raw-tool rule denies `podman run`
+to every agent and leaves it no route, so an agent wraps it in a script the guard cannot
+see.
 
-- **Benefit:** zero surface, zero responsibility; the runtime stays entirely outside.
-- **Pitfall:** the command is nine flags long and must be kept in step with `mise.toml`
-  by hand. The guard's raw-tool rule denies `podman run` to every agent, and there is no
-  magus route to point it at. The working directory and a worktree's `.git` link are easy
-  to get wrong.
+### B. A repository-local target (the prototype)
 
-### B. A repository-local development target (the prototype, cleaned up)
+`magus run linux . -- <magus arguments>`. No engine change. Rejected in this shape: every
+flaw it has comes from being a target. The nested `--` is a house dialect, the inner run's
+output is one op's captured stdout, the working directory is fixed by the target, and
+reaching `affected` or `queue gate` means nesting a second command line.
 
-`magus run linux . -- <magus arguments>` in this repository's own magusfile, or in a
-`tools/` module it imports. Nothing in the engine changes, and no other workspace sees it.
+### B'. A prefix script in this repository (decided)
 
-- **Benefit:** magus as a product takes on no responsibility. It is Buzz over an existing
-  spell op, so `--dry-run` prints the podman command, the guard is satisfied, and deleting
-  it is one commit. It answers the need that exists today: this repository's CI box.
-- **Pitfall:** it is a wrapper target with a nested `--`, a house dialect a reader has to
-  learn. Its output is one op's captured stdout, hidden on success unless `-vv`. Reaching
-  `queue gate` or `affected` means nesting a second command line. Another workspace that
-  wants the same thing copies it.
+```sh
+tools/on-linux magus queue gate --sandbox=required -- magus run test .
+tools/on-linux magus run go::go-test . -- -run TestX
+```
+
+An executable that takes a magus command line and runs it on Linux, the way `sudo`,
+`nice` and `cross` take a command. It has none of B's flaws: no nested `--`, its output is
+the inner run's own stdio, it runs where the caller stands, and it reaches every verb. The
+engine learns nothing.
 
 ### C. A `:linux` charm
 
-`magus run test:linux .`
+Rejected by every reviewer. A charm patches one op's arguments and cannot change what runs;
+charms key the cache, so a `:linux` run mints keys CI never mints; it means nothing on
+`affected`, `queue gate`, `buzz` or `x`; and `amd64`/`arm64` already answer "build for which
+architecture", a different question from "run on which kernel".
 
-- **Benefit:** short, and it sits beside the existing `:amd64` / `:arm64` image charms.
-- **Pitfall:** rejected. A charm patches one op's arguments and cannot change what runs,
-  so either every top-level target learns to re-dispatch itself or the engine grows a charm
-  that breaks the charm boundary. Charms key the cache, so a `:linux` run mints keys CI
-  never mints and replays nothing CI recorded. It means nothing on `affected`, `queue
-  gate`, `buzz` or `x`, which are where the need is. And `amd64`/`arm64` answer "build for
-  which architecture"; this answers "run on which kernel". One word must not name both.
+### D. An execution-platform flag relayed through a provider spell (considered, not planned)
 
-### D. An execution-platform flag, relayed through a provider spell
+`magus <verb> --on linux ...`: the engine relays the whole invocation to a provider spell
+whose op returns the container command as data. Recorded here so a later proposal argues
+with this page rather than starting over. It is not planned, and it is not scheduled by
+any trigger in this ADR; see "If D is ever proposed" below.
 
-One global flag names the platform an invocation executes on:
+## Decision
 
-```sh
-magus queue gate --platform linux --sandbox=required -- magus run ci .
-magus run test --platform linux . -- -run TestX
-magus affected ci --platform linux
-magus queue gate --platform linux --dry-run -- magus run ci .   # prints the container command
-```
+1. **B' now, in this repository only.** `tools/on-linux` is this repository's
+   development tool, documented in a contributor guide, not a magus feature. `docs/scope.md`
+   does not change. The prototype target is deleted when the script lands.
+2. **D is considered and not planned.** Any proposal to put a platform concept in magus
+   itself is its own ADR, and must meet the preconditions below first.
+3. **C and A are rejected.**
 
-**How it works.**
+### The contract B' must hold
 
-1. The engine parses `--platform <os[/arch]>`. If it matches the host (`runtime.GOOS` and
-   `GOARCH`), nothing changes: the verb runs here, so one command line is true on a Mac and
-   on the Linux runner.
-2. If it does not match, the engine asks the workspace's platform provider for the command
-   that runs the same argument list, minus `--platform`, on that platform. It forks that
-   command with the caller's working directory, stdio and terminal passed through, and exits
-   with its status.
-3. The verbs that read a model (`describe`, `query`, `ls`, `explain`, `doctor`) refuse the
-   flag with an error. They answer from this workspace and run nothing.
+Every line here is a reviewer finding the first draft missed or got wrong.
 
-**Providers.** magus reaches systems it does not know through provider spells: a remote
-cache, a CI system, a secret store and a review host each take one, wired in the magusfile
-by name. A platform provider is the fifth:
+- **Scope: the kernel, not CI's whole environment.** The image carries Go and nothing else
+  `mise.toml` pins (node, pnpm, golangci-lint, dprint, trivy and more). So the supported uses
+  are Go tests and `queue gate` over Go targets. `magus run ci` inside is out of scope and
+  the guide says so, rather than failing on the first missing tool.
+- **Architecture is stated, not implied.** On Apple silicon `linux` means linux/arm64, while
+  every CI job runs `ubuntu-latest`, linux/amd64. A failure that only amd64 shows does not
+  reproduce, and landlock under emulation is unmeasured. The first line the script prints
+  names the platform, the image digest and the inner magus build.
+- **The checkout is mounted read-only**, with one writable per-platform store under
+  `.magus/platform/<os>-<arch>` for magus's cache and state. A read-write mount lets a
+  `build` inside replace the host's darwin `./magus` with a Linux binary, lets the default
+  `rw` charm rewrite the host's generated files, and writes root-owned files with no lease
+  check. `queue gate` already works on a copy of HEAD, so it needs no write access to the
+  tree.
+- **The environment crosses only by name.** A container does not inherit the environment of
+  the process that starts it; only `-e` crosses. The script passes `MAGUS_SANDBOX`,
+  `MAGUS_NO_BOOTSTRAP_EXEC=1`, the cache and state locations, and the sandbox passthrough
+  list explicitly, and `NO_COLOR` and `TERM` when set. Nothing else is assumed to arrive.
+- **The inner magus is built from the tree inside the container**, so the inner and host
+  builds describe the same sources. This is why B' works only in magus's own repository, and
+  why it stays there.
+- **Nothing implicit.** It never pulls an image and never starts the VM: a missing image or a
+  stopped machine is an error that prints the `podman pull` or `podman machine start` line
+  for a person to run. No config key, no environment variable turns it on, and there is no
+  fallback from podman to another runtime or from the container to the host.
+- **Streams and exits stay honest.** stdout and stderr pass through untouched; a TTY is
+  allocated only when stdin, stdout and stderr are all terminals, since `-t` merges the two
+  streams. A runtime failure (podman's 125 to 127, a VM that is not running) exits 69 with a
+  message saying the relay failed, never the build. The inner status passes through only
+  once the inner magus has started. Ctrl-C and SIGTERM leave no container behind.
+- **Follow-up commands keep the platform.** The inner run prints `reproduce:` and
+  `inspect:` lines that name no platform; the guide says to prefix them with
+  `tools/on-linux`, and the script's last line repeats the reproduce command with the prefix.
+- **No shared cache tier is written.** The image is in no cache key and the manifest compares
+  only os and arch, so a laptop run must never write a tier CI reads: remote writes are off
+  inside.
+- **Agents are not taught it as a default.** No hint, advisory or skill suggests it except
+  for a kernel-bound failure (MGS2012, a landlock-only or `/proc`-only test). On Linux it is
+  pointless, so an agent that adds it everywhere costs only the Mac user.
 
-```buzz
-import "spells/platform/podman" as linux_on_podman;
-magus\platform.provider(linux_on_podman);
-```
+### If D is ever proposed
 
-The spell implements one op, `platform_command`, that takes the platform, the argument
-list, the repository root, the working directory, and where magus should keep its cache and
-state, and returns a `Command`. Because it returns data rather than running anything,
-`--dry-run` and `describe` print exactly what would run. The engine knows only "relay an
-invocation"; the image, the mounts, the volumes and every podman flag live in the spell.
-Docker and Apple's `container` are two more spells with the same op. The engine never picks
-one: the workspace wires the provider, and with none wired, `--platform` on another OS is an
-error naming `magus\platform.provider`.
+A proposal must first settle, in its own ADR:
 
-**What crosses the boundary, and what does not.**
+- a failure that only a Linux kernel reproduces, seen in a second workspace, not a request
+  for containers;
+- where a workspace that is not magus's own gets a Linux magus, and how the inner and host
+  builds are compared, failing closed;
+- how the relay injects and verifies the sandbox floor rather than trusting a provider;
+- where outputs land, so a relayed run never writes the host's tree;
+- how a per-machine runtime (podman, Docker, Colima, Apple `container`) is chosen without a
+  preference knob `docs/scope.md` refuses;
+- the arm64 and amd64 question.
 
-- The **sandbox floor** crosses: the relay starts the container through magus's own
-  process runner, which sets `MAGUS_SANDBOX` on every child, so the inner magus runs no
-  weaker than the outer. `--sandbox=required` in the relayed arguments is honored inside,
-  where landlock exists.
-- **Cache keys** stay CI's keys; the key has no platform line. Stores do not cross: a Linux
-  run writes a per-platform store (`.magus/platform/linux-arm64`), because two platforms
-  sharing one store overwrite each other's manifests under the same key. `magus query output
-  <ref>` on the host learns to read those stores.
-- The **broker, daemon, job store, lease marker and guard** do not cross. The inner magus
-  is a fresh process tree with its own state; the guard runs on the host only.
-
-- **Benefit:** every verb keeps its meaning and gains one word. A person and an agent type
-  the same thing, and the guard needs no new rule. The runtime stays a spell the workspace
-  chose. Cache parity with CI holds. A second workspace gets it by wiring a provider, not by
-  copying a target.
-- **Pitfall:** see below.
-
-## Responsibility D takes on
-
-Stated plainly, because this is the part that could make it horribly good or horribly bad:
-
-- **Expectations.** A `--platform` flag reads like a promise that the other place is
-  equivalent. It is not: different filesystem performance (virtiofs on macOS), uid mapping,
-  SELinux labels, network, and a different broker budget. Every gap becomes a bug report
-  against magus even when it is the runtime's.
-- **Scope pressure.** Once it exists, the next asks are predictable: a default platform in
-  `magus.yaml`, "run CI in a container", hermetic builds, remote builders, Windows. Each is a
-  preference knob or a hermeticity claim the scope page refuses today. The refusals must be
-  written in the same commit, or the flag becomes the start of a container orchestrator.
-- **Two meanings of platform.** Execution platform (this flag) and target platform (the
-  image charms) share a word. Bazel needed three terms for this; magus would need the docs
-  to hold the line every time.
-- **State split.** Nothing the host knows (jobs, leases, the daemon's warm graph, the
-  guard's facts) exists inside. A run that works on the host and fails inside for that reason
-  will be confusing.
-- **Agents.** A one-word way to reach Linux is also a one-word way for an agent to spend a
-  VM's worth of time on every test run. The guard and the skills must not teach it as a
-  default.
-- **Security surface.** The repository is mounted into a container that runs as root by
-  default, with network. The provider, not magus, decides the mounts, and a published
-  provider spell would need review like any other.
-- **Maintenance.** The relay is roughly 300 lines of Go plus a spell, a diagnostic code, a
-  scope amendment and tests. It is small; the ongoing cost is the expectations above.
-
-## Decision (proposed)
-
-Decide in two steps, so the product takes on the responsibility only after the need is
-shown to be real and general.
-
-1. **Now: B, as a development tool of this repository only.** Keep the `linux` target,
-   fixed so it runs in the caller's directory, keeps magus's cache in a per-platform store
-   under `.magus/platform/`, and does not force `MAGUS_TEST_REQUIRE_LANDLOCK`. Document it
-   in a contributor guide as this repository's tool, not a magus feature. It
-   exists to fix and keep green the CI box, and the scope page does not change.
-2. **Later, only if promoted: D.** Promote the target to the flag and provider contract
-   when at least one of these is observed, not predicted:
-   - a second workspace asks for it or copies the target;
-   - agents or people keep needing it for verbs the target cannot reach cleanly
-     (`affected`, `queue gate`);
-   - the nested `--` or the hidden output causes a real mistake.
-
-   Promotion lands in one change: the flag, the provider contract, the podman provider, the
-   `docs/scope.md` amendment, and refusal rows for a `:linux` charm and a `magus.yaml` default
-   platform. The development target is deleted in the same change.
-
-C is rejected outright, and A is rejected because agents cannot use it.
+And it ships with, in the same change: the `docs/scope.md` amendment, refusal rows for a
+`:linux` charm and a default platform, a whole-invocation relay only (never a per-target or
+per-op platform, which is where Bazel's cost lives), and the spelling `--on`, since
+`--platform` means the target platform in Bazel and buildx.
 
 ## Consequences
 
-- magus as a product gains nothing now; this repository gains a way to reproduce its
-  Linux-only failures before CI.
-- If D is adopted later, its design is recorded here, so the promotion argues with this page
-  rather than starting over.
-- The target is visible house dialect until then. That is accepted as the price of not
-  committing the product to a platform concept on the strength of one repository's need.
+- magus as a product gains nothing. This repository gains a way to reproduce its Linux-only
+  failures before CI, limited to the kernel.
+- The prototype target and its nested `--` go away.
+- The script is house tooling the guide must keep honest: when it cannot reproduce
+  something (amd64-only behavior, the non-Go toolchains), the guide says so.
+
+## Review
+
+Six reviewer archetypes read the first draft of this ADR. All six chose not to put a
+platform concept in magus now; none backed the charm.
+
+| Reviewer | Position | What it changed here |
+|---|---|---|
+| UNIX graybeard | B now as a prefix command, never a target; a separate executable if ever promoted | B' replaced B; the environment crosses only by name; the streams, exit and signal contract |
+| Bazel veteran | B, then D only once its contract settles | read-only mount; whole-invocation relay only; `--on` over `--platform` |
+| Dagger veteran | B now; a higher bar for D | scope is the kernel, not CI's environment; the read-write mount's damage |
+| Platform engineer | B, then D only once supportable | nothing implicit; no shared cache writes; the per-machine runtime question |
+| Coding agent | B, then D only on a person's or second workspace's need | hints only on kernel-bound failures; follow-up commands keep the platform |
+| justfile minimalist | B only; D as considered, its own ADR | D demoted from a plan to a record |
+
+Two claims in the first draft were wrong and are corrected above: that the sandbox floor
+crosses into the container on its own, and that cache parity with CI holds. Keys match; hits
+do not, because CI records linux/amd64 and a Mac runs linux/arm64.
 
 ## Open questions
 
-1. Name, if D lands: `--platform` reuses the word magus already uses for `os/arch` values
-   and matches podman, buildx and Apple `container`; `--on linux` is unambiguous.
-2. Is "the requested platform matches the host, so run here" a guess under "told, never
-   guessed"? This ADR reads it as a comparison against a fact magus already stamps into
-   every cache manifest. The alternative is to always relay.
-3. Where the image pin lives: a workspace-local spell reading `mise.toml`, or a declaration
-   argument to `magus\platform.provider`.
-4. Does Docker Desktop's kernel enable landlock? The podman machine's does; Docker's is
-   unmeasured.
-5. Which read verbs should refuse the flag. `doctor` ("does this workspace load on Linux")
-   is arguable.
+1. The script's language. This repository keeps workflow logic in Buzz behind `magus buzz`,
+   but B' has to pass its argument list through untouched and stream the inner stdio. It is
+   Buzz if `magus buzz` can do both without a nested `--`, and a POSIX shell script
+   otherwise.
+2. Whether the guard needs to recognize `tools/on-linux magus ...` as the magus command it
+   prefixes, so the rules that judge magus invocations still apply to it.
+3. Whether a default of linux/amd64 through emulation serves better than the host's arm64,
+   once landlock under emulation is measured.
 </content>
 </invoke>
