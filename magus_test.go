@@ -782,6 +782,41 @@ func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
 	assert.Error(t, err, "malformed signing key was accepted")
 }
 
+// TestOpenRefusesARequiredRemoteWriteWithNoBackend: cache.remote.write.enabled true in a
+// workspace whose magusfile wires no backend fails Open instead of running local-only.
+func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	cfg := config.Defaults()
+	cfg.Cache.Dir = filepath.Join(t.TempDir(), ".magus")
+	required := true
+	cfg.Cache.Remote.Write.Enabled = &required
+
+	m, err := Open(t.Context(), root, WithLoadedConfig(cfg))
+	if m != nil {
+		_ = m.Close()
+	}
+	assert.ErrorContains(t, err, "remote writes are required but no remote backend is wired")
+}
+
+// TestOpenRemoteBackendThatDidNotStart: this test binary links no backend opener, so
+// every wired backend fails to start. A required write surfaces that failure as the
+// error; an optional one names it in the header the run prints.
+func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
+	opt := remoteBackendOption(t.Context(), "github", nil)
+	require.NotNil(t, opt)
+
+	_, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt, cache.WithRemoteWrite(true))
+	assert.ErrorContains(t, err, "remote writes are required but remote github unavailable: cache: no remote backend registered in this binary")
+
+	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
+	require.NoError(t, err)
+	tier, mode := (&Magus{cache: c}).CacheDescription()
+	assert.True(t, strings.HasPrefix(tier, "local (remote github unavailable: cache: no remote backend registered in this binary"), tier)
+	assert.Equal(t, "read+write", mode)
+}
+
 // TestSharedProviderVisibleAcrossMagus proves the /dashboard data-flow invariant: when two
 // Magus instances are opened with ONE shared observability provider (WithProvider), a metric
 // recorded through one is visible via the other's MetricsCollector. This is exactly what lets

@@ -55,6 +55,7 @@ type Cache struct {
 	localWrite     bool
 	remoteWrite    *bool // nil = follow localWrite; set = declared, and required when true
 	backend        RemoteBackend
+	remoteDown     *remoteUnavailable // a wired backend that did not start; see WithRemoteUnavailable
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
 	log            *slog.Logger
@@ -332,6 +333,26 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	return c, nil
 }
 
+// remoteUnavailable is a wired remote backend that did not start.
+type remoteUnavailable struct {
+	name string
+	err  error
+}
+
+func (u *remoteUnavailable) Error() string {
+	return fmt.Sprintf("remote %s unavailable: %v", u.name, u.err)
+}
+
+func (u *remoteUnavailable) Unwrap() error { return u.err }
+
+// WithRemoteUnavailable records that the remote backend name was wired but did not
+// start, in place of [WithRemoteBackend]. The cache runs local-only and names the reason
+// in [Cache.Description]; with [WithRemoteWrite] declared true, Open fails instead,
+// wrapping err.
+func WithRemoteUnavailable(name string, err error) Option {
+	return func(c *Cache) { c.remoteDown = &remoteUnavailable{name: name, err: err} }
+}
+
 // buildTiers decides, once, which tiers this cache may write. The remote tier is
 // written only when the local tier is, since its entries are exported from the local
 // store; unset, it is written when a signed entry could be, so a machine holding only
@@ -346,7 +367,15 @@ func (c *Cache) buildTiers() error {
 			"the remote tier is written from the local one, so enable local writes or turn remote writes off")
 	}
 	if c.backend == nil {
-		return nil
+		if !declared || !*c.remoteWrite {
+			return nil
+		}
+		if c.remoteDown != nil {
+			return fmt.Errorf("magus/cache: remote writes are required but %w; "+
+				"fix the backend, or set cache.remote.write.enabled false to run local-only", c.remoteDown)
+		}
+		return errors.New("magus/cache: remote writes are required but no remote backend is wired; " +
+			"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 	}
 	r := &remoteTier{c: c, backend: c.backend}
 	switch {

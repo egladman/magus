@@ -1269,3 +1269,39 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 		"narrow": {os.Getenv("CARGO_MAKEFLAGS"), ""},
 	}, got)
 }
+
+// A declared remote write with no backend to write is refused at Open, whether none was
+// wired or the wired one did not start.
+func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {
+	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
+	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired; "+
+		"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
+
+	startErr := errors.New("ACTIONS_RUNTIME_TOKEN is unset")
+	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+		WithRemoteUnavailable("github", startErr), WithRemoteWrite(true))
+	require.ErrorIs(t, err, startErr)
+	assert.EqualError(t, err, "magus/cache: remote writes are required but remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset; "+
+		"fix the backend, or set cache.remote.write.enabled false to run local-only")
+}
+
+// Undeclared or declared false, a backend that did not start leaves the cache local-only,
+// and the header names why.
+func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
+	off := false
+	for name, write := range map[string]*bool{"undeclared": nil, "declared false": &off} {
+		t.Run(name, func(t *testing.T) {
+			opts := []Option{WithRemoteUnavailable("github", errors.New("ACTIONS_RUNTIME_TOKEN is unset"))}
+			if write != nil {
+				opts = append(opts, WithRemoteWrite(*write))
+			}
+			c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opts...)
+			require.NoError(t, err)
+			assert.Nil(t, c.remote)
+			assert.Equal(t, []tier{c.local}, c.tiers)
+			tierDesc, mode := c.Description()
+			assert.Equal(t, "local (remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset)", tierDesc)
+			assert.Equal(t, "read+write", mode)
+		})
+	}
+}
