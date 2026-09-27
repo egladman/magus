@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/hostvocab"
 	"github.com/egladman/magus/libs/conventions/importceiling"
 	"github.com/egladman/magus/libs/conventions/nameoutput"
+	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
 	"github.com/egladman/magus/libs/conventions/stutter"
 	"github.com/egladman/magus/libs/conventions/testisolation"
@@ -29,6 +30,7 @@ func init() {
 	register.Plugin("hostvocab", plugin(hostvocab.New))
 	register.Plugin("importceiling", plugin(importceiling.New))
 	register.Plugin("nameoutput", plugin(nameoutput.New))
+	register.Plugin("providerio", plugin(providerio.New))
 	register.Plugin("ruletext", plugin(ruletext.New))
 	register.Plugin("stutter", plugin(stutter.New))
 	register.Plugin("testisolation", plugin(testisolation.New))

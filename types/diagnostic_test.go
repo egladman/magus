@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,9 +15,9 @@ import (
 // so tooling that lists codes (the knowledge graph builds a node per code) never
 // silently drops one. Mirrors the source-scan idiom in diagnostic_doc_test.go.
 func TestAllDiagnosticCodesEnumerated(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	root := filepath.Dir(filepath.Dir(thisFile))
+	// go test's cwd is this package dir, regardless of -trimpath.
+	root, err := filepath.Abs("..")
+	require.NoError(t, err)
 
 	src, err := os.ReadFile(filepath.Join(root, "types", "diagnostic.go"))
 	require.NoError(t, err)

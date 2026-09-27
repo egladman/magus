@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -268,10 +271,50 @@ type pipedMagus struct {
 // `grep -rn`, which answers with less than the piped graph read it was denied.
 var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": true, "describe": true}
 
-// renamesSymbol reports `refs --rename` without `--check`, the one graph verb that writes.
+// renamesSymbol reports `refs --rename` without the global `--dry-run` (or its `-u`
+// short form), the one graph verb that writes.
 func renamesSymbol(args []string) bool {
 	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") }) &&
-		!slices.Contains(args, "--check")
+		!slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
+}
+
+// JudgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
+// hook judges the same edit. The verb's process knows no host session, so it acts under the
+// lease it resolves on its own: the checkout's binding, else its magus.lease BAGGAGE claim.
+// Resolving none while live leases hold write paths in the checkout at root is a deny: a
+// worker bound only by its session would otherwise be graded by nobody. dryRun judges as
+// [Request.DryRun] does, writing nothing.
+func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) Verdict {
+	envelope, _ := json.Marshal(map[string]any{
+		"cwd": root,
+		"tool_input": map[string]any{
+			"file_path":  filepath.Join(root, filepath.FromSlash(rel)),
+			"old_string": string(before),
+			"new_string": string(after),
+		},
+	})
+	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun})
+	if v.Decision == "deny" || v.Lease != "" {
+		return v
+	}
+	at := hookLocation(hookContextAt(ctx, deps, root), deps)
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return v // an unreadable plan is the guard's standing fail-open
+	}
+	var held []string
+	for _, row := range job.HeldIn(rows, at.workspace) {
+		held = append(held, row.ID)
+	}
+	if len(held) == 0 {
+		return v
+	}
+	slices.Sort(held)
+	v.Decision, v.Context, v.Rule = "deny", "", ""
+	v.Reason = fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout and this process names no lease, so nothing would grade the edit.\n"+
+		"A magus process cannot see the host session its caller is bound by; name the lease you hold: `%s=<id> magus ...`.",
+		strings.Join(held, ", "), envHookLease)
+	return v
 }
 
 // graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.

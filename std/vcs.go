@@ -88,7 +88,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "commit",
-			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that may not exist.",
+			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents, files}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339 in the committer's own offset, when the revision was recorded. files stays empty here, meaning not asked; vcs.history fills it. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that may not exist.",
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
@@ -98,9 +98,11 @@ var Vcs = Module{
 		},
 		{
 			Name: "history",
-			Doc:  "Up to limit recent commits, newest first; each is the same object vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
+			Doc:  "Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs.commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. first_parent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.",
 			Args: []Arg{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
+				{Name: "paths", Type: TypeStringSlice, Optional: true},
+				{Name: "first_parent", Type: TypeBool, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
 			Raises:  true,
@@ -392,15 +394,16 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	return c, nil
 }
 
-// VcsHistory returns up to limit recent commits (newest first) as objects, or an
+// VcsHistory returns the commits the query selects (newest first) as objects, or an
 // empty list when no VCS is resolved. It RAISES when the query fails: an empty
 // list there would read as "no history" for "could not read history".
-func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
+func VcsHistory(ctx context.Context, limit int, paths []string, firstParent bool) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil
 	}
-	commits, err := v.History(ctx, vcsDir(ctx), limit)
+	q := types.HistoryQuery{Limit: limit, Paths: paths, FirstParent: firstParent}
+	commits, err := v.History(ctx, vcsDir(ctx), q)
 	if err != nil {
 		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s history", v.Name())
 	}

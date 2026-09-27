@@ -2197,8 +2197,8 @@ func (_c *MockVCSDriver_GeneratedPaths_Call) RunAndReturn(run func(ctx context.C
 }
 
 // History provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) History(ctx context.Context, dir string, limit int) ([]types.Commit, error) {
-	ret := _mock.Called(ctx, dir, limit)
+func (_mock *MockVCSDriver) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	ret := _mock.Called(ctx, dir, q)
 
 	if len(ret) == 0 {
 		panic("no return value specified for History")
@@ -2206,18 +2206,18 @@ func (_mock *MockVCSDriver) History(ctx context.Context, dir string, limit int) 
 
 	var r0 []types.Commit
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int) ([]types.Commit, error)); ok {
-		return returnFunc(ctx, dir, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.HistoryQuery) ([]types.Commit, error)); ok {
+		return returnFunc(ctx, dir, q)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int) []types.Commit); ok {
-		r0 = returnFunc(ctx, dir, limit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.HistoryQuery) []types.Commit); ok {
+		r0 = returnFunc(ctx, dir, q)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]types.Commit)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int) error); ok {
-		r1 = returnFunc(ctx, dir, limit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.HistoryQuery) error); ok {
+		r1 = returnFunc(ctx, dir, q)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2232,12 +2232,12 @@ type MockVCSDriver_History_Call struct {
 // History is a helper method to define mock.On call
 //   - ctx context.Context
 //   - dir string
-//   - limit int
-func (_e *MockVCSDriver_Expecter) History(ctx interface{}, dir interface{}, limit interface{}) *MockVCSDriver_History_Call {
-	return &MockVCSDriver_History_Call{Call: _e.mock.On("History", ctx, dir, limit)}
+//   - q types.HistoryQuery
+func (_e *MockVCSDriver_Expecter) History(ctx interface{}, dir interface{}, q interface{}) *MockVCSDriver_History_Call {
+	return &MockVCSDriver_History_Call{Call: _e.mock.On("History", ctx, dir, q)}
 }
 
-func (_c *MockVCSDriver_History_Call) Run(run func(ctx context.Context, dir string, limit int)) *MockVCSDriver_History_Call {
+func (_c *MockVCSDriver_History_Call) Run(run func(ctx context.Context, dir string, q types.HistoryQuery)) *MockVCSDriver_History_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -2247,9 +2247,9 @@ func (_c *MockVCSDriver_History_Call) Run(run func(ctx context.Context, dir stri
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 int
+		var arg2 types.HistoryQuery
 		if args[2] != nil {
-			arg2 = args[2].(int)
+			arg2 = args[2].(types.HistoryQuery)
 		}
 		run(
 			arg0,
@@ -2265,7 +2265,7 @@ func (_c *MockVCSDriver_History_Call) Return(commits []types.Commit, err error) 
 	return _c
 }
 
-func (_c *MockVCSDriver_History_Call) RunAndReturn(run func(ctx context.Context, dir string, limit int) ([]types.Commit, error)) *MockVCSDriver_History_Call {
+func (_c *MockVCSDriver_History_Call) RunAndReturn(run func(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error)) *MockVCSDriver_History_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -110,17 +110,81 @@ func (v jjVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, e
 	return c, nil
 }
 
-func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Commit, error) {
-	if limit <= 0 {
-		limit = 1
+// jjHistoryTemplate follows jjCommitTemplate with each changed path marked by a leading
+// "F", which no commit_id (lowercase hex) starts with, so the next record is unambiguous.
+// A rename lists its old path too, as git's --no-renames does.
+const jjHistoryTemplate = jjCommitTemplate + ` ++ "\0" ++ self.diff().files().map(|f| ` +
+	`if(f.status() == "renamed", "F" ++ f.source().path() ++ "\0") ++ "F" ++ f.path() ++ "\0").join("")`
+
+// jjDiffEntryTemplate is jjHistoryTemplate's per-path half for `jj diff -T`.
+const jjDiffEntryTemplate = `if(status == "renamed", "F" ++ source.path() ++ "\0") ++ "F" ++ path ++ "\0"`
+
+// History implements types.VCSDriver in one `jj log` from the workspace root, where paths
+// print root-relative. root() is jj's empty virtual base, not a recorded revision. A
+// merge's self.diff() is against its merged parents, so each merge diffs from its first
+// parent instead, and for the same reason the log takes no path filter: historyTouching
+// narrows.
+func (v jjVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
 	}
-	// "::@" is the ancestors of the working-copy commit; jj log is newest-first.
-	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", "::@", "--no-graph",
-		"-n", fmt.Sprintf("%d", limit), "-T", `commit_id ++ "\n"`)
+	revs := "::@"
+	if q.FirstParent {
+		revs = "first_ancestors(@)"
+	}
+	args := []string{"log", "-r", revs + " ~ root()", "--no-graph", "-T", jjHistoryTemplate}
+	if q.Limit > 0 && len(q.Paths) == 0 {
+		args = append(args, "-n", strconv.Itoa(q.Limit))
+	}
+	out, err := vcsOutput(ctx, root, "jj", args...)
 	if err != nil {
 		return nil, fmt.Errorf("jj log: %w", err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return historyTouching(parseJJHistory(out), q, func(c types.Commit) ([]string, error) {
+		if len(c.Parents) < 2 {
+			return keepUnder(c.Files, q.Paths), nil
+		}
+		diff := append([]string{"diff", "--from", c.Parents[0], "--to", c.ID, "-T", jjDiffEntryTemplate},
+			jjRootPaths(q.Paths)...)
+		files, err := vcsOutput(ctx, root, "jj", diff...)
+		if err != nil {
+			return nil, fmt.Errorf("jj diff --from %s --to %s: %w", c.Parents[0], c.ID, err)
+		}
+		return jjMarkedPaths(strings.Split(files, commitDelim)), nil
+	})
+}
+
+// parseJJHistory reads jjHistoryTemplate records: the commit fields, then its marked paths.
+func parseJJHistory(out string) []types.Commit {
+	fields := strings.Split(out, commitDelim)
+	var commits []types.Commit
+	for i := 0; i+numCommitFields <= len(fields); {
+		c := parseCommit(strings.Join(fields[i:i+numCommitFields], commitDelim))
+		if c.ID == "" {
+			break
+		}
+		i += numCommitFields
+		j := i
+		for j < len(fields) && strings.HasPrefix(fields[j], "F") {
+			j++
+		}
+		c.Files = jjMarkedPaths(fields[i:j])
+		i = j
+		commits = append(commits, c)
+	}
+	return commits
+}
+
+// jjMarkedPaths strips the "F" marker from each marked field and drops the rest.
+func jjMarkedPaths(fields []string) []string {
+	var out []string
+	for _, f := range fields {
+		if p, ok := strings.CutPrefix(f, "F"); ok {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // Describe reports "": jj has no native tag-describe (tags live in the colocated

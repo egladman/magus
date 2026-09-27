@@ -50,13 +50,15 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 // the same Store update that read those terms. A rejected result is an ordinary Status,
 // not an error: callers need its violations to decide what to repair. result=nil uses
 // the result and attempt filed by Exit; a supplied result is resolved in this checkout.
+// A bound store verifies only a row below its own lease (see [Actor.Verifies]).
 func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer) (types.JobStatus, error) {
-	if actor := store.Actor(); actor.Bound() {
-		return types.JobStatus{}, fmt.Errorf("job: this checkout holds the lease on %s and a holder does not verify its own work", actor.Lease)
-	}
 	jobs, err := store.List()
 	if err != nil {
 		return types.JobStatus{}, err
+	}
+	actor := store.Actor()
+	if !actor.Verifies(jobs, id) {
+		return types.JobStatus{}, fmt.Errorf("job: this checkout holds the lease on %s and a holder does not verify its own work", actor.Lease)
 	}
 	i := slices.IndexFunc(jobs, func(row types.Job) bool { return row.ID == id })
 	if i < 0 {
@@ -92,8 +94,18 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		}
 	}
 
+	// authorizeRow lets a bound writer touch no existing row but its own, so the verdict on
+	// a descendant, admitted by Verifies above, is written unbound.
+	// TODO: grade verdicts in authorizeRow so the store stays the backstop for this write.
+	writer := store
+	if actor.Bound() {
+		writer = &Store{
+			path: store.path, err: store.err, root: store.root, actor: &Actor{}, cacheDir: store.cacheDir,
+			clock: store.clock, staleAfter: store.staleAfter, notices: store.notices,
+		}
+	}
 	var status types.JobStatus
-	_, err = store.Update(ctx, id, func(row *types.Job) {
+	_, err = writer.Update(ctx, id, func(row *types.Job) {
 		status = VerifyGates(inheritGates(*row, jobs), *result, attempt, gateAttempts, jobs, seen)
 		if status.Verified {
 			row.State = types.StatePass
@@ -103,6 +115,17 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.JobStatus{}, err
 	}
 	return status, nil
+}
+
+// Verifies reports whether this actor may verify row id: an unbound actor verifies any
+// row, a bound one only a row below its own lease in rows' parent chain. Its own row, a
+// sibling's and an ancestor's stay refused, since each would be work grading itself or
+// its peers.
+func (a Actor) Verifies(rows []types.Job, id string) bool {
+	if !a.Bound() {
+		return true
+	}
+	return slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == a.Lease })
 }
 
 // resolveResultAttempts takes a portable snapshot for every evidence reference the

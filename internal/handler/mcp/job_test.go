@@ -252,6 +252,67 @@ func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 	assert.Contains(t, err.Error(), "result must be an object")
 }
 
+func TestJobToolWaitAdmitsAHolderOnlyBelowItsLease(t *testing.T) {
+	t.Parallel()
+
+	loc := job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{}}
+	orchestrator := job.NewStore(loc)
+	check := types.LeaseCheck{Target: "go::go-test", Project: "."}
+	for _, row := range []types.Job{
+		{ID: "root", WritePaths: []string{"internal"}},
+		{ID: "root/worker", Parent: "root", WritePaths: []string{"internal/job"}},
+		{ID: "root/sibling", Parent: "root", WritePaths: []string{"internal/guard"}},
+		{ID: "root/worker/child", Parent: "root/worker", WritePaths: []string{"internal/job"}},
+		{ID: "root/worker/child/leaf", Parent: "root/worker/child", WritePaths: []string{"internal/job"}},
+		{ID: "other", WritePaths: []string{"cmd"}},
+	} {
+		row.Check, row.Validation, row.State = &check, check.String(), types.StateRunning
+		_, err := orchestrator.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+
+	loc.Actor = &job.Actor{Lease: "root/worker"}
+	tool := &jobTool{
+		store: job.NewStore(loc),
+		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}, nil
+		},
+		observe: diffShows("internal/job/verify.go"),
+	}
+	wait := func(id string) (spells.InvokeResponse, error) {
+		return tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "wait", "id": id, "result": map[string]any{
+			"schema_version":   types.JobResultSchemaVersion,
+			"job":              id,
+			"changed_paths":    []any{"internal/job/verify.go"},
+			"validation":       map[string]any{"command": "magus run go::go-test .", "output_ref": "out-" + id},
+			"unresolved_risks": []any{},
+		}}})
+	}
+
+	for _, id := range []string{"root/worker", "root/sibling", "root", "other"} {
+		_, err := wait(id)
+		require.EqualError(t, err, "job: this checkout holds the lease on root/worker and a holder does not verify its own work", id)
+	}
+	// The leaf first: a child is not done while a descendant is live.
+	for _, id := range []string{"root/worker/child/leaf", "root/worker/child"} {
+		resp, err := wait(id)
+		require.NoError(t, err, id)
+		status := resp.Data.(types.JobStatus)
+		assert.True(t, status.Verified, status.Violations)
+	}
+
+	rows, err := orchestrator.List()
+	require.NoError(t, err)
+	got := map[string]types.JobState{}
+	for _, row := range rows {
+		got[row.ID] = row.State
+	}
+	assert.Equal(t, map[string]types.JobState{
+		"root": types.StateRunning, "root/worker": types.StateRunning, "root/sibling": types.StateRunning,
+		"root/worker/child": types.StatePass, "root/worker/child/leaf": types.StatePass, "other": types.StateRunning,
+	}, got)
+}
+
 // TestJobToolCompletionGatesRoundTripThroughMCP pins that fork accepts
 // completion_gates the same way CLI --stdin and Buzz put do, and that wait
 // verifies every declared gate against gate_evidence.

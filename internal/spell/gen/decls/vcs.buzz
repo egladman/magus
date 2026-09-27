@@ -32,6 +32,7 @@ export object Commit {
     subject: str = "",
     body: str = "",
     parents: [str] = [],
+    files: [str] = [],
 }
 
 export object Status {
@@ -62,7 +63,7 @@ export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult
 export extern fun commit(rev: str = "") > Commit !> any;
 export extern fun describe() > str !> any;
 export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
-export extern fun history(limit: int = 10) > [Commit] !> any;
+export extern fun history(limit: int = 10, paths: [str] = [<str>], first_parent: bool = false) > [Commit] !> any;
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;
 export extern fun name() > str;
 export extern fun ref() > str !> any;

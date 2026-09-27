@@ -3191,6 +3191,11 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.readsFiles("tools/lint.buzz", "tools/lint/*.buzz",
+                   // provider-io-is-buzz's own reads(): the Buzz files the boundary's
+                   // table names or this project owns near them, not "**/*.buzz",
+                   // which would reach into every nested project's own magusfile.
+                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "tools/**/*.buzz",
+                   ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",

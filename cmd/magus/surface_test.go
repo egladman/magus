@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"io"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -226,11 +225,12 @@ var helpAliases = []string{"-h", "--help", "help"}
 // switch and are asserted separately or left to the man-page drift tests.
 func dispatcherCases(t *testing.T, file, funcName string) []string {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	// go test's cwd is this package dir, regardless of -trimpath.
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	path := filepath.Join(filepath.Dir(thisFile), file)
+	path := filepath.Join(dir, file)
 
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)

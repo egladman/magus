@@ -10,12 +10,15 @@
 
 # A target that outruns its ceiling FAILS. The message carries everything needed to
 # reconstruct the decision without reading code: which target, the ceiling it was held
-# to, how long it actually ran, and the log its output was captured to.
+# to, how long it actually ran, and the log its output was captured to. The cause line
+# is an excerpt that a long TMPDIR can cut inside the log path, so the log is reached
+# through the output ref printed under it.
 ! exec magus run slow:rw -s
 stderr 'MGS3011'
 stderr 'target "slow" exceeded its declared timeout of 2s'
 stderr 'its process tree was killed'
-stderr 'captured output: .*\.magus/logs/'
+stderr 'captured output: '
+stderr 'inspect: magus query output out[0-9a-f]+'
 
 # ...and the elapsed figure is what proves the process tree was actually reaped rather
 # than merely abandoned. The fixture sleeps 30s; if the SIGTERM to the process group

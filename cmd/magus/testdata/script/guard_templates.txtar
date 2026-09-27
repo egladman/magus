@@ -97,7 +97,9 @@ exec sh $WORK/parity.sh command
 # Both MCP cases run under a BOUND lease, in the one fixture workspace this archive
 # carries, because the rule that reads an MCP call is lease-scoped. The row is declared
 # first: an id the ledger does not carry is refused by a different rule, and the case would
-# then pass for a reason that has nothing to do with this transport.
+# then pass for a reason that has nothing to do with this transport. The guard binds whoever
+# it lets `magus job exec` through, keyed on the session the event names, so the exec goes
+# through the template as the session both MCP events carry.
 #
 # Declaring a row reaches the user-global state dir, which the archive's read-only HOME is
 # not: both are pointed at the work directory for the length of this block.
@@ -106,7 +108,8 @@ env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
-exec magus job exec harness/mcp-worker
+stdin $WORK/exec-mcp-worker.json
+exec sh $WORK/parity.sh command
 
 # Both MCP cases forward the WHOLE event, and the two forms reach that by different
 # routes: the sh copy is told, through HOST_EVENT_RAW, and the Buzz port works it out,
@@ -139,8 +142,9 @@ env HOME=/no-home
 env XDG_STATE_HOME=
 # The binding is dropped here, not left for the cases below: every path case in this
 # fixture workspace would otherwise be graded against write paths nobody declared for it, and
-# the lease rules answer before the rule each of those cases is about.
-rm $WORK/home/state/magus/checkouts
+# the lease rules answer before the rule each of those cases is about. The session's binding
+# is filed beside the job store, so the state dir goes with it.
+rm $WORK/home/state
 
 # --- the edges of the whole-event derivation --------------------------------
 #
@@ -872,10 +876,13 @@ stdout '"additionalContext":"pushing'
 
 # case: command/deny
 # A session bound to a job lease is a worker, and workers do not publish: refused outright.
+# The guard binds each session that runs `magus job exec` through it, so every worker below
+# takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus job fork harness/push-worker --criteria 'the push transport cases, held so the push gate has a worker to refuse'
-exec magus job exec harness/push-worker
+stdin $WORK/exec-push-worker.json
+exec sh $WORK/parity.sh command
 stdin $WORK/push-approval.json
 exec sh $WORK/parity.sh command
 stdout '"behavior":"deny"'
@@ -887,6 +894,8 @@ env HOST_NAME=testscript
 # case: command/deny
 # A leased worker runs as its own session, so this refusal is its first and explains itself
 # in full, whatever the orchestrator's session was told above.
+stdin $WORK/exec-push-worker-s-worker.json
+exec sh $WORK/parity.sh command
 stdin $WORK/push-command-worker.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
@@ -895,11 +904,13 @@ stdout 'workers do not publish'
 # hosts: cursor
 
 # case: command/deny
+stdin $WORK/cursor-exec-push-worker.json
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdin $WORK/cursor-push.json
 exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'workers do not publish'
-rm $WORK/home/state/magus/checkouts
+rm $WORK/home/state
 env HOME=/no-home
 env XDG_STATE_HOME=
 
@@ -1032,6 +1043,12 @@ prefix_rule(
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
 -- push-command-worker.json --
 {"hook_event_name": "PreToolUse", "session_id": "s-worker", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- exec-push-worker.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/push-worker"}}
+-- exec-push-worker-s-worker.json --
+{"hook_event_name": "PreToolUse", "session_id": "s-worker", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/push-worker"}}
+-- cursor-exec-push-worker.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c1", "command": "magus job exec harness/push-worker", "cwd": ".", "sandbox": false}
 -- push-line.txt --
 git push origin HEAD
 -- push-command-turn.json --
@@ -1062,6 +1079,8 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- exec-mcp-worker.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --
 {"session_id": "s1", "tool_name": "mcp__magus__magus_job", "tool_input": {"op": "clear"}}
 -- mcp-read.json --

@@ -1115,11 +1115,23 @@ func causeSignature(cause string) (sig string, viaDeps bool) {
 	return strings.Join(msgs, "\n"), viaDeps
 }
 
+// failureCauseExcerptLogMarker is the label MGS3011's message puts before the captured
+// output path (see CeilingExceededError); failureCauseExcerpt keeps that path whole.
+const failureCauseExcerptLogMarker = "captured output: "
+
 func failureCauseExcerpt(cause string) string {
 	const maxRunes = 240
 	cause = strings.Join(strings.Fields(cause), " ")
 	if len([]rune(cause)) <= maxRunes {
 		return cause
+	}
+	// A long TMPDIR can push the log path past the budget on its own; trimming the
+	// prose in front of it, rather than the path itself, keeps the path openable.
+	if i := strings.LastIndex(cause, failureCauseExcerptLogMarker); i >= 0 {
+		prose := []rune(cause[:i])
+		rest := cause[i:] // marker plus the untouched path
+		budget := min(max(maxRunes-len([]rune(rest))-3, 0), len(prose))
+		return string(prose[:budget]) + "..." + rest
 	}
 	return string([]rune(cause)[:maxRunes-3]) + "..."
 }

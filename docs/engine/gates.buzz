@@ -11,10 +11,13 @@
 // leaf-only and cycle-free.
 namespace gates;
 
-import "os";
 import "fs";
 import "io";
+// Aliased: engine/path.buzz already binds the name "path" to its own namespace.
+import "path" as filepath;
 import "std";
+import "time";
+import "vcs";
 import "engine/types" as _;
 import "lib/text" as _;
 import "lib/csp" as _;
@@ -25,21 +28,44 @@ import "lib/conventions" as _;
 // The checks whose other half lives outside the page; crosscheckFindings reads both.
 import "lib/crosscheck" as _;
 
-// loadMeta populates the commit-metadata fields once, shelling out to git. The
+// loadMeta populates the commit-metadata fields once, from the vcs module. The
 // GitHub source-navigation links (edit/blame/history/blob) use the git symbolic ref
 // HEAD, which GitHub resolves to the repo's default branch: honest (it names the
 // canonical line, not a fabricated branch), rename-proof (survives a default-branch
 // rename), and identical on every branch so a feature-branch render never drifts -
 // the reason the old hardcoded "main" existed, now solved without the lie.
+//
+// A tree with no VCS at all (a release tarball) renders with no provenance; a VCS that
+// is present and fails throws.
 export fun loadMeta(site: Site) > void !> any {
     if (site.metaLoaded) { return; }
-    site.metaPrefix = capture("git -C " + site.root + " rev-parse --show-prefix");
     site.metaBranch = "HEAD";
-    site.metaFull = capture("git -C " + site.root + " rev-parse HEAD");
-    site.metaShort = capture("git -C " + site.root + " rev-parse --short HEAD");
-    site.metaStamp = capture("TZ=UTC git -C " + site.root + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
-    site.metaCommits = buildCommits(site);
+    if (vcs\name() != "") {
+        site.metaPrefix = sitePrefix(site);
+        final head = vcs\commit();
+        site.metaFull = head.id;
+        site.metaShort = head.short;
+        site.metaStamp = utcStamp(head.date);
+        site.metaCommits = buildCommits(site);
+    }
     site.metaLoaded = true;
+}
+
+// sitePrefix is site.root relative to the repository root, "" at the root and slash-
+// terminated below it: the prefix every repo-relative path the history reports carries.
+fun sitePrefix(site: Site) > str !> any {
+    final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.root));
+    if (fromRoot == ".") { return ""; }
+    if (fromRoot == ".." or fromRoot.startsWith("../")) {
+        throw "site root " + site.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)";
+    }
+    return fromRoot + "/";
+}
+
+// utcStamp renders a commit's RFC 3339 date in UTC. The date carries the committer's own
+// offset, and a stamp that followed it would change bytes with whoever committed.
+fun utcStamp(date: str) > str !> any {
+    return time\format("2006-01-02T15:04:05Z", time\parse("2006-01-02T15:04:05Z07:00", date));
 }
 
 // axisReport lists pages reachable by fewer than three KINDS of route - tree, sequence, topic.
@@ -141,61 +167,32 @@ export fun orphanCheck(site: Site) > void !> any {
 }
 
 
-export fun capture(cmd: str) > str !> any {
-    final tmp = os\tmpFilename("sitegen");
-    final code = os\execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
-    if (code != 0) {
-        fs\removeAll(tmp);
-        return "";
-    }
-    final f = io\File.open(tmp, io\FileMode.read);
-    final result = f.readAll();
-    f.close();
-    fs\removeAll(tmp);
-    return result.trim();
-}
-
-// Map of repo-relative source path -> "full|short|date" of the newest commit that touched
-// it, from ONE git log (newest-first, first sighting wins) instead of a git call per page.
-// ">>>" can't begin a repo path, so it marks each commit header; file names follow until
-// the next. Run with `git -C ..` so pathspecs and written paths are magus/-relative,
-// matching site.metaPrefix.
-// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The log is one
-// git spawn, so a higher cap is cheap; a low one keeps the <details> panel from bloating on
-// hot-edit files.
+// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The history is
+// one VCS call, so a higher cap is cheap; a low one keeps the <details> panel from bloating
+// on hot-edit files.
 final HISTORY_MAX = 8;
 
-// buildCommits parses one git-log pass:
-//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting; drives the
-//     always-visible "Last updated" footer line.
+// buildCommits reads the first-parent history of the site's sources in one vcs\history
+// call (limit 0: every commit) and indexes it by repo-relative path:
+//   - metaCommits: path -> "full|short|stamp" of the newest commit that touched it; drives
+//     the always-visible "Last updated" footer line.
 //   - metaHistory: path -> up to HISTORY_MAX "full|short|stamp|subject" entries, newest-
 //     first; drives the collapsed history panel.
-// The log prints "SUBJ:<subject>" after each ">>>" header so both fields ride together
-// without a second git spawn.
 export fun buildCommits(site: Site) > {str: str} !> any {
     var m: mut {str: str} = mut {};
     site.metaHistory = mut {};
-    final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
-        + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
-        + "--format='>>>%H|%h|%cd%nSUBJ:%s' -- README.md docs blog CHANGELOG.md");
-    var curHeader = "";
-    var curSubject = "";
-    foreach (line in log.split("\n")) {
-        if (line.startsWith(">>>")) {
-            curHeader = line.sub(3);
-            curSubject = "";
-        } else if (line.startsWith("SUBJ:")) {
-            curSubject = line.sub(5);
-        } else if (line != "" and curHeader != "") {
-            // Newest sighting wins for the "last updated" line.
-            if (m[line] == null) { m[line] = curHeader; }
-            // Append to per-file history (newest-first) until HISTORY_MAX.
-            var hist = site.metaHistory[line];
+    var sources: mut [str] = mut [<str>];
+    foreach (p in ["README.md", "docs", "blog", "CHANGELOG.md"]) { sources.append(site.metaPrefix + p); }
+    foreach (c in vcs\history(0, paths: sources, first_parent: true)) {
+        final header = c.id + "|" + c.short + "|" + utcStamp(c.date);
+        foreach (file in c.files) {
+            if (m[file] == null) { m[file] = header; }
+            var hist = site.metaHistory[file];
             if (hist == null) { hist = mut [<str>]; }
             if (hist.len() < HISTORY_MAX) {
-                hist.append(curHeader + "|" + curSubject);
+                hist.append(header + "|" + c.subject);
             }
-            site.metaHistory[line] = hist;
+            site.metaHistory[file] = hist;
         }
     }
     return m;

@@ -105,8 +105,9 @@ type VCSDriver interface {
 	// FindCommit looks up a revision (a VCS-native rev expression; empty means
 	// the current revision) and returns its normalized Commit.
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)
-	// History returns up to limit recent commits, newest first.
-	History(ctx context.Context, dir string, limit int) ([]Commit, error)
+	// History returns the commits reachable from the current revision that q selects,
+	// newest first, each carrying its Files.
+	History(ctx context.Context, dir string, q HistoryQuery) ([]Commit, error)
 	// Describe returns a human-readable version string derived from the nearest
 	// tag (git's `describe --tags --always --dirty`: tag, else short id, with a
 	// -dirty suffix for a modified tree). Tags are a git-shaped concept; a backend
@@ -230,10 +231,31 @@ type Commit struct {
 	Body    string
 	// Parents are parent IDs; more than one for a merge.
 	Parents []string
+	// Files are the repository-relative slash paths the revision changed against its
+	// first parent (every path, for a root), a rename being its old path and its new one.
+	// Only History fills them, narrowed to its query's paths; FindCommit and RangeCommits
+	// leave them nil, so an empty list from those means "not asked", never "changed nothing".
+	Files []string
+}
+
+// HistoryQuery selects the commits VCSDriver.History returns. The zero value is every
+// ancestor of the current revision.
+type HistoryQuery struct {
+	// Limit caps how many commits come back; zero or less means no cap.
+	Limit int
+	// Paths, when non-empty, keeps only the commits whose Files include one of these
+	// literal repository-relative paths (a directory keeps what is under it) and narrows
+	// each commit's Files to them. A merge is judged by its diff against the first parent,
+	// the same on every backend, where git's own path-limited log also drops a merge that
+	// matches its other parent.
+	Paths []string
+	// FirstParent follows only the first parent of a merge: the line a branch landed on,
+	// without the commits it brought in.
+	FirstParent bool
 }
 
 // BuzzObject is the Buzz boundary map vcs.commit / vcs.history entries return:
-// {id, short, author {name, email}, date, subject, body, parents}. date is
+// {id, short, author {name, email}, date, subject, body, parents, files}. date is
 // RFC3339, empty when the VCS reported no timestamp.
 func (c Commit) BuzzObject() BuzzObject {
 	date := ""
@@ -248,6 +270,7 @@ func (c Commit) BuzzObject() BuzzObject {
 		"subject": c.Subject,
 		"body":    c.Body,
 		"parents": c.Parents,
+		"files":   c.Files,
 	}
 }
 
@@ -278,6 +301,7 @@ type CommitRecord struct {
 	Subject string
 	Body    string
 	Parents []string
+	Files   []string
 }
 
 // VCSMeta holds per-revision metadata for embedding in build artifacts.

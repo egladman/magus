@@ -9,10 +9,15 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -335,7 +340,7 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 			return leaseStanding{readable: true, declared: true, state: u.State, row: u, rows: leases}
 		}
 	}
-	return leaseStanding{readable: true}
+	return leaseStanding{readable: true, rows: leases}
 }
 
 // denyUndeclaredLease refuses to grade a call for an id this workspace's ledger does not
@@ -484,19 +489,39 @@ func denyOverdueLease(me types.Job, now int64) string {
 // Unbound callers are untouched too, for the reason every lease rule here gives: an
 // orchestrator and a person at a terminal both name no lease, and they are the ones who
 // write rows.
+//
+// A child of the caller's own lease, and `job wait` on one of its descendants, pass: the
+// store grades a child against its parent (see childForkRebind for when it cannot).
 func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
 	}
-	cmds, ok := ParseCommands(command)
-	if !ok {
+	f, err := parseFile(command, DialectBash)
+	if err != nil {
 		return ""
 	}
-	for _, c := range cmds {
-		what := leaseRebind(c, func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) })
-		if what == "" {
-			continue
+	h := holder{
+		id:       actingLease,
+		standing: sync.OnceValue(func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) }),
+		storeLease: func() string {
+			lease, _ := job.ActingLease(hookLocation(ctx, deps).cacheDir, "")
+			return lease
+		},
+	}
+	var what string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		st, ok := n.(*syntax.Stmt)
+		if !ok || what != "" {
+			return what == ""
 		}
+		for _, c := range stmtCommands(st, DialectBash) {
+			if what = leaseRebind(c, stdinRecord(st), h); what != "" {
+				return false
+			}
+		}
+		return true
+	})
+	if what != "" {
 		return fmt.Sprintf(
 			"magus workspace: leave your own job alone. "+leaseActorClause("change a job")+"\n"+
 				"`%s` would %s, and this call acts under lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
@@ -537,16 +562,25 @@ func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, comm
 	return ""
 }
 
+// holder is what the rebind rule reads about the bound caller, each part fetched only on
+// the paths that need it.
+type holder struct {
+	id       string
+	standing func() leaseStanding
+	// storeLease is the lease the job store writes as from this checkout, "" for none.
+	storeLease func() string
+}
+
 // leaseRebind names what a parsed command would do to the ledger when it is one a bound
-// caller may not do, or "" for everything else. me reads where the acting lease stands,
-// and is called only on the paths that need it.
+// caller may not do, or "" for everything else. stdin is the record the command's
+// statement feeds it, "" when the line carries none the guard can read.
 //
 // The MCP form is graded here alongside the CLI ones because it is the SAME write through
 // a different transport, and a rule that held on one channel would move the traffic rather
 // than stop it.
-func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
+func leaseRebind(c hint.Invocation, stdin string, h holder) string {
 	if c.Name == hint.ToolJob.String() {
-		return jobToolRebind(mcpParams(c.Args), me)
+		return jobToolRebind(mcpParams(c.Args), h)
 	}
 	if path.Base(c.Name) != "magus" {
 		return ""
@@ -574,36 +608,216 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 	// held job is in flight: once it has exited or ended, or names no row at all, the next
 	// exec is how the caller moves on (see bindOnExec).
 	case hint.JobExec.MatchedBy(words) && len(words) > 2:
-		if held := me(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
+		if held := h.standing(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
 			return ""
 		}
 		return "take the lease on another job"
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
+		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
+			return ""
+		}
 		return "verify a job"
 	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
-		return "declare a job"
+		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job")
 	}
 	return ""
+}
+
+// descendsFrom reports whether id sits below the held row in the parent chain.
+func descendsFrom(held leaseStanding, id string) bool {
+	return held.declared && held.state.Live() &&
+		slices.ContainsFunc(types.JobDescendants(held.rows, held.row.ID), func(r types.Job) bool { return r.ID == id })
+}
+
+// childFork is the row a fork declares, as far as childForkRebind reads it.
+type childFork struct {
+	id, parent string
+	readOnly   bool
+	writePaths bool
+	// bounded is any declaration beyond the lineage, the prose and read_only: paths, a
+	// check, gates, a state. Each is something the store grades against the parent.
+	bounded bool
+}
+
+// childForkRebind names what a bound caller's fork would do when the guard refuses it, or
+// "" for a new child of its own lease that is left to the store. verb opens the refusal.
+//
+// The store grades the child's boundary against the parent's (internal/job/authorize.go
+// authorizeChild), but only when it writes AS that lease, which it learns from this
+// checkout's record. A worker the hook identified in a checkout bound to nobody writes to
+// an unbound store that grades nothing, so there only a read-only child declaring no
+// boundary passes: it can widen nothing.
+//
+// A child that is neither read-only nor handed write paths is refused on both paths: an
+// empty write set scopes nothing (gradeAgainstOwnLease), and the store's subset test
+// passes it.
+func childForkRebind(f childFork, h holder, verb string) string {
+	held := h.standing()
+	switch {
+	case !held.declared || !held.state.Live():
+		return verb
+	case f.id == "":
+		return fmt.Sprintf("%s the guard cannot read: give the child an id and --parent %s, or its record in a quoted heredoc", verb, h.id)
+	case f.id == h.id:
+		return "rewrite the job it holds"
+	case f.parent != h.id:
+		return fmt.Sprintf("%s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q", verb, h.id, f.parent)
+	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
+		return fmt.Sprintf("%s over %s, which already exists: a worker writes no row but its own and the children it hands out", verb, f.id)
+	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
+		return verb + " that can write anywhere: a child that is not read-only and names no write paths is scoped by nothing, so fork it --read-only or with --write-paths inside your own"
+	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
+		return fmt.Sprintf("%s nothing would grade: this checkout's job store writes as %q, not as %s, so it checks no child against your row; only a --read-only child declaring no paths, check or gates passes here",
+			verb, h.storeLease(), h.id)
+	}
+	return ""
+}
+
+// forkFlagsUnbounded are the `job fork` flags, and the magus_job params, that declare no
+// boundary: the lineage, the prose, the timing and read_only.
+var forkFlagsUnbounded = map[string]bool{
+	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true,
+	"read-only": true, "read_only": true, "depends-on": true, "depends_on": true,
+	"stdin": true, "op": true, "id": true,
+}
+
+// cliFork reads the child a `magus job fork` argv declares. Under --stdin the flags are
+// ignored and the row is the record, which the guard reads only from a heredoc or a
+// here-string on the same statement; a record it cannot read declares no id.
+func cliFork(args []string, stdin string) childFork {
+	operands, flags := verbArgv(args, hint.JobFork)
+	if flags["stdin"] != "" && flags["stdin"] != "false" {
+		row, err := job.DecodeDeclaration(strings.NewReader(stdin))
+		if err != nil {
+			return childFork{}
+		}
+		return childFork{
+			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.WritePaths) > 0,
+			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.CompletionGates) > 0 ||
+				row.Check != nil || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
+		}
+	}
+	f := childFork{parent: flags["parent"], writePaths: flags["write-paths"] != ""}
+	if len(operands) == 1 {
+		f.id = operands[0]
+	}
+	if v, ok := flags["read-only"]; ok {
+		f.readOnly = v != "false"
+	}
+	for name := range flags {
+		if _, own := verbFlag(hint.JobFork, name); own && !forkFlagsUnbounded[name] {
+			f.bounded = true
+		}
+	}
+	return f
+}
+
+// verbArgv splits a magus argv into the operands after its two-word verb and the flags it
+// carries, a bool flag reading "true". Arity comes from the registry the CLI parses with;
+// a flag it does not know takes no value, and the CLI refuses that argv anyway.
+func verbArgv(args []string, verb hint.Command) (operands []string, flags map[string]string) {
+	flags = map[string]string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if len(a) < 2 || a[0] != '-' {
+			operands = append(operands, a)
+			continue
+		}
+		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		takes, _ := MagusFlagTakesValue(name)
+		if own, ok := verbFlag(verb, name); ok {
+			takes = own.Kind != cli.FlagBool
+		}
+		switch {
+		case joined:
+		case takes && i+1 < len(args):
+			i++
+			value = args[i]
+		default:
+			value = "true"
+		}
+		flags[name] = value
+	}
+	return operands[min(2, len(operands)):], flags
+}
+
+// verbFlag looks name up among verb's own flags in the registry the CLI parses with.
+func verbFlag(verb hint.Command, name string) (cli.Flag, bool) {
+	for _, group := range cli.All {
+		if group.Name != verb.Head() {
+			continue
+		}
+		for _, sub := range group.Children {
+			if sub.Name != verb.Leaf() {
+				continue
+			}
+			if i := slices.IndexFunc(sub.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
+				return sub.Flags[i], true
+			}
+		}
+	}
+	return cli.Flag{}, false
+}
+
+// stdinRecord is the text a statement feeds its command from a heredoc or a here-string,
+// or "" when it feeds none or the text holds an expansion only the shell can resolve.
+func stdinRecord(st *syntax.Stmt) string {
+	for _, r := range st.Redirs {
+		w := r.Hdoc
+		if r.Op == syntax.WordHdoc {
+			w = r.Word
+		}
+		if w == nil {
+			continue
+		}
+		if !literalParts(w.Parts) {
+			return ""
+		}
+		return literalWord(w.Parts)
+	}
+	return ""
+}
+
+// literalParts reports whether a word holds only text the shell passes through unchanged.
+func literalParts(parts []syntax.WordPart) bool {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit, *syntax.SglQuoted:
+		case *syntax.DblQuoted:
+			if !literalParts(p.Parts) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // jobToolRebind judges one call to the job tool against the job the caller holds, naming
 // what the call would do when it is something a holder may not.
 //
-// Three carve-outs, and each is somebody else's job rather than a hole:
+// Four carve-outs, and each is somebody else's job rather than a hole:
 //
 //   - `op=exec` on the caller's OWN job records the base it landed on. That is the
 //     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
 //     and denying it here would leave a holder unable to write anywhere at all. On
 //     another job it is refused only while the held one is in flight, as the CLI form is.
-//   - `op=put` on the caller's own job that only SHRINKS its write paths gives ground
+//   - `op=fork` on the caller's own job that only SHRINKS its write paths gives ground
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a path cannot widen a role.
+//   - `op=fork` of a new row naming the caller's job as `parent` is a child, graded by
+//     the store against its parent (childForkRebind).
 //   - a read (`op=list`, and the default) is not a write.
 //
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
 // must already be one the job carries, and there must be fewer of them. A cleverer pattern
 // that happens to cover less is not something this rule will try to prove.
-func jobToolRebind(params map[string]string, me func() leaseStanding) string {
+func jobToolRebind(params map[string]string, h holder) string {
 	op, id := params["op"], params["id"]
 	if op == "clear" {
 		return "drop every job"
@@ -611,7 +825,7 @@ func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 	if op != "fork" && op != "exec" {
 		return ""
 	}
-	standing := me()
+	standing := h.standing()
 	if !standing.readable || standing.terminal() {
 		// The store could not answer, or the job has already finished and every rule
 		// keyed on it is inert. Naming somebody else's job here would be a reason the
@@ -629,6 +843,9 @@ func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 		}
 		return "enter a job not forked beneath the one it holds"
 	}
+	if op == "fork" && id != standing.row.ID {
+		return childForkRebind(mcpFork(params), h, "write another job")
+	}
 	if id == "" || id != standing.row.ID {
 		return "write another job"
 	}
@@ -637,6 +854,19 @@ func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 		return ""
 	}
 	return "rewrite the job it holds"
+}
+
+// mcpFork reads the child an `op=fork` call declares.
+func mcpFork(params map[string]string) childFork {
+	f := childFork{
+		id: strings.TrimSpace(params["id"]), parent: strings.TrimSpace(params["parent"]),
+		readOnly:   params["read_only"] == "true",
+		writePaths: params[writePathsParam]+params[writePathsLegacyParam] != "",
+	}
+	for key := range params {
+		f.bounded = f.bounded || !forkFlagsUnbounded[key]
+	}
+	return f
 }
 
 // shrinksWritePaths reports whether a put changes nothing but the row's write paths, and

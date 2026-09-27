@@ -185,6 +185,43 @@ func TestWorktreeRemoveDeniesWhatItCannotRead(t *testing.T) {
 	assertRemovalDenied(t, r.judgeFrom("", "git worktree remove "+wt), "which checkout this session runs in is unknown")
 }
 
+// A for loop over literal words is judged one removal per word, as if written out; a list
+// only the shell can expand stays refused.
+func TestWorktreeRemoveFollowsALiteralLoop(t *testing.T) {
+	r := newWorktreeRepo(t)
+	r.add("one")
+	r.add("two")
+	loop := func(words string) string {
+		return "for b in " + words + "; do git worktree remove " + r.parent + "/$b; done"
+	}
+
+	for _, command := range []string{
+		loop("one two"),
+		`for b in one "two"; do git worktree remove ../"${b}" --force; done`,
+		"cd " + r.parent + " && for b in one two; do git -C main worktree remove ../$b; done",
+	} {
+		assert.Equal(t, ShellVerdict{}, r.judge(command), "%q", command)
+	}
+
+	dirty := r.add("three")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty, "a.txt"), []byte("changed\n"), 0o644))
+	assertRemovalDenied(t, r.judge(loop("one three two")), "Removing "+dirty+" is refused", "first a.txt")
+
+	for _, words := range []string{"$(ls)", "*", "one $W", "{one,two}", "~/one", `one\ two`, `"one two"`} {
+		assertRemovalDenied(t, r.judge(loop(words)), "a loop whose words are not all literal")
+	}
+	for _, command := range []string{
+		"for b in one two; do b=main; git worktree remove " + r.parent + "/$b; done",
+		"for b in one two; do git worktree remove " + r.parent + "/$b; break; done",
+		"f() { :; }; " + loop("one two"),
+		"for b; do git worktree remove " + r.parent + "/$b; done",
+		"while true; do git worktree remove " + r.parent + "/one; done",
+	} {
+		assertRemovalDenied(t, r.judge(command), "a loop whose words are not all literal")
+	}
+	assertRemovalDenied(t, r.judge("for b in one; do git worktree remove "+r.parent+"/${b%/}; done"), "not literal")
+}
+
 // Prune clears only records of directories already gone, and help prints usage: neither
 // removes anything, so neither is judged.
 func TestWorktreeRemoveLeavesPruneAndHelpAlone(t *testing.T) {

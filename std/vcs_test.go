@@ -3,6 +3,8 @@ package std
 import (
 	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,9 +69,54 @@ func TestVcsCommitRaisesWithNoVCS(t *testing.T) {
 func TestVcsHistoryRaisesWithNoVCS(t *testing.T) {
 	chdirOutsideAnyRepo(t)
 
-	got, err := VcsHistory(context.Background(), 5)
+	got, err := VcsHistory(context.Background(), 5, nil, false)
 	require.Error(t, err)
 	assert.Nil(t, got)
+}
+
+// TestVcsHistoryPassesPathsAndLimitThrough runs a real git repository: the query reaches
+// the driver whole, so paths narrow both the commits and their files, and limit 0 is
+// every commit rather than none.
+func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	for _, kv := range [][2]string{
+		{"GIT_AUTHOR_NAME", "t"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+		{"GIT_COMMITTER_NAME", "t"}, {"GIT_COMMITTER_EMAIL", "t@t"},
+		{"GIT_CONFIG_GLOBAL", os.DevNull}, {"GIT_CONFIG_SYSTEM", os.DevNull},
+	} {
+		t.Setenv(kv[0], kv[1])
+	}
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	write := func(name string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644))
+	}
+	git("init", "-q", "-b", "main")
+	write("docs/a.md")
+	write("other.txt")
+	git("add", ".")
+	git("commit", "-qm", "both")
+	write("other.txt.2")
+	git("add", ".")
+	git("commit", "-qm", "outside")
+
+	got, err := VcsHistory(WithCwd(context.Background(), dir), 0, []string{"docs"}, true)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "both", got[0].Subject)
+	assert.Equal(t, []string{"docs/a.md"}, got[0].Files)
+
+	all, err := VcsHistory(WithCwd(context.Background(), dir), 0, nil, false)
+	require.NoError(t, err)
+	assert.Len(t, all, 2)
 }
 
 // TestVcsIsDirtyRaisesWhenTheProbeFails is the most important one here. is_dirty is the

@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus"
@@ -237,6 +240,56 @@ func TestMergeDriverKeepsAnOutputWhatever(t *testing.T) {
 	base, ours, theirs := mergeSides(t, "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
 	require.NoError(t, mergeDriverRun(ctx, root, []string{base, ours, theirs, "7", "gen/catalog.md"}))
 	assert.Equal(t, "a\np\nz\n", readFile(t, ours))
+}
+
+// gitArgvRecorder puts a `git` ahead of the real one on PATH that appends each call's
+// full argument list, one per line, to a log file and then runs the real git unchanged,
+// so a caller still gets real output.
+func gitArgvRecorder(t *testing.T) (logPath string) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	require.NoError(t, err)
+	shimDir := t.TempDir()
+	logPath = filepath.Join(shimDir, "argv.log")
+	script := fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real)
+	require.NoError(t, os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return logPath
+}
+
+// gitSubcommand returns argv's subcommand, skipping the leading "-c key=value" pairs
+// gitExec always pins ahead of it.
+func gitSubcommand(argv string) string {
+	fields := strings.Fields(argv)
+	for len(fields) >= 2 && fields[0] == "-c" {
+		fields = fields[2:]
+	}
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+// TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock pins the reason the driver is
+// safe to run from inside git's own index manipulation: git holds index.lock (and
+// MERGE_RR.lock, replaying rerere) for the whole call, so any subcommand of its own that
+// takes a repository lock would deadlock against the caller holding it. `rev-parse` takes
+// none; nothing else may be introduced without opening that seam back up.
+func TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock(t *testing.T) {
+	ctx, root := mergeDriverWorkspace(t)
+	logPath := gitArgvRecorder(t)
+
+	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
+	require.NoError(t, mergeDriverRun(ctx, root, []string{"ancestor", result, "other", "7", "gen/catalog.md"}))
+
+	logged, err := os.ReadFile(logPath)
+	require.NoError(t, err, "the driver must have called git at all, or this test proves nothing")
+	lines := strings.Split(strings.TrimSpace(string(logged)), "\n")
+	require.NotEmpty(t, lines)
+	for _, line := range lines {
+		assert.Equal(t, "rev-parse", gitSubcommand(line),
+			"a git subcommand beyond rev-parse can take a repository lock the caller already holds: %s", line)
+	}
 }
 
 // TestMergeDriverRelPath covers both callers' path conventions: git passes a repo-relative
