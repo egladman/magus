@@ -864,6 +864,11 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		return ""
 	}
 	for _, candidate := range writeTargetCandidates(command, 0, effectiveDialect(deps.ShellDialect)) {
+		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
+		// written `./-p`, which still resolves.
+		if strings.HasPrefix(candidate, "-") {
+			continue
+		}
 		rel, inside := workspaceRelative(location.workspace, candidate)
 		if !inside || !declaredPath(live, rel) {
 			continue
