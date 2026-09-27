@@ -2,7 +2,6 @@ package magus
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -52,10 +51,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	lease, from, err := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
-	if err != nil {
-		return ctx, fmt.Errorf("sandbox: %w", err)
-	}
+	lease, from := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
 	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
 	confines, err := p.KernelConfines()
 	if err != nil {

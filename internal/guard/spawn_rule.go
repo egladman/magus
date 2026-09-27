@@ -11,10 +11,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -66,8 +68,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// which is what lets that child's own later calls name their parent and their job.
 	if env.AfterCall {
 		if env.SpawnedAgent != "" {
-			spawner, _, err := actingLeaseFor(who, at, req.Lease)
-			recordSpawnedAgent(ctx, at, facts, who, env, spawner, err)
+			spawner, _ := actingLeaseFor(who, at, req.Lease)
+			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	}
@@ -161,7 +163,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	lease, _, _ := actingLeaseFor(who, at, explicitLease)
+	lease, _ := actingLeaseFor(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
 	return req
 }
@@ -244,20 +246,19 @@ type spawnedAgent struct {
 // id, maps its name to that id, and starts its idle clock.
 //
 // A title of the form `<parent>/<role> <job>` naming a live job attributes the child to
-// that job through [job.Store.BindAgent], and every later call carrying its id is graded
+// that job through [job.Store.Bind], and every later call carrying its id is graded
 // under that job's lease from whichever checkout it runs in. The job's base is recorded
 // by the child's first call, in the checkout it landed in (see registerAgentBase).
 //
 // The title is the spawner's claim, and any process can pipe a spawn envelope into
 // `magus shell`, so it attributes only what the spawner could hand out: an unleased
 // spawner (the orchestrator or a person) any live job, a leased one only its own lease or
-// a job forked beneath it. A spawner whose lease does not resolve hands out nothing.
-// Anything else is recorded as UntrustedJob and attributes nothing, or a worker could name
-// another job in a title and be graded under it.
+// a job forked beneath it. Anything else is recorded as UntrustedJob and attributes
+// nothing, or a worker could name another job in a title and be graded under it.
 //
 // Best effort like every marker: a record that cannot be written leaves the child's calls
 // with an empty parent and no job, the answer a host with no subagent identity gets.
-func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who hookAttribution, env hookRequest, spawner string, spawnerErr error) {
+func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who hookAttribution, env hookRequest, spawner string) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
 	if env.Spawn.Name != "" {
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
@@ -273,13 +274,13 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
 		rows, err := leaseRows(ctx, at)
-		if spawnerErr != nil || err != nil || !mayHandOut(rows, spawner, row.ID) {
+		if err != nil || !mayHandOut(rows, spawner, row.ID) {
 			rec.UntrustedJob = row.ID
 			writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 			return
 		}
-		_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).
-			BindAgent(job.Subagent{Host: who.Host, Session: who.Session, ID: env.SpawnedAgent}, row.ID)
+		child := job.Caller{Host: who.Host, Session: who.Session, Agent: env.SpawnedAgent}
+		_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(child, row.ID)
 	}
 	writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 }
@@ -331,35 +332,145 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 	return types.Job{}, false
 }
 
-// agentJobFor is the job the calling subagent was spawned for, "" for a root session, a
-// host that names no subagent, and a subagent no spawn attributed.
-func agentJobFor(who hookAttribution, at location) string {
-	if who.Agent == "" || at.workspace == "" {
+// caller is who this call comes from, as the job store keys a binding.
+func (who hookAttribution) caller() job.Caller {
+	return job.Caller{Host: who.Host, Session: who.Session, Agent: who.Agent}
+}
+
+// boundJob is the job the caller's own record names: for an identified caller the one
+// keyed on exactly its host, session and agent, and for a caller with neither id this
+// checkout's. "" when no record answers.
+func boundJob(who hookAttribution, at location) string {
+	if who.caller().Identified() && at.workspace == "" {
 		return ""
 	}
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).
-		AgentJob(job.Subagent{Host: who.Host, Session: who.Session, ID: who.Agent})
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bound(who.caller())
 }
 
 // actingLeaseFor is the lease a call acts under. See [resolveLease].
-func actingLeaseFor(who hookAttribution, at location, explicit string) (string, types.LeaseSource, error) {
-	return resolveLease(who, at, explicit, agentJobFor(who, at))
+func actingLeaseFor(who hookAttribution, at location, explicit string) (string, types.LeaseSource) {
+	return resolveLease(who, explicit, boundJob(who, at))
 }
 
-// resolveLease resolves by job.LeaseQuery with the answers only the guard holds: the
-// calling subagent's job and the session.
+// resolveLease resolves by job.LeaseQuery with the answer only the guard holds: the
+// caller's record, bound.
 //
-// The subagent's job outranks the session's marker because a host that reports subagents
-// hands them their parent's session id, so the marker cannot tell them apart and the
-// agent id can. The marker is keyed on the session, so several sessions sharing one
-// checkout each resolve their own; a host that reports none reads the checkout-wide one.
-func resolveLease(who hookAttribution, at location, explicit, agentJob string) (string, types.LeaseSource, error) {
-	return job.LeaseQuery{
-		Checkout: job.Checkout{CacheDir: at.cacheDir, Session: who.Session},
-		Flag:     explicit,
-		AgentJob: agentJob,
-		Claim:    trail.LeaseFromEnv(),
-	}.Resolve()
+// Exact, with no fallback between keys. A host that reports subagents hands them their
+// parent's session id, so a subagent that read its session's record would be graded as
+// its parent, and a parent that read the checkout's would be graded as whichever
+// identity-less caller took a job here last.
+func resolveLease(who hookAttribution, explicit, bound string) (string, types.LeaseSource) {
+	q := job.LeaseQuery{Flag: explicit, Claim: trail.LeaseFromEnv()}
+	if who.caller().Identified() {
+		q.CallerJob = bound
+	} else {
+		q.CheckoutJob = bound
+	}
+	return q.Resolve()
+}
+
+// execTarget is the job a command line takes, through `magus job exec <job>` or the job
+// tool's `op=exec`, or "" when it takes none.
+func execTarget(command string) string {
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		if c.Name == hint.ToolJob.String() {
+			if params := mcpParams(c.Args); params["op"] == "exec" {
+				return strings.TrimSpace(params["id"])
+			}
+			continue
+		}
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
+			continue
+		}
+		if hint.JobExec.MatchedBy(magusSubcommandWords(c.Args)) {
+			return execOperand(c.Args)
+		}
+	}
+	return ""
+}
+
+// execOperand is the job a `magus job exec` argv names: its first word after the verb,
+// with the value of every flag that takes one skipped, the verb's own `--base` included.
+// magusSubcommandWords knows only the global flags, so it reads `--base <rev>`'s value as
+// the job.
+func execOperand(args []string) string {
+	var words []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		if len(a) < 2 || a[0] != '-' {
+			words = append(words, a)
+			continue
+		}
+		name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !joined && execFlagTakesValue(name) {
+			i++
+		}
+	}
+	if len(words) < 3 {
+		return ""
+	}
+	return words[2]
+}
+
+// execFlagTakesValue reports whether name is a global flag or a `magus job exec` flag that
+// takes a value, read from the registry the CLI parses with.
+func execFlagTakesValue(name string) bool {
+	if takes, known := MagusFlagTakesValue(name); known {
+		return takes
+	}
+	for _, group := range cli.All {
+		if group.Name != hint.JobExec.Head() {
+			continue
+		}
+		for _, verb := range group.Children {
+			if verb.Name != hint.JobExec.Leaf() {
+				continue
+			}
+			i := slices.IndexFunc(verb.Flags, func(f cli.Flag) bool { return f.Name == name })
+			return i >= 0 && verb.Flags[i].Kind != cli.FlagBool
+		}
+	}
+	return false
+}
+
+// bindOnExec records that the caller acts under the job command takes, when it takes a
+// live one its record does not already name. It runs only on a command the guard lets
+// through, and is the one place a binding is made outside a spawn.
+//
+// The GUARD records it, not `magus job exec`: a binding is a fact about who is acting, and
+// only the hook reads the host's session and agent ids. The CLI knows neither, so every
+// binding it wrote was keyed on the checkout, and one subagent's exec there graded its
+// parent as that subagent from the parent's next call.
+//
+// Whether the caller may take the job is decided before this runs: denyLeaseScopedRebind
+// refuses another job while the one it holds is still declared or running.
+func bindOnExec(ctx context.Context, at location, who hookAttribution, command string) {
+	id := execTarget(command)
+	if !types.ValidJobID(id) {
+		return
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return
+	}
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id })
+	if i < 0 || !rows[i].State.Live() {
+		return
+	}
+	if who.caller().Identified() && at.workspace == "" {
+		return
+	}
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	if store.Bound(who.caller()) != id {
+		_ = store.Bind(who.caller(), id)
+	}
 }
 
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
@@ -389,39 +500,6 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		return err == nil
 	}
 	return false
-}
-
-// denyUnresolvedLease is the verdict for a call whose lease could not be resolved: a
-// binding in this checkout exists and does not read. Denied, because every lease rule
-// would otherwise grade the call as nobody's while the checkout says it is somebody's.
-func denyUnresolvedLease(err error) string {
-	return "magus workspace: this checkout's lease binding does not read, so no call here can be graded. " +
-		"Clear it with `" + hint.JobExec.With("--vacate") + "`, the one command this state lets through beside help.\n" +
-		err.Error()
-}
-
-// repairsUnreadableMarker reports whether every command on the line is one a checkout with
-// an unreadable binding must still allow: `magus job exec --vacate`, which clears the
-// marker, or a magus help read. Anything chained beside them makes the line ordinary.
-func repairsUnreadableMarker(command string) bool {
-	cmds, ok := ParseCommands(command)
-	if !ok || len(cmds) == 0 {
-		return false
-	}
-	for _, c := range cmds {
-		if path.Base(c.Name) != "magus" {
-			return false
-		}
-		words := magusSubcommandWords(c.Args)
-		switch {
-		case hint.JobExec.MatchedBy(words) && len(words) == 2 && magusFlag(c.Args, "vacate"):
-		case magusFlag(c.Args, "h") || magusFlag(c.Args, "help"):
-		case len(words) > 0 && words[0] == "help":
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id

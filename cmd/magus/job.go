@@ -85,8 +85,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  fork  declare a job, from flags or a JSON record on stdin")
-	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on;")
-	fmt.Fprintln(os.Stderr, "        --vacate gives it up instead")
+	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on")
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
@@ -321,12 +320,7 @@ func overlapFootprints(ctx context.Context, root string, rows []types.Job, overl
 	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.Source != types.VCSSourceDisabled {
 		driver = res.VCS
 	}
-	return job.OverlapFootprints(ctx, driver, root, func(dir string) (string, error) {
-		if dir == root {
-			return magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-		}
-		return magus.ResolveCacheDir(dir)
-	}, rows, overlaps)
+	return job.OverlapFootprints(ctx, driver, rows, overlaps)
 }
 
 // overlapFootprintLine is the footprint verdict under an overlapping pair, or "" when
@@ -699,45 +693,37 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// jobExec takes the lease on a job in THIS checkout: it binds the marker every
-// lease-scoped rule reads, and records the base this tree actually landed on beside the
-// checkpoint the job was handed.
+// jobExec takes a job in THIS checkout: it records the base this tree actually landed on
+// beside the checkpoint the job was handed, and the checkout it landed in.
 //
-// Two acts, one verb, because splitting them is what the previous surface did and it left
-// the base unrecorded on every job a person took by hand: binding was a CLI verb and
-// recording the base was an MCP op, so a holder without the tool simply skipped it and the
-// guard then refused its first write for a registration nobody could make.
+// It binds nobody. A binding is a fact about WHO is acting, and only the guard hook reads
+// the host's session and agent ids, so the guard records it when it lets this command
+// through (see guard.bindOnExec). A CLI process knows neither: a binding it wrote could only
+// be keyed on the checkout, and one subagent's exec there graded its parent as that
+// subagent from the parent's next call.
 //
 // The base is READ FROM THE CHECKOUT rather than passed in. A holder typing the token it
 // believes it is on is a holder reporting a belief; the divergence this records is only
 // worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
-	var base, session string
-	var vacate bool
+	var base string
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
-		fs.StringVar(&session, "session", "", "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's, as it was before")
-		fs.BoolVar(&vacate, "vacate", false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none.")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus job exec --vacate")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Take the lease on a job here. Every lease-scoped guard and sandbox rule then")
-			fmt.Fprintln(os.Stderr, "reads that job's write paths in this checkout, and the base this tree is on is")
-			fmt.Fprintln(os.Stderr, "recorded beside the checkpoint the job was handed, with the divergence between")
-			fmt.Fprintln(os.Stderr, "them as a fact rather than a refusal.")
+			fmt.Fprintln(os.Stderr, "Take a job here: record the base this tree is on beside the checkpoint the job")
+			fmt.Fprintln(os.Stderr, "was handed, with the divergence between them as a fact rather than a refusal,")
+			fmt.Fprintln(os.Stderr, "and the checkout it was taken in.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "With no job, it prints the one this checkout holds.")
+			fmt.Fprintln(os.Stderr, "The guard hook binds the caller to the job when it lets this command through,")
+			fmt.Fprintln(os.Stderr, "keyed on the session and subagent its agent host names, so every lease-scoped")
+			fmt.Fprintln(os.Stderr, "rule then grades that caller and nobody else. A host that names neither binds")
+			fmt.Fprintln(os.Stderr, "this checkout. A subagent whose spawn the guard attributed to the job is bound")
+			fmt.Fprintln(os.Stderr, "already, and exec only records its base.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--session names the session taking it, so several sessions sharing one checkout")
-			fmt.Fprintln(os.Stderr, "each hold their own lease and each gets its own boundary graded. Pass the id this")
-			fmt.Fprintln(os.Stderr, "agent host reports to its hooks, or the binding is the whole checkout's.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
-			fmt.Fprintln(os.Stderr, "different job (or the server's next assignment). Refused while the job is still")
-			fmt.Fprintln(os.Stderr, "declared or running: walking away from those two would leave the checkout's next")
-			fmt.Fprintln(os.Stderr, "write ungraded. A job this checkout already exited, one the store no longer")
-			fmt.Fprintln(os.Stderr, "carries, or no binding at all, all vacate cleanly.")
+			fmt.Fprintln(os.Stderr, "Taking a different job is refused while the one held is still declared or")
+			fmt.Fprintln(os.Stderr, "running; once it has exited or ended, exec takes the next one.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -746,64 +732,24 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if vacate {
-		if len(pos) > 0 {
-			return usagef("magus job exec --vacate: takes no job; it gives up whichever this checkout holds")
-		}
-		if strings.TrimSpace(base) != "" {
-			return usagef("magus job exec --vacate: --base names nothing to record when there is no job to exec")
-		}
-		root = resolveRootOrEmpty(root)
-		if root == "" {
-			return errors.New("magus job exec --vacate: no workspace here: the lease marker is keyed by a checkout's cache dir, so run from inside one or pass --root <path>")
-		}
-		cacheDir, cerr := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-		if cerr != nil {
-			return fmt.Errorf("magus job exec --vacate: %w", cerr)
-		}
-		return jobExecVacate(root, job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)})
-	}
-	if len(pos) > 1 {
-		return usagef("magus job exec: takes at most one job")
+	if len(pos) != 1 {
+		return usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
 	}
 	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return errors.New("magus job exec: no workspace here: the lease marker is keyed by a checkout's cache dir, so run from inside one or pass --root <path>")
-	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return fmt.Errorf("magus job exec: %w", err)
-	}
-	here := job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)}
-	if len(pos) == 0 {
-		id, err := here.Marker()
-		if err != nil {
-			return fmt.Errorf("magus job exec: %w", err)
-		}
-		if id != "" {
-			fmt.Printf("this checkout holds the lease on %s\n", id)
-			return nil
-		}
-		fmt.Println("this checkout holds no job")
-		return nil
-	}
-	if err := here.Bind(pos[0]); err != nil {
-		return fmt.Errorf("magus job exec: %w", err)
+		return errors.New("magus job exec: no workspace here: run from inside one or pass --root <path>")
 	}
 	if strings.TrimSpace(base) == "" {
-		// A tree with no readable revision still TAKES the job: binding is what puts every
-		// lease-scoped rule in force, and refusing it because there is nothing to compare
-		// a base against would leave the holder unguarded over a missing FACT.
 		base, _ = checkoutBaseToken(ctx, flagRoot)
+	}
+	if strings.TrimSpace(base) == "" {
+		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s;"+
+			" pass the one you are on with --base", pos[0])
 	}
 	store, err := openJobs(root)
 	if err != nil {
 		return err
-	}
-	if strings.TrimSpace(base) == "" {
-		fmt.Printf("holding the lease on %s; this checkout reports no revision, so no base was recorded\n", pos[0])
-		return nil
 	}
 	stored, err := store.Exec(ctx, pos[0], base)
 	if err != nil {
@@ -819,59 +765,11 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{stored.ID})
 	case outputText:
 		fmt.Println(job.BaseAdvice(stored))
-		fmt.Printf("the lease is bound to %s; read the terms with `%s`\n", root, hint.DescribeJob.With(stored.ID))
+		fmt.Printf("took %s in %s; read the terms with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
 		return nil
 	default:
 		return emitFormatted(opts, stored)
 	}
-}
-
-// jobExecVacate gives up the lease this session holds here, so a later exec can take a
-// different one (or the same one again, which Bind already permitted). It releases only
-// this session's binding: a sibling session working in the same checkout keeps its own.
-//
-// Refused only while the row says work is still IN FLIGHT (declared or running): a
-// holder that walks away from those two leaves its next write ungraded from here on,
-// the same escape denyLeaseScopedRebind already closes for rebinding outright. Once a
-// holder has exited, there is no more of ITS OWN work left to protect against: exited
-// counts as live elsewhere (types.JobState.Live) so a rejected wait can send work back
-// to the same write paths, but nobody is required to ever run that wait, and a checkout stuck
-// on a lease nobody will collect is exactly the bug this flag exists to fix. A row the
-// store cannot find or read is treated the same permissive way: nothing here declares a
-// boundary left to protect, the same fail-open reading the guard gives an unreadable
-// ledger.
-func jobExecVacate(root string, here job.Checkout) error {
-	id, err := here.Marker()
-	if err != nil {
-		// A marker that does not read binds no row there is a state to check, and clearing
-		// it is the fix the error names.
-		if _, verr := here.Vacate(); verr != nil {
-			return fmt.Errorf("magus job exec --vacate: %w", verr)
-		}
-		fmt.Printf("cleared a lease marker that did not read (%v)\n", err)
-		return nil
-	}
-	if id == "" {
-		fmt.Println("this checkout holds no job; nothing to vacate")
-		return nil
-	}
-	if store, serr := openJobs(root); serr == nil {
-		if rows, lerr := store.List(); lerr == nil {
-			if i := slices.IndexFunc(rows, func(j types.Job) bool { return j.ID == id }); i >= 0 {
-				if state := rows[i].State; state == types.StateDeclared || state == types.StateRunning {
-					return fmt.Errorf("magus job exec --vacate: this checkout holds the lease on %s, and it is still %s."+
-						" Exit it first with `%s`, or leave it to the orchestrator: vacating mid-flight would leave your next write ungraded",
-						id, state, hint.JobExit.With(id))
-				}
-			}
-		}
-	}
-	cleared, err := here.Vacate()
-	if err != nil {
-		return fmt.Errorf("magus job exec --vacate: %w", err)
-	}
-	fmt.Printf("vacated the lease on %s\n", cleared)
-	return nil
 }
 
 // ledgerAccept grades one worker's report against its row and records the verdict.
@@ -1030,11 +928,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	actor, err := store.Actor()
-	if err != nil {
-		return fmt.Errorf("magus job wait: %w", err)
-	}
-	if actor.Bound() {
+	if actor := store.Actor(); actor.Bound() {
 		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
 			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}

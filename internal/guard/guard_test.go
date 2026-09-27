@@ -143,7 +143,7 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 }
 
 // TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
-// per-session binding: each session's own marker decides which write paths its writes are graded
+// per-session binding: each session's own record decides which write paths its writes are graded
 // against, so two workers sharing a checkout are each denied outside their own paths
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
@@ -156,10 +156,9 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.Bind(one.ID))
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.Bind(two.ID))
+	bindCaller(t, ctx, hookAttribution{Host: "test-host", Session: "session-one"}, one.ID)
+	bindCaller(t, ctx, hookAttribution{Host: "test-host", Session: "session-two"}, two.ID)
 
 	first := Judge(ctx, Dependencies{}, Request{
 		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-one", Host: "test-host",

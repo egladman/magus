@@ -159,6 +159,23 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	assert.Equal(t, diverged.Created, settled.Created)
 }
 
+// A job that already ended has nothing left to take, and recording a base on it would
+// read as work resumed on a closed row.
+func TestStoreExecRefusesAnEndedJob(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []types.JobState{types.StatePass, types.StateFail, types.StateNoReturn} {
+		s := tmpStore(t, t.TempDir())
+		seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, State: state})
+
+		_, err := s.Exec(t.Context(), "u1", baseA)
+		require.Error(t, err, state)
+		got, err := s.List()
+		require.NoError(t, err)
+		assert.Empty(t, got[0].ReportedBase, state)
+	}
+}
+
 func TestCompareBase(t *testing.T) {
 	t.Parallel()
 

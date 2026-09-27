@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,6 +45,10 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to exec against."+
 				" Check the declared ids with `magus_job list` and exec under the id the"+
 				" orchestrator handed you", ErrUnknownJob, id)
+		}
+		if cur.State.Terminal() {
+			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take;"+
+				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
 		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(cur.Checkpoint, base)

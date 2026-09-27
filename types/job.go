@@ -461,12 +461,17 @@ type LeaseSource string
 const (
 	// LeaseSourceFlag is an explicit --lease on the call.
 	LeaseSourceFlag LeaseSource = "flag"
-	// LeaseSourceAgent is the job magus recorded the calling subagent was spawned for.
+	// LeaseSourceAgent is the job the guard recorded for the caller its host named: a
+	// subagent a spawn attributed or that ran `magus job exec`, or a session that ran it.
+	// Named for the subagent case it began with; a session with no agent id is recorded
+	// the same way.
 	LeaseSourceAgent LeaseSource = "agent"
-	// LeaseSourceMarker is the binding `magus job exec` wrote into the checkout.
+	// LeaseSourceMarker is the checkout's record, which the guard writes when a caller
+	// whose host names no session or agent runs `magus job exec`, and only such a caller
+	// reads.
 	LeaseSourceMarker LeaseSource = "marker"
-	// LeaseSourceContested is the marker answering while the environment claimed a
-	// different lease. The marker's lease is the one graded; the claim is ignored.
+	// LeaseSourceContested is a record answering while a lower source named a different
+	// lease. The record's lease is the one graded; the other is ignored.
 	LeaseSourceContested LeaseSource = "contested"
 	// LeaseSourceEnv is magus.lease in the process's BAGGAGE.
 	LeaseSourceEnv LeaseSource = "env"

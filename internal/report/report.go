@@ -419,12 +419,7 @@ type NextServer func(next []hint.Next) []hint.Next
 func ServedIn(cacheDir, root string) NextServer {
 	return func(next []hint.Next) []hint.Next {
 		role, writePaths := hint.RoleUnbound, []string(nil)
-		// A binding that cannot be read serves the worker's narrower set.
-		id, _, err := job.ActingLease(cacheDir, trail.LeaseFromEnv())
-		if err != nil {
-			role = hint.RoleWorker
-		}
-		if id != "" {
+		if id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker
 			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)
