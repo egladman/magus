@@ -5,6 +5,8 @@
 namespace feeds;
 
 import "fs";
+import "semver";
+import "assert";
 import "engine/types" as _;
 import "lib/text" as _;
 import "lib/feed" as _;
@@ -47,11 +49,18 @@ export fun renderBlogAtom(site: Site) > void !> any {
 }
 
 
+// releaseEntryTitle is a feed entry's title: the version, marked when it is a prerelease so
+// a reader does not take a candidate for the latest stable release.
+fun releaseEntryTitle(version: str) > str {
+    if (semver\isPrerelease(version)) { return version + " (prerelease)"; }
+    return version;
+}
+
 // renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed
-// releases (newest first as authored). Per <entry>: title = version, link =
+// releases (newest first as authored). Per <entry>: title = releaseEntryTitle, link =
 // site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section
-// body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on
-// having at least one released version.
+// body. Feed-level updated = newest entry's date, a candidate's included, as Atom defines it.
+// Gated on site.config.baseURL and on having at least one released version.
 export fun renderReleasesAtom(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     if (site.releases.len() == 0) { return; }
@@ -67,7 +76,7 @@ export fun renderReleasesAtom(site: Site) > void !> any {
         final ver = r.version;
         final link = site.config.repoURL + "/releases/tag/" + ver;
         body = body + "  <entry>\n"
-            + "    " + xmlElement("title", ver) + "\n"
+            + "    " + xmlElement("title", releaseEntryTitle(ver)) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
             + "    " + xmlElement("id", link) + "\n"
             + "    " + xmlElement("updated", atomDate(r.date)) + "\n"
@@ -80,4 +89,10 @@ export fun renderReleasesAtom(site: Site) > void !> any {
     // Register it: pruneStaleOutputs deletes a directory whose index.html is no
     // longer produced, and /public/atom/ has no page of its own.
     site.writtenPaths["public/atom/releases.atom.xml"] = true;
+}
+
+test "releaseEntryTitle marks a candidate and leaves a release as its version" {
+    assert\equal(releaseEntryTitle("v0.5.0-rc.1"), "v0.5.0-rc.1 (prerelease)", "a candidate is marked");
+    assert\equal(releaseEntryTitle("v0.4.3"), "v0.4.3", "a release is its version");
+    assert\equal(releaseEntryTitle("v0.4.3+build-1"), "v0.4.3+build-1", "build metadata is not a prerelease");
 }

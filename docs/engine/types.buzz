@@ -13,6 +13,7 @@ final maxSubtreeRows = 40;
 
 import "fs";
 import "io";
+import "semver";
 import "serialize";
 import "markdown";
 import "template";
@@ -285,6 +286,17 @@ export object Site {
     cspBadges: str = "",
 
     // --- Methods that manage this state (pure helpers stay free functions below) ---
+
+    // latestStable is the release the site advertises as current: the newest that
+    // semver\isPrerelease does not name, or null before one ships. A candidate tagged after
+    // it is still listed in the feed and on /public/, but never pins the install docs,
+    // since `magus self update` and GitHub's latest skip it too.
+    fun latestStable() > Release? {
+        foreach (r in this.releases) {
+            if (!semver\isPrerelease(r.version)) { return r; }
+        }
+        return null;
+    }
 
     // addRecord appends one page's search-index record and marks its URL written (so the
     // alias pass catches a redirect shadowing a real page). Also records the index.html in
@@ -1019,6 +1031,33 @@ test "Site.addRecord marks the URL written and appends one search record" {
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
     assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert\len(s.searchRecords, 1, "one search record appended");
+}
+
+test "Site.latestStable passes over a newer release candidate" {
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
+    assert\equal(s.latestStable() == null, true, "nothing shipped yet");
+    s.releases.append(Release{ version = "v0.5.0-rc.1" });
+    assert\equal(s.latestStable() == null, true, "a candidate alone is not a stable release");
+    s.releases.append(Release{ version = "v0.4.3+build-1" });
+    s.releases.append(Release{ version = "v0.4.2" });
+    final latest = s.latestStable();
+    assert\equal(latest != null, true, "a stable release is found");
+    assert\equal(latest!.version, "v0.4.3+build-1", "build metadata is not a prerelease");
 }
 
 
