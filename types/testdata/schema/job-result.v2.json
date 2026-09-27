@@ -1,0 +1,13 @@
+{
+  "fields": {
+    "changed_paths": "[]string",
+    "descendants": "[]string",
+    "gate_evidence": "[]types.GateEvidence",
+    "job": "string",
+    "requires": "[]string",
+    "schema_version": "int",
+    "unresolved_risks": "[]string",
+    "validation": "types.JobResultValidation"
+  },
+  "reserved": []
+}
