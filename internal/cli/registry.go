@@ -895,7 +895,16 @@ concurrency pool (current slot usage, queued waiters).
 
 When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
-snapshot on its own line for log capture.`,
+snapshot on its own line for log capture.
+
+--wait prints no snapshot: it exits 0 once this machine's build budget can
+seat a run, and it is how a run refused with MGS3009 waits without a retry
+loop. Piped into a magus run (magus status --wait | magus run test .) it reads
+that run's command from the pipe, waits until the budget can seat the claims
+that run will make, and holds the run from starting until it exits; the run
+then proceeds as usual, or starts nothing (MGS3030) if the wait failed. On
+its own it waits for a free slot. A claim larger than the whole budget exits
+78 at once; no broker means nothing to wait for, and it exits 0.`,
 	Usage: "magus status [flags]",
 	Flags: []Flag{
 		{Name: "watch", Kind: FlagDuration, Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
@@ -906,9 +915,11 @@ snapshot on its own line for log capture.`,
 		{Name: "socket", Kind: FlagString, Doc: "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one"},
 		{Name: "probe", Kind: FlagString, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
 		{Name: "workspace", Kind: FlagString, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
+		{Name: "wait", Kind: FlagBool, Doc: "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then"},
 	},
 	Examples: []Example{
 		{"One-shot status snapshot", "magus status"},
+		{"Run tests once the build budget can seat them", "magus status --wait | magus run test ."},
 		{"Live updates every 15 seconds", "magus status --watch=15s"},
 		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=15s"},
 		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/server.sock"},

@@ -643,6 +643,8 @@ const (
 	FlagStatusSocket = "socket"
 	// status: --symbols
 	FlagStatusSymbols = "symbols"
+	// status: --wait
+	FlagStatusWait = "wait"
 	// status: --watch
 	FlagStatusWatch = "watch"
 	// status: --workspace
@@ -1196,6 +1198,7 @@ type StatusFlags struct {
 	Socket    string        // --socket
 	Probe     string        // --probe
 	Workspace string        // --workspace
+	Wait      bool          // --wait
 }
 
 // BindStatus registers `magus status`'s flags on fs and returns the destination.
@@ -1209,6 +1212,7 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then")
 	return &f
 }
 

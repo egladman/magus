@@ -218,6 +218,7 @@ flag status/compact
 flag status/probe
 flag status/socket
 flag status/symbols
+flag status/wait
 flag status/watch
 flag status/workspace
 flag version/client
