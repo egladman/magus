@@ -2248,3 +2248,14 @@ func TestGlobalFlagScannersAgreeExceptOnUnknownFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestRefsRenameIsNotAGraphRead(t *testing.T) {
+	read := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo"}}
+	check := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "--check"}}
+	write := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename=Bar"}}
+	assert.True(t, graphReadOnly([]hint.Invocation{read}))
+	assert.True(t, graphReadOnly([]hint.Invocation{check}))
+	assert.False(t, graphReadOnly([]hint.Invocation{write}))
+	assert.True(t, repairInvocation(hint.Invocation{Name: "magus", Args: read.Args}))
+	assert.False(t, repairInvocation(hint.Invocation{Name: "magus", Args: write.Args}))
+}

@@ -261,6 +261,12 @@ type pipedMagus struct {
 // `grep -rn`, which answers with less than the piped graph read it was denied.
 var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": true, "describe": true}
 
+// renamesSymbol reports `refs --rename` without `--check`, the one graph verb that writes.
+func renamesSymbol(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") }) &&
+		!slices.Contains(args, "--check")
+}
+
 // graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.
 func graphReadOnly(cmds []hint.Invocation) bool {
 	saw := false
@@ -268,7 +274,7 @@ func graphReadOnly(cmds []hint.Invocation) bool {
 		if !isMagusInvocation(c) {
 			continue
 		}
-		if !graphReadVerbs[magusSubcommand(c.Args)] {
+		if !graphReadVerbs[magusSubcommand(c.Args)] || renamesSymbol(c.Args) {
 			return false
 		}
 		saw = true
