@@ -455,6 +455,7 @@ linters:
       rules:
         - name: var-naming
         - name: receiver-naming
+        - name: context-as-argument
         - name: exported
           arguments:
             - "disableStutteringCheck"
