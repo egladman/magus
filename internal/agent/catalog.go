@@ -223,7 +223,10 @@ import (
 // flags are gone and a writing job with neither a check nor a goal is refused. It grades
 // `unreferenced` while the old definition still exists, because once it is gone the
 // graph cannot count what names it and the goal fails.
-const SkillVersion = 90
+// 91: magus-multi-agent drops `--gates` from `magus describe job`. The read it named is
+// unconditional now: describe job always prints where each goal stands, graded against
+// the evidence magus holds, alongside the terms it already printed.
+const SkillVersion = 91
 
 const skillLicense = "GPL-3.0-or-later"
 

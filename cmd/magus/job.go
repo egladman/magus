@@ -649,29 +649,24 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 
 // describeJob is `magus describe job`: one job's terms, which is what a holder reads on
 // arrival. It prints the criteria, the write paths, the check, the model, the checkpoint, the
-// dependencies, what the workspace itself puts out of reach, and the graph's blast radius
-// for each write path, and it prints no procedure: taking the job is `magus job exec`'s
-// work to DO, not a paragraph for somebody to follow by hand.
+// dependencies, what the workspace itself puts out of reach, the graph's blast radius for
+// each write path, and where each declared goal stands graded against the evidence magus
+// holds now, and it prints no procedure: taking the job is `magus job exec`'s work to DO,
+// not a paragraph for somebody to follow by hand.
 func describeJob(ctx context.Context, root string, args []string) error {
-	var gates bool
 	pos, err := cmdParse("describe job", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&gates, "gates", false, "Grade this job's goals against the evidence magus holds now, and record nothing")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus describe job <job> --gates")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, write paths, check and dependencies, the paths this")
-			fmt.Fprintln(os.Stderr, "workspace puts out of reach, and the graph's blast radius for each write path.")
+			fmt.Fprintln(os.Stderr, "workspace puts out of reach, the graph's blast radius for each write path, and where each")
+			fmt.Fprintln(os.Stderr, "declared goal stands graded against the evidence magus holds now.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
-			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job, the way `magus diff --prompt` does.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--gates is the exception, and it is still a READ: it grades this job's goals")
-			fmt.Fprintln(os.Stderr, "against the evidence magus holds right now and records nothing, so asking")
-			fmt.Fprintln(os.Stderr, "never advances a job and never blocks the holder still working on it. It is the")
-			fmt.Fprintln(os.Stderr, "same grading `"+hint.JobWait.String()+"` does, so the two cannot disagree.")
-			fmt.Fprintln(os.Stderr, "Exit 1 means a goal is unmet, so a caller branches on the status rather than")
-			fmt.Fprintln(os.Stderr, "reading the text.")
+			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job, the way `magus diff --prompt` does. Grading a goal is")
+			fmt.Fprintln(os.Stderr, "still a READ: it records nothing, so asking never advances a job and never blocks the")
+			fmt.Fprintln(os.Stderr, "holder still working on it. It is the same grading `"+hint.JobWait.String()+"` does, so the")
+			fmt.Fprintln(os.Stderr, "two cannot disagree.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -679,9 +674,6 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
-	}
-	if gates {
-		return jobGates(ctx, root, pos)
 	}
 	if len(pos) != 1 {
 		return usagef("magus describe job: requires exactly one job")
@@ -709,6 +701,14 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
+	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root))
+	if err != nil {
+		return usagef("magus describe job: %s", err)
+	}
+	if gradesSymbols(leases, row.ID) {
+		status.StaleIndexes = staleIndexProjects(ctx, root)
+	}
+
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -718,6 +718,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
 		if err != nil {
@@ -727,8 +728,22 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:
-		return emitFormatted(opts, brief)
+		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
 	}
+}
+
+// describeJobOutput is a job's terms plus where its declared goals stand, which is what
+// `-o json`/`-o yaml` for `describe job` renders. json and yaml flatten the embedded
+// terms, so the wire shape is the terms plus one `goals` key, the same
+// queryWithNext/explainWithNext pattern uses to add a field without changing the type
+// underneath it.
+type describeJobOutput struct {
+	job.Terms `yaml:",inline"`
+	// Goals is where each of the job's declared goals stands, graded against the evidence
+	// magus holds right now. Grading is still a READ: it records nothing, so asking never
+	// advances a job and never blocks the holder still working on it. It is the same
+	// grading `job wait` does, so the two cannot disagree.
+	Goals types.JobStatus `json:"goals" yaml:"goals"`
 }
 
 // checkoutBaseToken is the base this checkout is on, in the one form the store compares
@@ -1325,7 +1340,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "paths, tool calls the guard observed under its lease, and the runs magus recorded")
 			fmt.Fprintln(os.Stderr, "against it. None of them asks the holder anything, so watching costs it nothing.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "`"+hint.DescribeJob.With("<job>", "--gates")+"` grades what it has finished; this shows what it is doing.")
+			fmt.Fprintln(os.Stderr, "`"+hint.DescribeJob.With("<job>")+"` grades what it has finished; this shows what it is doing.")
 		}
 	})
 	if err != nil {
@@ -1961,56 +1976,6 @@ func latestGreenGate(ctx context.Context, root string) job.GreenGate {
 		return job.GreenGate{}
 	}
 	return job.GreenGate{Commit: rec.Commit, Projects: rec.Projects, Tier: rep.Tier}
-}
-
-// jobGates is `magus describe job <job> --gates`: each goal graded against the
-// evidence magus holds right now.
-//
-// A READ. It records nothing, so an orchestrator may ask while the holder is still
-// working, and asking never advances a job the way `job wait` does. Exit 1 when a gate is
-// unmet, so a script can branch without parsing the text; exit 0 means every gate this
-// job declared is satisfied, which is not the same as the job being recorded pass.
-func jobGates(ctx context.Context, root string, pos []string) error {
-	if len(pos) != 1 {
-		return usagef("magus describe job --gates: requires exactly one job")
-	}
-	root = resolveRootOrEmpty(root)
-	store, err := openJobs(root)
-	if err != nil {
-		return err
-	}
-	status, err := job.GradeGates(ctx, store, pos[0], jobObserver(root))
-	if err != nil {
-		return usagef("magus describe job --gates: %s", err)
-	}
-	if rows, lerr := store.List(); lerr == nil && gradesSymbols(rows, pos[0]) {
-		status.StaleIndexes = staleIndexProjects(ctx, root)
-	}
-
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	switch opts.Format {
-	case outputName:
-		// The unmet gates, one id per line: what a caller filters for, and empty when
-		// every gate is met.
-		var unmet []string
-		for _, gate := range status.Gates {
-			if !gate.Verified {
-				unmet = append(unmet, gate.ID)
-			}
-		}
-		err = emitNames(unmet)
-	case outputText:
-		job.RenderGates(os.Stdout, status)
-	default:
-		err = emitFormatted(opts, status)
-	}
-	if err != nil || status.Verified {
-		return err
-	}
-	return errSilent{exitCode: 1}
 }
 
 // gradesSymbols reports whether grading id reads the symbol graph: a symbol gate of its

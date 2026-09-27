@@ -170,8 +170,7 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 
 // TestGradeGatesReportsAPrimaryCheck is the regression for a job declaring only --check:
 // VerifyGates used to grade the primary by hand and append it to Gates only when OTHER
-// gates existed, so `describe job --gates` reported "no completion gate" and exited 0 for
-// a job that had one.
+// gates existed, so `describe job` reported "no completion gate" for a job that had one.
 func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 	t.Parallel()
 

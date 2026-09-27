@@ -151,8 +151,6 @@ const (
 	FlagConfigSetGlobal = "global"
 	// config token generate: --force
 	FlagConfigTokenGenerateForce = "force"
-	// describe job: --gates
-	FlagDescribeJobGates = "gates"
 	// describe projects: --e
 	FlagDescribeProjectsE = "e"
 	// describe projects: --evaluated
@@ -670,18 +668,6 @@ const (
 	// where: --regex
 	FlagWhereRegex = "regex"
 )
-
-// DescribeJobFlags are the flags declared for `magus describe job`.
-type DescribeJobFlags struct {
-	Gates bool // --gates
-}
-
-// BindDescribeJob registers `magus describe job`'s flags on fs and returns the destination.
-func BindDescribeJob(fs *flag.FlagSet) *DescribeJobFlags {
-	var f DescribeJobFlags
-	fs.BoolVar(&f.Gates, FlagDescribeJobGates, false, "Grade this job's goals against the evidence magus holds now, and record nothing")
-	return &f
-}
 
 // DescribeTargetFlags are the flags declared for `magus describe target`.
 type DescribeTargetFlags struct {

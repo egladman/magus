@@ -318,7 +318,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// ONE list, from EffectiveGoals, so the primary check is graded by the same loop as
 	// every other goal and lands in Gates like one. Grading it separately meant a job
 	// declaring only `--check` reported no goals at all to anything that read Gates,
-	// which is how `describe job --gates` came to exit 0 on a job with a goal.
+	// which is how `describe job` came to show an empty goal list on a job with a check.
 	gates := row.EffectiveGoals()
 	evidenceByGate[types.PrimaryCompletionGateID] = rep.Validation.OutputRef
 	attemptByGate[types.PrimaryCompletionGateID] = att

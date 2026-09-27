@@ -50,8 +50,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result))
 	require.NoError(t, err)
 	// The primary check is LISTED, like any other gate: it is one, and reporting it only
-	// when other gates existed is what let `describe job --gates` say a check-only job had
-	// none.
+	// when other gates existed is what let `describe job` say a check-only job had none.
 	assert.Equal(t, types.JobStatus{
 		Job:      result.Job,
 		Verified: true,
