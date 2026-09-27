@@ -193,7 +193,7 @@ type toolMatch struct {
 // duplicates a stream without trimming it.
 var textFilters = map[string]bool{
 	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
-	"head": true, "tail": true, "awk": true, "sed": true,
+	"head": true, "tail": true, "awk": true, "sed": true, "tr": true,
 	"cut": true, "sort": true, "uniq": true, "wc": true, "column": true,
 }
 
@@ -232,11 +232,14 @@ func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 		if !trimmableMagus(left) {
 			return true
 		}
-		name, isFilter := firstTextFilter(firstOfPipeline(pipe.Y, d))
+		filter, isFilter := firstTextFilter(firstOfPipeline(pipe.Y, d))
 		if !isFilter {
 			return true
 		}
-		match := pipedMagus{verb: magusVerb(left), filter: name, ok: true}
+		match := pipedMagus{verb: magusVerb(left), filter: filter.Name, filterArgs: filter.Args, ok: true}
+		if i := slices.IndexFunc(left, isMagusInvocation); i >= 0 {
+			match.args = left[i].Args
+		}
 		if !graphReadOnly(left) {
 			denied = match
 		} else if !read.ok {
@@ -250,10 +253,13 @@ func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 	return pipedMagus{}, read
 }
 
-// pipedMagus is one magus invocation piped into a text filter.
+// pipedMagus is one magus invocation piped into a text filter: the verb and the filter
+// for the message's lead, both argvs for the rewrite, which is only exact when it reads
+// the noun, the flags and the count the reader typed.
 type pipedMagus struct {
-	verb, filter string
-	ok           bool
+	verb, filter     string
+	args, filterArgs []string
+	ok               bool
 }
 
 // graphReadVerbs are the verbs that read the knowledge graph and change nothing. Measured
@@ -276,14 +282,14 @@ func graphReadOnly(cmds []hint.Invocation) bool {
 	return saw
 }
 
-// firstTextFilter names the filter the output was piped into.
-func firstTextFilter(cmds []hint.Invocation) (string, bool) {
+// firstTextFilter is the filter the output was piped into.
+func firstTextFilter(cmds []hint.Invocation) (hint.Invocation, bool) {
 	for _, c := range cmds {
 		if textFilters[c.Name] {
-			return c.Name, true
+			return c, true
 		}
 	}
-	return "", false
+	return hint.Invocation{}, false
 }
 
 // magusVerb is the subcommand path a magus invocation names, at most two words
@@ -1474,24 +1480,33 @@ var (
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
 )
 
-// pipeDeny answers the question the filter was asking, about the command that was run.
+// pipeDeny is pipeAnswer for a pipe known only by its verb and filter.
+func pipeDeny(verb, filter string) string {
+	return pipeAnswer(pipedMagus{verb: verb, filter: filter})
+}
+
+// pipeAnswer answers the question the filter was asking, about the command that was run.
 //
 // The menu this replaced listed -o name, -o json and -o template on every pipe, whatever
 // the reader piped or which command they piped it from. It was wrong as often as it was
 // right: `magus agent install | head` emits advisory lines with no record to project, so
 // every option offered was inapplicable, and a reader who tries one and gets nothing
 // learns the advice is noise. Three lines nobody reads are worse than one that lands.
-func pipeDeny(verb, filter string) string {
+// Where the record the verb renders is known (pipeRewrite), the answer names its fields.
+func pipeAnswer(p pipedMagus) string {
 	// The verb is quoted WITHOUT the binary name: a compiled-in verdict that spells
 	// `magus run lint` reads as an instruction, and lint/test/build/generate are this
 	// repository's target names rather than magus vocabulary, so in most workspaces that
 	// instruction names nothing. Quoting the reader's own verb identifies the command
 	// without minting a command line to copy.
-	lead := "`" + verb + " | " + filter + "`: magus answers this without the pipe.\n"
-	if verb == "" {
+	lead := "`" + p.verb + " | " + p.filter + "`: magus answers this without the pipe.\n"
+	if p.verb == "" {
 		lead = "magus answers this without the pipe.\n"
 	}
-	switch filter {
+	if rewrite, ok := pipeRewrite(p); ok {
+		return lead + rewrite + "\n" + pipeExitNote
+	}
+	switch p.filter {
 	case "head", "tail", "less", "more":
 		// Fewer LINES. -s is the only lever every command has, because it suppresses
 		// progress rather than projecting a record the command may not have.
@@ -1507,9 +1522,9 @@ func pipeDeny(verb, filter string) string {
 	}
 }
 
-// graphPipeAdvice is pipeDeny's answer, offered rather than imposed.
-func graphPipeAdvice(verb, filter string) string {
-	return "magus workspace: " + pipeDeny(verb, filter)
+// graphPipeAdvice is pipeAnswer's answer, offered rather than imposed.
+func graphPipeAdvice(p pipedMagus) string {
+	return "magus workspace: " + pipeAnswer(p)
 }
 
 const graphPipeBrief = "magus workspace: a graph read projects its own record: `-o name`, `-o json`, `-o template='{{.field}}'`."
@@ -1917,7 +1932,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
 	case piped.ok:
-		return ShellVerdict{Deny: pipeDeny(piped.verb, piped.filter), Rule: denyRule{Name: denyRuleOutputPipe}}
+		return ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}
 	case redirected:
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
 	}
@@ -1933,7 +1948,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return captureAdvice
 	}
 	if pipedRead.ok {
-		return ShellVerdict{Context: graphPipeAdvice(pipedRead.verb, pipedRead.filter), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
+		return ShellVerdict{Context: graphPipeAdvice(pipedRead), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):
