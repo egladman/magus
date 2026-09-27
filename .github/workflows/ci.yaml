@@ -177,6 +177,14 @@ jobs:
       # The hard failures below keep failing hard: uncommitted generated output and a
       # non-deterministic generator both mean the tree under test is not the tree in the
       # commit, and a shard result from it describes nothing.
+      # Any magus command registers the merge driver in this clone, and only `init --vcs git`
+      # writes the settle hooks that finish its work, so doctor's settle-hooks check fails
+      # every clone that skipped it. --local leaves the committed magus.yaml as it is and
+      # writes no user config. A failure here is doctor's to report, like the step below.
+      - name: Wire the merge driver and its settle hooks
+        continue-on-error: true
+        run: magus init --local --vcs git
+
       - name: Doctor
         id: doctor
         continue-on-error: true
