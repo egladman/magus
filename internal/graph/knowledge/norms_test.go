@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"strings"
 	"testing"
@@ -10,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,14 +68,14 @@ func (f *normFixture) value(dir, name, typ string) string {
 	return id
 }
 
-func normRow(t *testing.T, table types.NormTable, family, scope string) types.Norm {
+func normRow(t *testing.T, rows []types.Norm, family, scope string) types.Norm {
 	t.Helper()
-	for _, r := range table.Norms {
+	for _, r := range rows {
 		if r.Family == family && r.Scope == scope {
 			return r
 		}
 	}
-	require.FailNow(t, "no row", "%s %s in %+v", family, scope, table.Norms)
+	require.FailNow(t, "no row", "%s %s in %+v", family, scope, rows)
 	return types.Norm{}
 }
 
@@ -154,39 +152,12 @@ func TestNormsStaySilentBelowEitherGate(t *testing.T) {
 	}
 	assert.True(t, normRow(t, f.g.Norms(NormOptions{}), types.NormErrSentinelName, "go").Silent,
 		"a cohort of four is under the minimum of five")
-	assert.False(t, normRow(t, f.g.Norms(NormOptions{MinCohort: 4}), types.NormErrSentinelName, "go").Silent,
-		"a caller's own minimum is honored")
 
+	f.value("internal/a", "ErrX4", "error")
 	f.value("internal/a", "notFound", "error")
 	f.value("internal/a", "badInput", "error")
-	row := normRow(t, f.g.Norms(NormOptions{MinCohort: 4}), types.NormErrSentinelName, "go")
-	assert.Equal(t, [3]any{4, 6, true}, [3]any{row.Agree, row.Cohort, row.Silent}, "4 of 6 is under 80%")
-}
-
-func TestNormsNeverCountWhatAChangeIntroduced(t *testing.T) {
-	t.Parallel()
-
-	f := newNormFixture()
-	f.pkg("cmd/app", 1)
-	f.pkg("internal/new", 1)
-	f.imports("internal/new", "cmd/app")
-	for i := range 5 {
-		f.pkg(fmt.Sprintf("internal/p%d", i), 1)
-		f.imports("cmd/app", fmt.Sprintf("internal/p%d", i))
-		f.value(fmt.Sprintf("internal/p%d", i), fmt.Sprintf("ErrX%d", i), "error")
-	}
-	added := f.value("internal/new", "missing", "error")
-
-	before := f.g.Norms(NormOptions{})
-	assert.Equal(t, [2]int{5, 6}, [2]int{normRow(t, before, types.NormDepDirection, "cmd, internal").Agree,
-		normRow(t, before, types.NormDepDirection, "cmd, internal").Cohort})
-	assert.Equal(t, 6, normRow(t, before, types.NormErrSentinelName, "go").Cohort)
-
-	after := f.g.Norms(NormOptions{Introduced: map[string]bool{added: true, normNamespace("internal/new", "go"): true}})
-	dep := normRow(t, after, types.NormDepDirection, "cmd, internal")
-	assert.Equal(t, [3]any{5, 5, 0}, [3]any{dep.Agree, dep.Cohort, len(dep.Deviations)})
-	errs := normRow(t, after, types.NormErrSentinelName, "go")
-	assert.Equal(t, [2]int{5, 5}, [2]int{errs.Agree, errs.Cohort})
+	row := normRow(t, f.g.Norms(NormOptions{}), types.NormErrSentinelName, "go")
+	assert.Equal(t, [3]any{5, 7, true}, [3]any{row.Agree, row.Cohort, row.Silent}, "5 of 7 is under 80%")
 }
 
 func TestNormsSkipGeneratedAndTestCode(t *testing.T) {
@@ -211,7 +182,7 @@ func TestNormsSkipGeneratedAndTestCode(t *testing.T) {
 	table := f.g.Norms(NormOptions{Generated: map[string]bool{
 		"internal/a/gen/f0.go": true, "internal/a/gen/x_test.go": true, "mocks/a/f0.go": true,
 	}})
-	for _, r := range table.Norms {
+	for _, r := range table {
 		assert.NotEqual(t, "internal, mocks", r.Scope, "a generated package's imports are its generator's: %+v", r)
 	}
 	errs := normRow(t, table, types.NormErrSentinelName, "go")
@@ -232,7 +203,7 @@ func TestNormsJudgeTestPackagesOnlyWhereALanguagePackagesByDirectory(t *testing.
 			f.file(file, normNamespace(file, "typescript"), name, "typescript")
 		}
 	}
-	for _, r := range f.g.Norms(NormOptions{}).Norms {
+	for _, r := range f.g.Norms(NormOptions{}) {
 		assert.NotEqual(t, types.NormTestPackageName, r.Family, "%+v", r)
 	}
 }
@@ -258,26 +229,8 @@ func TestNormsFanoutIsADistributionOverImporters(t *testing.T) {
 	assert.Equal(t, types.Norm{
 		Family: types.NormDepFanout, Scope: "internal", Key: "at most 1",
 		Agree: 20, Cohort: 21, Share: 20.0 / 21,
-		Quantiles:  &types.NormQuantiles{P50: 1, P90: 1, P95: 1, Max: 12},
+		Quantiles:  &types.NormQuantiles{P95: 1, Max: 12},
 		Examples:   []string{"cmd/c00 imports 1", "cmd/c01 imports 1", "cmd/c02 imports 1"},
 		Deviations: []types.NormSite{{Subject: "cmd/big imports 12", Source: "cmd/big"}},
 	}, normRow(t, f.g.Norms(NormOptions{}), types.NormDepFanout, "internal"))
-}
-
-func TestNormsWriteReplacesTheCachedTable(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	first := types.NormTable{Definition: types.NormTableDefinition, MinCohort: 5, MinShare: 0.8,
-		Norms: []types.Norm{{Family: types.NormErrSentinelName, Scope: "go", Key: "err<X>", Agree: 9, Cohort: 10, Share: 0.9}}}
-	require.NoError(t, WriteNorms(dir, first))
-	second := first
-	second.Norms = nil
-	require.NoError(t, WriteNorms(dir, second))
-
-	raw, err := os.ReadFile(NormsPath(dir))
-	require.NoError(t, err)
-	var got types.NormTable
-	require.NoError(t, json.Unmarshal(raw, &got))
-	assert.Equal(t, second, got)
 }

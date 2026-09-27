@@ -159,9 +159,6 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 			if err := m.WriteGuardIndex(ctx); err != nil {
 				interactive.Emit(os.Stderr, "guard index not written: "+err.Error())
 			}
-			if err := writeNorms(ctx, m); err != nil {
-				interactive.Emit(os.Stderr, "norm table not written: "+err.Error())
-			}
 		}
 	}
 	return nil
@@ -493,42 +490,6 @@ func statsText(out types.KnowledgeStats) error {
 		}
 	}
 	return nil
-}
-
-// mineNorms mines g, which must carry its symbols. Generated output is what the workspace
-// declares a target writes, so a generated file never forms a norm.
-func mineNorms(ctx context.Context, ws types.Inspector, g *knowledge.Graph) (types.NormTable, error) {
-	var paths []string
-	for _, n := range g.Nodes() {
-		if n.Kind == types.KindFile {
-			paths = append(paths, n.Source)
-		}
-	}
-	slices.Sort(paths)
-	entries, err := ws.ClassifyFiles(ctx, slices.Compact(paths))
-	if err != nil {
-		return types.NormTable{}, err
-	}
-	generated := map[string]bool{}
-	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
-			generated[e.Path] = true
-		}
-	}
-	return g.Norms(knowledge.NormOptions{Generated: generated}), nil
-}
-
-// writeNorms caches the norm table where the guard and the advisors read it.
-func writeNorms(ctx context.Context, m *magus.Magus) error {
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
-	if err != nil {
-		return err
-	}
-	t, err := mineNorms(ctx, m, g)
-	if err != nil {
-		return err
-	}
-	return knowledge.WriteNorms(m.CacheDir(), t)
 }
 
 // loadKnowledgeGraph gathers the workspace inputs and runs the cache-first build,

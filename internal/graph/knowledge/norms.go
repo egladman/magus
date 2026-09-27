@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,47 +24,33 @@ type NormOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
-	// Introduced holds the node IDs (symbols, files, namespaces) new in a change. They never
-	// count, so a change cannot manufacture the norm it is then measured against.
-	Introduced map[string]bool
-	// MinCohort and MinShare are the silence gates, as for the conformance lens. Zero takes
-	// the defaults, 5 and 0.8.
-	MinCohort int
-	MinShare  float64
 }
 
 // Norms mines the norm table from g, which must carry its symbols. Rows come back ordered by
 // family, scope and key, so two runs over one graph agree byte for byte. A graph with no
-// symbols yields an empty table, never an error.
-func (g *Graph) Norms(o NormOptions) types.NormTable {
-	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Introduced: o.Introduced})
-	m := normMiner{g: g, x: x, introduced: o.Introduced, fileNS: g.fileNamespaces()}
+// symbols yields no rows, never an error.
+func (g *Graph) Norms(o NormOptions) []types.Norm {
+	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated})
+	m := normMiner{g: g, x: x, fileNS: g.fileNamespaces()}
 	pk := m.packages()
 	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName())
-	t := types.NormTable{
-		Definition: types.NormTableDefinition,
-		MinCohort:  cmp.Or(o.MinCohort, conformanceMinCohort),
-		MinShare:   cmp.Or(o.MinShare, conformanceMinShare),
-	}
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
 			r.Share = float64(r.Agree) / float64(r.Cohort)
 		}
-		r.Silent = r.Cohort < t.MinCohort || r.Share < t.MinShare
+		r.Silent = r.Cohort < conformanceMinCohort || r.Share < conformanceMinShare
 	}
 	slices.SortFunc(rows, func(a, b types.Norm) int {
 		return cmp.Or(cmp.Compare(a.Family, b.Family), cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.Key, b.Key))
 	})
-	t.Norms = rows
-	return t
+	return rows
 }
 
 type normMiner struct {
-	g          *Graph
-	x          *namingIndex
-	introduced map[string]bool
-	fileNS     map[string][]string
+	g      *Graph
+	x      *namingIndex
+	fileNS map[string][]string
 }
 
 // normPackages places each workspace package: its directory and the top-level directory
@@ -99,9 +83,6 @@ func (m normMiner) packages() normPackages {
 		}
 		dir := path.Dir(n.Source)
 		for _, ns := range nss {
-			if m.introduced[ns] {
-				continue
-			}
 			if cur, ok := pk.dir[ns]; !ok || dir < cur {
 				pk.dir[ns] = dir
 			}
@@ -219,7 +200,7 @@ func (m normMiner) depFanout(pk normPackages) []types.Norm {
 		}
 		slices.Sort(vals)
 		q := func(p float64) int { return vals[min(len(vals)-1, int(p*float64(len(vals))))] }
-		qs := &types.NormQuantiles{P50: q(0.5), P90: q(0.9), P95: q(0.95), Max: vals[len(vals)-1]}
+		qs := &types.NormQuantiles{P95: q(0.95), Max: vals[len(vals)-1]}
 		row := types.Norm{
 			Family:    types.NormDepFanout,
 			Scope:     layer,
@@ -248,7 +229,7 @@ func (m normMiner) errSentinelName() []types.Norm {
 	byLang := map[string]*types.Norm{}
 	for _, id := range slices.Sorted(maps.Keys(m.x.byID)) {
 		d := m.x.byID[id]
-		if d.shape.Kind != declValue || d.shape.Meaning != "error" || m.introduced[id] {
+		if d.shape.Kind != declValue || d.shape.Meaning != "error" {
 			continue
 		}
 		row := byLang[d.language]
@@ -281,7 +262,7 @@ func (m normMiner) testPackageName() []types.Norm {
 	var tests []string
 	for id, nss := range m.fileNS {
 		n := m.g.nodes[id]
-		if n.Kind != types.KindFile || m.x.generated(n.Source) || m.introduced[id] {
+		if n.Kind != types.KindFile || m.x.generated(n.Source) {
 			continue
 		}
 		if isTestSource(n.Source) {
@@ -349,17 +330,4 @@ func derefRows(m map[string]*types.Norm) []types.Norm {
 		out = append(out, *r)
 	}
 	return out
-}
-
-// NormsPath is the norm table under a workspace cache dir.
-func NormsPath(cacheDir string) string { return filepath.Join(StoreDir(cacheDir), "norms.json") }
-
-// WriteNorms replaces the cached norm table atomically, so a reader sees the previous table or
-// this one and never a partial file.
-func WriteNorms(cacheDir string, t types.NormTable) error {
-	b, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeAtomic(NormsPath(cacheDir), string(b)+"\n")
 }
