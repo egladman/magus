@@ -230,7 +230,8 @@ func memoryDelete(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory delete <name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Remove one memory entry. This is strict: a missing name is likely a typo.")
+			fmt.Fprintln(os.Stderr, "Move one memory entry into the store's archive and print the command that")
+			fmt.Fprintln(os.Stderr, "puts it back. A missing name is an error, since it is likely a typo.")
 			fs.PrintDefaults()
 		}
 	})
@@ -240,24 +241,63 @@ func memoryDelete(root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus memory delete: requires exactly one entry name")
 	}
-	if err := memory.Delete(root, pos[0], false); err != nil {
+	archived, err := memory.Delete(root, pos[0])
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("magus memory delete: %w; see what is there with `%s`", err, hint.MemoryLs)
+		}
 		return err
 	}
+	restore := memoryRestoreCommand(archived)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	out := struct {
-		Deleted string `json:"deleted"`
-	}{Deleted: pos[0]}
 	if opts.Format == outputName {
 		return emitNames([]string{pos[0]})
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, struct {
+			Deleted  string        `json:"deleted"`
+			Archived string        `json:"archived"`
+			Record   memory.Record `json:"record"`
+			Restore  string        `json:"restore"`
+		}{Deleted: pos[0], Archived: archived.Path, Record: archived.Record, Restore: restore})
 	}
-	fmt.Printf("Deleted memory entry %q.\n", pos[0])
+	fmt.Printf("Deleted memory entry %q; archived at %s.\nRestore it with:\n  %s\n", pos[0], archived.Path, restore)
 	return nil
+}
+
+// memoryRestoreCommand is the command that recreates an archived entry. An entry that could
+// not be read has no fields to put, so its restore is moving the archived file back.
+func memoryRestoreCommand(a memory.Archived) string {
+	r := a.Record
+	if r.Type == "" {
+		return "mv " + shellQuote(a.Path) + " " + shellQuote(a.Origin)
+	}
+	args := []string{r.Name, "--" + gen.FlagMemoryPutType, string(r.Type)}
+	for _, ref := range r.Refs {
+		args = append(args, "--"+gen.FlagMemoryPutRef, shellQuote(string(ref.Kind)+": "+ref.Target))
+	}
+	for _, name := range r.References {
+		args = append(args, "--"+gen.FlagMemoryPutReference, name)
+	}
+	for _, f := range [...]struct{ flag, value string }{
+		{gen.FlagMemoryPutStatus, r.Status},
+		{gen.FlagMemoryPutBody, r.Body},
+		{gen.FlagMemoryPutExcerpt, r.Excerpt},
+	} {
+		if f.value != "" {
+			args = append(args, "--"+f.flag, shellQuote(f.value))
+		}
+	}
+	return hint.MemoryPut.With(args...)
+}
+
+// shellQuote single-quotes s for a POSIX shell, so a pasted restore command carries body and
+// excerpt text byte for byte.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func memoryVerify(ctx context.Context, root string, args []string) error {

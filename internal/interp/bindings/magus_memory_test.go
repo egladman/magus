@@ -49,12 +49,15 @@ export fun roundTrip() > [{str: any}] !> any {
     final got = magus\memory\get("use-buzz");
     final listed = magus\memory\list();
     magus\memory\delete("use-buzz");
-    magus\memory\delete("use-buzz");
     return [stored, got, listed, magus\memory\list()];
 }
 
 export fun getAbsent() > void !> any {
     _ = magus\memory\get("absent");
+}
+
+export fun deleteAbsent() > void !> any {
+    magus\memory\delete("absent");
 }
 `)
 	got, err := call("roundTrip")
@@ -70,10 +73,12 @@ export fun getAbsent() > void !> any {
 	assert.Equal(t, "compose in Buzz", field(steps[0], "body").AsString(), "a key opts omits is kept")
 	assert.Equal(t, "accepted", field(steps[1], "status").AsString())
 	assert.Len(t, field(steps[2], "records").ListItems(), 1)
-	assert.Empty(t, field(steps[3], "records").ListItems(), "deleting twice converges")
+	assert.Empty(t, field(steps[3], "records").ListItems())
 
 	_, err = call("getAbsent")
 	require.ErrorContains(t, err, `no entry named "absent"`)
+	_, err = call("deleteAbsent")
+	require.ErrorContains(t, err, `no entry named "absent"`, "a delete of a name that holds nothing raises")
 }
 
 func TestVCSCheckpointNamespaceMatchesTheMember(t *testing.T) {

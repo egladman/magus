@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/egladman/magus/internal/memory"
@@ -71,6 +72,43 @@ func TestMemoryPutMatchesTheCLIContract(t *testing.T) {
 	_, err = put(map[string]any{"name": "cache-key-drift", "type": "pointer"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, memory.ErrInvalid, "a record cannot be updated into another type")
+}
+
+// TestMemoryDeleteArchivesAndRefusesAnAbsentName pins the agent door: a delete hands back
+// the record it archived, a put of that record restores it, and a typo is an error rather
+// than a report of a delete that never happened.
+func TestMemoryDeleteArchivesAndRefusesAnAbsentName(t *testing.T) {
+	testkit.Isolate(t)
+	tool := &memoryTool{opts: Options{Magus: fixtureMagus(t)}}
+	ctx := context.Background()
+	invoke := func(params map[string]any) (any, error) {
+		resp, err := tool.Invoke(ctx, spells.InvokeRequest{Params: params})
+		return resp.Data, err
+	}
+
+	_, err := invoke(map[string]any{"op": "put", "name": "next-release", "type": "plan", "refs": "command: magus affected ci", "body": "Gate after docs."})
+	require.NoError(t, err)
+
+	_, err = invoke(map[string]any{"op": "delete", "name": "next-releas"})
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.Contains(t, err.Error(), `did you mean "next-release"?`)
+
+	data, err := invoke(map[string]any{"op": "delete", "name": "next-release"})
+	require.NoError(t, err)
+	out, ok := data.(map[string]any)
+	require.True(t, ok)
+	view, ok := out["record"].(memoryRecordView)
+	require.True(t, ok)
+	assert.Equal(t, "next-release", out["deleted"])
+	assert.FileExists(t, out["archived"].(string))
+	assert.Equal(t, "Gate after docs.", view.Body)
+
+	_, err = invoke(map[string]any{"op": "get", "name": "next-release"})
+	require.Error(t, err)
+	_, err = invoke(map[string]any{"op": "put", "name": view.Name, "type": view.Type, "refs": "command: magus affected ci", "body": view.Body})
+	require.NoError(t, err)
+	_, err = invoke(map[string]any{"op": "get", "name": "next-release"})
+	require.NoError(t, err, "a put of the archived record restores it")
 }
 
 func TestSplitCommaList(t *testing.T) {

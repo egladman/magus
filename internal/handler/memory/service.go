@@ -80,14 +80,17 @@ func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.
 	return connect.NewResponse(recordToProto(stored)), nil
 }
 
-// DeleteMemory removes a record by name. allow_missing=true makes deleting an absent record
+// DeleteMemory archives a record by name. allow_missing=true makes deleting an absent record
 // a no-op; otherwise an absent record is NotFound. Any other failure is a storage error.
 func (s *Service) DeleteMemory(_ context.Context, req *connect.Request[memoryv1.DeleteMemoryRequest]) (*connect.Response[memoryv1.DeleteMemoryResponse], error) {
-	err := store.Delete(s.ws.Root(), req.Msg.GetName(), req.Msg.GetAllowMissing())
-	if errors.Is(err, os.ErrNotExist) {
+	_, err := store.Delete(s.ws.Root(), req.Msg.GetName())
+	switch {
+	case errors.Is(err, os.ErrNotExist) && req.Msg.GetAllowMissing():
+	case errors.Is(err, os.ErrNotExist):
 		return nil, connect.NewError(connect.CodeNotFound, err)
-	}
-	if err != nil {
+	case errors.Is(err, store.ErrInvalid):
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&memoryv1.DeleteMemoryResponse{}), nil
