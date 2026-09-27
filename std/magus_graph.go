@@ -267,7 +267,12 @@ func recordMap(v any) (map[string]any, error) {
 	if err := json.UnmarshalLossless(raw, &out); err != nil {
 		return nil, err
 	}
-	return numbersToBuzz(out).(map[string]any), nil
+	// numbersToBuzz's map[string]any case always hands the same map back.
+	converted, ok := numbersToBuzz(out).(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("recordMap: numbersToBuzz returned %T, not a map", converted)
+	}
+	return converted, nil
 }
 
 // jsonNumber is encoding/json.Number's method set, named here because this tree reaches
