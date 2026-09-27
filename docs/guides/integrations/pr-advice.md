@@ -172,6 +172,24 @@ The checks read what every language's index holds (names, kinds, scopes, referen
 where a language reports it, the declaration's shape: `param-order` needs a language whose
 index renders parameter names (Go and TypeScript today).
 
+A directory the change creates gets three more checks, read from `magus diff`'s `layout` on
+the first changed file in it. A directory is new when every file the index places under it
+is one the change adds, so an existing directory is never reported. Its norm is the
+directories of the same language under the same parent that the change did not create,
+behind the same two gates:
+
+| check           | it reports                                                              |
+| --------------- | ----------------------------------------------------------------------- |
+| `package-files` | a new directory holding one source file where most beside it hold more  |
+| `package-tests` | a new directory holding no test file where most beside it hold one      |
+| `package-name`  | a new directory with a digit in its name where most beside it have none |
+
+Each finding states the directory's own counts (source files, test files, and the directories
+whose files reference what it defines), how many of its siblings follow the norm, and the two
+nearest that do. A test file is recognized by its language's own naming (`_test.go`,
+`.test.ts`, `.spec.ts`, `test_*.py`), and a directory mixing two languages is left alone.
+These are facts about a boundary the author chose, so they stay advice.
+
 Before the checks run, `magus diff` brings the symbol index of every project the change
 touched up to date through that project's `scip` target, so a current index replays and a
 stale one rebuilds only itself. When it cannot (the indexer is missing or fails, or cache

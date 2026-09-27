@@ -199,6 +199,15 @@ const (
 	// CheckParamOrder is a function taking two parameters in the reverse of the order most
 	// functions in its scope that take both do.
 	CheckParamOrder = "param-order"
+	// CheckPackageFiles is a new directory holding one source file where most directories of
+	// its language beside it hold more.
+	CheckPackageFiles = "package-files"
+	// CheckPackageTests is a new directory holding no test file where most directories of its
+	// language beside it hold one.
+	CheckPackageTests = "package-tests"
+	// CheckPackageName is a new directory whose name carries a digit where most directories of
+	// its language beside it carry none.
+	CheckPackageName = "package-name"
 )
 
 // DiffChurn is how often this file has been changing, and whether that is accelerating.
@@ -301,6 +310,11 @@ type DiffFile struct {
 	// Symbols are the changed symbols this file defines, each carrying how widely it is
 	// referenced. Empty when no symbol index covers the file.
 	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// Layout is what the package checks found about the directory this change creates around
+	// this file: its file count, test files and name against the directories beside it, as
+	// CheckAdvice. Only the first changed file of a new directory carries it, so a finding is
+	// reported once per directory.
+	Layout []Check `json:"layout,omitempty" yaml:"layout,omitempty"`
 	// Surface is one of the DiffSurface constants: whether any changed symbol here is
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
 	// rather than a verdict; see DiffSurface.

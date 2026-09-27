@@ -171,6 +171,7 @@ export object DiffFile {
     hint: str = "",
     coverage: ImpactCoverage? = null,
     symbols: [DiffSymbol] = [],
+    layout: [Check] = [],
     surface: str = "",
     touches: [DiffTouch] = [],
     readState: str = "",
