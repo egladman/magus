@@ -175,6 +175,10 @@ type ReleaseIndex struct {
 	// compromise into a denial of service. RFC3339; empty means no bound.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
+	// Prereleases lists release candidates apart from Releases, because every binary
+	// through v0.4.3 auto-selects the highest semver in Releases and drops a member it
+	// does not declare. Only an explicit --version reaches this list.
+	Prereleases []IndexRelease `json:"prereleases,omitzero"`
 }
 
 // IndexRelease represents one entry inside ReleaseIndex.Releases. The index
@@ -272,16 +276,18 @@ func checkNotExpired(expiresAt string) error {
 
 // SelectRelease returns the IndexRelease for the requested tag from idx.
 // When tag is empty, the release with the highest valid semver Version among
-// non-yanked entries is returned; positional order in the index is not
+// non-yanked stable entries is returned; positional order in the index is not
 // trusted (an index that is not newest-first, whether by bug or tampering,
 // must not select a stale release). Entries whose Version is not valid
-// semver are rejected rather than considered.
+// semver are rejected rather than considered, and a prerelease is never
+// selected automatically, even one listed under Releases. A tag is looked up
+// in Releases, then Prereleases, so naming a prerelease still installs it.
 func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
 	if tag == "" {
 		var best *IndexRelease
 		for i := range idx.Releases {
 			rel := &idx.Releases[i]
-			if rel.Yanked || !semver.IsValid(rel.Version) {
+			if rel.Yanked || !semver.IsValid(rel.Version) || IsPrerelease(rel.Version) {
 				continue
 			}
 			if best == nil || semver.Compare(rel.Version, best.Version) > 0 {
@@ -289,16 +295,20 @@ func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
 			}
 		}
 		if best == nil {
-			return nil, errors.New("no non-yanked release with a valid semver version found in index")
+			return nil, errors.New("no non-yanked stable release with a valid semver version found in index " +
+				"(a prerelease installs only by name, with --version)")
 		}
 		return best, nil
 	}
-	for i := range idx.Releases {
-		if idx.Releases[i].Version == tag {
-			if idx.Releases[i].Yanked {
+	for _, list := range [][]IndexRelease{idx.Releases, idx.Prereleases} {
+		for i := range list {
+			if list[i].Version != tag {
+				continue
+			}
+			if list[i].Yanked {
 				return nil, fmt.Errorf("release %s has been yanked", tag)
 			}
-			return &idx.Releases[i], nil
+			return &list[i], nil
 		}
 	}
 	return nil, fmt.Errorf("release %s not found in index", tag)
@@ -543,6 +553,19 @@ func Compare(a, b string) int {
 	return cmp
 }
 
+// IsPrerelease reports whether version carries a semver prerelease component:
+// v0.5.0-rc.1 and v1.2.3-rc.1+build-9 do, v1.2.3+build-1 does not, since build
+// metadata is not a prerelease. The leading v is optional; a string that is not
+// semver is not a prerelease. It is the one definition the release index, the
+// release cut and self update share, and it answers as
+// .github/actions/magus/prerelease.buzz does for the GitHub Release flag.
+func IsPrerelease(version string) bool {
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	return semver.Prerelease(version) != ""
+}
+
 // PrintUpdateStatus writes a one-line current-vs-available comparison.
 func PrintUpdateStatus(tagName, currentVersion string) {
 	cmp, ok := compareParsed(tagName, currentVersion)
@@ -556,7 +579,7 @@ func PrintUpdateStatus(tagName, currentVersion string) {
 	case 0:
 		fmt.Printf("already up to date (%s)\n", currentVersion)
 	case -1:
-		fmt.Printf("current version %s is newer than latest release %s\n", currentVersion, tagName)
+		fmt.Printf("current version %s is newer than latest stable release %s\n", currentVersion, tagName)
 	}
 }
 

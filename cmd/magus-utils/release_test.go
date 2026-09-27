@@ -104,6 +104,31 @@ func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
 	require.Equal(t, "magus_v0.2.0_linux_amd64_static.tar.gz", rel.Artifacts[0].Name)
 }
 
+// Every shipped client through v0.4.3 auto-selects the highest semver under
+// "releases", so a candidate must never be emitted there.
+func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
+	manifests := []ReleaseManifest{
+		{Version: "v0.5.0-rc.1", Artifacts: []ReleaseArtifact{{Name: "rc.tar.gz"}}},
+		{Version: "v0.4.3+build-1", Artifacts: []ReleaseArtifact{{Name: "stable.tar.gz"}}},
+	}
+	idx := buildIndexForTest(manifests)
+	data, err := json.Marshal(idx)
+	require.NoError(t, err)
+	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","expires_at":"2099-01-01T00:00:00Z",`+
+		`"releases":[{"version":"v0.4.3+build-1","artifacts":[{"name":"stable.tar.gz","platform":"","size":"","sha256":""}]}],`+
+		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz","platform":"","size":"","sha256":""}]}]}`,
+		string(data))
+
+	var client selfupdate.ReleaseIndex
+	require.NoError(t, json.Unmarshal(data, &client))
+	auto, err := selfupdate.SelectRelease(&client, "")
+	require.NoError(t, err)
+	require.Equal(t, "v0.4.3+build-1", auto.Version)
+	named, err := selfupdate.SelectRelease(&client, "v0.5.0-rc.1")
+	require.NoError(t, err)
+	require.Equal(t, "rc.tar.gz", named.Artifacts[0].Name)
+}
+
 // servedIndexDir is the tracked docs/gen/public/release, the one directory under
 // docs/gen/ that a render never writes.
 const servedIndexDir = "../../docs/gen/public/release"

@@ -294,6 +294,94 @@ func TestSelectRelease_AllMalformedVersions(t *testing.T) {
 	assert.Contains(t, err.Error(), "semver")
 }
 
+// The cases mirror .github/actions/magus/prerelease.buzz's tests, so the GitHub
+// Release flag and the index agree on every tag shape.
+func TestIsPrereleaseAgreesWithTheReleaseFlag(t *testing.T) {
+	t.Parallel()
+	cases := map[string]bool{
+		"v0.4.0":              false,
+		"v0.5.0-rc.1":         true,
+		"v1.0.0-beta":         true,
+		"v1.2.3+build-1":      false,
+		"v1.2.3-rc.1+build-9": true,
+		"0.5.0-rc.1":          true,
+		"not-a-version":       false,
+		"":                    false,
+	}
+	for version, want := range cases {
+		assert.Equal(t, want, IsPrerelease(version), version)
+	}
+}
+
+func TestSelectRelease_LatestSkipsPrereleases(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases: []IndexRelease{
+			{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}},
+			{Version: "v0.4.3", Artifacts: []IndexArtifact{{Name: "stable.tar.gz"}}},
+		},
+		Prereleases: []IndexRelease{
+			{Version: "v0.6.0-rc.1", Artifacts: []IndexArtifact{{Name: "next.tar.gz"}}},
+		},
+	}
+	rel, err := SelectRelease(idx, "")
+	require.NoError(t, err)
+	require.Equal(t, IndexRelease{Version: "v0.4.3", Artifacts: []IndexArtifact{{Name: "stable.tar.gz"}}}, *rel)
+}
+
+func TestSelectRelease_OnlyPrereleasesRefusesAutoSelect(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases:      []IndexRelease{{Version: "v0.5.0-rc.1"}},
+		Prereleases:   []IndexRelease{{Version: "v0.5.0-rc.2"}},
+	}
+	_, err := SelectRelease(idx, "")
+	require.EqualError(t, err, "no non-yanked stable release with a valid semver version found in index "+
+		"(a prerelease installs only by name, with --version)")
+}
+
+func TestSelectRelease_ExplicitPrereleaseInstalls(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases:      []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{{Name: "stable.tar.gz"}}}},
+		Prereleases: []IndexRelease{
+			{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}},
+			{Version: "v0.5.0-rc.2", Yanked: true},
+		},
+	}
+	rel, err := SelectRelease(idx, "v0.5.0-rc.1")
+	require.NoError(t, err)
+	require.Equal(t, IndexRelease{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}}, *rel)
+
+	_, err = SelectRelease(idx, "v0.5.0-rc.2")
+	require.EqualError(t, err, "release v0.5.0-rc.2 has been yanked")
+}
+
+// A shipped client decodes into a ReleaseIndex with no Prereleases field and
+// drops the member, which is what keeps it on the stable list.
+func TestReleaseIndex_PrereleasesDecodeApart(t *testing.T) {
+	t.Parallel()
+	data := []byte(`{"schema_version":1,"key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
+		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz"}]}]}`)
+	var idx ReleaseIndex
+	require.NoError(t, json.Unmarshal(data, &idx))
+	require.Equal(t, ReleaseIndex{
+		SchemaVersion: 1,
+		KeyID:         "k",
+		Releases:      []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{}}},
+		Prereleases:   []IndexRelease{{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}}},
+	}, idx)
+
+	var shipped struct {
+		Releases []IndexRelease `json:"releases"`
+	}
+	require.NoError(t, json.Unmarshal(data, &shipped))
+	require.Equal(t, []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{}}}, shipped.Releases)
+}
+
 func TestFindAssets_AllPresent(t *testing.T) {
 	t.Parallel()
 	assetName := fmt.Sprintf("magus_v1.0.0_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)

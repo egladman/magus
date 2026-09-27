@@ -152,6 +152,11 @@ type ReleaseIndex struct {
 	// internal/selfupdate for what it does and does not buy.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
+	// Prereleases holds every manifest selfupdate.IsPrerelease names, apart from
+	// Releases, because a shipped client auto-selects the highest semver in Releases.
+	// Nil rather than empty when there are none, so omitzero leaves the signed bytes
+	// of an index without candidates as they were.
+	Prereleases []IndexRelease `json:"prereleases,omitzero"`
 }
 
 // IndexValidity is how long a signed index is good for. Long, because nothing
@@ -193,11 +198,16 @@ func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []
 		if artifacts == nil {
 			artifacts = []ReleaseArtifact{} // "artifacts":[] rather than null
 		}
-		idx.Releases = append(idx.Releases, IndexRelease{
+		rel := IndexRelease{
 			Version:   m.Version,
 			Yanked:    m.Yanked,
 			Artifacts: artifacts,
-		})
+		}
+		if selfupdate.IsPrerelease(m.Version) {
+			idx.Prereleases = append(idx.Prereleases, rel)
+			continue
+		}
+		idx.Releases = append(idx.Releases, rel)
 	}
 	return idx
 }
