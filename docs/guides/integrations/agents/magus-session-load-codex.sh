@@ -18,11 +18,14 @@
 #
 # Codex records no skill loads and no hook output, and its only exit-like signal
 # is patch_apply_end's success flag, which describes a patch rather than a
-# command. The coverage line says so, and a report reading it says unobservable
-# for those dimensions rather than zero. Declaring commands=yes on the strength
-# of what the other hosts supply is the failure this line exists to prevent.
+# command. Neither session_meta nor a turn record carries a model name or a CLI
+# version this adapter can point at with confidence, so both are declared none
+# rather than guessed. The coverage line says so, and a report reading it says
+# unobservable for those dimensions rather than zero. Declaring commands=yes on
+# the strength of what the other hosts supply is the failure this line exists
+# to prevent.
 # magus-guard-template: 18
-# magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
+# magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
 
