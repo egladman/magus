@@ -521,6 +521,50 @@ func TestCutLeavesNoFragmentBehind(t *testing.T) {
 	require.Equal(t, 1, strings.Count(manifests[0].Body, "- **Brand new feature.**"), "the entry belongs to v0.2.0 alone")
 }
 
+// A candidate's cut must leave every fragment for the final cut, or v0.5.0 would
+// ship with only the notes written after v0.5.0-rc.1.
+func TestRunCut_PrereleaseKeepsFragmentsForTheFinalCut(t *testing.T) {
+	artifactsDir := t.TempDir()
+	unreleasedDir := t.TempDir()
+	relDir := t.TempDir()
+	cut := func(version string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_"+version+"_linux_amd64_static.tar.gz"), []byte(version), 0o644))
+		require.NoError(t, runCut([]string{
+			"-version", version, "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
+		}))
+	}
+	names := func() []string {
+		t.Helper()
+		frags, err := readFragments(unreleasedDir)
+		require.NoError(t, err)
+		var got []string
+		for _, f := range frags {
+			got = append(got, filepath.Base(f.path))
+		}
+		return got
+	}
+
+	writeFragment(t, unreleasedDir, "early.md", "### Added\n\n- **Early.**\n")
+	cut("v0.5.0-rc.1")
+	require.Equal(t, []string{"early.md"}, names(), "the candidate deletes nothing")
+	cut("v0.5.0-rc.1")
+	require.Equal(t, []string{"early.md"}, names(), "a candidate's rerun deletes nothing either")
+
+	writeFragment(t, unreleasedDir, "late.md", "### Fixed\n\n- **Late.**\n")
+	require.NoError(t, os.Remove(filepath.Join(artifactsDir, "magus_v0.5.0-rc.1_linux_amd64_static.tar.gz")))
+	cut("v0.5.0")
+	require.Empty(t, names(), "the final cut folds and deletes every fragment")
+
+	manifests, err := loadManifests(relDir)
+	require.NoError(t, err)
+	require.Len(t, manifests, 2)
+	require.Equal(t, "v0.5.0", manifests[0].Version)
+	require.Equal(t, "### Added\n\n- **Early.**\n\n### Fixed\n\n- **Late.**", manifests[0].Body, "the final notes are whole")
+	require.Equal(t, "v0.5.0-rc.1", manifests[1].Version)
+	require.Equal(t, "### Added\n\n- **Early.**", manifests[1].Body, "the candidate records its notes")
+}
+
 // TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is
 // already there. A publish job can fail at any step after the cut, so "already cut" has to
 // be a state a rerun passes THROUGH when the bytes agree, and a refusal when they do not.
