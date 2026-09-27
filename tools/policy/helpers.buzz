@@ -65,6 +65,59 @@ export fun flagValue(args: [str], long: str, short: str) > str? {
     return null;
 }
 
+final heredocOpener = $"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?";
+
+// substitutedHeredocs are the bodies of the heredocs line feeds to a command substitution
+// (`"$(cat <<'EOF'`), in order. The parser renders such an argument empty, so these are the
+// only way to read a message written that way.
+export fun substitutedHeredocs(line: str) > [str] {
+    final bodies = mut [<str>];
+    final lines = line.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final open = heredocOpener.match(lines[i]);
+        final at = lines[i].indexOf("<<");
+        if (open == null or at == null or lines[i].sub(0, len: at!).indexOf("$(") == null) {
+            i = i + 1;
+            continue;
+        }
+        final body = mut [<str>];
+        var j = i + 1;
+        while (j < lines.len() and lines[j].trim() != open![1]) {
+            body.append(lines[j]);
+            j = j + 1;
+        }
+        bodies.append(body.join("\n"));
+        i = j + 1;
+    }
+    return bodies;
+}
+
+// fillSlots puts texts, in order, into the arguments slots names: slots[i] lists the
+// argument indices of programs[i] whose value the parser could not render.
+export fun fillSlots(programs: [Program], slots: [[int]], texts: [str]) > [Program] {
+    final filled = mut [<Program>];
+    var next = 0;
+    foreach (i, p in programs) {
+        if (slots[i].len() == 0 or next >= texts.len()) {
+            filled.append(p);
+            continue;
+        }
+        final args = mut [<str>];
+        foreach (arg in p.args) {
+            args.append(arg);
+        }
+        foreach (slot in slots[i]) {
+            if (next < texts.len()) {
+                args[slot] = texts[next];
+                next = next + 1;
+            }
+        }
+        filled.append(Program{ name = p.name, args = args, repeats = p.repeats, path = p.path });
+    }
+    return filled;
+}
+
 // GoCall is a go command's -C directory, "" for none, and its argv from the subcommand on
 // with -C removed. go accepts -C first, before the subcommand or right after it.
 export object GoCall {

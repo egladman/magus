@@ -1,0 +1,341 @@
+// The commit-subject rule: the shape of a commit message written with `git commit -m`.
+namespace agentpolicy\commits;
+
+import "std";
+import "magus";
+import "./tools/policy/helpers" as helpers;
+
+final firstCommitDenial = "Load Skill(idiomatic-commit-messages) before this session's first commit, "
+    + "then run the same command again. This asks once per session.";
+
+final fixLine = "Commit one lowercase imperative subject line with its clauses joined by `;`: no body, "
+    + "no prefix, no attribution. Skill(idiomatic-commit-messages) has the full rules.";
+
+final maxSubject = 150;
+
+final attribution = $"(?i)co-authored-by|generated with";
+final nonASCII = $"[^ -~\n\t]";
+// A capital followed by a lowercase letter: `Fix the port` is titlecased, `URL-parse the
+// port` opens with an acronym and passes.
+final titlecased = $"^[^A-Za-z]*[A-Z][a-z]";
+
+// The git options before the subcommand that take the next word as their value.
+final gitValueFlags = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
+    "--super-prefix", "--attr-source"];
+
+// The git commit long options that take the next word as their value when not given `=`.
+final commitValueFlags = ["--file", "--author", "--date", "--cleanup", "--reuse-message",
+    "--reedit-message", "--fixup", "--squash", "--trailer", "--template", "--pathspec-from-file"];
+
+// The git commit short options that take a value, attached or as the next word.
+final commitValueShorts = ["F", "C", "c", "t"];
+
+// commitStart is the index of the first argument after `commit` in a git call's args, or
+// null when it runs another subcommand or asks for help.
+fun commitStart(p: helpers\Program) > int? {
+    if (p.name != "git") {
+        return null;
+    }
+    var skip = false;
+    foreach (i, arg in p.args) {
+        if (skip) {
+            skip = false;
+        } else if (arg.startsWith("-")) {
+            skip = arg.indexOf("=") == null and gitValueFlags.indexOf(arg) != null;
+        } else {
+            if (arg != "commit" or helpers\hasFlag(p.args.sub(i + 1), long: "--help") or p.args.sub(i + 1).indexOf("-h") != null) {
+                return null;
+            }
+            return i + 1;
+        }
+    }
+    return null;
+}
+
+// Message is one -m value: its text, and the index of the argument holding it, which is
+// null when the value is attached to its flag (`-mtext`, `--message=text`).
+object Message {
+    text: str,
+    slot: int?,
+}
+
+fun messagesOf(p: helpers\Program, start: int) > [Message] {
+    final found = mut [<Message>];
+    var i = start;
+    while (i < p.args.len()) {
+        final arg = p.args[i];
+        if (arg == "--") {
+            break;
+        }
+        if (arg == "--message") {
+            if (i + 1 < p.args.len()) {
+                found.append(Message{ text = p.args[i + 1], slot = i + 1 });
+            }
+            i = i + 2;
+        } else if (arg.startsWith("--message=")) {
+            found.append(Message{ text = arg.sub(10), slot = null });
+            i = i + 1;
+        } else if (arg.startsWith("--")) {
+            if (arg.indexOf("=") == null and commitValueFlags.indexOf(arg) != null) {
+                i = i + 1;
+            }
+            i = i + 1;
+        } else if (arg.startsWith("-") and arg.len() > 1) {
+            var k = 1;
+            var consumed = false;
+            while (k < arg.len()) {
+                final flag = arg.sub(k, len: 1);
+                final rest = arg.sub(k + 1);
+                if (flag == "m") {
+                    if (rest != "") {
+                        found.append(Message{ text = rest, slot = null });
+                    } else if (i + 1 < p.args.len()) {
+                        found.append(Message{ text = p.args[i + 1], slot = i + 1 });
+                        consumed = true;
+                    }
+                    break;
+                }
+                if (commitValueShorts.indexOf(flag) != null) {
+                    consumed = rest == "";
+                    break;
+                }
+                k = k + 1;
+            }
+            if (consumed) {
+                i = i + 1;
+            }
+            i = i + 1;
+        } else {
+            i = i + 1;
+        }
+    }
+    return found;
+}
+
+// messageSlots are the arguments of p holding a commit message the parser rendered empty,
+// a substitution such as `-m "$(cat <<'EOF' ...)"`.
+export fun messageSlots(p: helpers\Program) > [int] {
+    final slots = mut [<int>];
+    final start = commitStart(p);
+    if (start == null) {
+        return slots;
+    }
+    foreach (m in messagesOf(p, start: start!)) {
+        if (m.text == "" and m.slot != null) {
+            slots.append(m.slot!);
+        }
+    }
+    return slots;
+}
+
+// subjectProblems names what is wrong with one git commit's message. A message that still
+// renders empty is a value only known at run time (git itself refuses a literal empty one),
+// so its subject goes unjudged.
+export fun subjectProblems(args: [str], messages: [str]) > [str] {
+    final problems = mut [<str>];
+    if (attribution.match(args.join("\n")) != null) {
+        problems.append("an attribution (Co-Authored-By, Generated with): credit nobody in a commit");
+    }
+    if (messages.len() > 1) {
+        problems.append("more than one -m: each after the first becomes a body paragraph");
+    }
+    if (messages.len() == 0 or messages[0] == "") {
+        return problems;
+    }
+    if (messages[0].indexOf("\n") != null) {
+        problems.append("a line break: the message has a body");
+    }
+    final subject = messages[0].trim().split("\n")[0].trim();
+    if (subject == "") {
+        problems.append("an empty subject");
+        return problems;
+    }
+    if (nonASCII.match(subject) != null) {
+        problems.append("a character outside plain ASCII (an em dash, a curly quote, an emoji)");
+    }
+    if (titlecased.match(subject) != null) {
+        problems.append("a capitalized first word: write it lowercase; an acronym may lead");
+    }
+    if (subject.endsWith(".")) {
+        problems.append("a trailing period");
+    }
+    if (subject.indexOf(",") != null) {
+        problems.append("a comma: join clauses with `;`");
+    }
+    if (subject.indexOf(":") != null) {
+        problems.append("a colon: no area prefix, and clauses join with `;`");
+    }
+    if (subject.indexOf("(") != null or subject.indexOf(")") != null) {
+        problems.append("a parenthesis: join clauses with `;`");
+    }
+    if (subject.indexOf("!") != null) {
+        problems.append("an exclamation mark");
+    }
+    if (subject.indexOf("?") != null) {
+        problems.append("a question mark");
+    }
+    if (subject.indexOf(" - ") != null) {
+        problems.append("a spaced hyphen used as a dash: join clauses with `;`");
+    }
+    if (subject.len() > maxSubject) {
+        problems.append("{subject.len()} characters, past {maxSubject}: cut it, or split the commit along a code boundary");
+    }
+    return problems;
+}
+
+// commits reports whether a line runs git commit.
+export fun commits(programs: [helpers\Program]) > bool {
+    foreach (p in programs) {
+        if (commitStart(p) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// decideCommit denies the session's first commit once, so the rules are loaded before a
+// message is written, then every commit whose message breaks them. Each git commit on the
+// line is judged on its own: two chained commits are two subjects, not a subject and a body.
+export fun decideCommit(programs: [helpers\Program], once: fun (key: str) > bool) > GuardVerdict {
+    if (!commits(programs)) {
+        return magus\guard.allow();
+    }
+    if (once("commit-subject")) {
+        return magus\guard.deny(firstCommitDenial);
+    }
+    final problems = mut [<str>];
+    foreach (p in programs) {
+        final start = commitStart(p);
+        if (start != null) {
+            final messages = mut [<str>];
+            foreach (m in messagesOf(p, start: start!)) {
+                messages.append(m.text);
+            }
+            foreach (problem in subjectProblems(p.args.sub(start!), messages: messages)) {
+                if (problems.indexOf(problem) == null) {
+                    problems.append(problem);
+                }
+            }
+        }
+    }
+    if (problems.len() == 0) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny("This commit message breaks the subject rules:\n  - " + problems.join("\n  - ") + "\n" + fixLine);
+}
+
+// seen is a gate whose first firing is already spent, the state after the session's first
+// commit was turned back.
+fun seen() > fun (key: str) > bool {
+    final once = helpers\counter();
+    once("commit-subject");
+    return once;
+}
+
+fun ask(argv: [str]) > GuardVerdict {
+    return decideCommit(helpers\request([argv]), once: seen());
+}
+
+fun problemsOf(argv: [str]) > str {
+    return ask(argv).reason;
+}
+
+test "the session's first commit is turned back once to load the rules" {
+    final once = helpers\counter();
+    final line = helpers\request([["git", "commit", "-m", "trim a fragment"]]);
+    final first = decideCommit(line, once: once);
+    std\assert(first.decision == "deny", message: "the first commit");
+    std\assert(first.reason.indexOf("Skill(idiomatic-commit-messages)") != null, message: "names the skill");
+    std\assert(decideCommit(line, once: once).decision == "allow", message: "and only once");
+}
+
+test "a lowercase imperative subject passes, an acronym may lead it" {
+    foreach (argv in [
+        ["git", "commit", "-m", "trim a fragment; keep the key stable"],
+        ["git", "commit", "-m", "URL-parse the port"],
+        ["git", "commit", "-am", "drop the v1 key"],
+        ["git", "commit", "-q", "--message=bump go to 1.25"],
+        ["git", "commit", "-mtrim a fragment"],
+        ["git", "-C", "/w", "-c", "user.name=x", "commit", "-q", "-m", "trim a fragment"],
+        ["git", "commit", "--amend", "--no-edit"],
+        ["git", "commit", "-F", "msg.txt"],
+    ]) {
+        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "each subject rule is named when broken" {
+    final cases = {
+        "Fix the port": "capitalized first word",
+        "trim a fragment.": "trailing period",
+        "trim a fragment, keep the key": "a comma",
+        "fix(cache): keep the key": "a colon",
+        "keep the key (stable)": "a parenthesis",
+        "keep the key!": "exclamation mark",
+        "keep the key?": "question mark",
+        "keep the key - stable": "spaced hyphen",
+        "keep the café key": "plain ASCII",
+        "keep the key\n\nbody text": "line break",
+        "   ": "an empty subject",
+    };
+    foreach (subject, want in cases) {
+        final v = ask(["git", "commit", "-m", subject]);
+        std\assert(v.decision == "deny", message: subject);
+        std\assert(v.reason.indexOf(want) != null, message: "{subject}: {v.reason}");
+        std\assert(v.reason.indexOf("lowercase imperative subject line") != null, message: "states the fix");
+    }
+    std\assert(problemsOf(["git", "commit", "-m", "x".repeat(151)]).indexOf("151 characters, past 150") != null, message: "too long");
+    std\assert(ask(["git", "commit", "-m", "x".repeat(150)]).decision == "allow", message: "150 is the cap");
+}
+
+test "a body, a second -m and an attribution are denied" {
+    std\assert(problemsOf(["git", "commit", "-m", "trim a fragment", "-m", "why it matters"]).indexOf("more than one -m") != null, message: "two -m");
+    std\assert(problemsOf(["git", "commit", "-m", "trim a fragment", "--trailer", "Co-Authored-By: a <b@c>"]).indexOf("an attribution") != null, message: "a trailer");
+    std\assert(problemsOf(["git", "commit", "-m", "trim a fragment\n\nGenerated with a tool"]).indexOf("an attribution") != null, message: "in the message");
+}
+
+test "every problem is named, once, across chained commits" {
+    final line = helpers\request([
+        ["git", "commit", "-m", "Fix the port."],
+        ["git", "commit", "-m", "Keep the key."],
+    ]);
+    final v = decideCommit(line, once: seen());
+    std\assert(v.decision == "deny", message: "denied");
+    std\assert(v.reason.indexOf("capitalized first word") != null and v.reason.indexOf("trailing period") != null, message: "both problems");
+    std\assert(v.reason.split("trailing period").len() == 2, message: "named once");
+    final second = helpers\request([["git", "commit", "-m", "trim a fragment"], ["git", "commit", "-m", "Keep the key"]]);
+    std\assert(decideCommit(second, once: seen()).decision == "deny", message: "the second commit is judged on its own");
+}
+
+test "a line that only mentions git commit, and other git calls, stay silent" {
+    foreach (argv in [
+        ["rg", "git commit"],
+        ["echo", "git", "commit", "-m", "Bad."],
+        ["git", "log", "-m", "Bad."],
+        ["git", "help", "commit"],
+        ["git", "commit", "--help"],
+        ["git", "-c", "commit.gpgsign=false", "status"],
+    ]) {
+        final v = decideCommit(helpers\request([argv]), once: helpers\counter());
+        std\assert(v.decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "a message written through a heredoc substitution is judged from its body" {
+    final line = "git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"";
+    final programs = helpers\request([["git", "commit", "-m", ""], ["cat"]]);
+    final slots = mut [<[int]>];
+    foreach (p in programs) {
+        slots.append(messageSlots(p));
+    }
+    std\assert(slots[0].len() == 1 and slots[0][0] == 2, message: "the -m value is the slot");
+    final filled = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs(line));
+    final v = decideCommit(filled, once: seen());
+    std\assert(v.decision == "deny", message: "denied");
+    foreach (want in ["an attribution", "line break", "capitalized first word", "trailing period"]) {
+        std\assert(v.reason.indexOf(want) != null, message: want);
+    }
+    final plain = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs("git commit -m \"$(cat <<'EOF'\ntrim a fragment\nEOF\n)\""));
+    std\assert(decideCommit(plain, once: seen()).decision == "allow", message: "a one-line heredoc subject passes");
+    std\assert(decideCommit(programs, once: seen()).decision == "allow", message: "a value known only at run time goes unjudged");
+}
