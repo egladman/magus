@@ -778,7 +778,7 @@ var scriptedRewriteInterpreters = map[string]bool{
 func scriptedRewriteFires(command string, d Dialect, scope workspaceScope) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return scriptedRewriteRe.MatchString(command)
+		return scriptedRewriteRe.MatchString(dropDataHeredocs(command))
 	}
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
@@ -815,6 +815,32 @@ func scriptedRewriteFires(command string, d Dialect, scope workspaceScope) bool 
 	return found
 }
 
+// heredocOpenRe finds a heredoc operator and its delimiter on a line.
+var heredocOpenRe = regexp.MustCompile(`<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
+
+// dropDataHeredocs removes the body of every heredoc whose opening line names no
+// interpreter, for the unparsable-line fallback: `cat >> notes.md <<EOF` appends text,
+// and a body that documents a python rewrite is not one. A line that fails to parse
+// usually does so INSIDE such a body, an unquoted delimiter with a stray `$(`.
+func dropDataHeredocs(command string) string {
+	lines := strings.Split(command, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		out = append(out, lines[i])
+		m := heredocOpenRe.FindStringSubmatch(lines[i])
+		if m == nil || scriptedRewriteInterpreterRe.MatchString(lines[i]) {
+			continue
+		}
+		for i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != m[1] {
+			i++
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// scriptedRewriteInterpreterRe names an interpreter scriptedRewriteRe reads a program for.
+var scriptedRewriteInterpreterRe = regexp.MustCompile(`\b(?:python3?|perl|ruby|node)\b`)
+
 // heredocText is the body of every heredoc redirected into a statement.
 func heredocText(st *syntax.Stmt) string {
 	var b strings.Builder
@@ -834,7 +860,53 @@ func heredocText(st *syntax.Stmt) string {
 
 // scriptRewrites reports a program that substitutes and writes the result back.
 func scriptRewrites(script string) bool {
-	return substitutes(script) && strings.Contains(script, ".write(")
+	return substitutes(script) && writesBack(script)
+}
+
+// openModeRe captures the quoted literals inside an open() call, one of which is its mode:
+// python's `open(p, 'w')` and `p.open('a')`, ruby's `File.open(p, 'a')`, perl's
+// `open(my $fh, '>>', $p)`.
+var openModeRe = regexp.MustCompile(`open\s*\(([^()]*)\)`)
+
+// openModeLiteralRe is a literal that reads as a file mode rather than a path.
+var openModeLiteralRe = regexp.MustCompile(`^(?:[rwxabt+]{1,3}|>>|>|\+<|\+>|<)$`)
+
+// writesBack reports a program that writes a file in a mode that can change an existing
+// line. An append cannot: it adds to the end and leaves every byte already there. A
+// program that opens nothing with a mode and writes only to its own stdout or stderr
+// writes back nothing either; any other `.write(` without a visible mode is taken as one.
+func writesBack(script string) bool {
+	if !strings.Contains(script, ".write(") {
+		return false
+	}
+	var modes []string
+	for _, m := range openModeRe.FindAllStringSubmatch(script, -1) {
+		for _, lit := range quotedLiterals(m[1]) {
+			if openModeLiteralRe.MatchString(lit) {
+				modes = append(modes, lit)
+			}
+		}
+	}
+	if len(modes) > 0 {
+		return slices.ContainsFunc(modes, overwritesMode)
+	}
+	streams := strings.NewReplacer("sys.stdout.write(", "", "sys.stderr.write(", "", "$stdout.write(", "", "$stderr.write(", "")
+	return strings.Contains(streams.Replace(script), ".write(")
+}
+
+// overwritesMode reports a file mode that can rewrite existing content: any write mode
+// but an append, and perl's truncating or read-write opens.
+func overwritesMode(mode string) bool {
+	switch mode {
+	case ">>":
+		return false
+	case ">", "+<", "+>":
+		return true
+	}
+	if strings.Contains(mode, "a") {
+		return false
+	}
+	return strings.ContainsAny(mode, "wx+")
 }
 
 // inPlaceFiles are the files a `perl -i`/`ruby -i` edits: its operands after the program,

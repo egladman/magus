@@ -22,8 +22,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | [busy-wait](busy-wait.md)                         | a loop polling for work you started, which announces its own completion                           |
 | [buzz-unbriefed](buzz-unbriefed.md)               | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
-| [capture-filter](capture-filter.md)               | a filter over a run capture or log, which cuts the failure block apart                            |
-| [cd](cd.md)                                       | a `cd` before a magus command, when the project is an argument                                    |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)           |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
@@ -33,7 +31,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                          |
 | [output-pipe](output-pipe.md)                     | magus output piped into a filter, when magus projects the record itself                           |
-| [output-redirect](output-redirect.md)             | magus output redirected to a file, which the run log already holds                                |
+| [output-redirect](output-redirect.md)             | magus output sent to a file or discarded, which the run log already holds                         |
 | [process-poll](process-poll.md)                   | a process table inspected to wait on magus work the lock already reports                          |
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused               |
 | [raw-tool](raw-tool.md)                           | a toolchain command a spell already wraps, run outside the cache                                  |
@@ -55,11 +53,13 @@ name is the entry below. `magus describe rules` prints the same list.
 
 | Rule                                    | Catches                                                                                 |
 | --------------------------------------- | --------------------------------------------------------------------------------------- |
+| [capture-filter](capture-filter.md)     | a filter over a run capture or log, which cuts the failure block apart                  |
 | [chained-run](chained-run.md)           | several magus runs chained on one line, where the dependency graph would have run them  |
 | [checkpoint-state](checkpoint-state.md) | a command reaching for a tree's identity, which a revision alone cannot give            |
 | [focus](focus.md)                       | a read or write outside the paths the running job declared                              |
 | [gate-repeat](gate-repeat.md)           | the gate run again soon after it passed, repeating work already done                    |
 | [generated-write](generated-write.md)   | a hand edit to a declared output, which the next run overwrites                         |
+| [graph-pipe](graph-pipe.md)             | a read-only graph verb piped into a text filter, when magus projects the record itself  |
 | [graph-stale](graph-stale.md)           | a graph read while the index is older than the sources it describes                     |
 | [hook-wiring](hook-wiring.md)           | a write to the host wiring that decides whether these rules run at all                  |
 | [installed-skill](installed-skill.md)   | a write to an installed skill copy, which re-installing discards                        |

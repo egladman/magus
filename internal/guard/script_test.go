@@ -16,7 +16,7 @@ var scriptFixtures = map[string]string{
 	"retry.sh":    "#!/usr/bin/env bash\nuntil ./magus run test . -s; do sleep 20; done\n",
 	"wait":        "#!/bin/sh\nwhile ! test -f done.txt; do\n  sleep 5\ndone\n",
 	"run.sh":      "set -e\n./magus run lint . > out.log 2>&1\n",
-	"in.sh":       "cd libs/foo && magus run test .\n",
+	"in.sh":       "cd libs/foo && magus run test . 2>/dev/null\n",
 	"nowait.sh":   "MAGUS_NO_WAIT=1 ./magus run test .\n",
 	"p3.py":       "p = 'internal/x.go'\ns = open(p).read().replace('A', 'B')\nopen(p, 'w').write(s)\n",
 	"scratch.py":  "p = '/tmp/x/notes.md'\ns = open(p).read().replace('A', 'B')\nopen(p, 'w').write(s)\n",
@@ -52,7 +52,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 		{"S=" + dir + `; bash "$S/retry.sh"`, denyRuleBusyWait},
 		{dir + "/wait", denyRuleBusyWait},
 		{"bash run.sh", denyRuleOutputRedirect},
-		{"bash in.sh", denyRuleCd},
+		{"bash in.sh", denyRuleOutputRedirect},
 		{"bash nowait.sh", denyRuleUnknownEnv},
 		{"python3 p3.py", denyRuleScriptedRewrite},
 		{"python3 -u p3.py", denyRuleScriptedRewrite},
@@ -87,7 +87,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 // A line that earned its own deny keeps it, and a script's deny outranks an advisory.
 func TestRankScriptContent(t *testing.T) {
 	script := ShellVerdict{Deny: "script", Rule: denyRule{Name: denyRuleBusyWait}}
-	own := ShellVerdict{Deny: "own", Rule: denyRule{Name: denyRuleCd}}
+	own := ShellVerdict{Deny: "own", Rule: denyRule{Name: denyRuleOutputPipe}}
 	assert.Equal(t, own, rankScriptContent(own, script))
 	assert.Equal(t, script, rankScriptContent(ShellVerdict{Context: "advice"}, script))
 	assert.Equal(t, ShellVerdict{Context: "advice"}, rankScriptContent(ShellVerdict{Context: "advice"}, ShellVerdict{}))

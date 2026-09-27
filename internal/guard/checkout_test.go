@@ -167,20 +167,20 @@ func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 	assert.NotEmpty(t, testSiblingCheckoutDeny("WT="+wt+"; cd $WT && ./magus run lint ."))
 }
 
-// The ordering the wiring exists for. The general cd deny must lose to a
-// sibling reason: every sibling case is itself a `cd`, and "do not cd"
-// understates a command aimed at another tree.
-func TestRankSiblingCheckoutOutranksACdDeny(t *testing.T) {
-	cdDeny := ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
-	got := rankSiblingCheckout(cdDeny, "aimed at another checkout")
+// A sibling reason replaces a silence or an advisory: the advice is about a tree the
+// command was never going to judge.
+func TestRankSiblingCheckoutFillsASilence(t *testing.T) {
+	for _, v := range []ShellVerdict{{}, {Context: "advice"}} {
+		got := rankSiblingCheckout(v, "aimed at another checkout")
 
-	assert.Equal(t, "aimed at another checkout", got.Deny)
-	assert.Equal(t, denyRuleSiblingCheckout, got.Rule.Name)
-	assert.Empty(t, got.Context, "a deny that still carries advisory context renders both")
+		assert.Equal(t, "aimed at another checkout", got.Deny)
+		assert.Equal(t, denyRuleSiblingCheckout, got.Rule.Name)
+		assert.Empty(t, got.Context, "a deny that still carries advisory context renders both")
+	}
 }
 
-// An existing DENY stands when it is not the general cd rule. Replacing it would
-// swap a block the caller already has for a different one, and one is enough.
+// An existing DENY stands. Replacing it would swap a block the caller already has for
+// a different one, and one is enough.
 func TestRankSiblingCheckoutYieldsToAnExistingDeny(t *testing.T) {
 	pipe := pipeDeny("ls", "grep")
 	got := rankSiblingCheckout(ShellVerdict{Deny: pipe}, "aimed at another checkout")
@@ -190,17 +190,26 @@ func TestRankSiblingCheckoutYieldsToAnExistingDeny(t *testing.T) {
 
 // The common case: nothing to add, and the pure verdict passes through untouched.
 func TestRankSiblingCheckoutIsInertWithoutAReason(t *testing.T) {
-	for _, v := range []ShellVerdict{{}, {Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}, {Deny: pipeDeny("ls", "grep")}} {
+	for _, v := range []ShellVerdict{{}, {Context: "advice"}, {Deny: pipeDeny("ls", "grep")}} {
 		assert.Equal(t, v, rankSiblingCheckout(v, ""))
 	}
 }
 
-// Without the sibling rule, a cd into another path is still refused by the
-// general cd deny. The sibling rule upgrades the reason when the target is
-// another checkout of THIS repository.
-func TestCdIntoACheckoutIsDeniedByCdRuleWithoutTheSiblingRule(t *testing.T) {
-	v := Evaluate(testDependencies(), "cd /Users/someone/checkouts/other && ./magus run lint .")
-
-	assert.Equal(t, denyRuleCd, v.Rule.Name)
-	assert.NotEmpty(t, v.Deny)
+// Without the sibling rule, a cd ahead of magus passes: it is the same command as the
+// project operand or `--root`. Only another checkout of THIS repository, which the
+// sibling rule resolves on disk, or a throwaway copy is refused.
+func TestCdAheadOfMagusPassesWithoutTheSiblingRule(t *testing.T) {
+	for _, cmd := range []string{
+		"cd /Users/someone/checkouts/other && ./magus run lint .",
+		"cd libs/gopherbuzz && magus run test .",
+		"cd libs/diagnostics && magus run test",
+		"cd .github/actions/advice && ../../../magus buzz -t merge-queue.buzz",
+		"cd /repo && git status && ./magus run lint .",
+		"(cd libs/foo && magus run test .)",
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, cmd)
+	}
+	// The relocations that change which tree magus judges stay refused.
+	assert.Equal(t, denyRuleThrowawayCopy,
+		Evaluate(testDependencies(), "cd /tmp/copy && magus run lint .").Rule.Name)
 }

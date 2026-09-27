@@ -357,6 +357,11 @@ reference/rules/stale-binary/
 reference/rules/code-search/
 reference/rules/doc-search/
 
+# The cd rule was deleted: a cd ahead of magus is the same command as naming the project,
+# and sibling-checkout and throwaway-copy still refuse the relocations that change the
+# tree. A rule page is generated per shipped rule, so it retires.
+reference/rules/cd/
+
 # MGS5004 was deleted with the server-queued detach, leaving one page tagged detach. A
 # tag page needs two, so the tag retires.
 tags/detach/
