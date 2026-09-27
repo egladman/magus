@@ -1611,6 +1611,9 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 			if rel == "." {
 				return nil
 			}
+			if rel == spellCachesDir {
+				return filepath.SkipDir
+			}
 			return tw.WriteHeader(&tar.Header{
 				Typeflag: tar.TypeDir,
 				Name:     rel + "/",
@@ -1683,6 +1686,9 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 		clean, err := safePathIn(c.dir, hdr.Name)
 		if err != nil {
 			return err
+		}
+		if top, _, _ := strings.Cut(path.Clean(hdr.Name), "/"); top == spellCachesDir {
+			return fmt.Errorf("magus/cache: import %q: a spell's caches are restored only from a signed bundle", hdr.Name)
 		}
 
 		switch hdr.Typeflag {

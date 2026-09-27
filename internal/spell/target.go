@@ -108,15 +108,18 @@ var VersionBoundsSource string
 //go:embed gen/types/tool.buzz
 var ToolSource string
 
-// SandboxAllowSource, SandboxEnvSource and SandboxSource are the generated mirrors of
-// what a spell's mgs_getSandbox returns. SandboxSource must follow the other two in the
-// bundle: its fields are typed by them.
+// SandboxAllowSource, SandboxEnvSource, SandboxCacheSource and SandboxSource are the
+// generated mirrors of what a spell's mgs_getSandbox returns. SandboxSource must follow
+// the other three in the bundle: its fields are typed by them.
 //
 //go:embed gen/types/sandboxallow.buzz
 var SandboxAllowSource string
 
 //go:embed gen/types/sandboxenv.buzz
 var SandboxEnvSource string
+
+//go:embed gen/types/sandboxcache.buzz
+var SandboxCacheSource string
 
 //go:embed gen/types/sandbox.buzz
 var SandboxSource string
@@ -193,7 +196,7 @@ var CharmModuleSource string
 // cross-references so their position is free). Shared by the runtime registration
 // (modules.go) and the built-in inliner (builtinModuleSources) below, so the two
 // can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

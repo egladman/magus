@@ -1031,17 +1031,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Write cache entries to an archive",
 					Flags: []Flag{
 						{Name: "to", Kind: FlagString, Doc: "Write the archive to this file (default: stdout)"},
-						{Name: "toolchain", Kind: FlagString, Doc: "Export this toolchain's own caches instead, as a signed bundle (go: GOCACHE and GOMODCACHE)"},
-						{Name: "remote", Kind: FlagBool, Doc: "Store the toolchain bundle in the remote tier instead of writing it (--toolchain only)"},
-						{Name: "used-within", Kind: FlagDuration, Default: 12 * time.Hour, Doc: "Keep only build-cache entries used this recently; 0 keeps every entry (--toolchain only)"},
+						{Name: "remote", Kind: FlagBool, Doc: "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive"},
 					},
 				},
 				{
 					Name:  "import",
 					Short: "Load cache entries from an archive",
 					Flags: []Flag{
-						{Name: "toolchain", Kind: FlagString, Doc: "Import a signed bundle of this toolchain's own caches instead, verified against cache.remote.trusted_keys"},
-						{Name: "remote", Kind: FlagBool, Doc: "Restore the newest verified toolchain bundle from the remote tier (--toolchain only)"},
+						{Name: "remote", Kind: FlagBool, Doc: "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive"},
 					},
 				},
 				{Name: "key", Short: "Manage the remote cache signing key"},
@@ -1866,13 +1863,16 @@ global --sandbox is the mode, raised to best-effort as validate raises it.
 
 --cache keeps the local cache tier of the command's magus in a directory outside
 the box that the caller carries between runs, the one write the box grants outside
-itself. --env passes the named variables of this environment to the command's own
+itself, and under it the caches the workspace's spells declare (go: GOCACHE and
+GOMODCACHE), each in the mode its spell grants it. So a command run in one box, such
+as ` + "`magus config cache import --remote`" + `, warms the caches the next box builds
+with. --env passes the named variables of this environment to the command's own
 magus, over the sandbox's scrub, and no further: its children get the scrubbed
 environment. Neither may move the box: a variable the box sets, or one naming a
 cache it withholds, is refused.`,
 			Usage: "magus queue gate [flags] -- <command> [args...]",
 			Flags: append([]Flag{
-				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does"},
+				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does"},
 				{Name: "env", Kind: FlagString, Doc: "Comma-separated `names` of variables passed from this environment to the command's own magus"},
 			}, queueCheckout...),
 		},

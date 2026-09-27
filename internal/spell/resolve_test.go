@@ -541,6 +541,37 @@ export fun mgs_getSandbox() > Sandbox { return Sandbox{allow = [` + entry + `]};
 	}
 }
 
+// A cache names a writable grant of its own declaration by variable; one naming no such
+// grant is refused at load, like any grant that cannot be honored.
+func TestResolve_SandboxRefusesACacheOfNoWritableGrant(t *testing.T) {
+	for name, decl := range map[string]string{
+		"no grant":        `Sandbox{caches = [SandboxCache{env = "TOOL_CACHE"}]}`,
+		"read-only grant": `Sandbox{allow = [SandboxAllow{env = "TOOL_CACHE", mode = SandboxAccess.rx}], caches = [SandboxCache{env = "TOOL_CACHE"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := `
+import "magus/spell";
+export fun mgs_getName() > str { return "bad-cache"; }
+export fun mgs_getSandbox() > Sandbox { return ` + decl + `; }
+`
+			_, err := resolve(t, src)
+			require.ErrorIs(t, err, types.AllowlistUnresolved)
+			assert.Contains(t, err.Error(), "no writable allow entry has env TOOL_CACHE")
+		})
+	}
+}
+
+// The go spell declares the two caches a warm build reads: the build cache, whose
+// entries go re-dates as it uses them, and the module cache less its zips and clones.
+func TestGoSpellDeclaresItsCaches(t *testing.T) {
+	sb := Builtins()["go"].Sandbox
+	require.NotNil(t, sb)
+	assert.Equal(t, []spells.SandboxCache{
+		{Env: "GOCACHE", StampsUse: true, Skip: []string{"README", "trim.txt", "fuzz/**"}},
+		{Env: "GOMODCACHE", Skip: []string{"cache/vcs/**", "cache/download/**/*.zip", "**/*.lock", "**/*.partial", "**/*.tmp"}},
+	}, sb.Caches)
+}
+
 // A passthrough pattern env.Parse refuses is refused at load too.
 func TestResolve_SandboxRefusesAPassthroughThatDoesNotParse(t *testing.T) {
 	const src = `

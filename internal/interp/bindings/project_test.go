@@ -182,6 +182,24 @@ func TestParseBuzzProjectOpts_TargetSandboxMalformedErrors(t *testing.T) {
 	}
 }
 
+// A cache is a spell's declaration: its bundle is keyed by the spell's tools, and a
+// target has none, so a target that names one is refused rather than left uncarried.
+func TestParseBuzzProjectOpts_TargetSandboxRefusesACache(t *testing.T) {
+	entry := vm.NewMap()
+	entry.MapSet("env", vm.StrValue("FIXTURES"))
+	entry.MapSet("mode", vm.StrValue("rw"))
+	cache := vm.NewMap()
+	cache.MapSet("env", vm.StrValue("FIXTURES"))
+	sb := vm.NewMap()
+	sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
+	sb.MapSet("caches", vm.ListValue([]vm.Value{cache}))
+	pol := vm.NewMap()
+	pol.MapSet("sandbox", sb)
+	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+	require.ErrorIs(t, err, types.AllowlistUnresolved)
+	assert.ErrorContains(t, err, `targets["test"].sandbox: sandbox: caches are a spell's declaration`)
+}
+
 // TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth
 // the cleaning buys: a magusfile may reach into a sibling tree, and the reach resolves
 // against the declaring project, so "../proto/**/*.proto" from docs/ declares

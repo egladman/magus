@@ -374,6 +374,19 @@ jobs:
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
 
+      # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
+      # signed, so a magus miss rebuilds only what changed. Restored in a box of the same
+      # --cache as the gate's, which keeps them under it, where the gate's box builds with
+      # them. Nothing that fails verification is restored, and a miss or a refusal leaves
+      # the build cold rather than red. Main restores too: the bundle is verified.
+      - name: Restore the spells' caches
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+        with:
+          command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache import --remote
+
       # The gate runs in the environment the merge queue gates a candidate in, built by
       # the same code (`magus queue gate`, internal/queue's GateCommit): a checkout of
       # HEAD in a box under TMPDIR with a private home and temporary directory, the
@@ -382,8 +395,11 @@ jobs:
       #
       # What differs from the queue, and why:
       # - --cache .magus keeps the gate's local tier where the restore and save steps
-      #   around this one carry it between pushes, and where the logs are uploaded from.
-      #   The queue keeps it in the box, since one candidate must not replay another's.
+      #   around this one carry it between pushes, and where the logs are uploaded from,
+      #   and the spells' caches beside it. A pull request's code may write those, and
+      #   nothing it writes is kept: only main saves them, after a green run, and every
+      #   restore verifies main's signature. The queue keeps both in the box, since one
+      #   candidate must not replay or build with another's.
       # - --env hands the gate's own magus what reports and caches: the CI provider, the
       #   shard, the history path, and the remote tier read directly with the runner's
       #   token and the same trust set, where the queue reads through a read-only proxy.
@@ -407,6 +423,20 @@ jobs:
           command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
+
+      # Signed with MAGUS_CACHE_SIGNING_KEY, which only main holds, in a box of the gate's
+      # --cache so it bundles what the gate built with. Only the shard that runs the root
+      # module saves: the day's first bundle stands, and one from a shard that compiled a
+      # corner of the tree would claim the key. Restored entries are dated a day back and
+      # the gate re-dates what it uses, so the save leaves out what this run never read.
+      - name: Save the spells' caches
+        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && contains(format(' {0} ', matrix.projects), ' . ')
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+        with:
+          command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache export --remote
 
       # Saved on a red shard too: what passed before the failure is a valid hit for the
       # rerun, the run that most needs it. Not on cancel, where the store may be half

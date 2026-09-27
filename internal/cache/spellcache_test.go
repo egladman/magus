@@ -18,14 +18,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testGoEnv = map[string]string{
-	"GOVERSION": "go1.26.6", "GOOS": "linux", "GOARCH": "amd64", "GOAMD64": "v1",
-	"GOEXPERIMENT": "jsonv2", "GOFLAGS": "-mod=mod", "CGO_ENABLED": "1",
+var testTools = []string{"platform:linux/amd64", "go:go:1.26.6", "go:golangci-lint:2.1.0"}
+
+var testLocks = map[string][]byte{"go.sum": []byte("a v1 h1:x\n"), "libs/x/go.sum": []byte("b v2 h1:y\n")}
+
+func testSpellCacheKey() SpellCacheKey { return NewSpellCacheKey("go", testTools, testLocks) }
+
+const testBundleName = "go-test-20260926"
+
+// goRoots are the roots the go spell's declaration resolves to with its caches in
+// gocache and gomod.
+func goRoots(gocache, gomod string) []SpellCacheRoot {
+	return []SpellCacheRoot{
+		{Name: "GOCACHE", Dir: gocache, StampsUse: true, Skip: []string{"README", "trim.txt", "fuzz/**"}},
+		{Name: "GOMODCACHE", Dir: gomod, Skip: []string{"cache/vcs/**", "cache/download/**/*.zip", "**/*.lock", "**/*.partial", "**/*.tmp"}},
+	}
 }
-
-var testGoSums = map[string][]byte{"go.sum": []byte("a v1 h1:x\n"), "libs/x/go.sum": []byte("b v2 h1:y\n")}
-
-func testToolchainKey() ToolchainKey { return GoToolchainKey(testGoEnv, testGoSums) }
 
 func writeTree(t *testing.T, root string, files map[string]string) {
 	t.Helper()
@@ -57,7 +65,7 @@ func readTree(t *testing.T, root string) map[string]string {
 	return got
 }
 
-func sourceRoots(t *testing.T) []ToolchainRoot {
+func sourceRoots(t *testing.T) []SpellCacheRoot {
 	t.Helper()
 	src := t.TempDir()
 	writeTree(t, filepath.Join(src, "gocache"), map[string]string{
@@ -75,57 +83,84 @@ func sourceRoots(t *testing.T) []ToolchainRoot {
 		"cache/download/example.com/m/@v/v1.0.0.lock":    "",
 		"cache/vcs/0123/HEAD":                            "ref",
 	})
-	return GoToolchainRoots(filepath.Join(src, "gocache"), filepath.Join(src, "gomod"))
+	require.NoError(t, os.Chmod(filepath.Join(src, "gomod", "example.com", "m@v1.0.0", "m.go"), 0o444))
+	return goRoots(filepath.Join(src, "gocache"), filepath.Join(src, "gomod"))
 }
 
-func destRoots(t *testing.T) []ToolchainRoot {
+func destRoots(t *testing.T) []SpellCacheRoot {
 	t.Helper()
 	dst := t.TempDir()
-	return GoToolchainRoots(filepath.Join(dst, "gocache"), filepath.Join(dst, "gomod"))
+	return goRoots(filepath.Join(dst, "gocache"), filepath.Join(dst, "gomod"))
 }
 
-func signedBundle(t *testing.T, seed []byte, key ToolchainKey, roots []ToolchainRoot) []byte {
+func signedBundle(t *testing.T, seed []byte, key SpellCacheKey, roots []SpellCacheRoot) []byte {
 	t.Helper()
 	s, err := newSigner(seed)
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	_, err = writeToolchainBundle(t.Context(), &buf, s, key, "", roots, 0, time.Now())
+	_, err = writeSpellCacheBundle(t.Context(), &buf, s, key, testBundleName, roots, time.Now())
 	require.NoError(t, err)
 	return buf.Bytes()
 }
 
-func TestToolchainBundleRoundTrip(t *testing.T) {
+func TestSpellCacheBundleRoundTrip(t *testing.T) {
 	pub, seed := genKeypair(t)
-	key := testToolchainKey()
+	key := testSpellCacheKey()
 	data := signedBundle(t, seed, key, sourceRoots(t))
 
 	dst := destRoots(t)
 	now := time.Now()
 	v, err := newVerifier([][]byte{pub})
 	require.NoError(t, err)
-	stats, err := readToolchainBundle(t.Context(), bytes.NewReader(data), v, toolchainWant{key: key}, dst, defaultMaxImportBytes, now)
+	want := spellCacheWant{key: key, name: testBundleName}
+	stats, err := readSpellCacheBundle(t.Context(), bytes.NewReader(data), v, want, dst, defaultMaxImportBytes, now)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]string{"ab/ab01-a": "action", "ab/ab01-d": "output"}, readTree(t, dst[0].Dir),
-		"only cache shards travel; the staging directory is gone")
+		"what the spell skips stays out; the staging directory is gone")
 	assert.Equal(t, map[string]string{
 		"example.com/m@v1.0.0/m.go":                      "package m",
 		"cache/download/example.com/m/@v/v1.0.0.mod":     "module example.com/m",
 		"cache/download/example.com/m/@v/v1.0.0.ziphash": "h1:abc",
 	}, readTree(t, dst[1].Dir), "zips, locks and VCS clones stay out")
-	assert.Equal(t, ToolchainStats{Files: 5, Bytes: int64(len("actionoutputpackage mmodule example.com/mh1:abc"))}, stats)
+	assert.Equal(t, SpellCacheStats{Files: 5, Bytes: int64(len("actionoutputpackage mmodule example.com/mh1:abc"))}, stats)
 
 	info, err := os.Stat(filepath.Join(dst[1].Dir, "example.com/m@v1.0.0/m.go"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o444), info.Mode().Perm(), "module files are restored read-only, as Go keeps them")
+	assert.Equal(t, os.FileMode(0o444), info.Mode().Perm(), "a file is restored in the mode it was saved in")
 	info, err = os.Stat(filepath.Join(dst[0].Dir, "ab/ab01-a"))
 	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
 	assert.WithinDuration(t, now.Add(-restoredAge), info.ModTime(), time.Second,
-		"restored entries are backdated so Go re-stamps the ones a run uses")
+		"restored entries are backdated so the tool re-stamps the ones a run uses")
 
-	again, err := readToolchainBundle(t.Context(), bytes.NewReader(data), v, toolchainWant{key: key}, dst, defaultMaxImportBytes, now)
+	again, err := readSpellCacheBundle(t.Context(), bytes.NewReader(data), v, want, dst, defaultMaxImportBytes, now)
 	require.NoError(t, err)
-	assert.Equal(t, ToolchainStats{Skipped: 5}, again, "files already present are left as they are")
+	assert.Equal(t, SpellCacheStats{Skipped: 5}, again, "files already present are left as they are")
+}
+
+// A save keeps only what a use-stamping cache dated since the restore: an entry still
+// at its restored stamp went unused. A cache that stamps nothing keeps every entry.
+func TestSpellCacheSaveLeavesOutEntriesNoRunUsed(t *testing.T) {
+	roots := sourceRoots(t)
+	now := time.Now()
+	stale := now.Add(-restoredAge)
+	for _, p := range []string{filepath.Join(roots[0].Dir, "ab", "ab01-d"), filepath.Join(roots[1].Dir, "cache/download/example.com/m/@v/v1.0.0.mod")} {
+		require.NoError(t, os.Chtimes(p, stale, stale))
+	}
+	files, stats, err := collectSpellCacheFiles(t.Context(), roots, now)
+	require.NoError(t, err)
+	var paths []string
+	for _, f := range files {
+		paths = append(paths, f.Path)
+	}
+	assert.ElementsMatch(t, []string{
+		"GOCACHE/ab/ab01-a",
+		"GOMODCACHE/example.com/m@v1.0.0/m.go",
+		"GOMODCACHE/cache/download/example.com/m/@v/v1.0.0.mod",
+		"GOMODCACHE/cache/download/example.com/m/@v/v1.0.0.ziphash",
+	}, paths)
+	assert.Equal(t, 1, stats.Skipped)
 }
 
 // retar rewrites a bundle member by member; edit returns the new body, or keep=false
@@ -160,45 +195,48 @@ func retar(t *testing.T, raw []byte, edit func(name string, body []byte) (out []
 	return out.Bytes()
 }
 
-func TestToolchainBundleRefusals(t *testing.T) {
+func TestSpellCacheBundleRefusals(t *testing.T) {
 	pub, seed := genKeypair(t)
 	otherPub, otherSeed := genKeypair(t)
-	key := testToolchainKey()
+	key := testSpellCacheKey()
 	good := signedBundle(t, seed, key, sourceRoots(t))
+	want := spellCacheWant{key: key, name: testBundleName}
 
-	otherToolchain := key
-	otherToolchain.Toolchain = strings.Repeat("0", 64)
+	otherTools := key
+	otherTools.Tools = strings.Repeat("0", 64)
+	otherSpell := key
+	otherSpell.Spell = "rust"
 
 	cases := []struct {
 		name    string
 		bundle  []byte
 		trusted []byte
-		want    toolchainWant
+		want    spellCacheWant
 		err     string
 	}{
 		{
 			name: "a file swapped for bytes of the same size",
 			bundle: retar(t, good, func(name string, body []byte) ([]byte, bool) {
-				if name == "gocache/ab/ab01-a" {
+				if name == "GOCACHE/ab/ab01-a" {
 					return []byte("ACTION"), true
 				}
 				return body, true
 			}),
-			trusted: pub, want: toolchainWant{key: key},
+			trusted: pub, want: want,
 			err: "content does not match the signed index",
 		},
 		{
 			name: "a dropped member",
 			bundle: retar(t, good, func(name string, body []byte) ([]byte, bool) {
-				return body, name != "gocache/ab/ab01-d"
+				return body, name != "GOCACHE/ab/ab01-d"
 			}),
-			trusted: pub, want: toolchainWant{key: key},
+			trusted: pub, want: want,
 			err: "truncated",
 		},
 		{
 			name:    "a key outside the trust set",
 			bundle:  good,
-			trusted: otherPub, want: toolchainWant{key: key},
+			trusted: otherPub, want: want,
 			err: "not in trust set",
 		},
 		{
@@ -206,25 +244,31 @@ func TestToolchainBundleRefusals(t *testing.T) {
 			bundle: retar(t, good, func(name string, body []byte) ([]byte, bool) {
 				return body, name != sigFileName
 			}),
-			trusted: pub, want: toolchainWant{key: key},
+			trusted: pub, want: want,
 			err: "expected signature.json",
 		},
 		{
-			name:    "another toolchain's bundle",
-			bundle:  signedBundle(t, seed, otherToolchain, sourceRoots(t)),
-			trusted: pub, want: toolchainWant{key: key},
-			err: "is for toolchain",
+			name:    "a bundle of other tools",
+			bundle:  signedBundle(t, seed, otherTools, sourceRoots(t)),
+			trusted: pub, want: want,
+			err: "bundle is for go-",
+		},
+		{
+			name:    "another spell's bundle",
+			bundle:  signedBundle(t, seed, otherSpell, sourceRoots(t)),
+			trusted: pub, want: want,
+			err: "bundle is for rust-",
 		},
 		{
 			name:    "a bundle signed for another remote key",
 			bundle:  good,
-			trusted: pub, want: toolchainWant{key: key, name: "go-x-y-20260101"},
+			trusted: pub, want: spellCacheWant{key: key, name: "go-x-y-20260101"},
 			err: "signed for key",
 		},
 		{
 			name:    "a signature from a key the reader does not trust over a valid index",
 			bundle:  signedBundle(t, otherSeed, key, sourceRoots(t)),
-			trusted: pub, want: toolchainWant{key: key},
+			trusted: pub, want: want,
 			err: "not in trust set",
 		},
 	}
@@ -233,7 +277,7 @@ func TestToolchainBundleRefusals(t *testing.T) {
 			v, err := newVerifier([][]byte{tc.trusted})
 			require.NoError(t, err)
 			dst := destRoots(t)
-			_, err = readToolchainBundle(t.Context(), bytes.NewReader(tc.bundle), v, tc.want, dst, defaultMaxImportBytes, time.Now())
+			_, err = readSpellCacheBundle(t.Context(), bytes.NewReader(tc.bundle), v, tc.want, dst, defaultMaxImportBytes, time.Now())
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.err)
 			for _, root := range dst {
@@ -243,7 +287,7 @@ func TestToolchainBundleRefusals(t *testing.T) {
 	}
 
 	t.Run("no trust set", func(t *testing.T) {
-		_, err := readToolchainBundle(t.Context(), bytes.NewReader(good), nil, toolchainWant{key: key}, destRoots(t), defaultMaxImportBytes, time.Now())
+		_, err := readSpellCacheBundle(t.Context(), bytes.NewReader(good), nil, want, destRoots(t), defaultMaxImportBytes, time.Now())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no trust set")
 	})
@@ -251,16 +295,16 @@ func TestToolchainBundleRefusals(t *testing.T) {
 	t.Run("a member the index does not name", func(t *testing.T) {
 		v, err := newVerifier([][]byte{pub})
 		require.NoError(t, err)
-		smuggled := appendMember(t, good, "gocache/cd/cd01-a", "planted")
+		smuggled := appendMember(t, good, "GOCACHE/cd/cd01-a", "planted")
 		dst := destRoots(t)
-		_, err = readToolchainBundle(t.Context(), bytes.NewReader(smuggled), v, toolchainWant{key: key}, dst, defaultMaxImportBytes, time.Now())
+		_, err = readSpellCacheBundle(t.Context(), bytes.NewReader(smuggled), v, want, dst, defaultMaxImportBytes, time.Now())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not in the signed index")
 		assert.Empty(t, readTree(t, dst[0].Dir))
 	})
 
 	t.Run("writing without a signing key", func(t *testing.T) {
-		_, err := writeToolchainBundle(t.Context(), io.Discard, nil, key, "", sourceRoots(t), 0, time.Now())
+		_, err := writeSpellCacheBundle(t.Context(), io.Discard, nil, key, testBundleName, sourceRoots(t), time.Now())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "signing key")
 	})
@@ -294,79 +338,79 @@ func appendMember(t *testing.T, raw []byte, name, body string) []byte {
 	return buf.Bytes()
 }
 
-func TestGoToolchainKeyChangesWithEachInput(t *testing.T) {
-	base := testToolchainKey()
-	for _, v := range goKeyVars {
-		env := map[string]string{}
-		for k, val := range testGoEnv {
-			env[k] = val
-		}
-		env[v] += "x"
-		got := GoToolchainKey(env, testGoSums)
-		assert.NotEqual(t, base.Toolchain, got.Toolchain, "%s is part of the toolchain key", v)
-		assert.Equal(t, base.Modules, got.Modules, "%s is not part of the module key", v)
+func TestSpellCacheKeyChangesWithEachInput(t *testing.T) {
+	base := testSpellCacheKey()
+	for i := range testTools {
+		tools := append([]string(nil), testTools...)
+		tools[i] += "x"
+		got := NewSpellCacheKey("go", tools, testLocks)
+		assert.NotEqual(t, base.Tools, got.Tools, "%s is part of the tools key", testTools[i])
+		assert.Equal(t, base.Locks, got.Locks, "%s is not part of the lockfile key", testTools[i])
 	}
+	reordered := []string{testTools[2], testTools[0], testTools[1], testTools[0]}
+	assert.Equal(t, base, NewSpellCacheKey("go", reordered, testLocks), "order and repeats of the tool lines do not matter")
 
-	sums := map[string]map[string][]byte{
-		"a go.sum's content": {"go.sum": []byte("a v1 h1:z\n"), "libs/x/go.sum": testGoSums["libs/x/go.sum"]},
-		"a go.sum's path":    {"go.sum": testGoSums["go.sum"], "libs/y/go.sum": testGoSums["libs/x/go.sum"]},
-		"an added go.sum":    {"go.sum": testGoSums["go.sum"], "libs/x/go.sum": testGoSums["libs/x/go.sum"], "tools/go.sum": nil},
-		"a removed go.sum":   {"go.sum": testGoSums["go.sum"]},
+	locks := map[string]map[string][]byte{
+		"a lockfile's content": {"go.sum": []byte("a v1 h1:z\n"), "libs/x/go.sum": testLocks["libs/x/go.sum"]},
+		"a lockfile's path":    {"go.sum": testLocks["go.sum"], "libs/y/go.sum": testLocks["libs/x/go.sum"]},
+		"an added lockfile":    {"go.sum": testLocks["go.sum"], "libs/x/go.sum": testLocks["libs/x/go.sum"], "tools/go.sum": nil},
+		"a removed lockfile":   {"go.sum": testLocks["go.sum"]},
 	}
-	for name, s := range sums {
-		got := GoToolchainKey(testGoEnv, s)
-		assert.NotEqual(t, base.Modules, got.Modules, "%s changes the module key", name)
-		assert.Equal(t, base.Toolchain, got.Toolchain, "%s leaves the toolchain key", name)
+	for name, l := range locks {
+		got := NewSpellCacheKey("go", testTools, l)
+		assert.NotEqual(t, base.Locks, got.Locks, "%s changes the lockfile key", name)
+		assert.Equal(t, base.Tools, got.Tools, "%s leaves the tools key", name)
 	}
-	assert.Equal(t, base, GoToolchainKey(testGoEnv, testGoSums), "the key is deterministic")
+	assert.Equal(t, base, NewSpellCacheKey("go", testTools, testLocks), "the key is deterministic")
 
 	day := time.Date(2026, 9, 26, 23, 0, 0, 0, time.UTC)
 	assert.Equal(t, base.String()+"-20260926", base.remoteKey(day))
+	assert.True(t, strings.HasPrefix(base.remoteKey(day), "go-"), "a bundle is filed under its spell")
 	assert.NotEqual(t, base.remoteKey(day), base.remoteKey(day.AddDate(0, 0, 1)), "each day is its own key")
 }
 
-func TestToolchainRemoteSaveAndRestore(t *testing.T) {
+func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
 	require.NoError(t, err)
 	pub, seed := genKeypair(t)
 	trusted := [][]byte{pub}
 	_, writer := openSigned(t, remote, seed, trusted)
-	key := testToolchainKey()
+	key := testSpellCacheKey()
 	now := time.Now()
 
-	saved, err := writer.saveToolchain(t.Context(), key, sourceRoots(t), 0, now)
+	saved, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), now)
 	require.NoError(t, err)
 	assert.Equal(t, key.remoteKey(now), saved.Key)
 	assert.Equal(t, 5, saved.Files)
 	assert.Positive(t, saved.Transferred)
 
-	again, err := writer.saveToolchain(t.Context(), key, sourceRoots(t), 0, now)
+	again, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), now)
 	require.NoError(t, err)
 	assert.True(t, again.Present, "the day's first bundle stands")
 	assert.Zero(t, again.Files, "a stored key is not rebuilt")
 
 	_, reader := openSigned(t, remote, nil, trusted)
 	dst := destRoots(t)
-	got, err := reader.restoreToolchain(t.Context(), key, dst, now)
+	got, err := reader.restoreSpellCache(t.Context(), key, dst, now)
 	require.NoError(t, err)
 	assert.Equal(t, saved.Key, got.Key)
 	assert.True(t, got.Exact)
 	assert.Equal(t, 5, got.Files)
 	assert.Equal(t, "action", readTree(t, dst[0].Dir)["ab/ab01-a"])
 
-	t.Run("another module set takes the toolchain's newest bundle", func(t *testing.T) {
+	t.Run("other lockfiles take the tools' newest bundle", func(t *testing.T) {
 		moved := key
-		moved.Modules = strings.Repeat("1", 64)
-		got, err := reader.restoreToolchain(t.Context(), moved, destRoots(t), now)
+		moved.Locks = strings.Repeat("1", 64)
+		got, err := reader.restoreSpellCache(t.Context(), moved, destRoots(t), now)
 		require.NoError(t, err)
 		assert.Equal(t, saved.Key, got.Key)
 		assert.False(t, got.Exact)
 	})
 
-	t.Run("another toolchain finds nothing", func(t *testing.T) {
+	t.Run("other tools find nothing", func(t *testing.T) {
 		other := key
-		other.Toolchain = strings.Repeat("2", 64)
-		got, err := reader.restoreToolchain(t.Context(), other, destRoots(t), now)
+		other.Tools = strings.Repeat("2", 64)
+		got, err := reader.restoreSpellCache(t.Context(), other, destRoots(t), now)
 		require.NoError(t, err)
 		assert.Empty(t, got.Key)
 		assert.Empty(t, got.Refused)
@@ -377,27 +421,72 @@ func TestToolchainRemoteSaveAndRestore(t *testing.T) {
 		pr, err := Open(t.Context(), filepath.Join(root, ".magus"), WithLocalWrite(true), WithRemoteBackend(remote),
 			WithSigningKey(seed), WithTrustedKeys(trusted), WithRemoteWrite(false))
 		require.NoError(t, err)
-		_, err = pr.saveToolchain(t.Context(), key, sourceRoots(t), 0, now.AddDate(0, 0, 1))
+		_, err = pr.saveSpellCache(t.Context(), key, sourceRoots(t), now.AddDate(0, 0, 1))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "may not write (remote writes are off)")
 	})
 
 	t.Run("a tampered newest bundle is refused and an older verified one is taken", func(t *testing.T) {
 		later := now.AddDate(0, 0, 1)
-		_, err := writer.saveToolchain(t.Context(), key, sourceRoots(t), 0, later)
+		_, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), later)
 		require.NoError(t, err)
-		stored := remote.artifactPath(toolchainNamespace, key.remoteKey(later))
-		tampered := rewriteTarMember(t, stored, func(name string) bool { return name == "gocache/ab/ab01-d" }, []byte("OUTPUT"))
+		stored := remote.artifactPath(spellCacheNamespace, key.remoteKey(later))
+		tampered := rewriteTarMember(t, stored, func(name string) bool { return name == "GOCACHE/ab/ab01-d" }, []byte("OUTPUT"))
 		require.NoError(t, os.WriteFile(stored, tampered, 0o644))
 
 		dst := destRoots(t)
-		got, err := reader.restoreToolchain(t.Context(), key, dst, later)
+		got, err := reader.restoreSpellCache(t.Context(), key, dst, later)
 		require.NoError(t, err)
 		require.Len(t, got.Refused, 1)
 		assert.Contains(t, got.Refused[0], key.remoteKey(later))
 		assert.Equal(t, key.remoteKey(now), got.Key, "the day before's verified bundle")
 		assert.Equal(t, "output", readTree(t, dst[0].Dir)["ab/ab01-d"], "no tampered byte is restored")
 	})
+}
+
+// The local tier's archive never carries the caches a box keeps beside it, and an
+// archive that names one is refused: those caches travel only as signed bundles.
+func TestLocalTierArchiveLeavesSpellCachesOut(t *testing.T) {
+	src, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
+	require.NoError(t, err)
+	writeTree(t, SpellCacheDir(src.dir, "go", "GOCACHE"), map[string]string{"ab/ab01-a": "action"})
+	writeTree(t, src.dir, map[string]string{"logs/run.log": "ran"})
+
+	var buf bytes.Buffer
+	require.NoError(t, src.Export(t.Context(), &buf))
+	var names []string
+	for name := range tarMembers(t, buf.Bytes()) {
+		names = append(names, name)
+	}
+	assert.Contains(t, names, "logs/run.log")
+	for _, name := range names {
+		assert.False(t, strings.HasPrefix(name, spellCachesDir), "%s is a spell's cache", name)
+	}
+
+	dst, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
+	require.NoError(t, err)
+	planted := appendMember(t, buf.Bytes(), spellCachesDir+"/go/GOCACHE/ab/ab01-a", "planted")
+	err = dst.Import(t.Context(), bytes.NewReader(planted))
+	require.ErrorContains(t, err, "restored only from a signed bundle")
+	assert.NoFileExists(t, filepath.Join(SpellCacheDir(dst.dir, "go", "GOCACHE"), "ab", "ab01-a"))
+}
+
+func tarMembers(t *testing.T, raw []byte) map[string][]byte {
+	t.Helper()
+	gzr, err := gzip.NewReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	tr := tar.NewReader(gzr)
+	out := map[string][]byte{}
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out
+		}
+		require.NoError(t, err)
+		body, err := io.ReadAll(tr)
+		require.NoError(t, err)
+		out[hdr.Name] = body
+	}
 }
 
 // TestTrimmedGoBundleBuildsWarm drives the real Go toolchain: a bundle trimmed to the
@@ -442,16 +531,20 @@ func TestTrimmedGoBundleBuildsWarm(t *testing.T) {
 	}))
 	build(t, gocache, "app")
 
-	key := testToolchainKey()
-	var buf bytes.Buffer
-	stats, err := WriteToolchainBundle(t.Context(), &buf, seed, key, GoToolchainRoots(gocache, gomod), time.Hour)
+	key := testSpellCacheKey()
+	s, err := newSigner(seed)
 	require.NoError(t, err)
-	assert.Positive(t, stats.Skipped, "encoding/json's entries went unused and are trimmed")
+	var buf bytes.Buffer
+	stats, err := writeSpellCacheBundle(t.Context(), &buf, s, key, testBundleName, goRoots(gocache, gomod), time.Now())
+	require.NoError(t, err)
+	assert.Positive(t, stats.Skipped, "encoding/json's entries went unused and are left out")
 
+	v, err := newVerifier([][]byte{pub})
+	require.NoError(t, err)
 	restored := filepath.Join(work, "restored")
-	_, err = ReadToolchainBundle(t.Context(), &buf, [][]byte{pub}, key, GoToolchainRoots(restored, gomod))
+	_, err = readSpellCacheBundle(t.Context(), &buf, v, spellCacheWant{key: key, name: testBundleName}, goRoots(restored, gomod), defaultMaxImportBytes, time.Now())
 	require.NoError(t, err)
 	out := build(t, restored, "app")
 	assert.NotContains(t, out, "/compile ", "every package of the used build is a cache hit")
-	assert.Contains(t, build(t, restored, "other"), "/compile ", "a trimmed entry really is gone")
+	assert.Contains(t, build(t, restored, "other"), "/compile ", "a left-out entry really is gone")
 }
