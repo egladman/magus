@@ -62,7 +62,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 			"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
-			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect, capture-filter and unknown-env rules."},
+			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Decision: "deny", Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
 	{Name: string(denyRuleClaimedDeclaration), Decision: "deny",
 		Catches: "a leased edit landing in a declaration another live job claims (`run.go#executeStages`)",
@@ -71,19 +71,6 @@ var denyRuleDocs = []RuleDoc{
 			"The edit is applied to the file in memory and its changed lines are placed by the same diff-driver matching the job footprint uses, so the declaration this names is the one `magus job wait` would report. " +
 			"It fires only for a job-bound writer whose own claims in the file do not name the declaration, and only when another live job claims a declaration of that file; an edit that lands in the writer's claims, in no one's, or above the first declaration passes. " +
 			"A payload carrying no edit, such as a whole-file write, and a file whose lines cannot be placed stay graded by path alone."},
-	{Name: string(denyRuleCaptureFilter), Decision: "deny",
-		Catches: "a filter over a run capture or log, which cuts the failure block apart",
-		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
-			"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
-			"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
-			"Read the file whole, or give the run an output contract up front with `-o jsonl --tee <file>` and query that. Reading the whole file is not a filter and stays allowed."},
-	{Name: string(denyRuleCd), Decision: "deny",
-		Catches: "a `cd` before a magus command, when the project is an argument",
-		Why: "magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. " +
-			"The project is an argument and is written bare (`magus run build libs/foo`); a DIFFERENT workspace is `--root <path>`, and `magus where <name>` resolves a fuzzy name. " +
-			"A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. " +
-			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
-			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
 	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
 		Catches: "a line ending by printing an exit status, which the harness already reports",
 		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +
@@ -97,7 +84,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A filter given no input reads stdin, and under an agent harness stdin is the harness's own: where the harness holds it open, nothing writes to it and nothing closes it, so the call waits past the tool timeout and goes on waiting in the background. Measured: one such `grep` held a subagent for two hours. " +
 			"Name the input: a file operand, a pipe into the command, or a `<`, `<<` or `<<<` redirect on it or on a loop or block around it. " +
 			"It reads each tool's own flag grammar, so `grep -e pat file`, `jq --arg k v . f` and `head -n 5 file` are fed, and `tr`, `tee` and `xargs` fire whenever nothing feeds them, because their operands are never input. " +
-			"A recursive grep with no path fires too: GNU grep searches `.` then, but macOS's BSD grep reads stdin, and writing `.` costs nothing. " +
+			"A recursive grep with no path passes: GNU grep, macOS's BSD grep 2.6 and the ugrep a host may put behind `grep` all search the working directory then, measured 2026-09-26, and those were all five of the rule's measured denies. " +
 			"What the guard cannot classify passes, because it refuses only what it can prove: an unknown flag, an unquoted expansion that may split into several words, `jq -n`, an awk program with a BEGIN block, a command inside a function body. " +
 			"ripgrep with no path passes for the same reason: it searches the working directory unless stdin is a pipe or a file, which a hook cannot see."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
@@ -148,15 +135,19 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
 		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
 			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
+			"A bare listing passes (`ls`, `du`, `stat`, `test` of the state dir or a token file), alone or piped into a text filter such as `head` or `grep`: it shows file names, and none is a secret, since the operator file is always `mcp_token` and a store entry is `<token name>.json`, the name `magus config mcp connector ls` already prints. A listing inside a substitution, or piped into anything else (`| xargs cat`), is refused like any mention. " +
 			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
 		Catches: "magus output piped into a filter, when magus projects the record itself",
 		Why: "magus projects its own record, so the filter is answering a question the command takes a flag for: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field, `-s` to silence progress. " +
-			"The half a reader cannot discover by trying again is the exit status: a pipe takes it from the LAST stage, so a failing magus reads as exit 0 and nothing says so."},
+			"The half a reader cannot discover by trying again is the exit status: a pipe takes it from the LAST stage, so a failing magus reads as exit 0 and nothing says so. " +
+			"It denies on `run`, `affected`, `x` and every verb that is not a graph read. A read-only graph verb (`refs`, `query`, `explain`, `describe`) gets the same answer as the graph-pipe advisory, and a help request (`--help`, `-h`) passes: neither loses a failure."},
 	{Name: string(denyRuleOutputRedirect), Decision: "deny",
-		Catches: "magus output redirected to a file, which the run log already holds",
-		Why: "There is no legitimate shape of this against magus. Silencing and keeping are the only two intents and magus has a lever for each: `--silent` says nothing until something fails, and `-o json --tee <file>` keeps the STRUCTURED output rather than console text, which is not a format anything should parse. " +
-			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant."},
+		Catches: "magus output sent to a file or discarded, which the run log already holds",
+		Why: "Silencing and keeping are the only two intents and magus has a lever for each: `--silent` says nothing until something fails, and `-o json --tee <file>` keeps the STRUCTURED output rather than console text, which is not a format anything should parse. " +
+			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant. " +
+			"It judges where each stream ENDS. Either stream landing in a file fires, and so does stdout landing in /dev/null. `2>/dev/null` fires on `run`, `affected` and `x`, which write their failure block (cause, output ref, reproduce line) to stderr, and passes on every other verb, whose stderr carries at most an error line the exit status also reports. " +
+			"`2>&1` alone passes: both streams still reach the reader. Measured 2026-09-26: 556 of 841 denies were stderr-only."},
 	{Name: string(denyRuleProcessPoll), Decision: "deny",
 		Catches: "a process table inspected to wait on magus work the lock already reports",
 		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +
@@ -167,6 +158,7 @@ var denyRuleDocs = []RuleDoc{
 			"Tool flags go after `--`. A raw WRITE (codegen, a formatter with -w/--write/--fix, `go mod tidy`, build output landing on a tracked path) is the firm half: it leaves the owning target reporting drift it did not cause, and that has no exceptions. " +
 			"The guard reads the command being RUN, so a wrapper, a `VAR=value` prefix or `bash -c` reaches the same verdict, and `go -C <dir> <verb>` reads the same as `go <verb> -C <dir>`. " +
 			"Asking a tool for its usage or version runs nothing over the tree and passes: `go clean --help`, `gofmt -h`, `go help clean`, `govulncheck -V`. The help flag has to be the tool's own, last on the line, after a subcommand a spell renders; one handed to a program is work, so `go run main.go --help` and `go test ./... -args --help` are refused. " +
+			"`gofmt -l` and `gofmt -d` pass too, without `-w`: they list or diff and write nothing, so they leave no drift for the format target to report. `go list` passes because no spell renders it. " +
 			"One build is exempt, in a checkout of magus itself: `go build -o magus ./cmd/magus`, alone on its line, into a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
@@ -182,7 +174,8 @@ var denyRuleDocs = []RuleDoc{
 			"The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. " +
 			"Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for \"no matches\" is how a rename misses half its sites. " +
 			"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. " +
-			"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched."},
+			"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched. " +
+			"An APPEND passes, since it adds to the end and cannot mangle a line already there: a heredoc appended with `cat >> f <<EOF` or `tee -a`, whatever program its text documents, and a program whose every file write opens in append mode (`open(p, 'a')`, perl's `'>>'`) or goes to its own stdout."},
 	{Name: string(denyRuleSedInPlace), Decision: "deny",
 		Catches: "`sed -i`, whose two spellings destroy each other's work across platforms",
 		Why: "`sed -i` is not portable and the two spellings destroy each other's work. " +
@@ -250,6 +243,14 @@ var denyRuleDocs = []RuleDoc{
 // catalogued anyway, because a reader asking what this workspace enforces is owed the
 // whole set rather than the half that happens to apply to them today.
 var advisoryDocs = []RuleDoc{
+	{Name: string(advisoryCaptureFilter), Decision: "advise",
+		Catches: "a filter over a run capture or log, which cuts the failure block apart",
+		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
+			"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
+			"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
+			"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
+			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
+			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
 	{Name: string(advisoryChainedRun), Decision: "advise",
 		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
@@ -259,6 +260,10 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryFocus), Decision: "advise", Catches: "a read or write outside the paths the running job declared"},
 	{Name: string(advisoryGateRepeat), Decision: "advise", Catches: "the gate run again soon after it passed, repeating work already done"},
 	{Name: string(advisoryGeneratedWrite), Decision: "advise", Catches: "a hand edit to a declared output, which the next run overwrites"},
+	{Name: string(advisoryGraphPipe), Decision: "advise",
+		Catches: "a read-only graph verb piped into a text filter, when magus projects the record itself",
+		Why: "The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
+			"It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. Measured 2026-09-26: 819 output-pipe denies landed on these verbs, and the refused agent went back to `grep -rn`, which answers with less than the graph read it was denied."},
 	{Name: string(advisoryGraphStale), Decision: "advise", Catches: "a graph read while the index is older than the sources it describes"},
 	{Name: string(advisoryHookWiring), Decision: "advise", Catches: "a write to the host wiring that decides whether these rules run at all"},
 	{Name: string(advisoryInstalledSkill), Decision: "advise", Catches: "a write to an installed skill copy, which re-installing discards"},
@@ -334,7 +339,8 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
-	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun,
+	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
+	advisoryGraphPipe,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the

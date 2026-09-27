@@ -242,12 +242,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
-		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
-		// a check bypasses nothing, and what it bypasses is the cache, the sandbox and
-		// the affected set, exactly as the rewriting form does. The deny names the charm,
-		// so the reader is not sent at a target that would rewrite the tree.
-		{command: "gofmt -l ./libs", rule: rawTool(`gofmt -l ./libs`)},
-		{command: "gofmt -d x.go", rule: rawTool(`gofmt -d x.go`)},
+		// A check rendering is covered too: it bypasses the cache, the sandbox and the
+		// affected set, exactly as the rewriting form does. gofmt's listing and diff are
+		// the exemption, pinned in TestRawToolPassesAGofmtListing.
 		// One per tool family a spell renders without a subcommand. Each passed before,
 		// because the rendering names no verb and the prefix match had nothing to compare.
 		{command: "golangci-lint run ./...", rule: rawTool(`golangci-lint run ./...`)},
@@ -339,14 +336,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// field, so it is the projection flags that are named.
 		{command: "magus affected ci 2>&1 | tail -30", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "/tmp/magus run test | head -5", rule: denyRule{Name: denyRuleOutputPipe}},
-		{command: "MAGUS_X=1 magus query foo | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "MAGUS_X=1 magus ls | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
 		// A MAGUS_* name this magus does not read is a setting that never took effect.
 		{command: "MAGUS_NO_WAIT=1 ./magus run test .", rule: denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}},
 		{command: "MAGUS_CACHE_DIR=/tmp/c ./magus run test ."},
 		// Every spelling of an exit-status echo that ends the line.
 		{command: `./check.sh; rc=$?; echo "rc=$rc"`, rule: denyRule{Name: denyRuleExitStatusEcho}},
 		{command: `./check.sh; rc=$?; echo "rc=$rc"; exit $rc`},
-		{command: "magus describe targets | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus ls targets . | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "magus run test -s | grep -i fail | head -3", rule: denyRule{Name: denyRuleOutputPipe}},
 		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
 		// verdict describes a tree nobody will ship. Taken from a real observed
@@ -372,17 +369,15 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace, ahead of a magus command, is denied: name the
-		// project instead. A cd into a temp or scratchpad copy is the throwaway rule
-		// above (more specific); "./magus" counts the same as "magus" on PATH.
-		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
-		// A cd alone on its line relocates nothing after it, and is how a session whose
-		// shell persists moves into its own checkout.
+		// A cd ahead of magus is the same command as the project operand, so it passes.
+		// A cd into a temp or scratchpad copy is the throwaway rule above, and one into
+		// another checkout of this repository is sibling-checkout, resolved on disk.
+		{command: "cd libs/gopherbuzz && magus run test ."},
 		{command: "cd libs/diagnostics"},
 		{command: "cd /Users/someone/checkouts/guard-terms"},
-		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint .", rule: denyRule{Name: denyRuleCd}},
-		// A cd ahead of ordinary, non-magus work is not this rule's business: nothing
-		// after it lands on the wrong project, since nothing after it is magus.
+		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint ."},
+		// `cd X && git ...` is `git -C X ...`: the git rules judge it either way.
+		{command: "cd /repo && git log --oneline -3"},
 		{command: "cd libs/diagnostics; ls"},
 		{command: "bash -c 'cd /tmp && ls'"},
 		{command: "(cd libs/diagnostics && ls)"},
@@ -399,7 +394,6 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// reported an exit code with no cause and forced a re-run to learn it.
 		{command: "magus run lint . > /tmp/x.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
 		{command: "magus run build . >> /tmp/log.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
-		{command: "magus run lint . -s 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
 		{command: "magus affected ci --silent > /dev/null 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
 		// --silent plus a redirect is the WORST case, not the careful one: silent
 		// mode is quiet until it fails, so the redirect discards exactly the
@@ -420,7 +414,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// record `-o` shapes, so the deny still fires without --text.
 		{command: "magus refs TODO --text | grep -n fixme"},
 		{command: "magus refs TODO --text > /tmp/hits.txt"},
-		{command: "magus refs Open | grep -n Open", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus refs Open | grep -n Open", context: "magus answers this without the pipe"},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -451,9 +445,6 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "grep -rn BZZ1008 libs/"},
 		// A search of another tree has no answer in this workspace's graph.
 		{command: "grep -rn MGS2011 /tmp/elsewhere"},
-		// magus is CWD-relative, so cd-then-magus is denied: the project is an
-		// argument; only a different WORKSPACE needs --root.
-		{command: "cd libs/diagnostics && magus run test", rule: denyRule{Name: denyRuleCd}},
 		{command: "magus run test libs/diagnostics"},
 		{command: "grep pattern onefile.txt"},
 		{command: "grep -n x file.go"},
@@ -563,7 +554,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		// version flag after a subcommand (go test hands it to the compiled test binary),
 		// and `help` given to a program with no subcommands, which reads it as a file.
 		{command: "go test -run X -h", rule: rawTool("go test -run X -h")},
-		{command: "gofmt -l --help", rule: rawTool("gofmt -l --help")},
+		{command: "gofmt -w --help", rule: rawTool("gofmt -w --help")},
 		{command: "go test ./... --version", rule: rawTool("go test ./... --version")},
 		{command: "gofmt help", rule: rawTool("gofmt help")},
 		// One per exempted rule. The silent advisory rows are the dependency and install
@@ -580,7 +571,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		// Those rules still judge work, and a flag only some tools read as help.
 		{command: "ps -h", rule: denyRule{Name: denyRuleProcessPoll}},
 		{command: "magus memory get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
-		{command: "cd libs && magus run test --help=false", rule: denyRule{Name: denyRuleCd}},
+		{command: "magus run test --help=false | tail", rule: denyRule{Name: denyRuleOutputPipe}},
 		// One per protected rule: none of them consults helpRequest. sed is not in
 		// helpSafePrograms, since BSD sed reads `-i --help` as a backup suffix.
 		{command: "magus config token print --help", rule: denyRule{Name: denyRuleCredentialVerb}},
@@ -905,6 +896,75 @@ func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
 // agent does not need to intend evasion to evade; it just needs a habit and a
 // toolchain that is awkward to reach. Treat any new entry here as a bug report,
 // not a nice-to-have.
+// TestPrecisionFixesHoldBesideGitGlobalOptions: a git line read through parseGit neither
+// re-arms the redirect, pipe, raw-tool, rewrite and listing passes nor loses its own deny.
+func TestPrecisionFixesHoldBesideGitGlobalOptions(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		rule    denyRuleName // "" when nothing denies
+	}{
+		{command: "git -C /repo status --short && ./magus run lint . 2>&1"},
+		{command: "git -C /repo diff > /tmp/d.patch"},
+		{command: "git -c core.pager=cat log --oneline -3 && gofmt -l ."},
+		{command: "git -C /repo show HEAD:notes.md >> notes.md"},
+		{command: "git --no-pager log -1 && cat >> notes.md <<'EOF'\nopen(p,'w').write(s.replace('a','b'))\nEOF"},
+		{command: "git -C /repo log --oneline | head -3; ./magus refs Foo | grep bar"},
+		{command: "git --git-dir=/repo/.git status && cd /repo && ./magus run lint ."},
+
+		{command: "git -C /repo stash && ./magus run lint . 2>&1", rule: denyRuleWholeTree},
+		{command: "git -C /repo status && ./magus run lint . | tail", rule: denyRuleOutputPipe},
+		{command: "git -C /repo status && ./magus run lint . 2>/dev/null", rule: denyRuleOutputRedirect},
+		{command: "git -c core.pager=cat log && gofmt -w x.go", rule: denyRuleRawTool},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.rule == "" {
+			assert.Empty(t, v.Deny, tc.command)
+			continue
+		}
+		assert.Equal(t, tc.rule, v.Rule.Name, tc.command)
+	}
+}
+
+// TestRawToolPassesAGofmtListing:a gofmt that lists or diffs writes nothing, so it leaves
+// no drift for the format target to report; a write, and the other checks a spell
+// renders, stay refused.
+func TestRawToolPassesAGofmtListing(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{command: "gofmt -l ."},
+		{command: "gofmt -l ./libs"},
+		{command: "gofmt -d x.go"},
+		{command: "gofmt -l -s internal/guard"},
+		{command: "gofmt -d -r 'a -> b' x.go"},
+		{command: "gofmt -l -w=false ."},
+		{command: "/usr/local/go/bin/gofmt -l ."},
+		{command: "gofmt -l . | head"},
+		// go list reads the module graph and runs nothing a spell renders.
+		{command: "go list ./..."},
+		{command: "go list -m all"},
+
+		{command: "gofmt -w x.go", denied: true},
+		{command: "gofmt -l -w .", denied: true},
+		{command: "gofmt -d -w=true x.go", denied: true},
+		{command: "gofmt --w -l .", denied: true},
+		// Printing formatted source is neither a listing nor a diff.
+		{command: "gofmt x.go", denied: true},
+		{command: "gofmt -l=false x.go", denied: true},
+		// Other single-purpose checks keep the deny.
+		{command: "govulncheck ./...", denied: true},
+		{command: "shellcheck scripts/release.sh", denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleRawTool, v.Rule.Name, tc.command)
+	}
+}
+
 func TestGuardAdversarial(t *testing.T) {
 	denied := []struct{ name, command string }{
 		// Wrapper smuggling, the observed failure mode.
@@ -1190,7 +1250,7 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 // distinct messages, because the right replacement differs by shape: a filter
 // wanted one value, a redirect wanted a copy of the whole thing.
 func TestOutputGuardNamesTheReplacement(t *testing.T) {
-	piped := Evaluate(testDependencies(), "magus describe targets | grep build").Deny
+	piped := Evaluate(testDependencies(), "magus ls targets . | grep build").Deny
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
@@ -1219,6 +1279,54 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.NotEqual(t, piped, discarded, "the two shapes need different corrections")
 }
 
+// TestOutputRedirectJudgesWhereEachStreamEnds: the rule refuses output that is lost, not
+// a redirect operator. Measured 2026-09-26: 556 of 841 denies were stderr-only, where
+// both streams still reached the reader.
+func TestOutputRedirectJudgesWhereEachStreamEnds(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		dest    string // "" when the line passes
+	}{
+		// Both streams still reach the console.
+		{command: "magus ls 2>&1"},
+		{command: "magus run lint . -s 2>&1"},
+		{command: "magus affected ci 1>&2"},
+		{command: "magus run lint . 2>/dev/stderr"},
+		// A read verb's stderr carries at most an error line the exit status also reports.
+		{command: "magus --version 2>/dev/null"},
+		{command: "magus ls targets . 2>/dev/null"},
+		{command: "magus -o json describe targets 2>/dev/null"},
+
+		// A file keeps console text the run log already holds, on either stream.
+		{command: "magus run lint . > /tmp/x.txt", dest: ">/tmp/x.txt"},
+		{command: "magus run build . >> /tmp/log.txt", dest: ">>/tmp/log.txt"},
+		{command: "magus ls 2> err.txt", dest: "2>err.txt"},
+		{command: "magus run lint . > out.log 2>&1", dest: ">out.log"},
+		{command: "magus run lint . &> out.log", dest: "&>out.log"},
+		{command: "magus run lint . >&out.log", dest: ">&out.log"},
+		{command: "magus ls 2>&1 >/tmp/x", dest: ">/tmp/x"},
+		{command: `magus run lint . > "$LOG"`, dest: ">"},
+		// Stdout discarded, whatever the verb.
+		{command: "magus ls > /dev/null", dest: ">/dev/null"},
+		{command: "magus affected ci --silent > /dev/null 2>&1", dest: ">/dev/null"},
+		{command: "magus run lint . 1>&-", dest: "1>&-"},
+		// A run writes its failure block to stderr, so discarding that is silence too.
+		{command: "magus run lint . 2>/dev/null", dest: "2>/dev/null"},
+		{command: "./magus -s affected ci 2>/dev/null", dest: "2>/dev/null"},
+		{command: "magus x out1a2b 2>/dev/null", dest: "2>/dev/null"},
+	} {
+		verb, dest, ok := magusRedirected(tc.command, DialectBash)
+		if tc.dest == "" {
+			assert.False(t, ok, "should pass: %s (got %s %s)", tc.command, verb, dest)
+			assert.NotEqual(t, denyRuleOutputRedirect, Evaluate(testDependencies(), tc.command).Rule.Name, tc.command)
+			continue
+		}
+		assert.True(t, ok, "should be denied: %s", tc.command)
+		assert.Equal(t, tc.dest, dest, tc.command)
+		assert.Equal(t, denyRuleOutputRedirect, Evaluate(testDependencies(), tc.command).Rule.Name, tc.command)
+	}
+}
+
 // TestGuardExemptsRefsTextFromOutputRules pins the --text exemption's SCOPE: it
 // covers exactly the flag that makes refs a grep replacement, not the command
 // name in general.
@@ -1227,8 +1335,57 @@ func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
 		"a raw text search exists to be piped")
 	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text > /tmp/hits.txt").Deny,
 		"and to be redirected")
-	assert.NotEmpty(t, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Deny,
-		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
+	assert.Equal(t, advisoryGraphPipe, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Kind,
+		"a symbol lookup still renders a structured record -o shapes; only --text is silent")
+}
+
+// TestOutputPipeAdvisesOnGraphReads: a read-only graph verb piped into a filter loses no
+// failure, so it advises; a verb that runs work, or any other verb, still denies. Measured
+// 2026-09-26: 819 denies on graph reads, after which the agent went back to `grep -rn`.
+func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		want    string // "deny", "advise" or "" for silence
+	}{
+		{"magus refs Open | grep -n Open", "advise"},
+		{"./magus query kind=target | head -20", "advise"},
+		{"magus explain target:.:ci | grep needs", "advise"},
+		{"magus describe targets | wc -l", "advise"},
+		{"magus -o json describe spells | grep go", "advise"},
+		{"magus --root /tmp/ws refs Foo | sort", "advise"},
+
+		// Work verbs, and every verb that is not a graph read, stay refused.
+		{"magus run lint . | tail -30", "deny"},
+		{"magus affected ci 2>&1 | tail -30", "deny"},
+		{"magus x out1a2b | grep cause", "deny"},
+		{"magus ls | grep lint", "deny"},
+		{"magus status | head", "deny"},
+		// A graph read beside a run on the same line does not soften the run's pipe.
+		{"magus refs Foo | head; magus run test . | tail", "deny"},
+		{"magus run test . | tail; magus refs Foo | head", "deny"},
+		// An unplaceable flag leaves the verb unknown, and an unknown verb is refused.
+		{"magus --frobnicate refs Foo | head", "deny"},
+
+		// Help output has no record to project, and the raw log and a text search are exempt.
+		{"magus refs --help | grep occurrences", ""},
+		{"magus run -h | head", ""},
+		{"magus query output out1a2b | grep cause", ""},
+		{"magus refs TODO --text | grep fixme", ""},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		switch tc.want {
+		case "deny":
+			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
+		case "advise":
+			assert.Empty(t, v.Deny, tc.command)
+			assert.Equal(t, advisoryGraphPipe, v.Kind, tc.command)
+			assert.Contains(t, v.Context, "magus answers this without the pipe", tc.command)
+			assert.Equal(t, graphPipeBrief, v.Brief, tc.command)
+		default:
+			assert.Empty(t, v.Deny, tc.command)
+			assert.NotEqual(t, advisoryGraphPipe, v.Kind, tc.command)
+		}
+	}
 }
 
 // TestGuardExemptsQueryOutputBehindGlobalFlags pins the fix for the exemption
@@ -1457,6 +1614,45 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 		`node -e "console.log(x.replace(/a/,'b'))"`,
 	} {
 		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
+	}
+}
+
+// TestScriptedRewritePassesAnAppend: an append adds to the end of a file and cannot mangle
+// a line already there, so a heredoc appended with cat or tee, and a program whose every
+// file write is an append, pass; a write that can change an existing line still denies.
+func TestScriptedRewritePassesAnAppend(t *testing.T) {
+	t.Parallel()
+	const rewriteText = "s = open(p).read().replace('a', 'b')\nopen(p, 'w').write(s)\n"
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		// A heredoc into cat or tee is text, whatever program it documents.
+		{command: "cat >> notes.md <<'EOF'\n" + rewriteText + "EOF"},
+		{command: "tee -a notes.md <<'EOF'\n" + rewriteText + "EOF"},
+		{command: "cat >> types/buzz_object.go <<'EOF'\ntype Skill struct{}\nEOF"},
+		// An unquoted delimiter with a stray `$(` does not parse; the body is still text.
+		{command: "cat >> notes.md <<EOF\nrun python3 with re.sub( then .write( and $(\nEOF"},
+		// A program whose every file write appends.
+		{command: "python3 - <<'PY'\nopen('CHANGELOG.md', 'a').write(s.replace('x', 'y'))\nPY"},
+		{command: "python3 - <<'PY'\nwith open(p, mode='a+') as f:\n    f.write(re.sub('x', 'y', s))\nPY"},
+		{command: `python3 -c "open('log.txt','ab').write(s.replace(b'x', b'y'))"`},
+		// A program writing its result to stdout, appended by the shell.
+		{command: "python3 - >> out.txt <<'PY'\nimport sys\nsys.stdout.write(open('f.go').read().replace('a', 'b'))\nPY"},
+
+		{command: "python3 - <<'PY'\n" + rewriteText + "PY", denied: true},
+		{command: "python3 - <<'PY'\nf = open(p, 'r+')\nf.write(f.read().replace('a', 'b'))\nPY", denied: true},
+		{command: "python3 - <<'PY'\nopen('log.txt', 'a').write(x)\nopen('f.go', 'w').write(s.replace('a', 'b'))\nPY", denied: true},
+		{command: "python3 - >> out.txt <<'PY'\n" + rewriteText + "PY", denied: true},
+		// An unparsable line still denies a rewrite typed on it.
+		{command: `python3 -c "s=s.replace('a','b'); open(p,'w').write(s)" 'unterminated`, denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
 	}
 }
 
@@ -1690,16 +1886,21 @@ func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 // A backgrounded gate's capture is magus output one step removed, and nothing on the
 // filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
 // one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
-// it, which are the only way to read the rest of the failure.
-func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
+// it, which are the only way to read the rest of the failure. It advises: about three in
+// four denies were a search the reader needed.
+func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 	for _, cmd := range []string{
 		// The measured command.
 		`grep -n "^\[fail\]\|cause:" /Users/x/.claude/tasks/abc123.output | head -8`,
 		`grep -c fail tasks/abc123.output`,
-		`tail -40 /tmp/t.output`,
+		`grep '^--- FAIL' .magus/logs/9f2c1a.log`,
+		`tail -40 /tmp/claude-501/p/s/tasks/b6h6o001e.output`,
 		`cat tasks/abc123.output | grep cause:`,
 		`awk '/cause:/ {print}' tasks/abc123.output`,
 		`wc -l tasks/abc123.output`,
+		// A pattern supplied by a flag leaves every positional a file.
+		`grep -e cause: tasks/abc123.output`,
+		`grep -A 3 cause: tasks/abc123.output`,
 		// A range print cuts by position, which is a filter with extra steps.
 		`sed -n '1,200p' tasks/abc123.output`,
 		// The persisted run log is the same content by another route.
@@ -1711,31 +1912,34 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 		`LC_ALL=C grep cause: tasks/abc123.output`,
 	} {
 		v := Evaluate(testDependencies(), cmd)
-		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
-		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
+		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
+		assert.Equal(t, advisoryCaptureFilter, v.Kind, cmd)
+		assert.Equal(t, captureFilterBrief, v.Brief, cmd)
 	}
+
+	// A deny elsewhere on the line still outranks the advice.
+	v := Evaluate(testDependencies(), `grep cause: tasks/abc123.output; git add -A`)
+	assert.Equal(t, denyRuleStageAll, v.Rule.Name)
 }
 
-// The deny has to name what the filter was about to cut, or the reader corrects the
+// The advice has to name what the filter was about to cut, or the reader corrects the
 // spelling instead of the mistake, and it has to route somewhere that works.
 //
-// It used to reproduce the whole five-line failure block, which was eight lines of a
-// message that still owed the reader three lines of advice. The PAIR is what carries the
-// argument: `cause:` is what a filter matches and `output:` is the ref it drops, two lines
-// below it. Naming the other three proved nothing the pair does not.
-func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
+// The PAIR is what carries the argument: `cause:` is what a filter matches and `output:`
+// is the ref it drops, two lines below it.
+func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
-	require.NotEmpty(t, v.Deny)
+	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
-		assert.Contains(t, v.Deny, field, "the matched line and the dropped ref are what the filter costs")
+		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs")
 	}
-	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
-	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
-	assert.Contains(t, v.Deny, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+	assert.Contains(t, v.Context, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Context, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
+	assert.Contains(t, v.Context, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
 }
 
 // The rule is about the CAPTURE, not about text filters. Reading the file whole, and
-// filtering anything else, both stay allowed.
+// filtering anything else, both stay silent.
 func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 	for _, cmd := range []string{
 		// No filter at all: the whole file is the sanctioned read.
@@ -1747,8 +1951,18 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		// A --tee'd file has a contract, so consuming it is composition.
 		`jq -r 'select(.level=="error")' gate.jsonl`,
 		`cat gate.jsonl | jq -r .target`,
+		// A PATTERN shaped like a capture reads no capture: the measured non-log denies.
+		`grep -rn "global\.silent\|global\.output" cmd/magus/`,
+		`grep -rn 'tasks/x.output' docs/`,
+		`grep -e cause: -e 'tasks/x.output' notes.md`,
+		`awk '/tasks\/x.output/' notes.md`,
+		// A file named like a capture outside a host's tasks directory is not one.
+		`tail -40 /tmp/t.output`,
+		`grep x testdata/golden.output`,
+		// A run log's name is a content hash.
+		`grep x .magus/logs/notes.log`,
 	} {
-		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, advisoryCaptureFilter, Evaluate(testDependencies(), cmd).Kind, "should not fire: %s", cmd)
 	}
 }
 
