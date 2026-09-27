@@ -199,6 +199,12 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
+	// Check reaches the verdict the call would and writes nothing: the session state the
+	// rules spend is read from a discarded copy, and no trail line, policy record, binding
+	// or registration is made. One difference in wording: a repeated deny is shown in full,
+	// since the short form cites a stored verdict. A spawn or continuation is refused, as
+	// judging one records it.
+	Check bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
@@ -324,6 +330,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Agent == "" {
 			who.Agent = env.Who.Agent
 		}
+		if req.Check && (env.LoadedSkill != "" || env.NothingToJudge) {
+			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		}
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
@@ -348,6 +357,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			isPath = true
 		}
 		if env.IsSpawn || env.IsContinue {
+			if req.Check {
+				return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
+					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
+			}
 			return judgeAgentEvent(ctx, deps, req, env, who)
 		}
 	}
@@ -358,13 +371,27 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
-	policyDigest := recordPolicy(ctx, deps, location, false)
+	policyDigest := ""
+	if !req.Check {
+		policyDigest = recordPolicy(ctx, deps, location, false)
+	}
 	ctx = withJobStoreRows(ctx, location)
-	markers := hint.NewGate(location.cacheDir, who.callerKey())
-	facts := hint.NewGate(location.cacheDir, who.factsKey())
+	// Where the gates and the workspace rules keep session state. The rest of location is
+	// what the rules judge against, so a check swaps only the cache dir.
+	stateAt := location
+	if req.Check {
+		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey())
+		defer os.RemoveAll(stateAt.cacheDir)
+	}
+	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
+	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	bound := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
-	if bound != "" && actingLease == bound && registerAgentBase(ctx, deps, location, bound) {
+	switch {
+	case bound == "" || actingLease != bound:
+	case req.Check:
+		ctx = withRegisteredBase(ctx, deps, location, bound)
+	case registerAgentBase(ctx, deps, location, bound):
 		ctx = withJobStoreRows(ctx, location)
 	}
 	tool := hookToolCommand
@@ -558,7 +585,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Rule = string(adviceKind)
 		}
 		// The workspace's magus\guard.write rule, last because it may only add.
-		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, location)
+		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, stateAt)
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
 			drift.record()
@@ -693,9 +720,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			dialect:     shellD,
 			preauth:     preauth,
 			lease:       actingLease,
-		}, who, location)
+		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
-		if verdict.Decision == "pass" || verdict.Decision == "advise" {
+		if !req.Check && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 			bindOnExec(ctx, location, who, input)
 		}
 	}
@@ -728,7 +755,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if tool == hookToolCommand {
 			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
 		}
-		verdict.Reason, verdictRef = shapeDeny(ctx, markers, verdict.Rule, verdict.Reason, note)
+		shapeGate := markers
+		if req.Check {
+			shapeGate = hint.Gate{} // spends and stores nothing, so the deny is worded in full
+		}
+		verdict.Reason, verdictRef = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note)
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
@@ -739,7 +770,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+	if !req.Check {
+		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+	}
 	return verdict
 }
 
@@ -1168,6 +1201,87 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 		return pinned.Rows, pinned.Err
 	}
 	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+}
+
+// copySessionState copies into a new temporary directory what the gates keyed on keys hold
+// under cacheDir, and the served-next journal, keeping modification times, since an
+// anonymous marker expires on its age. "" when there is nothing to copy or the copy cannot
+// be made: a check then reads a session nothing was told yet, rather than write the real one.
+func copySessionState(cacheDir string, keys ...string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	dir, err := os.MkdirTemp("", "magus-guard-check-")
+	if err != nil {
+		return ""
+	}
+	copyFile := func(src, dst string) error {
+		info, err := os.Stat(src)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, body, 0o644); err != nil {
+			return err
+		}
+		return os.Chtimes(dst, info.ModTime(), info.ModTime())
+	}
+	copyAll := func() error {
+		if err := copyFile(hint.ServedNextPath(cacheDir), hint.ServedNextPath(dir)); err != nil {
+			return err
+		}
+		for _, key := range keys {
+			from, to := hint.MarkerPath(cacheDir, key, ""), hint.MarkerPath(dir, key, "")
+			entries, _ := os.ReadDir(filepath.Dir(from))
+			for _, e := range entries {
+				if !strings.HasPrefix(e.Name(), filepath.Base(from)) {
+					continue
+				}
+				if err := copyFile(filepath.Join(filepath.Dir(from), e.Name()), filepath.Join(filepath.Dir(to), e.Name())); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if copyAll() != nil {
+		_ = os.RemoveAll(dir)
+		return ""
+	}
+	return dir
+}
+
+// withRegisteredBase is registerAgentBase for a check: the row is registered in the pinned
+// snapshot only. Its base verdict stays unset, so a diverged base is not reported.
+func withRegisteredBase(ctx context.Context, deps Dependencies, at location, agentJob string) context.Context {
+	snap, ok := job.SnapshotFromContext(ctx)
+	if !ok || snap.Err != nil {
+		return ctx
+	}
+	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == agentJob })
+	if i < 0 || !snap.Rows[i].State.Live() || snap.Rows[i].Registered != 0 {
+		return ctx
+	}
+	base := deps.checkoutBase(ctx, at.workspace)
+	if base == "" {
+		return ctx
+	}
+	snap = snap.Clone()
+	row := &snap.Rows[i]
+	row.Registered, row.ReportedBase, row.CheckoutRoot = time.Now().Unix(), base, ""
+	if abs, err := filepath.Abs(at.workspace); err == nil && at.workspace != "" {
+		row.CheckoutRoot = abs
+	}
+	return job.WithSnapshot(ctx, snap)
 }
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook

@@ -745,7 +745,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		return refuse(refused...)
 	}
 
-	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws)))
+	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws, check)))
 	if refused := plan.Refused(); len(refused) > 0 {
 		return refuse(refused...)
 	}
@@ -787,14 +787,15 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 // exactly as a host edit hook would (see [guard.JudgeEdit] for which lease that is), so the
 // lease and claimed-declaration verdicts cannot differ between the two. The edit replaces
 // the whole file, which is what lets the guard place every changed line in its declaration.
-func renameGrade(ctx context.Context, ws types.WorkspaceRepository) func(string, []byte, []byte) (string, string) {
+// Under check the guard records nothing, so a preview leaves no trace.
+func renameGrade(ctx context.Context, ws types.WorkspaceRepository, check bool) func(string, []byte, []byte) (string, string) {
 	deps := guardDependencies()
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
 		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {
 			return "", reason
 		}
-		v := guard.JudgeEdit(ctx, deps, ws.Root(), rel, before, after)
+		v := guard.JudgeEdit(ctx, deps, ws.Root(), rel, before, after, check)
 		switch v.Decision {
 		case "deny", "ask":
 			return v.Rule, strings.TrimSpace(v.Reason)

@@ -565,3 +565,143 @@ func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 	assert.Equal(t, "advise", inside.Decision)
 	assert.Equal(t, string(advisoryMemoryWrite), inside.Rule)
 }
+
+// driftWorkspace is focusFixture loaded as the hook's workspace. Only the reader half and
+// ClassifyFiles are reached on the write path.
+type driftWorkspace struct {
+	focusFixture
+	types.TargetExpander
+	types.AffectedComputer
+	types.Inspector
+}
+
+func (driftWorkspace) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
+	return nil, nil
+}
+
+// treeState is every path under dirs with its bytes and modification time.
+func treeState(t *testing.T, dirs ...string) map[string]string {
+	t.Helper()
+	state := map[string]string{}
+	for _, dir := range dirs {
+		require.NoError(t, filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			state[path] = info.ModTime().String()
+			if !d.IsDir() {
+				body, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				state[path] += " " + string(body)
+			}
+			return nil
+		}))
+	}
+	return state
+}
+
+// A check reaches the verdict the call would and leaves the cache dir and the state dir
+// as it found them, where the call itself writes to one of them. The second round reads
+// what the first call wrote: a held advisory stays held, a recorded drift stays quiet.
+// Only a repeated deny is worded differently.
+func TestCheckJudgesAsTheCallAndWritesNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T) (context.Context, Dependencies, Request)
+		want  Verdict
+	}{
+		{
+			name: "a write drifting into a second project",
+			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
+				testkit.Isolate(t)
+				cacheDir := t.TempDir()
+				who := hookAttribution{Session: "s1"}
+				scopeDrift{markers: hint.NewGate(cacheDir, who.factsKey()), project: "libs/ui"}.record()
+				deps := Dependencies{
+					Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+						return driftWorkspace{focusFixture: newFocusFixture()}, nil
+					},
+					Policy: func() PolicyState { return PolicyState{Digest: "d1", ShellRules: 1} },
+				}
+				return WithLocation(t.Context(), cacheDir, "/ws", "/ws"), deps, Request{Input: "/ws/app/main.go", IsPath: true, Session: who.Session}
+			},
+			want: Verdict{Decision: "advise", Rule: string(advisoryScopeDrift)},
+		},
+		{
+			name: "a once-per-session notice",
+			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
+				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
+				return ctx, Dependencies{}, Request{Input: "ls", Lease: "finished", Session: "s1"}
+			},
+			want: Verdict{Decision: "advise", Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: types.LeaseSourceFlag},
+		},
+		{
+			name: "a denied command",
+			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
+				testkit.Isolate(t)
+				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), Dependencies{}, Request{Input: "magus run ci | tail", Session: "s1"}
+			},
+			want: Verdict{Decision: "deny"},
+		},
+		{
+			name: "an unregistered worker's first write",
+			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
+				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, WritePaths: []string{"app/**"}})
+				bindCaller(t, ctx, hookAttribution{}, "worker")
+				deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "77aa01c" }}
+				return ctx, deps, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
+			},
+			want: Verdict{Decision: "pass", Lease: "worker", LeaseFrom: types.LeaseSourceMarker},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, deps, req := tc.setup(t)
+			t.Setenv(trail.EnvBaggage, "")
+			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
+			checked := req
+			checked.Check = true
+			for round := range 2 {
+				before := treeState(t, dirs...)
+				preview := Judge(ctx, deps, checked)
+				assert.Equal(t, before, treeState(t, dirs...), "round %d: the check wrote", round)
+				leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "magus-guard-check-*"))
+				require.NoError(t, err)
+				assert.Empty(t, leftover, "round %d: the check left its copy behind", round)
+
+				real := Judge(ctx, deps, req)
+				if round == 0 {
+					assert.Equal(t, real, preview)
+					assert.NotEqual(t, before, treeState(t, dirs...), "the call itself records something")
+					got := Verdict{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
+					if tc.want.Rule == "" {
+						got.Rule = ""
+					}
+					assert.Equal(t, tc.want, got)
+					continue
+				}
+				if real.Decision == "deny" {
+					real.Reason, preview.Reason = "", ""
+				}
+				assert.Equal(t, real, preview, "round %d", round)
+			}
+		})
+	}
+}
+
+// Judging a spawn records it, so a check refuses one rather than record it.
+func TestCheckRefusesASpawn(t *testing.T) {
+	testkit.Isolate(t)
+	cacheDir := t.TempDir()
+	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
+	v := Judge(ctx, Dependencies{}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", Check: true})
+	assert.Equal(t, "deny", v.Decision)
+	entries, err := os.ReadDir(cacheDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}

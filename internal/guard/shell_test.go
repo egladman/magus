@@ -2268,7 +2268,7 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 	edit := func(rel string) Verdict {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"))
+		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
@@ -2289,4 +2289,20 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	unnamed := edit("docs/readme.md")
 	assert.Equal(t, graded{Denied: true}, gradedAs(unnamed))
 	assert.Contains(t, unnamed.Reason, "lease lease-c holds write paths in this checkout")
+}
+
+// `refs --rename --check` grades each file as the rename would and leaves no activity line.
+func TestJudgeEditCheckRecordsNothing(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	edit := func(rel string, check bool) Verdict {
+		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), check)
+	}
+	for i, rel := range []string{"internal/ledger/store.go", "cmd/magus/main.go"} {
+		preview := edit(rel, true)
+		assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), i, rel)
+		assert.Equal(t, edit(rel, false), preview, rel)
+	}
+	assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), 2, "the rename itself is recorded")
 }

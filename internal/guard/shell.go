@@ -274,8 +274,9 @@ func renamesSymbol(args []string) bool {
 // hook judges the same edit. The verb's process knows no host session, so it acts under the
 // lease it resolves on its own: the checkout's binding, else its magus.lease BAGGAGE claim.
 // Resolving none while live leases hold write paths in the checkout at root is a deny: a
-// worker bound only by its session would otherwise be graded by nobody.
-func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte) Verdict {
+// worker bound only by its session would otherwise be graded by nobody. check judges as
+// [Request.Check] does, writing nothing.
+func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, check bool) Verdict {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -284,7 +285,7 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 			"new_string": string(after),
 		},
 	})
-	v := Judge(ctx, deps, Request{Input: string(envelope)})
+	v := Judge(ctx, deps, Request{Input: string(envelope), Check: check})
 	if v.Decision == "deny" || v.Lease != "" {
 		return v
 	}
