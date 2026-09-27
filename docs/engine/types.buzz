@@ -288,12 +288,12 @@ export object Site {
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
     // latestStable is the release the site advertises as current: the newest that
-    // semver\isPrerelease does not name, or null before one ships. A candidate tagged after
+    // semver\isStable accepts, or null before one ships. A candidate tagged after
     // it is still listed in the feed and on /public/, but never pins the install docs,
     // since `magus self update` and GitHub's latest skip it too.
     fun latestStable() > Release? {
         foreach (r in this.releases) {
-            if (!semver\isPrerelease(r.version)) { return r; }
+            if (semver\isStable(r.version)) { return r; }
         }
         return null;
     }

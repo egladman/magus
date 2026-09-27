@@ -6,9 +6,9 @@
 // wrong marks an ordinary release as a prerelease, which hides it from everyone following
 // the repo's latest.
 //
-// semver\isPrerelease is the predicate the release index and the docs site's latest stable
-// release use too, so the release flag, `magus self update` and the install docs cannot
-// disagree about one tag.
+// semver\isStable is the answer the release index and the docs site's latest release use
+// too, so the release flag, `magus self update` and the install docs cannot disagree
+// about one tag.
 //
 // Reads TAG. Prints "true" or "false" for $GITHUB_OUTPUT.
 import "os";
@@ -17,13 +17,13 @@ import "std";
 
 fun env(name: str) > str { return os\env(name) ?? ""; }
 
-// releaseFlag is the value the step writes for tag. A tag that is not semver throws: the
-// predicate alone would call it no prerelease, publishing it as the repo's latest.
+// releaseFlag is the value the step writes for tag. A tag that is not semver throws rather
+// than being flagged a prerelease, which would hide a mistyped release.
 export fun releaseFlag(tag: str) > bool !> any {
     if (!semver\isValid(tag)) {
         throw "prerelease: TAG \"{tag}\" is not a semantic version";
     }
-    return semver\isPrerelease(tag);
+    return !semver\isStable(tag);
 }
 
 fun main() > void !> any {

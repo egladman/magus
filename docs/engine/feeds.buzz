@@ -52,7 +52,7 @@ export fun renderBlogAtom(site: Site) > void !> any {
 // releaseEntryTitle is a feed entry's title: the version, marked when it is a prerelease so
 // a reader does not take a candidate for the latest stable release.
 fun releaseEntryTitle(version: str) > str {
-    if (semver\isPrerelease(version)) { return version + " (prerelease)"; }
+    if (!semver\isStable(version)) { return version + " (prerelease)"; }
     return version;
 }
 

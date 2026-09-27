@@ -37,11 +37,11 @@ var Semver = Module{
 			Impl:    SemverIsValid,
 		},
 		{
-			Name:    "isPrerelease",
-			Doc:     `Whether v carries a prerelease component: "v0.5.0-rc.1" does, "v1.2.3+build-1" does not, since build metadata is not a prerelease. False, never an error, when v is not a semantic version.`,
+			Name:    "isStable",
+			Doc:     `Whether v is a stable release version: "v0.4.0" and "v1.2.3+build-1" are, "v0.5.0-rc.1" is not, and neither is anything that is not a semantic version. The ok of the Go ParseVersion the release index and self update decide with.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
-			Impl:    SemverIsPrerelease,
+			Impl:    SemverIsStable,
 		},
 		{
 			Name:    "canonical",
@@ -166,14 +166,12 @@ func SemverIsValid(_ context.Context, v string) (bool, error) {
 	return err == nil, nil
 }
 
-// SemverIsPrerelease reports whether v has a prerelease component. It answers as
-// selfupdate.IsPrerelease does for the release index, so a script deciding the
-// GitHub Release flag or the docs site's latest stable release agrees with which
-// releases self update may pick on its own. It parses with this module's parser
-// rather than importing selfupdate, which builds only without -tags noselfupdate.
-func SemverIsPrerelease(_ context.Context, v string) (bool, error) {
-	sv, err := semver.NewVersion(v)
-	return err == nil && sv.Prerelease() != "", nil
+// SemverIsStable is the ok of types.ParseVersion, so a script deciding the GitHub
+// Release flag or the docs site's latest release agrees with which releases self
+// update may pick on its own.
+func SemverIsStable(_ context.Context, v string) (bool, error) {
+	_, stable := types.ParseVersion(v)
+	return stable, nil
 }
 
 // SemverCanonical returns v in canonical "vX.Y.Z" form.

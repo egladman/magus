@@ -351,7 +351,7 @@ var modules = []Module{
 		Methods: []Method{
 			{Name: "compare", Doc: "Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.", Sig: "semver\\compare(a, b) -> int"},
 			{Name: "isValid", Doc: "Whether v parses as a semantic version. Use it instead of calling parse purely to see whether it raises.", Sig: "semver\\isValid(v) -> bool"},
-			{Name: "isPrerelease", Doc: "Whether v carries a prerelease component: \"v0.5.0-rc.1\" does, \"v1.2.3+build-1\" does not, since build metadata is not a prerelease. False, never an error, when v is not a semantic version.", Sig: "semver\\isPrerelease(v) -> bool"},
+			{Name: "isStable", Doc: "Whether v is a stable release version: \"v0.4.0\" and \"v1.2.3+build-1\" are, \"v0.5.0-rc.1\" is not, and neither is anything that is not a semantic version. The ok of the Go ParseVersion the release index and self update decide with.", Sig: "semver\\isStable(v) -> bool"},
 			{Name: "canonical", Doc: "Canonical \"vX.Y.Z\" form of v, filling in missing components and discarding build metadata; errors on invalid input.", Sig: "semver\\canonical(v) -> string"},
 			{Name: "major", Doc: "The major prefix of v as a string: major(\"1.2.3\") is \"v1\". This is the cache token a spell's VersionKey{upTo = \"major\"} produces; parse().major is the same number as an int.", Sig: "semver\\major(v) -> string"},
 			{Name: "majorMinor", Doc: "The major.minor prefix of v as a string: majorMinor(\"1.2.3\") is \"v1.2\". This is the cache token a spell's VersionKey{upTo = \"minor\"} produces.", Sig: "semver\\majorMinor(v) -> string"},

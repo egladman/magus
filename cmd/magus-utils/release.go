@@ -15,6 +15,7 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
@@ -152,7 +153,7 @@ type ReleaseIndex struct {
 	// internal/selfupdate for what it does and does not buy.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
-	// Prereleases holds every manifest selfupdate.IsPrerelease names, apart from
+	// Prereleases holds every manifest whose version is a prerelease, apart from
 	// Releases, because a shipped client auto-selects the highest semver in Releases.
 	// Nil rather than empty when there are none, so omitzero leaves the signed bytes
 	// of an index without candidates as they were.
@@ -203,7 +204,7 @@ func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []
 			Yanked:    m.Yanked,
 			Artifacts: artifacts,
 		}
-		if selfupdate.IsPrerelease(m.Version) {
+		if _, stable := types.ParseVersion(m.Version); !stable {
 			idx.Prereleases = append(idx.Prereleases, rel)
 			continue
 		}
@@ -265,7 +266,7 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 // artifact in artifactsDir, and deletes the fragments it folded: the manifest owns
 // that text now, and the docs changelog page renders it from there.
 //
-// A prerelease (selfupdate.IsPrerelease) records the same notes and deletes nothing.
+// A prerelease records the same notes and deletes nothing.
 // Its notes are a preview of the final release's, and the final cut has to fold every
 // fragment again, since no later tool subtracts a candidate's notes from it.
 //
@@ -301,7 +302,11 @@ func runCut(args []string) error {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 	outPath := filepath.Join(outDir, version+".yaml")
-	candidate := selfupdate.IsPrerelease(version)
+	if !semver.IsValid(version) {
+		return fmt.Errorf("cut: -version %q is not a semantic version", version)
+	}
+	_, stable := types.ParseVersion(version)
+	candidate := !stable
 
 	artifacts, err := scanReleaseArtifacts(artifactsDir, version)
 	if err != nil {

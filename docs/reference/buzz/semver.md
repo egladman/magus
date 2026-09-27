@@ -39,11 +39,11 @@ Whether v parses as a semantic version. Use it instead of calling parse purely t
 
 **Returns:** bool
 
-### isPrerelease
+### isStable
 
-Whether v carries a prerelease component: "v0.5.0-rc.1" does, "v1.2.3+build-1" does not, since build metadata is not a prerelease. False, never an error, when v is not a semantic version.
+Whether v is a stable release version: "v0.4.0" and "v1.2.3+build-1" are, "v0.5.0-rc.1" is not, and neither is anything that is not a semantic version. The ok of the Go ParseVersion the release index and self update decide with.
 
-**Signature:** `semver\isPrerelease(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L174)
+**Signature:** `semver\isStable(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L172)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -55,7 +55,7 @@ Whether v carries a prerelease component: "v0.5.0-rc.1" does, "v1.2.3+build-1" d
 
 Canonical "vX.Y.Z" form of v, filling in missing components and discarding build metadata; errors on invalid input.
 
-**Signature:** `semver\canonical(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L185)
+**Signature:** `semver\canonical(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L183)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -67,7 +67,7 @@ Canonical "vX.Y.Z" form of v, filling in missing components and discarding build
 
 The major prefix of v as a string: major("1.2.3") is "v1". This is the cache token a spell's VersionKey{upTo = "major"} produces; parse().major is the same number as an int.
 
-**Signature:** `semver\major(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L199)
+**Signature:** `semver\major(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L197)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -79,7 +79,7 @@ The major prefix of v as a string: major("1.2.3") is "v1". This is the cache tok
 
 The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is the cache token a spell's VersionKey{upTo = "minor"} produces.
 
-**Signature:** `semver\majorMinor(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L209)
+**Signature:** `semver\majorMinor(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L207)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -91,7 +91,7 @@ The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is 
 
 Whether v meets constraint, the full range syntax magus.yaml required_version uses: ">= 1.2, < 2.0", "^1.2.3", "~1.2". compare() tests one relation; this tests a range.
 
-**Signature:** `semver\satisfies(v, constraint) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L222)
+**Signature:** `semver\satisfies(v, constraint) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L220)
 
 | Parameter    | Type     | Optional | Description |
 | ------------ | -------- | -------- | ----------- |

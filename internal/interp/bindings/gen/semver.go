@@ -33,9 +33,9 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return BoolVal(ret0), nil
 	}))
-	m.MapSet("isPrerelease", vm.DirectValue("semver.isPrerelease", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("isStable", vm.DirectValue("semver.isStable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		v := Str(bzArgs, 0)
-		ret0, err := std.SemverIsPrerelease(ctx, v)
+		ret0, err := std.SemverIsStable(ctx, v)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

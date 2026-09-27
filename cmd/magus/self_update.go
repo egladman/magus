@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/types"
 	minioselfupdate "github.com/minio/selfupdate"
 )
 
@@ -203,7 +204,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		case -1:
 			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.
-				if selfupdate.IsPrerelease(version) {
+				if _, stable := types.ParseVersion(version); !stable {
 					return fmt.Errorf(
 						"you are running prerelease %s and automatic updates follow stable releases only; "+
 							"the newest stable release is %s\n"+

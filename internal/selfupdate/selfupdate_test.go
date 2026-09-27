@@ -294,25 +294,6 @@ func TestSelectRelease_AllMalformedVersions(t *testing.T) {
 	assert.Contains(t, err.Error(), "semver")
 }
 
-// The cases are std.TestSemverIsPrerelease's, so the Buzz predicate behind the
-// GitHub Release flag and the index agree on every tag shape.
-func TestIsPrereleaseAgreesWithTheReleaseFlag(t *testing.T) {
-	t.Parallel()
-	cases := map[string]bool{
-		"v0.4.0":              false,
-		"v0.5.0-rc.1":         true,
-		"v1.0.0-beta":         true,
-		"v1.2.3+build-1":      false,
-		"v1.2.3-rc.1+build-9": true,
-		"0.5.0-rc.1":          true,
-		"not-a-version":       false,
-		"":                    false,
-	}
-	for version, want := range cases {
-		assert.Equal(t, want, IsPrerelease(version), version)
-	}
-}
-
 func TestSelectRelease_LatestSkipsPrereleases(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
