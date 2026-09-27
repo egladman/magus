@@ -1736,7 +1736,7 @@ func latestGreenGate(ctx context.Context, root string) job.GreenGate {
 		return job.GreenGate{}
 	}
 	if meta.ID != rec.Commit {
-		history, err := res.VCS.History(ctx, m.Root(), gateMergeScanLimit)
+		history, err := res.VCS.History(ctx, m.Root(), types.HistoryQuery{Limit: gateMergeScanLimit})
 		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
 			return job.GreenGate{}
 		}

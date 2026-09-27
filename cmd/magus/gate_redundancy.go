@@ -194,7 +194,7 @@ func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 		}
 	}
 	if g.commit != rec.Commit {
-		history, err := g.drv.History(ctx, g.root, gateMergeScanLimit)
+		history, err := g.drv.History(ctx, g.root, types.HistoryQuery{Limit: gateMergeScanLimit})
 		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
 			return gateFinding{}, false
 		}
@@ -383,7 +383,7 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 			return green.Run, green.Commit, ok
 		},
 		History: func(ctx context.Context) ([]types.Commit, error) {
-			return g.drv.History(ctx, g.root, gateMergeScanLimit)
+			return g.drv.History(ctx, g.root, types.HistoryQuery{Limit: gateMergeScanLimit})
 		},
 		Assess: func(ctx context.Context, green string) (types.RiskReport, error) {
 			return m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: green})
