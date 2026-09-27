@@ -15,12 +15,10 @@ package filenames
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
@@ -31,12 +29,14 @@ const message = "%s mashes %q and %q together, both already file names in this t
 
 // Options configures the analyzer returned by [New].
 type Options struct {
-	// Module names the tree: the directory whose go.mod declares it is walked,
-	// nested modules included, and every Go file name under it is vocabulary.
+	// Module names the tree: every Go file name the go tool would read under
+	// the directory whose go.mod declares it, nested modules included, is
+	// vocabulary.
 	Module string `json:"module"`
 
 	// SkipDirs names directories, by any segment of the root-relative path,
-	// that neither supply vocabulary nor are checked.
+	// that neither supply vocabulary nor are checked. Each must name a
+	// directory holding Go files.
 	SkipDirs []string `json:"skip-dirs"`
 
 	// Suffixes are stripped from a file name's end, repeatedly, before it is
@@ -47,8 +47,9 @@ type Options struct {
 	Allow []string `json:"allow"`
 }
 
-// New returns the analyzer configured by opts, erroring on an empty Module.
-// The tree is walked once, on the first package analyzed.
+// New returns the analyzer configured by opts, reading the tree's file names
+// once. It errors on an empty Module, a tree with no Go files, and a SkipDirs
+// entry that skips nothing.
 func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.Module == "" {
 		return nil, errors.New("filenames: module is required: its tree's file names are the vocabulary")
@@ -61,8 +62,30 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		}
 		suffixes = regexp.MustCompile(`_(` + strings.Join(quoted, "|") + `)$`)
 	}
-	c := &checker{opts: opts, suffixes: suffixes}
-	c.load = sync.OnceValues(c.walk)
+	c := &checker{opts: opts, suffixes: suffixes, vocabulary: map[string]bool{}}
+	root, err := source.Root("filenames", opts.Module)
+	if err != nil {
+		return nil, err
+	}
+	c.root = root
+	files, err := source.GoFiles(root)
+	if err != nil {
+		return nil, fmt.Errorf("filenames: %w", err)
+	}
+	if err := source.RequireDirNames("filenames", "skip-dirs", root, opts.SkipDirs, files); err != nil {
+		return nil, err
+	}
+	for _, rel := range files {
+		if c.skipped(rel) {
+			continue
+		}
+		for _, seg := range c.segments(filepath.Base(rel)) {
+			c.vocabulary[seg] = true
+		}
+	}
+	if len(c.vocabulary) == 0 {
+		return nil, fmt.Errorf("filenames: no Go files under %s; the rule would report nothing", root)
+	}
 	return &analysis.Analyzer{
 		Name: "filenames",
 		Doc:  "report Go file names that mash two words together",
@@ -70,45 +93,18 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	}, nil
 }
 
-type tree struct {
-	root     string
-	segments map[string]bool
-}
-
 type checker struct {
-	opts     Options
-	suffixes *regexp.Regexp
-	load     func() (tree, error)
+	opts       Options
+	suffixes   *regexp.Regexp
+	root       string
+	vocabulary map[string]bool
 }
 
-func (c *checker) walk() (tree, error) {
-	root, err := source.Root("filenames", c.opts.Module)
-	if err != nil {
-		return tree{}, err
-	}
-	t := tree{root: root, segments: map[string]bool{}}
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path != root && slices.Contains(c.opts.SkipDirs, d.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		for _, seg := range c.segments(d.Name()) {
-			t.segments[seg] = true
-		}
-		return nil
-	})
-	if err != nil {
-		return tree{}, fmt.Errorf("filenames: %w", err)
-	}
-	if len(t.segments) == 0 {
-		return tree{}, fmt.Errorf("filenames: no Go files under %s; the rule would report nothing", root)
-	}
-	return t, nil
+// skipped reports whether a slash-separated root-relative file path sits in a
+// SkipDirs directory.
+func (c *checker) skipped(rel string) bool {
+	segs := strings.Split(rel, "/")
+	return slices.ContainsFunc(segs[:len(segs)-1], func(s string) bool { return slices.Contains(c.opts.SkipDirs, s) })
 }
 
 // segments returns the underscore-separated words of a Go file name, or nil
@@ -127,18 +123,13 @@ func (c *checker) segments(name string) []string {
 }
 
 func (c *checker) run(pass *analysis.Pass) error {
-	t, err := c.load()
-	if err != nil {
-		return err
-	}
 	files, err := source.Files(pass)
 	if err != nil {
 		return err
 	}
 	for _, f := range files {
 		name := source.Name(pass, f)
-		if rel, err := filepath.Rel(t.root, filepath.Dir(name)); err == nil &&
-			slices.ContainsFunc(strings.Split(filepath.ToSlash(rel), "/"), func(s string) bool { return slices.Contains(c.opts.SkipDirs, s) }) {
+		if rel, err := filepath.Rel(c.root, name); err == nil && c.skipped(filepath.ToSlash(rel)) {
 			continue
 		}
 		for _, seg := range c.segments(filepath.Base(name)) {
@@ -149,7 +140,7 @@ func (c *checker) run(pass *analysis.Pass) error {
 			// "a" of "async" is never a word.
 			for i := 2; i < len(seg)-1; i++ {
 				head, tail := seg[:i], seg[i:]
-				if t.segments[head] && t.segments[tail] {
+				if c.vocabulary[head] && c.vocabulary[tail] {
 					pass.Reportf(f.Package, message, seg, head, tail, tail, head, tail, seg)
 					break
 				}

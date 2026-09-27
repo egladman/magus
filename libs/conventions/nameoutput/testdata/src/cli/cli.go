@@ -29,7 +29,7 @@ func projects(format string, ps []string) error {
 
 func status(format string, v string) error {
 	switch format {
-	case outputName: // want "this `case outputName:` arm must render through emitNames"
+	case outputName: // want "this `case outputName:` arm must render through emitNames .*; a single value is emitNames"
 		fmt.Println(v)
 	}
 	return nil

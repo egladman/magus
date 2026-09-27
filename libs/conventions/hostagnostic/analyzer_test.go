@@ -4,16 +4,32 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
+
+// hosts mirrors the repository's own settings, so the matcher is graded on the
+// configuration it runs with. Cursor is a pattern rather than a host: the word
+// is a terminal position and a pagination token far more often than the host.
+var hosts = Options{
+	Hosts: []string{"claude", "opencode", "codex", "aider", "windsurf"},
+	HostPatterns: []string{
+		`\(Cursor\)`,
+		`(?i)\bcursor (hooks?|ide|editor|rules)\b`,
+		`(?i)[!=]=\s*"cursor"`,
+	},
+}
 
 // TestAnalyzer names a module the testdata is not in, as a nested module with
 // its own name is in the tree: its packages are still scanned and still skipped
 // by directory.
 func TestAnalyzer(t *testing.T) {
-	analyzer, err := New(Options{Module: "example.com/m", SkipDirs: []string{"gen"}})
+	opts := hosts
+	opts.SkipDirs = []string{"gen"}
+	analyzer, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,9 +45,11 @@ func (r *recorder) Errorf(format string, args ...any) {
 }
 
 // TestAnalyzerReadsExcludedFiles holds the rule on a file this platform's build
-// constraints drop, as the tree walk it replaced did.
+// constraints drop, as the tree walk it replaced did, and carries the hint.
 func TestAnalyzerReadsExcludedFiles(t *testing.T) {
-	analyzer, err := New(Options{})
+	opts := hosts
+	opts.Hint = "see docs/hosts.md"
+	analyzer, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +58,9 @@ func TestAnalyzerReadsExcludedFiles(t *testing.T) {
 		for _, d := range r.Diagnostics {
 			p := r.Pass.Fset.Position(d.Pos)
 			got = append(got, fmt.Sprintf("%s:%d", filepath.Base(p.Filename), p.Line))
+			if !strings.HasSuffix(d.Message, "; see docs/hosts.md") {
+				t.Errorf("message %q does not end with the hint", d.Message)
+			}
 		}
 	}
 	if len(got) == 0 || slices.ContainsFunc(got, func(s string) bool { return s != "tagged_never.go:5" }) {
@@ -47,10 +68,42 @@ func TestAnalyzerReadsExcludedFiles(t *testing.T) {
 	}
 }
 
+func TestNewRequiresHosts(t *testing.T) {
+	if _, err := New(Options{}); err == nil || !strings.Contains(err.Error(), "hosts and host-patterns are both empty") {
+		t.Fatalf("want an error for no hosts, got %v", err)
+	}
+}
+
+func TestNewRejectsBadPattern(t *testing.T) {
+	if _, err := New(Options{HostPatterns: []string{"("}}); err == nil || !strings.Contains(err.Error(), `host-patterns "("`) {
+		t.Fatalf("want an error naming the pattern, got %v", err)
+	}
+}
+
+// TestNewChecksSkipDirs fails at construction on a skip entry naming no
+// directory that holds Go files: the tree moved and the setting skips nothing.
+func TestNewChecksSkipDirs(t *testing.T) {
+	sourcetest.Module(t, "example.com/m", "app/gen/gen.go", "app/app.go")
+	opts := hosts
+	opts.Module = "example.com/m"
+	opts.SkipDirs = []string{"gen"}
+	if _, err := New(opts); err != nil {
+		t.Fatal(err)
+	}
+	opts.SkipDirs = []string{"gen", "generated"}
+	if _, err := New(opts); err == nil || !strings.Contains(err.Error(), `skip-dirs entry "generated"`) {
+		t.Fatalf("want an error naming the dead entry, got %v", err)
+	}
+}
+
 // TestLine grades the matcher against lines, because a tree that reports
 // nothing is equally consistent with a matcher that matches nothing. Cursor is
 // the case that needs it, and the negative cases are why.
 func TestLine(t *testing.T) {
+	m, err := newMatcher(hosts.Hosts, hosts.HostPatterns)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		line string
 		want bool
@@ -67,9 +120,10 @@ func TestLine(t *testing.T) {
 		{`"cursor-hook.sh",`, false},
 		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
 		{`filepath.Join(root, ".claude", "settings.json"),`, false},
+		{`case "claude":`, false},
 	} {
-		if got := Line(tc.line); got != tc.want {
-			t.Errorf("Line(%q) = %v, want %v", tc.line, got, tc.want)
+		if got := m.line(tc.line); got != tc.want {
+			t.Errorf("line(%q) = %v, want %v", tc.line, got, tc.want)
 		}
 	}
 }

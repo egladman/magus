@@ -24,26 +24,26 @@ import (
 )
 
 func init() {
-	register.Plugin("asciistrings", plugin(asciistrings.New))
-	register.Plugin("filenames", plugin(filenames.New))
-	register.Plugin("hostagnostic", plugin(hostagnostic.New))
-	register.Plugin("hostvocab", plugin(hostvocab.New))
-	register.Plugin("importceiling", plugin(importceiling.New))
-	register.Plugin("nameoutput", plugin(nameoutput.New))
-	register.Plugin("providerio", plugin(providerio.New))
-	register.Plugin("ruletext", plugin(ruletext.New))
-	register.Plugin("stutter", plugin(stutter.New))
-	register.Plugin("testisolation", plugin(testisolation.New))
+	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
+	register.Plugin("filenames", plugin("filenames", filenames.New))
+	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))
+	register.Plugin("hostvocab", plugin("hostvocab", hostvocab.New))
+	register.Plugin("importceiling", plugin("importceiling", importceiling.New))
+	register.Plugin("nameoutput", plugin("nameoutput", nameoutput.New))
+	register.Plugin("providerio", plugin("providerio", providerio.New))
+	register.Plugin("ruletext", plugin("ruletext", ruletext.New))
+	register.Plugin("stutter", plugin("stutter", stutter.New))
+	register.Plugin("testisolation", plugin("testisolation", testisolation.New))
 }
 
 // plugin builds a constructor that decodes a settings block straight into the
 // analyzer's own Options, so an option added there cannot be dropped on the
-// way in, and an unknown key is a load error naming it.
-func plugin[O any](build func(O) (*analysis.Analyzer, error)) register.NewPlugin {
+// way in, and an unknown key is a load error naming it and the linter.
+func plugin[O any](name string, build func(O) (*analysis.Analyzer, error)) register.NewPlugin {
 	return func(raw any) (register.LinterPlugin, error) {
 		opts, err := register.DecodeSettings[O](raw)
 		if err != nil {
-			return nil, fmt.Errorf("settings: %w", err)
+			return nil, fmt.Errorf("%s: settings: %w", name, err)
 		}
 		analyzer, err := build(opts)
 		if err != nil {
@@ -57,6 +57,7 @@ type linter struct {
 	analyzer *analysis.Analyzer
 }
 
+// BuildAnalyzers returns the one analyzer the settings configured.
 func (l *linter) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{l.analyzer}, nil
 }

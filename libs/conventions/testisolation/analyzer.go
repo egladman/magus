@@ -1,10 +1,10 @@
 // Package testisolation holds every test binary that links a configured package
 // to a TestMain calling an isolating helper.
 //
-// In magus the package is the one resolving the per-user runtime directory. A
-// test binary linking it can reach the person's real directory, dial their
-// broker, claim capacity from it, and bind a pool beside their server. The
-// helper points the process at a private directory first.
+// The package is one whose reach outside the test is the hazard, such as one
+// resolving a per-user runtime directory: a test binary linking it can reach
+// the person's real directory and the services listening there. The helper
+// points the process somewhere private first.
 //
 // Reach is a package fact carried along imports, so the link graph is the
 // compiler's rather than a hand-kept list.
@@ -12,6 +12,7 @@ package testisolation
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -25,8 +26,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-const message = "this test binary links %s but no TestMain in its directory calls %s, so its tests can reach " +
-	"the person's real runtime directory: add `func TestMain(m *testing.M) { %s(m) }`"
+const message = "this test binary links %s but no TestMain in its directory calls %s, so its tests run " +
+	"unisolated from what that package reaches: add `func TestMain(m *testing.M) { %s(m) }`"
 
 // Options configures the analyzer returned by [New].
 type Options struct {
@@ -39,12 +40,19 @@ type Options struct {
 
 	// Calls are the helpers a TestMain may call, as pkg.Func.
 	Calls []string `json:"calls"`
+
+	// Hint is appended to every diagnostic: the repository's own account of
+	// what an unisolated test reaches.
+	Hint string `json:"hint"`
 }
 
 // reaches marks a package that is, or transitively imports, [Options.Package].
 type reaches struct{}
 
-func (*reaches) AFact()         {}
+// AFact implements [analysis.Fact].
+func (*reaches) AFact() {}
+
+// String names the fact in analysistest's `want package:"reaches"` form.
 func (*reaches) String() string { return "reaches" }
 
 // New returns the analyzer configured by opts, erroring on a missing package,
@@ -59,7 +67,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		}
 	}
 	if err := source.InModule("testisolation", opts.Module, func(root string) error {
-		return source.CheckPackage("testisolation", "package", root, opts.Module, opts.Package)
+		return source.RequirePackage("testisolation", "package", root, opts.Module, opts.Package)
 	}); err != nil {
 		return nil, err
 	}
@@ -102,7 +110,8 @@ func run(pass *analysis.Pass, opts Options) error {
 	first := slices.MinFunc(tests, func(a, b *ast.File) int {
 		return strings.Compare(source.Name(pass, a), source.Name(pass, b))
 	})
-	pass.Reportf(first.Name.Pos(), message, opts.Package, strings.Join(opts.Calls, " or "), opts.Calls[0])
+	msg := fmt.Sprintf(message, opts.Package, strings.Join(opts.Calls, " or "), opts.Calls[0])
+	pass.Reportf(first.Name.Pos(), "%s", source.Hint(msg, opts.Hint))
 	return nil
 }
 

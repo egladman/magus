@@ -16,6 +16,7 @@ func TestAnalyzer(t *testing.T) {
 		Dirs:            []string{"queue"},
 		Allow:           []AllowEntry{{File: "queue/allowed.go", Reason: "test fixture: the file this test's Allow entry names"}},
 		ProviderImports: []string{"go-github", "go-gitlab"},
+		Hint:            "provider I/O lives in scripts",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,6 +48,16 @@ func TestNewChecksAllowFileExists(t *testing.T) {
 	opts := Options{Module: "example.com/m", Dirs: []string{"queue"}, Allow: []AllowEntry{{File: "queue/present.go", Reason: "test"}}}
 	if _, err := New(opts); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestNewRejectsMovedDir fails at construction when a governed directory holds
+// no Go files: the code moved, and the rule would govern nothing there.
+func TestNewRejectsMovedDir(t *testing.T) {
+	sourcetest.Module(t, "example.com/m", "internal/queue/provider/host.go")
+	opts := Options{Module: "example.com/m", Dirs: []string{"internal/queue", "internal/job"}}
+	if _, err := New(opts); err == nil || !strings.Contains(err.Error(), `providerio: dirs entry "internal/job" holds no Go files`) {
+		t.Fatalf("want an error naming the dead dir, got %v", err)
 	}
 }
 

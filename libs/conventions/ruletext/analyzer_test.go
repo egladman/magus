@@ -22,7 +22,7 @@ func TestNewRejectsDeadScope(t *testing.T) {
 }
 
 func TestAnalyzer(t *testing.T) {
-	analyzer, err := New(Options{Files: []string{"cli/shell.go"}, Prefix: "magus workspace:"})
+	analyzer, err := New(Options{Files: []string{"cli/shell.go"}, Prefix: "magus workspace:", Hint: "rules live in guard/"})
 	if err != nil {
 		t.Fatal(err)
 	}

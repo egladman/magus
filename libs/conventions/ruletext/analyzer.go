@@ -8,6 +8,7 @@ package ruletext
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/token"
 	"strconv"
@@ -17,8 +18,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-const message = "guard rule text %s outside internal/guard: move the rule there, where the rule suite " +
-	"and `magus session ls`'s replay path can both reach it; this file owns flags, stdin and rendering only"
+const message = "guard rule text %s in a file that owns flags, stdin and rendering only: move the rule " +
+	"into the guard's own package, where its rule suite and its replay path can both reach it"
 
 // Options configures the analyzer returned by [New].
 type Options struct {
@@ -30,6 +31,10 @@ type Options struct {
 
 	// Prefix opens every reason and advisory the guard produces.
 	Prefix string `json:"prefix"`
+
+	// Hint is appended to every diagnostic: the repository's own remedy, which
+	// may name the guard's package and the commands that replay it.
+	Hint string `json:"hint"`
 }
 
 // New returns the analyzer configured by opts, erroring on a malformed glob or
@@ -42,7 +47,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		return nil, errors.New("ruletext: prefix is empty")
 	}
 	if err := source.InModule("ruletext", opts.Module, func(root string) error {
-		return opts.Files.Check("ruletext", "files", root)
+		return opts.Files.RequireMatches("ruletext", "files", root)
 	}); err != nil {
 		return nil, err
 	}
@@ -68,7 +73,7 @@ func run(pass *analysis.Pass, opts Options) error {
 				return true
 			}
 			if v, err := strconv.Unquote(lit.Value); err == nil && strings.HasPrefix(v, opts.Prefix) {
-				pass.Reportf(lit.Pos(), message, lit.Value)
+				pass.Reportf(lit.Pos(), "%s", source.Hint(fmt.Sprintf(message, lit.Value), opts.Hint))
 			}
 			return true
 		})

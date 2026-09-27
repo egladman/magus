@@ -13,7 +13,11 @@ import (
 // external test package serving the internal one, a binary that links nothing,
 // and an external test package that alone brings the link in.
 func TestAnalyzer(t *testing.T) {
-	analyzer, err := New(Options{Package: "sockdir", Calls: []string{"testkit.Main", "testkit.Isolated"}})
+	analyzer, err := New(Options{
+		Package: "sockdir",
+		Calls:   []string{"testkit.Main", "testkit.Isolated"},
+		Hint:    "it reaches the real runtime dir",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

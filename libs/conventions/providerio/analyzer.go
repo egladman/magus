@@ -1,15 +1,14 @@
 // Package providerio reports Go source that reaches toward a CI or VCS provider
 // (GitHub, GitLab, ...) from a package this rule governs: net/http client
-// construction, and any import naming a provider client SDK. A CI/VCS provider is
-// reached only by a Buzz op magus invokes (a provider spell, a queue provider
-// script, a tools/*.buzz driver); Go opens no provider socket, so it invokes the
-// Buzz op through bindings and reads the record back instead.
+// construction, and any import naming a provider client SDK. It serves a tree
+// whose provider I/O lives somewhere other than its Go source, such as scripts
+// the Go code invokes.
 //
 // Governed directories carry the risk: a package that already talks to a provider,
 // or one a "quick fetch" could most easily grow onto. A file inside them that
-// legitimately reaches the world for a reason OTHER than a provider - magus's own
-// remote cache, its OCI registry, selfupdate, its own local server - is named in
-// the written allowlist, each entry carrying why.
+// legitimately reaches the world for a reason other than a provider (the tree's
+// own remote services, its own local server) is named in the written allowlist,
+// each entry carrying why.
 package providerio
 
 import (
@@ -43,24 +42,28 @@ var httpNames = map[string]bool{
 	"DefaultTransport":      true,
 }
 
-const httpMessage = "constructs an HTTP client or request: a CI or VCS provider is reached only by a Buzz op " +
-	"magus invokes, never Go; if this is one of magus's OWN remote services (the cache, the OCI registry, " +
-	"selfupdate, ...), add a providerio allow entry in .golangci.yml naming why"
+const httpMessage = "constructs an HTTP client or request where Go never reaches a CI or VCS provider; " +
+	"if this reaches a service other than a provider, add a providerio allow entry naming why"
 
-const importMessage = "imports %q, shaped like a CI/VCS provider client library: provider calls belong in Buzz, " +
-	"not Go; if this is not provider I/O, add a providerio allow entry in .golangci.yml naming why"
+const importMessage = "imports %q, shaped like a CI/VCS provider client library, which stays out of this Go source; " +
+	"if this is not provider I/O, add a providerio allow entry naming why"
 
-// AllowEntry exempts one file, module-relative, from this rule. Reason is
-// required: an allowlist with no reason is a place violations go to hide.
+// AllowEntry exempts one file from this rule.
 type AllowEntry struct {
-	File   string `json:"file"`
+	// File is the exempt file's module-relative, slash-separated path. It must
+	// exist when [Options.Module] is set.
+	File string `json:"file"`
+
+	// Reason says why the file reaches the world. It is required: an allowlist
+	// with no reason is a place violations go to hide.
 	Reason string `json:"reason"`
 }
 
 // Options configures the analyzer returned by [New].
 type Options struct {
 	// Module is the import path [Options.Dirs] and [AllowEntry.File] are relative
-	// to.
+	// to. When set, every Dirs entry must hold Go files and every allowed file
+	// must exist under the module's root.
 	Module string `json:"module"`
 
 	// Dirs are the module-relative directories this rule governs, matched by
@@ -76,10 +79,14 @@ type Options struct {
 	// module (not only inside Dirs), that name a CI/VCS provider client SDK.
 	// Empty until one is added to go.mod; the rule still governs the day one is.
 	ProviderImports []string `json:"provider-imports"`
+
+	// Hint is appended to every diagnostic: the repository's own remedy, which
+	// may name where its provider I/O lives instead.
+	Hint string `json:"hint"`
 }
 
-// New returns the analyzer configured by opts, erroring on an unreasoned or
-// missing allow entry.
+// New returns the analyzer configured by opts, erroring on no dirs, an
+// unreasoned or missing allow entry, and a dir holding no Go files.
 func New(opts Options) (*analysis.Analyzer, error) {
 	if len(opts.Dirs) == 0 {
 		return nil, errors.New("providerio: dirs is required: with none, the rule governs nothing")
@@ -92,6 +99,13 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		allow[a.File] = a.Reason
 	}
 	if err := source.InModule("providerio", opts.Module, func(root string) error {
+		files, err := source.GoFiles(root)
+		if err != nil {
+			return fmt.Errorf("providerio: %w", err)
+		}
+		if err := source.RequireDirs("providerio", "dirs", root, opts.Dirs, files); err != nil {
+			return err
+		}
 		for _, a := range opts.Allow {
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(a.File))); err != nil {
 				return fmt.Errorf("providerio: allow file %q: %w; the code it exempted moved, fix the setting", a.File, err)
@@ -124,11 +138,11 @@ func run(pass *analysis.Pass, opts Options, allow map[string]string) error {
 		if _, exempt := allow[rel]; exempt {
 			continue
 		}
-		checkImports(pass, f, opts.ProviderImports)
+		checkImports(pass, f, opts.ProviderImports, opts.Hint)
 		if !governed(rel, opts.Dirs) {
 			continue
 		}
-		checkHTTP(pass, f)
+		checkHTTP(pass, f, opts.Hint)
 	}
 	return nil
 }
@@ -148,7 +162,7 @@ func governed(rel string, dirs []string) bool {
 // checkImports reports an import whose path names a configured provider SDK
 // substring, wherever the file sits: an accidental provider dependency is worth
 // catching everywhere it could land, not only in the governed directories.
-func checkImports(pass *analysis.Pass, f *ast.File, providerImports []string) {
+func checkImports(pass *analysis.Pass, f *ast.File, providerImports []string, hint string) {
 	if len(providerImports) == 0 {
 		return
 	}
@@ -159,7 +173,7 @@ func checkImports(pass *analysis.Pass, f *ast.File, providerImports []string) {
 		}
 		for _, sub := range providerImports {
 			if strings.Contains(path, sub) {
-				pass.Reportf(imp.Pos(), importMessage, path)
+				pass.Reportf(imp.Pos(), "%s", source.Hint(fmt.Sprintf(importMessage, path), hint))
 				break
 			}
 		}
@@ -171,11 +185,12 @@ func checkImports(pass *analysis.Pass, f *ast.File, providerImports []string) {
 // information: a package that imports net/http under any other name is not
 // this repository's practice, and matching by identifier keeps the rule
 // readable at the site it fires.
-func checkHTTP(pass *analysis.Pass, f *ast.File) {
+func checkHTTP(pass *analysis.Pass, f *ast.File, hint string) {
 	alias, ok := httpLocalName(f)
 	if !ok {
 		return
 	}
+	msg := source.Hint(httpMessage, hint)
 	ast.Inspect(f, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
 		if !ok {
@@ -183,7 +198,7 @@ func checkHTTP(pass *analysis.Pass, f *ast.File) {
 		}
 		id, ok := sel.X.(*ast.Ident)
 		if ok && id.Name == alias && httpNames[sel.Sel.Name] {
-			pass.Reportf(sel.Pos(), "%s", httpMessage)
+			pass.Reportf(sel.Pos(), "%s", msg)
 		}
 		return true
 	})

@@ -5,13 +5,13 @@ package guard
 const hookToolRead = "read"
 
 var surfaces = map[string]int{
-	"Read":       1, // want `guard code spells the host tool name "Read"`
+	"Read":       1, // want `spells the host tool name "Read": .*; the labels are hookTool\*`
 	hookToolRead: 2,
 }
 
 func verdict(tool string) bool {
 	switch tool {
-	case "Bash": // want `guard code spells the host tool name "Bash"`
+	case "Bash": // want `spells the host tool name "Bash"`
 		return true
 	}
 	return false
