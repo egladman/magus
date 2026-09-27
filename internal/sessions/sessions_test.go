@@ -545,6 +545,40 @@ func TestSummaryKeepsTheInvocationApartFromTheHostSession(t *testing.T) {
 	assert.Contains(t, string(raw), `"kind":"invocation_start"`)
 }
 
+// A session that spans a model or host switch reports what it ENDED on, since
+// that is the pair today's rules would be checked against, not what it began with.
+func TestSummarizeReadsTheNewestModelAndHostVersionPair(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadEvents(dir, []LoadEvent{
+		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r1", AtMs: 10, Model: "claude-opus-5", HostVersion: "2.1.260"}},
+		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r2", AtMs: 20, Model: "claude-opus-5-5", HostVersion: "2.1.280"}},
+	}, InvocationStart{})
+	require.NoError(t, err)
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "claude-opus-5-5", summaries[0].Model, "the newest event's pair wins, not the first")
+	assert.Equal(t, "2.1.280", summaries[0].HostVersion)
+}
+
+// A host that never names a model or its own version summarizes with both empty,
+// not with the zero value read as a fact: a host that says nothing is unobservable,
+// not "no model".
+func TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
+	require.NoError(t, err)
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Empty(t, summaries[0].Model)
+	assert.Empty(t, summaries[0].HostVersion)
+}
+
 // NewestEventMs reads the HOST's timestamp: a store loaded today from a month-old
 // transcript is a month-old audit, and the doctor check ages against that.
 func TestNewestEventMsReadsTheHostTimestamp(t *testing.T) {

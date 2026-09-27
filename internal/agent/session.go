@@ -22,9 +22,17 @@ import (
 
 // SessionSchemaVersion is the version of the event line every adapter emits.
 // Bump it only when an existing field changes MEANING; adding a kind or a
-// dimension is not a bump. A bump invalidates every installed adapter at once,
-// because a reader's copy is theirs from the moment they download it.
-const SessionSchemaVersion = 1
+// dimension is not a bump on its own. A bump invalidates every installed
+// adapter at once, because a reader's copy is theirs from the moment they
+// download it.
+//
+// 2 is the one deliberate exception: it adds the model and host-version
+// dimensions (AgentEvent.Model, AgentEvent.HostVersion) that the model-upgrade
+// loop reads to tell an old session from a new one, and an adapter silently
+// missing them would misreport that loop's own evidence as "no model ever
+// ran here" rather than "this copy predates the fact". The number in the
+// coverage line is what lets a reader tell the two apart at a glance.
+const SessionSchemaVersion = 2
 
 // SessionCoverageMarker introduces an adapter's machine-readable statement of what
 // its host can supply, and is what a reader greps for in their own copy.
@@ -32,13 +40,14 @@ const SessionCoverageMarker = "magus-session-coverage:"
 
 // sessionDimensions is what an adapter declares a stance on: whether the host's
 // store carries shell commands, a command's exit status, skill loads, the output
-// of magus's own hooks, subagent spawns, and a session id to join them by.
+// of magus's own hooks, subagent spawns, a session id to join them by, which
+// model produced an event, and which version of the host ran it.
 //
 // A new entry here is a promise that every adapter answers for it. The parity gate
 // is what collects on that promise, and the honest answer for a host whose store
 // has nothing to say is "none" rather than silence: an undeclared dimension is
 // one nobody asked about, which reads in a report as a zero it never measured.
-var sessionDimensions = []string{"commands", "exit", "skills", "hook-output", "spawn", "session-id"}
+var sessionDimensions = []string{"commands", "exit", "skills", "hook-output", "spawn", "session-id", "model", "host-version"}
 
 // sessionStances are the answers an adapter may give: the host records it, or it
 // does not.

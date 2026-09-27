@@ -130,6 +130,17 @@ func TestSessionAdaptersDeclareTheContract(t *testing.T) {
 	assert.Len(t, parseSessionCoverage(t), len(sessionAdapters), "one declaration per adapter")
 }
 
+// TestSessionSchemaCarriesModelAndHostVersion pins schema 2: the model and
+// host-version dimensions exist and every adapter must take a stance on both,
+// which parseSessionCoverage already enforces per adapter. This is the one
+// place that pins the schema NUMBER, so a future bump is a deliberate edit here
+// rather than a side effect of adding a dimension.
+func TestSessionSchemaCarriesModelAndHostVersion(t *testing.T) {
+	assert.Equal(t, 2, SessionSchemaVersion)
+	assert.Contains(t, SessionDimensions(), "model")
+	assert.Contains(t, SessionDimensions(), "host-version")
+}
+
 // sessionExitArmRe matches an adapter giving up: a bare `exit 0` inside a
 // conditional block, which is how every one of these arms ends.
 var sessionExitArmRe = regexp.MustCompile(`^exit 0$`)
