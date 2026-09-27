@@ -129,6 +129,39 @@ func TestCommandInvocations(t *testing.T) {
 				{Program: "sleep", Args: []string{"60"}, Repeats: true},
 			}},
 		{"a line that does not parse runs nothing", `gh pr view "`, nil},
+		{"git's global options before its subcommand are taken out", `git -C .. -c user.name=x --no-pager commit -q -m "trim a fragment"`,
+			[]types.CommandInvocation{{
+				Program: "git", Args: []string{"-C", "..", "-c", "user.name=x", "--no-pager", "commit", "-q", "-m", "trim a fragment"},
+				VCS: &types.VCSInvocation{Tool: "git", Subcommand: "commit", Args: []string{"-q", "-m", "trim a fragment"}},
+			}}},
+		{"git reads its help flag as the help command", `git --help commit`,
+			[]types.CommandInvocation{{
+				Program: "git", Args: []string{"--help", "commit"},
+				VCS: &types.VCSInvocation{Tool: "git", Subcommand: "help", Args: []string{"commit"}},
+			}}},
+		{"hg's global options are taken out wherever they sit", `hg -R ../repo --config ui.username=x commit -m "trim a fragment" -y`,
+			[]types.CommandInvocation{{
+				Program: "hg", Args: []string{"-R", "../repo", "--config", "ui.username=x", "commit", "-m", "trim a fragment", "-y"},
+				VCS: &types.VCSInvocation{Tool: "hg", Subcommand: "commit", Args: []string{"-m", "trim a fragment"}},
+			}}},
+		{"sl reads its own global options", `sl --configfile x.rc ci -m "trim a fragment"`,
+			[]types.CommandInvocation{{
+				Program: "sl", Args: []string{"--configfile", "x.rc", "ci", "-m", "trim a fragment"},
+				VCS: &types.VCSInvocation{Tool: "sl", Subcommand: "ci", Args: []string{"-m", "trim a fragment"}},
+			}}},
+		{"jj's global options are taken out after the subcommand too", `jj --no-pager describe -r @- -m "trim a fragment" --color=never`,
+			[]types.CommandInvocation{{
+				Program: "jj", Args: []string{"--no-pager", "describe", "-r", "@-", "-m", "trim a fragment", "--color=never"},
+				VCS: &types.VCSInvocation{Tool: "jj", Subcommand: "describe", Args: []string{"-r", "@-", "-m", "trim a fragment"}},
+			}}},
+		{"a substituted message renders empty in the parsed arguments too", `jj commit -m "$(cat msg)"`,
+			[]types.CommandInvocation{
+				{
+					Program: "jj", Args: []string{"commit", "-m", ""},
+					VCS: &types.VCSInvocation{Tool: "jj", Subcommand: "commit", Args: []string{"-m", ""}},
+				},
+				{Program: "cat", Args: []string{"msg"}},
+			}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -270,8 +303,36 @@ func TestApprovedCommandRuleTimeoutDenies(t *testing.T) {
 	assert.Contains(t, v.Reason, approvedRuleTimedOut(seamCommand))
 }
 
-// The checkout's state costs processes, so it is read only for a line that pushes.
-func TestCommandRuleSeesCheckoutStateOnlyForAPush(t *testing.T) {
+// The checkout's state costs processes, so it is read only for a line that pushes or
+// commits. A push wins over a commit on the same line, since the push rules read it.
+func TestCommandRuleSeesCheckoutStateOnlyForAPushOrACommit(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	var read []string
+	state := &types.CheckoutState{Branch: "main", Base: "origin/main"}
+	deps := Dependencies{CheckoutState: func(_ context.Context, dir string) *types.CheckoutState { read = append(read, dir); return state }}
+	probe := &commandRuleProbe{}
+	deps.CommandRule = probe.rule()
+	at := hookLocation(ctx, Dependencies{})
+
+	for _, line := range []string{
+		`git commit -m "trim a fragment"`,
+		`jj -R ../j describe -m "trim a fragment"`,
+		`hg ci -m "trim a fragment"`,
+		`git -C a commit -m x && git -C b push origin HEAD:topic`,
+		`git log -m`,
+	} {
+		Judge(ctx, deps, Request{Input: line, Host: "claude-code"})
+	}
+	require.Len(t, probe.asked, 5)
+	for i := range 4 {
+		assert.Equal(t, state, probe.asked[i].Checkout, probe.asked[i].Command)
+	}
+	assert.Nil(t, probe.asked[4].Checkout, "git log records nothing")
+	assert.Equal(t, []string{at.dir, filepath.Join(at.dir, "../j"), at.dir, filepath.Join(at.dir, "b")}, read)
+}
+
+// A push's checkout is the one its -C names.
+func TestCommandRuleSeesThePushedCheckout(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	var read []string
 	state := &types.CheckoutState{RemoteBranches: []string{"origin/main"}}

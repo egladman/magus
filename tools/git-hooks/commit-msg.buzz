@@ -17,14 +17,6 @@ import "os";
 import "vcs";
 import "tools/commits" as commits;
 
-// git writes these subjects itself, or an autosquash rebase rewrites them away.
-fun exempt(subject: str) > bool {
-    foreach (prefix in ["Merge ", "fixup! ", "squash! ", "amend! "]) {
-        if (subject.startsWith(prefix)) { return true; }
-    }
-    return false;
-}
-
 // git runs commit-msg before it strips comment lines, so they are skipped here.
 fun subjectOf(message: str) > str {
     foreach (line in message.split("\n")) {
@@ -32,14 +24,6 @@ fun subjectOf(message: str) > str {
         return line.trim();
     }
     return "";
-}
-
-// vcs\base is remote-qualified ("origin/main"); vcs\ref is the bare branch.
-fun baseBranch() > str {
-    final base = vcs\base();
-    final slash = base.indexOf("/");
-    if (slash != null) { return base.sub(slash + 1); }
-    return base;
 }
 
 // vcs\ref raises on an unborn branch, and a repository's first commit is on one.
@@ -52,11 +36,11 @@ fun main(args: [str]) > void !> any {
     if (args.len() != 1) {
         throw "commit-msg: want the message file git passes, got {args.len()} argument(s)";
     }
-    final branch = baseBranch();
-    if (currentBranch() != branch) { return; }
+    final base = vcs\base();
+    if (!commits\onBase(currentBranch(), base: base)) { return; }
+    final branch = commits\branchOf(base);
     final subject = subjectOf(fs\readFile(args[0]));
-    if (subject == "" or exempt(subject)) { return; }
-    final problem = commits\problem(subject);
+    final problem = commits\baseProblem(subject);
     if (problem == "") { return; }
     io\stderr.write("commit-msg: commits on {branch} land as written, so the subject must be a "
         + "conventional commit, as pull request titles are.\n  \"{subject}\": {problem}\n") catch void;

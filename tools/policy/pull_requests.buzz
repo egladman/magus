@@ -1,0 +1,290 @@
+// The pull-request-text rule: the title and description `gh pr create` and `gh pr edit` write.
+namespace agentpolicy\pullRequests;
+
+import "std";
+import "magus";
+import "./tools/policy/helpers" as helpers;
+import "./tools/commits" as conventional;
+
+final fixLine = "Rewrite it: a conventional title (`fix(cache): keep the key stable`), then a description "
+    + "of at most 150 words that leads with the problem and the change, in plain ASCII, with no names, "
+    + "no credit to a tool or an agent, no attribution line, and no account of how it was made.";
+
+final maxWords = 150;
+// A line whose description could not be read past this length is judged long anyway.
+final maxLine = 3000;
+
+// Credit for the work. A tool name after `.`, `/`, `-` or a word character is a path
+// (`.claude/worktrees`), and "agent" alone is a word this repository's code uses, so only
+// an agent as the subject of the work counts.
+final credit = $"(?i)(^|[^./\w-])(claude|anthropic|copilot)\b|\b(sub)?agent('s)?\s+(found|implemented|built|fixed|reported|wrote|discovered|verified|measured)|\bbranch report\b";
+final narrative = $"(?i)\b(this session|this week's session|the report above|as reported)\b";
+final attribution = $"(?i)co-authored-by|generated with";
+final nonASCII = $"[^ -~\n\t]";
+final spacedHyphen = $"\S - \S";
+final word = $"\S+";
+
+// The flags whose value is text this rule reads, long form first.
+final titleFlags = ["--title", "-t"];
+final bodyFlags = ["--body", "-b"];
+final bodyFileFlags = ["--body-file", "-F"];
+
+// writesText reports whether p is `gh pr create` or `gh pr edit` carrying a title or a
+// description.
+export fun writesText(p: helpers\Program) > bool {
+    if (p.name != "gh") {
+        return false;
+    }
+    final ops = helpers\operandsOf(p.args, valueFlags: ["-R", "--repo"]);
+    if (ops.len() < 2 or ops[0] != "pr" or (ops[1] != "create" and ops[1] != "edit")) {
+        return false;
+    }
+    foreach (arg in p.args) {
+        foreach (flag in titleFlags + bodyFlags + bodyFileFlags) {
+            if (arg == flag or arg.startsWith(flag + "=")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Value is one text flag's value and, when it is the next argument, that argument's index.
+object Value {
+    text: str,
+    slot: int?,
+}
+
+// valuesOf are the values given to any of flags, in order.
+fun valuesOf(args: [str], flags: [str]) > [Value] {
+    final found = mut [<Value>];
+    foreach (i, arg in args) {
+        foreach (flag in flags) {
+            if (arg == flag and i + 1 < args.len()) {
+                found.append(Value{ text = args[i + 1], slot = i + 1 });
+            } else if (arg.startsWith(flag + "=")) {
+                found.append(Value{ text = arg.sub(flag.len() + 1), slot = null });
+            }
+        }
+    }
+    return found;
+}
+
+// textSlots are the arguments of p holding a title or description the parser rendered
+// empty, a substitution such as `--body "$(cat <<'EOF' ...)"`.
+export fun textSlots(p: helpers\Program) > [int] {
+    final slots = mut [<int>];
+    if (!writesText(p)) {
+        return slots;
+    }
+    foreach (v in valuesOf(p.args, flags: titleFlags + bodyFlags)) {
+        if (v.text == "" and v.slot != null) {
+            slots.append(v.slot!);
+        }
+    }
+    return slots;
+}
+
+// bodyFiles are the --body-file paths the line's pull request calls read, `-` (stdin) left out.
+export fun bodyFiles(programs: [helpers\Program]) > [str] {
+    final paths = mut [<str>];
+    foreach (p in programs) {
+        if (writesText(p)) {
+            foreach (v in valuesOf(p.args, flags: bodyFileFlags)) {
+                if (v.text != "" and v.text != "-") {
+                    paths.append(v.text);
+                }
+            }
+        }
+    }
+    return paths;
+}
+
+fun last(values: [Value]) > str? {
+    if (values.len() == 0) {
+        return null;
+    }
+    return values[values.len() - 1].text;
+}
+
+// textProblems names what is wrong with one call's title and description. files holds the
+// contents of the body files the guard could read. A value the parser could not render is
+// unknown, and then the whole line is read in its place.
+export fun textProblems(p: helpers\Program, line: str, files: {str: str}) > [str] {
+    final problems = mut [<str>];
+    final title = last(valuesOf(p.args, flags: titleFlags));
+    var body = last(valuesOf(p.args, flags: bodyFlags));
+    final file = last(valuesOf(p.args, flags: bodyFileFlags));
+    var known = title != "" and body != "";
+    if (file != null) {
+        final content = files[file!];
+        if (content == null) {
+            known = false;
+        } else {
+            body = content!;
+        }
+    }
+    var text = line;
+    if (known) {
+        text = "{title ?? ""}\n{body ?? ""}";
+    }
+    if (credit.match(text) != null) {
+        problems.append("it credits a tool or an agent: describe the change, not how it was produced");
+    }
+    if (narrative.match(text) != null) {
+        problems.append("it narrates the session that wrote it, which a description outlives");
+    }
+    if (attribution.match(text) != null) {
+        problems.append("an attribution line: a description credits nobody");
+    }
+    if (nonASCII.match(text) != null) {
+        problems.append("a character outside plain ASCII (an em dash, a curly quote, an emoji)");
+    }
+    if (spacedHyphen.match(text) != null) {
+        problems.append("a spaced hyphen used as a dash: restructure the sentence");
+    }
+    if (known and body != null) {
+        final words = (word.matchAll(body!) ?? [<[str]>]).len();
+        if (words > maxWords) {
+            problems.append("{words} words, past {maxWords}: keep what a reviewer needs to review it");
+        }
+    } else if (!known and line.len() > maxLine) {
+        problems.append("the command runs {line.len()} characters: cut the description to what a reviewer needs");
+    }
+    if (title != null and title! != "") {
+        final problem = conventional\problem(title!);
+        if (problem != "") {
+            problems.append("the title fails the check CI runs on it: pr-title: \"{title!}\": {problem}");
+        }
+    }
+    return problems;
+}
+
+// decidePullRequest denies any pull request title or description that breaks the rules. The
+// title answers to the conventional-commit rule the pr-title check applies in CI, through
+// the same function, so the guard and CI cannot disagree.
+export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}) > GuardVerdict {
+    final calls = mut [<helpers\Program>];
+    foreach (p in programs) {
+        if (writesText(p)) {
+            calls.append(p);
+        }
+    }
+    if (calls.len() == 0) {
+        return magus\guard.allow();
+    }
+    final problems = mut [<str>];
+    foreach (p in calls) {
+        foreach (problem in textProblems(p, line: line, files: files)) {
+            if (problems.indexOf(problem) == null) {
+                problems.append(problem);
+            }
+        }
+    }
+    if (problems.len() == 0) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny("This pull request text breaks the description rules:\n  - " + problems.join("\n  - ") + "\n" + fixLine);
+}
+
+final goodTitle = "fix(guard): keep the key stable";
+
+fun create(title: str, body: str) > [helpers\Program] {
+    return helpers\request([["gh", "pr", "create", "--base", "main", "--title", title, "--body", body]]);
+}
+
+fun reasonFor(title: str, body: str) > str {
+    return decidePullRequest(create(title, body: body), line: "", files: {<str: str>}).reason;
+}
+
+test "a conventional title and a plain description pass" {
+    foreach (argv in [
+        ["gh", "pr", "create", "--title", goodTitle, "--body", "The key drifted between runs; this pins it to the source digest."],
+        ["gh", "pr", "create", "-t", "feat: add a commit-msg hook", "-b", "Adds the hook.", "--base", "main"],
+        ["gh", "pr", "edit", "412", "--body", "Moves the rule under .claude/skills/ and tools/policy; an agent reads it at spawn."],
+        ["gh", "-R", "egladman/magus", "pr", "edit", "412", "--title=docs: README framing; one line per audience"],
+    ]) {
+        final v = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
+        std\assert(v.decision == "allow", message: "{argv.join(" ")}: {v.reason}");
+    }
+}
+
+test "each description rule is named when broken" {
+    final cases = {
+        "Claude pinned the key.": "credits a tool",
+        "The subagent found the drift and pinned it.": "credits a tool",
+        "Pins the key; see the branch report.": "credits a tool",
+        "Pins the key, found in this session.": "narrates the session",
+        "Pins the key.\n\nCo-Authored-By: a <b@c>": "an attribution line",
+        "Pins the key — for good.": "plain ASCII",
+        "Pins the key - for good.": "spaced hyphen",
+    };
+    foreach (body, want in cases) {
+        final reason = reasonFor(goodTitle, body: body);
+        std\assert(reason.indexOf(want) != null, message: "{body}: {reason}");
+        std\assert(reason.indexOf("leads with the problem and the change") != null, message: "states the fix");
+    }
+    final long = reasonFor(goodTitle, body: "word ".repeat(151));
+    std\assert(long.indexOf("151 words, past 150") != null, message: long);
+    std\assert(reasonFor(goodTitle, body: "word ".repeat(150)) == "", message: "150 is the cap");
+}
+
+test "a title CI would reject is denied with CI's own message" {
+    final reason = reasonFor("Pin the cache key", body: "Pins it.");
+    final want = "pr-title: \"Pin the cache key\": " + conventional\problem("Pin the cache key");
+    std\assert(reason.indexOf(want) != null, message: reason);
+    std\assert(reasonFor("fix(cache): Pin the key", body: "Pins it.").indexOf("sentence case") != null, message: "sentence case");
+}
+
+test "a path through .claude/ and the word agent alone are not credit" {
+    foreach (body in [
+        "Reads .claude/skills/land-pull-requests/SKILL.md and /Users/x/.claude/worktrees/a.",
+        "The agent guard denies a spawn with no job row.",
+        "magus agent install writes the hooks.",
+    ]) {
+        std\assert(reasonFor(goodTitle, body: body) == "", message: body);
+    }
+}
+
+test "a description read from a heredoc or a body file is judged" {
+    final line = "gh pr create --title \"fix: pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"";
+    final programs = helpers\request([["gh", "pr", "create", "--title", "fix: pin the key", "--body", ""], ["cat"]]);
+    final slots = mut [<[int]>];
+    foreach (p in programs) {
+        slots.append(textSlots(p));
+    }
+    final filled = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs(line));
+    final v = decidePullRequest(filled, line: line, files: {<str: str>});
+    std\assert(v.reason.indexOf("credits a tool") != null, message: v.reason);
+
+    final fromFile = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body-file", "pr.md"]]);
+    std\assert(bodyFiles(fromFile)[0] == "pr.md", message: "the file to read");
+    final judged = decidePullRequest(fromFile, line: "", files: {"pr.md": "Claude wanted this."});
+    std\assert(judged.reason.indexOf("credits a tool") != null, message: judged.reason);
+}
+
+test "an unreadable description is judged from the whole line" {
+    final programs = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
+    final line = "gh pr create --title \"{goodTitle}\" --body \"$BODY by Claude\"";
+    std\assert(decidePullRequest(programs, line: line, files: {<str: str>}).reason.indexOf("credits a tool") != null, message: "the line");
+    final long = "gh pr create --body \"$BODY\" " + "x".repeat(3000);
+    std\assert(decidePullRequest(programs, line: long, files: {<str: str>}).reason.indexOf("the command runs") != null, message: "a long line");
+}
+
+test "other gh calls and a line that only mentions gh pr create stay silent" {
+    foreach (argv in [
+        ["rg", "gh pr create --title"],
+        ["gh", "pr", "view", "412", "--json", "title,body"],
+        ["gh", "pr", "create", "--fill"],
+        ["gh", "pr", "edit", "412", "--add-label", "merge-queue: squash"],
+        ["gh", "issue", "create", "--title", "a bug", "--body", "x"],
+    ]) {
+        final v = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
+        std\assert(v.decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "no message sends the reader to a skill" {
+    final reason = reasonFor("Pin the key", body: "Claude pinned the key.");
+    std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
+}

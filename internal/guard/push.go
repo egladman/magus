@@ -310,23 +310,60 @@ type pushSite struct {
 // without running anything: a variable, a substitution, a cd whose success decides what
 // runs next, or a relocation inside a wrapper's script.
 func locatePush(command string, d Dialect, cwd string) (pushSite, bool) {
+	site, _, located := locateFirst(command, d, cwd, isPush)
+	return site, located
+}
+
+// locateCheckout is where the checkout a command rule is handed stands: the first push's,
+// or on a line that pushes nothing, the first commit's. A push that is found but cannot be
+// located stays unknown rather than falling back, since the push rules read that checkout.
+func locateCheckout(command string, d Dialect, cwd string) (pushSite, bool) {
+	site, found, located := locateFirst(command, d, cwd, isPush)
+	if found {
+		return site, located
+	}
+	site, _, located = locateFirst(command, d, cwd, recordsCommit)
+	return pushSite{dir: site.dir, relocated: site.relocated}, located
+}
+
+// locateFirst walks command for the first invocation match accepts. found reports one was
+// seen, located that its directory is known.
+func locateFirst(command string, d Dialect, cwd string, match func(hint.Invocation) bool) (site pushSite, found, located bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return pushSite{}, false
+		return pushSite{}, false, false
 	}
-	w := pushWalk{d: d}
+	w := pushWalk{d: d, match: match}
 	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
 	if !w.found || !w.located {
-		return pushSite{}, false
+		return pushSite{}, w.found, false
 	}
 	if w.site.relocated && !filepath.IsAbs(w.site.dir) {
 		abs, err := filepath.Abs(w.site.dir)
 		if err != nil {
-			return pushSite{}, false
+			return pushSite{}, true, false
 		}
 		w.site.dir = abs
 	}
-	return w.site, true
+	return w.site, true, true
+}
+
+// recordsCommit reports a command that records a commit message: git, hg and sl commit
+// (hg and sl also spell it ci), and jj commit and describe (describe also spelled desc).
+func recordsCommit(c hint.Invocation) bool {
+	switch c.Name {
+	case "git", "hg", "sl", "jj":
+	default:
+		return false
+	}
+	sub, _ := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		return sub == "commit"
+	case "jj":
+		return sub == "commit" || sub == "describe" || sub == "desc"
+	}
+	return sub == "commit" || sub == "ci"
 }
 
 // shellDir is the working directory a shell line has reached at one point in it.
@@ -337,9 +374,11 @@ type shellDir struct {
 }
 
 // pushWalk follows a line's statements in the order the shell runs them, carrying the
-// working directory, until it reaches a push.
+// working directory, until it reaches an invocation match accepts: a push, for the push
+// rules.
 type pushWalk struct {
 	d       Dialect
+	match   func(hint.Invocation) bool
 	found   bool
 	located bool
 	site    pushSite
@@ -400,7 +439,7 @@ func (w *pushWalk) cmd(c syntax.Command, at shellDir) shellDir {
 		if call, ok := n.(*syntax.CallExpr); ok && !w.found {
 			for _, inv := range peelWrappers(literalWords(call.Args), w.d) {
 				switch {
-				case isPush(inv):
+				case w.match(inv):
 					w.found = true
 				case changesDir(inv):
 					at.known = false
@@ -424,7 +463,7 @@ func (w *pushWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 			return cdInto(c.Args[1:], at)
 		case changesDir(inv):
 			at.known = false
-		case isPush(inv):
+		case w.match(inv):
 			w.found = true
 			w.site, w.located = pushFrom(inv.Name, c.Args[1:], at)
 		}
@@ -436,7 +475,7 @@ func (w *pushWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 		switch {
 		case changesDir(inv):
 			at.known = false
-		case isPush(inv):
+		case w.match(inv):
 			w.found = true
 			w.located = at.known && !vcsRelocates(inv.Name, inv.Args)
 			w.site = pushSite{dir: at.dir, relocated: at.moved}

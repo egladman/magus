@@ -189,8 +189,9 @@ func checkoutBaseForGuard(ctx context.Context, root string) string {
 }
 
 // checkoutStateForGuard reads the checkout holding dir through the version control that
-// resolves there, for a rule judging a push. Nil when there is none, when its driver cannot
-// report the state, or when the read fails: a rule reads nil as unknown.
+// resolves there, for a rule judging a push or a commit, with the base ref that resolution
+// chose. Nil when there is none, when its driver cannot report the state, or when the read
+// fails: a rule reads nil as unknown.
 func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState {
 	if dir == "" {
 		return nil
@@ -203,6 +204,7 @@ func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState
 	if err != nil {
 		return nil
 	}
+	state.Base = res.Base
 	return &state
 }
 

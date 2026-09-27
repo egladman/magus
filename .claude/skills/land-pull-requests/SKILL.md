@@ -20,7 +20,23 @@ wrong, fix the pure function that produced it and its test, then run it again.
    ```
 
    With no selector it reads your own open pull requests. It prints one JSON
-   record per pull request: `state`, `reason`, `action`, `model`, `evidence`.
+   record per pull request: `state`, `stage`, `reason`, `action`, `model`,
+   `evidence`, and sometimes `merge`.
+
+   `state` is what the checks on the head say:
+
+   - `running`: a check has not finished, or none has reported yet.
+   - `green`: every check finished and passed.
+   - `red-inherited`: every failing check and failing Go test also fails on
+     main's latest completed CI run; `evidence` names both runs.
+   - `red`: anything else; `evidence` names the failures main does not have.
+
+   `stage` is what else stands before a merge: `merged`, `closed`, `draft`,
+   `waiting-below`, `conflicting`, `kicked-back`, `behind`, `queued`,
+   `needs-queue`.
+
+   `merge` appears only on a `green` or `red-inherited` record whose stage
+   allows a merge. It is the person's command; hand it over, never run it.
 
 2. Take the actions that change no code, with the same selectors:
 
@@ -28,8 +44,10 @@ wrong, fix the pure function that produced it and its test, then run it again.
    ./magus buzz tools/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
    ```
 
-   It queues what is green on a current base and reruns a red that is not the
-   change's, once per head, and prints each command it ran.
+   It queues what is `green` on a current base and reruns a `red` that is not
+   the change's, once per head, and prints each command it ran. It never acts
+   on `red-inherited`: nothing in the change is broken, and the queue would
+   refuse it for main's failures.
 
 3. For every record whose `model` is `sonnet` or `opus`, spawn one agent of that
    model:
@@ -47,17 +65,19 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 5. Schedule the next pass with the host's wakeup, about every 20 minutes (the
    queue's validation time), or with its pull request monitor, and repeat from 1.
-   A record with `action: none` needs nothing: it is queued, waiting on the pull
-   request below it, or waiting on running checks. A `draft` or `closed` record
-   never lands on its own; tell the person and drop it from the selection.
+   A record with `action: none` needs nothing from an agent: it is queued,
+   waiting on the pull request below it, `running`, or `red-inherited` with a
+   `merge` for the person. A `draft` or `closed` stage never lands on its own;
+   tell the person and drop it from the selection.
 
-Stop when every selected record reads `merged`. That `status` output is the
+Stop when every selected record's stage reads `merged`. That `status` output is the
 proof; a green check or the queue's comment is not.
 
 ## Never
 
-- Never admin-merge (`gh pr merge --admin`). It skips the queue's validation and
-  its ordering, so nothing checked the combination that lands.
+- Never admin-merge (`gh pr merge --admin`) yourself. It skips the queue's
+  validation and its ordering, so nothing checked the combination that lands;
+  the record's `merge` is for the person to run.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
   commits, and a rewrite orphans both.
 - Never run two agents on one pull request branch at a time. One branch has one
