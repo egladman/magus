@@ -6,7 +6,7 @@ const KnowledgeRenameDefinition = "refs --rename replaces a symbol's name at eve
 	"Its inverse is the same verb with the two names swapped."
 
 // KnowledgeRenameOutput is the result of `magus refs <symbol> --rename <new>`. A refused
-// rename carries Refused and wrote nothing; a checked one carries the sites it would
+// rename carries Refused and wrote nothing; a dry run carries the sites it would
 // change and Applied false.
 type KnowledgeRenameOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
