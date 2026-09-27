@@ -148,6 +148,10 @@ flag diff/watch
 flag doctor/fix
 flag doctor/list
 flag doctor/probe
+flag edit/check
+flag edit/schema
+flag edit/stdin
+flag edit/undo
 flag events/f
 flag events/follow
 flag events/interval
@@ -241,6 +245,7 @@ subcommand config
 subcommand describe
 subcommand diff
 subcommand doctor
+subcommand edit
 subcommand events
 subcommand explain
 subcommand graph

@@ -48,6 +48,7 @@ var subcommands = []subcommand{
 	{Group: groupKnowledge, Name: "path", Short: "show the shortest path between two knowledge-graph nodes"},
 	{Group: groupKnowledge, Name: "graph", Short: "the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)"},
 
+	{Group: groupChanges, Name: "edit", Short: "apply a multi-file edit set all or nothing, checked against the files first; undo it from its receipt"},
 	{Group: groupChanges, Name: "diff", Short: "read uncommitted changes in the order they deserve attention, generated folded"},
 	{Group: groupChanges, Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},
 	{Group: groupChanges, Name: "session", Short: "what magus invocations did and what agents are blocked on: humans read (ls, attention) and dispose; hosts write (notify)"},

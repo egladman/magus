@@ -18,6 +18,7 @@ function __magus_subcommands
         explain    'show one knowledge-graph node: its edges, provenance, blast radius' \
         path       'show the shortest path between two knowledge-graph nodes' \
         graph      'the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)' \
+        edit       'apply a multi-file edit set all or nothing, checked against the files first; undo it from its receipt' \
         diff       'read uncommitted changes in the order they deserve attention, generated folded' \
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         session    'what magus invocations did and what agents are blocked on: humans read (ls, attention) and dispose; hosts write (notify)' \

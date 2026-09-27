@@ -1,0 +1,119 @@
+.TH MAGUS-EDIT 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-edit \- Apply a multi\-file edit set: every site checked first, all files written or none
+.SH SYNOPSIS
+.B magus
+.RI "edit \-\-stdin [\-\-check] | \-\-undo <id> [\-\-check] | \-\-schema"
+.SH DESCRIPTION
+Apply an edit set, a JSON document naming sites in one or more files and
+the bytes that replace each. The caller writes every replacement; magus
+checks that each site holds the bytes the caller expects, then writes.
+.PP
+A site is anchored by "lines", whole lines by number ([start, end], 1\-based
+and inclusive; end = start\-1 inserts before line start), or by "text", the
+bytes equal to old (exactly one occurrence, or every one with "all"). "old"
+is required for text and checked when given for lines. "digest", the
+sha256:<hex> of the whole file as the caller read it, refuses a file that
+changed since.
+.PP
+Every site is resolved before the first byte moves. One bad site refuses the
+whole set, every reason is listed, and nothing is written. A declared output
+is refused: regenerate it, never hand\-edit. There is no \-\-force.
+.PP
+The write stages each file as a temp sibling, renames the stages over the
+originals, and renames the held originals back if any rename fails. No VCS
+command runs. The receipt, stored under the cache dir, holds the undo set:
+\-\-undo <id> applies it, refusing any file edited since.
+.PP
+\-o name prints the receipt id; \-o json the receipt.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-check\fR
+Resolve and check every site and print the plan; write nothing
+.TP
+\fB\-\-schema\fR
+Print the JSON schema an edit set must satisfy, and exit
+.TP
+\fB\-\-stdin\fR
+Read the edit set as JSON on stdin
+.TP
+\fB\-\-undo\fR \fIstring\fR
+Apply the undo set of the receipt with this id
+.RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+The set was applied, or with \-\-check would apply.
+.TP
+\fB1\fR
+The set was refused and nothing was written, or a write failed and every file already written was restored. Each reason is printed.
+.TP
+\fB2\fR
+Misuse, or the input is not a readable edit set; nothing was attempted.
+.RE
+.SH EXAMPLES
+\fIApply a set\fR
+.PP
+.EX
+magus edit --stdin < edits.json
+.EE
+.PP
+\fICheck a set without writing\fR
+.PP
+.EX
+magus edit --check --stdin < edits.json
+.EE
+.PP
+\fIUndo it\fR
+.PP
+.EX
+magus edit --undo 20260926-101500-1a2b3c4d
+.EE
+.PP
+\fIPrint the set schema\fR
+.PP
+.EX
+magus edit --schema
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-queue\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-job\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
+\fBmagus\-mcp\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-spell\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br
