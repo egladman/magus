@@ -671,7 +671,10 @@ export function buildMemorySection(
     const skipped = recs.length - todo.length;
     const restored = todo.length - failed;
     if (failed === 0 && skipped === 0) {
-      showToast("Agent memory", "Restored " + restored + (restored === 1 ? " memory." : " memories."));
+      showToast(
+        "Agent memory",
+        "Restored " + restored + (restored === 1 ? " memory." : " memories."),
+      );
     } else {
       showToast(
         "Agent memory",
