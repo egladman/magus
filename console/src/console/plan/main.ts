@@ -956,15 +956,7 @@ export function activate(host: HTMLElement): JobsInstance {
         String(n.job.updated),
         sizeLine(n.job),
         n.overlaps.map((o) => [o.jobA, o.jobB, o.pathsA, o.pathsB]),
-        n.job.goals.map((g) => [
-          g.id,
-          g.kind,
-          g.expect,
-          g.check,
-          g.paths,
-          g.symbols,
-          g.dependsOn,
-        ]),
+        n.job.goals.map((g) => [g.id, g.kind, g.expect, g.check, g.paths, g.symbols, g.dependsOn]),
         n.job.result
           ? [n.job.result.changedPaths, n.job.result.unresolvedRisks, n.job.result.descendants]
           : null,

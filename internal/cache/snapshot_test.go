@@ -279,6 +279,9 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	// Delete all CAS blobs to simulate a partially-deleted snapshot.
 	casDir := filepath.Join(cdir, "cas")
 	require.NoError(t, os.RemoveAll(casDir), "RemoveAll cas")
+	// Replay leaves an output already holding the recorded bytes alone, so the blob is
+	// only needed once the output is gone.
+	require.NoError(t, os.Remove(out), "remove output")
 
 	// A cache must not claim a hit when the blobs are gone.
 	c2, err := Open(t.Context(), cdir)

@@ -34,7 +34,6 @@
 package pricing
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -42,6 +41,8 @@ import (
 	"slices"
 
 	_ "embed"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // tokensPerPriceUnit is the denominator every rate is quoted against.
