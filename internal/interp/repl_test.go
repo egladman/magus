@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/term"
 )
 
 // fakeTable is a minimal engine.Table backed by insertion-ordered slices. It
@@ -132,6 +134,7 @@ func (s *fakeSession) Drivers() []engine.ReplDriver { return s.drivers }
 // runRepl drives Repl over the given input lines and returns stdout/stderr.
 func runRepl(t *testing.T, sess engine.Session, opts ReplOptions, input string) (string, string, error) {
 	t.Helper()
+	isolatePryHistory(t)
 	var stdout, stderr strings.Builder
 	opts.Stdin = strings.NewReader(input)
 	opts.Stdout = &stdout
@@ -317,6 +320,7 @@ func TestRepl_LoadMissingFileReportsError(t *testing.T) {
 }
 
 func TestRepl_ContextCancelledExitsCleanly(t *testing.T) {
+	isolatePryHistory(t)
 	drv := &scriptDriver{lang: "buzz"}
 	sess := newFakeSession(drv)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -861,4 +865,178 @@ func TestWordStartTreatsBuzzMemberAccessAsOneWord(t *testing.T) {
 func TestCompleteDedupesAcrossSources(t *testing.T) {
 	c, _ := testCompleter([]string{"build"}, []string{"build", "build"})
 	assert.Equal(t, []string{"build"}, c.matching("bui"))
+}
+
+// TestRunArrayContext pins where target/flag completion applies: inside an
+// OPEN magus\run([...] argv array, and nowhere else.
+func TestRunArrayContext(t *testing.T) {
+	open := `magus\run(["te`
+	assert.True(t, runArrayContext(open, len(open)), "still inside the array")
+
+	openFlag := `magus\run(["test", "--v`
+	assert.True(t, runArrayContext(openFlag, len(openFlag)), "a later element is still inside the array")
+
+	closed := `magus\run(["test"]); f`
+	assert.False(t, runArrayContext(closed, len(closed)), "a closed array ends the context")
+
+	unrelated := `fs\writeFile("x`
+	assert.False(t, runArrayContext(unrelated, len(unrelated)), "not a magus\\run call at all")
+}
+
+// TestCompleteRunArrayOffersTargetNames covers the bare-word half of the
+// magus\run([...]) context: a target name, not a module or project path.
+func TestCompleteRunArrayOffersTargetNames(t *testing.T) {
+	c := &replCompleter{
+		driver:     func() engine.ReplDriver { return nil },
+		candidates: func() []string { return []string{"fs"} },
+		targets:    func() []string { return []string{"build", "test"} },
+		out:        &bytes.Buffer{},
+	}
+	line := `magus\run(["te`
+	got, pos, ok := c.complete(line, len(line), '\t')
+	require.True(t, ok)
+	want := `magus\run(["test`
+	assert.Equal(t, want, got)
+	assert.Equal(t, len(want), pos)
+}
+
+// TestCompleteRunArrayOffersRunFlags covers the dash-prefixed half: `run`'s
+// own flags, asked for by name so a stale verb can't slip in unnoticed.
+func TestCompleteRunArrayOffersRunFlags(t *testing.T) {
+	var out bytes.Buffer
+	verbAsked := ""
+	c := &replCompleter{
+		targets: func() []string { return []string{"build", "test"} },
+		flags: func(verb string) []string {
+			verbAsked = verb
+			return []string{"--concurrency", "--quiet"}
+		},
+		out: &out,
+	}
+	line := `magus\run(["test", "--`
+	_, _, ok := c.complete(line, len(line), '\t')
+	assert.False(t, ok, "an ambiguous prefix lists rather than guessing")
+	assert.Equal(t, "run", verbAsked)
+	assert.Contains(t, out.String(), "--concurrency")
+	assert.Contains(t, out.String(), "--quiet")
+}
+
+// TestCompleteRunArrayClosedFallsThroughToCandidates: once the array closes,
+// the position is ordinary Buzz source again, not an argv slot.
+func TestCompleteRunArrayClosedFallsThroughToCandidates(t *testing.T) {
+	c := &replCompleter{
+		driver:     func() engine.ReplDriver { return nil },
+		candidates: func() []string { return []string{"fs"} },
+		targets:    func() []string { return []string{"build"} },
+		out:        &bytes.Buffer{},
+	}
+	line := `magus\run(["test"]); f`
+	got, _, ok := c.complete(line, len(line), '\t')
+	require.True(t, ok)
+	assert.Equal(t, `magus\run(["test"]); fs`, got)
+}
+
+// TestReplInputCtrlCIsNotCtrlD proves readLine tells the two keys apart. x/term's
+// ReadLine maps both to the same io.EOF (terminal.go's keyCtrlC/keyCtrlD
+// handling), so without the wrapping reader a Ctrl-C looked exactly like a
+// Ctrl-D and quit the session instead of clearing the line.
+func TestReplInputCtrlCIsNotCtrlD(t *testing.T) {
+	newInput := func() (*replInput, *io.PipeWriter) {
+		pr, pw := io.Pipe()
+		sig := &ctrlTracker{Reader: pr}
+		editor := term.NewTerminal(struct {
+			io.Reader
+			io.Writer
+		}{sig, io.Discard}, "")
+		return &replInput{editor: editor, sig: sig, out: io.Discard}, pw
+	}
+
+	t.Run("ctrl-c", func(t *testing.T) {
+		in, pw := newInput()
+		go func() { _, _ = pw.Write([]byte{ctrlC}) }()
+		_, err := in.readLine("> ")
+		assert.ErrorIs(t, err, errInterrupted)
+	})
+
+	t.Run("ctrl-d", func(t *testing.T) {
+		in, pw := newInput()
+		go func() { _, _ = pw.Write([]byte{ctrlD}) }()
+		_, err := in.readLine("> ")
+		assert.ErrorIs(t, err, io.EOF)
+		assert.NotErrorIs(t, err, errInterrupted)
+	})
+}
+
+// TestReplInputSuspendRawLeavesBeforeFnAndDoesNotFakeReentry proves the
+// call-sequencing suspendRaw promises for a Ctrl-C to interrupt an evaluation:
+// cooked mode is restored (in.restore called) BEFORE fn runs, and fn cannot
+// observe a stale raw-mode handle. A real re-entry into raw mode needs an
+// actual tty, which a pipe fd is not, so suspendRaw's attempt fails and it
+// leaves in.restore nil rather than claiming an entry that did not happen.
+func TestReplInputSuspendRawLeavesBeforeFnAndDoesNotFakeReentry(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer r.Close()
+	defer w.Close()
+
+	restoreCalls := 0
+	in := &replInput{
+		editor: term.NewTerminal(struct {
+			io.Reader
+			io.Writer
+		}{r, io.Discard}, ""),
+		restore: func() error { restoreCalls++; return nil },
+		fd:      r.Fd(),
+	}
+
+	var restoreDuringFn func() error
+	in.suspendRaw(func() { restoreDuringFn = in.restore })
+
+	assert.Equal(t, 1, restoreCalls, "cooked mode is entered exactly once before fn runs")
+	assert.Nil(t, restoreDuringFn, "fn must not see a stale raw-mode handle")
+	assert.Nil(t, in.restore, "a non-tty fd cannot re-enter raw mode; suspendRaw must not fake success")
+}
+
+// TestReplInputSuspendRawIsANoOpOffATTY: a piped session never entered raw
+// mode, so there is nothing to suspend and fn just runs.
+func TestReplInputSuspendRawIsANoOpOffATTY(t *testing.T) {
+	in := &replInput{}
+	ran := false
+	in.suspendRaw(func() { ran = true })
+	assert.True(t, ran)
+}
+
+// TestRepl_HistoryMetaCommand: `.history` is Pry's command today; the REPL
+// must answer it the same way, from the one file both share.
+func TestRepl_HistoryMetaCommand(t *testing.T) {
+	drv := &scriptDriver{
+		lang: "buzz",
+		responses: map[string]driverResponse{
+			"x": {vals: []engine.Value{engine.NumberValue(1)}},
+		},
+	}
+	sess := newFakeSession(drv)
+	out, _, err := runRepl(t, sess, ReplOptions{}, "x\n.history\n")
+	require.NoError(t, err)
+	assert.Contains(t, out, "   1: x")
+}
+
+// TestRepl_HistoryPersistsAcrossSessions proves the REPL writes through to the
+// pry history file rather than keeping an in-memory-only ring: a second,
+// unrelated session recalls what the first one typed.
+func TestRepl_HistoryPersistsAcrossSessions(t *testing.T) {
+	isolatePryHistory(t)
+
+	sess1 := newFakeSession(&scriptDriver{lang: "buzz"})
+	var out1, err1 strings.Builder
+	require.NoError(t, Repl(context.Background(), sess1, ReplOptions{
+		Stdin: strings.NewReader("first line\n"), Stdout: &out1, Stderr: &err1,
+	}))
+
+	sess2 := newFakeSession(&scriptDriver{lang: "buzz"})
+	var out2, err2 strings.Builder
+	require.NoError(t, Repl(context.Background(), sess2, ReplOptions{
+		Stdin: strings.NewReader(".history\n"), Stdout: &out2, Stderr: &err2,
+	}))
+	assert.Contains(t, out2.String(), "first line")
 }

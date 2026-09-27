@@ -34,6 +34,14 @@ type ReplOptions struct {
 	// to matter, which is most of them, since a REPL is where you sit while editing
 	// the magusfile it is describing.
 	Candidates func() []string
+	// Targets supplies just the workspace's target names, for completion inside
+	// magus\run(["<target>", ...]): offering every module and project path there
+	// too would bury the handful of names actually valid in that position.
+	Targets func() []string
+	// Flags supplies the CLI flags a subcommand (e.g. "run") declares, each
+	// spelled with its leading dashes, for completion inside magus\run([...])
+	// once the target name is typed. Optional.
+	Flags func(verb string) []string
 }
 
 // replInput is the REPL's line source. It is one type with two behaviors because
@@ -50,7 +58,45 @@ type replInput struct {
 	editor  *term.Terminal
 	scanner *bufio.Scanner
 	restore func() error
+	fd      uintptr
+	sig     *ctrlTracker
 	out     io.Writer
+}
+
+// ctrlC and ctrlD are the raw bytes a terminal sends for those keys (ETX, EOT).
+const (
+	ctrlC = 0x03
+	ctrlD = 0x04
+)
+
+// errInterrupted is readLine's Ctrl-C result: distinct from io.EOF (Ctrl-D), so
+// the caller clears the current line instead of ending the session.
+var errInterrupted = errors.New("interrupted")
+
+// ctrlTracker wraps the editor's reader and remembers the last Ctrl-C or Ctrl-D
+// byte it delivered. x/term's ReadLine maps both keys to the same io.EOF with no
+// way to ask which one fired; readLine consults this to tell them apart.
+type ctrlTracker struct {
+	io.Reader
+	last byte
+}
+
+func (r *ctrlTracker) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	for _, b := range p[:n] {
+		if b == ctrlC || b == ctrlD {
+			r.last = b
+		}
+	}
+	return n, err
+}
+
+// take returns and clears the last signal seen, so a later EOF (the underlying
+// stream actually closing) isn't misread as a stale keypress.
+func (r *ctrlTracker) take() byte {
+	last := r.last
+	r.last = 0
+	return last
 }
 
 // newReplInput builds the line source for opts, installing the editor only when
@@ -68,17 +114,19 @@ func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune
 		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		return in
 	}
-	restore, err := tty.MakeRaw(stdin.Fd())
+	in.fd = stdin.Fd()
+	restore, err := tty.MakeRaw(in.fd)
 	if err != nil {
 		in.scanner = bufio.NewScanner(opts.Stdin)
 		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		return in
 	}
 	in.restore = restore
+	in.sig = &ctrlTracker{Reader: opts.Stdin}
 	in.editor = term.NewTerminal(struct {
 		io.Reader
 		io.Writer
-	}{opts.Stdin, opts.Stdout}, "")
+	}{in.sig, opts.Stdout}, "")
 	in.editor.AutoCompleteCallback = complete
 	// Without a size the editor assumes 80 columns and wraps a longer line in the
 	// wrong place, which makes editing the tail of a long expression unusable.
@@ -97,7 +145,11 @@ func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune
 func (in *replInput) readLine(prompt string) (string, error) {
 	if in.editor != nil {
 		in.editor.SetPrompt(prompt)
-		return in.editor.ReadLine()
+		line, err := in.editor.ReadLine()
+		if errors.Is(err, io.EOF) && in.sig.take() == ctrlC {
+			return "", errInterrupted
+		}
+		return line, err
 	}
 	fmt.Fprint(in.out, prompt)
 	if !in.scanner.Scan() {
@@ -107,6 +159,27 @@ func (in *replInput) readLine(prompt string) (string, error) {
 		return "", io.EOF
 	}
 	return in.scanner.Text(), nil
+}
+
+// suspendRaw restores cooked mode for the duration of fn and re-enters raw mode
+// after, so the tty's ISIG setting comes back and a Ctrl-C pressed during fn
+// reaches the foreground process group as a real SIGINT, including a child
+// magus\run already forked and waiting on, rather than a raw byte only this
+// process's reader would ever see. Off a TTY, raw mode was never entered, so fn
+// just runs.
+func (in *replInput) suspendRaw(fn func()) {
+	if in.editor == nil || in.restore == nil {
+		fn()
+		return
+	}
+	_ = in.restore()
+	in.restore = nil
+	defer func() {
+		if r, err := tty.MakeRaw(in.fd); err == nil {
+			in.restore = r
+		}
+	}()
+	fn()
 }
 
 func (in *replInput) close() {
@@ -129,6 +202,8 @@ type replCompleter struct {
 	meta       []string
 	driver     func() engine.ReplDriver
 	candidates func() []string
+	targets    func() []string
+	flags      func(verb string) []string
 	out        io.Writer
 }
 
@@ -144,7 +219,7 @@ func (c *replCompleter) complete(line string, pos int, key rune) (string, int, b
 	}
 	start := wordStart(line, pos)
 	word := line[start:pos]
-	matches := c.matching(word)
+	matches := c.matches(line, start, word)
 	if len(matches) == 0 {
 		return "", 0, false
 	}
@@ -160,6 +235,37 @@ func (c *replCompleter) complete(line string, pos int, key rune) (string, int, b
 		}
 	}
 	return line[:start] + insert + line[pos:], start + len(insert), true
+}
+
+// matches resolves the candidate pool for the word starting at start, reading
+// WHERE the cursor sits before falling back to what the word alone would offer:
+// inside magus\run(["...])'s argv array a bare word is a target name and a
+// dash-prefixed one is one of `run`'s own flags, since that is the one
+// subcommand magus\run ever invokes.
+func (c *replCompleter) matches(line string, start int, word string) []string {
+	if !strings.HasPrefix(word, ".") && runArrayContext(line, start) {
+		var pool []string
+		switch {
+		case strings.HasPrefix(word, "-"):
+			if c.flags != nil {
+				pool = c.flags("run")
+			}
+		case c.targets != nil:
+			pool = c.targets()
+		}
+		return filterSorted(pool, word)
+	}
+	return c.matching(word)
+}
+
+// runArrayContext reports whether start sits inside the argv array of a
+// magus\run([ ... ] call that pos has not yet closed with a "]".
+func runArrayContext(line string, start int) bool {
+	i := strings.LastIndex(line[:start], `magus\run([`)
+	if i < 0 {
+		return false
+	}
+	return !strings.ContainsRune(line[i:start], ']')
 }
 
 // matching gathers every candidate with the given prefix, deduplicated and sorted
@@ -180,6 +286,12 @@ func (c *replCompleter) matching(word string) []string {
 			pool = append(pool, c.candidates()...)
 		}
 	}
+	return filterSorted(pool, word)
+}
+
+// filterSorted keeps every pool entry with the given prefix, deduplicated and
+// sorted so Tab's output order is stable between presses.
+func filterSorted(pool []string, word string) []string {
 	seen := make(map[string]bool, len(pool))
 	var out []string
 	for _, p := range pool {
@@ -268,7 +380,7 @@ func commonPrefix(items []string) string {
 // handleReplMeta together.
 func metaCommands(drivers []engine.ReplDriver) []string {
 	_ = drivers
-	out := []string{".exit", ".heap", ".help", ".load", ".quit"}
+	out := []string{".exit", ".heap", ".help", ".history", ".load", ".quit"}
 	slices.Sort(out)
 	return out
 }
@@ -406,13 +518,22 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	var pending strings.Builder
 	depth := 0
 
+	// One history file for Repl and Pry both, so a session opened either way
+	// recalls what the other left behind.
+	hist, _ := openHistory(defaultHistoryPath(), 0)
+
 	completer := &replCompleter{
 		meta:       metaCommands(drivers),
 		driver:     func() engine.ReplDriver { return currentDriver },
 		candidates: opts.Candidates,
+		targets:    opts.Targets,
+		flags:      opts.Flags,
 	}
 	input := newReplInput(opts, completer.complete)
 	defer input.close()
+	if input.editor != nil && hist != nil {
+		input.editor.History = termHistory{h: hist}
+	}
 	// The completer prints its candidate list through the same writer the editor
 	// owns, so the list cannot land mid-prompt.
 	completer.out = input.out
@@ -450,16 +571,29 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 
 		line, err := input.readLine(prompt)
 		if err != nil {
+			if errors.Is(err, errInterrupted) {
+				// Ctrl-C: abandon whatever was pending and start clean, the way a
+				// shell's line-kill does, rather than ending the session.
+				fmt.Fprintln(stdout, "^C")
+				pending.Reset()
+				depth = 0
+				continue
+			}
 			if errors.Is(err, io.EOF) {
 				fmt.Fprintln(stdout)
 				return nil
 			}
 			return err
 		}
+		// The editor records history itself via input.editor.History; off a TTY
+		// nothing else does, so record it here.
+		if hist != nil && input.editor == nil && historyWorthy(line) {
+			hist.append(line)
+		}
 
 		// Meta-commands only on fresh input.
 		if pending.Len() == 0 && depth == 0 {
-			handled, exit := handleReplMeta(ctx, stdout, stderr, line, &currentDriver, drivers, sess)
+			handled, exit := handleReplMeta(ctx, stdout, stderr, line, &currentDriver, drivers, sess, hist)
 			if exit {
 				return nil
 			}
@@ -495,7 +629,13 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		// Named src, not input: input is the line source now, and shadowing it here
 		// would hide the editor from the rest of the loop.
 		src := pending.String()
-		vals, evalErr := currentDriver.EvalLine(src)
+		var vals []engine.Value
+		var evalErr error
+		// Cooked mode for the call: a Ctrl-C during a long magus\run reaches it as
+		// a real SIGINT only while ISIG is on, which raw mode turns off.
+		input.suspendRaw(func() {
+			vals, evalErr = currentDriver.EvalLine(src)
+		})
 		if evalErr != nil {
 			if currentDriver.IsIncomplete(evalErr) {
 				continue
@@ -514,7 +654,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 }
 
 // handleReplMeta handles a dot-command. Returns (handled, exit).
-func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, _ *engine.ReplDriver, drivers []engine.ReplDriver, sess engine.Session) (handled, exit bool) {
+func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, _ *engine.ReplDriver, drivers []engine.ReplDriver, sess engine.Session, hist *history) (handled, exit bool) {
 	switch {
 	case line == ".exit" || line == ".quit":
 		return true, true
@@ -528,6 +668,10 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 	case strings.HasPrefix(line, ".load "):
 		path := strings.TrimSpace(strings.TrimPrefix(line, ".load "))
 		loadFile(ctx, sess, path, stderr)
+		return true, false
+	case strings.HasPrefix(line, ".history"):
+		rest := strings.TrimSpace(strings.TrimPrefix(line, ".history"))
+		printHistory(stdout, hist, rest)
 		return true, false
 	}
 	return false, false
@@ -554,6 +698,7 @@ func replHelp(w io.Writer, drivers []engine.ReplDriver) {
 		fmt.Fprintf(w, "  %-16s switch input language (%s)\n", strings.Join(langs, " / "), strings.Join(langs, ", "))
 	}
 	fmt.Fprintln(w, "  .load <path>     execute a file")
+	fmt.Fprintln(w, "  .history [N]     show last N (default 50) commands")
 	fmt.Fprintln(w, "  .exit / .quit    exit the REPL")
 	fmt.Fprintln(w, "  .heap            heap size and the lines growing it")
 	fmt.Fprintln(w, "  .help            show this message")
