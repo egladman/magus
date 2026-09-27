@@ -640,9 +640,9 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     return (head + section + tail).trim() + "\n\n" + footer();
 }
 
-// silences reports whether these labels mute an advisor. `magus:silence` mutes every
-// one; `magus:silence:<name>` mutes exactly one. Pure over the label list so the matching
-// rule is testable.
+// silences reports whether these labels mute an advisor. `advice: silence` mutes every
+// one; `advice: silence <name>` mutes exactly one. Pure over the label list so the
+// matching rule is testable.
 //
 // A LABEL rather than a config file, because silencing is usually about this change
 // rather than about the repository: you looked, you decided the finding does not apply
@@ -651,8 +651,8 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
 // removing it brings the finding back.
 export fun silences(labels: [str], name: str) > bool {
     foreach (label in labels) {
-        if (label == "magus:silence") { return true; }
-        if (label == "magus:silence:" + name) { return true; }
+        if (label == "advice: silence") { return true; }
+        if (label == "advice: silence " + name) { return true; }
     }
     return false;
 }
@@ -940,12 +940,13 @@ test "the footer survives a comment with nothing cited" {
 }
 
 test "silences mutes one advisor by name" {
-    std\assert(silences(["magus:silence:unclaimed"], name: "unclaimed"), message: "the named one");
-    std\assert(!silences(["magus:silence:unclaimed"], name: "doctor"), message: "and only that one");
+    std\assert(silences(["advice: silence unclaimed"], name: "unclaimed"), message: "the named one");
+    std\assert(!silences(["advice: silence unclaimed"], name: "doctor"), message: "and only that one");
 }
 
 test "silences mutes everything with the bare label" {
-    std\assert(silences(["magus:silence"], name: "doctor"), message: "blanket silence");
+    std\assert(silences(["advice: silence"], name: "doctor"), message: "blanket silence");
+    std\assert(!silences(["magus:silence"], name: "doctor"), message: "the old spelling mutes nothing");
 }
 
 test "the collect sink emits one JSON line per section" {

@@ -39,11 +39,10 @@ final LIMIT = 100;
 
 // The queue's own surface: a stack's top carries QUEUE_LABEL plus a method, a kick-back
 // sets KICKED or, for KICK_REGENERATION, NEEDS_REGENERATION, and ends its comment with
-// KICK_MARKER, and QUEUE_STATUS is its status. The status labels share QUEUE_LABEL, so
-// only a method after it is intent.
+// KICK_MARKER, and QUEUE_STATUS is its status. Only a method after QUEUE_LABEL is intent.
 final QUEUE_LABEL = "merge-queue: ";
-final KICKED = "merge-queue: kicked back";
-final NEEDS_REGENERATION = "merge-queue: needs regeneration";
+final KICKED = "queue: kicked back";
+final NEEDS_REGENERATION = "queue: needs regeneration";
 final KICK_MARKER = "<!-- mergequeue: ";
 final QUEUE_STATUS = "merge-queue";
 
@@ -1510,7 +1509,7 @@ final SAMPLE = `{
   "headRefName": "delete-ci-shard", "headRefOid": "6d401ee42f1190d5dc092c450b7ff62764e793c0",
   "isCrossRepository": false, "isDraft": false, "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING",
   "number": 317, "state": "OPEN", "title": "refactor(ci)!: delete ci-shard; run a shard of a saved plan with magus run --stdin",
-  "labels": [{"id": "LA_1", "name": "merge-queue: kicked back", "color": "b60205"}],
+  "labels": [{"id": "LA_1", "name": "queue: kicked back", "color": "b60205"}],
   "files": [{"path": ".github/workflows/ci.yaml", "additions": 10, "deletions": 3}, {"path": "types/diagnostic.go", "additions": 1, "deletions": 1}],
   "statusCheckRollup": [
     {"__typename": "CheckRun", "conclusion": "CANCELLED", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36064348656/job/107850475236", "name": "queue advice", "status": "COMPLETED", "workflowName": "Queue advice"},
@@ -1531,7 +1530,7 @@ test "a gh pr view record reads into a pull request, each check at its newest ru
     assert\equal(p.head, want: "delete-ci-shard", message: "head");
     assert\equal(p.author, want: "egladman", message: "author");
     assert\equal(p.autoMerge, want: false, message: "a null autoMergeRequest is no intent");
-    assert\equal(p.labels, want: ["merge-queue: kicked back"], message: "labels");
+    assert\equal(p.labels, want: [KICKED], message: "labels");
     assert\equal(p.files, want: [".github/workflows/ci.yaml", "types/diagnostic.go"], message: "files");
     assert\equal(p.checks.len(), want: 3, message: "queue advice once, and the queue's own status left out");
     assert\equal(p.checks[0].conclusion, want: "SUCCESS", message: "the cancelled run was superseded");
@@ -1571,7 +1570,7 @@ test "stage is the first thing other than checks between a pull request and its 
     expect(Pull{ number = 3, mergeState = "BEHIND" }, want: "behind");
     expect(Pull{ number = 3, autoMerge = true }, want: "queued");
     expect(Pull{ number = 3, labels = ["merge-queue: rebase"] }, want: "queued");
-    expect(Pull{ number = 3, labels = ["merge-queue: queued", "merge-queue: Squash"] }, want: "needs-queue");
+    expect(Pull{ number = 3, labels = ["queue: queued", "merge-queue: Squash"] }, want: "needs-queue");
     expect(bottom, want: "queued");
     expect(Pull{ number = 3, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, want: "needs-queue");
 }

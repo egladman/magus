@@ -77,18 +77,19 @@ about to see that pull request merged.
 A pull request carries at most one of the queue's status labels, and the queue sets and
 removes them itself:
 
-| Label                             | Means                                            | Removed when                                                     |
-| --------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| `merge-queue: queued`             | the queue holds it                               | it is kicked back or merged, or the next apply run finds it gone |
-| `merge-queue: kicked back`        | kicked back; the queue's newest comment says why | it is queued again, or the next apply run finds it closed        |
-| `merge-queue: needs regeneration` | its merge needs regeneration its own code runs   | it is queued again, or the next apply run finds it closed        |
+| Label                       | Means                                            | Removed when                                                     |
+| --------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| `queue: queued`             | the queue holds it                               | it is kicked back or merged, or the next apply run finds it gone |
+| `queue: kicked back`        | kicked back; the queue's newest comment says why | it is queued again, or the next apply run finds it closed        |
+| `queue: needs regeneration` | its merge needs regeneration its own code runs   | it is queued again, or the next apply run finds it closed        |
 
 Setting one removes the other two. When the queue sees a pull request merge, it removes
-every `merge-queue:` label from it, the stack's intent label included; one merged or
-closed where the queue did not see it (by hand, or closed unmerged) loses them on the
-next apply run, which lists the closed pull requests still carrying any. The intent label
-is the prefix followed by a merge method, exactly: `merge-queue: squash`,
-`merge-queue: rebase` or `merge-queue: merge`, so no status label ever reads as intent.
+every `queue:` label from it and the stack's intent label; one merged or closed where the
+queue did not see it (by hand, or closed unmerged) loses them on the next apply run,
+which lists the closed pull requests still carrying any. The intent label is a person's
+and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squash`,
+`merge-queue: rebase` or `merge-queue: merge`. The status labels are the queue's answer
+and read `queue:`, so none ever reads as intent.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label
@@ -102,7 +103,7 @@ on the result, and apply lands it through an update commit on the branch, with t
 bytes validation gated (see [Trust model](#trust-model)). Only when validation left
 nothing apply can check, and the build tool cannot prove main's regeneration runs none
 of the pull request's own code, does the queue kick it back with `KICK_REGENERATION` and
-label it `merge-queue: needs regeneration`. Merge main in, regenerate, push, and queue
+label it `queue: needs regeneration`. Merge main in, regenerate, push, and queue
 it again: the merge then leaves the files as the pull request has them.
 
 A pull request the queue kicks back gets a new comment, and its auto-merge or label is
@@ -1049,8 +1050,8 @@ auto-merge, its own label, and the label on its stack's top. Last it minimizes a
 outdated its own earlier kick-back comments on the pull request, a comment its
 credential wrote whose last line is that marker; a failure there is printed to the apply
 job's log and does not fail the kick-back. `mark` shows the state as one label at most,
-created with a description the first time a repository needs it: `merge-queue: queued`,
-`merge-queue: kicked back` or `merge-queue: needs regeneration`, removing the other two;
+created with a description the first time a repository needs it: `queue: queued`,
+`queue: kicked back` or `queue: needs regeneration`, removing the other two;
 none removes every one and the `merge-queue: <method>` label. `list_changes` finds the
 closed pull requests still showing any of these labels in one search (`is:pr is:closed`
 with every label as alternatives), paged to its end. A label GitHub refuses to create for

@@ -343,8 +343,7 @@ fun start(base: str, intentAt: str) > void !> any {
     }
 }
 
-// QUEUE_LABELS are the labels that queue a pull request, one per merge method; the
-// queue's status labels share their prefix and queue nothing.
+// QUEUE_LABELS are the labels that queue a pull request, one per merge method.
 final QUEUE_LABELS = ["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"];
 
 // ciPulls reads `gh api repos/<repo>/actions/runs/<id>` of a CI run: the head it ran on
@@ -546,8 +545,8 @@ test "a CI run starts the queue only when it finished on the current head of a q
     };
     assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: true, message: "auto-merge");
     assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: rebase"]), head: "h1", base: "main"), want: true, message: "a queue label");
-    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: queued", "merge-queue: kicked back"]), head: "h1", base: "main"),
-        want: false, message: "a status label is no intent");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["queue: queued", "queue: kicked back"]), head: "h1", base: "main"),
+        want: false, message: "a mark is no intent");
     assert\equal(queuedAt(pull("open", head: "h2", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "CI on a head since replaced");
     assert\equal(queuedAt(pull("open", head: "h1", base: "release", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "another base");
     assert\equal(queuedAt(pull("closed", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "closed");

@@ -5,7 +5,7 @@
 // A pull request queues by enabling auto-merge; the label is how a stack queues from its
 // top. The label's prefix and the merge methods come from `magus queue describe`, so the
 // advice names what the provider accepts rather than what this file assumes. Only the
-// prefix followed by a method is intent: the queue's status labels share the prefix.
+// prefix followed by a method is intent.
 //
 // Reads the `merge-queue-provider` and `merge-queue-base` inputs.
 import "proc";
@@ -97,8 +97,8 @@ final M = ["squash", "rebase"];
 test "an approved pull request on the queue's base with no intent is queueable" {
     std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["bug"], fork: false,
         autoMerge: false, prefix: P, methods: M), message: "shown");
-    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["merge-queue: kicked back"], fork: false,
-        autoMerge: false, prefix: P, methods: M), message: "a status label is no intent");
+    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["queue: kicked back", "merge-queue: Squash"], fork: false,
+        autoMerge: false, prefix: P, methods: M), message: "a mark or a mis-cased method is no intent");
 }
 
 test "every other state retracts" {
