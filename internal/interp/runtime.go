@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -838,6 +839,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			// child once: `ci` composes lint, format and generate, none of which declare
 			// a timeout, so each level re-adds time the level above already has.
 			ctx = types.WithDependencyWait(ctx)
+			ctx = withDeclaredStep(ctx, dir, key)
 			// The DURATION, not a context carrying it: runTargetBody applies it per
 			// resume, so it measures the body's own execution and not the time its
 			// dependencies take.
@@ -861,6 +863,27 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	}
 
 	return &loadedBuzz{Session: buzzSess, Targets: targetMap}, nil
+}
+
+// withDeclaredStep confines ctx to the target key of the project whose magusfile dir is
+// dir, the scope runTarget gives a scheduled target. A ctx.needs child never passes
+// through runTarget, so this is the only place its own grants apply. It gets its own
+// declaration, not the union with its caller's: widening either step to cover the other
+// hands grants to processes that never declared them.
+func withDeclaredStep(ctx context.Context, dir, key string) context.Context {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return ctx
+	}
+	p := projectAt(ws, dir)
+	if p == nil {
+		return ctx
+	}
+	scope := make([]string, len(p.ResolvedSpells))
+	for i, s := range p.ResolvedSpells {
+		scope[i] = s.Name()
+	}
+	return sandbox.WithStep(ctx, scope, p.TargetPolicies[key].Sandbox)
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz
