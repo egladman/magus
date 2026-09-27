@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
@@ -916,12 +915,12 @@ func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []
 	return v.Line(), ok
 }
 
-// AutoResolve settles a conflicted path the way the merge queue does: merge3 settles every
-// region both sides changed, by the same rule, and AutoResolvable allows the result. It
+// AutoResolve settles a conflicted path the way the merge queue does: MergeThreeWay settles
+// every region both sides changed, by the same rule, and AutoResolvable allows the result. It
 // returns the merge when it settles; report names the path's class and why, and each
 // region as a location (path#declaration) with how it settled, either way.
 func (m *Magus) AutoResolve(ctx context.Context, path string, base, ours, theirs []byte) (merged []byte, report string, ok bool) {
-	res, ok := merge3.Resolve(path, base, ours, theirs)
+	res, ok := types.MergeThreeWay(path, base, ours, theirs)
 	if !ok {
 		if len(res.Regions) == 0 {
 			return nil, path + ": binary, or too far from the merge base to merge by line", false
@@ -940,7 +939,7 @@ func (m *Magus) AutoResolve(ctx context.Context, path string, base, ours, theirs
 // settles, and every other region between conflict markers markerSize wide. It reports
 // false for input no line merge applies to.
 func MergeMarkers(base, ours, theirs []byte, markerSize int) ([]byte, bool) {
-	return merge3.Markers(base, ours, theirs, markerSize)
+	return types.MergeThreeWayMarkers(base, ours, theirs, markerSize)
 }
 
 // AutoResolveGlobs are the workspace-relative globs a merge driver registration routes to

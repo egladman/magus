@@ -199,7 +199,7 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 }
 
 // mergeDriverRun settles one conflicted file. A file magus.yaml's vcs.auto_resolve opts in
-// is merged by merge3 when every region both sides changed is low risk. A declared output
+// is merged three ways when every region both sides changed is low risk. A declared output
 // keeps the version the VCS already staged, which marks the conflict resolved without
 // merging generated hunks by hand. Args: ancestor result other markerSize path (git and
 // hg), plus output when the VCS reads the result from a file of its own (jj). A non-zero

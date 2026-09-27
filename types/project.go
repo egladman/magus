@@ -234,7 +234,7 @@ type Project struct {
 	GateLowRiskDeclared bool
 	// MergeLowRisk are the project-relative globs of code files a merge may settle
 	// without a person, from magus.project's "merge_low_risk" key. A conflicted file
-	// merge3 settles already qualifies when the change classifier classes it low risk
+	// MergeThreeWay settles already qualifies when the change classifier classes it low risk
 	// (generated, prose, comment-only); this is the opt-in for code. Empty, the
 	// default, opts nothing in.
 	MergeLowRisk []string
