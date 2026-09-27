@@ -605,6 +605,9 @@ func WorkspaceOverlapWitness(root string) OverlapWitness {
 			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(read)))
 			return err == nil && info.Mode().IsRegular()
 		}
+		if namesPrunedDir(read, ignore) {
+			return namedDirWitness(tree, write, read, ignore)
+		}
 		once.Do(walk)
 		mu.Lock()
 		paths, seen := hits[write]
@@ -627,6 +630,36 @@ func WorkspaceOverlapWitness(root string) OverlapWitness {
 		}
 		return false
 	}
+}
+
+// namedDirWitness answers for a read pattern whose literal prefix names a pruned dir,
+// which the hasher walks from that prefix (expandSources): a file the pattern matches
+// there, with no further pruned dir below the prefix, that write also produces. This is
+// how a generator declaring internal/spell/gen/types/*.buzz meets the sibling that
+// rewrites those files, instead of the pruned tree walk hiding the pair from MGS4008.
+func namedDirWitness(tree fs.FS, write, read string, ignore []string) bool {
+	matches, err := doublestar.Glob(tree, read, doublestar.WithFilesOnly(), doublestar.WithNoFollow())
+	if err != nil {
+		return false
+	}
+	base := staticDirPrefix(read) + "/"
+	for _, m := range matches {
+		below := strings.Split(strings.TrimPrefix(m, base), "/")
+		pruned := false
+		for _, dir := range below[:len(below)-1] {
+			if isIgnoreDir(dir, ignore) {
+				pruned = true
+				break
+			}
+		}
+		if pruned {
+			continue
+		}
+		if ok, err := doublestar.Match(write, m); ok && err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // FindSameStepConflicts reports the same-step pairs no schedule can order: both sides

@@ -1091,10 +1091,12 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // than a concurrent one. Every sibling that writes Go under internal/ or types/gen
     // races the same way, and MGS4008 refuses the run rather than letting it, so each is
     // declared and the compile runs after all of them.
-    ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
-              config_generate, mocks_generate);
+    ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
+              mcp_tools_generate, config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
-        "go.mod", "go.sum", "go.work", "go.work.sum");
+        "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
@@ -1191,7 +1193,10 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(types_generate);
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/interp/bindings/gen/*.go");
     proc\exec("go", ["generate", "./std/..."]);
 }
@@ -1231,6 +1236,9 @@ export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any
 // own drift test to say so, one commit later. A generated file whose only regeneration
 // route is a hand-typed command is a file that rots.
 export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(job_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/job/gen/*.json");
     ctx.writesFiles("internal/langservice/manifest_data.go");
     proc\exec("go", ["generate", "./internal/langservice"]);
 }
@@ -1242,6 +1250,10 @@ export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
 // generator and no drift gate behind it: a tool could duplicate another, or keep
 // wrapping a member that had been renamed, and nothing said so.
 export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(spells_generate, job_generate, langservice_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/handler/mcp/gen/registry.go");
     proc\exec("go", ["generate", "./internal/handler/mcp"]);
 }
@@ -1251,8 +1263,20 @@ export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // The schemas were hand-written beside those structs, so every field was declared twice
 // and a test could only report that the two copies had already diverged.
+//
+// internal/job go:embeds these schemas, and every generator that runs magus-utils,
+// langservice-manifest, magus-termcast or magus-termshots compiles internal/job. Each
+// declares internal/job/gen/*.json as a read and needs this target, and MGS4008 refuses a
+// run where one does not: a compile beside a rewrite of an embedded file fails with "no
+// matching files found".
 export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(types_generate);
+    // spells_generate first: magus-utils compiles internal/spell, whose embedded trees
+    // spells_generate rewrites, and spells_generate compiles internal/job in turn, so one
+    // of the two has to go first.
+    ctx.needs(types_generate, spells_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz");
     ctx.writesFiles("internal/job/gen/*.json");
     proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
@@ -1265,6 +1289,12 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
+//
+// internal/spell go:embeds all three trees, and cmd/magus-utils imports internal/spell,
+// so every generator that runs magus-utils compiles them. Each declares the trees as reads
+// and needs this target, and MGS4008 refuses a run where one does not. A compile beside a
+// replay of these files failed with "pattern gen/types/<name>.buzz: no matching files
+// found".
 export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
@@ -1276,7 +1306,14 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
 // interface's gen/ subdir. Mocks are committed and drift-gated like every other
 // generated tree; mockery is pinned in the go.mod tool block.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(types_generate);
+    // mockery type-checks the mocked packages, and the root package and internal/dry
+    // import the bindings and config gen packages besides internal/spell and internal/job.
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
+              bindings_generate, config_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
+        "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
     ctx.writesFiles("**/gen/mocks/*.go");
     proc\exec("go", ["tool", "mockery"]);
     // mockery's testify template emits no `var _ Iface = (*Mock)(nil)`, so a mock that
@@ -1386,7 +1423,10 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(types_generate);
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
     proc\exec("go", ["generate", "./cmd/magus/..."]);
@@ -1641,8 +1681,9 @@ export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
 // recording nothing checks goes stale in silence, until the README's alt text is
 // describing a project count magus no longer reports.
 export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(job_generate);
     ctx.readsFiles("tapes/*.capture", "cmd/magus-termcast/*.go",
-        "internal/interactive/screen/*.go");
+        "internal/interactive/screen/*.go", "internal/job/gen/*.json");
     // Globbed, the way termshots_generate declares its shots: each picture ships
     // in both palettes, and naming only the dark half let a cache hit restore a
     // half-written assets/gen.
@@ -1661,8 +1702,9 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the REAL PrettyHandler, so its band
     // is an input to the picture. Left undeclared, an edit to the band replays
     // a cached SVG of the stale band.
+    ctx.needs(job_generate);
     ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
-        "internal/cache/*.go");
+        "internal/cache/*.go", "internal/job/gen/*.json");
     ctx.writesFiles("assets/gen/terminal-*.svg");
     proc\exec("go", ["run", "./cmd/magus-termshots"]);
 }

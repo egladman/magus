@@ -337,6 +337,48 @@ func TestWorkspaceOverlapWitnessNeedsAFileMatchingBothGlobs(t *testing.T) {
 	assert.True(t, witness("**/gen/mocks/*.go", "gen/mocks/store.go", nil), "an exact read reaches in")
 	assert.True(t, witness("dist/*.go", "**/*.go", nil))
 	assert.False(t, witness("dist/*.go", "**/*.go", []string{"dist"}), "pruned by the reader's own spell dirs")
+
+	// A pattern that names the pruned dir is hashed from there, so it witnesses too.
+	assert.True(t, witness("**/gen/mocks/*.go", "gen/mocks/*.go", nil), "the read names gen/")
+	assert.False(t, witness("dist/*.go", "gen/mocks/*.go", nil), "named, but the writer writes elsewhere")
+}
+
+// The race that failed `magus affected generate:rw`: mcp-tools-generate compiled
+// internal/spell, which go:embeds internal/spell/gen/types, while spells-generate
+// replayed that tree beside it in generate's one ctx.needs call. Declared as a read, the
+// embedded tree has to make the pair a refusal; the pruned walk used to hide it.
+func TestFindSameStepConflictsSeesAReadOfAGeneratedTree(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	f := filepath.Join(root, "internal/spell/gen/types/versionkey.buzz")
+	require.NoError(t, os.MkdirAll(filepath.Dir(f), 0o755))
+	require.NoError(t, os.WriteFile(f, []byte("x\n"), 0o644))
+
+	gen := DepKey(".", "generate")
+	nodes := func(ordered bool) []TargetNode {
+		reader := TargetNode{Project: ".", Target: "mcp-tools-generate", Steps: []string{gen},
+			Reads: []string{"**/*.go", "internal/spell/gen/types/*.buzz"}, DeclaredReads: true,
+			Writes: []string{"internal/handler/mcp/gen/registry.go"}, DeclaredWrites: true}
+		if ordered {
+			reader.Needs = Needs(DepKey(".", "spells-generate"))
+		}
+		return []TargetNode{
+			{Project: ".", Target: "generate", Steps: []string{gen},
+				Needs: Needs(DepKey(".", "spells-generate"), DepKey(".", "mcp-tools-generate"))},
+			{Project: ".", Target: "spells-generate", Steps: []string{gen},
+				Writes: []string{"internal/spell/gen/types/*.buzz"}, DeclaredWrites: true},
+			reader,
+		}
+	}
+
+	witness := WorkspaceOverlapWitness(root)
+	got := FindSameStepConflicts(nodes(false), witness)
+	assert.Equal(t, SameStepConflicts{{
+		Step: gen, Writer: DepKey(".", "spells-generate"), Reader: DepKey(".", "mcp-tools-generate"),
+		WriteGlob: "internal/spell/gen/types/*.buzz", ReadGlob: "internal/spell/gen/types/*.buzz",
+	}}, got)
+	require.Error(t, got.Refusal())
+	assert.Empty(t, FindSameStepConflicts(nodes(true), witness), "ctx.needs(spells_generate) orders the pair")
 }
 
 // With a witness the same fixture is refused only when its overlap is real on disk.

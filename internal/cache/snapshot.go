@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -271,31 +272,88 @@ func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return nil, err
 		}
-		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
-			return nil, fmt.Errorf("replay %s: remove existing: %w", rec.Path, err)
-		}
 		if rec.Symlink != "" {
 			// A symlink target is unchecked bytes from the manifest; a later record
 			// writing through it would escape root. Refuse one that resolves outside.
 			if err := ensureSymlinkTargetInRoot(root, dst, rec.Symlink); err != nil {
 				return nil, err
 			}
-			if err := os.Symlink(rec.Symlink, dst); err != nil {
-				return nil, err
-			}
-			paths = append(paths, dst)
-			continue
 		}
-		blob := blobPathIn(store, rec.Blob)
-		if err := replayBlob(blob, dst); err != nil {
+		if err := replayRecord(rec, dst, store); err != nil {
 			return nil, fmt.Errorf("replay %s: %w", rec.Path, err)
-		}
-		if rec.Mode != 0 {
-			_ = file.Chmod(dst, os.FileMode(rec.Mode&0o777)) // best-effort (no-op on wasm)
 		}
 		paths = append(paths, dst)
 	}
 	return paths, nil
+}
+
+// replayRecord materializes one output record at dst so that dst is never absent: a
+// file already holding the recorded bytes (or a link already naming the recorded
+// target) is left alone, and anything else is staged beside dst and renamed over it.
+// A sibling target compiling against this tree meets the old bytes or the new ones,
+// never a missing path: removing dst first opens a window in which `go build` fails
+// with "no matching files found" for a go:embed of a file the replay is about to
+// restore.
+func replayRecord(rec OutputRecord, dst, store string) error {
+	if replayCurrent(rec, dst) {
+		return nil
+	}
+	tmp, err := stagingName(dst)
+	if err != nil {
+		return err
+	}
+	if rec.Symlink != "" {
+		err = os.Symlink(rec.Symlink, tmp)
+	} else {
+		err = replayBlob(blobPathIn(store, rec.Blob), tmp)
+		if err == nil && rec.Mode != 0 {
+			_ = file.Chmod(tmp, os.FileMode(rec.Mode&0o777)) // best-effort (no-op on wasm)
+		}
+	}
+	if err == nil {
+		err = os.Rename(tmp, dst)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// replayCurrent reports whether dst already is what rec records: the same link target,
+// or a regular file with the recorded bytes and mode. Leaving such a file untouched also
+// keeps its mtime, so nothing keyed on it goes dirty.
+func replayCurrent(rec OutputRecord, dst string) bool {
+	info, err := os.Lstat(dst)
+	if err != nil {
+		return false
+	}
+	if rec.Symlink != "" {
+		target, err := os.Readlink(dst)
+		return err == nil && target == rec.Symlink
+	}
+	if !info.Mode().IsRegular() || info.Size() != rec.Size {
+		return false
+	}
+	if rec.Mode != 0 && runtime.GOOS != "windows" && uint32(info.Mode()&0o777) != rec.Mode&0o777 {
+		return false
+	}
+	sum, err := hashFile(dst)
+	return err == nil && sum == rec.Blob
+}
+
+// stagingName reserves an unused path in dst's directory, so the rename that follows
+// stays on one filesystem and replaces dst in a single step.
+func stagingName(dst string) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".replay.*")
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	if err := errors.Join(f.Close(), os.Remove(name)); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // ensureReplayDstSafe refuses a replay destination that escapes root or whose
