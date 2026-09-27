@@ -203,17 +203,22 @@ var denyRuleDocs = []RuleDoc{
 			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses, and `magus explain diagnostic:<code>` knows the code's page and what documents and emits it. " +
 			"An alternation (`A\\|B`, `-e A -e B`, `A|B` under -E) is answered with one command per name, and a definition lookup (`func X`, `func (r *T) X`, `type X`) with `magus refs X --definition --source`, which prints the body in place of the grep-then-sed pair. " +
 			"A search naming Go files (`grep -n Foo file.go`, measured 2026-09-26 as the commonest symbol lookup) is denied with the lines it would have printed, so the line numbers a bounded read needs are still there. " +
+			"A search of the tree carries the index's own answer when it can give one within the hook's budget: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. " +
+			"A pipe after the search (`| head`, `| grep -v _test`, `| wc -l`, `| cut -d: -f1 | sort | uniq -c`) is run over the rows the search would print, so the deny answers the pipeline's question, and a projection onto files routes to `magus refs <symbol>`, the per-file view. " +
+			"A stale index, a site list the graph capped, or a pipe over rows the index does not hold keeps the routing deny without the answer, and a filter no row model reproduces (`| xargs`, `| awk` past a field print, `| while read`) is silent. " +
 			"A single name the index cannot vouch for, a BZZ code, a case-insensitive search, a Markdown or log operand, or a search of a tree outside the workspace stays advice or nothing. " +
 			"Searching raw TEXT is untouched and has its own answer: `magus refs --text <pattern> [<path>...]` is a literal substring search with grep's exit codes, scoped by the same trailing paths."},
 	{Name: string(denyRuleSearchTranslation), Decision: "deny",
 		Catches: "a text search whose pattern a graph query provably answers with the same entities",
 		Why: "The pattern is compiled in the tool's own dialect (BRE, ERE or fixed) and run against the graph's ids when the command is judged, so the deny names a query that was checked rather than one that looks equivalent, and carries that query's answer, bounded to twenty results and a count, so the refused search costs nothing. " +
-			"Four shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
+			"Five shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
 			"A pattern selecting every Markdown heading of the files searched (`^#`, `^#\\+`), when those lines match the section nodes the graph holds file for file and none sits in a code fence, becomes `magus query kind=docsection 'id=~^docsection:<file>#'`. " +
 			"A search of a magusfile whose every hit declares a target the graph holds becomes `magus explain target:<project>:<name>`. " +
 			"A search of one Go file whose every hit declares a symbol the index holds (`^func`, `^func Test`, `func (s \\*Store)`) becomes `magus explain file:<path>`, with the names and their lines inline. " +
-			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. " +
-			"Measured 2026-09-26 over 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389 listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target declarations."},
+			"A `find -name` under the workspace whose files are, name for name, the file nodes the graph holds under the searched paths becomes `magus query kind=file 'id=~^file:...'`; -type f and -maxdepth are honored, any other predicate is silent. " +
+			"A pipe after the search (`| head`, `| tail`, `| wc -l`, `| sort -u`, `| uniq -c`, `| cut`, `| tr`, `| sed`, `| awk '{print $N}'`, `| grep -v`) is run over the rows the proof read, so the deny answers the pipeline's question with the same command; a truncation or an ordering also runs over an entity list the proof did not read the rows for, a count or a projection does not. " +
+			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, a tree outside the workspace, or a filter no row model reproduces (`| xargs`, `| tee`, `| while read`, an awk program past a field print). " +
+			"Measured 2026-09-26 over 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389 listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target declarations, 1,366 were a `find -name`; 30,037 searches fed a pipe, 18,646 of them `| head` and 3,512 `| grep -v | head`."},
 	{Name: string(denyRuleThrowawayCopy), Decision: "deny",
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
 		Why: "A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits. " +
@@ -261,6 +266,13 @@ var advisoryDocs = []RuleDoc{
 			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(denyRuleReadNavigation), Decision: "deny",
+		Catches: "a whole read of a mapped Go or Markdown file over 120 lines",
+		Why: "The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. " +
+			"120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 3.6% of whole reads were followed by an edit of that file. " +
+			"Silent on a short file, Buzz (no symbol index), a generated output, a path outside the workspace, a stale index, a heading count the graph disagrees with, and a read feeding a pipe or redirect."},
+	{Name: string(advisoryReadSymbol), Decision: "advise",
+		Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked"},
 	{Name: string(advisoryChainedRun), Decision: "advise",
 		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
 		Why: "Targets compose through ctx.needs, so the last one usually pulls the rest in order and each extra invocation reloads the workspace. " +
@@ -358,7 +370,7 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
-	advisoryChainedRun,
+	advisoryChainedRun, advisoryReadSymbol,
 }
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.

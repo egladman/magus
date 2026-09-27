@@ -48,12 +48,16 @@ func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, boo
 
 func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (ShellVerdict, bool) {
 	var inScope []hint.Invocation
-	for _, c := range cmds {
+	for i, c := range cmds {
 		c = asSearch(c)
 		if !hint.IsSearchTool(c.Name) {
 			continue
 		}
-		if v, ok := fileSymbolVerdict(deps, dir, c); ok {
+		stages, ok := filterStages(cmds[i+1:])
+		if !ok {
+			continue
+		}
+		if v, ok := fileSymbolVerdict(deps, dir, c, stages); ok {
 			return v, true
 		}
 		if hint.Classify(c) != hint.ClassSearchSource {
@@ -66,7 +70,9 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		}
 		inScope = append(inScope, c)
 		if routes, ok := provableRoutes(deps, c); ok {
-			return ShellVerdict{Deny: denySymbolSearch(routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}, true
+			if v, ok := treeSymbolVerdict(deps, dir, c, routes, stages); ok {
+				return v, true
+			}
 		}
 	}
 	ident := precedentIdent(inScope)
@@ -100,7 +106,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 // with the lines the search would have printed, so the reader keeps the line numbers a
 // bounded read needs and learns the query that has them for every file. Silent for a
 // tree, a pipe, a file the index does not cover, or a flag that changes the question.
-func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellVerdict, bool) {
+func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, stages []pipeStage) (ShellVerdict, bool) {
 	sc, ok := parseSearchCall(c)
 	if !ok || sc.readsStdin() || len(sc.paths) == 0 || deps.scope.root == "" {
 		return ShellVerdict{}, false
@@ -109,17 +115,14 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 	if !ok {
 		return ShellVerdict{}, false
 	}
-	var files []string
-	for _, p := range sc.paths {
-		abs, rel, ok := workspacePath(root, dir, p)
-		if !ok || path.Ext(rel) != ".go" {
+	ps, ok := sc.speller(root, dir)
+	if !ok || ps.searchesDir() {
+		return ShellVerdict{}, false
+	}
+	for _, op := range ps.ops {
+		if path.Ext(op.rel) != ".go" {
 			return ShellVerdict{}, false
 		}
-		info, err := os.Stat(abs)
-		if err != nil || info.IsDir() {
-			return ShellVerdict{}, false
-		}
-		files = append(files, rel)
 	}
 	routes, ok := provableRoutes(deps, c)
 	if !ok {
@@ -129,35 +132,193 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 	if !ok {
 		return ShellVerdict{}, false
 	}
-	var hits []string
-	for _, rel := range files {
-		lines, ok := selectedLines(filepath.Join(root, rel), line)
+	var hits []hit
+	for _, op := range ps.ops {
+		selected, ok := selectedLines(op.rel, filepath.Join(root, op.rel), line)
 		if !ok {
 			return ShellVerdict{}, false
 		}
-		for _, l := range lines {
-			hits = append(hits, rel+":"+l)
-		}
+		hits = append(hits, selected...)
+	}
+	// The answer names every file, whatever the tool's own layout would do.
+	shown := sc
+	shown.filenames, shown.lineNumbers = 1, true
+	answer, ok := shown.rows(ps, hits)
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	rows, _ := sc.rows(ps, hits)
+	piped, ok := runStages(stages, rows, answer)
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	block := answerBlock("What this search selects", answer)
+	if piped.text != "" {
+		block = piped.block(nil)
 	}
 	return ShellVerdict{
-		Deny: denySymbolSearch(routes) + "\n" + answerBlock("What this search selects", hits),
+		Deny: denySymbolSearch(routes) + "\n" + block,
 		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)},
 	}, true
 }
 
-// selectedLines is what `grep -n` prints for file: `<line>:<text>` for each line re selects.
-func selectedLines(file string, re *regexp.Regexp) ([]string, bool) {
+// treeSymbolVerdict denies a search of the tree for names the index vouches for, and
+// carries the answer when the index can give it in the hook's budget: every site under the
+// searched paths, or what the pipe's filters make of them. A stale index, a site list the
+// graph capped, or a pipe over rows it does not hold keeps the routing deny alone. A pipe
+// that needs rows over a diagnostic code, which no site list describes, is silent.
+func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute, stages []pipeStage) (ShellVerdict, bool) {
+	if !entityStages(stages) && slices.ContainsFunc(routes, isDiagnosticRoute) {
+		return ShellVerdict{}, false
+	}
+	if projectsToFiles(stages) {
+		for i, r := range routes {
+			if !isDiagnosticRoute(r) {
+				routes[i].run = hint.Refs.With(r.name)
+			}
+		}
+	}
+	v := ShellVerdict{Deny: denySymbolSearch(routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
+	answer, rows, ok := treeSymbolAnswer(deps, dir, c, routes)
+	if !ok {
+		return v, true
+	}
+	if piped, ok := runStages(stages, rows, answer); ok {
+		v.Deny += "\n" + piped.block(answer)
+	}
+	return v, true
+}
+
+func isDiagnosticRoute(r searchRoute) bool {
+	return strings.HasPrefix(r.name, types.KindDiagnostic+":")
+}
+
+// maxSiteRows bounds the sites read back for a tree search's rows.
+const maxSiteRows = 400
+
+// treeSymbolAnswer is the sites the index holds for every name searched, under the paths
+// searched: one line per file with its count and lines, as `magus refs` prints them, and
+// the rows the search would print when every site's line is known.
+func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute) (answer, rows []string, ok bool) {
+	sc, ok := parseSearchCall(c)
+	if !ok || deps.scope.root == "" {
+		return nil, nil, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return nil, nil, false
+	}
+	ps, ok := sc.speller(root, dir)
+	if !ok {
+		return nil, nil, false
+	}
+	line, ok := sc.lineRegexp()
+	if !ok {
+		return nil, nil, false
+	}
+	type site struct {
+		rel   string
+		count int
+		lines []int
+	}
+	var sites []site
+	for _, r := range routes {
+		if isDiagnosticRoute(r) {
+			return nil, nil, false
+		}
+		found, definitive := deps.symbolSites(r.name)
+		if !definitive {
+			return nil, nil, false
+		}
+		for _, f := range found {
+			if _, under := ps.spell(f.File); !under || !sc.includes(f.File) {
+				continue
+			}
+			sites = append(sites, site{rel: f.File, count: f.Count, lines: f.Lines})
+		}
+	}
+	slices.SortFunc(sites, func(a, b site) int { return strings.Compare(a.rel, b.rel) })
+	merged := sites[:0]
+	for _, s := range sites {
+		if n := len(merged); n > 0 && merged[n-1].rel == s.rel {
+			merged[n-1].count += s.count
+			merged[n-1].lines = append(merged[n-1].lines, s.lines...)
+			continue
+		}
+		merged = append(merged, s)
+	}
+	complete := !sc.exclude
+	total := 0
+	var hits []hit
+	for _, s := range merged {
+		spelled, _ := ps.spell(s.rel)
+		slices.Sort(s.lines)
+		total += s.count
+		answer = append(answer, spelled+"  ("+strconv.Itoa(s.count)+")  lines "+joinInts(s.lines))
+		if len(s.lines) != s.count || total > maxSiteRows {
+			complete = false
+			continue
+		}
+		if !complete {
+			continue
+		}
+		text, ok := fileLines(filepath.Join(root, filepath.FromSlash(s.rel)))
+		if !ok {
+			complete = false
+			continue
+		}
+		for _, n := range slices.Compact(s.lines) {
+			if n >= 1 && n <= len(text) && line.MatchString(text[n-1]) {
+				hits = append(hits, hit{rel: s.rel, line: n, text: text[n-1]})
+			}
+		}
+	}
+	if complete {
+		rows, _ = sc.rows(ps, hits)
+	}
+	return answer, rows, true
+}
+
+// includes reports whether a file's name passes the search's --include globs.
+func (sc searchCall) includes(rel string) bool {
+	if len(sc.include) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(sc.include, func(g string) bool {
+		matched, err := path.Match(g, path.Base(rel))
+		return err == nil && matched
+	})
+}
+
+func fileLines(file string) ([]string, bool) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, false
+	}
+	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"), true
+}
+
+func joinInts(ns []int) string {
+	parts := make([]string, len(ns))
+	for i, n := range ns {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ",")
+}
+
+// selectedLines is each line of file that re selects.
+func selectedLines(rel, file string, re *regexp.Regexp) ([]hit, bool) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, false
 	}
 	defer f.Close()
-	var out []string
+	var out []hit
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for n := 1; s.Scan(); n++ {
 		if re.MatchString(s.Text()) {
-			out = append(out, strconv.Itoa(n)+":"+s.Text())
+			out = append(out, hit{rel: rel, line: n, text: s.Text()})
 		}
 	}
 	return out, s.Err() == nil

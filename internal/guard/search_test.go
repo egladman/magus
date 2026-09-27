@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestSymbolSearchDeniesEveryProvableShape widens the deny past one bare identifier: an
@@ -99,6 +102,11 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "HandleRequest", "  internal/api/handler.go:6:func serve() { HandleRequest() }"},
 		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "HandleRequest", "refs HandleRequest --definition --source"},
 		{`grep -n ParseConfig internal/api/handler.go`, deps, "ParseConfig", "What this search selects: nothing."},
+		// A pipe runs over the rows the tool would print: one file, so no filename.
+		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "HandleRequest", "Its answer, after `| head -1` (1 result):\n  3:// HandleRequest serves one request."},
+		{`grep HandleRequest internal/api/handler.go | grep -v '^//' | wc -l`, deps, "HandleRequest", "Its answer, after `| grep -v ^// | wc -l`: 2"},
+		{`grep -Hn HandleRequest internal/api/handler.go | cut -d: -f2 | tr '\n' ,`, deps, "HandleRequest", "(1 result):\n  3,4,6,"},
+		{`grep -n HandleRequest internal/api/handler.go | tee out.txt`, deps, "", ""},
 
 		// A stale index proves nothing.
 		{`grep -n HandleRequest internal/api/handler.go`, stale, "", ""},
@@ -128,6 +136,72 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, tt.command)
 		assert.Contains(t, v.Deny, tt.answer, tt.command)
 	}
+}
+
+// TestSymbolSearchAnswersTreeSearches pins the inline answer of a tree search: the sites
+// the index holds under the searched paths, or what the pipe's filters make of them, and
+// the routing deny alone when the index cannot say.
+func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/api/handler.go":      "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
+		"internal/api/handler_test.go": "package api\n\nfunc TestHandle(t *testing.T) { HandleRequest() }\n",
+		"internal/api/config.go":       "package api\n\nfunc ParseConfig() {}\n",
+		"docs/handler.md":              "HandleRequest is documented here.\n",
+	})
+	sites := map[string][]types.KnowledgeRefSite{
+		"HandleRequest": {{File: "internal/api/handler.go", Count: 2, Lines: []int{4, 6}}, {File: "internal/api/handler_test.go", Count: 1, Lines: []int{3}}, {File: "cmd/x.go", Count: 1, Lines: []int{9}}},
+		"ParseConfig":   {{File: "internal/api/config.go", Count: 1, Lines: []int{3}}},
+	}
+	indexed := func(name string) (bool, bool) { return sites[name] != nil, true }
+	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, scope: workspaceScope{root: root}}
+	blind := Dependencies{SymbolDefined: indexed, scope: workspaceScope{root: root}}
+	capped := deps
+	capped.SymbolSites = func(name string) ([]types.KnowledgeRefSite, bool) {
+		return []types.KnowledgeRefSite{{File: "internal/api/handler.go", Count: 3, Lines: []int{4, 6}}}, true
+	}
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		run     string
+		answer  string
+	}{
+		{`grep -rn HandleRequest internal`, deps, "refs HandleRequest --occurrences",
+			"Its answer (2 results):\n  internal/api/handler.go  (2)  lines 4,6\n  internal/api/handler_test.go  (1)  lines 3"},
+		{`grep -rn HandleRequest internal | grep -v _test`, deps, "refs HandleRequest --occurrences",
+			"Its answer, after `| grep -v _test` (2 results):\n  internal/api/handler.go:4:func HandleRequest() {}\n  internal/api/handler.go:6:func serve() { HandleRequest() }"},
+		{`grep -rn HandleRequest internal | cut -d: -f1 | sort -u`, deps, "refs HandleRequest`",
+			"Its answer, after `| cut -d: -f1 | sort -u` (2 results):\n  internal/api/handler.go\n  internal/api/handler_test.go"},
+		{`grep -rn HandleRequest ./internal/ | cut -d: -f1 | sort | uniq -c`, deps, "refs HandleRequest`",
+			"Its answer, after `| cut -d: -f1 | sort | uniq -c` (2 results):\n        2 ./internal/api/handler.go\n        1 ./internal/api/handler_test.go"},
+		{`grep -rn HandleRequest internal | wc -l`, deps, "refs HandleRequest --occurrences", "Its answer, after `| wc -l`: 3"},
+		{`grep -rn --include='*_test.go' HandleRequest internal | wc -l`, deps, "refs HandleRequest --occurrences", "Its answer, after `| wc -l`: 1"},
+		{`rg 'HandleRequest|ParseConfig' internal/api | head -1`, deps, "refs ParseConfig --occurrences",
+			"Its answer, after `| head -1` (1 result):\n  internal/api/config.go:func ParseConfig() {}"},
+		{`grep -rn 'func HandleRequest' internal | head -1`, deps, "refs HandleRequest --definition --source",
+			"Its answer, after `| head -1` (1 result):\n  internal/api/handler.go:4:func HandleRequest() {}"},
+		// A search the row model does not cover keeps the routing deny alone.
+		{`grep -rl HandleRequest internal`, deps, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
+		{`grep -rn HandleRequest internal`, blind, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
+		// Capped lines answer the count of sites, never the rows.
+		{`grep -rn HandleRequest internal`, capped, "refs HandleRequest --occurrences", "Its answer (1 result):\n  internal/api/handler.go  (3)  lines 4,6"},
+		{`grep -rn HandleRequest internal | wc -l`, capped, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
+	} {
+		v, ok := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
+		require.True(t, ok && v.Deny != "", tt.command)
+		assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
+		assert.Contains(t, v.Deny, tt.run, tt.command)
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		if !strings.Contains(tt.answer, "Its answer") {
+			assert.NotContains(t, v.Deny, "Its answer", tt.command)
+		}
+	}
+	// The capped sites carry no rows, so a pipe over them has no answer.
+	v, _ := searchVerdictAt(capped, root, parseForTest(t, `grep -rn HandleRequest internal | wc -l`))
+	assert.NotContains(t, v.Deny, "Its answer")
+	// A filter no row model reproduces is silent.
+	_, ok := searchVerdictAt(deps, root, parseForTest(t, `grep -rn HandleRequest internal | tee sites.txt`))
+	assert.False(t, ok)
 }
 
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:

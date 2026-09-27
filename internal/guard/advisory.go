@@ -80,6 +80,8 @@ const (
 	// was ignored all three, which is a fact worth being able to READ rather than
 	// reconstruct from a transcript.
 	advisoryChainedRun denyRuleName = "chained-run"
+	// advisoryReadSymbol is a bounded read inside one declaration; see read.go.
+	advisoryReadSymbol denyRuleName = "read-symbol"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

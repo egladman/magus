@@ -103,6 +103,11 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// SymbolSites lists every file that defines or references a symbol named ident, one
+	// entry per file with its occurrence count and first lines, from the same index
+	// SymbolDefined answers from and definitive on the same terms. It is what lets a deny
+	// carry the answer to the search it refuses.
+	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
 	// Revision is the revision rev names in the checkout holding dir, abbreviated, or ""
 	// when there is no VCS to ask or rev names nothing. Empty rev is the checkout's current
 	// revision; empty dir is the process's working directory. The push gate matches it
@@ -180,6 +185,14 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 		return false, false
 	}
 	return d.SymbolDefined(ident)
+}
+
+// symbolSites answers not-definitive for an unset resolver, like symbolDefined.
+func (d Dependencies) symbolSites(ident string) ([]types.KnowledgeRefSite, bool) {
+	if d.SymbolSites == nil {
+		return nil, false
+	}
+	return d.SymbolSites(ident)
 }
 
 // graphIDs answers not-definitive for an unset resolver, so a caller that supplies none

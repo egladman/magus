@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -36,12 +37,19 @@ import (
 const GuardSymbol = "symbol"
 
 // guardIndexKinds are the node kinds the index lists by id.
-var guardIndexKinds = []string{types.KindDiagnostic, types.KindDocSection, types.KindTarget}
+var guardIndexKinds = []string{types.KindDiagnostic, types.KindDocSection, types.KindTarget, types.KindFile}
 
 const guardIndexHeader = "magus-guard-index 1"
 
 // GuardIndexPath is the index file under a workspace cache dir.
 func GuardIndexPath(cacheDir string) string { return filepath.Join(StoreDir(cacheDir), "guard.idx") }
+
+// GuardRefsPath is the reference-site file beside the index: one line per symbol name and
+// file, sorted by name, kept apart because it is several times the index's size and a
+// hook reads it only for a search it has already found a symbol in.
+func GuardRefsPath(cacheDir string) string {
+	return filepath.Join(StoreDir(cacheDir), "guard-refs.idx")
+}
 
 // guardSkipDirs are never walked and never counted in a directory digest: VCS internals,
 // the cache, and dependency or build trees no index reads.
@@ -97,6 +105,7 @@ type guardDirStamp struct {
 // GuardIndex is a read guard index. Safe for concurrent use.
 type GuardIndex struct {
 	root         string
+	refsPath     string
 	symbolsFresh bool
 	ids          map[string][]string // sorted
 	files        []guardFileStamp
@@ -104,6 +113,8 @@ type GuardIndex struct {
 
 	mu    sync.Mutex
 	fresh map[string]bool
+	refs  []byte // the refs file, read on the first RefSites
+	refsE error
 }
 
 // WriteGuardIndex writes the index for g, built from the workspace at root. symbolsFresh
@@ -115,11 +126,13 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 		return err
 	}
 	ids := map[string][]string{}
+	symbols := map[string]types.KnowledgeNode{}
 	for _, n := range g.Nodes() {
 		switch {
 		case n.Kind == types.KindSymbol:
-			if n.Label != "" && !strings.ContainsAny(n.Label, " \n") {
+			if n.Label != "" && !strings.ContainsAny(n.Label, " \n\t") {
 				ids[GuardSymbol] = append(ids[GuardSymbol], n.Label)
+				symbols[n.ID] = n
 			}
 		case slices.Contains(guardIndexKinds, n.Kind):
 			ids[n.Kind] = append(ids[n.Kind], n.ID)
@@ -127,6 +140,9 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 	}
 	files, err := guardSourceFiles(absRoot)
 	if err != nil {
+		return err
+	}
+	if err := writeGuardRefs(GuardRefsPath(cacheDir), g, symbols); err != nil {
 		return err
 	}
 	var b strings.Builder
@@ -155,15 +171,63 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 			fmt.Fprintf(&b, "i %s %s\n", kind, id)
 		}
 	}
-	dst := GuardIndexPath(cacheDir)
+	return writeAtomic(GuardIndexPath(cacheDir), b.String())
+}
+
+// writeGuardRefs writes every file that defines or references a symbol, keyed by the
+// symbol's NAME since that is what a search pattern spells: `name\tfile\tcount\tlines`,
+// sorted, with lines capped as the graph's own reference edges cap them. A definition
+// contributes its declaring line.
+func writeGuardRefs(dst string, g *Graph, symbols map[string]types.KnowledgeNode) error {
+	var lines []string
+	for _, e := range g.Edges() {
+		sym, ok := symbols[e.Target]
+		if !ok || !strings.HasPrefix(e.Source, types.KindFile+":") {
+			continue
+		}
+		file := strings.TrimPrefix(e.Source, types.KindFile+":")
+		var count int
+		var at []int
+		switch e.Relation {
+		case types.RelationReferences:
+			count, at, ok = parseRefProvenance(e.Provenance)
+			if !ok {
+				continue
+			}
+		case types.RelationDefines:
+			count = 1
+			if p, l, found := strings.Cut(sym.Source, ":"); found && p == file {
+				if n, err := strconv.Atoi(l); err == nil {
+					at = []int{n}
+				}
+			}
+		default:
+			continue
+		}
+		var b strings.Builder
+		b.WriteString(sym.Label + "\t" + file + "\t" + strconv.Itoa(count) + "\t")
+		for i, l := range at {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(strconv.Itoa(l))
+		}
+		lines = append(lines, b.String())
+	}
+	slices.Sort(lines)
+	lines = slices.Compact(lines)
+	return writeAtomic(dst, strings.Join(lines, "\n")+"\n")
+}
+
+func writeAtomic(dst, content string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".guard.idx-*")
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+"-*")
 	if err != nil {
 		return err
 	}
-	_, err = tmp.WriteString(b.String())
+	_, err = tmp.WriteString(content)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
@@ -247,7 +311,7 @@ func ReadGuardIndex(cacheDir, root string) (*GuardIndex, error) {
 		return nil, err
 	}
 	defer f.Close()
-	x := &GuardIndex{ids: map[string][]string{}, fresh: map[string]bool{}}
+	x := &GuardIndex{refsPath: GuardRefsPath(cacheDir), ids: map[string][]string{}, fresh: map[string]bool{}}
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	if !s.Scan() || s.Text() != guardIndexHeader {
@@ -304,6 +368,65 @@ func (x *GuardIndex) Has(kind, id string) bool {
 	return ok
 }
 
+// RefSites lists every file that defines or references a symbol named name, one entry per
+// file, with its occurrence count and the first lines. Every symbol of that name counts,
+// since a text search cannot tell them apart. Whether the answer is current is
+// Fresh(GuardSymbol)'s to say. The refs file is read whole on the first call: a name lookup
+// is one substring scan of it, cheaper than seeking, and the file is a few megabytes.
+func (x *GuardIndex) RefSites(name string) ([]types.KnowledgeRefSite, error) {
+	x.mu.Lock()
+	if x.refs == nil && x.refsE == nil {
+		x.refs, x.refsE = os.ReadFile(x.refsPath)
+	}
+	data, err := x.refs, x.refsE
+	x.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	key := []byte(name + "\t")
+	pos := 0
+	if !bytes.HasPrefix(data, key) {
+		i := bytes.Index(data, append([]byte{'\n'}, key...))
+		if i < 0 {
+			return nil, nil
+		}
+		pos = i + 1
+	}
+	byFile := map[string]*types.KnowledgeRefSite{}
+	var order []string
+	for pos < len(data) && bytes.HasPrefix(data[pos:], key) {
+		end := bytes.IndexByte(data[pos:], '\n')
+		if end < 0 {
+			end = len(data) - pos
+		}
+		fields := strings.Split(string(data[pos+len(key):pos+end]), "\t")
+		pos += end + 1
+		if len(fields) != 3 {
+			continue
+		}
+		count, _ := strconv.Atoi(fields[1])
+		site := byFile[fields[0]]
+		if site == nil {
+			site = &types.KnowledgeRefSite{File: fields[0]}
+			byFile[fields[0]] = site
+			order = append(order, fields[0])
+		}
+		site.Count += count
+		for _, l := range strings.Split(fields[2], ",") {
+			if n, err := strconv.Atoi(l); err == nil {
+				site.Lines = append(site.Lines, n)
+			}
+		}
+	}
+	out := make([]types.KnowledgeRefSite, 0, len(order))
+	for _, f := range order {
+		s := byFile[f]
+		slices.Sort(s.Lines)
+		out = append(out, *s)
+	}
+	return out, nil
+}
+
 // Fresh reports whether every source kind's ids were derived from is unchanged since the
 // index was written, so a query of the graph answers what the index says. Diagnostics are
 // compiled into the binary and always fresh. It stats the sources once per kind.
@@ -325,8 +448,9 @@ func (x *GuardIndex) computeFresh(kind string) bool {
 	if kind == GuardSymbol && !x.symbolsFresh {
 		return false
 	}
+	// A file node comes from whichever index read the file, so every stamp counts for it.
 	class := kindClass(kind)
-	if class == 0 {
+	if class == 0 && kind != types.KindFile {
 		return false
 	}
 	checks := make([]func() bool, 0, len(x.dirs)+len(x.files))
@@ -337,7 +461,7 @@ func (x *GuardIndex) computeFresh(kind string) bool {
 		})
 	}
 	for _, f := range x.files {
-		if strings.IndexByte(f.classes, class) < 0 {
+		if class != 0 && strings.IndexByte(f.classes, class) < 0 {
 			continue
 		}
 		checks = append(checks, func() bool {
