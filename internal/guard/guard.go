@@ -130,6 +130,19 @@ type Dependencies struct {
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
 	scope workspaceScope
+	// callDir is the directory the judged call runs in, where its relative paths resolve.
+	// Judge fills it from the envelope's cwd; empty means the hook process's own.
+	callDir string
+}
+
+// workingDir is where a relative path on the judged line resolves. The hook process's cwd
+// is only the fallback: a host runs its hooks from wherever it likes.
+func (d Dependencies) workingDir() (string, bool) {
+	if d.callDir != "" {
+		return d.callDir, true
+	}
+	wd, err := os.Getwd()
+	return wd, err == nil
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -585,6 +598,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if callDir == "" {
 			callDir = location.dir
 		}
+		deps.callDir = callDir
 		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
 		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))

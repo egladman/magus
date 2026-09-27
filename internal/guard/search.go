@@ -16,19 +16,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The symbol-search rule: a text search whose every alternative the graph can answer
-// exactly. An indexed symbol is the one search shape with an EXACT replacement, which is
-// what makes denying it free: refs returns the same sites, column-precise and checked
-// against the tree, plus the generated and cross-language ones a pattern cannot reach.
-// Anything the index cannot vouch for stays an advisory, because a deny that routes
-// nowhere takes a capability away. Raw text is the standing case there: a string literal
-// or a comment body is not a symbol, so no index holds it.
-//
-// Measured 2026-09-24 over 14,773 search patterns: 45% were alternations and 13% were
-// `func X` or `type X` definition lookups, and the single-identifier form this rule
-// started with fired 0 times. Measured 2026-09-26 over 89,116 search calls: 8,500 looked
-// for a symbol and most named one Go file (`grep -n Foo file.go`), a shape the rule then
-// left alone as a read.
+// The symbol-search rule denies a tree search only when refs returns the same sites for
+// every alternative; anything the index cannot vouch for stays advice, since a deny that
+// routes nowhere takes a capability away. The catalog's Why carries the measurements.
 
 // searchRoute is the graph command that answers one alternative of a search.
 type searchRoute struct {
@@ -39,8 +29,8 @@ type searchRoute struct {
 // searchVerdict judges the searches on a line against the index, reporting false when no
 // search there is one it has anything to say about.
 func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
-	dir, err := os.Getwd()
-	if err != nil {
+	dir, ok := deps.workingDir()
+	if !ok {
 		return ShellVerdict{}, false
 	}
 	return searchVerdictAt(deps, dir, cmds)
@@ -57,7 +47,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		if !ok {
 			continue
 		}
-		if v, ok := fileSymbolVerdict(deps, dir, c, stages); ok {
+		if v, ok := fileSymbolVerdict(deps, dir, c); ok {
 			return v, true
 		}
 		if hint.Classify(c) != hint.ClassSearchSource {
@@ -102,11 +92,11 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 	}, true
 }
 
-// fileSymbolVerdict denies a search of named Go files for names the index vouches for,
-// with the lines the search would have printed, so the reader keeps the line numbers a
-// bounded read needs and learns the query that has them for every file. Silent for a
-// tree, a pipe, a file the index does not cover, or a flag that changes the question.
-func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, stages []pipeStage) (ShellVerdict, bool) {
+// fileSymbolVerdict advises refs for a search of named Go files for names the index
+// vouches for. It lets the search run: a deny could only hand back the lines grep prints.
+// Silent for a tree, a pipe, a file the index does not cover, or a flag that changes the
+// question.
+func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellVerdict, bool) {
 	sc, ok := parseSearchCall(c)
 	if !ok || sc.readsStdin() || len(sc.paths) == 0 || deps.scope.root == "" {
 		return ShellVerdict{}, false
@@ -128,37 +118,14 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, stages 
 	if !ok {
 		return ShellVerdict{}, false
 	}
-	line, ok := sc.lineRegexp()
-	if !ok {
+	if _, ok := sc.lineRegexp(); !ok {
 		return ShellVerdict{}, false
-	}
-	var hits []hit
-	for _, op := range ps.ops {
-		selected, ok := selectedLines(op.rel, filepath.Join(root, op.rel), line)
-		if !ok {
-			return ShellVerdict{}, false
-		}
-		hits = append(hits, selected...)
-	}
-	// The answer names every file, whatever the tool's own layout would do.
-	shown := sc
-	shown.filenames, shown.lineNumbers = 1, true
-	answer, ok := shown.rows(ps, hits)
-	if !ok {
-		return ShellVerdict{}, false
-	}
-	rows, _ := sc.rows(ps, hits)
-	piped, ok := runStages(stages, rows, answer)
-	if !ok {
-		return ShellVerdict{}, false
-	}
-	block := answerBlock("What this search selects", answer)
-	if piped.text != "" {
-		block = piped.block(nil)
 	}
 	return ShellVerdict{
-		Deny: denySymbolSearch(routes) + "\n" + block,
-		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)},
+		Context: routeClause(routes) + " this for every file, checked against the tree, including the generated and cross-language sites a pattern misses. " +
+			"The search runs as typed.",
+		Kind:  advisoryPrecedent,
+		Brief: "magus workspace: " + routeClause(routes) + " this for every file.",
 	}, true
 }
 
@@ -511,9 +478,8 @@ func routeNames(routes []searchRoute) string {
 	return strings.Join(names, ",")
 }
 
-// denySymbolSearch leads with the commands, one per name, since that is the whole
-// correction.
-func denySymbolSearch(routes []searchRoute) string {
+// routeClause is the commands, one per name, and the verb that agrees with them.
+func routeClause(routes []searchRoute) string {
 	runs := make([]string, len(routes))
 	for i, r := range routes {
 		runs[i] = "`" + r.run + "`"
@@ -522,6 +488,12 @@ func denySymbolSearch(routes []searchRoute) string {
 	if len(routes) > 1 {
 		verb = "answer"
 	}
-	return strings.Join(runs, ", ") + " " + verb + " this exactly, checked against the tree rather than matched against it.\n" +
+	return strings.Join(runs, ", ") + " " + verb
+}
+
+// denySymbolSearch leads with the commands, one per name, since that is the whole
+// correction.
+func denySymbolSearch(routes []searchRoute) string {
+	return routeClause(routes) + " this exactly, checked against the tree rather than matched against it.\n" +
 		"Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it."
 }

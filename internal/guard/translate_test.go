@@ -245,8 +245,8 @@ func TestSearchTranslationDeclarations(t *testing.T) {
 			"  6: Open\n  8: Close\n"},
 		{`grep -n '^func \|^type ' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
 			"  4: Store\n  6: Open\n"},
-		// One name is a definition lookup, and refs prints the body.
-		{`grep -n 'func helper' internal/store/store.go`, deps, denyRule{Name: denyRuleSymbolSearch, Arg: "helper"}, "refs helper --definition --source"},
+		// One name is a definition lookup, which symbol-search advises rather than denies.
+		{`grep -n 'func helper' internal/store/store.go`, deps, denyRule{}, ""},
 
 		// The comment mentions `func helper` and the call site names helper: text.
 		{`grep -n 'helper' internal/store/store.go`, deps, denyRule{}, ""},

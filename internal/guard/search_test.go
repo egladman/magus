@@ -1,12 +1,15 @@
 package guard
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -77,8 +80,8 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 }
 
 // TestSymbolSearchOnNamedFiles pins the file half: a search of named Go files for an
-// indexed name is denied with the lines it would have printed, and anything the index
-// does not cover, or a flag that changes the question, is left alone.
+// indexed name runs with refs advised, and anything the index does not cover, or a flag
+// that changes the question, gets no such advice.
 func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
@@ -92,50 +95,69 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	for _, tt := range []struct {
 		command string
 		deps    Dependencies
-		arg     string // "" for no deny
-		answer  string
+		advice  string // the refs command advised, "" for none
 	}{
-		{`grep -n HandleRequest internal/api/handler.go`, deps, "HandleRequest",
-			"What this search selects (3 results):\n  internal/api/handler.go:3:// HandleRequest serves one request.\n  internal/api/handler.go:4:func HandleRequest() {}\n  internal/api/handler.go:6:func serve() { HandleRequest() }"},
-		{`grep -n 'HandleRequest\|ParseConfig' internal/api/handler.go internal/api/config.go`, deps, "HandleRequest,ParseConfig",
-			"  internal/api/config.go:3:func ParseConfig() {}"},
-		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "HandleRequest", "  internal/api/handler.go:6:func serve() { HandleRequest() }"},
-		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "HandleRequest", "refs HandleRequest --definition --source"},
-		{`grep -n ParseConfig internal/api/handler.go`, deps, "ParseConfig", "What this search selects: nothing."},
-		// A pipe runs over the rows the tool would print: one file, so no filename.
-		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "HandleRequest", "Its answer, after `| head -1` (1 result):\n  3:// HandleRequest serves one request."},
-		{`grep HandleRequest internal/api/handler.go | grep -v '^//' | wc -l`, deps, "HandleRequest", "Its answer, after `| grep -v ^// | wc -l`: 2"},
-		{`grep -Hn HandleRequest internal/api/handler.go | cut -d: -f2 | tr '\n' ,`, deps, "HandleRequest", "(1 result):\n  3,4,6,"},
-		{`grep -n HandleRequest internal/api/handler.go | tee out.txt`, deps, "", ""},
+		{`grep -n HandleRequest internal/api/handler.go`, deps, "refs HandleRequest --occurrences` answers this for every file."},
+		{`grep -n 'HandleRequest\|ParseConfig' internal/api/handler.go internal/api/config.go`, deps,
+			"refs HandleRequest --occurrences`, `magus refs ParseConfig --occurrences` answer this for every file."},
+		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "refs HandleRequest --occurrences`"},
+		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --definition --source`"},
+		{`grep -n ParseConfig internal/api/handler.go`, deps, "refs ParseConfig --occurrences`"},
+		// A pipe changes nothing: the search still runs as typed.
+		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "refs HandleRequest --occurrences`"},
+		{`grep -n HandleRequest internal/api/handler.go | tee out.txt`, deps, ""},
 
 		// A stale index proves nothing.
-		{`grep -n HandleRequest internal/api/handler.go`, stale, "", ""},
+		{`grep -n HandleRequest internal/api/handler.go`, stale, ""},
 		// Text, and a name the index does not hold.
-		{`grep -n serve internal/api/handler.go`, deps, "", ""},
-		{`grep -n 'HandleRequest\|serve' internal/api/handler.go`, deps, "", ""},
+		{`grep -n serve internal/api/handler.go`, deps, ""},
+		{`grep -n 'HandleRequest\|serve' internal/api/handler.go`, deps, ""},
 		// Prose is not what the symbol index covers.
-		{`grep -n HandleRequest docs/handler.md`, deps, "", ""},
-		{`grep -n HandleRequest internal/api/handler.go docs/handler.md`, deps, "", ""},
+		{`grep -n HandleRequest docs/handler.md`, deps, ""},
+		{`grep -n HandleRequest internal/api/handler.go docs/handler.md`, deps, ""},
 		// Context, count, list, invert and case flags ask a different question.
-		{`grep -n -B2 HandleRequest internal/api/handler.go`, deps, "", ""},
-		{`grep -c HandleRequest internal/api/handler.go`, deps, "", ""},
-		{`grep -l HandleRequest internal/api/handler.go`, deps, "", ""},
-		{`grep -v HandleRequest internal/api/handler.go`, deps, "", ""},
-		{`grep -in handlerequest internal/api/handler.go`, deps, "", ""},
+		{`grep -n -B2 HandleRequest internal/api/handler.go`, deps, ""},
+		{`grep -c HandleRequest internal/api/handler.go`, deps, ""},
+		{`grep -l HandleRequest internal/api/handler.go`, deps, ""},
+		{`grep -v HandleRequest internal/api/handler.go`, deps, ""},
+		{`grep -in handlerequest internal/api/handler.go`, deps, ""},
 		// A glob or a missing file cannot be read.
-		{`grep -n HandleRequest internal/api/*.go`, deps, "", ""},
-		{`grep -n HandleRequest internal/api/missing.go`, deps, "", ""},
+		{`grep -n HandleRequest internal/api/*.go`, deps, ""},
+		{`grep -n HandleRequest internal/api/missing.go`, deps, ""},
 		// A pipe is not a file.
-		{`cat internal/api/handler.go | grep -n HandleRequest`, deps, "", ""},
+		{`cat internal/api/handler.go | grep -n HandleRequest`, deps, ""},
 	} {
-		v, ok := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
-		if tt.arg == "" {
-			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
+		v, _ := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
+		assert.Empty(t, v.Deny, "%q must not deny", tt.command)
+		if tt.advice == "" {
+			assert.NotContains(t, v.Brief, "this for every file", tt.command)
 			continue
 		}
-		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, tt.command)
-		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		assert.Equal(t, advisoryPrecedent, v.Kind, tt.command)
+		assert.Contains(t, v.Brief, tt.advice, tt.command)
+		assert.Contains(t, v.Context, "The search runs as typed.", tt.command)
 	}
+}
+
+// TestJudgeResolvesSearchPathsFromTheCallCwd pins that a relative path resolves from the
+// envelope's cwd, not the hook process's: the file exists only under the call's directory.
+func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {
+	testkit.Isolate(t)
+	root := writeTree(t, map[string]string{
+		"internal/api/handler.go": "package api\n\nfunc HandleRequest() {}\n\nfunc serve() {}\n",
+	})
+	t.Chdir(t.TempDir())
+	deps := testDependencies()
+	deps.SymbolDefined = func(name string) (bool, bool) { return name == "HandleRequest" || name == "serve", true }
+	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})
+	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + filepath.Join(root, "internal", "api") +
+		`","tool_input":{"command":"grep -n '^func ' handler.go"}}`
+
+	v := Judge(ctx, deps, Request{Input: envelope})
+
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, string(denyRuleSearchTranslation), v.Rule)
+	assert.Contains(t, v.Reason, "explain file:internal/api/handler.go")
 }
 
 // TestSymbolSearchAnswersTreeSearches pins the inline answer of a tree search: the sites

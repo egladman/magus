@@ -18,22 +18,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The search-translation rule: a text search whose pattern a graph query answers with the
-// same entities. The pattern is compiled in the dialect the tool would use and run against
-// the graph's own ids at judge time, so the deny names a query that was checked, not one
-// that merely looks equivalent. Anything short of that proof stays silent: a deny that
-// routes nowhere takes a capability away.
-//
-// Five shapes are provable: a pattern that can only match diagnostic codes, a pattern
-// that selects every Markdown heading of the files searched, a pattern whose every hit in
-// a magusfile is a target declaration, a pattern whose every hit in a Go file is a
-// declaration of an indexed symbol, and a `find -name` whose files are the graph's file
-// nodes. Each deny carries the answer, bounded, so the reader loses nothing by being
-// refused, and a pipe after the search is run over that answer.
-//
-// Measured 2026-09-26 over 89,116 search calls in 1,441 transcripts: 1,389 listed a Go
-// file's declarations (`^func `, `^func Test`), 1,366 were a `find -name`, 369 listed
-// headings, 319 diagnostic codes and 176 target declarations.
+// The search-translation rule compiles a pattern in the tool's dialect and runs it against
+// the graph's ids at judge time, so a deny names a query that was checked. Short of that
+// proof it stays silent. The catalog's Why lists the provable shapes and measurements.
 
 // translatableTools are the search tools whose flags and dialects this rule models.
 var translatableTools = map[string]bool{"grep": true, "egrep": true, "fgrep": true, "rg": true}
@@ -448,8 +435,8 @@ type translation struct {
 // translateVerdict denies the first search on the line that a graph query provably
 // answers, and reports false when none is.
 func translateVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
-	dir, err := os.Getwd()
-	if err != nil {
+	dir, ok := deps.workingDir()
+	if !ok {
 		return ShellVerdict{}, false
 	}
 	return translateSearches(deps, dir, cmds)
@@ -1047,15 +1034,14 @@ func translateTargets(deps Dependencies, dir string, sc searchCall) (translation
 var goDeclRe = regexp.MustCompile(`^(?:func(?:\s*\([^()]*\))?|type|var|const)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 
 // translateDeclarations answers a search of one Go file whose every selected line
-// declares a symbol the index holds: `^func `, `^func Test`, `func (s \*Store)`. A lookup
-// of one name is the symbol-search rule's, which answers it with the definition itself.
-// A single hit that is a call, a comment or a string is text the graph does not hold,
-// and keeps the rule silent.
+// declares a symbol the index holds: `^func `, `func (s \*Store)`. A lookup of names is
+// the symbol-search rule's. One hit that is a call, a comment or a string is text the
+// graph does not hold, and keeps the rule silent.
 func translateDeclarations(deps Dependencies, dir string, c hint.Invocation, sc searchCall) (translation, bool) {
 	if deps.scope.root == "" || len(sc.paths) != 1 || path.Ext(sc.paths[0]) != ".go" {
 		return translation{}, false
 	}
-	if _, single := provableRoutes(deps, asSearch(c)); single {
+	if _, provable := provableRoutes(deps, asSearch(c)); provable {
 		return translation{}, false
 	}
 	line, ok := sc.lineRegexp()
