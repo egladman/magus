@@ -320,6 +320,9 @@ func TestTierLocalReplayFailureTriesL2(t *testing.T) {
 	m, err := c.readManifest("test/pkg", r.Hash)
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(c.blobPath(m.Outputs[0].Blob)))
+	// Replay leaves an output already holding the recorded bytes alone, so the blob is
+	// only needed once the output is gone.
+	require.NoError(t, os.Remove(filepath.Join(root, "test", "pkg", "out.txt")))
 
 	ctx := ContextWithRemoteStats(t.Context())
 	r, ran := buildIn(t, ctx, root, c)
