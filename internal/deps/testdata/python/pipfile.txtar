@@ -1,0 +1,29 @@
+A PEP 621 manifest locked by pipenv's Pipfile.lock, with an editable local package
+and an undeclared transitive dependency.
+
+-- pyproject.toml --
+[project]
+name = "fixture"
+version = "0.1.0"
+dependencies = ["requests", "Flask>=3", "localpkg"]
+
+[dependency-groups]
+dev = ["pytest"]
+-- Pipfile.lock --
+{
+    "_meta": {
+        "hash": {"sha256": "x"},
+        "pipfile-spec": 6,
+        "requires": {"python_version": "3.12"},
+        "sources": [{"name": "pypi", "url": "https://pypi.org/simple", "verify_ssl": true}]
+    },
+    "default": {
+        "flask": {"hashes": ["sha256:x"], "index": "pypi", "version": "==3.1.0"},
+        "localpkg": {"editable": true, "path": "."},
+        "requests": {"hashes": ["sha256:x"], "index": "pypi", "version": "==2.32.3"},
+        "urllib3": {"hashes": ["sha256:x"], "index": "pypi", "version": "==2.2.3"}
+    },
+    "develop": {
+        "pytest": {"hashes": ["sha256:x"], "index": "pypi", "version": "==8.3.4"}
+    }
+}

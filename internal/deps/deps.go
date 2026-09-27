@@ -10,25 +10,81 @@
 // answer to a different question (where a package sits ON DISK), and that question is
 // only ever asked about a package that is already there.
 //
-// Go is the ecosystem this can serve from the manifest alone: go.mod require lines are
-// exact versions, never ranges. An ecosystem whose manifest holds ranges (npm) needs
-// its lockfile read instead, which is what spells.Manifest.LockCandidates leads to and
-// what a second reader here will do.
+// Every reader shares one contract: direct dependencies only, never the network, and
+// best-effort, so an unreadable or unparsable file contributes nothing and fails
+// nothing. go.mod pins exact versions, so it is read alone. Every other manifest holds
+// ranges, so its reader takes the lockfile spells.Manifest.LockCandidates resolved and
+// reports the version the LOCK pins for the names the MANIFEST declares.
 package deps
 
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 
 	"golang.org/x/mod/modfile"
 
 	"github.com/egladman/magus/types"
 )
 
-// managerGo is the package-manager name recorded for Go modules. It matches the
-// manager segment SCIP monikers use ("gomod"), so a package node and the symbols
-// ingested for that same dependency agree on which namespace they are in.
-const managerGo = "gomod"
+// The package-manager names recorded on package nodes. Each must equal the manager
+// segment its ecosystem's SCIP indexer writes into monikers, so a package node and the
+// symbols ingested for that same dependency agree on which namespace they are in.
+const (
+	// managerGo matches scip-go, read off this repository's own indexes.
+	managerGo = "gomod"
+	// managerNode matches scip-typescript, read off this repository's own indexes.
+	managerNode = "npm"
+	// managerPython matches scip-python: ScipSymbol.package in
+	// sourcegraph/scip-python packages/pyright-scip/src/ScipSymbol.ts builds
+	// `scip-python python ${name} ${version} `. Read from that source on 2026-09-27;
+	// this repository has no Python index to check it against.
+	managerPython = "python"
+	// managerCargo matches rust-analyzer: crates/rust-analyzer/src/cli/scip.rs builds
+	// scip_types::Package{manager: "cargo".to_owned(), ...}. Read from that source on
+	// 2026-09-27; this repository has no Rust index to check it against.
+	managerCargo = "cargo"
+)
+
+// Reader is how one kind of manifest becomes packages.
+type Reader struct {
+	// Manager is the package-manager name on every package Read returns.
+	Manager string
+	// Locks names the lockfile basenames Read understands. Empty means the manifest
+	// pins exact versions itself and Read ignores its lockfile argument.
+	Locks []string
+	// Read takes the manifest's path and its resolved lockfile's path ("" when none
+	// was found) and returns the direct dependencies, or nil.
+	Read func(manifest, lockfile string) []types.KnowledgePackage
+}
+
+// Readers holds a Reader for every manifest a shipped spell declares, keyed by the
+// manifest's basename (spells.Manifest.Value). TestEverySpellManifestHasAReader fails
+// when a spell declares a manifest or lock candidate that is neither read here nor
+// allowlisted with a reason.
+var Readers = map[string]Reader{
+	"go.mod": {Manager: managerGo, Read: func(manifest, _ string) []types.KnowledgePackage {
+		return GoModule(manifest)
+	}},
+	"package.json": {
+		Manager: managerNode,
+		Locks:   []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock"},
+		Read:    NodePackages,
+	},
+	"pyproject.toml": {
+		Manager: managerPython,
+		Locks:   []string{"uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"},
+		Read:    PythonPackages,
+	},
+	"Cargo.toml": {Manager: managerCargo, Locks: []string{"Cargo.lock"}, Read: CargoPackages},
+}
+
+// UnderstandsLock reports whether r reads the lockfile at path, judged by basename.
+func (r Reader) UnderstandsLock(path string) bool {
+	return slices.Contains(r.Locks, filepath.Base(path))
+}
 
 // GoModule reads the require block of the go.mod at path.
 //
@@ -97,4 +153,20 @@ func GoModule(path string) []types.KnowledgePackage {
 		return nil
 	}
 	return out
+}
+
+// pep503Separators is the run PEP 503 collapses to one hyphen.
+var pep503Separators = regexp.MustCompile(`[-_.]+`)
+
+// normalizePython is the PEP 503 form of a Python distribution name, the form PyPI
+// keys a project by, so `Pillow`, `pillow` and `PILLOW` are one project.
+func normalizePython(name string) string {
+	return strings.ToLower(pep503Separators.ReplaceAllString(name, "-"))
+}
+
+// isPinned reports whether a lockfile's version is a registry release. A lock records
+// a link, file or git dependency's location in the version slot; none of those starts
+// with a digit, and every version npm, PyPI and crates.io publish does.
+func isPinned(version string) bool {
+	return version != "" && version[0] >= '0' && version[0] <= '9'
 }

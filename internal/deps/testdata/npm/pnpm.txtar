@@ -1,0 +1,103 @@
+A pnpm v9 lock cut from docs/pnpm-lock.yaml: three dependencies, one devDependency,
+a workspace: sibling and a peer, beside a hoisted workspace lock whose importer is
+the member's directory.
+
+-- package.json --
+{
+  "name": "fixture",
+  "private": true,
+  "dependencies": {
+    "@connectrpc/connect": "^2.1.2",
+    "d3-drag": "3.0.0",
+    "highlight.js": "11.11.1",
+    "sibling": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}
+-- pnpm-lock.yaml --
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@connectrpc/connect':
+        specifier: ^2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.9.0)
+      d3-drag:
+        specifier: 3.0.0
+        version: 3.0.0
+      highlight.js:
+        specifier: 11.11.1
+        version: 11.11.1
+      sibling:
+        specifier: workspace:*
+        version: link:../sibling
+    devDependencies:
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+packages:
+
+  '@bufbuild/protobuf@2.9.0':
+    resolution: {integrity: sha512-x}
+
+  '@connectrpc/connect@2.1.2':
+    resolution: {integrity: sha512-x}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.7.0
+
+  d3-drag@3.0.0:
+    resolution: {integrity: sha512-x}
+    engines: {node: '>=12'}
+
+  highlight.js@11.11.1:
+    resolution: {integrity: sha512-x}
+    engines: {node: '>=12.0.0'}
+
+  typescript@5.8.3:
+    resolution: {integrity: sha512-x}
+    engines: {node: '>=14.17'}
+    hasBin: true
+-- mono/pnpm-lock.yaml --
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/app:
+    dependencies:
+      d3-drag:
+        specifier: ^3.0.0
+        version: 3.0.0
+-- mono/packages/app/package.json --
+{
+  "name": "app",
+  "dependencies": {
+    "d3-drag": "^3.0.0"
+  }
+}
+-- old/pnpm-lock.yaml --
+lockfileVersion: '6.0'
+
+dependencies:
+  d3-drag:
+    specifier: 3.0.0
+    version: 3.0.0
+-- old/package.json --
+{"dependencies": {"d3-drag": "3.0.0"}}
