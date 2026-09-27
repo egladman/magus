@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -523,6 +524,9 @@ type JobStatus struct {
 	// names. A file's Preamble is exempt: every job that adds an import lands there. Each
 	// is also a violation.
 	FootprintUnclaimed []string `json:"footprint_unclaimed,omitempty" yaml:"footprint_unclaimed,omitempty"`
+	// Entries are the job's recorded entries, so a footprint line in an entered path reads
+	// as the entrant's write rather than the holder's.
+	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -673,6 +677,9 @@ type Job struct {
 	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
 	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
+	// Entries are the acknowledged writes into this row's write paths by somebody other
+	// than its holder, oldest first, at most two per job. Store-computed like Releases.
+	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
 	// WriteProof is what the fork could prove about this job's write paths against the
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
@@ -831,6 +838,10 @@ type Declaration struct {
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
 	Timeout string `json:"timeout,omitempty"`
+	// Enter turns the record into an entry rather than a declaration: it acknowledges one
+	// write into this path, inside the write paths of the live job ID names, by somebody
+	// other than its holder. A record carrying it declares nothing else.
+	Enter string `json:"enter,omitempty"`
 }
 
 // FoldLegacyNames moves a field declared under its old name onto the one that carries it,
@@ -871,6 +882,14 @@ func (r *Declaration) FoldLegacyNames() error {
 func (r Declaration) Validate() error {
 	if !ValidJobID(strings.TrimSpace(r.ID)) {
 		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, MaxJobIDLen)
+	}
+	if r.Enter != "" {
+		rest := r
+		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
+		if !reflect.ValueOf(rest).IsZero() {
+			return errors.New("job: a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter")
+		}
+		return nil
 	}
 	if r.State != "" && !ValidJobState(r.State) {
 		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
@@ -1179,6 +1198,18 @@ type JobUnattributedWrite struct {
 	Digest string `json:"digest" yaml:"digest"`
 	// At is unix seconds, stamped by the store.
 	At int64 `json:"at" yaml:"at"`
+}
+
+// JobEntry is a party other than a job's holder acknowledging, on the record, that it
+// will write one path inside the job's write paths. The guard lets exactly one such
+// write through and stamps Consumed.
+type JobEntry struct {
+	Path string `json:"path" yaml:"path"`
+	// By is where the acknowledging call came from, stamped by the store.
+	By Origin `json:"by" yaml:"by"`
+	// At and Consumed are unix seconds; Consumed is zero until the write lands.
+	At       int64 `json:"at" yaml:"at"`
+	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
 }
 
 // JobOverlap is two leases whose declared WritePaths intersect. A FACT the
@@ -1542,6 +1573,7 @@ func (u Job) Clone() Job {
 	c.CompletionGates = cloneCompletionGates(u.CompletionGates)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
+	c.Entries = slices.Clone(u.Entries)
 	if u.Result != nil {
 		result := *u.Result
 		result.Schema = u.Result.clone()

@@ -296,6 +296,8 @@ type leaseStanding struct {
 	declared bool
 	state    types.JobState
 	row      types.Job
+	// rows is the whole store, for a rule that reads the job tree around row.
+	rows []types.Job
 }
 
 // terminal reports a row that is declared and has stopped running, so its rules are inert.
@@ -330,7 +332,7 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 	}
 	for _, u := range leases {
 		if u.ID == actingLease {
-			return leaseStanding{readable: true, declared: true, state: u.State, row: u}
+			return leaseStanding{readable: true, declared: true, state: u.State, row: u, rows: leases}
 		}
 	}
 	return leaseStanding{readable: true}
@@ -619,6 +621,13 @@ func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 	}
 	if op == "exec" && (id == standing.row.ID || !standing.inFlight()) {
 		return ""
+	}
+	if _, entering := params["enter"]; entering && op == "fork" {
+		// The store refuses anything but an entry beside `enter`, and grades the rest.
+		if id != standing.row.ID && mayHandOut(standing.rows, standing.row.ID, id) {
+			return ""
+		}
+		return "enter a job not forked beneath the one it holds"
 	}
 	if id == "" || id != standing.row.ID {
 		return "write another job"

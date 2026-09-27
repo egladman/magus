@@ -585,6 +585,13 @@ export object Origin {
     credential: Credential = Credential{},
 }
 
+export object JobEntry {
+    path: str = "",
+    by: Origin = Origin{},
+    at: int = 0,
+    consumed: int = 0,
+}
+
 export object JobResultValidation {
     command: str = "",
     outputRef: str = "",
@@ -651,6 +658,7 @@ export object Job {
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],
+    entries: [JobEntry] = [],
     writeProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
@@ -673,6 +681,7 @@ export object SpawnTarget {
     description: str = "",
     model: str = "",
     contextTokens: int? = null,
+    entries: [JobEntry] = [],
 }
 
 export object SpawnRequest {
@@ -808,6 +817,7 @@ export object JobStatus {
     footprintKnown: bool = false,
     footprintReason: str = "",
     footprintUnclaimed: [str] = [],
+    entries: [JobEntry] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;

@@ -938,3 +938,110 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 
 	assert.Equal(t, string(advisoryLeasedPath), write("s2", "internal/ledger/store.go").Rule, "a new session has heard nothing")
 }
+
+// entryFleet is an orchestrator lease and a worker forked beneath it, whose holder took
+// its job in the fixture's workspace so the guard reads its trail from there.
+func entryFleet(root string) []types.Job {
+	return []types.Job{
+		{ID: "orch", WritePaths: []string{"cmd/**"}, State: types.StateRunning, Registered: 1},
+		{ID: "orch/worker", Parent: "orch", WritePaths: []string{"internal/ledger/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: root},
+	}
+}
+
+// holderCalled plants a tool call the guard graded under lease, ago before now.
+func holderCalled(t *testing.T, ctx context.Context, lease string, ago time.Duration) {
+	t.Helper()
+	trail.Append(ctx, hookLocation(ctx, Dependencies{}).cacheDir, trail.Event{
+		Ts: time.Now().Add(-ago).UnixMilli(), Kind: trail.KindAgentCommand, Action: "Edit", Lease: lease, Outcome: trail.OutcomeOK,
+	})
+}
+
+// TestLandlordEntry pins the entry: denied without one, held while the holder works, one
+// write through once it is idle, and the next write denied again.
+func TestLandlordEntry(t *testing.T) {
+	ctx, root := fleetFixture(t)
+	store := storeAt(ctx)
+	for _, row := range entryFleet(root) {
+		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	target := filepath.Join(root, "internal/ledger/store.go")
+
+	denied := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
+	require.Equal(t, "deny", denied.Decision)
+	assert.Contains(t, denied.Reason, "magus_job op=fork id=orch/worker enter=internal/ledger/store.go")
+
+	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/store.go")
+	require.NoError(t, err)
+
+	holderCalled(t, ctx, "orch/worker", 5*time.Second)
+	busy := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
+	require.Equal(t, "deny", busy.Decision, "the holder is mid-turn")
+	assert.Contains(t, busy.Reason, "idle")
+
+	require.NoError(t, os.RemoveAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, "activity")))
+	holderCalled(t, ctx, "orch/worker", 2*time.Minute)
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "one write through")
+
+	rows, err := store.List()
+	require.NoError(t, err)
+	entries := job.EntriesOf(rows, "orch/worker")
+	require.Len(t, entries, 1)
+	assert.NotZero(t, entries[0].Consumed)
+	assert.Equal(t, "deny", gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "the entry is single-use")
+
+	t.Run("the holder is told to re-read", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, Dependencies{}, "orch/worker", target)
+		assert.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "re-read internal/ledger/store.go")
+		assert.NotEmpty(t, got.Key)
+	})
+
+	t.Run("an unattributed writer consumes an entry without the advisory", func(t *testing.T) {
+		other := filepath.Join(root, "internal/ledger/other.go")
+		_, err := store.Enter(ctx, "orch/worker", "internal/ledger/other.go")
+		require.NoError(t, err)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", other).Decision)
+		assert.Equal(t, advisoryLeasedPath, gradeLeasedWrite(ctx, Dependencies{}, "", other).Kind)
+	})
+}
+
+// TestEnterRefuses pins what the store will not record as an entry.
+func TestEnterRefuses(t *testing.T) {
+	ctx, root := fleetFixture(t)
+	store := storeAt(ctx)
+	for _, row := range append(entryFleet(root), types.Job{ID: "done", WritePaths: []string{"docs/**"}, State: types.StatePass}) {
+		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+
+	for name, tc := range map[string]struct{ id, rel, want string }{
+		"no such job":            {"nobody", "internal/ledger/a.go", "nothing to enter"},
+		"an ended job":           {"done", "docs/a.md", "free to write"},
+		"outside write paths":    {"orch/worker", "cmd/main.go", "widened into it"},
+		"not workspace-relative": {"orch/worker", "../elsewhere.go", "workspace-relative"},
+	} {
+		_, err := store.Enter(ctx, tc.id, tc.rel)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), tc.want, name)
+	}
+
+	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/a.go")
+	require.NoError(t, err)
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/a.go")
+	require.ErrorContains(t, err, "not yet written", "an open entry is not entered twice")
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/b.go")
+	require.NoError(t, err)
+	_, err = store.Enter(ctx, "orch/worker", "internal/ledger/c.go")
+	require.ErrorContains(t, err, "resume its holder", "a job takes two")
+
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Len(t, job.EntriesOf(rows, "orch/worker"), job.MaxJobEntries)
+}
+
+// storeAt is the job store the fixture's context pins.
+func storeAt(ctx context.Context) *job.Store {
+	at := hookLocation(ctx, Dependencies{})
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+}
