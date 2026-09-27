@@ -1,0 +1,107 @@
+name: Run
+
+# One magus invocation on a pushed commit, with no pull request, started by hand:
+#
+#   magus buzz tools/gha-run.buzz -- dispatch --ref <branch> -- <magus argv>
+#
+# It runs in the box the merge queue gates in, so green here and green in the queue are
+# one claim. Read-only, no secret beyond the job's token, and no write to any shared
+# cache tier. docs/decisions/0004-running-a-branch-on-a-hosted-runner.md says what a run
+# on this public repository leaves visible.
+
+on:
+  workflow_dispatch:
+    inputs:
+      argv:
+        description: The magus argv after `magus`, space-separated, e.g. "run test ."
+        required: true
+        type: string
+      sandbox:
+        description: The box's sandbox mode.
+        required: false
+        type: choice
+        options: [required, best-effort]
+        default: required
+
+run-name: magus ${{ inputs.argv }} on ${{ github.ref_name }}
+
+permissions:
+  contents: read
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+  # Reads main's signed remote tier; never writes it.
+  MAGUS_CACHE_REMOTE_WRITE_ENABLED: 'false'
+  MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
+  MAGUS_LOG_STREAM: '1'
+  CI_PROVIDER: github-actions
+
+jobs:
+  run:
+    name: magus ${{ inputs.argv }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      # Full clone and no persisted credential, as ci.yaml's shards: the box reads only
+      # the object store and may not read the credential file.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # No cache: main never saves one this key could restore.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: false
+
+      - uses: ./.github/actions/codec-deps
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build prepends its own Go; the gate builds with mise's.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      - name: Name the revision under test
+        run: magus vcs checkpoint -o name
+
+      # The runner hands these to an action's process only, so re-exporting them for
+      # the remote tier's read takes a JS action, as in ci.yaml.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) continue
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
+      # ci.yaml's shard gate without the shard and the signing key. The magus action
+      # passes the command through its environment, so argv is word-split, never
+      # interpreted by a shell; gha-run.buzz refuses words that would not survive it.
+      - name: Run magus ${{ inputs.argv }}
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+        with:
+          command: queue gate --sandbox=${{ inputs.sandbox }} --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_HISTORY_PATH,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus ${{ inputs.argv }}
+
+      - name: Upload magus run logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-logs
+          path: .magus/logs/
+          if-no-files-found: ignore
+          retention-days: 7
