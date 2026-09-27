@@ -271,7 +271,9 @@ magus\harness.provider(claude)
 magus\harness.provider(opencode)
 ```
 
-Then `magus agent harness apply` (no `--id`) writes every wired host's fragments.
+Then `magus describe harness` (no id) prints every wired host's fragments and the
+one command that merges them; you read it and run it, since magus never writes host
+config.
 
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on
   either surface and under every role, unbound sessions included. That directory
@@ -754,7 +756,7 @@ touching Magus source:
    ```
 
 3. Edit the workspace Buzz (matchers, managed fragments, guard command).
-4. `magus agent harness apply` then `magus agent harness verify`. Commit the
+4. Merge what `magus describe harness` prints, then run `magus agent harness verify`. Commit the
    `magus.yaml` change and the forked spell together.
 
 That is the ownership switch: Magus ships the default spell; the declaration in

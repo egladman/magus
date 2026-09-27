@@ -327,7 +327,7 @@ logs and history). How you connect depends on the client:
   installed by `magus agent install .claude/skills`) at launch, so an already-open session
   will not see them until it is restarted.
 
-- **Cursor** owns its MCP client config. `magus agent harness apply --id cursor`
+- **Cursor** owns its MCP client config. `magus describe harness cursor`
   prints a short setup hint and a docs pointer; it does not write
   `.cursor/mcp.json`. Register Magus under Settings -> Tools & MCP (or
   hand-write `.cursor/mcp.json` / `~/.cursor/mcp.json`) at
@@ -385,7 +385,7 @@ logs and history). How you connect depends on the client:
   Prefer binding the token through the workspace **secret provider** (built-in
   environment provider: the ref `MAGUS_MCP_TOKEN`) rather than pasting a
   plaintext secret into a committed file. Harness spells declare that ref via
-  `harness_mcp`; `magus agent harness apply` prints a host CLI command sketch
+  `harness_mcp`; `magus describe harness` prints a host CLI command sketch
   and/or a docs pointer only - Magus does not write host MCP client config.
   Resolve the ref with `magus\secret.read("MAGUS_MCP_TOKEN")` inside a
   magusfile when a spell needs the value; hosts read the env var directly.

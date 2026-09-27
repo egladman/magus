@@ -455,7 +455,7 @@ actually sent: a flag, an argument, the event a hook was handed. `NO_COLOR`
 belongs with them: a person set it to say what they want.
 
 An agent host is a caller like any other, so it says who it is. The hook
-configuration `magus agent harness apply` writes names the host explicitly, and
+configuration `magus describe harness` prints names the host explicitly, and
 a hook invoked without that name is refused rather than defaulted to one host.
 
 `TestNoEnvironmentSniffing` in `conventions_test.go` fails the build when code

@@ -76,15 +76,17 @@ Wire several providers when you bounce between hosts; each call appends.
 To adapt a Buzz harness **without modifying Magus source**, copy the shipped
 spell into the workspace and declare the copy as a `path:` override of the
 registry path in `magus.yaml`. The import and `magus\harness.provider(...)`
-stay as they are. Edit the workspace Buzz, then
-`magus agent harness apply` / `verify`. That ownership switch is documented in
+stay as they are. Edit the workspace Buzz, merge what `magus describe harness`
+prints, then run `magus agent harness verify`. That ownership switch is documented in
 the [workspace-rules skill](../../reference/skills/magus-workspace-rules.md)
 under "Adapting a Buzz harness" and in [Recurring guard friction](agents/guard.md#recurring-guard-friction). Additive deny/advise
 that is not host-shaped stays in `magus\guard.shell({...})`.
 
-`magus agent harness apply` (no `--id`) applies every magusfile-wired provider;
-`--id <id>` targets one spell. `verify` reports whether the fragments are still
-present and that the config invokes magus. A host Magus has never heard of can
+magus never writes host config. `magus describe harness` (no id) prints, for every
+magusfile-wired provider, each entry its host files lack and the one command that
+merges them; you read the command and run it. `magus describe harness <id>` targets
+one spell, and `-o json` prints the exact fragments. `magus agent harness verify`
+reports whether the fragments are still present and runs the wired guard command. A host Magus has never heard of can
 ship its own harness spell without a Magus release, by the same ownership switch
 as adapting a shipped one; a portable adapter remains an option where a native
 event contract is not available. [Doctrine](../../doctrine.md#the-host-wiring-is-yours)

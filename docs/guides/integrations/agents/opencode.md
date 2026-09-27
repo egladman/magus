@@ -42,8 +42,8 @@ run your lock target with `:update` to pin its digest in `magus.lock`, so the ha
 versions apart from your magus binary; see
 [Remote spells](../../../reference/remote-spells.md).
 
-The spell is skills-only (empty config path): `magus agent harness apply` writes
-nothing for OpenCode, and verify does not invent a stamp JSON for Magus to check.
+The spell is skills-only (empty config path): `magus describe harness` prints no
+hook config for OpenCode, and verify does not invent a stamp JSON for Magus to check.
 The guard is the TypeScript plugin, not managed hook fragments. To adapt without
 Magus source edits, fork the spell and change only the import path; see
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
@@ -58,7 +58,7 @@ install surface.
 
 ## MCP
 
-Configure MCP for OpenCode yourself. `magus agent harness apply --id opencode`
+Configure MCP for OpenCode yourself. `magus describe harness opencode`
 prints a short secret-ref hint and a docs pointer; Magus does not write OpenCode
 MCP config. See [MCP](../mcp.md). An agent uses the CLI fallback when MCP is
 unavailable.
@@ -386,7 +386,7 @@ export const MagusGuard: Plugin = async () => {
         throw new Error(
           `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
             "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push reaches the prompt " +
-            'its own "permission.bash" entries configure, which magus agent harness apply --id opencode writes. ' +
+            'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
             "Ask them to run it from their own terminal.",
         );
       case "advise":
@@ -505,8 +505,9 @@ If magus lives in a prefix the OpenCode process does not have on PATH (mise,
 brew, asdf, `~/.local/bin`), set `__MAGUS_BIN` to an absolute path.
 
 A push at a commit no passing gate covers needs your approval, and a plugin cannot
-ask: `tool.execute.before` can only throw. `magus agent harness apply --id opencode`
-writes an `"ask"` entry under `permission.bash` in `opencode.json` for each backend's
+ask: `tool.execute.before` can only throw. `magus describe harness opencode`
+prints an `"ask"` entry under `permission.bash` in `opencode.json`, and the command
+that merges it, for each backend's
 push, bare and with arguments: `git push`, `hg push`, `sl push` and `jj git push`, each
 also as `<verb> *`. OpenCode then prompts before every push, and the plugin's
 `permission.ask` hook answers that prompt from the verdict: allow for a push a gate

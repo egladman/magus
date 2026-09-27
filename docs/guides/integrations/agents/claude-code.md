@@ -40,8 +40,8 @@ surface, the two forms, and the drift check.
 
 ## MCP
 
-Configure MCP for Claude Code yourself. `magus agent harness apply --id
-claude-code` prints the `claude mcp add` sketch only. Resolve secret ref
+Configure MCP for Claude Code yourself. `magus describe harness claude-code`
+prints the `claude mcp add` sketch only. Resolve secret ref
 `MAGUS_MCP_TOKEN` (env provider by default) for the bearer header; [MCP](../mcp.md)
 has the full token setup. Tools are discovered at launch, so restart a client
 after changing its MCP configuration. An agent that finds MCP unavailable uses
@@ -50,7 +50,7 @@ the CLI fallback; it does not manually start Magus solely to obtain tools.
 ## Guard hook
 
 Prefer wiring the Claude Code harness from the root magusfile when you bounce
-between hosts; apply then covers every wired provider:
+between hosts; `magus describe harness` then covers every wired provider:
 
 ```buzz
 import "ghcr.io/egladman/magus/spells/claude-code" as claude;
@@ -63,21 +63,25 @@ target with `:update` to pin its digest in `magus.lock`, so the harness versions
 from your magus binary; see [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
-magus agent harness apply
+magus describe harness
 magus agent harness verify
 ```
 
+`magus describe harness` prints each entry `.claude/settings.json` lacks and the one
+command that merges them. magus never writes the file: read the command, run it
+yourself, then verify.
+
 To adapt that Buzz harness without modifying Magus source: copy the spell into
 the workspace, change only the import path (for example
-`import "harness/claude-code" as claude`), edit the workspace Buzz, then re-run
-apply and verify. Details:
+`import "harness/claude-code" as claude`), edit the workspace Buzz, then describe,
+merge, and verify again. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
 Or target Claude Code alone:
 
 ```sh
-magus agent harness apply --id claude-code
+magus describe harness claude-code
 magus agent harness verify --id claude-code
 ```
 
@@ -103,7 +107,7 @@ observation, and sub-agent spawns. Each runs a shipped script that talks to
 ```
 
 This repository's own `.claude/settings.json` invokes those same files. The
-scripts are the glue; harness apply only merges the fragments that name them.
+scripts are the glue; the harness only prints the fragments that name them.
 See [guard templates](guard-templates.md) for the files and the variables that
 adapt them.
 
@@ -160,8 +164,8 @@ denied instead, because workers do not publish.
 ### Maintaining the workspace harness
 
 This host is a Buzz harness spell. Adapt without Magus source edits by forking
-the spell and changing only the import path; then `magus agent harness apply`
-and `verify`. See
+the spell and changing only the import path; then merge what `magus describe
+harness` prints and run `magus agent harness verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
@@ -169,8 +173,8 @@ and `verify`. See
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
 `mcp__<server>__<tool>`. The shipped spell includes a Magus-MCP matcher,
-so `magus agent harness apply --id claude-code` installs this entry alongside
-the command and file surfaces:
+so `magus describe harness claude-code` prints this entry alongside the command
+and file surfaces:
 
 ```json
 {
@@ -234,8 +238,8 @@ When Claude Code hands work to a sub-agent it does so through a tool call, and
 that call fires `PreToolUse` like any other - carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`, the callee's declared
 `subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
-descriptor includes a matcher for it, so `magus agent harness apply --id
-claude-code` installs this entry alongside the surfaces above:
+descriptor includes a matcher for it, so `magus describe harness claude-code`
+prints this entry alongside the surfaces above:
 
 ```json
 {
