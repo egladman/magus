@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -68,7 +67,7 @@ const changelogEntryWordCap = 60
 // The formula is Keep a Changelog plus this repo's entry shape: sections from
 // changelogSections, in that order, each once; every entry a `- **headline**` sentence
 // that ends in a period, continued on lines indented two spaces, within
-// changelogEntryWordCap words. It is enforced rather than described because notesFromBody
+// changelogEntryWordCap words. It is enforced rather than described because notesFromBodyString
 // DROPS what it cannot place: an unknown heading or a stray line vanished from the
 // release notes without a word.
 func lintUnreleased(body string) []string {
@@ -254,7 +253,7 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 // runCut folds the changelog fragments in unreleasedDir into a
 // releases/v<version>.yaml manifest, alongside the size and SHA-256 of every
 // artifact in artifactsDir, and deletes the fragments it folded: the manifest owns
-// that text now, and CHANGELOG.md is generated back out of the manifests.
+// that text now, and the docs changelog page renders it from there.
 //
 // Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
 //
@@ -380,60 +379,6 @@ func removeFragments(frags []fragment) error {
 	return nil
 }
 
-// runMigrate reads CHANGELOG.md and writes a releases/*.yaml for every released
-// version. It is a one-shot migration tool: run once, then delete the
-// parseChangelog function from render.buzz.
-//
-// Usage:
-//
-//	magus-utils migrate -changelog ./CHANGELOG.md -out ./releases
-func runMigrate(args []string) error {
-	var changelogPath, outDir string
-	for i := 0; i < len(args)-1; i++ {
-		switch args[i] {
-		case "-changelog":
-			changelogPath = args[i+1]
-			i++
-		case "-out":
-			outDir = args[i+1]
-			i++
-		}
-	}
-	if changelogPath == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils migrate -changelog ./CHANGELOG.md -out ./releases")
-	}
-
-	releases, err := parseReleasedVersions(changelogPath)
-	if err != nil {
-		return fmt.Errorf("parse changelog: %w", err)
-	}
-
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", outDir, err)
-	}
-
-	for _, r := range releases {
-		notes, body := notesFromBody(r.body)
-		m := ReleaseManifest{
-			Version:   r.version,
-			Date:      r.date,
-			Notes:     notes,
-			Body:      body,
-			Artifacts: historicalArtifacts(r.version),
-		}
-		out, err := yaml.Marshal(m)
-		if err != nil {
-			return fmt.Errorf("marshal %s: %w", r.version, err)
-		}
-		outPath := filepath.Join(outDir, r.version+".yaml")
-		if err := os.WriteFile(outPath, out, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", outPath, err)
-		}
-		fmt.Printf("wrote %s\n", outPath)
-	}
-	return nil
-}
-
 // runReleaseIndex builds index.json from releases/*.yaml and signs those exact
 // bytes into index.json.sig. Both land in outDir, which is the tracked
 // docs/gen/public/release/; the site render copies that directory out verbatim
@@ -538,215 +483,6 @@ func runReleaseIndex(args []string) error {
 	}
 	fmt.Printf("signed %s -> %s\n", idxPath, sigPath)
 	return nil
-}
-
-// runGenerateChangelog writes a changelog from releases/*.yaml. [Unreleased] is
-// empty unless -unreleased names the fragment directory to render into it: the
-// committed CHANGELOG.md is written without, so no pull request changes it, and the
-// docs page with, so readers still see what is coming. `-changelog -` writes to stdout.
-//
-// Without -unreleased it refuses to overwrite a changelog whose [Unreleased] holds
-// entries, since regenerating would delete them; they belong in fragments.
-//
-// Usage:
-//
-//	magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md [-unreleased ./changes/unreleased]
-func runGenerateChangelog(args []string) error {
-	var releasesDir, changelogPath, unreleasedDir string
-	for i := 0; i < len(args)-1; i++ {
-		switch args[i] {
-		case "-releases":
-			releasesDir = args[i+1]
-			i++
-		case "-changelog":
-			changelogPath = args[i+1]
-			i++
-		case "-unreleased":
-			unreleasedDir = args[i+1]
-			i++
-		}
-	}
-	if releasesDir == "" || changelogPath == "" {
-		return fmt.Errorf("usage: magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md [-unreleased ./changes/unreleased]")
-	}
-
-	var unreleased string
-	if unreleasedDir != "" {
-		frags, err := readFragments(unreleasedDir)
-		if err != nil {
-			return fmt.Errorf("read fragments: %w", err)
-		}
-		unreleased = renderUnreleased(frags)
-	} else if changelogPath != "-" {
-		written, err := readUnreleasedSection(changelogPath)
-		if err != nil {
-			return fmt.Errorf("read unreleased: %w", err)
-		}
-		if strings.TrimSpace(written) != "" {
-			return fmt.Errorf("%s has entries under [Unreleased]; move each into its own fragment under "+
-				"changes/unreleased/ (see changes/README.md), since regenerating would delete them", changelogPath)
-		}
-	}
-
-	manifests, err := loadManifests(releasesDir)
-	if err != nil {
-		return err
-	}
-
-	var b strings.Builder
-	b.WriteString("# Changelog\n\n")
-	b.WriteString("All notable changes to this project will be documented in this file.\n")
-	b.WriteString("The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n")
-	b.WriteString("and this project adheres to [Semantic Versioning](https://semver.org/).\n")
-	b.WriteString("Entries for the next release wait as one file each under `changes/unreleased/`.\n")
-	b.WriteString("\n")
-	b.WriteString("## [Unreleased]\n")
-	if unreleased != "" {
-		b.WriteString("\n")
-		b.WriteString(unreleased)
-		b.WriteString("\n")
-	}
-	// Released sections: generated from manifests (newest first).
-	// Format: blank line + `"## [version] - date"` + blank line + body.
-	// This matches Keep-a-Changelog convention and preserves the exact text that
-	// was in CHANGELOG.md before the inversion (body is already trimmed).
-	for _, m := range manifests {
-		b.WriteString("\n## [")
-		b.WriteString(m.Version)
-		b.WriteString("] - ")
-		b.WriteString(m.Date)
-		b.WriteString("\n\n")
-		b.WriteString(m.Body)
-		b.WriteString("\n")
-	}
-
-	if changelogPath == "-" {
-		_, err := os.Stdout.WriteString(b.String())
-		return err
-	}
-	return os.WriteFile(changelogPath, []byte(b.String()), 0o644)
-}
-
-// --- Helpers ---
-
-// changelogEntry is a parsed CHANGELOG release (version, date, raw body).
-type changelogEntry struct {
-	version string
-	date    string
-	body    string // raw body text including leading \n, NOT trimmed
-}
-
-// parseReleasedVersions reads CHANGELOG.md and returns all released versions
-// (skipping [Unreleased]), preserving the raw body text per section.
-// This mirrors the logic of render.buzz's parseChangelog.
-func parseReleasedVersions(path string) ([]changelogEntry, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var entries []changelogEntry
-	var cur changelogEntry
-	have := false
-	var bodyLines []string
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "## ") {
-			// Flush previous.
-			if have {
-				cur.body = strings.Join(bodyLines, "\n") + "\n"
-				entries = append(entries, cur)
-			}
-			cur = changelogEntry{}
-			bodyLines = bodyLines[:0]
-			have = false
-
-			rest := line[3:]
-			if strings.HasPrefix(rest, "[") {
-				close := strings.Index(rest, "]")
-				if close >= 0 {
-					ver := rest[1:close]
-					if !strings.EqualFold(ver, "unreleased") {
-						cur.version = ver
-						rem := rest[close+1:]
-						if dash := strings.Index(rem, "-"); dash >= 0 {
-							cur.date = strings.TrimSpace(rem[dash+1:])
-						}
-						have = true
-						bodyLines = []string{""} // leading blank line, matching Buzz accumulation
-					}
-				}
-			}
-		} else if have {
-			bodyLines = append(bodyLines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	if have {
-		cur.body = strings.Join(bodyLines, "\n") + "\n"
-		entries = append(entries, cur)
-	}
-	return entries, nil
-}
-
-// readUnreleasedSection returns the body of the [Unreleased] section (everything
-// after the `## [Unreleased]` heading, up to the next `## ` heading), with a
-// leading newline if non-empty. generate-changelog reads it to refuse deleting
-// hand-written entries.
-func readUnreleasedSection(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	defer f.Close()
-
-	var bodyLines []string
-	inUnreleased := false
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "## ") {
-			if inUnreleased {
-				break
-			}
-			rest := line[3:]
-			if strings.HasPrefix(rest, "[") {
-				close := strings.Index(rest, "]")
-				if close >= 0 && strings.EqualFold(rest[1:close], "unreleased") {
-					inUnreleased = true
-					continue
-				}
-			}
-		} else if inUnreleased {
-			bodyLines = append(bodyLines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	if len(bodyLines) == 0 {
-		return "", nil
-	}
-	// bodyLines[0] is the empty line after "## [Unreleased]", so the join
-	// already starts with a newline; no extra prefix needed.
-	return strings.Join(bodyLines, "\n") + "\n", nil
-}
-
-// notesFromBody parses a raw body string (with leading newline) into structured
-// notes AND returns the trimmed body for the Atom feed.
-func notesFromBody(raw string) (ReleaseNotes, string) {
-	body := strings.TrimSpace(raw)
-	notes := notesFromBodyString(body)
-	return notes, body
 }
 
 // notesFromBodyString parses a trimmed body into structured notes sections.
@@ -917,22 +653,6 @@ func fileSizeAndSHA256(path string) (int64, string, error) {
 		return 0, "", err
 	}
 	return n, hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// historicalArtifacts returns the standard 8-artifact list for a historical
-// release with no size/sha256 data (they were not available during migration).
-func historicalArtifacts(version string) []ReleaseArtifact {
-	v := version
-	return []ReleaseArtifact{
-		{Name: "magus_" + v + "_linux_amd64.tar.gz", Platform: "linux/amd64", Size: "", SHA256: ""},
-		{Name: "magus_" + v + "_linux_arm64.tar.gz", Platform: "linux/arm64", Size: "", SHA256: ""},
-		{Name: "magus_" + v + "_darwin_amd64.tar.gz", Platform: "darwin/amd64", Size: "", SHA256: ""},
-		{Name: "magus_" + v + "_darwin_arm64.tar.gz", Platform: "darwin/arm64", Size: "", SHA256: ""},
-		{Name: "magus_" + v + "_windows_amd64.tar.gz", Platform: "windows/amd64", Size: "", SHA256: ""},
-		{Name: "SHA256SUMS", Platform: "", Size: "", SHA256: ""},
-		{Name: "SHA256SUMS.sig", Platform: "", Size: "", SHA256: ""},
-		{Name: "magus-release.pem", Platform: "", Size: "", SHA256: ""},
-	}
 }
 
 // verifyIndexSig verifies index.json against index.json.sig using the embedded

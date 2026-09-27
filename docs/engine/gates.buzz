@@ -178,14 +178,17 @@ final HISTORY_MAX = 8;
 //     the always-visible "Last updated" footer line.
 //   - metaHistory: path -> up to HISTORY_MAX "full|short|stamp|subject" entries, newest-
 //     first; drives the collapsed history panel.
+// metaCommits also keys the releases directory itself, for the pages the manifests feed.
 export fun buildCommits(site: Site) > {str: str} !> any {
     var m: mut {str: str} = mut {};
     site.metaHistory = mut {};
     var sources: mut [str] = mut [<str>];
-    foreach (p in ["README.md", "docs", "blog", "CHANGELOG.md"]) { sources.append(site.metaPrefix + p); }
+    final releases = site.metaPrefix + "releases";
+    foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.metaPrefix + p); }
     foreach (c in vcs\history(0, paths: sources, first_parent: true)) {
         final header = c.id + "|" + c.short + "|" + utcStamp(c.date);
         foreach (file in c.files) {
+            if (m[releases] == null and file.startsWith(releases + "/")) { m[releases] = header; }
             if (m[file] == null) { m[file] = header; }
             var hist = site.metaHistory[file];
             if (hist == null) { hist = mut [<str>]; }
@@ -293,7 +296,7 @@ export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
 }
 
 // pruneStaleOutputs deletes gen/ output whose source no longer produces it - a
-// renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md.
+// renamed/removed page, a deleted post, a dropped alias, a release out of releases/.
 // gen/ is not wiped before each render, so this keeps it from accumulating orphans: for
 // every "<dir>/index.html" not in writtenPaths and not in alwaysKeep, delete the whole
 // directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so

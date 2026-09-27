@@ -19,52 +19,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestMigrateRoundtrip verifies that migrating a changelog in the shape
-// generate-changelog writes produces manifests whose body fields are pre-trimmed (no
-// leading/trailing whitespace), so render.buzz can use them verbatim as Atom feed
-// summaries. The changelog is generated here from manifests of the test's own, which
-// is the shape CHANGELOG.md has; its bodies carry blank lines inside and around them.
-func TestMigrateRoundtrip(t *testing.T) {
-	releases := t.TempDir()
-	seeds := []ReleaseManifest{
-		{Version: "v0.2.0", Date: "2026-07-02", Body: "### Added\n\n- **Two.** It\n  wraps.\n\n### Fixed\n\n- **A fix.**"},
-		{Version: "v0.1.0", Date: "2026-07-01", Body: "### Added\n\n- **One.**"},
-	}
-	for _, m := range seeds {
-		writeManifestFile(t, releases, m)
-	}
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n"), 0o644))
-	require.NoError(t, runGenerateChangelog([]string{"-releases", releases, "-changelog", changelogPath}))
-
-	dir := t.TempDir()
-	require.NoError(t, runMigrate([]string{"-changelog", changelogPath, "-out", dir}))
-
-	entries, err := loadManifests(dir)
-	require.NoError(t, err)
-	require.Len(t, entries, len(seeds), "one manifest per released section")
-
-	for i, m := range entries {
-		assert.Equal(t, []string{seeds[i].Version, seeds[i].Date, seeds[i].Body}, []string{m.Version, m.Date, m.Body},
-			"%s: version, date and body survive the round trip", seeds[i].Version)
-		require.Equal(t, ReleaseManifest{
-			Version:   m.Version,
-			Date:      m.Date,
-			Notes:     m.Notes,
-			Body:      m.Body,
-			Artifacts: m.Artifacts,
-			Yanked:    m.Yanked,
-		}, m, "manifest %s round-trips identically (whole-struct check)", m.Version)
-		require.NotEmpty(t, m.Body, "%s: body is empty", m.Version)
-		require.NotEmpty(t, m.Version, "manifest has empty version")
-		require.NotEmpty(t, m.Date, "manifest has empty date")
-		require.NotEmpty(t, m.Artifacts, "%s: no artifacts", m.Version)
-		// Body must be trimmed: no leading or trailing newline.
-		require.False(t, len(m.Body) > 0 && m.Body[0] == '\n', "%s: body has leading newline", m.Version)
-		require.False(t, len(m.Body) > 0 && m.Body[len(m.Body)-1] == '\n', "%s: body has trailing newline", m.Version)
-	}
-}
-
 // TestReleaseIndexSignAndVerify generates an ephemeral Ed25519 key, constructs
 // an index.json, signs it, and verifies the signature. Proves the sign/verify
 // loop works without the production MAGUS_SIGNING_KEY.
@@ -271,24 +225,6 @@ func TestLoadManifestsRefusesAnEmptySet(t *testing.T) {
 
 	_, err = loadManifests(t.TempDir())
 	require.ErrorContains(t, err, "no release manifests")
-}
-
-// TestGenerateChangelogRefusesToEraseEveryRelease: release.yaml runs this on every
-// tag, and a wrong -releases path used to rewrite CHANGELOG.md down to its header.
-func TestGenerateChangelogRefusesToEraseEveryRelease(t *testing.T) {
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	before := "# Changelog\n\n## [Unreleased]\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
-	require.NoError(t, os.WriteFile(changelogPath, []byte(before), 0o644))
-
-	err := runGenerateChangelog([]string{
-		"-releases", filepath.Join(t.TempDir(), "absent"),
-		"-changelog", changelogPath,
-	})
-	require.Error(t, err)
-
-	after, err := os.ReadFile(changelogPath)
-	require.NoError(t, err)
-	require.Equal(t, before, string(after), "the changelog must be untouched when the manifests cannot be read")
 }
 
 // TestLoadManifestsSortedNewestFirst verifies that loadManifests returns entries
@@ -535,30 +471,29 @@ func TestRunCut_HappyPath(t *testing.T) {
 	require.Equal(t, want, got, "ReleaseManifest matches expected whole struct")
 }
 
-// TestCutThenGenerateChangelogDoesNotDuplicate walks the pair of commands a
-// release runs. The docs page renders the fragments under [Unreleased], so a cut
-// that left them behind would print the shipped entries twice.
-func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
+// TestCutLeavesNoFragmentBehind: the docs page renders the fragments under
+// [Unreleased] and the manifests below it, so a cut that left a folded fragment
+// behind would print the shipped entry twice.
+func TestCutLeavesNoFragmentBehind(t *testing.T) {
 	artifactsDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
 
 	unreleasedDir := t.TempDir()
 	writeFragment(t, unreleasedDir, "feature.md", "### Added\n\n- **Brand new feature.**\n")
-	pagePath := filepath.Join(t.TempDir(), "changelog.md")
 
 	relDir := t.TempDir()
 	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
 	require.NoError(t, runCut([]string{
 		"-version", "v0.2.0", "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
 	}))
-	require.NoError(t, runGenerateChangelog([]string{
-		"-releases", relDir, "-changelog", pagePath, "-unreleased", unreleasedDir,
-	}))
 
-	got, err := os.ReadFile(pagePath)
+	left, err := readFragments(unreleasedDir)
 	require.NoError(t, err)
-	require.Equal(t, 1, strings.Count(string(got), "- **Brand new feature.**"), "the entry belongs to v0.2.0 alone:\n%s", got)
-	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is empty, not removed")
+	assert.Empty(t, left, "the folded fragment is gone")
+	manifests, err := loadManifests(relDir)
+	require.NoError(t, err)
+	require.Equal(t, "v0.2.0", manifests[0].Version)
+	require.Equal(t, 1, strings.Count(manifests[0].Body, "- **Brand new feature.**"), "the entry belongs to v0.2.0 alone")
 }
 
 // TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is
@@ -685,92 +620,6 @@ func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	})
 	require.Error(t, err, "must refuse when no release artifacts are found")
 	require.Contains(t, err.Error(), "no release artifacts found", "error must name the problem")
-}
-
-// TestRunGenerateChangelog verifies that runGenerateChangelog renders the
-// fragments under [Unreleased] and regenerates released sections from manifests.
-func TestRunGenerateChangelog(t *testing.T) {
-	relDir := t.TempDir()
-	writeManifestFile(t, relDir, ReleaseManifest{
-		Version: "v0.2.0",
-		Date:    "2026-08-01",
-		Body:    "### Added\n\n- new thing",
-	})
-	writeManifestFile(t, relDir, ReleaseManifest{
-		Version: "v0.1.0",
-		Date:    "2026-07-05",
-		Body:    "### Added\n\n- first",
-	})
-
-	unreleasedDir := t.TempDir()
-	writeFragment(t, unreleasedDir, "soon.md", "### Added\n\n- **Coming soon.**\n")
-
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	initial := "# Changelog\n\n## [Unreleased]\n\n## [v0.1.0] - 2026-07-05\n\nOld content to be replaced.\n"
-	require.NoError(t, os.WriteFile(changelogPath, []byte(initial), 0o644))
-
-	require.NoError(t, runGenerateChangelog([]string{
-		"-releases", relDir,
-		"-changelog", changelogPath,
-		"-unreleased", unreleasedDir,
-	}))
-
-	data, err := os.ReadFile(changelogPath)
-	require.NoError(t, err)
-	body := string(data)
-
-	require.Contains(t, body, "## [Unreleased]\n\n### Added\n\n- **Coming soon.**\n\n## [v0.2.0]", "fragments render under Unreleased")
-	require.Contains(t, body, "## [v0.2.0] - 2026-08-01", "v0.2.0 heading generated")
-	require.Contains(t, body, "### Added\n\n- new thing", "v0.2.0 body generated")
-	require.Contains(t, body, "## [v0.1.0] - 2026-07-05", "v0.1.0 heading generated")
-	require.Contains(t, body, "### Added\n\n- first", "v0.1.0 body generated")
-	// v0.2.0 must appear before v0.1.0 (newest-first).
-	require.Less(t, index(body, "## [v0.2.0]"), index(body, "## [v0.1.0]"), "newest release first")
-}
-
-// Without -unreleased, a hand-written [Unreleased] entry is refused rather than
-// regenerated away.
-func TestGenerateChangelogRefusesHandWrittenUnreleased(t *testing.T) {
-	relDir := t.TempDir()
-	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	before := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Hand written.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
-	require.NoError(t, os.WriteFile(changelogPath, []byte(before), 0o644))
-
-	err := runGenerateChangelog([]string{"-releases", relDir, "-changelog", changelogPath})
-	require.ErrorContains(t, err, "changes/unreleased/")
-	after, err := os.ReadFile(changelogPath)
-	require.NoError(t, err)
-	require.Equal(t, before, string(after), "the entry survives")
-}
-
-// TestReadUnreleasedSection verifies extraction of the [Unreleased] body.
-func TestReadUnreleasedSection(t *testing.T) {
-	changelog := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- pending\n\n## [v0.1.0] - 2026-07-05\n\nReleased.\n"
-	path := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(path, []byte(changelog), 0o644))
-
-	got, err := readUnreleasedSection(path)
-	require.NoError(t, err)
-	require.Contains(t, got, "### Added", "section heading preserved")
-	require.Contains(t, got, "- pending", "item preserved")
-	// Must not include the released section.
-	require.NotContains(t, got, "v0.1.0", "released section excluded")
-
-	// Non-existent file returns empty string, no error.
-	empty, err := readUnreleasedSection(filepath.Join(t.TempDir(), "none.md"))
-	require.NoError(t, err)
-	require.Equal(t, "", empty, "missing file returns empty string")
-}
-
-// index returns the byte offset of substr in s, or panics if not found (test helper).
-func index(s, substr string) int {
-	for i := range len(s) {
-		if i+len(substr) <= len(s) && s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	panic("substring not found: " + substr)
 }
 
 // writeManifestFile writes a ReleaseManifest to dir/<version>.yaml for tests.

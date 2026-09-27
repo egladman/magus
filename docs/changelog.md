@@ -1,16 +1,16 @@
 ---
 title: Changelog
-generated_from: CHANGELOG.md
+generated_from: changes/README.md, changes/unreleased/*.md, releases/*.yaml
 description: Every change to magus, newest first, in Keep a Changelog format, starting with the unreleased entries. Generated from changes/unreleased/ and releases/*.yaml.
 tags: [changelog, releases, versions, upgrade, breaking-changes]
 ---
 
 # Changelog
 
-All notable changes to this project will be documented in this file.
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/).
-Entries for the next release wait as one file each under `changes/unreleased/`.
+All notable changes to this project are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
+[Semantic Versioning](https://semver.org/). Entries for the next release wait as one file
+each under `changes/unreleased/`.
 
 ## [Unreleased]
 
@@ -286,6 +286,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
+- **Provider I/O stays in Buzz.** A `providerio` Go analyzer (`libs/conventions`) refuses
+  a `net/http` client or a provider SDK import outside a reasoned allowlist; a
+  `provider-io-is-buzz` lint rule refuses a real `gh`, `curl` or `http` call at a
+  provider host from a Buzz file outside the ones the boundary names.
 - **The merge queue and the merge driver settle low-risk conflicts.** A conflicted file
   settles when every region both sides changed does, and magus's change classifier
   classes the edit low risk, or `merge_low_risk` opts its code in. Each region is named
@@ -320,8 +324,8 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   resolves the conflict or kicks it back naming the files.
 - **`magus refs <symbol> --rename <new>` renames a symbol at every verified site.**
   Every file is graded under the acting lease before any is written, and every file is
-  written or none is. An ambiguous name, a stale index, an unverified site or a declared
-  output refuses the whole rename.
+  written or none is. An ambiguous name, a stale index, an unverified site, a declared
+  output or a guard deny refuses the whole rename. `--dry-run` prints the sites.
 - **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
   affected listings and failing results carry up to three `{id, command, argv, why}`
   entries, filtered by the acting lease's role and journaled per session.
@@ -349,6 +353,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
   embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
   and invalid. `magus spell build|push|pull|ls` publish.
+- **`magus status --wait | magus run <target>` waits for the build budget.** A run
+  refused with MGS3009 still exits at once and names this pipe. `status --wait` sizes the
+  run's claim from the pipe and exits once the budget can seat it; on its own it waits
+  for a free slot.
 - **A subagent's shell and edit calls are graded under its job.** `magus shell --agent`
   takes the host's subagent id, and the command and path glue forward it (`HOST_AGENT_PATH`,
   default `agent_id`). Guard templates are at version 17; re-install them.
@@ -490,10 +498,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and exits after ten minutes holding nothing. Only `magus server start` starts the
   server, which serves MCP, the console and jobs. `server stop --services` is now
   `broker stop --services`.
-- **Unreleased changelog entries are fragments under `changes/unreleased/`.** One file
-  per entry, so concurrent pull requests never edit one shared section; `CHANGELOG.md`
-  keeps an empty `[Unreleased]` and the docs changelog page renders the fragments. A
-  malformed fragment or an unknown group fails `pr-changelog`.
+- **The changelog is fragments under `changes/unreleased/` plus the release
+  manifests, and the root `CHANGELOG.md` is gone.** One file per entry, so concurrent
+  pull requests never edit one shared section; the docs changelog page renders both.
+  A malformed fragment or an unknown group fails `pr-changelog`.
 - **CI asks for the whole machine explicitly.** Every `magus` invocation in this
   repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
   target now passes `--concurrency-profile aggressive` on the command line, the same
@@ -748,6 +756,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `skill-variant: short`, and a body brackets short wording with `{{if .Short}}`.
 - **`magus spell lock --update` writes no lock that pins nothing.** With no remote spell
   declared it removes `magus.lock` instead of writing a header and `version: 1`.
+- **`go-test` and `go-vet` pass `-trimpath`.** Matching `go-build`, so a run in one
+  worktree can share its compile and result cache with another worktree at the
+  same content, regardless of either one's absolute path.
 - **A target's `std\print` is captured with its output.** It is withheld, streamed and
   stored under the target's ref like a subprocess's output, instead of bypassing both.
 - **The trail names the credential, not "operator", and drops `actor`.** Each event records
@@ -879,6 +890,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **A catch-all lease no longer turns every word of a shell line into a path.**
   Under a `**` declaration only a redirect target or a file-shaped word is graded,
   so `python3 -c 'print(1)'` and `echo hi` pass beside it.
+- **A failure cause no longer clips MGS3011's log path.** Under a long `TMPDIR`, the
+  240-character excerpt used to cut mid-path, leaving `captured output: ...` unopenable.
+  The excerpt now trims the prose ahead of the path instead, so the path always prints
+  whole.
 - **Clones of an hg, jj or Sapling repository share one state store.** Identity is read
   from each backend's config without running it. jj is covered when colocated with git.
 - **A target reached through `ctx.needs` runs under its own sandbox declaration.** Only
@@ -960,6 +975,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   ask, such as an ungated push, skipped `magus\guard.command`, so approving the push
   also ran what the workspace denies on the same line, such as a chained
   `gh pr merge --admin`.
+- **The guard judges a `for` loop over literal words one iteration at a time.**
+  `for b in x y; do git worktree remove /w/$b; done` passes when each worktree is
+  safe to remove, and a dirty one is named in the denial. Lists needing expansion,
+  other loops, conditionals and functions stay refused.
 - **Global options no longer hide a VCS command from the guard.** `git -C . reset --hard`,
   `hg -R . purge` and `jj --at-op @ abandon` reach the rule their subcommand triggers.
   An inline alias such as `git -c alias.x=...` is refused under the new `inline-alias`
@@ -1001,6 +1020,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
   A conflicted merge there read as one that never started, and a file named `*.txt`
   staged every `.txt` file. A merge already underway is now refused.
+- **magus reads no longer take `index.lock`.** Every git call runs with
+  `GIT_OPTIONAL_LOCKS=0`, so a status from a guard hook, the daemon or the merge driver
+  never rewrites the index while your own `git add`, `commit` or `merge` needs it, which
+  failed with "index.lock: File exists".
 - **Go ops key their cache on the platform they build for.** The go spell's build, vet,
   test and lint ops fold `GOOS`, `GOARCH`, `GOARM` and `GOAMD64` into their cache keys,
   so a run for another platform no longer replays the host's result.
@@ -1048,6 +1071,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.
+- **`magus refs <symbol> --rename <new> --dry-run` records nothing.** Grading each file
+  through the guard spent the session's once-only advisories, added to its touched
+  projects, recorded the policy, registered the acting lease's base and appended
+  activity lines. The dry run now reaches the same verdict from a discarded copy of that
+  state and writes none of it.
 - **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
   replay that fails tries the remote tier before rebuilding.
 - **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
@@ -1114,6 +1142,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   merge.
 - **A vulnerability database release no longer invalidates every Go target's cache.** The
   database date keys only targets that run govulncheck.
+- **A worker can fork a child of its own job.** The guard refused every `magus job fork`
+  and `op=fork` under a lease, though the job store grades exactly that. A row naming the
+  caller's lease as `parent` now reaches the store, which refuses a child reaching past
+  its parent's paths.
+- **A worker can wait on a job it forked.** `magus job wait` and `magus_job` `op=wait`
+  refused every call from a checkout holding a lease, so a worker could never verify its
+  own child. A holder now waits on any job below its lease. Its own job, a sibling's, an
+  ancestor's and any unrelated job stay refused.
 - **Workspace load is 10x faster.** A bare library import is no longer executed as a
   candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
   A run skips re-evaluating a magusfile that does not export the target, and an exact
