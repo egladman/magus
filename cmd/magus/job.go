@@ -45,10 +45,6 @@ import (
 // tool is the agent's channel and this verb is the person's; they reach the same store and
 // the same rules, so a job still has one author (internal/job.authorizeRow enforces it)
 // without a capability existing for agents that a person does not have.
-//
-// It takes the --root OVERRIDE and resolves it per verb rather than once here: two of the
-// verbs reach loadMagus, whose singleton panics when a second caller hands it a different
-// spelling of the same root.
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
@@ -678,7 +674,6 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus describe job: requires exactly one job")
 	}
-	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	store, err := openJobs(root)
 	if err != nil {
@@ -693,12 +688,12 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus describe job: there is no job %q (run `%s` to see them)", pos[0], hint.LsJobs)
 	}
 	row := leases[i]
-	if err := jobRefusesTheGate(ctx, flagRoot, row); err != nil {
+	if err := jobRefusesTheGate(ctx, root, row); err != nil {
 		return err
 	}
 
-	facts := leaseBoundary(ctx, flagRoot, row, leases)
-	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.WritePaths)
+	facts := leaseBoundary(ctx, root, row, leases)
+	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, root, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
 	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root))
@@ -1075,13 +1070,12 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
 	}
-	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	if root == "" {
 		return errors.New("magus job exec: no workspace here: run from inside one or pass --root <path>")
 	}
 	if strings.TrimSpace(base) == "" {
-		base, _ = checkoutBaseToken(ctx, flagRoot)
+		base, _ = checkoutBaseToken(ctx, root)
 	}
 	if strings.TrimSpace(base) == "" {
 		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s;"+
@@ -1164,7 +1158,6 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus job exit: requires exactly one job")
 	}
-	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	store, err := openJobs(root)
 	if err != nil {
@@ -1188,7 +1181,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
 	// the historical primary check.
 	stored, err := job.Exit(ctx, store, pos[0], &result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
-		return storedAttempt(ctx, flagRoot, ref)
+		return storedAttempt(ctx, root, ref)
 	})
 	if err != nil {
 		return usagef("magus job exit: %s", err)
@@ -1263,7 +1256,6 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus job wait: requires exactly one job")
 	}
-	flagRoot := root
 	root = resolveRootOrEmpty(root)
 
 	store, err := openJobs(root)
@@ -1288,7 +1280,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		result = &decoded
 	}
 	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
-		return storedAttempt(ctx, flagRoot, ref)
+		return storedAttempt(ctx, root, ref)
 	}, jobObserver(root))
 	if err != nil {
 		return usagef("magus job wait: %s", err)

@@ -682,3 +682,25 @@ func TestRelaxGCConcurrentCallersShareOneRestore(t *testing.T) {
 	got = debug.SetGCPercent(before)
 	assert.Equal(t, before, got, "GOGC must be restored to its pre-relax value once every holder released")
 }
+
+func TestOpenedRootAcceptsEverySpellingOfItsWorkspace(t *testing.T) {
+	t.Parallel()
+	workspace := func() string {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+		return dir
+	}
+	a, b := workspace(), workspace()
+	require.NoError(t, os.Mkdir(filepath.Join(a, "sub"), 0o755))
+	opened := openedRoot{override: "", root: a}
+
+	for _, override := range []string{"", a, filepath.Join(a, "sub")} {
+		assert.NoError(t, opened.check("loadMagus", override), "%q names the loaded workspace", override)
+	}
+	assert.PanicsWithValue(t, "loadMagus: asked for the workspace at "+b+" after loading "+a,
+		func() { _ = opened.check("loadMagus", b) }, "a second workspace in one process is a bug")
+	assert.Error(t, opened.check("loadMagus", filepath.Join(t.TempDir(), "gone")),
+		"an override that no longer resolves is the caller's error, not a panic")
+	assert.NoError(t, openedRoot{override: ""}.check("loadMagus", b),
+		"a load that failed to resolve keeps its own error")
+}
