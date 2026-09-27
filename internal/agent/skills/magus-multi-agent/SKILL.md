@@ -320,7 +320,9 @@ tree is not clean) - and keep descendants in the same store. Fork each one with
 the `{{tool "job"}}` tool from the orchestrating agent, or `magus job fork` from a
 person at a terminal{{if .Full}} - the same store and the same
 authorization rule either way, so a job forked by hand and one an agent forked are
-indistinguishable to everything that reads them{{end}}:
+indistinguishable to everything that reads them{{end}}.
+A worker holding a lease forks its own units the same way, naming its job with
+`--parent`, and the job store refuses a child that claims more than its parent:
 {{if .Full}}
 The same checkpoint is what a later incremental re-review diffs from (see the
 {{skill "change-summary"}} skill) - review time and pickup time read the same object.

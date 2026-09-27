@@ -157,9 +157,14 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
     }
     fork = fork + " --criteria \"<what done means>\"";
     tool = tool + ", \"criteria\": \"<what done means>\"\}";
+    var scope = "";
+    if (spawn.lease != "") {
+        scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "
+            + "your row already holds, and the job store refuses anything wider.";
+    }
     return "Fork the row first: `{fork}` (or the magus_job tool: `{tool}`), then spawn with the "
         + "description `{parent}/{role} {id}`. A thinking role (plan, review, research, scout, "
-        + "integrate) forks `--read-only`; a change role declares its `--write-paths`.";
+        + "integrate) forks `--read-only`; a change role declares its `--write-paths`.{scope}";
 }
 
 fun request(title: str, isolated: bool) > Spawn {
@@ -219,6 +224,9 @@ test "a leased spawner hands out only its own tree" {
     final v = decideSpawn(other, rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "a row outside the lease");
     std\assert(v.reason.indexOf("--parent v050-prep") != null, message: "forks beneath the lease");
+    std\assert(v.reason.indexOf("a child of `v050-prep`") != null, message: "says the fork is a child the store grades");
+    final unleased = decideSpawn(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
+    std\assert(unleased.reason.indexOf("a child of") == null, message: "an orchestrator's remedy names no lease");
 }
 
 test "an unreadable store advises and never denies" {
