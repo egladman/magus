@@ -3,6 +3,7 @@ package guard
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path"
@@ -11,20 +12,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
-// The search-translation rule: a text search whose pattern a graph query answers with the
-// same entities. The pattern is compiled in the dialect the tool would use and run against
-// the graph's own ids at judge time, so the deny names a query that was checked, not one
-// that merely looks equivalent. Anything short of that proof stays silent: a deny that
-// routes nowhere takes a capability away.
-//
-// Three shapes are provable: a pattern that can only match diagnostic codes, a pattern
-// that selects every Markdown heading of the files searched, and a pattern whose every hit
-// in a magusfile is a target declaration.
+// The search-translation rule compiles a pattern in the tool's dialect and runs it against
+// the graph's ids at judge time, so a deny names a query that was checked. Short of that
+// proof it stays silent. The catalog's Why lists the provable shapes and measurements.
 
 // translatableTools are the search tools whose flags and dialects this rule models.
 var translatableTools = map[string]bool{"grep": true, "egrep": true, "fgrep": true, "rg": true}
@@ -162,6 +158,12 @@ func (sc *searchCall) flag(name string) {
 	}
 }
 
+// hit is one line a search selects.
+type hit struct {
+	line int
+	text string
+}
+
 // readsStdin reports a search with no operand that reads the pipe rather than the tree.
 func (sc searchCall) readsStdin() bool { return len(sc.paths) == 0 && !sc.recursive }
 
@@ -289,10 +291,12 @@ func bracketEnd(p string, i int) (int, bool) {
 	return 0, false
 }
 
-// translation is one provable answer: the magus command and why it is the same answer.
+// translation is one provable answer: the magus command, why it is the same answer, and
+// the answer itself.
 type translation struct {
-	args []string // after the binary name
-	why  string
+	args   []string // after the binary name
+	why    string
+	answer []string // what the command prints, as far as the proof computed it
 	// routes is set for a search of literal diagnostic codes, which keeps the
 	// symbol-search rule's per-code answer.
 	routes []searchRoute
@@ -301,25 +305,21 @@ type translation struct {
 // translateVerdict denies the first search on the line that a graph query provably
 // answers, and reports false when none is.
 func translateVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
-	dir, err := os.Getwd()
-	if err != nil {
+	dir, ok := deps.workingDir()
+	if !ok {
 		return ShellVerdict{}, false
 	}
 	return translateSearches(deps, dir, cmds)
 }
 
 func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (ShellVerdict, bool) {
-	for _, c := range cmds {
-		sc, ok := parseSearchCall(c)
-		if !ok || sc.readsStdin() || allOutside(deps.scope, sc.paths) || searchesRevision(c, dir) {
-			continue
-		}
-		tr, ok := translateDiagnostics(dir, sc)
-		if !ok {
-			tr, ok = translateHeadings(deps, dir, sc)
-		}
-		if !ok {
-			tr, ok = translateTargets(deps, dir, sc)
+	for i, c := range cmds {
+		var tr translation
+		var ok bool
+		if path.Base(c.Name) == "find" {
+			tr, ok = translateFind(deps, dir, c)
+		} else {
+			tr, ok = translateSearch(deps, dir, c)
 		}
 		if !ok {
 			continue
@@ -327,14 +327,36 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 		if tr.routes != nil {
 			return ShellVerdict{Deny: denySymbolSearch(tr.routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(tr.routes)}}, true
 		}
-		return ShellVerdict{Deny: denySearchTranslation(tr), Rule: denyRule{Name: denyRuleSearchTranslation, Arg: strings.Join(tr.args, " ")}}, true
+		return ShellVerdict{
+			Deny: denySearchTranslation(tr, pipedInto(cmds[i+1:])),
+			Rule: denyRule{Name: denyRuleSearchTranslation, Arg: strings.Join(tr.args, " ")},
+		}, true
 	}
 	return ShellVerdict{}, false
 }
 
-func denySearchTranslation(tr translation) string {
+func translateSearch(deps Dependencies, dir string, c hint.Invocation) (translation, bool) {
+	sc, ok := parseSearchCall(c)
+	if !ok || sc.readsStdin() || allOutside(deps.scope, sc.paths) || searchesRevision(c, dir) {
+		return translation{}, false
+	}
+	tr, ok := translateDiagnostics(dir, sc)
+	if !ok {
+		tr, ok = translateHeadings(deps, dir, sc)
+	}
+	if !ok {
+		tr, ok = translateTargets(deps, dir, sc)
+	}
+	if !ok {
+		tr, ok = translateDeclarations(deps, dir, c, sc)
+	}
+	return tr, ok
+}
+
+func denySearchTranslation(tr translation, piped bool) string {
 	return "`" + hint.BinaryName() + " " + strings.Join(tr.args, " ") + "` answers this search exactly.\n" +
 		tr.why + "\n" +
+		answerBlock("Its answer", tr.answer) + pipeNote(piped) + "\n" +
 		"Search raw TEXT (a string literal, a comment, a config value) with grep as before: no graph node holds that, so nothing replaces it."
 }
 
@@ -476,10 +498,15 @@ func translateDiagnostics(dir string, sc searchCall) (translation, bool) {
 	if !slices.Equal(selected, matched) {
 		return translation{}, false
 	}
+	ids := make([]string, len(selected))
+	for i, code := range selected {
+		ids[i] = types.KindDiagnostic + ":" + code
+	}
 	return translation{
 		args: []string{"query", "kind=" + types.KindDiagnostic, "'id=~" + idRe + "'", "-o", "name"},
 		why: "The pattern can match nothing but a diagnostic code, and it matches " + countNoun(len(matched), "registered code") + " (" + sample(matched) + "). " +
 			"The graph holds a node for every registered code, and `" + hint.Explain.With("diagnostic:<code>") + "` gives each one's page and the docs that cite it.",
+		answer: ids,
 	}, true
 }
 
@@ -672,10 +699,12 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 		return translation{}, false
 	}
 	got := map[string]int{}
+	var sections []string
 	for _, id := range ids {
 		if answer.MatchString(id) {
 			file, _, _ := strings.Cut(strings.TrimPrefix(id, "docsection:"), "#")
 			got[file]++
+			sections = append(sections, id)
 		}
 	}
 	if !mapsEqual(got, want) {
@@ -689,6 +718,7 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 		args: []string{"query", "kind=" + types.KindDocSection, "'id=~" + idRe + "'", "-o", "name"},
 		why: "The pattern selects every Markdown heading and nothing else here: " + countNoun(total, "heading line") + " across " + countNoun(len(want), "file") +
 			", one per section node the graph holds for them. `" + hint.Explain.With("docsection:<file>#<anchor>") + "` gives a section's text and links.",
+		answer: sections,
 	}, true
 }
 
@@ -831,18 +861,288 @@ func translateTargets(deps Dependencies, dir string, sc searchCall) (translation
 			return translation{}, false
 		}
 	}
-	why := "Every line the pattern selects declares a target, and the graph holds each one: " + strings.Join(targets, ", ") + "."
+	why := "Every line the pattern selects declares a target, and the graph holds each one."
 	if len(targets) == 1 {
-		return translation{args: []string{"explain", targets[0]}, why: why}, true
+		return translation{args: []string{"explain", targets[0]}, why: why, answer: targets}, true
 	}
 	quoted := make([]string, len(targets))
 	for i, id := range targets {
 		quoted[i] = regexp.QuoteMeta(id)
 	}
 	return translation{
-		args: []string{"query", "kind=" + types.KindTarget, "'id=~^(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"},
-		why:  why,
+		args:   []string{"query", "kind=" + types.KindTarget, "'id=~^(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"},
+		why:    why,
+		answer: targets,
 	}, true
+}
+
+// goDeclRe is a Go top-level declaration and its name, the receiver of a method skipped.
+// A `type (` or `var (` block opener names nothing and so is not one.
+var goDeclRe = regexp.MustCompile(`^(?:func(?:\s*\([^()]*\))?|type|var|const)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
+// translateDeclarations answers a search of one Go file whose every selected line
+// declares a symbol the index holds: `^func `, `func (s \*Store)`. A lookup of names is
+// the symbol-search rule's. One hit that is a call, a comment or a string is text the
+// graph does not hold, and keeps the rule silent.
+func translateDeclarations(deps Dependencies, dir string, c hint.Invocation, sc searchCall) (translation, bool) {
+	if deps.scope.root == "" || len(sc.paths) != 1 || path.Ext(sc.paths[0]) != ".go" {
+		return translation{}, false
+	}
+	if _, provable := provableRoutes(deps, asSearch(c)); provable {
+		return translation{}, false
+	}
+	line, ok := sc.lineRegexp()
+	if !ok {
+		return translation{}, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return translation{}, false
+	}
+	abs, rel, ok := workspacePath(root, dir, sc.paths[0])
+	if !ok {
+		return translation{}, false
+	}
+	selected, ok := selectedLines(abs, line)
+	if !ok || len(selected) == 0 {
+		return translation{}, false
+	}
+	names := make([]string, 0, len(selected))
+	for _, h := range selected {
+		m := goDeclRe.FindStringSubmatch(h.text)
+		if m == nil {
+			return translation{}, false
+		}
+		if defined, definitive := deps.symbolDefined(m[1]); !defined || !definitive {
+			return translation{}, false
+		}
+		names = append(names, strconv.Itoa(h.line)+": "+m[1])
+	}
+	return translation{
+		args: []string{"explain", types.KindFile + ":" + rel},
+		why: "Every line the pattern selects declares a symbol, and the index holds each of the " + countNoun(len(names), "name") + ". " +
+			"The file node lists everything the file defines, and `" + hint.Refs.With("<name>", "--definition", "--source") + "` prints any one body.",
+		answer: names,
+	}, true
+}
+
+// A find -name is proved by walking the same tree and requiring its files to equal the
+// graph's file nodes one for one: a Markdown tree, a sibling checkout, or a file no index
+// covers fails it and keeps the rule silent.
+
+// findCall is one find invocation reduced to what decides its answer.
+type findCall struct {
+	paths    []string
+	name     string
+	files    bool // -type f
+	maxDepth int  // 0 for unbounded
+}
+
+// findWalkBudget bounds the tree walk a find is proved over. The guard runs before every
+// command, so a walk past it keeps the rule silent rather than slowing the call.
+const findWalkBudget = 150 * time.Millisecond
+
+var (
+	errFindBudget   = errors.New("guard: find walk over budget")
+	errFindMismatch = errors.New("guard: find prints a file the graph does not select")
+)
+
+// parseFindCall reads c as a name search, or reports false for any other predicate, which
+// asks something the file nodes do not say.
+func parseFindCall(c hint.Invocation) (findCall, bool) {
+	fc := findCall{}
+	args := c.Args
+	for len(args) > 0 && !strings.HasPrefix(args[0], "-") && args[0] != "(" && args[0] != "!" {
+		fc.paths = append(fc.paths, args[0])
+		args = args[1:]
+	}
+	if len(fc.paths) == 0 {
+		fc.paths = []string{"."}
+	}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-name":
+			// find negates a class with `[!x]`, which path.Match and a regexp read as a
+			// literal `!`, so the proof would agree with itself on the complement.
+			if i+1 >= len(args) || fc.name != "" || strings.Contains(args[i+1], "/") || strings.Contains(args[i+1], "[!") {
+				return findCall{}, false
+			}
+			if _, err := path.Match(args[i+1], ""); err != nil {
+				return findCall{}, false
+			}
+			fc.name = args[i+1]
+			i++
+		case "-type":
+			if i+1 >= len(args) || args[i+1] != "f" {
+				return findCall{}, false
+			}
+			fc.files = true
+			i++
+		case "-maxdepth":
+			if i+1 >= len(args) {
+				return findCall{}, false
+			}
+			n, err := strconv.Atoi(args[i+1])
+			if err != nil || n < 1 {
+				return findCall{}, false
+			}
+			fc.maxDepth = n
+			i++
+		case "-print":
+		default:
+			return findCall{}, false
+		}
+	}
+	return fc, fc.name != ""
+}
+
+// translateFind answers a `find -name` under the workspace with the query selecting the
+// same file nodes.
+func translateFind(deps Dependencies, dir string, c hint.Invocation) (translation, bool) {
+	fc, ok := parseFindCall(c)
+	if !ok || deps.scope.root == "" || allOutside(deps.scope, fc.paths) {
+		return translation{}, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return translation{}, false
+	}
+	type operand struct{ abs, rel string }
+	var operands []operand
+	var prefixes []string
+	for _, p := range fc.paths {
+		abs, rel, ok := workspacePath(root, dir, p)
+		if !ok {
+			return translation{}, false
+		}
+		info, err := os.Stat(abs)
+		if err != nil || !info.IsDir() {
+			return translation{}, false
+		}
+		operands = append(operands, operand{abs: abs, rel: rel})
+		prefix := ""
+		if rel != "." {
+			prefix = regexp.QuoteMeta(rel) + "/"
+		}
+		if fc.maxDepth > 0 {
+			prefix += `(?:[^/]+/){0,` + strconv.Itoa(fc.maxDepth-1) + `}`
+		} else {
+			prefix += `(?:.*/)?`
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	expr := strings.Join(slices.Compact(prefixes), "|")
+	if len(prefixes) > 1 {
+		expr = "(?:" + expr + ")"
+	}
+	idRe := `^file:` + expr + globRegexp(fc.name) + `$`
+	answer, err := regexp.Compile(idRe)
+	if err != nil {
+		return translation{}, false
+	}
+	ids, definitive := deps.graphIDs(context.Background(), types.KindFile)
+	if !definitive {
+		return translation{}, false
+	}
+	var nodes []string
+	selected := map[string]bool{}
+	for _, id := range ids {
+		if answer.MatchString(id) {
+			nodes = append(nodes, id)
+			selected[strings.TrimPrefix(id, types.KindFile+":")] = true
+		}
+	}
+	if len(nodes) == 0 {
+		return translation{}, false
+	}
+	found := map[string]bool{}
+	deadline := time.Now().Add(findWalkBudget)
+	for _, op := range operands {
+		if !findSelects(fc, op.abs, op.rel, selected, found, deadline) {
+			return translation{}, false
+		}
+	}
+	if len(found) != len(selected) {
+		return translation{}, false
+	}
+	return translation{
+		args: []string{"query", "kind=" + types.KindFile, "'id=~" + idRe + "'", "-o", "name"},
+		why: "The graph holds a file node for each of the " + countNoun(len(nodes), "file") + " this find prints, checked name for name, and `" +
+			hint.Explain.With("file:<path>") + "` lists what any one defines and who depends on it.",
+		answer: nodes,
+	}, true
+}
+
+// findSelects walks abs as fc would, adding each file it prints to found, and reports
+// false at the first one the graph did not select, a matching directory fc would print,
+// or the deadline, so a mismatch stops the walk rather than finishing it.
+func findSelects(fc findCall, abs, rel string, selected, found map[string]bool, deadline time.Time) bool {
+	entries := 0
+	err := filepath.WalkDir(abs, func(q string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entries++; entries%256 == 0 && time.Now().After(deadline) {
+			return errFindBudget
+		}
+		sub, _ := filepath.Rel(abs, q)
+		sub = filepath.ToSlash(sub)
+		if sub == "." {
+			return nil
+		}
+		var descend error
+		if d.IsDir() && fc.maxDepth > 0 && strings.Count(sub, "/")+1 >= fc.maxDepth {
+			descend = fs.SkipDir
+		}
+		if matched, _ := path.Match(fc.name, d.Name()); !matched {
+			return descend
+		}
+		switch {
+		case d.Type().IsRegular():
+			r := sub
+			if rel != "." {
+				r = rel + "/" + sub
+			}
+			if !selected[r] {
+				return errFindMismatch
+			}
+			found[r] = true
+		case d.IsDir() && fc.files:
+		default:
+			return errFindMismatch
+		}
+		return descend
+	})
+	return err == nil
+}
+
+// globRegexp is find's -name glob over a file name as a Go regexp.
+func globRegexp(glob string) string {
+	var b strings.Builder
+	for i := 0; i < len(glob); i++ {
+		switch c := glob[i]; c {
+		case '*':
+			b.WriteString(`[^/]*`)
+		case '?':
+			b.WriteString(`[^/]`)
+		case '[':
+			end := strings.IndexByte(glob[i:], ']')
+			if end < 0 {
+				b.WriteString(regexp.QuoteMeta(string(c)))
+				continue
+			}
+			b.WriteString(glob[i : i+end+1])
+			i += end
+		case '\\':
+			if i+1 < len(glob) {
+				i++
+				b.WriteString(regexp.QuoteMeta(string(glob[i])))
+			}
+		default:
+			b.WriteString(regexp.QuoteMeta(string(c)))
+		}
+	}
+	return b.String()
 }
 
 // resolvedRoot is the workspace root with symlinks resolved, so it compares with a path
