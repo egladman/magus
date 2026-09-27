@@ -28,6 +28,7 @@ var All = []Command{
 	sessionCommand,
 	memoryCommand,
 	jobCommand,
+	editCommand,
 	notesCommand,
 	diffCommand,
 	serverCommand,
@@ -2391,6 +2392,52 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
+	},
+}
+
+var editCommand = Command{
+	Name:        "edit",
+	Short:       "Apply a multi-file edit set: every site checked first, all files written or none",
+	Description: "Apply an edit set declared as JSON: every site is checked against the file on disk before anything is written, every file is written or none is, and a receipt records the undo.",
+	Tags:        []string{"cli", "magus edit", "edit", "multi-file", "atomic", "undo", "receipt"},
+	Long: `Apply an edit set, a JSON document naming sites in one or more files and
+the bytes that replace each. The caller writes every replacement; magus
+checks that each site holds the bytes the caller expects, then writes.
+
+A site is anchored by "lines", whole lines by number ([start, end], 1-based
+and inclusive; end = start-1 inserts before line start), or by "text", the
+bytes equal to old (exactly one occurrence, or every one with "all"). "old"
+is required for text and checked when given for lines. "digest", the
+sha256:<hex> of the whole file as the caller read it, refuses a file that
+changed since.
+
+Every site is resolved before the first byte moves. One bad site refuses the
+whole set, every reason is listed, and nothing is written. A declared output
+is refused: regenerate it, never hand-edit. There is no --force.
+
+The write stages each file as a temp sibling, renames the stages over the
+originals, and renames the held originals back if any rename fails. No VCS
+command runs. The receipt, stored under the cache dir, holds the undo set:
+--undo <id> applies it, refusing any file edited since.
+
+-o name prints the receipt id; -o json the receipt.`,
+	Usage: "magus edit --stdin [--check] | --undo <id> [--check] | --schema",
+	Flags: []Flag{
+		{Name: "stdin", Kind: FlagBool, Doc: "Read the edit set as JSON on stdin"},
+		{Name: "check", Kind: FlagBool, Doc: "Resolve and check every site and print the plan; write nothing"},
+		{Name: "undo", Kind: FlagString, Doc: "Apply the undo set of the receipt with this id"},
+		{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema an edit set must satisfy, and exit"},
+	},
+	Examples: []Example{
+		{"Apply a set", "magus edit --stdin < edits.json"},
+		{"Check a set without writing", "magus edit --check --stdin < edits.json"},
+		{"Undo it", "magus edit --undo 20260926-101500-1a2b3c4d"},
+		{"Print the set schema", "magus edit --schema"},
+	},
+	ExitStatus: []ExitCode{
+		{0, "The set was applied, or with --check would apply."},
+		{1, "The set was refused and nothing was written, or a write failed and every file already written was restored. Each reason is printed."},
+		{2, "Misuse, or the input is not a readable edit set; nothing was attempted."},
 	},
 }
 

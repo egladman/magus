@@ -201,6 +201,14 @@ const (
 	FlagDoctorList = "list"
 	// doctor: --probe
 	FlagDoctorProbe = "probe"
+	// edit: --check
+	FlagEditCheck = "check"
+	// edit: --schema
+	FlagEditSchema = "schema"
+	// edit: --stdin
+	FlagEditStdin = "stdin"
+	// edit: --undo
+	FlagEditUndo = "undo"
 	// events: --f
 	FlagEventsF = "f"
 	// events: --follow
@@ -1786,6 +1794,24 @@ type JobRmFlags struct {
 func BindJobRm(fs *flag.FlagSet) *JobRmFlags {
 	var f JobRmFlags
 	fs.BoolVar(&f.Force, FlagJobRmForce, false, "Remove a row that already ended, destroying the record of what happened")
+	return &f
+}
+
+// EditFlags are the flags declared for `magus edit`.
+type EditFlags struct {
+	Stdin  bool   // --stdin
+	Check  bool   // --check
+	Undo   string // --undo
+	Schema bool   // --schema
+}
+
+// BindEdit registers `magus edit`'s flags on fs and returns the destination.
+func BindEdit(fs *flag.FlagSet) *EditFlags {
+	var f EditFlags
+	fs.BoolVar(&f.Stdin, FlagEditStdin, false, "Read the edit set as JSON on stdin")
+	fs.BoolVar(&f.Check, FlagEditCheck, false, "Resolve and check every site and print the plan; write nothing")
+	fs.StringVar(&f.Undo, FlagEditUndo, "", "Apply the undo set of the receipt with this id")
+	fs.BoolVar(&f.Schema, FlagEditSchema, false, "Print the JSON schema an edit set must satisfy, and exit")
 	return &f
 }
 

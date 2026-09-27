@@ -393,6 +393,10 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// it lazily, so a preload would put a full workspace load in front of every tool
 		// call for nothing. Never forwarded: a verdict is not adoptable work.
 		return dispatchProfile{needsConfig: true}
+	case "edit":
+		// Never forwarded: the set arrives on THIS process's stdin and the files are the
+		// caller's checkout. It opens the workspace itself to classify outputs.
+		return dispatchProfile{needsConfig: true}
 	case "events":
 		// Reads the run-log directory; the magusfile never. Loading the workspace would
 		// refresh the merge-driver registration, and a subscriber an editor spawns must
@@ -1012,6 +1016,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return memoryCmd(ctx, root, subArgs)
 	case "job":
 		return jobCmd(ctx, root, subArgs)
+	case "edit":
+		return editCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
 	case "diff":

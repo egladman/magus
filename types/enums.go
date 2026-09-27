@@ -104,3 +104,9 @@ var sandboxModes = enum.Set[SandboxMode]{SandboxModeOff, SandboxModeBestEffort, 
 
 func (v SandboxMode) Values() []string { return sandboxModes.Strings() }
 func (v SandboxMode) Valid() bool      { return sandboxModes.Valid(v) }
+
+var editAnchors = enum.Set[EditAnchor]{EditAnchorLines, EditAnchorText}
+
+func (v EditAnchor) Values() []string { return editAnchors.Strings() }
+func (v EditAnchor) Valid() bool      { return editAnchors.Valid(v) }
+func (v EditAnchor) String() string   { return enum.String(v) }
