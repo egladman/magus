@@ -263,6 +263,28 @@ func TestNextForDenyRemedyServesTheArgvItWasGiven(t *testing.T) {
 	assert.Equal(t, "./magus", n.Argv[0], "the argv is copied, not aliased")
 }
 
+// A pipeline remedy runs as one shell line and is graded stage by stage: a worker keeps
+// it only while every stage writes inside its write paths.
+func TestNextForDenyRemedyPipelineGradesEveryStage(t *testing.T) {
+	stages := [][]string{
+		{"./magus", "run", "generate:rw", "docs"},
+		{"./magus", "run", "test", "internal/hint"},
+	}
+	n := NextForDenyRemedyPipeline("chained-run", stages, "why")
+	assert.Equal(t, Next{
+		ID:   "deny-chained-run",
+		Run:  "./magus run generate:rw docs | ./magus run test internal/hint",
+		Argv: []string{"./magus", "run", "generate:rw", "docs", PipeSep, "./magus", "run", "test", "internal/hint"},
+		Why:  "why",
+	}, n)
+	assert.Equal(t, stages, pipelineStages(n.Argv))
+
+	assert.Equal(t, []Next{n}, ServableTo(RoleWorker, []string{"docs/**", "internal/hint/**"}, []Next{n}))
+	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []Next{n}), "the second stage writes outside")
+	assert.Nil(t, ServableTo(RoleReviewer, []string{"docs/**", "internal/hint/**"}, []Next{n}))
+	assert.Equal(t, []Next{n}, ServableTo(RoleUnbound, nil, []Next{n}))
+}
+
 // TestServableToGradesVcsAddByItsPaths extends the worker's write-path rule to the one
 // write whose operands are paths: staging inside the write paths is the worker's own.
 func TestServableToGradesVcsAddByItsPaths(t *testing.T) {

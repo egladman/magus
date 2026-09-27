@@ -218,6 +218,43 @@ func NextForDenyRemedy(rule string, argv []string, why string) Next {
 	return Next{ID: DenyRemedyPrefix + rule, Run: strings.Join(quoted, " "), Argv: slices.Clone(argv), Why: why}
 }
 
+// PipeSep separates the stages of a pipeline remedy's Argv. A served stage never
+// carries it as an argument, so splitting on it recovers every stage whole.
+const PipeSep = "|"
+
+// NextForDenyRemedyPipeline is NextForDenyRemedy for a remedy that is a shell pipeline
+// of several complete argvs. Run joins the quoted stages with ` | `; Argv joins them with
+// PipeSep, which ServableTo splits to grade every stage on its own.
+func NextForDenyRemedyPipeline(rule string, stages [][]string, why string) Next {
+	runs := make([]string, len(stages))
+	var argv []string
+	for i, stage := range stages {
+		quoted := make([]string, len(stage))
+		for j, a := range stage {
+			quoted[j] = matcherArg(a)
+		}
+		runs[i] = strings.Join(quoted, " ")
+		if i > 0 {
+			argv = append(argv, PipeSep)
+		}
+		argv = append(argv, stage...)
+	}
+	return Next{ID: DenyRemedyPrefix + rule, Run: strings.Join(runs, " | "), Argv: argv, Why: why}
+}
+
+// pipelineStages splits an Argv at PipeSep. A plain argv is one stage.
+func pipelineStages(argv []string) [][]string {
+	var stages [][]string
+	start := 0
+	for i, a := range argv {
+		if a == PipeSep {
+			stages = append(stages, argv[start:i])
+			start = i + 1
+		}
+	}
+	return append(stages, argv[start:])
+}
+
 // Role is who a result is being served to, read off the acting lease's row by
 // [RoleFor].
 //
@@ -270,10 +307,11 @@ func ServableTo(role Role, writePaths []string, next []Next) []Next {
 	}
 	kept := make([]Next, 0, len(next))
 	for _, n := range next {
-		if mutatesTree(n.Argv) && (role != RoleWorker || !withinWritePaths(writePaths, n.Argv)) {
-			continue
+		if !slices.ContainsFunc(pipelineStages(n.Argv), func(stage []string) bool {
+			return mutatesTree(stage) && (role != RoleWorker || !withinWritePaths(writePaths, stage))
+		}) {
+			kept = append(kept, n)
 		}
-		kept = append(kept, n)
 	}
 	return capNext(kept)
 }
