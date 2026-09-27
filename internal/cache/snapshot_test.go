@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // TestSnapshotAtomicBlob verifies that if the blob copy fails (because the
@@ -570,8 +572,8 @@ func TestReplayBlobRoundTrip(t *testing.T) {
 	}
 }
 
-// TestReplayOverwritesExisting verifies replay removes a pre-existing file at
-// the destination before materialising the blob (the os.Remove branch).
+// TestReplayOverwritesExisting verifies replay replaces a pre-existing file whose
+// bytes differ from the record, and leaves no staging file behind.
 func TestReplayOverwritesExisting(t *testing.T) {
 	c := newBareCache(t)
 	src := t.TempDir()
@@ -591,6 +593,86 @@ func TestReplayOverwritesExisting(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(root, "out.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, []byte("new"), got, "replay must overwrite an existing file")
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "the staging file must be renamed away, not left beside the output")
+}
+
+// TestReplayLeavesCurrentFileAlone pins that a destination already holding the
+// recorded bytes is not rewritten: its mtime survives, so nothing keyed on it goes
+// dirty, and a concurrent reader never sees it change.
+func TestReplayLeavesCurrentFileAlone(t *testing.T) {
+	c := newBareCache(t)
+	src := t.TempDir()
+	abs := filepath.Join(src, "in.txt")
+	require.NoError(t, os.WriteFile(abs, []byte("same"), 0o644))
+	rec, err := c.snapshotOne(abs, "out.txt")
+	require.NoError(t, err)
+
+	root := t.TempDir()
+	dst := filepath.Join(root, "out.txt")
+	require.NoError(t, os.WriteFile(dst, []byte("same"), 0o644))
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(dst, old, old))
+
+	_, err = c.replay(context.Background(), &Manifest{Outputs: []OutputRecord{rec}}, root)
+	require.NoError(t, err)
+
+	info, err := os.Stat(dst)
+	require.NoError(t, err)
+	assert.True(t, info.ModTime().Equal(old), "a file already holding the recorded bytes must not be rewritten")
+}
+
+// TestReplayNeverLeavesAnOutputAbsent is the race that failed `magus affected
+// generate:rw`: one target replayed internal/spell/gen/types while a sibling compiled
+// internal/spell, and go reported a go:embed file as missing. A reader polling the
+// outputs through repeated replays of alternating content must always find every one.
+func TestReplayNeverLeavesAnOutputAbsent(t *testing.T) {
+	c := newBareCache(t)
+	src := t.TempDir()
+	root := t.TempDir()
+	const files = 16
+	manifests := make([]*Manifest, 2)
+	for v := range manifests {
+		manifests[v] = &Manifest{}
+		for i := range files {
+			abs := filepath.Join(src, fmt.Sprintf("v%d-%d", v, i))
+			require.NoError(t, os.WriteFile(abs, fmt.Appendf(nil, "version %d of file %d", v, i), 0o644))
+			rec, err := c.snapshotOne(abs, fmt.Sprintf("gen/f%d.buzz", i))
+			require.NoError(t, err)
+			manifests[v].Outputs = append(manifests[v].Outputs, rec)
+		}
+	}
+	_, err := c.replay(context.Background(), manifests[0], root)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	missing := make(chan string, 1)
+	go func() {
+		defer close(missing)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			for i := range files {
+				p := filepath.Join(root, "gen", fmt.Sprintf("f%d.buzz", i))
+				if _, err := os.Lstat(p); err != nil {
+					missing <- p
+					return
+				}
+			}
+		}
+	}()
+	for n := range 200 {
+		_, err := c.replay(context.Background(), manifests[(n+1)%2], root)
+		require.NoError(t, err)
+	}
+	close(done)
+	if p, ok := <-missing; ok {
+		t.Fatalf("%s was absent during a replay", p)
+	}
 }
 
 // TestReplayCancelledCtx verifies replay honours context cancellation before
