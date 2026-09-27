@@ -304,6 +304,15 @@ func TestFailureExcerptBoundsMultilineError(t *testing.T) {
 	assert.Len(t, []rune(failureCauseExcerpt(strings.Repeat("x", 300))), 240)
 }
 
+func TestFailureExcerptKeepsTheCapturedOutputPathWhole(t *testing.T) {
+	t.Parallel()
+	path := "/" + strings.Repeat("d", 300) + "/.magus/logs/9c4f0000-abcd-1234-5678-000000000000.log"
+	cause := `target "security" exceeded its declared timeout of 15m after 15m0s; ` +
+		`its process tree was killed; captured output: ` + path
+	got := failureCauseExcerpt(cause)
+	assert.True(t, strings.HasSuffix(got, path), "path was cut: %s", got)
+}
+
 // TestReproTarget verifies the target token the repro line uses: the bare name, or
 // name:charm1,charm2 when charms are active (the `magus run` charm-suffix syntax).
 func TestReproTarget(t *testing.T) {
