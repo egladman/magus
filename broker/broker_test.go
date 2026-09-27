@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -485,7 +484,7 @@ func TestNoBrokerIsUnavailable(t *testing.T) {
 func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr)
-	conn, err := net.Dial("unix", addr[len("unix://"):])
+	conn, err := endpoint.DialUnix(t.Context(), addr[len("unix://"):])
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	w := &frameWriter{w: conn}

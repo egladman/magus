@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -741,7 +742,7 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	t.Cleanup(srv.Close)
 	return srv, srv.Addr(), &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", path)
+			return endpoint.Endpoint{Scheme: "unix", Addr: path}.Dial(ctx)
 		},
 	}}
 }
