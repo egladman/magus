@@ -41,16 +41,22 @@ func TestActivationAdoptsAListeningUnixSocket(t *testing.T) {
 	adopted, err := adoptListener(dupFD(t, f))
 	require.NoError(t, err)
 	defer func() { _ = adopted.Close() }()
-	require.NoError(t, servesAddr(adopted, "unix://"+path))
-	assert.Error(t, servesAddr(adopted, "unix://"+filepath.Join(filepath.Dir(path), "elsewhere.sock")),
-		"a socket runs do not dial holds capacity nobody asks for")
+	served, err := servesAddr(adopted, "unix://"+path)
+	require.NoError(t, err)
+	assert.Equal(t, path, served.Addr().String(), "the socket reports the path runs dial, whatever name it was bound by")
+	elsewhere := filepath.Join(filepath.Dir(path), "elsewhere.sock")
+	other, err := endpoint.ListenUnix(elsewhere)
+	require.NoError(t, err)
+	defer func() { _ = other.Close() }()
+	_, err = servesAddr(adopted, "unix://"+elsewhere)
+	assert.Error(t, err, "a socket runs do not dial holds capacity nobody asks for")
 
 	go func() {
 		if c, err := endpoint.DialUnix(context.Background(), path); err == nil {
 			_ = c.Close()
 		}
 	}()
-	conn, err := adopted.Accept()
+	conn, err := served.Accept()
 	require.NoError(t, err)
 	_ = conn.Close()
 }
