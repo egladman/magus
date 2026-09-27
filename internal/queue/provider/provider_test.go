@@ -63,11 +63,11 @@ export fun list_changes(io: {str: any}) > any {
     return {
         "changes": [{
             "id": "7", "repo": "acme/acme", "head": "` + headA + `", "ref": "refs/pull/7/head",
-            "branch": "feat", "base": "{io["base"]}", "title": "{io["remote_url"]}", "fork": true,
+            "branch": "feat", "base": "{io["base"]}", "title": "{io["remote_url"]}", "author": "priya", "fork": true,
             "method": "squash", "parent": "6",
         }],
         "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
-        "unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "mark": "queued"}],
+        "unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],
         "closed": [{"id": "12", "repo": "acme/acme"}],
     };
 }
@@ -265,12 +265,14 @@ func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T
 		Schema: types.SchemaChanges, Base: "main", RemoteURL: "git@github.com:acme/acme.git",
 		Changes: []types.Change{{
 			ID: "7", Repo: "acme/acme", Head: headA, Ref: "refs/pull/7/head", Branch: "feat",
-			Base: "main", Title: "git@github.com:acme/acme.git", Fork: true,
+			Base: "main", Title: "git@github.com:acme/acme.git", Author: "priya", Fork: true,
 			Method: types.MethodSquash, Parent: "6",
 		}},
-		Merged:   []types.MergedChange{{ID: "6", Head: headD, Commit: headE, Method: types.MethodSquash}},
-		Unqueued: []types.UnqueuedChange{{ID: "9", Repo: "acme/acme", Head: headF, Mark: types.MarkQueued}},
-		Closed:   []types.ClosedChange{{ID: "12", Repo: "acme/acme"}},
+		Merged: []types.MergedChange{{ID: "6", Head: headD, Commit: headE, Method: types.MethodSquash}},
+		Unqueued: []types.UnqueuedChange{{
+			ID: "9", Repo: "acme/acme", Head: headF, Title: "wip", Author: "ann", Branch: "wip", Base: "main", Mark: types.MarkQueued,
+		}},
+		Closed: []types.ClosedChange{{ID: "12", Repo: "acme/acme"}},
 	}, got)
 	_, err = open(t, strings.Replace(script, `"closed": [{"id": "12"`, `"closed": [{"id": "../12"`, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
 	require.ErrorContains(t, err, "closed[0]:")
@@ -299,7 +301,7 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 		{`, "fork": true`, `list_changes: changes[0]: field "fork" is missing`},
 		{`"repo": "acme/acme", `, `list_changes: changes[0]: field "repo" is missing`},
 		{`"base": "{io["base"]}", `, `list_changes: changes[0]: field "base" is missing`},
-		{`"unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "mark": "queued"}],`, `list_changes: field "unqueued" is missing`},
+		{`"unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],`, `list_changes: field "unqueued" is missing`},
 		{`, "method": "squash"}]`, `list_changes: merged[0]: field "method" is missing`},
 	} {
 		to := ""

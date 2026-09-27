@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
@@ -1571,7 +1572,9 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	return types.NewJobList(jobs), nil
+	// The same join `magus ls jobs` and the magus_job list op make, from the snapshot
+	// `magus queue ls` keeps; it never fetches.
+	return queue.JoinInflight(ctx, types.WorkspaceFromContext(ctx).Root(), types.NewJobList(jobs), job.Identity{Lease: store.Actor().Lease})
 }
 
 // MagusPutJob backs magus\job.put. The field merge is decoded by

@@ -774,6 +774,46 @@ export object JobReadOnly {
     lacks: [str] = [],
 }
 
+export object InflightNeighbour {
+    id: str = "",
+    evidence: str = "",
+    paths: [str] = [],
+    declarations: [str] = [],
+    units: [str] = [],
+    base: str = "",
+}
+
+export object InflightChange {
+    id: str = "",
+    title: str = "",
+    author: str = "",
+    head: str = "",
+    branch: str = "",
+    base: str = "",
+    fork: bool = false,
+    jobs: [str] = [],
+    intent: str = "",
+    mark: str = "",
+    decision: str = "",
+    code: str = "",
+    reason: str = "",
+    partition: int = 0,
+    position: int = 0,
+    below: str = "",
+    mine: bool = false,
+    attention: str = "",
+    neighbours: [InflightNeighbour] = [],
+}
+
+export object InflightFetch {
+    provider: str = "",
+    host: str = "",
+    base: str = "",
+    tip: str = "",
+    at: int = 0,
+    elapsedMS: int = 0,
+}
+
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
@@ -782,6 +822,9 @@ export object JobList {
     stale: [str] = [],
     blocked: [JobBlock] = [],
     readOnly: [JobReadOnly] = [],
+    changes: [InflightChange] = [],
+    fetched: InflightFetch? = null,
+    unproposed: [str] = [],
 }
 
 export object GateStatus {

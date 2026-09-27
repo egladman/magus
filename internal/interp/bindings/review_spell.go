@@ -72,6 +72,10 @@ var viewer struct {
 	name string
 }
 
+// ReviewViewer is the forge login the review provider named for its credential, "" until a
+// review lookup in this process has asked. It never asks.
+func ReviewViewer() string { return cachedViewer() }
+
 func cachedViewer() string {
 	viewer.RLock()
 	defer viewer.RUnlock()
