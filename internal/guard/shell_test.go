@@ -9,8 +9,11 @@ import (
 
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2258,4 +2261,32 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 	assert.False(t, graphReadOnly([]hint.Invocation{write}))
 	assert.True(t, repairInvocation(hint.Invocation{Name: "magus", Args: read.Args}))
 	assert.False(t, repairInvocation(hint.Invocation{Name: "magus", Args: write.Args}))
+}
+
+// A rename's process names no session, so its writes are graded under the lease it claims,
+// and in a checkout where a lease is held, claiming none is refused rather than ungraded.
+func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	edit := func(rel string) Verdict {
+		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"))
+	}
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	assert.Equal(t, graded{false, "lease-a", types.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
+	assert.Equal(t, graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(edit("cmd/magus/main.go")))
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+	assert.Equal(t, graded{true, "lease-b", types.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
+
+	t.Setenv(trail.EnvBaggage, "")
+	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
+
+	store := job.NewStore(job.Location{CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
+	_, err := store.Update(t.Context(), "lease-c", func(cur *types.Job) {
+		*cur = types.Job{ID: "lease-c", WritePaths: []string{"web/**"}, State: types.StateRunning, CheckoutRoot: root}
+	})
+	require.NoError(t, err)
+	unnamed := edit("docs/readme.md")
+	assert.Equal(t, graded{Denied: true}, gradedAs(unnamed))
+	assert.Contains(t, unnamed.Reason, "lease lease-c holds write paths in this checkout")
 }
