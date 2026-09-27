@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 
-	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/langservice"
 )
 
 // buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile surface
@@ -42,6 +44,8 @@ func buzzRepl(ctx context.Context, workDir string, noAutoload bool) error {
 		Stderr:     os.Stderr,
 		Banner:     "magus buzz - Buzz REPL (.help for commands)",
 		Candidates: workspaceReplCandidates(ctx, cwd),
+		Targets:    workspaceTargetNames(ctx, cwd),
+		Flags:      cliFlagCandidates,
 	})
 }
 
@@ -60,15 +64,11 @@ func workspaceReplCandidates(ctx context.Context, cwd string) func() []string {
 			return cached
 		}
 		// Host modules come from the binary, not the workspace, so they are always
-		// available, and they are what a workspace REPL is mostly for. Each
-		// module contributes its own name plus every `mod.method`, which is the
-		// difference between completing "fs" and completing "fs.writeFile".
-		for _, mod := range hostmodules.Describe("") {
-			cached = append(cached, mod.Name)
-			for _, meth := range hostmodules.Describe(mod.Name)[0].Methods {
-				cached = append(cached, mod.Name+"."+meth.Name)
-			}
-		}
+		// available, and they are what a workspace REPL is mostly for. Sourced from
+		// the same manifest `magus buzz lsp` completes from, spelled the way Buzz
+		// actually calls it (module\name), not the dotted form the Go descriptor
+		// declares a member under.
+		cached = append(cached, langservice.ModuleCallCandidates()...)
 		if m, err := loadMagus(ctx, cwd); err == nil {
 			// Best-effort completion candidates: this closure has no error path of its
 			// own (it feeds a completer, not a command), so a cancelled ctx here just
@@ -89,4 +89,50 @@ func workspaceReplCandidates(ctx context.Context, cwd string) func() []string {
 		}
 		return cached
 	}
+}
+
+// workspaceTargetNames supplies just this workspace's target names, for
+// completion inside magus\run(["<target>", ...]), where offering every module
+// and project path alongside them would bury the few names valid there.
+func workspaceTargetNames(ctx context.Context, cwd string) func() []string {
+	var cached []string
+	return func() []string {
+		if cached != nil {
+			return cached
+		}
+		if m, err := loadMagus(ctx, cwd); err == nil {
+			if targets, err := m.ListTargets(ctx); err == nil {
+				for _, t := range targets {
+					cached = append(cached, t.Name)
+				}
+			}
+		}
+		if cached == nil {
+			cached = []string{}
+		}
+		return cached
+	}
+}
+
+// cliFlagCandidates returns the CLI's declared flags for verb (e.g. "run"),
+// each spelled with its leading dashes, read from the same registry the
+// generated binders in cmd/magus/gen and the shell completions come from, so
+// this can't drift from what the subcommand actually accepts.
+func cliFlagCandidates(verb string) []string {
+	for _, c := range cli.All {
+		if c.Name != verb {
+			continue
+		}
+		out := make([]string, 0, len(c.Flags))
+		for _, f := range c.Flags {
+			prefix := "--"
+			if len(f.Name) == 1 {
+				prefix = "-"
+			}
+			out = append(out, prefix+f.Name)
+		}
+		sort.Strings(out)
+		return out
+	}
+	return nil
 }

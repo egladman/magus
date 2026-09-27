@@ -129,3 +129,37 @@ func (h *history) rewriteLocked() {
 	}
 	_ = file.WriteFileAtomic(h.path, buf.Bytes(), 0o600)
 }
+
+// historyWorthy reports whether a line belongs in recall: not a meta command
+// (the REPL's own vocabulary, not something to reuse from history), not blank,
+// not a comment.
+func historyWorthy(line string) bool {
+	return line != "" && !strings.HasPrefix(line, ".") && !strings.HasPrefix(line, "--")
+}
+
+// termHistory adapts *history to x/term's History interface (Add, Len, At), so
+// the line editor's arrow-key recall and its own automatic per-line Add read
+// and write the one file Repl and Pry both use.
+type termHistory struct {
+	h *history
+}
+
+func (t termHistory) Add(entry string) {
+	if t.h != nil && historyWorthy(entry) {
+		t.h.append(entry)
+	}
+}
+
+func (t termHistory) Len() int {
+	if t.h == nil {
+		return 0
+	}
+	return len(t.h.Lines())
+}
+
+// At returns the idx-th most-recently-added entry: x/term indexes from the
+// newest (0), while Lines returns oldest-first.
+func (t termHistory) At(idx int) string {
+	lines := t.h.Lines()
+	return lines[len(lines)-1-idx]
+}
