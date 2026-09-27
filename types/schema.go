@@ -86,6 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
+	Added:   map[string]int{"entries": 11},
 	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
 	// and lane_proof, write_proof's spelling through schema 8.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "lane_proof"},
@@ -101,6 +102,7 @@ var DeclarationSchema = SchemaLedger{
 	Name:     "declaration",
 	Type:     reflect.TypeFor[Declaration](),
 	Version:  JobSchemaVersion,
+	Added:    map[string]int{"enter": 11},
 	Requires: JobSchema.Requires,
 }
 
