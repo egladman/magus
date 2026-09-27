@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -577,6 +579,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 		return types.Diff{}, err
 	}
 	rev.Base = base
+	attachLayout(ctx, m, &rev, opts)
 	// The churn lenses, from a fresh scan. The server serves these from a warm cache; a
 	// one-shot CLI has none, so it pays the bounded git-log walk here. Best-effort: a
 	// workspace with no history simply reports no churn rather than failing the diff.
@@ -606,6 +609,80 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 		rev.AttachReviewed(store.ReviewedAt(paths))
 	}
 	return rev, nil
+}
+
+// attachLayout runs the package checks over the directories the change creates and sets Layout
+// on the first changed file of each. It loads the graph a second time, so it first asks the disk
+// whether an added file opened a directory at all: most changes open none.
+func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts types.DiffOptions) {
+	// An index that could not be brought current would count a stale tree's files.
+	if rev.ConformanceError != nil {
+		return
+	}
+	added := map[string]bool{}
+	for _, f := range changeset.Parse(opts.Patch) {
+		if f.Status == changeset.StatusAdded {
+			added[f.Path] = true
+		}
+	}
+	if !opensDir(m.Root(), added) {
+		return
+	}
+	fail := func(err error) {
+		rev.Notes = append(rev.Notes, "layout: the package checks could not run: "+err.Error())
+	}
+	graph, err := m.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		fail(err)
+		return
+	}
+	var files []string
+	for _, n := range graph.Nodes() {
+		if n.Kind == types.KindFile || n.Kind == types.KindDoc {
+			files = append(files, n.Source)
+		}
+	}
+	entries, err := m.ClassifyFiles(ctx, files)
+	if err != nil {
+		fail(err)
+		return
+	}
+	generated := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			generated[e.Path] = true
+		}
+	}
+	found := graph.Layout(knowledge.LayoutChange{
+		Added: added, Generated: generated, MinCohort: opts.MinCohort, MinShare: opts.MinShare,
+	})
+	for dir, checks := range found {
+		i := slices.IndexFunc(rev.Files, func(f types.DiffFile) bool { return path.Dir(f.Path) == dir })
+		if i >= 0 {
+			rev.Files[i].Layout = checks
+		}
+	}
+}
+
+// opensDir reports whether some added file sits in a directory holding no file the change did
+// not add. Subdirectories are left to the graph, which knows which of their files are new.
+func opensDir(root string, added map[string]bool) bool {
+	for file := range added {
+		dir := path.Dir(file)
+		if dir == "." {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
+		if err != nil {
+			continue
+		}
+		if !slices.ContainsFunc(entries, func(e os.DirEntry) bool {
+			return !e.IsDir() && !added[path.Join(dir, e.Name())]
+		}) {
+			return true
+		}
+	}
+	return false
 }
 
 // watchDiff re-renders whenever the working tree changes, until interrupted.
@@ -1475,6 +1552,9 @@ func diffFileFacts(f types.DiffFile) []string {
 		for _, c := range s.Checks {
 			facts = append(facts, "CONFORMANCE "+c.Message)
 		}
+	}
+	for _, c := range f.Layout {
+		facts = append(facts, "LAYOUT "+c.Message)
 	}
 	if n := f.ReachOr(0); f.Reach != nil && n > 0 {
 		noun := "files"

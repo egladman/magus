@@ -188,6 +188,9 @@ final symbolChecks = [
     {"check": "name-collision", "heading": "This adds a name a workspace entity already carries"},
     {"check": "rename-leftover", "heading": "This renames a symbol whose old name still appears where it is used"},
     {"check": "param-order", "heading": "This takes parameters in the reverse of the order its neighbors take them"},
+    {"check": "package-files", "heading": "This adds a directory holding one file where the directories beside it hold more"},
+    {"check": "package-tests", "heading": "This adds a directory holding no test file where the directories beside it hold one"},
+    {"check": "package-name", "heading": "This adds a directory with a digit in its name where the directories beside it have none"},
 ];
 
 // symbolRow flattens one finding to primitives, so the rendering is testable: a host object
@@ -256,7 +259,8 @@ fun body(items: [{str: str}], rows: [{str: str}], caveats: [str]) > str {
     foreach (c in caveats) { parts.append("_" + cell(c) + "_\n\n"); }
     return parts.join("")
         + "Nobody wrote these conventions down. magus derived them from the workspace: targets "
-        + "grouped by the ops they invoke, declarations by their shape. Each count above is "
+        + "grouped by the ops they invoke, declarations by their shape, directories by the ones "
+        + "beside them. Each count above is "
         + "what the rest of the code already does, not a rule imposed on you.\n\n"
         + "Renaming now is cheap. Later it means changing every caller, and for a target every "
         + "CI config and script that names it, across teams that each have to be persuaded "
@@ -333,6 +337,9 @@ fun main() > void !> any {
             foreach (c in sym.checks) {
                 rows.append(symbolRow(f.path, check: c.name, message: c.message, details: c.details));
             }
+        }
+        foreach (c in f.layout) {
+            rows.append(symbolRow(f.path, check: c.name, message: c.message, details: c.details));
         }
     }
     // What weakened the symbol half is said beside its findings, never left to be inferred.
@@ -476,6 +483,18 @@ test "each check gets its own table, in symbolChecks order" {
     std\assert(text.indexOf("old name still appears") != null, message: "rename table");
     std\assert(text.indexOf("a \\| b") != null, message: "a pipe cannot split the table");
     std\assert(text.indexOf("already carries") < text.indexOf("old name still appears"), message: "symbolChecks order");
+}
+
+test "a new directory's finding renders under its own heading" {
+    final text = symbolTables([
+        symbolRow("internal/merge3/merge.go", check: "package-name",
+            message: "`internal/merge3`: 1 Go file, 1 test file and 2 importing directories; 63 of 64 Go directories beside it carry no digit in their names, as `internal/merge` and `internal/memory` do",
+            details: ["not: internal/sha3"]),
+    ]);
+    std\assert(text.indexOf("a digit in its name") != null, message: "the package-name table's heading");
+    std\assert(text.indexOf("63 of 64") != null, message: "the count is the argument");
+    std\assert(text.indexOf("| not: internal/sha3 |") != null, message: "the outliers are the evidence");
+    std\assert(text.indexOf("holding one file") == null, message: "no package-files finding, no package-files table");
 }
 
 test "a change that could not be checked never reads as one with nothing to report" {

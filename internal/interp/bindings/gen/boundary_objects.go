@@ -937,6 +937,11 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 		itemsSymbols[indexSymbols] = ObjectDiffSymbol(v.Symbols[indexSymbols])
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	itemsLayout := make([]vm.Value, len(v.Layout))
+	for indexLayout := range v.Layout {
+		itemsLayout[indexLayout] = ObjectCheck(v.Layout[indexLayout])
+	}
+	out.MapSet("layout", vm.ListValue(itemsLayout))
 	out.MapSet("surface", vm.StrValue(v.Surface))
 	itemsTouches := make([]vm.Value, len(v.Touches))
 	for indexTouches := range v.Touches {
