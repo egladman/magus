@@ -12,6 +12,7 @@ import (
 func TestPluginsRegister(t *testing.T) {
 	for name, settings := range map[string]any{
 		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
+		"filenames":     map[string]any{"module": "example.com/m", "allow": []any{"runtime"}},
 		"hostagnostic":  map[string]any{"skip-dirs": []any{"gen"}},
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}},
 		"importceiling": map[string]any{"rules": []any{map[string]any{"package": "a", "prefix": "b/", "max": 1}}},

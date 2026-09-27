@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/libs/conventions/asciistrings"
+	"github.com/egladman/magus/libs/conventions/filenames"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
 	"github.com/egladman/magus/libs/conventions/importceiling"
@@ -23,6 +24,7 @@ import (
 
 func init() {
 	register.Plugin("asciistrings", plugin(asciistrings.New))
+	register.Plugin("filenames", plugin(filenames.New))
 	register.Plugin("hostagnostic", plugin(hostagnostic.New))
 	register.Plugin("hostvocab", plugin(hostvocab.New))
 	register.Plugin("importceiling", plugin(importceiling.New))
