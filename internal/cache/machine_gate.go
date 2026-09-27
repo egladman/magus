@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -213,12 +214,76 @@ func workingDir() string {
 // would loop on them.
 
 // machineBusyError is the fail-fast answer: another magus invocation fills the machine
-// right now, and the same command will succeed later.
+// right now, and the same command will succeed later. The wait belongs to the caller, so
+// the error names the pipe that does it rather than a retry loop.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full; %s, and %s. %s",
+		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
+		describeMachineRemaining(v), describeMachineHolders(v.Holders),
+		hint.Status.With("--wait"), hint.Run)}
+}
+
+// machineAwaitEvery paces AwaitMachine's reads of the budget. Slower than
+// machinePollEvery: each read is a fresh broker connection, and the wait is on other
+// invocations, which finish in seconds at the earliest.
+//
+// A var for the reason machineReleaseTimeout is one.
+var machineAwaitEvery = 500 * time.Millisecond
+
+// AwaitMachine blocks until the budget snapshot reads would admit every claim in claims
+// beside what it holds, each on its own: a run's steps wait on one another rather than
+// refuse. It takes and holds nothing, so a run started once it returns can still lose
+// the budget to another invocation that asks first.
+//
+// It returns nil at once when snapshot fails, since no broker means nothing refuses the
+// run; the MGS3009 refusal for a claim larger than the whole budget, which no wait
+// admits; or ctx's error. waiting is called once, when the first read keeps it out.
+//
+// A snapshot counts every holder, the claims of this process's own ancestors included,
+// so a caller nested under a magus run can wait on its parent. Only a top-level caller
+// should wait.
+func AwaitMachine(ctx context.Context, snapshot func(context.Context) (types.MachineSnapshot, error), claims []types.MachineClaim, waiting func(msg string)) error {
+	announced := false
+	for {
+		s, err := snapshot(ctx)
+		if err != nil {
+			return nil //nolint:nilerr // unarbitrated: the run admits itself
+		}
+		blocked, ok := firstUnadmitted(s, claims)
+		if !ok {
+			return nil
+		}
+		v := types.MachineVerdict{Holders: s.Holders, BudgetMB: s.BudgetMB, HeldMB: s.HeldMB, BudgetSlots: s.BudgetSlots, HeldSlots: s.HeldSlots}
+		budget := NewMachineBudget(s.BudgetMB, s.BudgetSlots)
+		if !budget.fits(blocked, 0, 0) {
+			return machineDoesNotFitError(blocked, v)
+		}
+		if !announced && waiting != nil {
+			waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
+				displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
+				describeMachineRemaining(v), describeMachineHolders(v.Holders)))
+			announced = true
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
+		case <-time.After(machineAwaitEvery):
+		}
+	}
+}
+
+// firstUnadmitted returns the first claim s cannot seat beside what it holds, by the
+// rule MachineBudget.Request applies to a claim with no ancestors.
+func firstUnadmitted(s types.MachineSnapshot, claims []types.MachineClaim) (types.MachineClaim, bool) {
+	budget := NewMachineBudget(s.BudgetMB, s.BudgetSlots)
+	for _, c := range claims {
+		c.Slots = max(c.Slots, 1)
+		if !budget.fits(c, s.HeldMB, s.HeldSlots) {
+			return c, true
+		}
+	}
+	return types.MachineClaim{}, false
 }
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit

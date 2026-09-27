@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	procrun "github.com/egladman/magus/internal/proc/run"
@@ -30,7 +31,8 @@ import (
 
 // TestHelperPipeStage is not a test: it is one stage of a shell pipe, re-executed from
 // this binary so it runs the same executable a real magus stage would. PIPETEST_*
-// configures it: sleep PRE_MS, take PROJECTS through takeRunLocks, touch READY, write
+// configures it: raise the pipe gate when GATE is set, sleep PRE_MS, take PROJECTS
+// through takeRunLocks, touch READY, wait for the budget until AWAIT_FILE exists, write
 // WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
 // the status it records and exits with.
@@ -44,6 +46,9 @@ func TestHelperPipeStage(t *testing.T) {
 		return time.Duration(n) * time.Millisecond
 	}
 	l := newProjectLocker(env("CACHE_DIR"), testWorkspaceRoot, withStdio(&ProcessStdio{Stdin: os.Stdin, Stdout: os.Stdout}))
+	if env("GATE") != "" {
+		GatePipe(testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: env("CACHE_DIR")}})
+	}
 	time.Sleep(ms("PRE_MS"))
 	release := func() {}
 	if p := env("PROJECTS"); p != "" {
@@ -62,6 +67,17 @@ func TestHelperPipeStage(t *testing.T) {
 	}
 	if r := env("READY"); r != "" {
 		_ = os.WriteFile(r, []byte("1"), 0o644)
+	}
+	if f := env("AWAIT_FILE"); f != "" {
+		budget := func(context.Context) (types.MachineSnapshot, error) {
+			if _, err := os.Stat(f); err == nil {
+				return types.MachineSnapshot{BudgetSlots: 1}, nil
+			}
+			return types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1}, nil
+		}
+		if err := cache.AwaitMachine(context.Background(), budget, []types.MachineClaim{{Slots: 1}}, nil); err != nil {
+			os.Exit(4)
+		}
 	}
 	_, _ = os.Stdout.WriteString(env("WRITE_HOLDING"))
 	if n, _ := strconv.Atoi(env("WRITE_BYTES")); n > 0 {
@@ -660,6 +676,85 @@ func TestReadOnlyUpstreamNeverDelays(t *testing.T) {
 	defer release()
 	if sp != nil || time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("waited %s on a producer that takes no locks", time.Since(start))
+	}
+}
+
+// readOnly classifies a stage whose argv says "readonly" as one that takes no locks, the
+// way status is classified.
+func readOnly(argv []string) bool { return !slices.Contains(argv, "readonly") }
+
+// TestPipeGateHoldsTheRunUntilItExits is `magus status --wait | magus run`: status
+// takes no locks, yet its gate holds the run back until it exits.
+func TestPipeGateHoldsTheRunUntilItExits(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	ready := readyFile(t)
+	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "500", "EXIT": "0"}, "readonly")
+	upstreamOf(t, up, w)
+	waitForFile(t, ready, 5*time.Second)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	start := time.Now()
+	release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
+	if err != nil {
+		t.Fatalf("takeRunLocks after a gate that exited 0: %v", err)
+	}
+	release()
+	if waited := time.Since(start); waited < 300*time.Millisecond {
+		t.Fatalf("started after %s, before the gated upstream exited", waited)
+	}
+}
+
+// TestPipeGateThatFailsStartsNothing: a wait that fails fails the pipeline, so the run
+// never reaches the budget it was waiting for.
+func TestPipeGateThatFailsStartsNothing(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	ready := readyFile(t)
+	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "200", "EXIT": "78"}, "readonly")
+	upstreamOf(t, up, w)
+	waitForFile(t, ready, 5*time.Second)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	_, _, err := l.takeRunLocks(t.Context(), []string{"p"})
+	wantPipeUpstreamFailed(t, err, 78, up.Process.Pid)
+}
+
+// TestStatusWaitPipeRunsTheDownstreamAfterRelease is the whole composition: the gated
+// stage waits on a full budget, and the run behind it starts once the budget frees.
+func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	ready := readyFile(t)
+	freed := filepath.Join(t.TempDir(), "freed")
+	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_FILE": freed, "EXIT": "0"}, "readonly")
+	upstreamOf(t, up, w)
+	waitForFile(t, ready, 5*time.Second)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	done := make(chan error, 1)
+	go func() {
+		release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
+		if err == nil {
+			release()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the run started (%v) while the budget was still full", err)
+	case <-time.After(700 * time.Millisecond):
+	}
+	if err := os.WriteFile(freed, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("takeRunLocks once the budget freed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run never started after the budget freed")
 	}
 }
 

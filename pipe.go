@@ -17,6 +17,7 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
@@ -170,20 +171,33 @@ func RecordPipeExit(root string, cfg config.Config, status int, signal string) {
 // It blocks while a reader is a shell child that has yet to exec its command, up to
 // pipeExecWait, since the shell forks every stage of a pipeline at once.
 func ReadByMagus(ctx context.Context, out *os.File) bool {
+	_, ok := ReaderArgv(ctx, out)
+	return ok
+}
+
+// ReaderArgv is ReadByMagus that also returns the reader's argv, argv[0] first: what the
+// next stage of the pipe was asked to do. argv is nil when a magus reads out but its
+// argv cannot be read.
+func ReaderArgv(ctx context.Context, out *os.File) (argv []string, ok bool) {
 	if out == nil {
-		return false
+		return nil, false
 	}
 	self := os.Getpid()
 	p, err := pipepeer.WriteEnd(self, int(out.Fd()))
 	if err != nil {
-		return false
+		return nil, false
 	}
 	ancestors := ancestorPIDs(ctx, self)
-	return pollPeers(ctx, p.Readers, func(pid int) bool { return pid == self || ancestors[pid] }, func(pid int) bool {
+	ok = pollPeers(ctx, p.Readers, func(pid int) bool { return pid == self || ancestors[pid] }, func(pid int) bool {
 		// Asked after SameExecutable: a fork listed as a reader that has since exec'd this
 		// executable closed its copy of the pipe on the way.
-		return pipepeer.SameExecutable(pid) && p.ReadBy(pid)
+		if !pipepeer.SameExecutable(pid) || !p.ReadBy(pid) {
+			return false
+		}
+		argv, _ = pipepeer.Args(pid)
+		return true
 	})
+	return argv, ok
 }
 
 // RecordUpstream returns the pid of a magus stage writing in directly, proven from the
@@ -342,8 +356,81 @@ func WithProcessStdio(s ProcessStdio) RunOption { return func(o *run) { o.stdio 
 
 func withStdio(s *ProcessStdio) lockerOption { return func(l *projectLocker) { l.stdio = s } }
 
+// pipeGate is GatePipe's flock. Referenced for the life of the process so no finalizer
+// closes it, which would lift the gate early.
+var pipeGate *flock.Flock
+
+// GatePipe holds the magus stage reading this process's stdout from starting anything
+// until this process exits: it takes no lock, and it refuses with MGS3030 if this process
+// exits non-zero. It does nothing unless stdout is a pipe. Call it at process start: a
+// stage that has already passed its locks does not look again.
+//
+// There is no release. The reader must see this process's exit record before it starts,
+// and that is written after the command returns.
+func GatePipe(root string, cfg config.Config) {
+	if pipeGate != nil || !isPipe(os.Stdout) {
+		return
+	}
+	dir := pipeDirOf(resolveCacheDir(root, cfg), root)
+	if os.MkdirAll(dir, 0o755) != nil {
+		return
+	}
+	fl := flock.New(filepath.Join(dir, strconv.Itoa(os.Getpid())+gateSuffix))
+	if got, err := fl.TryLock(); err == nil && got {
+		pipeGate = fl
+	}
+}
+
+// MachineClaims is what a run of targets, under charms and with extraArgs forwarded,
+// would ask the machine budget for: one claim per selected target, sized as the run sizes
+// it. A gating stage waits on these for the run it feeds (see GatePipe).
+//
+// They are the selected targets' own claims. A step the run reaches through a project
+// dependency claims for itself when it starts, and is not weighed here.
+func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []types.MachineClaim {
+	size := memorySizer(m.peakIndex(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs))
+	capacity := m.limiter().Capacity()
+	out := make([]types.MachineClaim, 0, len(targets))
+	for _, t := range targets {
+		p := m.Get(t.Path)
+		if p == nil {
+			continue
+		}
+		step := m.buildStep(p, t.Name)
+		if size != nil {
+			if sizing := m.claimMemory(&step, p, t.Name, size); sizing.Measured() {
+				step.MemorySizing = sizing
+			}
+		}
+		slots := max(step.Slots, 1)
+		if capacity > 0 {
+			slots = min(slots, capacity)
+		}
+		out = append(out, types.MachineClaim{
+			Project: p.Path, Target: t.Name, DeclaredBy: step.MemoryDeclaredBy,
+			MemoryMB: step.MemoryMB, Sizing: step.MemorySizing, Slots: slots,
+		})
+	}
+	return out
+}
+
+// gated reports whether procID holds a pipe gate (see GatePipe). A gate left by a dead
+// process is swept.
+func (l *projectLocker) gated(procID int) bool {
+	path := filepath.Join(l.pipeDir(), strconv.Itoa(procID)+gateSuffix)
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	if lockIsHeld(path) {
+		return true
+	}
+	_ = os.Remove(path)
+	return false
+}
+
 const (
 	pipeDirName    = ".pipe"
+	gateSuffix     = ".gate"
 	holdsSuffix    = ".holds"
 	pipeWaitSuffix = ".wait"
 	exitSuffix     = ".exit"
@@ -645,14 +732,14 @@ type upstreamBlock struct {
 }
 
 // blocking returns the upstream stages this run must still wait for, conflicts first:
-// those that may take locks, still write their pipe, and have either not settled a lock
-// set yet or settled one that overlaps paths. A stage whose settled set is disjoint
-// streams alongside.
+// those that may take locks or hold a gate, still write their pipe, and have either not
+// settled a lock set yet or settled one that overlaps paths. A stage whose settled set is
+// disjoint streams alongside; a gate never settles one.
 func (l *projectLocker) blocking(ups []upstreamStage, paths []string) []upstreamBlock {
 	want := canonicalProjects(paths)
 	var out []upstreamBlock
 	for _, u := range ups {
-		if !u.takesLocks || !u.writes.WrittenBy(u.pid) {
+		if (!u.takesLocks && !l.gated(u.pid)) || !u.writes.WrittenBy(u.pid) {
 			continue
 		}
 		held, settled := l.settledProjects(u.pid)
@@ -733,8 +820,12 @@ func (l *projectLocker) emitPipeWait(ctx context.Context, up upstreamStage) {
 		_ = report.Record(l.rw, report.LockPipeWait{UpstreamPID: up.pid, Command: up.command()})
 		return
 	}
-	fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to finish with the projects this run needs before taking their locks.\n",
-		up.pid, up.command())
+	if l.gated(up.pid) {
+		fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to exit before starting.\n", up.pid, up.command())
+	} else {
+		fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to finish with the projects this run needs before taking their locks.\n",
+			up.pid, up.command())
+	}
 	slog.InfoContext(ctx, "lock.pipe_wait", slog.Int("upstream_pid", up.pid), slog.String("upstream_command", up.command()))
 }
 
