@@ -22,9 +22,15 @@ import (
 // that merely looks equivalent. Anything short of that proof stays silent: a deny that
 // routes nowhere takes a capability away.
 //
-// Three shapes are provable: a pattern that can only match diagnostic codes, a pattern
-// that selects every Markdown heading of the files searched, and a pattern whose every hit
-// in a magusfile is a target declaration.
+// Four shapes are provable: a pattern that can only match diagnostic codes, a pattern
+// that selects every Markdown heading of the files searched, a pattern whose every hit in
+// a magusfile is a target declaration, and a pattern whose every hit in a Go file is a
+// declaration of an indexed symbol. Each deny carries the answer, bounded, so the reader
+// loses nothing by being refused.
+//
+// Measured 2026-09-26 over 89,116 search calls in 1,441 transcripts: 1,389 listed a Go
+// file's declarations (`^func `, `^func Test`), 369 its headings, 319 diagnostic codes
+// and 176 target declarations.
 
 // translatableTools are the search tools whose flags and dialects this rule models.
 var translatableTools = map[string]bool{"grep": true, "egrep": true, "fgrep": true, "rg": true}
@@ -289,10 +295,12 @@ func bracketEnd(p string, i int) (int, bool) {
 	return 0, false
 }
 
-// translation is one provable answer: the magus command and why it is the same answer.
+// translation is one provable answer: the magus command, why it is the same answer, and
+// the answer itself.
 type translation struct {
-	args []string // after the binary name
-	why  string
+	args   []string // after the binary name
+	why    string
+	answer []string // what the command prints, as far as the proof computed it
 	// routes is set for a search of literal diagnostic codes, which keeps the
 	// symbol-search rule's per-code answer.
 	routes []searchRoute
@@ -322,6 +330,9 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 			tr, ok = translateTargets(deps, dir, sc)
 		}
 		if !ok {
+			tr, ok = translateDeclarations(deps, dir, c, sc)
+		}
+		if !ok {
 			continue
 		}
 		if tr.routes != nil {
@@ -335,6 +346,7 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 func denySearchTranslation(tr translation) string {
 	return "`" + hint.BinaryName() + " " + strings.Join(tr.args, " ") + "` answers this search exactly.\n" +
 		tr.why + "\n" +
+		answerBlock("Its answer", tr.answer) + "\n" +
 		"Search raw TEXT (a string literal, a comment, a config value) with grep as before: no graph node holds that, so nothing replaces it."
 }
 
@@ -476,10 +488,15 @@ func translateDiagnostics(dir string, sc searchCall) (translation, bool) {
 	if !slices.Equal(selected, matched) {
 		return translation{}, false
 	}
+	ids := make([]string, len(selected))
+	for i, code := range selected {
+		ids[i] = types.KindDiagnostic + ":" + code
+	}
 	return translation{
 		args: []string{"query", "kind=" + types.KindDiagnostic, "'id=~" + idRe + "'", "-o", "name"},
 		why: "The pattern can match nothing but a diagnostic code, and it matches " + countNoun(len(matched), "registered code") + " (" + sample(matched) + "). " +
 			"The graph holds a node for every registered code, and `" + hint.Explain.With("diagnostic:<code>") + "` gives each one's page and the docs that cite it.",
+		answer: ids,
 	}, true
 }
 
@@ -672,10 +689,12 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 		return translation{}, false
 	}
 	got := map[string]int{}
+	var sections []string
 	for _, id := range ids {
 		if answer.MatchString(id) {
 			file, _, _ := strings.Cut(strings.TrimPrefix(id, "docsection:"), "#")
 			got[file]++
+			sections = append(sections, id)
 		}
 	}
 	if !mapsEqual(got, want) {
@@ -689,6 +708,7 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 		args: []string{"query", "kind=" + types.KindDocSection, "'id=~" + idRe + "'", "-o", "name"},
 		why: "The pattern selects every Markdown heading and nothing else here: " + countNoun(total, "heading line") + " across " + countNoun(len(want), "file") +
 			", one per section node the graph holds for them. `" + hint.Explain.With("docsection:<file>#<anchor>") + "` gives a section's text and links.",
+		answer: sections,
 	}, true
 }
 
@@ -831,17 +851,70 @@ func translateTargets(deps Dependencies, dir string, sc searchCall) (translation
 			return translation{}, false
 		}
 	}
-	why := "Every line the pattern selects declares a target, and the graph holds each one: " + strings.Join(targets, ", ") + "."
+	why := "Every line the pattern selects declares a target, and the graph holds each one."
 	if len(targets) == 1 {
-		return translation{args: []string{"explain", targets[0]}, why: why}, true
+		return translation{args: []string{"explain", targets[0]}, why: why, answer: targets}, true
 	}
 	quoted := make([]string, len(targets))
 	for i, id := range targets {
 		quoted[i] = regexp.QuoteMeta(id)
 	}
 	return translation{
-		args: []string{"query", "kind=" + types.KindTarget, "'id=~^(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"},
-		why:  why,
+		args:   []string{"query", "kind=" + types.KindTarget, "'id=~^(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"},
+		why:    why,
+		answer: targets,
+	}, true
+}
+
+// goDeclRe is a Go top-level declaration and its name, the receiver of a method skipped.
+// A `type (` or `var (` block opener names nothing and so is not one.
+var goDeclRe = regexp.MustCompile(`^(?:func(?:\s*\([^()]*\))?|type|var|const)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
+// translateDeclarations answers a search of one Go file whose every selected line
+// declares a symbol the index holds: `^func `, `^func Test`, `func (s \*Store)`. A lookup
+// of one name is the symbol-search rule's, which answers it with the definition itself.
+// A single hit that is a call, a comment or a string is text the graph does not hold,
+// and keeps the rule silent.
+func translateDeclarations(deps Dependencies, dir string, c hint.Invocation, sc searchCall) (translation, bool) {
+	if deps.scope.root == "" || len(sc.paths) != 1 || path.Ext(sc.paths[0]) != ".go" {
+		return translation{}, false
+	}
+	if _, single := provableRoutes(deps, asSearch(c)); single {
+		return translation{}, false
+	}
+	line, ok := sc.lineRegexp()
+	if !ok {
+		return translation{}, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return translation{}, false
+	}
+	abs, rel, ok := workspacePath(root, dir, sc.paths[0])
+	if !ok {
+		return translation{}, false
+	}
+	selected, ok := selectedLines(abs, line)
+	if !ok || len(selected) == 0 {
+		return translation{}, false
+	}
+	names := make([]string, 0, len(selected))
+	for _, l := range selected {
+		n, text, _ := strings.Cut(l, ":")
+		m := goDeclRe.FindStringSubmatch(text)
+		if m == nil {
+			return translation{}, false
+		}
+		if defined, definitive := deps.symbolDefined(m[1]); !defined || !definitive {
+			return translation{}, false
+		}
+		names = append(names, n+": "+m[1])
+	}
+	return translation{
+		args: []string{"explain", types.KindFile + ":" + rel},
+		why: "Every line the pattern selects declares a symbol, and the index holds each of the " + countNoun(len(names), "name") + ". " +
+			"The file node lists everything the file defines, and `" + hint.Refs.With("<name>", "--definition", "--source") + "` prints any one body.",
+		answer: names,
 	}, true
 }
 
