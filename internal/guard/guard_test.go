@@ -606,11 +606,11 @@ func treeState(t *testing.T, dirs ...string) map[string]string {
 	return state
 }
 
-// A check reaches the verdict the call would and leaves the cache dir and the state dir
+// A dry run reaches the verdict the call would and leaves the cache dir and the state dir
 // as it found them, where the call itself writes to one of them. The second round reads
 // what the first call wrote: a held advisory stays held, a recorded drift stays quiet.
 // Only a repeated deny is worded differently.
-func TestCheckJudgesAsTheCallAndWritesNothing(t *testing.T) {
+func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T) (context.Context, Dependencies, Request)
@@ -665,14 +665,14 @@ func TestCheckJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			t.Setenv(trail.EnvBaggage, "")
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
-			checked.Check = true
+			checked.DryRun = true
 			for round := range 2 {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
-				assert.Equal(t, before, treeState(t, dirs...), "round %d: the check wrote", round)
-				leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "magus-guard-check-*"))
+				assert.Equal(t, before, treeState(t, dirs...), "round %d: the dry run wrote", round)
+				leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "magus-guard-dry-run-*"))
 				require.NoError(t, err)
-				assert.Empty(t, leftover, "round %d: the check left its copy behind", round)
+				assert.Empty(t, leftover, "round %d: the dry run left its copy behind", round)
 
 				real := Judge(ctx, deps, req)
 				if round == 0 {
@@ -694,12 +694,12 @@ func TestCheckJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	}
 }
 
-// Judging a spawn records it, so a check refuses one rather than record it.
-func TestCheckRefusesASpawn(t *testing.T) {
+// Judging a spawn records it, so a dry run refuses one rather than record it.
+func TestDryRunRefusesASpawn(t *testing.T) {
 	testkit.Isolate(t)
 	cacheDir := t.TempDir()
 	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
-	v := Judge(ctx, Dependencies{}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", Check: true})
+	v := Judge(ctx, Dependencies{}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", DryRun: true})
 	assert.Equal(t, "deny", v.Decision)
 	entries, err := os.ReadDir(cacheDir)
 	require.NoError(t, err)

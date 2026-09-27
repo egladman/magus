@@ -2254,10 +2254,12 @@ func TestGlobalFlagScannersAgreeExceptOnUnknownFlags(t *testing.T) {
 
 func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 	read := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo"}}
-	check := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "--check"}}
+	dryRun := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "--dry-run"}}
+	short := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "-u"}}
 	write := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename=Bar"}}
 	assert.True(t, graphReadOnly([]hint.Invocation{read}))
-	assert.True(t, graphReadOnly([]hint.Invocation{check}))
+	assert.True(t, graphReadOnly([]hint.Invocation{dryRun}))
+	assert.True(t, graphReadOnly([]hint.Invocation{short}))
 	assert.False(t, graphReadOnly([]hint.Invocation{write}))
 	assert.True(t, repairInvocation(hint.Invocation{Name: "magus", Args: read.Args}))
 	assert.False(t, repairInvocation(hint.Invocation{Name: "magus", Args: write.Args}))
@@ -2291,13 +2293,13 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	assert.Contains(t, unnamed.Reason, "lease lease-c holds write paths in this checkout")
 }
 
-// `refs --rename --check` grades each file as the rename would and leaves no activity line.
-func TestJudgeEditCheckRecordsNothing(t *testing.T) {
+// `refs --rename --dry-run` grades each file as the rename would and leaves no activity line.
+func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	edit := func(rel string, check bool) Verdict {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), check)
+	edit := func(rel string, dryRun bool) Verdict {
+		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	for i, rel := range []string{"internal/ledger/store.go", "cmd/magus/main.go"} {
 		preview := edit(rel, true)

@@ -199,12 +199,12 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
-	// Check reaches the verdict the call would and writes nothing: the session state the
+	// DryRun reaches the verdict the call would and writes nothing: the session state the
 	// rules spend is read from a discarded copy, and no trail line, policy record, binding
 	// or registration is made. One difference in wording: a repeated deny is shown in full,
 	// since the short form cites a stored verdict. A spawn or continuation is refused, as
 	// judging one records it.
-	Check bool
+	DryRun bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
@@ -330,7 +330,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Agent == "" {
 			who.Agent = env.Who.Agent
 		}
-		if req.Check && (env.LoadedSkill != "" || env.NothingToJudge) {
+		if req.DryRun && (env.LoadedSkill != "" || env.NothingToJudge) {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		if env.LoadedSkill != "" {
@@ -357,7 +357,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			isPath = true
 		}
 		if env.IsSpawn || env.IsContinue {
-			if req.Check {
+			if req.DryRun {
 				return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
 					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
 			}
@@ -372,14 +372,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
 	policyDigest := ""
-	if !req.Check {
+	if !req.DryRun {
 		policyDigest = recordPolicy(ctx, deps, location, false)
 	}
 	ctx = withJobStoreRows(ctx, location)
 	// Where the gates and the workspace rules keep session state. The rest of location is
 	// what the rules judge against, so a check swaps only the cache dir.
 	stateAt := location
-	if req.Check {
+	if req.DryRun {
 		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey())
 		defer os.RemoveAll(stateAt.cacheDir)
 	}
@@ -389,7 +389,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
 	switch {
 	case bound == "" || actingLease != bound:
-	case req.Check:
+	case req.DryRun:
 		ctx = withRegisteredBase(ctx, deps, location, bound)
 	case registerAgentBase(ctx, deps, location, bound):
 		ctx = withJobStoreRows(ctx, location)
@@ -722,7 +722,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			lease:       actingLease,
 		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
-		if !req.Check && (verdict.Decision == "pass" || verdict.Decision == "advise") {
+		if !req.DryRun && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 			bindOnExec(ctx, location, who, input)
 		}
 	}
@@ -756,7 +756,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
 		}
 		shapeGate := markers
-		if req.Check {
+		if req.DryRun {
 			shapeGate = hint.Gate{} // spends and stores nothing, so the deny is worded in full
 		}
 		verdict.Reason, verdictRef = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note)
@@ -770,7 +770,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	if !req.Check {
+	if !req.DryRun {
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
 	}
 	return verdict
@@ -1206,12 +1206,12 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 // copySessionState copies into a new temporary directory what the gates keyed on keys hold
 // under cacheDir, and the served-next journal, keeping modification times, since an
 // anonymous marker expires on its age. "" when there is nothing to copy or the copy cannot
-// be made: a check then reads a session nothing was told yet, rather than write the real one.
+// be made: a dry run then reads a session nothing was told yet, rather than write the real one.
 func copySessionState(cacheDir string, keys ...string) string {
 	if cacheDir == "" {
 		return ""
 	}
-	dir, err := os.MkdirTemp("", "magus-guard-check-")
+	dir, err := os.MkdirTemp("", "magus-guard-dry-run-")
 	if err != nil {
 		return ""
 	}
