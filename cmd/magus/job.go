@@ -886,10 +886,10 @@ func jobExit(ctx context.Context, root string, args []string) error {
 // cited a run from somewhere else reads exactly like one that did the work, and this is
 // where that stops being true.
 //
-// THE VERIFIER IS NEVER THE VERIFIED. A session holding the lease is refused before
-// anything is read: a holder that can verify its own job is the loop's one remaining
-// self-assessment, and the store would refuse the resulting write anyway, so it is refused
-// here where the message can say why.
+// THE VERIFIER IS NEVER THE VERIFIED. A session holding a lease is refused before the
+// result is read unless the job sits below that lease: a holder that can verify its own
+// job, a sibling's or an ancestor's is the loop's one remaining self-assessment. Waiting
+// on a child it forked is the orchestrator's seat, one level down.
 //
 // Two failing statuses, because the caller is a shell step and the two send it somewhere
 // different: 2 for a result magus could not read at all (fix the result), 1 for one that
@@ -937,7 +937,11 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if actor := store.Actor(); actor.Bound() {
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	if actor := store.Actor(); !actor.Verifies(rows, pos[0]) {
 		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
 			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
