@@ -197,6 +197,19 @@ func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	}
 }
 
+// An exited holder returned, so its write paths collide with nobody's while it waits to be
+// graded.
+func TestJobOverlapsSkipsAnExitedJob(t *testing.T) {
+	t.Parallel()
+
+	live := owner("live", StateRunning, "internal/ledger")
+	exited := owner("exited", StateExited, "internal/ledger")
+	assert.Empty(t, jobOverlaps([]Job{live, exited}))
+	assert.Empty(t, jobOverlaps([]Job{exited, live}), "whichever order the rows sit in")
+	assert.True(t, StateExited.Live(), "an exited job stays live until it is graded")
+	assert.False(t, StateExited.Editing())
+}
+
 func TestNewJobListDerivesOverlapsFromTheRows(t *testing.T) {
 	t.Parallel()
 

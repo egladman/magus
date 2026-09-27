@@ -48,13 +48,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                               |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `lint-files`, `site-generate`                                                                |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                   |
-| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                  |
+| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                             |
 | module     | built in | `magus query kind=module`     |                                                                                                                  |
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
-| doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/rules/index.md` |
+| doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                   |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                              |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `records`                                                                                 |
@@ -74,7 +74,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/pricing                    |       7 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
 | libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
@@ -245,18 +244,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
 | `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
 | `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                                                                                                                                       |
-
-## Project: libs/pricing
-
-| Target           | What it does                                                                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                                                                     |
-| `format`         | No go-mod-tidy, unlike the sibling libraries: this package has no go.mod, so tidy here would rewrite the ROOT module's from a descendant project, which is the cross-project write magus rejects as MGS3001. |
-| `lint`           | go-vet only.                                                                                                                                                                                                 |
-| `build`          |                                                                                                                                                                                                              |
-| `test`           | No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters.                                                                                  |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                                                                        |
 
 ## Project: libs/testlayout
 

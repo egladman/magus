@@ -61,6 +61,13 @@ type rulesAnswer struct {
 	answered []string
 	// failures are the sides that judged nothing, and why.
 	failures []trail.RuleFailure
+	// timedOut is true when the answer is the deny for an approved side that did not
+	// resolve in time; that deny already says so, so no failure note is added to it.
+	timedOut bool
+	// unloaded is true when the working tree failed to load and the approved side yielded
+	// no rule either, so no policy was read at all. A side that loaded and then raised is
+	// not unloaded: that stays fail-open.
+	unloaded bool
 }
 
 // askWorkspaceRules runs the approved rule and the working-tree rule and keeps the
@@ -76,7 +83,8 @@ type rulesAnswer struct {
 // A rule that fails contributes nothing and is reported, following magus\guard.shell's
 // standing on a broken workspace rule: the built-ins still apply and the agent is not
 // bricked by a typo in the magusfile. The one exception is an approved rule that could not
-// be resolved in time, which denies: the time is the part an agent can spend.
+// be resolved in time, which denies: the time is the part an agent can spend. No side
+// loading at all is reported as unloaded, for denyUnloaded to judge.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
 	var out rulesAnswer
 	if loadFailure != nil {
@@ -100,6 +108,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 		}
 		out.answer = merged
 	}
+	approvedLoaded := false
 	if resolveApproved != nil {
 		resolveCtx, cancel := context.WithTimeout(ctx, approvedResolveTimeout)
 		rule, err := resolveApproved(resolveCtx)
@@ -107,6 +116,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 		cancel()
 		switch {
 		case err == nil && rule != nil:
+			approvedLoaded = true
 			ask(decidedByApproved, rule)
 		case expired:
 			// "No rule" read under an expired deadline may be a read that failed, since the
@@ -114,12 +124,60 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "resolving the rule took longer than " + approvedResolveTimeout.String()})
 			out.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: approvedRuleTimedOut(seam)}
 			out.by = decidedByApproved
+			out.timedOut = true
 		case err != nil:
 			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
 		}
 	}
 	ask(decidedByWorktree, worktree)
+	out.unloaded = loadFailure != nil && !approvedLoaded && worktree == nil
 	return out
+}
+
+// denyUnloaded turns asked into a deny of a gated call when no side of the policy loaded
+// while the last policy that did load registered seam's rule. verb names the gated call,
+// "" for one the rule's absence may pass. It reports whether it denied.
+//
+// Misconfiguration is an error: the rules that judge exactly these calls are not running,
+// most often because the binary answering the hook is older than the tree. Every other
+// call still passes on the built-ins, so the fix itself stays runnable. No record means
+// no rule was ever seen to protect, and the call passes.
+func denyUnloaded(asked *rulesAnswer, seam functionSeam, verb string, at location) bool {
+	if !asked.unloaded || verb == "" || asked.answer.Decision == types.GuardDeny || !recordedRule(at.cacheDir, seam) {
+		return false
+	}
+	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: unloadedReason(seam, verb, asked.failures, ownSourceRoot(at.workspace))}
+	asked.by = decidedByBuiltin
+	return true
+}
+
+// unloadedReason is the deny denyUnloaded gives. own is a checkout of magus itself, where
+// the fix is a rebuild of ./magus.
+func unloadedReason(seam functionSeam, verb string, failures []trail.RuleFailure, own bool) string {
+	var b strings.Builder
+	b.WriteString("magus workspace: " + verb + " is denied because this workspace's guard policy is not running. " +
+		"It registered a " + seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
+	for _, f := range failures {
+		b.WriteString("\n  " + f.Side + ": " + f.Error)
+	}
+	b.WriteString("\nThat rule judges " + gatedCalls(seam) + ", so these wait until it loads; every other call still runs on the built-in rules.\n")
+	if own {
+		b.WriteString("The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
+			"If that cannot load the tree either, relink, one command at a time: `mv magus magus.old`, " +
+			"`go build -o magus ./cmd/magus`, `./magus run go-build .`. If the error names a magusfile line instead, fix that line.")
+	} else {
+		b.WriteString("The likeliest cause is a magus older than this workspace's magusfile, or an error in it: " +
+			"`magus doctor` names the failure. Install a magus that loads it, or fix the line the error names.")
+	}
+	return b.String()
+}
+
+// gatedCalls words what denyUnloaded holds back on seam.
+func gatedCalls(seam functionSeam) string {
+	if seam == seamSpawn {
+		return "subagent spawns"
+	}
+	return "pushes, pull request merges and magus verbs that write shared state"
 }
 
 // applyWorkspaceAnswer merges a workspace rule's answer into the built-in verdict, which
@@ -141,11 +199,13 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, ru
 	return verdict, decided
 }
 
-// applyRuleFailureNote adds the note that a workspace rule judged nothing to any verdict
-// short of a deny, which explains itself.
+// applyRuleFailureNote adds the note that a workspace rule judged nothing to every
+// verdict: a deny or an ask reached with a rule missing must say it was judged short.
 func applyRuleFailureNote(verdict Verdict, note string, kind hint.MarkerKind) Verdict {
 	switch {
-	case note == "" || verdict.Decision == "deny" || verdict.Decision == "ask":
+	case note == "":
+	case verdict.Decision == "deny" || verdict.Decision == "ask":
+		verdict.Reason += "\n\n" + note
 	case verdict.Decision == "advise":
 		verdict.Context += "\n\n" + note
 	default:

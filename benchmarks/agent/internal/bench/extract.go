@@ -16,8 +16,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/pricing"
 )
 
 // Tool names whose call counts feed file_reads / re_read_rate.
@@ -41,13 +41,7 @@ func (u usageCounts) add(o usageCounts) usageCounts {
 }
 
 func (u usageCounts) cost(r pricing.Rates) float64 {
-	total := 0.0
-	total += float64(u.input) * r.Input / pricing.TokensPerPriceUnit
-	total += float64(u.output) * r.Output / pricing.TokensPerPriceUnit
-	total += float64(u.cacheRead) * r.CacheRead / pricing.TokensPerPriceUnit
-	total += float64(u.cacheWrite5m) * r.CacheWrite5m / pricing.TokensPerPriceUnit
-	total += float64(u.cacheWrite1h) * r.CacheWrite1h / pricing.TokensPerPriceUnit
-	return total
+	return r.Cost(u.input, u.output, u.cacheRead, u.cacheWrite5m, u.cacheWrite1h)
 }
 
 func (u usageCounts) tokens() TokenCounts {
