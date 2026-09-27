@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -134,7 +133,7 @@ func checkMerge(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, 
 // build tool's classification that allowed it.
 type settledSource struct {
 	path    string
-	res     merge3.Resolution
+	res     magustypes.MergeResolution
 	verdict string // the classifier's line, `<path>: <class> (<why>)`
 }
 
@@ -164,8 +163,8 @@ func declinedNote(declined []string) string {
 // declined, all in cs's order.
 //
 // A content conflict is merged from its three versions: at m.Ours, at m.Theirs, and at
-// m.Base, or at their one merge base when m.Base is empty. It settles when merge3 settles
-// every region both sides changed and the build tool allows the result
+// m.Base, or at their one merge base when m.Base is empty. It settles when MergeThreeWay
+// settles every region both sides changed and the build tool allows the result
 // (BuildFacts.AutoResolvable, the change classifier's low-risk classes or an opted-in
 // code path). A file the base lacks stays conflicted, and a file settles only whole. The
 // computation is the running queue's own, from the blobs alone, so whoever recomputes it
@@ -227,7 +226,7 @@ func resolveFile(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root,
 	if err != nil {
 		return settledSource{}, "", err
 	}
-	res, ok := merge3.Resolve(path, []byte(was), []byte(ours), []byte(theirs))
+	res, ok := magustypes.MergeThreeWay(path, []byte(was), []byte(ours), []byte(theirs))
 	switch {
 	case !ok && len(res.Regions) == 0:
 		return settledSource{}, path + ": binary, or too far from the merge base to merge by line", nil
@@ -912,7 +911,7 @@ type sourceConflict struct {
 	paths  []string     // the conflicted source files
 	with   []string     // base-branch commits touching paths ("abc123 subject")
 	// declined says, for each of paths auto-resolution tried, why it stayed conflicted:
-	// the locations merge3 could not settle, or the classifier's line.
+	// the locations MergeThreeWay could not settle, or the classifier's line.
 	declined []string
 }
 

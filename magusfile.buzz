@@ -3189,7 +3189,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                    ".claude/skills/magus-skill-authoring/SKILL.md",
                    ".claude/skills/magus-local-development/SKILL.md",
-                   ".claude/skills/land-pull-requests/SKILL.md",
+                   ".claude/skills/shepherd-pull-requests/SKILL.md",
                    "types/diagnostic.go",
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",

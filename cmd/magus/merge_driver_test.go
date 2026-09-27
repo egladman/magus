@@ -179,7 +179,7 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-// A low-risk file settles through merge3 in git's shape, where the result replaces %A,
+// A low-risk file settles through the three-way merge in git's shape, where the result replaces %A,
 // and in jj's, where it goes to the separate output and the sides stay as they were.
 // Prose qualifies by the change classifier's default globs, code only by merge_low_risk.
 func TestMergeDriverAutoResolvesALowRiskFile(t *testing.T) {
@@ -216,7 +216,7 @@ func TestMergeDriverLeavesAnUnsettledFileConflicted(t *testing.T) {
 	base, ours, theirs = mergeSides(t, "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
 	err = mergeDriverRun(ctx, root, []string{base, ours, theirs, "7", "main.txt"})
 	require.ErrorContains(t, err, "main.txt: code (no comment syntax is declared for this language; classified as code); main.txt: kind 2",
-		"merge3 settles it, and the classifier refuses code nothing opts in")
+		"the three-way merge settles it, and the classifier refuses code nothing opts in")
 	assert.Contains(t, readFile(t, ours), "a\np\nq\nz\n", "the markers of a merge that settled are the merge")
 
 	base, ours, theirs = mergeSides(t, "", "p\n", "q\n")
@@ -231,7 +231,7 @@ func TestMergeDriverLeavesAnUnsettledFileConflicted(t *testing.T) {
 }
 
 // A declared output is regenerated, never auto-resolved: the driver keeps the current
-// version whatever merge3 would make of it.
+// version whatever the three-way merge would make of it.
 func TestMergeDriverKeepsAnOutputWhatever(t *testing.T) {
 	ctx, root := autoResolveWorkspace(t)
 	base, ours, theirs := mergeSides(t, "a\nz\n", "a\np\nz\n", "a\nq\nz\n")

@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -220,7 +219,7 @@ func (d doubles) allows(path, was, merged, verdict string, ok bool) {
 	d.facts.EXPECT().AutoResolvable(mock.Anything, path, []byte(was), []byte(merged)).Return(verdict, ok, nil)
 }
 
-// A conflicted source file merge3 settles and the build tool allows is settled in the
+// A conflicted source file MergeThreeWay settles and the build tool allows is settled in the
 // checkout from its three versions, beside the generated file that takes the change's
 // side, and the report names its class and each region's location and kind.
 func TestMergeInAutoResolvesALowRiskSourceFile(t *testing.T) {
@@ -241,8 +240,8 @@ func TestMergeInAutoResolvesALowRiskSourceFile(t *testing.T) {
 	settled, resolved, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, dir, base)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"gen/a.go"}, settled)
-	assert.Equal(t, []settledSource{{path: "CHANGELOG.md", verdict: chVerdict, res: merge3.Resolution{Content: []byte("a\np\nq\nz\n"),
-		Regions: []merge3.Region{{Locations: []magustypes.Location{{Path: "CHANGELOG.md", Declaration: magustypes.Preamble}}, Kind: merge3.BothAdded}}}}}, resolved)
+	assert.Equal(t, []settledSource{{path: "CHANGELOG.md", verdict: chVerdict, res: magustypes.MergeResolution{Content: []byte("a\np\nq\nz\n"),
+		Regions: []magustypes.MergeRegion{{Locations: []magustypes.Location{{Path: "CHANGELOG.md", Declaration: magustypes.Preamble}}, Kind: magustypes.MergeBothAdded}}}}}, resolved)
 	assert.Equal(t, chNote, resolvedNote(resolved))
 	written, err := os.ReadFile(filepath.Join(dir, "CHANGELOG.md"))
 	require.NoError(t, err)
@@ -252,8 +251,8 @@ func TestMergeInAutoResolvesALowRiskSourceFile(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm(), "the file keeps its mode")
 }
 
-// Only what merge3 settles and the build tool allows is settled; everything else stays
-// the author's, with the reason: the location merge3 could not settle, or the build
+// Only what MergeThreeWay settles and the build tool allows is settled; everything else
+// stays the author's, with the reason: the location it could not settle, or the build
 // tool's verdict.
 func TestMergeInLeavesWhatAutoResolutionDoesNotSettle(t *testing.T) {
 	c := change("1")

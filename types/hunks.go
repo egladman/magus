@@ -222,10 +222,8 @@ func SplitLines(b []byte) []string {
 	return lines
 }
 
-// LineMatches returns the index pairs of the lines a and b share on a shortest edit
+// lineMatches returns the index pairs of the lines a and b share on a shortest edit
 // script, in order, and false when the script would exceed maxHunkEdits.
-func LineMatches(a, b []string) ([][2]int, bool) { return lineMatches(a, b) }
-
 func lineMatches(a, b []string) ([][2]int, bool) {
 	pre := 0
 	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {

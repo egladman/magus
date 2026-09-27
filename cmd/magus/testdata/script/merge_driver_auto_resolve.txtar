@@ -1,7 +1,7 @@
 # A low-risk file goes through the merge driver during a plain `git merge`: loading the
 # workspace registers the declared gate_low_risk and merge_low_risk globs in
 # .gitattributes, without the linguist-generated mark an output carries, and the driver
-# settles what merge3 settles and the classifier allows.
+# settles what the three-way merge settles and the classifier allows.
 # CHANGELOG.md, where both sides only added lines at one place, merges with both;
 # NOTES.md, where both edited one line differently, stays conflicted with both sides in
 # markers, and the driver names the heading the region sits under.

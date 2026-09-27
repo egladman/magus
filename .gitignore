@@ -45,7 +45,7 @@
 !/docs/gen/public/release/index.json.sig
 # The signed registry, tracked for the same reason: only a job holding
 # MAGUS_REGISTRY_KEY can produce it, and the site render must copy it rather than
-# rebuild it. registry.yaml opens the pull request that lands it.
+# rebuild it. registry.yaml opens the pull request that merges it.
 !/docs/gen/public/registry/
 /docs/gen/public/registry/*
 !/docs/gen/public/registry/index.json
@@ -134,7 +134,7 @@ coverage.cmd.out
 # the workspace. Regenerate the ignored trees instead:
 #   magus agent install .claude/skills --force
 #
-# magus-skill-authoring, magus-local-development and land-pull-requests are the exceptions and
+# magus-skill-authoring, magus-local-development and shepherd-pull-requests are the exceptions and
 # stay tracked: each is hand-authored, never embedded in the binary, and nothing regenerates
 # it. Hand-authored stays, generated goes. magus-local-development is additionally the name magus RESERVES for a
 # workspace's own rules (internal/agent.LocalSkillName, held by TestLocalSkillNameIsReserved),
@@ -145,7 +145,7 @@ coverage.cmd.out
 .claude/skills/*
 !.claude/skills/magus-skill-authoring/
 !.claude/skills/magus-local-development/
-!.claude/skills/land-pull-requests/
+!.claude/skills/shepherd-pull-requests/
 
 # launch.json pins one machine's dev-server command and port, so it stays per developer.
 #

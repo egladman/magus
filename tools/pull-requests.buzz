@@ -1,4 +1,4 @@
-// This repository's driver for landing a batch of pull requests through the magus merge
+// This repository's driver for shepherding a batch of pull requests through the magus merge
 // queue, so an orchestrator spends judgment only where a pull request needs it. It is
 // this repository's glue, not part of magus:
 //
@@ -990,7 +990,7 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
 
 // The stages from which a person may merge a pull request whose checks allow it: open,
 // not a draft, not stacked on an unmerged one, and neither conflicting nor kicked back.
-final LANDABLE = ["behind", "queued", "needs-queue"];
+final MERGE_READY_STAGES = ["behind", "queued", "needs-queue"];
 
 // classify decides one pull request: its state and stage, what to do and who does it, and
 // the merge command a person runs when its checks are green or fail only as main does.
@@ -1002,7 +1002,7 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
     final r = actionOf(p, open: open, facts: facts, stage: stage, verdict: verdict);
     var merge = "";
     final mergeable = verdict.state == "green" or verdict.state == "red-inherited";
-    if (mergeable and LANDABLE.indexOf(stage) != null and p.mergeable == "MERGEABLE") {
+    if (mergeable and MERGE_READY_STAGES.indexOf(stage) != null and p.mergeable == "MERGEABLE") {
         merge = "gh pr merge {p.number} --squash --admin";
     }
     return Record{ pr = r.pr, head = r.head, base = r.base, state = verdict.state, stage = stage, reason = r.reason,
@@ -1020,7 +1020,7 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
             reason: "closed without merging; reopen it or leave it out of the selection", evidence: Evidence{});
     }
     if (stage == "draft") {
-        return recordOf(p, action: "none", model: "none", reason: "a draft; take it out of draft to land it", evidence: plain);
+        return recordOf(p, action: "none", model: "none", reason: "a draft; take it out of draft to merge it", evidence: plain);
     }
     if (stage == "waiting-below") {
         final parent = parentOf(p, open: open)!;
@@ -1072,7 +1072,7 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
     }
     if (p.fork) {
         return recordOf(p, action: "fix", model: "opus",
-            reason: "from a fork, which the queue refuses; a person decides how it lands", evidence: plain);
+            reason: "from a fork, which the queue refuses; a person decides how it reaches main", evidence: plain);
     }
     if (verdict.state == "running") {
         var reason = "no check has reported on the head yet";
@@ -1410,7 +1410,7 @@ fun records(sel: Selector) > [Record] !> any {
         }
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests };
         final verdict = verdictOf(p, facts: facts);
-        if (verdict.state == "red" and LANDABLE.indexOf(stage) != null) {
+        if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
             facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p), baseline = baseline, failingTests = tests };
         } else if (stage == "kicked-back" and p.kick != null) {
             facts = Facts{ generated = generatedOf(p.kick!.paths), baseline = baseline, failingTests = tests };
@@ -1916,7 +1916,7 @@ test "the checks on the head decide running, green, red-inherited and red" {
     expect([failed("magus shard 0: .")], facts: Facts{}, want: "red");
 }
 
-test "only a green or red-inherited pull request on a landable stage carries a merge command" {
+test "only a green or red-inherited pull request on a merge-ready stage carries a merge command" {
     final inheritedFacts = Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] };
     final expect = fun (p: Pull, facts: Facts, state: str, merge: bool) > Record {
         final r = classify(p, open: [p], facts: facts);
