@@ -1,0 +1,17 @@
+# `magus describe job` loads the workspace under the --root flag as given ("") and then
+# grades a symbol goal through a graph load keyed on the path "" resolved to. Both name
+# one workspace, so the second load reuses the first.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+
+stdin job.json
+exec magus job fork --stdin
+exec magus describe job wave/sym
+stdout 'wave/sym: 0 of 1 goal\(s\) met'
+stdout '"NeverDefined" is defined nowhere the graph can see'
+
+-- job.json --
+{"schema_version": 11, "id": "wave/sym", "criteria": "define NeverDefined", "write_paths": ["code.go"], "goals": [{"id": "sym", "kind": "symbol", "expect": "present", "symbols": ["NeverDefined"]}]}
+-- code.go --
+package pkg

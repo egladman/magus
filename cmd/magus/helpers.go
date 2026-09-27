@@ -98,17 +98,43 @@ var globalCfg config.Config
 
 // Lazy singletons shared across subcommands.
 var (
-	magusOnce         sync.Once
-	magusValue        *magus.Magus
-	magusErr          error
-	magusRootOverride string
-	magusLoaded       atomic.Bool
+	magusOnce   sync.Once
+	magusValue  *magus.Magus
+	magusErr    error
+	magusOpened openedRoot
+	magusLoaded atomic.Bool
 
-	inspectOnce         sync.Once
-	inspectValue        types.WorkspaceRepository
-	inspectErr          error
-	inspectRootOverride string
+	inspectOnce   sync.Once
+	inspectValue  types.WorkspaceRepository
+	inspectErr    error
+	inspectOpened openedRoot
 )
+
+// openedRoot is the workspace a lazy singleton loaded: the --root spelling it was first
+// asked for, and the root that spelling resolved to ("" when resolution failed, which
+// leaves the singleton holding that error).
+type openedRoot struct {
+	override, root string
+}
+
+// check answers whether a later caller's override names the workspace this singleton
+// already loaded. The flag as given ("") and the path it resolves to are one workspace,
+// and a command often holds both. A second, different workspace in one process is a
+// programming error and panics naming both; an override that no longer resolves is
+// returned as the caller's error.
+func (o openedRoot) check(singleton, override string) error {
+	if override == o.override || o.root == "" {
+		return nil
+	}
+	root, err := magus.FindRoot(override)
+	if err != nil {
+		return err
+	}
+	if root != o.root {
+		panic(fmt.Sprintf("%s: asked for the workspace at %s after loading %s", singleton, root, o.root))
+	}
+	return nil
+}
 
 // loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
 // to the first, memoizing call: the server serve path passes magus.WithMetricsCollection()
@@ -120,13 +146,14 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 	}
 	t := traceFromContext(ctx)
 	magusOnce.Do(func() {
-		magusRootOverride = rootOverride
+		magusOpened.override = rootOverride
 		defer t.phase("magus.find_root")()
 		root, err := magus.FindRoot(rootOverride)
 		if err != nil {
 			magusErr = err
 			return
 		}
+		magusOpened.root = root
 		stop := t.phase("magus.open")
 		defer relaxGC()()
 		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
@@ -147,8 +174,8 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 			ensureMergeDriver(ctx, magusValue)
 		}
 	})
-	if rootOverride != magusRootOverride {
-		panic("loadMagus: called with different rootOverride on second call")
+	if err := magusOpened.check("loadMagus", rootOverride); err != nil {
+		return nil, err
 	}
 	return magusValue, magusErr
 }
@@ -197,12 +224,13 @@ func relaxGC() func() {
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) {
 	t := traceFromContext(ctx)
 	inspectOnce.Do(func() {
-		inspectRootOverride = rootOverride
+		inspectOpened.override = rootOverride
 		// startup already opened this workspace for most subcommands, and an open
 		// workspace answers everything an inspected one does; loading it twice doubled
 		// the cost of `magus ls`.
-		if magusLoaded.Load() && magusErr == nil && magusValue != nil && rootOverride == magusRootOverride {
-			inspectValue = magusValue
+		opened := magusLoaded.Load() && magusErr == nil && magusValue != nil
+		if opened && rootOverride == magusOpened.override {
+			inspectOpened.root, inspectValue = magusOpened.root, magusValue
 			return
 		}
 		defer t.phase("workspace.find_root")()
@@ -211,14 +239,19 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			inspectErr = err
 			return
 		}
+		inspectOpened.root = root
+		if opened && root == magusOpened.root {
+			inspectValue = magusValue
+			return
+		}
 		stop := t.phase("workspace.inspect")
 		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
 			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		stop()
 	})
-	if rootOverride != inspectRootOverride {
-		panic("inspectWorkspace: called with different rootOverride on second call")
+	if err := inspectOpened.check("inspectWorkspace", rootOverride); err != nil {
+		return nil, err
 	}
 	return inspectValue, inspectErr
 }

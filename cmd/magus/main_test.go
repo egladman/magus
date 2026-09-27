@@ -954,12 +954,12 @@ func resetStartupSingletons() {
 	magusLoaded.Store(false)
 	magusValue = nil
 	magusErr = nil
-	magusRootOverride = ""
+	magusOpened = openedRoot{}
 
 	inspectOnce = sync.Once{}
 	inspectValue = nil
 	inspectErr = nil
-	inspectRootOverride = ""
+	inspectOpened = openedRoot{}
 
 	globalCfg = config.Config{}
 	global = globalFlags{}
