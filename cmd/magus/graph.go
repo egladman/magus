@@ -159,6 +159,9 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 			if err := m.WriteGuardIndex(ctx); err != nil {
 				interactive.Emit(os.Stderr, "guard index not written: "+err.Error())
 			}
+			if err := writeNorms(ctx, m); err != nil {
+				interactive.Emit(os.Stderr, "norm table not written: "+err.Error())
+			}
 		}
 	}
 	return nil
@@ -420,8 +423,10 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
 	var sf *gen.GraphStatsFlags
+	var norms bool
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
 		sf = gen.BindGraphStats(fs)
+		fs.BoolVar(&norms, "norms", false, "Print the norm table instead: the shapes most of the workspace agrees on, counted from the symbol index")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			fs.PrintDefaults()
@@ -433,6 +438,9 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	outOpts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
+	}
+	if norms {
+		return graphNorms(ctx, root, sf, outOpts)
 	}
 	// Stats stay domain-only unless --symbols (or a --kind symbol scope) opts in.
 	g, err := loadKnowledgeGraph(ctx, root, sf.Refresh, sf.Global, sf.Symbols || sf.Kind == types.KindSymbol)
@@ -488,6 +496,108 @@ func statsText(out types.KnowledgeStats) error {
 			}
 			fmt.Println()
 		}
+	}
+	return nil
+}
+
+// graphNorms is `graph stats --norms`. It mines the table from the live index rather than
+// reading the one `graph build` cached, so it never reports a tree that has since moved.
+func graphNorms(ctx context.Context, root string, sf *gen.GraphStatsFlags, outOpts OutputOptions) error {
+	if sf.Global || sf.Kind != "" {
+		return errors.New("graph stats: --norms counts one workspace's symbols; drop --global and --kind")
+	}
+	g, err := loadKnowledgeGraph(ctx, root, sf.Refresh, false, true)
+	if err != nil {
+		return err
+	}
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	t, err := mineNorms(ctx, ws, g)
+	if err != nil {
+		return err
+	}
+	switch outOpts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(outOpts, t)
+	case outputName:
+		var names []string
+		for _, r := range t.Norms {
+			if !r.Silent {
+				names = append(names, r.Family+" "+r.Scope+": "+r.Key)
+			}
+		}
+		return emitNames(names)
+	}
+	return normsText(t)
+}
+
+// mineNorms mines g, which must carry its symbols. Generated output is what the workspace
+// declares a target writes, so a generated file never forms a norm.
+func mineNorms(ctx context.Context, ws types.Inspector, g *knowledge.Graph) (types.NormTable, error) {
+	var paths []string
+	for _, n := range g.Nodes() {
+		if n.Kind == types.KindFile {
+			paths = append(paths, n.Source)
+		}
+	}
+	slices.Sort(paths)
+	entries, err := ws.ClassifyFiles(ctx, slices.Compact(paths))
+	if err != nil {
+		return types.NormTable{}, err
+	}
+	generated := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			generated[e.Path] = true
+		}
+	}
+	return g.Norms(knowledge.NormOptions{Generated: generated}), nil
+}
+
+// writeNorms caches the norm table where the guard and the advisors read it.
+func writeNorms(ctx context.Context, m *magus.Magus) error {
+	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return err
+	}
+	t, err := mineNorms(ctx, m, g)
+	if err != nil {
+		return err
+	}
+	return knowledge.WriteNorms(m.CacheDir(), t)
+}
+
+// normDeviationsShown caps the deviations a text row lists; -o json carries them all.
+const normDeviationsShown = 5
+
+func normsText(t types.NormTable) error {
+	fmt.Printf("definition: %s\n\n", t.Definition)
+	fmt.Printf("norms (cohort >= %d, share >= %.0f%%):\n", t.MinCohort, t.MinShare*100)
+	fmt.Printf("  %-18s  %-20s  %-24s  %9s  %5s  %s\n", "FAMILY", "SCOPE", "KEY", "AGREE", "SHARE", "STATUS")
+	for _, r := range t.Norms {
+		status := "norm"
+		if r.Silent {
+			status = "silent"
+		}
+		fmt.Printf("  %-18s  %-20s  %-24s  %9s  %4.0f%%  %s\n", r.Family, truncate(r.Scope, 20), truncate(r.Key, 24),
+			fmt.Sprintf("%d/%d", r.Agree, r.Cohort), r.Share*100, status)
+		if q := r.Quantiles; q != nil {
+			fmt.Printf("      p50 %d, p90 %d, p95 %d, max %d\n", q.P50, q.P90, q.P95, q.Max)
+		}
+		if r.Silent || len(r.Deviations) == 0 {
+			continue
+		}
+		var subjects []string
+		for _, d := range r.Deviations[:min(len(r.Deviations), normDeviationsShown)] {
+			subjects = append(subjects, d.Subject)
+		}
+		more := ""
+		if n := len(r.Deviations) - normDeviationsShown; n > 0 {
+			more = fmt.Sprintf(" (+%d more)", n)
+		}
+		fmt.Printf("      not: %s%s\n", strings.Join(subjects, ", "), more)
 	}
 	return nil
 }
