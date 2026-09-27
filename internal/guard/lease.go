@@ -863,14 +863,25 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if len(live) == 0 {
 		return ""
 	}
-	for _, candidate := range writeTargetCandidates(command, 0, effectiveDialect(deps.ShellDialect)) {
+	dialect := effectiveDialect(deps.ShellDialect)
+	redirects := redirectTargets(command, 0, dialect)
+	for _, candidate := range writeTargetCandidates(command, 0, dialect) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
 		if strings.HasPrefix(candidate, "-") {
 			continue
 		}
 		rel, inside := workspaceRelative(location.workspace, candidate)
-		if !inside || !declaredPath(live, rel) {
+		if !inside {
+			continue
+		}
+		declared, byCatchAll := declaredPath(live, rel)
+		if !declared {
+			continue
+		}
+		// A catch-all covers every word, `print(1)` included, so under one only a
+		// redirect target or a word shaped like a file stands in for a path.
+		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(location.workspace, rel) {
 			continue
 		}
 		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == "deny" {
@@ -881,14 +892,50 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 }
 
 // declaredPath reports whether any live lease named rel in a boundary, as a path it owns
-// or a path it was refused. A word no plan mentions is not treated as a path at all.
-func declaredPath(live []types.Job, rel string) bool {
+// or a path it was refused, and whether only a catch-all (`**`) did. A word no plan
+// mentions is not treated as a path at all.
+func declaredPath(live []types.Job, rel string) (declared, byCatchAll bool) {
 	for _, u := range live {
 		for _, decls := range [][]string{u.WritePaths, u.DenyPaths} {
-			if _, ok, _ := declarationCovering(decls, rel); ok {
-				return true
+			decl, ok, _ := declarationCovering(decls, rel)
+			if !ok {
+				continue
 			}
+			if !catchAll(decl) {
+				return true, false
+			}
+			declared = true
 		}
 	}
-	return false
+	return declared, declared
+}
+
+// catchAll reports a declaration that covers every path in the workspace.
+func catchAll(decl string) bool {
+	file, _ := types.SplitClaim(decl)
+	d := path.Clean(file)
+	for {
+		trimmed := strings.TrimSuffix(strings.TrimSuffix(d, "/**"), "/*")
+		if trimmed == d {
+			break
+		}
+		d = trimmed
+	}
+	return d == "**" || d == "*"
+}
+
+// pathShaped reports a word that reads as a file: one that exists, or one spelled in
+// file-name characters with a separator or an extension. `hello`, `600` and `print(1)`
+// are not; `notes.txt` and `out/log` are. A new bare name (`touch build`) is missed,
+// failing open like every other uncertainty here.
+func pathShaped(workspace, rel string) bool {
+	if _, err := os.Lstat(filepath.Join(workspace, filepath.FromSlash(rel))); err == nil {
+		return true
+	}
+	if !strings.ContainsAny(rel, "./") || strings.Trim(rel, "0123456789.") == "" {
+		return false
+	}
+	return !strings.ContainsFunc(rel, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-/~@+,%:", r))
+	})
 }

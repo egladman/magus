@@ -780,18 +780,32 @@ func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
 	}
 
 	t.Run("flags and descriptors beside a lease owning the root", func(t *testing.T) {
-		ctx, _ := fleetFixture(t,
+		ctx, root := fleetFixture(t,
 			types.Job{ID: "owns-root", WritePaths: []string{"**"}, State: types.StateRunning, Registered: 1},
 			types.Job{ID: "reader", ReadOnly: true, State: types.StateRunning, Registered: 1},
 		)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README"), nil, 0o644))
 		for _, command := range []string{
 			"./magus ls jobs 2>&1",
 			"mkdir -p /tmp/scratch",
 			"python3 - < script.py",
+			"find /tmp/scratch -type f -delete",
+			"echo hi",
+			"python3 -c 'print(1)'",
+			`python3 -c 'print("hello")'`,
+			"mkdir -m 755 /tmp/scratch",
 		} {
 			assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
 		}
-		assert.NotEmpty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", "echo x > notes.txt"))
+		for _, command := range []string{
+			"echo x > notes.txt",
+			"echo x > out 2>&1",
+			"touch internal/new.go",
+			"rm README",
+			`python3 -c 'open("out.txt", "w")'`,
+		} {
+			assert.NotEmpty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
+		}
 	})
 
 	t.Run("no lease", func(t *testing.T) {
