@@ -22,7 +22,7 @@ import (
 var mcpJudgedParams = []string{
 	"op", "id", "write_paths", "deny_paths", "read_paths", "depends_on",
 	"validation", "read_only", "parent", "state", "checkpoint", "model", "criteria",
-	"check", "completion_gates",
+	"check", "completion_gates", "enter",
 }
 
 // writePathsParam is the one list a bound caller may shrink. writePathsLegacyParam is the

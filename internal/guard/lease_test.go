@@ -481,6 +481,25 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 	}
 }
 
+// TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt pins the one put on another row a
+// holder may make: an entry into a job forked beneath its own, which the store grades.
+func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
+	me := narrowLease().ID
+	child := types.Job{ID: me + "/child", Parent: me, WritePaths: []string{"cmd/magus/x/**"}, State: types.StateDeclared}
+	ctx, _ := fleetFixture(t, narrowLease(), child)
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, "magus_job op=fork id="+child.ID+" enter=cmd/magus/x/a.go"))
+	for _, command := range []string{
+		"magus_job op=fork id=harness/other enter=a.go",
+		"magus_job op=fork id=" + me + " enter=cmd/magus/a.go",
+	} {
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), "enter a job not forked beneath", "%q", command)
+	}
+
+	_, err := job.ParseMerge(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
+	assert.ErrorContains(t, err, "write_paths does not belong beside it", "an entry carries nothing else for the store to apply")
+}
+
 // TestDenyLeaseScopedRebindStaysQuiet covers every silence. A read is not a rebind, an
 // unbound caller is the party that writes rows, and `op=exec` is the worker's own
 // procedure, demanded by the checkpoint denial on the write surface.
@@ -878,6 +897,35 @@ func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
 	} {
 		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
 	}
+
+	t.Run("flags and descriptors beside a lease owning the root", func(t *testing.T) {
+		ctx, root := fleetFixture(t,
+			types.Job{ID: "owns-root", WritePaths: []string{"**"}, State: types.StateRunning, Registered: 1},
+			types.Job{ID: "reader", ReadOnly: true, State: types.StateRunning, Registered: 1},
+		)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README"), nil, 0o644))
+		for _, command := range []string{
+			"./magus ls jobs 2>&1",
+			"mkdir -p /tmp/scratch",
+			"python3 - < script.py",
+			"find /tmp/scratch -type f -delete",
+			"echo hi",
+			"python3 -c 'print(1)'",
+			`python3 -c 'print("hello")'`,
+			"mkdir -m 755 /tmp/scratch",
+		} {
+			assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
+		}
+		for _, command := range []string{
+			"echo x > notes.txt",
+			"echo x > out 2>&1",
+			"touch internal/new.go",
+			"rm README",
+			`python3 -c 'open("out.txt", "w")'`,
+		} {
+			assert.NotEmpty(t, denyWriteOutsideLease(ctx, Dependencies{}, "reader", command), "%q", command)
+		}
+	})
 
 	t.Run("no lease", func(t *testing.T) {
 		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "", "echo x > internal/ledger/store.go"))

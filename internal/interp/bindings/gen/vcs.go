@@ -88,7 +88,9 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("history", vm.DirectValue("vcs.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		limit := Int(bzArgs, 0, 10)
-		ret0, err := std.VcsHistory(ctx, limit)
+		paths := StrSlice(bzArgs, 1)
+		first_parent := Bool(bzArgs, 2, false)
+		ret0, err := std.VcsHistory(ctx, limit, paths, first_parent)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

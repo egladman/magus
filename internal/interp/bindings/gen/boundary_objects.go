@@ -1206,6 +1206,11 @@ func ObjectCommit(v types.Commit) vm.Value {
 		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
 	}
 	out.MapSet("parents", vm.ListValue(itemsParents))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out
 }
 
@@ -1375,6 +1380,11 @@ func ObjectCommitRecord(v types.CommitRecord) vm.Value {
 		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
 	}
 	out.MapSet("parents", vm.ListValue(itemsParents))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out
 }
 
@@ -1516,6 +1526,15 @@ func ObjectOrigin(v types.Origin) vm.Value {
 	out.MapSet("session", vm.StrValue(v.Session))
 	out.MapSet("agent", vm.StrValue(v.Agent))
 	out.MapSet("credential", ObjectCredential(v.Credential))
+	return out
+}
+
+func ObjectJobEntry(v types.JobEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("by", ObjectOrigin(v.By))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("consumed", vm.IntValue(int64(v.Consumed)))
 	return out
 }
 
@@ -1691,6 +1710,11 @@ func ObjectJob(v types.Job) vm.Value {
 		itemsUnattributed[indexUnattributed] = ObjectJobUnattributedWrite(v.Unattributed[indexUnattributed])
 	}
 	out.MapSet("unattributed", vm.ListValue(itemsUnattributed))
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
 	out.MapSet("writeProof", vm.StrValue(string(v.WriteProof)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
@@ -1890,6 +1914,11 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsFootprintUnclaimed[indexFootprintUnclaimed] = vm.StrValue(v.FootprintUnclaimed[indexFootprintUnclaimed])
 	}
 	out.MapSet("footprintUnclaimed", vm.ListValue(itemsFootprintUnclaimed))
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
 	return out
 }
 
@@ -1908,6 +1937,11 @@ func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
 		optContextTokens = vm.IntValue(int64((*v.ContextTokens)))
 	}
 	out.MapSet("contextTokens", optContextTokens)
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
 	return out
 }
 

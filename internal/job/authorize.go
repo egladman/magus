@@ -294,19 +294,9 @@ func completionGatesEqual(a, b []types.CompletionGate) bool {
 }
 
 // subset reports whether every declaration in inner is one outer also holds, compared as
-// the strings they were declared as, with one narrowing allowed: a claim on one declaration
-// of a file (`F#d`) is inside outer's whole-file entry for that same file (`F`).
-//
-// String equality otherwise, because this grades a DECLARATION against a declaration: a
-// worker that may rewrite its declarations into any covered form can also rewrite a glob
-// into a wider one that still looks contained. The exact-string rule costs a worker one
-// round trip and cannot be argued with. The declaration case is admitted on purpose: it is
-// how a worker holding `F` shrinks to `F#d` (see [authorizeRow]) and how a child is handed
-// `F#d` of a parent's `F` (see [authorizeChild]), and it runs only one way, so widening
-// `F#d` back out to `F` is still refused.
-//
-// Both sides are trimmed here because [Store.Update] writes a types.Job the caller
-// built, which no door has trimmed.
+// exact strings (a worker rewriting a glob into a wider one must not look contained), with
+// one narrowing allowed one way only: a claim on one declaration of a file (`F#d`) is
+// inside outer's whole-file entry for that file (`F`), never the reverse.
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		p := strings.TrimSpace(p)

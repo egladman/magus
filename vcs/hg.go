@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -296,16 +297,97 @@ func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, e
 	return c, nil
 }
 
-func (v hgVCS) History(ctx context.Context, dir string, limit int) ([]types.Commit, error) {
-	if limit <= 0 {
-		limit = 1
+// History implements types.VCSDriver; see hgFamilyHistory.
+func (v hgVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	return hgFamilyHistory(ctx, v, "hg", dir, q)
+}
+
+// hgHistoryTemplate follows hgCommitTemplate with a file count and each file, so a record
+// parses by counting and no byte of a message or a path can end one early.
+const hgHistoryTemplate = hgCommitTemplate + `\0{files|count}\0{files % "{file}\0"}`
+
+// hgFamilyHistory is History for hg and Sapling in one `log`. _firstancestors is the
+// revset behind hg's --follow-first: private by name, and the only first-parent walk
+// either CLI offers. null goes because an empty repository's "." is the null revision.
+//
+// A merge's {files} is not its diff against the first parent, so each merge asks
+// `status --change`, which is, from the root so both programs print root-relative paths.
+// For the same reason the log takes no path filter, which would judge a merge by {files}:
+// historyTouching narrows instead.
+func hgFamilyHistory(ctx context.Context, v types.VCSDriver, prog, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	revs := "::."
+	if q.FirstParent {
+		revs = "_firstancestors(.)"
 	}
-	// hg log is newest-first by default, so -l N is the N most recent.
-	out, err := vcsOutput(ctx, dir, "hg", "log", "-l", fmt.Sprintf("%d", limit), "--template", "{node}\n")
+	args := []string{"log", "-r", "reverse(" + revs + " - null)", "--template", hgHistoryTemplate}
+	if q.Limit > 0 && len(q.Paths) == 0 {
+		args = append(args, "-l", strconv.Itoa(q.Limit))
+	}
+	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
-		return nil, fmt.Errorf("hg log: %w", err)
+		return nil, fmt.Errorf("%s log: %w", prog, err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	commits, err := parseHgHistory(out)
+	if err != nil {
+		return nil, fmt.Errorf("%s log: %w", prog, err)
+	}
+	root := ""
+	return historyTouching(commits, q, func(c types.Commit) ([]string, error) {
+		if len(c.Parents) < 2 {
+			return keepUnder(c.Files, q.Paths), nil
+		}
+		if root == "" {
+			if root, err = v.Root(ctx, dir); err != nil {
+				return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+			}
+		}
+		st := append([]string{"status", "--no-status", "--added", "--modified", "--removed", "--change", c.ID},
+			hgFamilyRootPaths(q.Paths)...)
+		files, err := vcsOutput(ctx, root, prog, st...)
+		if err != nil {
+			return nil, fmt.Errorf("%s status --change %s: %w", prog, c.ID, err)
+		}
+		return splitLines([]byte(files)), nil
+	})
+}
+
+// parseHgHistory reads hgHistoryTemplate records: the commit fields, a file count, then
+// that many paths.
+func parseHgHistory(out string) ([]types.Commit, error) {
+	fields := strings.Split(strings.TrimSuffix(out, commitDelim), commitDelim)
+	var commits []types.Commit
+	for i := 0; i+numCommitFields < len(fields); {
+		c := parseCommit(strings.Join(fields[i:i+numCommitFields], commitDelim))
+		i += numCommitFields
+		n, err := strconv.Atoi(fields[i])
+		if err != nil || n < 0 || i+1+n > len(fields) {
+			return nil, fmt.Errorf("unreadable file count %q after commit %s", fields[i], c.ID)
+		}
+		if n > 0 {
+			c.Files = fields[i+1 : i+1+n]
+		}
+		i += 1 + n
+		commits = append(commits, c)
+	}
+	return commits, nil
+}
+
+// keepUnder narrows repository-relative files to those at or under one of paths, the way
+// a literal path filter reads a directory; no paths keeps every file.
+func keepUnder(files, paths []string) []string {
+	if len(paths) == 0 {
+		return files
+	}
+	var out []string
+	for _, f := range files {
+		if slices.ContainsFunc(paths, func(p string) bool {
+			p = strings.TrimSuffix(p, "/")
+			return p == "" || p == "." || f == p || strings.HasPrefix(f, p+"/")
+		}) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // isAncestor, commitBeforeTime and commitInfo run via `hg -R dir` so they target

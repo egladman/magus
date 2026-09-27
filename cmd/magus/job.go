@@ -454,6 +454,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		printJobEntries(os.Stdout, row.Entries)
 		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:
@@ -605,6 +606,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
+			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
+			fmt.Fprintln(os.Stderr, "job records it. The guard lets that one write through once the holder has been")
+			fmt.Fprintln(os.Stderr, "idle for a minute. A job takes two entries; past that, resume its holder.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
 			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A holder moves its own job with `"+hint.JobExec.String()+"` and `"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
@@ -641,6 +647,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	store, err := openJobs(root)
 	if err != nil {
 		return err
+	}
+	if row.Enter != "" {
+		return jobEnter(ctx, store, row.ID, row.Enter)
 	}
 	plan, err := store.List()
 	if err != nil {
@@ -699,6 +708,44 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return nil
 	default:
 		return emitFormatted(opts, stored)
+	}
+}
+
+// jobEnter records an entry into job id's path rel, the --stdin record's other shape.
+func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
+	stored, err := store.Enter(ctx, id, rel)
+	if err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames([]string{stored.ID})
+	case outputText:
+		fmt.Println(job.EntryAdvice(stored, rel))
+		printConsoleJobLine(os.Stdout, stored.ID)
+		return nil
+	default:
+		return emitFormatted(opts, stored)
+	}
+}
+
+// printJobEntries lists a job's entries, one line each, or nothing when it has none.
+func printJobEntries(out io.Writer, entries []types.JobEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "entries: writes into its paths by somebody other than its holder")
+	for _, e := range entries {
+		written := "not yet written"
+		if e.Consumed != 0 {
+			written = "written " + time.Unix(e.Consumed, 0).UTC().Format(time.RFC3339)
+		}
+		fmt.Fprintf(out, "  %s  entered %s by %s, %s\n", e.Path,
+			time.Unix(e.At, 0).UTC().Format(time.RFC3339), e.By.Label(), written)
 	}
 }
 
@@ -960,6 +1007,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
+	if rows, err := store.List(); err == nil {
+		status.Entries = job.EntriesOf(rows, status.Job)
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1197,6 +1247,7 @@ func printJobStatus(out io.Writer, s job.Status) {
 		}
 	}
 	printJobFootprint(out, s)
+	printJobEntries(out, s.Entries)
 	if len(s.Risks) > 0 {
 		fmt.Fprintln(out, "unresolved risks its holder reported")
 		for _, risk := range s.Risks {
@@ -1233,6 +1284,9 @@ func printJobFootprint(out io.Writer, s job.Status) {
 			continue
 		}
 		printed = append(printed, line)
+		if slices.ContainsFunc(s.Entries, func(e types.JobEntry) bool { return e.Consumed != 0 && job.Covers(e.Path, r.File.Path) }) {
+			line += "  (entered: may be the entrant's write, not the holder's)"
+		}
 		fmt.Fprintf(out, "  %s\n", line)
 	}
 }
@@ -1686,7 +1740,7 @@ func latestGreenGate(ctx context.Context, root string) job.GreenGate {
 		return job.GreenGate{}
 	}
 	if meta.ID != rec.Commit {
-		history, err := res.VCS.History(ctx, m.Root(), gateMergeScanLimit)
+		history, err := res.VCS.History(ctx, m.Root(), types.HistoryQuery{Limit: gateMergeScanLimit})
 		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
 			return job.GreenGate{}
 		}

@@ -1,9 +1,12 @@
-// The code-comments rule, a write rule: the first write of a session that adds code comments
-// is advised to audit what it wrote against the comment rule. The guard answers before the
-// write lands, so the advice arrives with the write rather than after it.
+// The code-comments rule, a write rule. A write to a Go file is graded against the
+// repository owner's comment budget: a block over its budget is advised, one over twice
+// its budget or above the package clause is denied. The first write of a session that
+// adds comments to any code file is advised to audit them against the comment rule. The
+// guard answers before the write lands, so the advice arrives with the write.
 namespace agentpolicy\comments;
 
 import "std";
+import "fs";
 import "magus";
 import "./tools/policy/helpers" as helpers;
 
@@ -21,6 +24,27 @@ final trailingComment = $"\S[ \t]+(//|#)[ \t]+\S";
 // The formats whose `#`, `--` or `//` lines are content rather than comments.
 final proseExtensions = [".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".json", ".csv", ".tsv",
     ".log", ".lock", ".svg", ".diff", ".patch"];
+
+// The Go comment budget, in `//` lines, is the owner's house style, set from the Go
+// standard library measured on 2026-09-26 (3925 non-test files) so that agent-written
+// code reads like his. A block over its budget is advised; over denyFactor times it, denied.
+//   inline, an own-line block inside a body: stdlib p50 1, p90 5. A why is a sentence.
+//   unexported, a doc comment on an unexported declaration: stdlib p50 2, p90 7.
+//   exported, a doc comment on an exported declaration: stdlib p50 2, p90 8. A contract, not an essay.
+final inlineBudget = 3;
+final unexportedBudget = 4;
+final exportedBudget = 8;
+final denyFactor = 2;
+
+final houseStyle = "Go comments here follow the repository owner's house style, so agent-written code reads "
+    + "like his: a comment says only what the code cannot, which is why it is written this way, in a few "
+    + "lines. Budget: {inlineBudget} lines inside a body, {unexportedBudget} above an unexported declaration, "
+    + "{exportedBudget} above an exported one; a block over twice its budget is refused. A new block is "
+    + "graded by its size, an extended one by what the write added.";
+
+final preambleRule = "The owner's Go house style keeps nothing above the package clause but what Go "
+    + "tooling reads: //go:build, a //go: directive, a generated-code header. A package comment lives in "
+    + "doc.go alone.";
 
 fun extensionOf(path: str) > str {
     final slash = path.split("/");
@@ -52,9 +76,257 @@ export fun hasComment(text: str) > bool {
     return commentLine.match(text) != null or trailingComment.match(text) != null;
 }
 
-// decideComments advises once per session when a write to a code file adds comment lines.
-export fun decideComments(path: str, added: str, once: fun (key: str) > bool) > GuardVerdict {
-    if (added == "" or proseExtensions.indexOf(extensionOf(path)) != null or !hasComment(added)) {
+// GoComment is one comment block of a Go file: preamble (above the package clause),
+// exported or unexported (a doc comment on a top-level declaration), inline (an own-line
+// block anywhere else) or trailing. lines counts its comment lines, added the ones the
+// write introduced, declLines the declaration a doc comment documents.
+export object GoComment {
+    kind: str,
+    line: int,
+    lines: int,
+    words: int,
+    added: int = 0,
+    declLines: int = 0,
+}
+
+final goPackage = $"^package [A-Za-z_]";
+// The lines Go tooling reads above the package clause, which no budget counts.
+final goDirective = $"^//(go:|line |export|extern )|^// \+build ";
+final goGenerated = $"^// Code generated .* DO NOT EDIT\.$";
+final goLicense = $"(?i)copyright|spdx-license-identifier";
+final goDecl = $"^(func|type|var|const) ";
+final goMethod = $"^func \(([^)]*)\) ([A-Za-z_][A-Za-z0-9_]*)";
+final goNamed = $"^(func|type|var|const) ([A-Za-z_][A-Za-z0-9_]*)";
+final goTrailing = $"\S[ \t]+//[ \t]*(\S.*)$";
+
+fun isUpper(name: str) > bool {
+    final b = name.byte(0);
+    return b >= 65 and b <= 90;
+}
+
+fun wordCount(text: str) > int {
+    var n = 0;
+    foreach (part in text.replace("\t", with: " ").split(" ")) {
+        if (part != "") {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// goExported reports whether the declaration line names an exported symbol. A grouped
+// `var (` or `type (` counts as exported, the larger budget.
+fun goExported(decl: str) > bool {
+    final method = goMethod.match(decl);
+    if (method != null) {
+        final recv = method![1].trim().split(" ");
+        var typeName = recv[recv.len() - 1].replace("*", with: "");
+        final bracket = typeName.indexOf("[");
+        if (bracket != null) {
+            typeName = typeName.sub(0, len: bracket!);
+        }
+        return typeName != "" and isUpper(typeName) and isUpper(method![2]);
+    }
+    final named = goNamed.match(decl);
+    if (named != null) {
+        return isUpper(named![2]);
+    }
+    return true;
+}
+
+// goDeclLines is the number of lines the declaration starting at lines[at] spans: its
+// signature to the balancing parenthesis, then its body to the `}` or `)` in column 0.
+fun goDeclLines(lines: [str], at: int) > int {
+    var i = at;
+    var depth = 0;
+    while (i < lines.len()) {
+        final line = lines[i];
+        depth = depth + line.split("(").len() - line.split(")").len();
+        if (depth <= 0) {
+            break;
+        }
+        i = i + 1;
+    }
+    if (i >= lines.len()) {
+        return lines.len() - at;
+    }
+    final t = lines[i].trim();
+    if (t.endsWith("\{") or t.endsWith("(")) {
+        i = i + 1;
+        while (i < lines.len() and lines[i] != "\}" and lines[i] != ")") {
+            i = i + 1;
+        }
+    }
+    return i - at + 1;
+}
+
+// goComments is every comment block of a Go file's text, in order, with the lines before
+// did not hold counted as added. A generated file has none: nobody wrote its comments.
+export fun goComments(text: str, before: str) > [GoComment] {
+    final had = mut {<str: bool>};
+    foreach (line in before.split("\n")) {
+        had[line.trim()] = true;
+    }
+    final lines = text.split("\n");
+    final blocks = mut [<GoComment>];
+    var packaged = false;
+    var i = 0;
+    while (i < lines.len()) {
+        final line = lines[i];
+        final t = line.trim();
+        if (!packaged and goPackage.match(line) != null) {
+            packaged = true;
+            i = i + 1;
+            continue;
+        }
+        if (t.startsWith("//") or t.startsWith("/*")) {
+            final start = i;
+            var n = 0;
+            var words = 0;
+            var added = 0;
+            var first = "";
+            if (t.startsWith("/*")) {
+                while (i < lines.len()) {
+                    final ct = lines[i].trim();
+                    n = n + 1;
+                    words = words + wordCount(ct.replace("/*", with: "").replace("*/", with: ""));
+                    if (!(had[ct] ?? false)) {
+                        added = added + 1;
+                    }
+                    if (first == "") {
+                        first = ct;
+                    }
+                    i = i + 1;
+                    if (lines[i - 1].indexOf("*/") != null) {
+                        break;
+                    }
+                }
+            } else {
+                final license = !packaged and goLicense.match(t) != null;
+                while (i < lines.len() and lines[i].trim().startsWith("//")) {
+                    final ct = lines[i].trim();
+                    i = i + 1;
+                    if (license or goDirective.match(ct) != null) {
+                        continue;
+                    }
+                    if (!packaged and goGenerated.match(ct) != null) {
+                        return [<GoComment>];
+                    }
+                    n = n + 1;
+                    words = words + wordCount(ct.sub(2));
+                    if (!(had[ct] ?? false)) {
+                        added = added + 1;
+                    }
+                    if (first == "") {
+                        first = ct;
+                    }
+                }
+            }
+            if (n == 0) {
+                continue;
+            }
+            var kind = "inline";
+            var declLines = 0;
+            if (!packaged) {
+                kind = "preamble";
+            } else if (i < lines.len() and goDecl.match(lines[i]) != null) {
+                kind = if (goExported(lines[i])) "exported" else "unexported";
+                declLines = goDeclLines(lines, at: i);
+            }
+            if (added > 0 and !(had[first] ?? false)) {
+                added = n;
+            }
+            blocks.append(GoComment{ kind = kind, line = start + 1, lines = n, words = words, added = added, declLines = declLines });
+            continue;
+        }
+        final trail = goTrailing.match(line);
+        if (trail != null and line.indexOf("://") == null) {
+            var added = 0;
+            if (!(had[t] ?? false)) {
+                added = 1;
+            }
+            blocks.append(GoComment{ kind = "trailing", line = i + 1, lines = 1, words = wordCount(trail![1]), added = added });
+        }
+        i = i + 1;
+    }
+    return blocks;
+}
+
+// budgetOf is the lines a block of this kind earns. A doc.go preamble is the package
+// comment, budgeted like an exported declaration's.
+fun budgetOf(kind: str) > int {
+    if (kind == "exported" or kind == "preamble") {
+        return exportedBudget;
+    }
+    if (kind == "unexported") {
+        return unexportedBudget;
+    }
+    return inlineBudget;
+}
+
+fun describe(kind: str) > str {
+    if (kind == "exported") {
+        return "doc comment on an exported declaration";
+    }
+    if (kind == "unexported") {
+        return "doc comment on an unexported declaration";
+    }
+    if (kind == "preamble") {
+        return "package comment";
+    }
+    return "comment inside a body";
+}
+
+// decideGo grades the comment blocks a write to a Go file adds or extends: a preamble
+// outside doc.go denies, a block over twice its budget denies, one over its budget
+// advises. The verdict names every block that is over, path:line first.
+export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
+    final isDoc = fs\basename(path) == "doc.go";
+    final denied = mut [<str>];
+    final advised = mut [<str>];
+    foreach (b in goComments(after, before: before)) {
+        if (b.added == 0) {
+            continue;
+        }
+        if (b.kind == "preamble" and !isDoc) {
+            denied.append("{path}:{b.line}: {b.added} comment lines above the package clause. " + preambleRule + " Delete them.");
+            continue;
+        }
+        final budget = budgetOf(b.kind);
+        if (b.added <= budget) {
+            continue;
+        }
+        final finding = "{path}:{b.line}: {describe(b.kind)}, {b.added} lines against a budget of {budget}.";
+        if (b.added > denyFactor * budget) {
+            denied.append(finding);
+        } else {
+            advised.append(finding);
+        }
+    }
+    if (denied.len() == 0 and advised.len() == 0) {
+        return magus\guard.allow();
+    }
+    final remedy = "Cut each to the why the code cannot show; a design record belongs in the commit message or the docs.";
+    if (denied.len() > 0) {
+        return magus\guard.deny("Refused. " + houseStyle + "\n\n" + (denied + advised).join("\n") + "\n\n" + remedy);
+    }
+    return magus\guard.advise(houseStyle + "\n\n" + advised.join("\n") + "\n\n" + remedy);
+}
+
+// decideComments grades a Go write against the comment budget, then advises once per
+// session when a write to any code file adds comment lines.
+export fun decideComments(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
+    if (proseExtensions.indexOf(extensionOf(path)) != null) {
+        return magus\guard.allow();
+    }
+    if (extensionOf(path) == ".go") {
+        final verdict = decideGo(path, before: before, after: after);
+        if (verdict.decision != "allow") {
+            return verdict;
+        }
+    }
+    final added = addedLines(before, after: after);
+    if (added == "" or !hasComment(added)) {
         return magus\guard.allow();
     }
     if (once("code-comments")) {
@@ -63,18 +335,34 @@ export fun decideComments(path: str, added: str, once: fun (key: str) > bool) > 
     return magus\guard.allow();
 }
 
+fun spent() > fun (key: str) > bool {
+    final once = helpers\counter();
+    once("code-comments");
+    return once;
+}
+
+fun commentLines(n: int, indent: str) > str {
+    final lines = mut [<str>];
+    var i = 0;
+    while (i < n) {
+        i = i + 1;
+        lines.append(indent + "// line {i} of a comment that narrates what the code below already says");
+    }
+    return lines.join("\n");
+}
+
 test "a write that adds a comment to code is advised once per session" {
     final once = helpers\counter();
-    final v = decideComments("/w/internal/cache/key.go", added: "// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
+    final v = decideComments("/w/internal/cache/key.go", before: "", after: "package cache\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
     std\assert(v.decision == "advise", message: "the first");
     std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
     std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
-    std\assert(decideComments("/w/a.go", added: "// again", once: once).decision == "allow", message: "only once");
+    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == "allow", message: "only once");
 }
 
 test "every comment form counts" {
     foreach (path, added in {
-        "a.go": "\t// a note",
+        "a.go": "package a\n\t// a note",
         "a.py": "# a note",
         "a.sh": "#\necho",
         "a.c": "/* a note */",
@@ -82,10 +370,10 @@ test "every comment form counts" {
         "a.html": "<!-- a note -->",
         "a.sql": "-- a note",
         "a.el": ";; a note",
-        "b.go": "x := 1 // a note",
+        "b.go": "package b\nx := 1 // a note",
         "b.py": "x = 1  # a note",
     }) {
-        std\assert(decideComments(path, added: added, once: helpers\counter()).decision == "advise", message: path);
+        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == "advise", message: path);
     }
 }
 
@@ -95,12 +383,89 @@ test "prose, a shebang, code alone and an unchanged comment stay silent" {
         "notes.TXT": "# a line",
         "data.json": "\{\"a\": \"// b\"}",
         "run.sh": "#!/bin/sh\necho hi",
-        "a.go": "x := a/b",
+        "a.go": "package a\nx := a/b",
         "b.go": "",
     }) {
-        std\assert(decideComments(path, added: added, once: helpers\counter()).decision == "allow", message: path);
+        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == "allow", message: path);
     }
-    final before = "// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
-    final after = "// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
-    std\assert(decideComments("a.go", added: addedLines(before, after: after), once: helpers\counter()).decision == "allow", message: "the comment was already there");
+    final before = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
+    final after = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
+    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == "allow", message: "the comment was already there");
+}
+
+test "goComments tells the kinds apart and sizes the declaration a doc comment documents" {
+    final text = "//go:build linux\n\n// Package p does things.\npackage p\n\n// Exported is a contract.\n// It has two lines.\nfunc Exported(\n\ta int,\n) \{\n\tx := 1 // trailing\n\t// inline\n\t// block\n\treturn\n}\n\n// helper is one line.\nfunc (s *Server) helper() \{}\n\n// T is a type.\ntype T struct \{\n\t// a field's doc, inline\n\tA int\n}\n";
+    final blocks = goComments(text, before: "");
+    final kinds = mut [<str>];
+    foreach (b in blocks) {
+        kinds.append("{b.kind}:{b.line}:{b.lines}:{b.declLines}:{b.added}");
+    }
+    std\assert(kinds.join(" ") == "preamble:3:1:0:1 exported:6:2:8:2 trailing:11:1:0:1 inline:12:2:0:2 unexported:17:1:1:1 exported:20:1:4:1 inline:22:1:0:1", message: kinds.join(" "));
+    std\assert(goComments("// Code generated by x. DO NOT EDIT.\n\npackage p\n\n" + commentLines(30, indent: ""), before: "").len() == 0, message: "generated");
+}
+
+test "a short why-comment passes the Go budget" {
+    final after = "package p\n\nfunc f() \{\n\t// keys are sorted; the bsearch below depends on it\n\tsort()\n}\n";
+    std\assert(decideComments("a.go", before: "", after: after, once: spent()).decision == "allow", message: "in budget");
+    final doc = "package p\n\n" + commentLines(8, indent: "") + "\nfunc Exported() \{}\n";
+    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == "allow", message: "an exported doc earns 8");
+}
+
+test "a narrated block over its budget is advised with the budget, the size and the remedy" {
+    final after = "package p\n\nfunc f() \{\n" + commentLines(5, indent: "\t") + "\n\tx()\n}\n";
+    final v = decideComments("/w/internal/a.go", before: "", after: after, once: spent());
+    std\assert(v.decision == "advise", message: v.decision);
+    std\assert(v.reason.indexOf("repository owner's house style") != null, message: "names whose style");
+    std\assert(v.reason.indexOf("/w/internal/a.go:4: comment inside a body, 5 lines against a budget of 3.") != null, message: v.reason);
+    std\assert(v.reason.indexOf("Cut each to the why") != null, message: "remedy");
+    final doc = "package p\n\n" + commentLines(6, indent: "") + "\nfunc helper() \{}\n";
+    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).reason.indexOf("unexported declaration, 6 lines against a budget of 4") != null, message: "unexported");
+    final exported = "package p\n\n" + commentLines(12, indent: "") + "\nfunc (s *Server) Exported() \{}\n";
+    std\assert(decideComments("a.go", before: "", after: exported, once: spent()).reason.indexOf("exported declaration, 12 lines against a budget of 8") != null, message: "exported");
+}
+
+test "a huge block is refused" {
+    final after = "package p\n\nfunc f() \{\n" + commentLines(7, indent: "\t") + "\n\tx()\n}\n";
+    final v = decideComments("a.go", before: "", after: after, once: spent());
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.startsWith("Refused."), message: v.reason);
+    std\assert(v.reason.indexOf("a.go:4: comment inside a body, 7 lines against a budget of 3.") != null, message: v.reason);
+    final doc = "package p\n\n" + commentLines(17, indent: "") + "\nfunc Exported() \{}\n";
+    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == "deny", message: "17 on an exported declaration");
+    final mixed = "package p\n\n" + commentLines(9, indent: "") + "\nfunc Exported() \{}\n\nfunc f() \{\n" + commentLines(7, indent: "\t") + "\n}\n";
+    final both = decideComments("a.go", before: "", after: mixed, once: spent());
+    std\assert(both.decision == "deny", message: "one refusal wins");
+    std\assert(both.reason.indexOf("a.go:3:") != null and both.reason.indexOf("a.go:15:") != null, message: both.reason);
+}
+
+test "a comment above the package clause is refused, the lines Go tooling reads pass" {
+    final v = decideComments("a.go", before: "", after: "// Package p does things.\npackage p\n", once: spent());
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.indexOf("a.go:1: 1 comment lines above the package clause.") != null, message: v.reason);
+    std\assert(v.reason.indexOf("doc.go alone") != null, message: "says where a package comment goes");
+    std\assert(decideComments("a.go", before: "", after: "// a note\n//go:build linux\n\npackage p\n", once: spent()).decision == "deny", message: "prose beside a directive");
+    foreach (name, text in {
+        "build tag": "//go:build linux && !noffi\n\npackage p\n",
+        "old build tag": "// +build linux\n\npackage p\n",
+        "generated": "// Code generated by magus-utils. DO NOT EDIT.\n\npackage p\n\n" + commentLines(40, indent: ""),
+        "license": "// Copyright 2026 The Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage p\n",
+        "directive": "//go:generate go run gen.go\n\npackage p\n",
+    }) {
+        std\assert(decideComments("a.go", before: "", after: text, once: spent()).decision == "allow", message: name);
+    }
+    std\assert(decideComments("p/doc.go", before: "", after: "// Package p is the thing.\n// One more line.\npackage p\n", once: spent()).decision == "allow", message: "doc.go holds the package comment");
+    std\assert(decideComments("p/doc.go", before: "", after: commentLines(17, indent: "") + "\npackage p\n", once: spent()).decision == "deny", message: "doc.go has the exported budget");
+}
+
+test "an edit that leaves an old long comment alone passes; growing one is graded by the growth" {
+    final old = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n\tx()\n}\n";
+    final touched = old + "\nfunc g() \{\n\t// one why\n\ty()\n}\n";
+    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == "allow", message: "the old block is not the write's");
+    final grown = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n\t// a thirteenth line\n\t// and a fourteenth\n\tx()\n}\n";
+    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == "allow", message: "two lines of growth");
+    final overgrown = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n" + commentLines(5, indent: "\t").replace("line ", with: "new ") + "\n\tx()\n}\n";
+    final v = decideComments("a.go", before: old, after: overgrown, once: spent());
+    std\assert(v.decision == "advise" and v.reason.indexOf("5 lines against a budget of 3") != null, message: v.reason);
+    final preamble = "// Package p is old.\n" + old;
+    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == "allow", message: "an old package comment is not the write's");
 }

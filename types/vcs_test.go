@@ -29,6 +29,7 @@ func TestCommitBuzzObject(t *testing.T) {
 		Subject: "fix",
 		Body:    "the details",
 		Parents: []string{"cafe"},
+		Files:   []string{"docs/a.md"},
 	}
 	want := BuzzObject{
 		"id":      "deadbeef",
@@ -38,6 +39,7 @@ func TestCommitBuzzObject(t *testing.T) {
 		"subject": "fix",
 		"body":    "the details",
 		"parents": []string{"cafe"},
+		"files":   []string{"docs/a.md"},
 	}
 	assert.Equal(t, want, c.BuzzObject())
 }

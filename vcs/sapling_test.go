@@ -377,3 +377,7 @@ func TestSaplingStartMergeRefusesWhenOneIsUnderway(t *testing.T) {
 	require.Error(t, err, "a second StartMerge must not report success over an in-progress merge")
 	assert.Contains(t, err.Error(), "already in progress")
 }
+
+func TestSaplingHistoryFollowsPathsAndFirstParent(t *testing.T) {
+	assertHistoryScenario(t, saplingVCS{}, hgFamilyHistoryRepo(t, "sl"))
+}

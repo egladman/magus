@@ -108,4 +108,7 @@ type SpawnTarget struct {
 	// plus cache-write tokens from the latest usage its host reported for it. Nil when
 	// the host reported none.
 	ContextTokens *int64
+	// Entries are the entries recorded on the job the agent was spawned for, so a resume
+	// can tell it which of its paths somebody else wrote.
+	Entries []JobEntry
 }

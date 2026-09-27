@@ -13,4 +13,5 @@ export object Commit {
     subject: str = "",
     body: str = "",
     parents: [str] = [],
+    files: [str] = [],
 }

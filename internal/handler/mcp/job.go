@@ -68,6 +68,9 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
+		if rel := paramString(req.Params, "enter", ""); rel != "" {
+			return spells.InvokeResponse{Text: job.EntryAdvice(stored, rel), Data: stored}, nil
+		}
 		return spells.InvokeResponse{Data: stored}, nil
 
 	case "exec":
@@ -108,6 +111,9 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve, t.observe)
 		if err != nil {
 			return spells.InvokeResponse{}, err
+		}
+		if rows, err := t.store.List(); err == nil {
+			status.Entries = job.EntriesOf(rows, status.Job)
 		}
 		return spells.InvokeResponse{Data: status}, nil
 

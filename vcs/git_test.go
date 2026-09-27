@@ -3495,3 +3495,84 @@ func TestCheckRefNameAndCommitID(t *testing.T) {
 		assert.Error(t, checkCommitID(bad), bad)
 	}
 }
+
+// assertHistoryScenario checks History against the history every backend's test builds:
+// "init" adds docs/a.md and x.txt, "side adds docs" adds docs/b.md off init, "main edits
+// docs" edits docs/a.md on the main line, "merge side" merges side into it, and "main
+// edits x" edits x.txt.
+func assertHistoryScenario(t *testing.T, drv types.VCSDriver, dir string) {
+	t.Helper()
+	ctx := t.Context()
+	subjects := func(cs []types.Commit) []string {
+		out := make([]string, len(cs))
+		for i, c := range cs {
+			out[i] = c.Subject
+		}
+		return out
+	}
+
+	line, err := drv.History(ctx, dir, types.HistoryQuery{FirstParent: true})
+	require.NoError(t, err)
+	require.Equal(t, []string{"main edits x", "merge side", "main edits docs", "init"}, subjects(line))
+	assert.Equal(t, []string{"x.txt"}, line[0].Files)
+	assert.Len(t, line[1].Parents, 2)
+	assert.Equal(t, []string{"docs/b.md"}, line[1].Files, "a merge's files are its diff against the first parent")
+	assert.Equal(t, []string{"docs/a.md"}, line[2].Files)
+	assert.ElementsMatch(t, []string{"docs/a.md", "x.txt"}, line[3].Files)
+
+	all, err := drv.History(ctx, dir, types.HistoryQuery{})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"main edits x", "merge side", "main edits docs", "side adds docs", "init"}, subjects(all))
+	assert.Equal(t, line[0], all[0])
+
+	docs, err := drv.History(ctx, dir, types.HistoryQuery{Paths: []string{"docs"}, FirstParent: true})
+	require.NoError(t, err)
+	require.Equal(t, []string{"merge side", "main edits docs", "init"}, subjects(docs))
+	assert.Equal(t, []string{"docs/a.md"}, docs[2].Files, "files narrow to the paths")
+
+	allDocs, err := drv.History(ctx, dir, types.HistoryQuery{Paths: []string{"docs"}})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"merge side", "main edits docs", "side adds docs", "init"}, subjects(allDocs))
+
+	one, err := drv.History(ctx, dir, types.HistoryQuery{Limit: 1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"main edits x"}, subjects(one))
+
+	oneDoc, err := drv.History(ctx, dir, types.HistoryQuery{Limit: 1, Paths: []string{"docs/b.md"}, FirstParent: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"merge side"}, subjects(oneDoc), "the limit counts commits that touch the paths")
+}
+
+func TestGitHistoryFollowsPathsAndFirstParent(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	gitRun(t, dir, "checkout", "-q", "-b", "side")
+	writeRepoFile(t, dir, "docs/b.md", "b\n")
+	gitRun(t, dir, "add", "docs/b.md")
+	gitRun(t, dir, "commit", "-q", "-m", "side adds docs")
+	gitRun(t, dir, "checkout", "-q", "-")
+	writeRepoFile(t, dir, "docs/a.md", "a2\n")
+	gitRun(t, dir, "commit", "-q", "-am", "main edits docs")
+	gitRun(t, dir, "merge", "-q", "--no-ff", "side", "-m", "merge side")
+	writeRepoFile(t, dir, "x.txt", "x2\n")
+	gitRun(t, dir, "commit", "-q", "-am", "main edits x")
+
+	assertHistoryScenario(t, gitVCS{}, dir)
+}
+
+// A path is data, never pathspec magic, and a rename is both of its paths.
+func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"*.md": "star\n", "a.md": "a\n"})
+	gitRun(t, dir, "mv", "a.md", "b.md")
+	gitRun(t, dir, "commit", "-q", "-m", "rename")
+
+	got, err := gitVCS{}.History(t.Context(), dir, types.HistoryQuery{Paths: []string{"*.md"}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, []string{"*.md"}, got[0].Files)
+
+	renamed, err := gitVCS{}.History(t.Context(), dir, types.HistoryQuery{Limit: 1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.md", "b.md"}, renamed[0].Files)
+}
