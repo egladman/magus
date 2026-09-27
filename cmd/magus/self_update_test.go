@@ -49,6 +49,15 @@ type testFixture struct {
 // mismatch guard in selfUpdateCmd; when omitted it defaults to tag.
 func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFixture {
 	t.Helper()
+	return newIndexFixture(t, tag, func(served selfupdate.IndexRelease) selfupdate.ReleaseIndex {
+		return selfupdate.ReleaseIndex{SchemaVersion: 1, Releases: []selfupdate.IndexRelease{served}}
+	}, manifestVersion...)
+}
+
+// newIndexFixture is newTestFixture with the index shaped by shape, which receives
+// the one release whose assets the fixture serves.
+func newIndexFixture(t *testing.T, tag string, shape func(served selfupdate.IndexRelease) selfupdate.ReleaseIndex, manifestVersion ...string) *testFixture {
+	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
@@ -90,19 +99,14 @@ func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFi
 
 	// Build the release index: the artifact download URLs point at artifactSrv.
 	artifactBase := fx.artifactSrv.URL
-	idx := selfupdate.ReleaseIndex{
-		SchemaVersion: 1,
-		Releases: []selfupdate.IndexRelease{
-			{
-				Version: tag,
-				Artifacts: []selfupdate.IndexArtifact{
-					{Name: assetName},
-					{Name: "SHA256SUMS"},
-					{Name: "SHA256SUMS.sig"},
-				},
-			},
+	idx := shape(selfupdate.IndexRelease{
+		Version: tag,
+		Artifacts: []selfupdate.IndexArtifact{
+			{Name: assetName},
+			{Name: "SHA256SUMS"},
+			{Name: "SHA256SUMS.sig"},
 		},
-	}
+	})
 	// We need to override FindAssets's URL computation so it uses the test
 	// server. We do that by intercepting the GitHub download path via an
 	// http.Client transport that redirects github.com -> artifactSrv.
@@ -277,6 +281,53 @@ func TestSelfUpdate_DowngradeForce(t *testing.T) {
 
 	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected forced downgrade to succeed in dry-run")
+}
+
+// newCandidateFixture serves v0.5.0-rc.1's assets beside a stable v0.4.3, with the
+// candidate under Prereleases as release-index publishes it, or under Releases as
+// an index written before that split did.
+func newCandidateFixture(t *testing.T, underReleases bool) *testFixture {
+	t.Helper()
+	return newIndexFixture(t, "v0.5.0-rc.1", func(rc selfupdate.IndexRelease) selfupdate.ReleaseIndex {
+		stable := selfupdate.IndexRelease{Version: "v0.4.3"}
+		if underReleases {
+			return selfupdate.ReleaseIndex{SchemaVersion: 1, Releases: []selfupdate.IndexRelease{rc, stable}}
+		}
+		return selfupdate.ReleaseIndex{
+			SchemaVersion: 1,
+			Releases:      []selfupdate.IndexRelease{stable},
+			Prereleases:   []selfupdate.IndexRelease{rc},
+		}
+	})
+}
+
+func TestSelfUpdate_AutoSelectSkipsPrerelease(t *testing.T) {
+	for _, underReleases := range []bool{false, true} {
+		t.Run(fmt.Sprintf("underReleases=%v", underReleases), func(t *testing.T) {
+			newCandidateFixture(t, underReleases).activate(t)
+			setVersion(t, "v0.4.3")
+
+			err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+			require.EqualError(t, err, "magus self update: already running v0.4.3 (use --force to reinstall)")
+		})
+	}
+}
+
+func TestSelfUpdate_ExplicitPrereleaseInstalls(t *testing.T) {
+	newCandidateFixture(t, false).activate(t)
+	setVersion(t, "v0.4.3")
+
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.5.0-rc.1"}))
+}
+
+func TestSelfUpdate_RunningPrereleaseRefusalNamesTheChannel(t *testing.T) {
+	newCandidateFixture(t, false).activate(t)
+	setVersion(t, "v0.5.0-rc.1")
+
+	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	require.EqualError(t, err, "you are running prerelease v0.5.0-rc.1 and automatic updates follow stable releases only; "+
+		"the newest stable release is v0.4.3\n"+
+		"  name a later prerelease with --version, or use --version v0.4.3 --force to return to stable")
 }
 
 // TestSelfUpdate_UnknownVersionRefusesAutoSelect proves that a dev build

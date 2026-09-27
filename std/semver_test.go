@@ -50,6 +50,25 @@ func TestSemverIsValid(t *testing.T) {
 	}
 }
 
+// The cases are types.TestParseVersionIsOkOnlyForAStableRelease's, so the Buzz binding
+// and the release index classify every tag shape alike.
+func TestSemverIsStable(t *testing.T) {
+	cases := map[string]bool{
+		"v0.4.0":              true,
+		"v1.2.3+build-1":      true,
+		"v0.5.0-rc.1":         false,
+		"v1.0.0-beta":         false,
+		"v1.2.3-rc.1+build-9": false,
+		"not-a-version":       false,
+		"":                    false,
+	}
+	for v, want := range cases {
+		got, err := SemverIsStable(context.Background(), v)
+		require.NoError(t, err, "isStable must never error, only report")
+		assert.Equal(t, want, got, v)
+	}
+}
+
 // Input stays lenient (matching parse) while output is always canonical, so two
 // results are directly comparable.
 func TestSemverCanonicalLenientInStrictOut(t *testing.T) {

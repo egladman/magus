@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/types"
 	minioselfupdate "github.com/minio/selfupdate"
 )
 
@@ -127,8 +128,8 @@ func archToken(goarch, goarm string) string {
 //
 // Downgrade/freeze protection: moving to a lower semver than the running binary
 // is refused unless --version is given explicitly (explicit opt-in) or --force
-// is set. When --version is omitted, the newest non-yanked release from the
-// index is used. A dev build (version == "unknown") has no baseline to compare
+// is set. When --version is omitted, the newest non-yanked stable release from
+// the index is used; a prerelease installs only when --version names it. A dev build (version == "unknown") has no baseline to compare
 // against, so it also requires --version or --force before auto-selecting a
 // release.
 func selfUpdateCmd(ctx context.Context, args []string) error {
@@ -137,9 +138,10 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus self update [flags]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Download the latest magus release, verify its Ed25519 signature and")
+		fmt.Fprintln(os.Stderr, "Download the latest stable magus release, verify its Ed25519 signature and")
 		fmt.Fprintln(os.Stderr, "SHA-256 hash, then atomically replace the running binary.")
 		fmt.Fprintln(os.Stderr, "Without --bin-dir the running binary is replaced in place.")
+		fmt.Fprintln(os.Stderr, "A prerelease (v0.5.0-rc.1) is never chosen automatically; name it with --version.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Discovery reads the release index at the site's public/release/index.json.")
 		fmt.Fprintln(os.Stderr, "Override with MAGUS_UPDATE_URL to use a private update channel.")
@@ -202,6 +204,15 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		case -1:
 			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.
+				if _, stable := types.ParseVersion(version); !stable {
+					return fmt.Errorf(
+						"you are running prerelease %s and automatic updates follow stable releases only; "+
+							"the newest stable release is %s\n"+
+							"  name a later prerelease with --%s, or use --%s %s --%s to return to stable",
+						version, rel.Version, gen.FlagSelfUpdateVersion,
+						gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
+					)
+				}
 				return fmt.Errorf(
 					"index advertises %s but you are running %s - refusing downgrade\n"+
 						"  use --%s %s to install a specific older release, or --%s to override",

@@ -15,6 +15,7 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
@@ -152,6 +153,11 @@ type ReleaseIndex struct {
 	// internal/selfupdate for what it does and does not buy.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
+	// Prereleases holds every manifest whose version is a prerelease, apart from
+	// Releases, because a shipped client auto-selects the highest semver in Releases.
+	// Nil rather than empty when there are none, so omitzero leaves the signed bytes
+	// of an index without candidates as they were.
+	Prereleases []IndexRelease `json:"prereleases,omitzero"`
 }
 
 // IndexValidity is how long a signed index is good for. Long, because nothing
@@ -193,11 +199,16 @@ func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []
 		if artifacts == nil {
 			artifacts = []ReleaseArtifact{} // "artifacts":[] rather than null
 		}
-		idx.Releases = append(idx.Releases, IndexRelease{
+		rel := IndexRelease{
 			Version:   m.Version,
 			Yanked:    m.Yanked,
 			Artifacts: artifacts,
-		})
+		}
+		if _, stable := types.ParseVersion(m.Version); !stable {
+			idx.Prereleases = append(idx.Prereleases, rel)
+			continue
+		}
+		idx.Releases = append(idx.Releases, rel)
 	}
 	return idx
 }
@@ -255,6 +266,10 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 // artifact in artifactsDir, and deletes the fragments it folded: the manifest owns
 // that text now, and the docs changelog page renders it from there.
 //
+// A prerelease records the same notes and deletes nothing.
+// Its notes are a preview of the final release's, and the final cut has to fold every
+// fragment again, since no later tool subtracts a candidate's notes from it.
+//
 // Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
 //
 // The MAGUS_SIGNING_KEY env var is NOT required here; signing SHA256SUMS is a
@@ -287,6 +302,11 @@ func runCut(args []string) error {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 	outPath := filepath.Join(outDir, version+".yaml")
+	if !semver.IsValid(version) {
+		return fmt.Errorf("cut: -version %q is not a semantic version", version)
+	}
+	_, stable := types.ParseVersion(version)
+	candidate := !stable
 
 	artifacts, err := scanReleaseArtifacts(artifactsDir, version)
 	if err != nil {
@@ -322,7 +342,7 @@ func runCut(args []string) error {
 		// did not delete.
 		var folded []fragment
 		for _, f := range frags {
-			if strings.Contains(prev.Body, f.entry) {
+			if !candidate && strings.Contains(prev.Body, f.entry) {
 				folded = append(folded, f)
 			}
 		}
@@ -360,6 +380,11 @@ func runCut(args []string) error {
 	}
 	if err := os.Rename(tmpPath, outPath); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
+	}
+	if candidate {
+		fmt.Printf("wrote %s from %d fragment(s); kept them for the final release, since %s is a prerelease\n",
+			outPath, len(frags), version)
+		return nil
 	}
 	fmt.Printf("wrote %s from %d fragment(s)\n", outPath, len(frags))
 	return removeFragments(frags)

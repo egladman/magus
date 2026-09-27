@@ -47,7 +47,8 @@ export fun isPublishablePost(site: Site, name: str) > bool !> any {
 }
 
 // findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names
-// the newest release's version, or leaves it "" when no post claims it.
+// the version site.latestStable() names, the one the announcement bar links it beside, or
+// leaves it "" when no post claims it.
 //
 // The claim lives on the POST, not on the release manifest: a release need not have a post
 // at all, and releases/*.yaml mirrors the Go ReleaseManifest that freezes index.json's v1
@@ -58,8 +59,9 @@ export fun findReleasePost(site: Site) > void !> any {
     // Cleared up front, like loadReleases does with site.releases: `serve` re-renders into
     // a Site that already ran, and a post that stops claiming the release must stop linking.
     site.releaseBlogURL = "";
-    if (site.releases.len() == 0) { return; }
-    final ver = site.releases[0].version;
+    final latest = site.latestStable();
+    if (latest == null) { return; }
+    final ver = latest!.version;
     final dir = fs\join(site.root, site.blog);
     if (fs\isDir(dir) == false) { return; }
     foreach (name in fs\listDir(dir)) {

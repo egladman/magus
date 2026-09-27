@@ -650,14 +650,15 @@ export fun renderRoot(site: Site) > void !> any {
 }
 
 
-// substituteVersionTokens swaps __MAGUS_VERSION__ for the latest release version WITH the
-// leading "v" (e.g. "v0.1.0"), read from releases/*.yaml via loadReleases - the single
-// source of truth (do NOT read git tags). Run before render AND before the md is written
-// back as index.md, so the page and its "View source" copy agree. No-op when no release has
-// shipped (the token stays literal, prompting a cut).
+// substituteVersionTokens swaps __MAGUS_VERSION__ for site.latestStable()'s version WITH the
+// leading "v" (e.g. "v0.1.0"), so the install docs never pin a release candidate. Run before
+// render AND before the md is written back as index.md, so the page and its "View source"
+// copy agree. No-op when no stable release has shipped (the token stays literal, prompting a
+// cut).
 fun substituteVersionTokens(md: str, site: Site) > str {
-    if (site.releases.len() == 0) { return md; }
-    return $"__MAGUS_VERSION__".replaceAll(md, site.releases[0].version);
+    final latest = site.latestStable();
+    if (latest == null) { return md; }
+    return $"__MAGUS_VERSION__".replaceAll(md, latest!.version);
 }
 
 
@@ -774,9 +775,10 @@ test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest r
         demoBySlug = mut {},
         releases = mut [<Release>],
     };
+    s.releases.append(Release{ version = "v0.3.0-rc.1" });
     s.releases.append(Release{ version = "v0.2.0" });
     final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
-    assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the tag");
+    assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the stable tag, not the newer candidate");
 }
 
 test "substituteVersionTokens is a no-op before any release has shipped" {

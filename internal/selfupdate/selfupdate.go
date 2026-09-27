@@ -44,6 +44,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/retry"
+	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
 )
 
@@ -175,6 +176,10 @@ type ReleaseIndex struct {
 	// compromise into a denial of service. RFC3339; empty means no bound.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
+	// Prereleases lists release candidates apart from Releases, because every binary
+	// through v0.4.3 auto-selects the highest semver in Releases and drops a member it
+	// does not declare. Only an explicit --version reaches this list.
+	Prereleases []IndexRelease `json:"prereleases,omitzero"`
 }
 
 // IndexRelease represents one entry inside ReleaseIndex.Releases. The index
@@ -272,16 +277,19 @@ func checkNotExpired(expiresAt string) error {
 
 // SelectRelease returns the IndexRelease for the requested tag from idx.
 // When tag is empty, the release with the highest valid semver Version among
-// non-yanked entries is returned; positional order in the index is not
+// non-yanked stable entries is returned; positional order in the index is not
 // trusted (an index that is not newest-first, whether by bug or tampering,
 // must not select a stale release). Entries whose Version is not valid
-// semver are rejected rather than considered.
+// semver are rejected rather than considered, and a prerelease is never
+// selected automatically, even one listed under Releases. A tag is looked up
+// in Releases, then Prereleases, so naming a prerelease still installs it.
 func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
 	if tag == "" {
 		var best *IndexRelease
 		for i := range idx.Releases {
 			rel := &idx.Releases[i]
-			if rel.Yanked || !semver.IsValid(rel.Version) {
+			_, stable := types.ParseVersion(rel.Version)
+			if rel.Yanked || !stable || !semver.IsValid(rel.Version) {
 				continue
 			}
 			if best == nil || semver.Compare(rel.Version, best.Version) > 0 {
@@ -289,16 +297,20 @@ func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
 			}
 		}
 		if best == nil {
-			return nil, errors.New("no non-yanked release with a valid semver version found in index")
+			return nil, errors.New("no non-yanked stable release with a valid semver version found in index " +
+				"(a prerelease installs only by name, with --version)")
 		}
 		return best, nil
 	}
-	for i := range idx.Releases {
-		if idx.Releases[i].Version == tag {
-			if idx.Releases[i].Yanked {
+	for _, list := range [][]IndexRelease{idx.Releases, idx.Prereleases} {
+		for i := range list {
+			if list[i].Version != tag {
+				continue
+			}
+			if list[i].Yanked {
 				return nil, fmt.Errorf("release %s has been yanked", tag)
 			}
-			return &idx.Releases[i], nil
+			return &list[i], nil
 		}
 	}
 	return nil, fmt.Errorf("release %s not found in index", tag)
@@ -556,7 +568,7 @@ func PrintUpdateStatus(tagName, currentVersion string) {
 	case 0:
 		fmt.Printf("already up to date (%s)\n", currentVersion)
 	case -1:
-		fmt.Printf("current version %s is newer than latest release %s\n", currentVersion, tagName)
+		fmt.Printf("current version %s is newer than latest stable release %s\n", currentVersion, tagName)
 	}
 }
 

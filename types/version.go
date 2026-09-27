@@ -3,6 +3,8 @@ package types
 import (
 	"context"
 	"strings"
+
+	semver "github.com/Masterminds/semver/v3"
 )
 
 type magusVersionKey struct{}
@@ -31,6 +33,27 @@ func MagusVersionFromContext(ctx context.Context) string {
 // inputs is version skew (environmental), not the developer's change.
 func IsDevMagusVersion(version string) bool {
 	return version == "" || version == "unknown" || strings.Contains(version, "-g")
+}
+
+// ParseVersion parses s as a release version, the leading v optional. ok is true
+// only for a stable release: false for a prerelease (v0.5.0-rc.1, v1.2.3-rc.1+build-9)
+// and for anything that is not a semantic version. Build metadata is not a
+// prerelease, so v1.2.3+build-1 is stable. The release index, the release cut and
+// self update all decide what counts as a release here.
+func ParseVersion(s string) (v SemverVersion, ok bool) {
+	sv, err := semver.NewVersion(s)
+	if err != nil {
+		return SemverVersion{}, false
+	}
+	v = SemverVersion{
+		Major:      int(sv.Major()),
+		Minor:      int(sv.Minor()),
+		Patch:      int(sv.Patch()),
+		Prerelease: sv.Prerelease(),
+		Metadata:   sv.Metadata(),
+		Original:   sv.Original(),
+	}
+	return v, v.Prerelease == ""
 }
 
 type magusBuildKey struct{}

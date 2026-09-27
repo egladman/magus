@@ -431,7 +431,9 @@ jobs:
       # is for; a failure to publish the update index must not withhold them.
       #
       # cut folds the changes/unreleased/ fragments into the manifest and deletes them;
-      # the docs changelog page renders both at build time.
+      # the docs changelog page renders both at build time. A prerelease tag records the
+      # same notes and deletes nothing, so the final release's cut still folds them all,
+      # and release-index lists it under `prereleases`, which self update never picks alone.
       - name: Cut the release manifest
         env:
           TAG: ${{ github.ref_name }}
