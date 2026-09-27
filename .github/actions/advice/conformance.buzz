@@ -267,7 +267,7 @@ fun body(items: [{str: str}], rows: [{str: str}], caveats: [str]) > str {
         + "separately.\n\n"
         + "If you diverged on purpose, because this really is a different thing that happens to "
         + "look the same, then this finding is wrong and worth ignoring. "
-        + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
+        + "Add the `advice: silence " + section + "` label to keep it quiet.\n";
 }
 
 fun main() > void !> any {
@@ -455,7 +455,7 @@ test "body shows the evidence and names the escape hatch" {
         "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}], rows: [], caveats: []);
     std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
     std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
-    std\assert(text.indexOf("`magus:silence:conformance` label") != null,
+    std\assert(text.indexOf("`advice: silence conformance` label") != null,
         message: "declining must be easy and permanent, and the label is how");
     std\assert(text.indexOf("| file | finding |") == null, message: "no symbol finding, no symbol table");
 }
