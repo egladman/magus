@@ -1,10 +1,14 @@
 package guard
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -12,17 +16,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The symbol-search rule: a recursive text search whose every alternative the graph can
-// answer exactly. An indexed symbol is the one search shape with an EXACT replacement,
-// which is what makes denying it free: refs returns the same sites, column-precise and
-// checked against the tree, plus the generated and cross-language ones a pattern cannot
-// reach. Anything the index cannot vouch for stays an advisory, because a deny that routes
+// The symbol-search rule: a text search whose every alternative the graph can answer
+// exactly. An indexed symbol is the one search shape with an EXACT replacement, which is
+// what makes denying it free: refs returns the same sites, column-precise and checked
+// against the tree, plus the generated and cross-language ones a pattern cannot reach.
+// Anything the index cannot vouch for stays an advisory, because a deny that routes
 // nowhere takes a capability away. Raw text is the standing case there: a string literal
 // or a comment body is not a symbol, so no index holds it.
 //
 // Measured 2026-09-24 over 14,773 search patterns: 45% were alternations and 13% were
 // `func X` or `type X` definition lookups, and the single-identifier form this rule
-// started with fired 0 times.
+// started with fired 0 times. Measured 2026-09-26 over 89,116 search calls: 8,500 looked
+// for a symbol and most named one Go file (`grep -n Foo file.go`), a shape the rule then
+// left alone as a read.
 
 // searchRoute is the graph command that answers one alternative of a search.
 type searchRoute struct {
@@ -33,10 +39,24 @@ type searchRoute struct {
 // searchVerdict judges the searches on a line against the index, reporting false when no
 // search there is one it has anything to say about.
 func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ShellVerdict{}, false
+	}
+	return searchVerdictAt(deps, dir, cmds)
+}
+
+func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (ShellVerdict, bool) {
 	var inScope []hint.Invocation
 	for _, c := range cmds {
 		c = asSearch(c)
-		if !hint.IsSearchTool(c.Name) || hint.Classify(c) != hint.ClassSearchSource {
+		if !hint.IsSearchTool(c.Name) {
+			continue
+		}
+		if v, ok := fileSymbolVerdict(deps, dir, c); ok {
+			return v, true
+		}
+		if hint.Classify(c) != hint.ClassSearchSource {
 			continue
 		}
 		// refs answers for THIS workspace, so a search of another tree has no replacement
@@ -74,6 +94,95 @@ func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, boo
 		Kind:    advisoryPrecedent,
 		Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
 	}, true
+}
+
+// fileSymbolVerdict denies a search of named Go files for names the index vouches for,
+// with the lines the search would have printed, so the reader keeps the line numbers a
+// bounded read needs and learns the query that has them for every file. Silent for a
+// tree, a pipe, a file the index does not cover, or a flag that changes the question.
+func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellVerdict, bool) {
+	sc, ok := parseSearchCall(c)
+	if !ok || sc.readsStdin() || len(sc.paths) == 0 || deps.scope.root == "" {
+		return ShellVerdict{}, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	var files []string
+	for _, p := range sc.paths {
+		abs, rel, ok := workspacePath(root, dir, p)
+		if !ok || path.Ext(rel) != ".go" {
+			return ShellVerdict{}, false
+		}
+		info, err := os.Stat(abs)
+		if err != nil || info.IsDir() {
+			return ShellVerdict{}, false
+		}
+		files = append(files, rel)
+	}
+	routes, ok := provableRoutes(deps, c)
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	line, ok := sc.lineRegexp()
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	var hits []string
+	for _, rel := range files {
+		lines, ok := selectedLines(filepath.Join(root, rel), line)
+		if !ok {
+			return ShellVerdict{}, false
+		}
+		for _, l := range lines {
+			hits = append(hits, rel+":"+l)
+		}
+	}
+	return ShellVerdict{
+		Deny: denySymbolSearch(routes) + "\n" + answerBlock("What this search selects", hits),
+		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)},
+	}, true
+}
+
+// selectedLines is what `grep -n` prints for file: `<line>:<text>` for each line re selects.
+func selectedLines(file string, re *regexp.Regexp) ([]string, bool) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	var out []string
+	s := bufio.NewScanner(f)
+	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for n := 1; s.Scan(); n++ {
+		if re.MatchString(s.Text()) {
+			out = append(out, strconv.Itoa(n)+":"+s.Text())
+		}
+	}
+	return out, s.Err() == nil
+}
+
+// answerCap bounds an inline answer, so a wide pattern's deny stays readable.
+const answerCap = 20
+
+// answerBlock renders the answer a denied search would have got, bounded, so the deny
+// costs the reader nothing. An empty answer is said outright: a hit grep would not have
+// printed either.
+func answerBlock(title string, items []string) string {
+	if len(items) == 0 {
+		return title + ": nothing."
+	}
+	var b strings.Builder
+	b.WriteString(title + " (" + countNoun(len(items), "result") + "):\n")
+	for i, it := range items {
+		if i == answerCap {
+			b.WriteString("  ... " + strconv.Itoa(len(items)-answerCap) + " more\n")
+			break
+		}
+		b.WriteString("  " + it + "\n")
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // asSearch reads `git grep` as the recursive grep it is, so its patterns and paths are
@@ -213,9 +322,10 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 		return searchRoute{name: node, run: hint.Explain.With(node)}, true
 	}
 	var ident string
+	definition := false
 	switch m := definitionLookupRe.FindStringSubmatch(alt); {
 	case len(m) > 1 && hint.IsIdentifier(m[1]):
-		ident = m[1]
+		ident, definition = m[1], true
 	case len(alt) >= precedentIdentMin && precedentIdentRe.MatchString(alt):
 		ident = alt
 	default:
@@ -223,6 +333,11 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 	}
 	if defined, definitive := deps.symbolDefined(ident); !defined || !definitive {
 		return searchRoute{}, false
+	}
+	if definition {
+		// A `func X` lookup wants the body next; --source prints it in place of the
+		// grep-then-sed pair.
+		return searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source")}, true
 	}
 	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences")}, true
 }
