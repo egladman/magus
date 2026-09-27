@@ -142,3 +142,18 @@ func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
 		assert.Equal(t, tc.want, renderMCPCall(tc.tool.String(), tc.input), name)
 	}
 }
+
+// Dropping enter from the rendering turns an entry beneath the holder's own job into a
+// bare fork of another row, which the rebind rule denies.
+func TestMCPEntryReachesTheRebindRule(t *testing.T) {
+	me := narrowLease().ID
+	child := types.Job{ID: me + "/child", Parent: me, WritePaths: []string{"cmd/magus/x/**"}, State: types.StateDeclared}
+	ctx, _ := fleetFixture(t, narrowLease(), child)
+
+	entry := renderMCPCall(hint.ToolJob.String(), map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go"})
+	assert.Equal(t, "magus_job op=fork id="+child.ID+" enter=cmd/magus/x/a.go", entry)
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, entry))
+
+	stray := renderMCPCall(hint.ToolJob.String(), map[string]any{"op": "fork", "id": "harness/other", "enter": "a.go"})
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, stray), "enter a job not forked beneath")
+}

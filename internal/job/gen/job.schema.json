@@ -204,6 +204,10 @@
     "timeout": {
       "type": "string",
       "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the row, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
+    },
+    "enter": {
+      "type": "string",
+      "description": "Enter turns the record into an entry rather than a declaration: it acknowledges one write into this path, inside the write paths of the live job ID names, by somebody other than its holder. A record carrying it declares nothing else."
     }
   }
 }

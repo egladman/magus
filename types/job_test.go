@@ -302,6 +302,47 @@ func TestDeclarationRejectsCyclicCompletionGates(t *testing.T) {
 	assert.Contains(t, err.Error(), "dependencies contain a cycle")
 }
 
+// entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
+// reads such a row, acts on the rest, and writes entries back untouched.
+func TestAnOlderReaderKeepsEntries(t *testing.T) {
+	t.Parallel()
+
+	type olderJob struct {
+		Schema
+		ID    string   `json:"id"`
+		State JobState `json:"state"`
+	}
+	in := Job{
+		Schema:  Schema{Version: JobSchemaVersion},
+		ID:      "worker",
+		State:   StateRunning,
+		Entries: []JobEntry{{Path: "a.go", By: Origin{User: "eli"}, At: 1, Consumed: 2}},
+	}
+	raw, err := json.Marshal(in)
+	require.NoError(t, err)
+
+	var old olderJob
+	require.NoError(t, json.Unmarshal(raw, &old))
+	old.State = StatePass
+	rewritten, err := json.Marshal(old)
+	require.NoError(t, err)
+
+	var back Job
+	require.NoError(t, json.Unmarshal(rewritten, &back))
+	assert.Equal(t, JobSchemaVersion, back.Version, "the stamp an older reader sees is one it accepts")
+	assert.Equal(t, in.Entries, back.Entries)
+	assert.Equal(t, StatePass, back.State)
+}
+
+func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
+	t.Parallel()
+
+	schema := Schema{Version: JobSchemaVersion}
+	assert.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
+	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
+	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
+}
+
 // The parse is what makes a check comparable with a stored run, so the shapes it refuses
 // are the point: a flag read as a positional binds evidence to a target nobody ran.
 func TestParseLeaseCheck(t *testing.T) {
