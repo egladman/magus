@@ -20,7 +20,7 @@ import (
 	"strconv"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
-	"github.com/egladman/magus/libs/pricing"
+	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
 )
 
 const usage = `usage:

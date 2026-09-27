@@ -40,7 +40,7 @@ func TestDefaultTableParses(t *testing.T) {
 // The rule that made the benchmark's cost basis auditable: cache read is a
 // tenth of base input on every model, and the two 5.1 models are the documented
 // exception at a fortieth. Pinning it here means a transcription slip in
-// pricing.json fails a test rather than moving a published dollar figure.
+// rates.json fails a test rather than moving a published dollar figure.
 func TestCacheReadMultiplier(t *testing.T) {
 	t.Parallel()
 	table := mustDefault(t)
@@ -83,7 +83,6 @@ func TestPublishedRates(t *testing.T) {
 		t.Run(tc.model, func(t *testing.T) {
 			got, err := table.Lookup(tc.model)
 			require.NoError(t, err)
-			got.FastInput, got.FastOutput, got.GeoMultipliers = 0, 0, nil
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -109,65 +108,16 @@ func TestLookupErrorsOnAnUnknownModel(t *testing.T) {
 	}
 }
 
-// Fast mode is published as an input/output pair only, so the cache rates have
-// to come from the model's own multipliers. A fast cache read that stayed at
-// the base rate would price a cached fast turn at a tenth of what it costs.
-func TestFastModeStacksWithTheCacheMultipliers(t *testing.T) {
+// Cost multiplies each counter by its own rate and sums, so a token in one
+// category never leaks into another's price.
+func TestRatesCost(t *testing.T) {
 	t.Parallel()
 	table := mustDefault(t)
-	for _, model := range []string{"claude-opus-5", "claude-opus-4-8"} {
-		t.Run(model, func(t *testing.T) {
-			got, err := table.Effective(model, Options{Fast: true})
-			require.NoError(t, err)
-			almost(t, got.Input, 10, "fast input")
-			almost(t, got.Output, 50, "fast output")
-			almost(t, got.CacheRead, 1, "fast cache read")
-			almost(t, got.CacheWrite5m, 12.5, "fast 5m cache write")
-			almost(t, got.CacheWrite1h, 20, "fast 1h cache write")
-		})
-	}
-}
-
-func TestFastModeErrorsWhereItIsNotPublished(t *testing.T) {
-	t.Parallel()
-	table := mustDefault(t)
-	_, err := table.Effective("claude-sonnet-5", Options{Fast: true})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fast-mode")
-}
-
-func TestBatchHalvesInputAndOutput(t *testing.T) {
-	t.Parallel()
-	table := mustDefault(t)
-	got, err := table.Effective("claude-opus-5", Options{Batch: true})
+	rates, err := table.Lookup("claude-sonnet-5")
 	require.NoError(t, err)
-	almost(t, got.Input, 2.5, "batch input")
-	almost(t, got.Output, 12.5, "batch output")
-	almost(t, got.CacheRead, 0.5, "batch cache read")
-}
-
-func TestInferenceGeoMultipliesEveryCategory(t *testing.T) {
-	t.Parallel()
-	table := mustDefault(t)
-	got, err := table.Effective("claude-sonnet-5", Options{InferenceGeo: "us"})
-	require.NoError(t, err)
-	almost(t, got.Input, 2.2, "us input")
-	almost(t, got.Output, 11, "us output")
-	almost(t, got.CacheRead, 0.22, "us cache read")
-	almost(t, got.CacheWrite5m, 2.75, "us 5m cache write")
-	almost(t, got.CacheWrite1h, 4.4, "us 1h cache write")
-}
-
-// The 1.1x is published for Claude 4.6 and later, so asking for it on a 4.5-era
-// model is an unpriced request rather than a no-op.
-func TestInferenceGeoIsUnpublishedBefore46(t *testing.T) {
-	t.Parallel()
-	table := mustDefault(t)
-	for _, model := range []string{"claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"} {
-		_, err := table.Effective(model, Options{InferenceGeo: "us"})
-		require.Error(t, err, "model %q", model)
-		assert.Contains(t, err.Error(), "inference_geo")
-	}
+	got := rates.Cost(1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
+	almost(t, got, rates.Input+rates.Output+rates.CacheRead+rates.CacheWrite5m+rates.CacheWrite1h, "cost of a million of each")
+	almost(t, rates.Cost(0, 0, 0, 0, 0), 0, "cost of nothing")
 }
 
 func TestWebSearchIsBilledPerThousand(t *testing.T) {
@@ -181,16 +131,15 @@ func TestWebSearchIsBilledPerThousand(t *testing.T) {
 func TestLoadRejectsAMalformedTable(t *testing.T) {
 	t.Parallel()
 	for name, body := range map[string]string{
-		"no models":        `{"batch_multiplier": 0.5, "web_search_usd_per_thousand": 10, "models": {}}`,
-		"missing rate":     `{"batch_multiplier": 0.5, "web_search_usd_per_thousand": 10, "models": {"m": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25}}}`,
-		"zero rate":        `{"batch_multiplier": 0.5, "web_search_usd_per_thousand": 10, "models": {"m": {"input": 0, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2}}}`,
-		"half a fast pair": `{"batch_multiplier": 0.5, "web_search_usd_per_thousand": 10, "models": {"m": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2, "fast_input": 10}}}`,
-		"no surcharges":    `{"models": {"m": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2}}}`,
-		"not json":         `{`,
+		"no models":     `{"web_search_usd_per_thousand": 10, "models": {}}`,
+		"missing rate":  `{"web_search_usd_per_thousand": 10, "models": {"m": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25}}}`,
+		"zero rate":     `{"web_search_usd_per_thousand": 10, "models": {"m": {"input": 0, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2}}}`,
+		"no surcharges": `{"models": {"m": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2}}}`,
+		"not json":      `{`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			file := filepath.Join(t.TempDir(), "pricing.json")
+			file := filepath.Join(t.TempDir(), "rates.json")
 			require.NoError(t, os.WriteFile(file, []byte(body), 0o644))
 			_, err := Load(file)
 			assert.Error(t, err)
@@ -200,7 +149,7 @@ func TestLoadRejectsAMalformedTable(t *testing.T) {
 
 func TestLoadReadsATableFromDisk(t *testing.T) {
 	t.Parallel()
-	file := filepath.Join(t.TempDir(), "pricing.json")
+	file := filepath.Join(t.TempDir(), "rates.json")
 	require.NoError(t, os.WriteFile(file, embedded, 0o644))
 	table, err := Load(file)
 	require.NoError(t, err)
