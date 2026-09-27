@@ -18,7 +18,7 @@ synthetic tree, which the tests reproduce exactly.
 
 Every command takes one positional argument and `-o` for the file it writes.
 `extract` prices a run from the table compiled in from
-[libs/pricing](../../../../libs/pricing/pricing.json), so no working directory
+[the pricing package](../pricing/rates.json), so no working directory
 or forgotten flag can change a published figure. `-p` names another table, for
 re-pricing an old results tree against the prices that were current when it ran.
 
@@ -68,7 +68,7 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   `cache_creation` when the transcript reports one). `total_billed` is the sum
   of all four; it is a token count, not a price.
 - **dollars** - the per-model token totals priced from
-  [libs/pricing](../../../../libs/pricing/pricing.json) (USD per million tokens,
+  [the pricing package](../pricing/rates.json) (USD per million tokens,
   read from the published pricing page on the date recorded in that file), which
   is also reported as `table_dollars_usd`. The host's own `total_cost_usd`, from
   the transcript's `result` record, is kept beside it as `reported_cost_usd` and

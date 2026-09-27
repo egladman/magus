@@ -2310,9 +2310,12 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
+rm removes one row that should never have been written. prune ENDS every job
+nobody is working, as exit would abandon it, and keeps each row as the record.
+
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2406,6 +2409,19 @@ shows what it is doing.`,
 			},
 			Usage: "magus job rm <job> [flags]",
 		},
+		{
+			Name:  "prune",
+			Short: "End every job nobody is working",
+			Description: "End, as no_return with an end_reason, every job the store can show nobody is working: exited " +
+				"and never collected with `magus job wait`, overdue, orphaned by an ancestor that ended, or declared and " +
+				"never taken past jobs.stale_after. Each ended job prints with its reason, then the count. A job a holder " +
+				"took and touched within jobs.stale_after is never ended, nor is its parent. --all also ends a taken job " +
+				"nobody touched within jobs.stale_after. The global --dry-run lists what would end and ends nothing.",
+			Flags: []Flag{
+				{Name: "all", Kind: FlagBool, Doc: "Also end a job a holder took and nobody touched within jobs.stale_after"},
+			},
+			Usage: "magus job prune [--all] [flags]",
+		},
 	},
 	Examples: []Example{
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
@@ -2415,6 +2431,7 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
+		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }
 

@@ -130,3 +130,21 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	}
 	assert.Equal(t, 1, byWorkspace, "a workspace shell rule's deny is the working tree's")
 }
+
+// The marker outlives a load failure, so it answers which seams the policy registered the
+// last time it loaded; no marker registered nothing.
+func TestPolicyRecordedRule(t *testing.T) {
+	base := t.TempDir()
+	for _, seam := range []functionSeam{seamSpawn, seamCommand, seamWrite} {
+		assert.False(t, recordedRule(base, seam), "no marker")
+	}
+	assert.False(t, recordedRule("", seamCommand), "no cache dir")
+
+	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", CommandRule: true, WriteRule: true}, false)
+	assert.Equal(t, []bool{false, true, true},
+		[]bool{recordedRule(base, seamSpawn), recordedRule(base, seamCommand), recordedRule(base, seamWrite)})
+
+	// A load failure hands RecordPolicy no state, so the record stands.
+	recordPolicy(t.Context(), Dependencies{}, location{cacheDir: base}, true)
+	assert.True(t, recordedRule(base, seamCommand))
+}

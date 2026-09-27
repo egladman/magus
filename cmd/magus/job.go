@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
@@ -51,7 +52,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run or rm)")
+		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run, rm or prune)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -71,13 +72,15 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
+	case "prune":
+		return jobPrune(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run|rm|prune> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -93,6 +96,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
+	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
@@ -181,7 +185,31 @@ func openJobs(root string) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn}), nil
+}
+
+// outputsIn resolves a ref against the output store of the checkout at root. That
+// checkout's own magus.yaml places its cache dir, and loadMagus cannot open a second root.
+func outputsIn(root string) job.AttemptResolver {
+	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		if strings.TrimSpace(ref) == "" {
+			return types.JobAttempt{}, nil
+		}
+		dir, err := magus.ResolveCacheDir(root)
+		if err != nil {
+			return types.JobAttempt{}, err
+		}
+		switch d, err := cache.NewOutputStore(dir).DescriptorByRef(ref); {
+		case err == nil:
+			return types.JobAttempt{
+				Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
+			}, nil
+		case errors.Is(err, fs.ErrNotExist):
+			return types.JobAttempt{}, nil
+		default:
+			return types.JobAttempt{}, err
+		}
+	}
 }
 
 // lsJobs is `magus ls jobs`: every job this repository carries, whoever holds it.
@@ -1104,7 +1132,8 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "fill in while you are still deciding what to do.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no --stdin the job is ABANDONED and recorded "+string(types.StateNoReturn)+": nobody")
-			fmt.Fprintln(os.Stderr, "returned it, which is not the same as returning it and failing.")
+			fmt.Fprintln(os.Stderr, "returned it, which is not the same as returning it and failing. To end every job")
+			fmt.Fprintln(os.Stderr, "nobody is working in one call, use `magus job prune`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -1608,9 +1637,9 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 	return out
 }
 
-// leasedBoundary is every path another LIVE lease claims. A terminal row claims nothing:
-// that is the same rule the overlap report follows, and the reason a worker releasing a
-// path early lets a waiter start against it.
+// leasedBoundary is every path another [job.Editing] lease claims. A terminal or exited
+// row claims nothing: that is the same rule the overlap report follows, and the reason a
+// worker releasing a path early lets a waiter start against it.
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
 // parent's boundary, so listing the parent's paths would put the child's own out of reach.
@@ -1618,7 +1647,7 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !other.State.Live() || blocked ||
+		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !job.Editing(other) || blocked ||
 			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
@@ -2083,6 +2112,9 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "written. A row that already ended is refused unless --force, because deleting it")
 			fmt.Fprintln(os.Stderr, "destroys the only record that the work ran.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Rows left over from finished work want `magus job prune`, which ENDS every job")
+			fmt.Fprintln(os.Stderr, "nobody is working and keeps each row as the record.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The dropped rows are archived beside the plan first, so this is recoverable.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -2117,4 +2149,86 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, dropped)
 	}
+}
+
+// jobPrune is `magus job prune`: end every job nobody is working, the way `job exit`
+// abandons one, so rows left over from finished work stop refusing new forks.
+//
+// --all is `docker system prune -a`'s knob and `ls jobs --all`'s word: the wider set.
+func jobPrune(ctx context.Context, root string, args []string) error {
+	var all bool
+	pos, err := cmdParse("job prune", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "End, as "+string(types.StateNoReturn)+", every job the store can show nobody is working:")
+			fmt.Fprintln(os.Stderr, "exited and never collected with `"+hint.JobWait.String()+"`, overdue, orphaned by an")
+			fmt.Fprintln(os.Stderr, "ancestor that ended, or declared and never taken past jobs.stale_after. Each row")
+			fmt.Fprintln(os.Stderr, "keeps its end_reason, as `"+hint.JobExit.String()+"` would leave it.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A job a holder took and touched within jobs.stale_after is never ended, nor is")
+			fmt.Fprintln(os.Stderr, "its parent. --all also ends a taken job nobody touched within jobs.stale_after.")
+			fmt.Fprintln(os.Stderr, "The global --dry-run lists what would end and ends nothing.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("magus job prune: takes no arguments (got %q)", pos[0])
+	}
+	store, err := openJobs(resolveRootOrEmpty(root))
+	if err != nil {
+		return err
+	}
+	ended, err := store.Prune(ctx, job.PruneOptions{All: all, DryRun: globalCfg.DryRun})
+	if err != nil {
+		return fmt.Errorf("magus job prune: %w", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		ids := make([]string, len(ended))
+		for i, e := range ended {
+			ids[i] = e.ID
+		}
+		return emitNames(ids)
+	case outputText:
+		printPruned(os.Stdout, ended, globalCfg.DryRun)
+		return nil
+	default:
+		if ended == nil {
+			ended = []job.Ending{}
+		}
+		return emitFormatted(opts, pruneReport{Ended: ended, DryRun: globalCfg.DryRun})
+	}
+}
+
+// pruneReport is `job prune`'s structured output.
+type pruneReport struct {
+	Ended  []job.Ending `json:"ended"   yaml:"ended"`
+	DryRun bool         `json:"dry_run" yaml:"dry_run"`
+}
+
+func printPruned(out io.Writer, ended []job.Ending, dryRun bool) {
+	verb := "ended"
+	if dryRun {
+		verb = "would end"
+	}
+	for _, e := range ended {
+		fmt.Fprintf(out, "%s %s: %s\n", verb, e.ID, e.Reason)
+	}
+	if dryRun {
+		fmt.Fprintf(out, "would end %d job(s); --dry-run ended nothing\n", len(ended))
+		return
+	}
+	fmt.Fprintf(out, "ended %d job(s)\n", len(ended))
 }

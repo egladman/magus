@@ -139,6 +139,9 @@ const (
 	denySpawnUnbriefed   denyRuleName = "spawn-unbriefed"
 	denyBuzzUnbriefed    denyRuleName = "buzz-unbriefed"
 	denyRuleBriefCommand denyRuleName = "brief-command"
+	// A write turning vcs off, which removes the guard's approval authority; see
+	// internal/guard/write.go.
+	denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"
 	// An edit landing in a declaration another live lease claims; see
 	// internal/guard/claim.go.
 	denyRuleClaimedDeclaration denyRuleName = "claimed-declaration"

@@ -106,6 +106,10 @@ An adapter emits one JSON object per line on stdout and pipes it into
   "ref": "<the host's own id for this event>",
   "text": "<command | path | skill name | hook text>",
   "transcript": "/abs/path",
+  "agent": {
+    "model": "<the model that produced this event, or null>",
+    "host_version": "<the host's own version, or null>"
+  },
   "outcome": { "exit": null, "denied": false, "interrupted": false }
 }
 ```
@@ -128,17 +132,24 @@ Four things are worth knowing before writing your own:
 - `text` for a spawn is the subagent TYPE, not the prompt. A prompt is unbounded,
   it is the delegating agent's own words about work in progress, and no report
   here asks what an agent was told.
+- `agent.model` and `agent.host_version` are opaque strings, compared for change
+  only. magus ships no model names, so nothing here lockstep-couples a magus
+  release to a model. They travel as one value because they describe one thing,
+  the agent that produced the event. `session show` and `session ls -o json`
+  report the pair off the NEWEST event that named one, which is what a session
+  ended on, and an omitted `agent` (or a null field inside it) where a host's
+  record does not carry it.
 
 ## Session load across hosts
 
 Every adapter emits the same contract. What differs is what its host's log
 records, and a host that supplies less declares less.
 
-| host        | commands | exit | skills | hook output | spawn | session id |
-| ----------- | -------- | ---- | ------ | ----------- | ----- | ---------- |
-| Claude Code | yes      | none | yes    | yes         | yes   | yes        |
-| Codex       | yes      | none | none   | none        | yes   | yes        |
-| OpenCode    | yes      | yes  | yes    | none        | none  | yes        |
+| host        | commands | exit | skills | hook output | spawn | session id | model | host version |
+| ----------- | -------- | ---- | ------ | ----------- | ----- | ---------- | ----- | ------------ |
+| Claude Code | yes      | none | yes    | yes         | yes   | yes        | yes   | yes          |
+| Codex       | yes      | none | none   | none        | yes   | yes        | none  | none         |
+| OpenCode    | yes      | yes  | yes    | none        | none  | yes        | none  | none         |
 
 A report reads this table and says **unobservable** for a `none`, never zero.
 Zero is a measurement; unobservable is the absence of one, and collapsing the two
@@ -152,7 +163,7 @@ grep magus-session-coverage magus-session-load-claude-code.sh
 ```
 
 ```text
-# magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
+# magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 ```
 
 An adapter that drops a dimension fails the build, and so does a table cell that
@@ -239,7 +250,9 @@ the delegated half of every fanned-out session goes with them.
 #   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
 #    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
 #    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
-#    "transcript":"<abs>","outcome":{"exit":null,"denied":false,"interrupted":false}}
+#    "transcript":"<abs>",
+#    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
+#    "outcome":{"exit":null,"denied":false,"interrupted":false}}
 #
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
@@ -272,7 +285,7 @@ the delegated half of every fanned-out session goes with them.
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
 # magus-guard-template: 18
-# magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
+# magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a
 # reason to abandon the ones it can: a single malformed line would otherwise end
@@ -361,6 +374,7 @@ extract() {
     def event($r; $kind; $ref; $text):
       {host: $host, session: ($r.sessionId // ""), ts: ($r.timestamp // "" | ms),
        cwd: ($r.cwd // ""), kind: $kind, ref: $ref, text: $text, transcript: $transcript,
+       agent: {model: ($r.message.model // null), host_version: ($r.version // null)},
        outcome: {exit: null, denied: false, interrupted: false}};
     foreach (inputs, null) as $r ({p: {}, e: []};
       .e = []
@@ -462,11 +476,14 @@ exit-like signal describes a patch rather than a command.
 #
 # Codex records no skill loads and no hook output, and its only exit-like signal
 # is patch_apply_end's success flag, which describes a patch rather than a
-# command. The coverage line says so, and a report reading it says unobservable
-# for those dimensions rather than zero. Declaring commands=yes on the strength
-# of what the other hosts supply is the failure this line exists to prevent.
+# command. Neither session_meta nor a turn record carries a model name or a CLI
+# version this adapter can point at with confidence, so both are declared none
+# rather than guessed. The coverage line says so, and a report reading it says
+# unobservable for those dimensions rather than zero. Declaring commands=yes on
+# the strength of what the other hosts supply is the failure this line exists
+# to prevent.
 # magus-guard-template: 18
-# magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
+# magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
 
@@ -617,9 +634,12 @@ a command's exit code, and the only one with no hook records and no spawn part.
 #
 # OpenCode is the only host of the three that records a command's exit code, and
 # the only one with neither hook records nor a spawn part. The coverage line says
-# both; a report reading it says unobservable, never zero.
+# both; a report reading it says unobservable, never zero. An export part carries
+# no CLI version and this adapter does not read a per-part model id with enough
+# confidence to publish it, so both new dimensions are declared none rather than
+# guessed.
 # magus-guard-template: 18
-# magus-session-coverage: schema=1 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes
+# magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
 
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.
 

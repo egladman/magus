@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -624,4 +625,111 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 	assert.Equal(t, types.StateExited, stored.State)
 	require.NotNil(t, stored.Attempt)
 	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
+}
+
+// pruneRows is a plan with one row for each reason prune ends a job and each it keeps one.
+func pruneRows(now int64) []types.Job {
+	fresh, old, deadline := now-60, now-int64((3*time.Hour).Seconds()), now-600
+	return []types.Job{
+		{ID: "exited", State: types.StateExited, Registered: old, Updated: old},
+		{ID: "late", State: types.StateDeclared, Deadline: deadline, Updated: fresh},
+		{ID: "late-held", State: types.StateRunning, Registered: fresh, Deadline: deadline, Updated: fresh},
+		{ID: "late-idle", State: types.StateRunning, Registered: old, Deadline: deadline, Updated: old},
+		{ID: "idle", State: types.StateRunning, Registered: old, Updated: old},
+		{ID: "busy", State: types.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "plan", State: types.StateDeclared, Updated: old},
+		{ID: "plan/w", Parent: "plan", State: types.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "old-plan", State: types.StateDeclared, Updated: old},
+		{ID: "old-plan/w", Parent: "old-plan", State: types.StateRunning, Registered: old, Updated: old},
+		{ID: "done", State: types.StateExited, Updated: fresh},
+		{ID: "done/c", Parent: "done", State: types.StateDeclared, Updated: fresh},
+		{ID: "fresh", State: types.StateDeclared, Updated: fresh},
+		{ID: "maint", Holder: types.HolderServer, State: types.StateExited, Updated: old},
+		{ID: "graded", State: types.StatePass, Updated: old},
+	}
+}
+
+func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
+	const now = int64(100_000)
+	const exited = "exited 3h0m0s ago and nobody collected its result with `magus job wait`"
+	const overdue = "overdue: its deadline passed 10m0s ago"
+	const taken = "taken, then untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"
+	defaults := []Ending{
+		{ID: "exited", Reason: exited},
+		{ID: "late", Reason: overdue},
+		{ID: "late-idle", Reason: overdue},
+		{ID: "done", Reason: "exited 1m0s ago and nobody collected its result with `magus job wait`"},
+		{ID: "done/c", Reason: "parent done ended as no_return, and its tree ends with it"},
+	}
+	tests := []struct {
+		name string
+		all  bool
+		want []Ending
+	}{
+		{name: "the default ends what is provably not worked", want: defaults},
+		{
+			name: "all also ends a taken job nobody touched, and the root above it",
+			all:  true,
+			want: append(slices.Clone(defaults[:3]),
+				Ending{ID: "idle", Reason: taken},
+				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+				Ending{ID: "old-plan/w", Reason: taken},
+				defaults[3], defaults[4],
+			),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, notices := sweepStore(t, now, 2*time.Hour)
+			s.landed = func(context.Context, types.Job) string { return "" }
+			rows := pruneRows(now)
+			plant(t, s, rows...)
+
+			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
+
+			f, err := s.read()
+			require.NoError(t, err)
+			for i, row := range f.Jobs {
+				at := slices.IndexFunc(tt.want, func(e Ending) bool { return e.ID == row.ID })
+				if at < 0 {
+					assert.Equal(t, rows[i].State, row.State, "%s is left as it was", row.ID)
+					assert.Equal(t, rows[i].Updated, row.Updated, row.ID)
+					assert.Empty(t, row.EndReason, row.ID)
+					continue
+				}
+				assert.Equal(t, types.StateNoReturn, row.State, row.ID)
+				assert.Equal(t, tt.want[at].Reason, row.EndReason, row.ID)
+				assert.Equal(t, now, row.Updated, row.ID)
+			}
+		})
+	}
+}
+
+func TestJobPruneDryRunEndsNothing(t *testing.T) {
+	const now = int64(100_000)
+	s, _ := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s, pruneRows(now)...)
+	path, err := s.Path()
+	require.NoError(t, err)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	got, err := s.Prune(t.Context(), PruneOptions{DryRun: true})
+	require.NoError(t, err)
+	assert.Len(t, got, 5, "a dry run lists what a prune would end")
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+}
+
+func TestJobPruneRefusesABoundWorker(t *testing.T) {
+	loc := declared(t, types.Job{ID: "w", State: types.StateExited})
+	_, err := boundStore(loc, "w").Prune(t.Context(), PruneOptions{})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, types.StateExited, jobStates(t, loc)["w"])
 }
