@@ -273,8 +273,6 @@ const (
 	FlagGraphStatsGlobal = "global"
 	// graph stats: --kind
 	FlagGraphStatsKind = "kind"
-	// graph stats: --norms
-	FlagGraphStatsNorms = "norms"
 	// graph stats: --refresh
 	FlagGraphStatsRefresh = "refresh"
 	// graph stats: --symbols
@@ -1031,7 +1029,6 @@ type GraphStatsFlags struct {
 	Refresh bool   // --refresh
 	Global  bool   // --global
 	Symbols bool   // --symbols
-	Norms   bool   // --norms
 }
 
 // BindGraphStats registers `magus graph stats`'s flags on fs and returns the destination.
@@ -1041,7 +1038,6 @@ func BindGraphStats(fs *flag.FlagSet) *GraphStatsFlags {
 	fs.BoolVar(&f.Refresh, FlagGraphStatsRefresh, false, "Force a full graph rebuild first")
 	fs.BoolVar(&f.Global, FlagGraphStatsGlobal, false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
 	fs.BoolVar(&f.Symbols, FlagGraphStatsSymbols, false, "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph")
-	fs.BoolVar(&f.Norms, FlagGraphStatsNorms, false, "Print the norm table instead: the shapes most of the workspace agrees on, counted from the symbol index")
 	return &f
 }
 
