@@ -1,0 +1,51 @@
+// magusfiles-hold-no-tests refuses a `test "..." {` block in any magusfile.buzz or docs
+// tour step (docs/guides/testing.md): a magusfile is glue, and tests belong to the
+// modules, spells and policy libraries it imports.
+namespace magusfiles;
+
+import "assert";
+import "path";
+import "std";
+import "magus/lint";
+import "tools/lint/support" as support;
+
+// TEST_BLOCK matches a test block's opening line, e.g. `test "name" {`.
+final TEST_BLOCK = std\pattern(`^test\s+"[^"]*"\s*\{`);
+
+export fun reads() > [str] {
+    return ["**/magusfile.buzz", "docs/tour/*.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        var n = 0;
+        foreach (line in support\read(f).split("\n")) {
+            n = n + 1;
+            if (TEST_BLOCK.match(line.trim()) != null) {
+                found.append(Finding{ path = f.value, line = n,
+                    message = "magusfile carries a test block, but a magusfile is glue, not logic to pin",
+                    fix = "Move the assertion into a Buzz module, spell or policy library this magusfile imports, and test it there." });
+            }
+        }
+    }
+    return found;
+}
+
+test "a magusfile with a test block is reported at its line" {
+    final got = check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n\ntest \"x\" \{\n    std\\assert(true);\n}\n"}));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].line, want: 3, message: "line of the test block");
+}
+
+test "a magusfile without a test block passes" {
+    assert\equal(check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n"})).len(), want: 0, message: "clean");
+}
+
+test "reads() matches magusfiles and tour steps, not a library module" {
+    final globs = reads();
+    assert\equal(path\matchesAny(globs, path: "magusfile.buzz"), want: true, message: "root magusfile");
+    assert\equal(path\matchesAny(globs, path: "libs/gopherbuzz/magusfile.buzz"), want: true, message: "nested magusfile");
+    assert\equal(path\matchesAny(globs, path: "docs/tour/23-charm-axes.buzz"), want: true, message: "tour step");
+    assert\equal(path\matchesAny(globs, path: "internal/foo/foo.buzz"), want: false, message: "library module ignored");
+}

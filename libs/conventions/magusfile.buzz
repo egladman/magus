@@ -1,9 +1,9 @@
 // magusfile.buzz for conventions, a standalone Go module (github.com/egladman/magus/libs/conventions)
 // at libs/conventions: the analyzers enforcing this repository's own rules over Go
 // source (host-agnostic code, the guard's vocabulary and rule text, ASCII strings,
-// the cmd/magus import ratchet, stutter, `-o name` emitters, test isolation). Its
-// own module for the reason libs/coldread gives: golangci-lint compiles a plugin
-// INTO its binary, so the rules have to be a dependency it can pin.
+// the cmd/magus import ratchet, stutter, mashed file names, `-o name` emitters, test
+// isolation). Its own module for the reason libs/coldread gives: golangci-lint
+// compiles a plugin INTO its binary, so the rules have to be a dependency it can pin.
 //
 //   magus run build libs/conventions   compile the analyzers and the plugin glue
 //   magus run test libs/conventions    run the analysistest suite

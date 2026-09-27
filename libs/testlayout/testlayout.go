@@ -41,6 +41,18 @@ func externalPackageMessage(pkg string) string {
 		"both, or keep the external package with a //nolint:testlayout naming the cycle."
 }
 
+// isMainTestPackage reports whether name is the package clause of a test file
+// that can only run inside the binary it drives: package main itself, or its
+// external main_test variant.
+func isMainTestPackage(name string) bool {
+	return name == "main" || name == "main_test"
+}
+
+// mainTestMessage names the fix for [Options.NoMainTests]: the wrong thing here
+// also compiles and passes, so the message says where the logic belongs rather
+// than what is wrong with leaving it in main.
+const mainTestMessage = "move the logic this test drives into the package that owns it, then test it there"
+
 const doc = `check that a test file's name does not narrow a source file's name
 
 X_test.go accompanies X.go. When there is no X.go but some prefix of X names a
@@ -56,7 +68,11 @@ With the unpaired option it reports every X_test.go with no X.go, unless a sourc
 family (X_linux.go) stands in or the file opens with "// cross-cutting: <why>".
 ignore-marker takes that second exit away, pair-benchmarks holds X_bench_test.go to
 the same rule instead of exempting it, and no-unix-suffix reports any Go file named
-with a _unix segment.`
+with a _unix segment.
+
+With no-main-tests it also reports any _test.go declaring package main or
+main_test, regardless of the other options: that test can only run inside the
+binary it drives, which usually means the code it drives never left main either.`
 
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
@@ -129,6 +145,16 @@ type Options struct {
 	// file's //go:build line decides what it serves and the name only suggests
 	// it; name the platforms instead (X_linux.go, X_darwin.go, X_other.go).
 	NoUnixSuffix bool `json:"no-unix-suffix"`
+
+	// NoMainTests reports every _test.go file declaring package main or
+	// main_test, so a test that only compiles inside the binary it drives gets
+	// flagged for the logic to move to a package of its own.
+	//
+	// Off by default: this repo migrates cmd/ logic into domain packages over
+	// time rather than in one lift, so turning this on today would report on
+	// every test that lift hasn't reached yet. See readme.md for the plan it
+	// is gated on.
+	NoMainTests bool `json:"no-main-tests"`
 }
 
 // CrossCuttingMarker opens a line comment above the package clause of a test file
@@ -167,6 +193,7 @@ func newAnalyzer(opts Options) *analysis.Analyzer {
 		ignoreMarker:   opts.IgnoreMarker,
 		pairBenchmarks: opts.PairBenchmarks,
 		noUnixSuffix:   opts.NoUnixSuffix,
+		noMainTests:    opts.NoMainTests,
 		// Combined once. Per test file, this list is walked but never rebuilt.
 		exempt: slices.Concat(conventional, opts.Allow),
 	}
@@ -183,6 +210,7 @@ type linter struct {
 	ignoreMarker   bool
 	pairBenchmarks bool
 	noUnixSuffix   bool
+	noMainTests    bool
 }
 
 func (l linter) run(pass *analysis.Pass) (any, error) {
@@ -217,6 +245,10 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		// export_test.go is not license to sit outside the package.
 		if strings.HasSuffix(f.Name.Name, "_test") {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
+		}
+
+		if l.noMainTests && isMainTestPackage(f.Name.Name) {
+			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: mainTestMessage})
 		}
 
 		if l.exempted(name) {

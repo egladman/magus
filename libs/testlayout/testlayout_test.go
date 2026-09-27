@@ -76,6 +76,36 @@ func TestAnalyzerAllow(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "allowed")
 }
 
+// TestAnalyzerNoMainTests checks the opt-in option: a _test.go in package main
+// is reported, and the same analyzer run over sprawl - which holds no main or
+// main_test package files - reports exactly what the default analyzer already
+// does, proving the option adds nothing there.
+func TestAnalyzerNoMainTests(t *testing.T) {
+	analyzer, err := New(Options{NoMainTests: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	analysistest.Run(t, analysistest.TestData(), analyzer, "mainpkg", "sprawl")
+}
+
+// TestIsMainTestPackage pins the exact package names [Options.NoMainTests]
+// targets: the binary's own package and its external test variant, and no
+// other.
+func TestIsMainTestPackage(t *testing.T) {
+	cases := map[string]bool{
+		"main":      true,
+		"main_test": true,
+		"widget":    false,
+	}
+
+	for name, want := range cases {
+		if got := isMainTestPackage(name); got != want {
+			t.Errorf("isMainTestPackage(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 // TestNewRejectsMalformedGlob pins the reason New validates at construction: the
 // patterns are otherwise reached once per test file per package, so a typo would
 // lint clean until it met a package containing a non-exempt test file and then

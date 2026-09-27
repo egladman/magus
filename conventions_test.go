@@ -19,7 +19,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -542,117 +541,6 @@ func TestEveryDiagnosticCodeHasARaiseSite(t *testing.T) {
 			"condition will be reported under it. Raise it where the condition is detected, or\n"+
 			"remove it from types.allDiagnosticCodes.\n\nunraised:\n%s",
 		strings.Join(unraised, "\n"))
-}
-
-// establishedCompoundNames are Go filename segments that LOOK like two words mashed
-// together and are single established terms. They are exempt from the check below.
-//
-// An allowlist rather than a cleverer test, because no rule distinguishes "runtime" from
-// "pushgate": both are two known words with the separator dropped, and only a person
-// knows the first is a word and the second is a mistake. Adding an entry is the deliberate
-// act of saying "this is one word"; it is not a place to park a name you did not want to
-// think about.
-var establishedCompoundNames = map[string]bool{
-	"runtime": true, // Go's own term
-	"stdlib":  true,
-	"keyring": true,
-	"jsonv2":  true, // names the GOEXPERIMENT
-	"libproc": true, // the Darwin API
-	"vmstat":  true, // the Darwin tool
-	// GNU make's name for the token protocol internal/proc/run implements.
-	"jobserver": true,
-}
-
-// grandfatheredCompoundNames are concatenations already in the tree when this check
-// landed. They are NOT exemptions: each is a rename waiting for a session with room for
-// it, and the list is meant to shrink.
-//
-// Recorded rather than fixed on the spot because a rename touches every importer, and a
-// gate that forced twenty of them at once would be turned off instead of satisfied.
-var grandfatheredCompoundNames = map[string]bool{
-	"magusfile":   true, // the file it names is called magusfile.buzz, so this may be right
-	"lockfile":    true, // the standard term for a dependency lock file
-	"eventstream": true,
-	"hostmodules": true,
-	"promptcache": true,
-	"selfupdate":  true,
-	"toolref":     true,
-}
-
-// TestGoFileNamesDoNotMashWordsTogether keeps new filenames readable: one word, or words
-// separated by an underscore the way workspace_shell.go and prompt_cache.go do it. Never
-// wordsmashedtogether.
-//
-// The vocabulary is built FROM THE TREE, which is what makes this checkable without a
-// dictionary: a segment is suspect when it splits into two segments this repository
-// already uses as filenames. skillgate is skill plus gate, pushgate is push plus gate,
-// hostschemas is hosts plus schemas -- all three shipped in one session, each one after
-// the last had been corrected by hand, which is the argument for a gate over a habit.
-//
-// Deliberately narrow: it can only see a mash of two words the tree already knows, so it
-// misses a compound of words that appear nowhere else. A check that catches the common
-// case and never lies is worth more than one that tries to catch everything.
-func TestGoFileNamesDoNotMashWordsTogether(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	root := filepath.Dir(thisFile)
-
-	suffixes := regexp.MustCompile(`_(test|linux|darwin|windows|unix|other|amd64|arm64|js|wasm|freebsd|openbsd|netbsd)$`)
-	segments := map[string]bool{}
-	type goFile struct{ path, base string }
-	var files []goFile
-
-	require.NoError(t, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		name := d.Name()
-		if d.IsDir() {
-			if name == ".git" || name == "node_modules" || name == ".claude" || name == "gen" || name == "testdata" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(name, ".go") {
-			return nil
-		}
-		base := strings.TrimSuffix(name, ".go")
-		for prev := ""; prev != base; {
-			prev, base = base, suffixes.ReplaceAllString(base, "")
-		}
-		rel, rerr := filepath.Rel(root, path)
-		if rerr != nil {
-			return rerr
-		}
-		files = append(files, goFile{path: rel, base: base})
-		for _, seg := range strings.Split(base, "_") {
-			if seg != "" {
-				segments[seg] = true
-			}
-		}
-		return nil
-	}))
-	require.NotEmpty(t, files, "walked no Go files; this gate went quiet rather than red")
-
-	for _, f := range files {
-		for _, seg := range strings.Split(f.base, "_") {
-			if establishedCompoundNames[seg] || grandfatheredCompoundNames[seg] {
-				continue
-			}
-			for i := 2; i < len(seg)-1; i++ {
-				head, tail := seg[:i], seg[i:]
-				if !segments[head] || !segments[tail] {
-					continue
-				}
-				assert.Fail(t, "filename mashes two words together",
-					"%s: %q is %q + %q, both of which this repository already uses as filenames.\n"+
-						"Name it %s.go, or %s_%s.go if it genuinely covers both. If %q is one established word,\n"+
-						"add it to establishedCompoundNames and say why.",
-					f.path, seg, head, tail, tail, head, tail, seg)
-				break
-			}
-		}
-	}
 }
 
 // commentRefRe finds `pkg.Symbol` inside comment prose: a lowercase package name, a

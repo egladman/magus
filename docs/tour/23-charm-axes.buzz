@@ -24,7 +24,6 @@
 
 import "magus";
 import "semver";
-import "std";
 
 magus\project({});
 
@@ -93,9 +92,4 @@ export fun publish(ctx: magus\Context, args: [str]) > void !> any {
         return;
     }
     magus\log.info("publish: " + version() + " -> stable channel, version tag and the moving tag");
-}
-
-test "a version with a prerelease belongs to the unstable channel" {
-    std\assert(semver\parse(version()).prerelease != "",
-        message: "the tour version is a release candidate, so stable must refuse it");
 }
