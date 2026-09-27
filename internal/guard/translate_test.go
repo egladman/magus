@@ -81,13 +81,15 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 }
 
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads
-// with the runnable query and says why it is the same answer.
+// with the runnable query, says why it is the same answer, and carries the answer.
 func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	t.Chdir("../..")
 	v := Evaluate(Dependencies{}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
 	assert.Contains(t, v.Deny, "MGS3020, MGS3021")
+	assert.Contains(t, v.Deny, "Its answer (")
+	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3020\n")
 }
 
 // writeTree lays files out under a fresh root and returns it with symlinks resolved.
@@ -159,13 +161,17 @@ func TestSearchTranslationHeadings(t *testing.T) {
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
 	}
 
+	// The answer is the section ids the query prints.
+	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^#' docs/a.md`))
+	assert.Contains(t, v.Deny, "Its answer (2 results):\n  docsection:docs/a.md#alpha\n  docsection:docs/a.md#beta\n")
+
 	// A directory walk proves over every Markdown file grep would read.
 	full := Dependencies{GraphIDs: graphOf(map[string][]string{"docsection": {
 		"docsection:docs/a.md#alpha", "docsection:docs/a.md#beta", "docsection:docs/b.md#gamma",
 	}}), scope: workspaceScope{root: root}}
 	walkRoot := writeTree(t, map[string]string{"docs/a.md": "# Alpha\n## Beta\n", "docs/b.md": "# Gamma\n"})
 	full.scope.root = walkRoot
-	v, _ := translateSearches(full, walkRoot, parseForTest(t, `grep -rn --include='*.md' '^#' docs`))
+	v, _ = translateSearches(full, walkRoot, parseForTest(t, `grep -rn --include='*.md' '^#' docs`))
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=docsection 'id=~^docsection:docs/[^#]*\.md#' -o name`}, v.Rule)
 	assert.Contains(t, v.Deny, "3 heading lines across 2 files")
 }
@@ -206,6 +212,179 @@ func TestSearchTranslationTargets(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, "Its answer (")
+	}
+}
+
+// TestSearchTranslationDeclarations pins the Go declaration arm: a listing of one file's
+// declarations is answered by its file node and the names inline, a lookup of one name
+// stays the symbol-search rule's, and a hit that is not a declaration keeps it silent.
+func TestSearchTranslationDeclarations(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/store/store.go": "package store\n\n// func helper is documented here\ntype Store struct{}\n\n" +
+			"func (s *Store) Open() error { return nil }\n\nfunc (s *Store) Close() error { return nil }\n\n" +
+			"func helper() {}\n\nvar (\n\tdefaultStore = &Store{}\n)\n\nfunc use() { helper() }\n",
+		"internal/store/store_test.go": "package store\n\nfunc TestOpen(t *testing.T) {}\n\nfunc TestClose(t *testing.T) {}\n\nfunc setup() {}\n",
+	})
+	indexed := map[string]bool{"Store": true, "Open": true, "Close": true, "helper": true, "use": true, "TestOpen": true, "TestClose": true, "setup": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, scope: workspaceScope{root: root}}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, scope: workspaceScope{root: root}}
+	partial := Dependencies{SymbolDefined: func(name string) (bool, bool) { return name == "Open", true }, scope: workspaceScope{root: root}}
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		rule    denyRule
+		answer  string
+	}{
+		{`grep -n '^func ' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"Its answer (4 results):\n  6: Open\n  8: Close\n  10: helper\n  16: use\n"},
+		{`grep -n '^func Test' internal/store/store_test.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store_test.go"},
+			"Its answer (2 results):\n  3: TestOpen\n  5: TestClose\n"},
+		{`grep -n 'func (s \*Store)' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"  6: Open\n  8: Close\n"},
+		{`grep -n '^func \|^type ' internal/store/store.go`, deps, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"},
+			"  4: Store\n  6: Open\n"},
+		// One name is a definition lookup, which symbol-search advises rather than denies.
+		{`grep -n 'func helper' internal/store/store.go`, deps, denyRule{}, ""},
+
+		// The comment mentions `func helper` and the call site names helper: text.
+		{`grep -n 'helper' internal/store/store.go`, deps, denyRule{}, ""},
+		{`grep -n 'func' internal/store/store.go`, deps, denyRule{}, ""},
+		// A block opener declares nothing.
+		{`grep -n '^var' internal/store/store.go`, deps, denyRule{}, ""},
+		// A name the index cannot vouch for.
+		{`grep -n '^func ' internal/store/store.go`, partial, denyRule{}, ""},
+		{`grep -n '^func ' internal/store/store.go`, stale, denyRule{}, ""},
+		// Context, count and list flags ask a different question.
+		{`grep -n -A2 '^func ' internal/store/store.go`, deps, denyRule{}, ""},
+		{`grep -c '^func ' internal/store/store.go`, deps, denyRule{}, ""},
+		// Two files, a glob, or a tree is not one file node.
+		{`grep -n '^func ' internal/store/store.go internal/store/store_test.go`, deps, denyRule{}, ""},
+		{`grep -n '^func ' internal/store/*.go`, deps, denyRule{}, ""},
+		{`grep -rn '^func ' internal/store`, deps, denyRule{}, ""},
+	} {
+		cmds := parseForTest(t, tt.command)
+		v, ok := translateSearches(tt.deps, root, cmds)
+		if !ok {
+			v, ok = searchVerdictAt(tt.deps, root, cmds)
+		}
+		if tt.rule == (denyRule{}) {
+			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
+			continue
+		}
+		assert.Equal(t, tt.rule, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
+	}
+}
+
+// TestSearchPipelines pins a search's pipe: the deny carries the query's unfiltered answer
+// and says the pipe is not reproduced, whatever the filter; it never models one.
+func TestSearchPipelines(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/store/store.go": "package store\n\ntype Store struct{}\n\nfunc (s *Store) Open() error { return nil }\n\n" +
+			"func (s *Store) Close() error { return nil }\n\nfunc helper() {}\n\nfunc use() { helper() }\n",
+	})
+	indexed := map[string]bool{"Store": true, "Open": true, "Close": true, "helper": true, "use": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, scope: workspaceScope{root: root}}
+	const answer = "Its answer (4 results):\n  5: Open\n  7: Close\n  9: helper\n  11: use\n" +
+		"The pipe after the search is not reproduced: run it over the command's output.\n"
+
+	for _, command := range []string{
+		`grep -n '^func ' internal/store/store.go | head -2`,
+		`grep -n '^func ' internal/store/store.go | grep -v Store | wc -l`,
+		`grep -n '^func ' internal/store/store.go | sort | uniq -c`,
+		`grep -n '^func ' internal/store/store.go | sed -e s/a/b/ -e s/c/d/`,
+		`grep -n '^func ' internal/store/store.go | tee out.txt`,
+	} {
+		v, ok := translateSearches(deps, root, parseForTest(t, command))
+		require.True(t, ok, command)
+		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"}, v.Rule, command)
+		assert.Contains(t, v.Deny, answer, command)
+		assert.NotContains(t, v.Deny, "after `|", command)
+	}
+
+	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^func ' internal/store/store.go`))
+	assert.NotContains(t, v.Deny, "not reproduced")
+
+	t.Chdir("../..")
+	for _, command := range []string{`grep -rn 'MGS30[23]' . | head -3`, `grep -rn 'MGS30[23]' . | wc -l`} {
+		v := Evaluate(Dependencies{}, command)
+		assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name, command)
+		assert.Contains(t, v.Deny, "Its answer (", command)
+		assert.Contains(t, v.Deny, "not reproduced", command)
+	}
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{}, `grep -rn MGS1046 . | wc -l`).Rule.Name)
+}
+
+// TestFindTranslation pins the find arm: a name search whose files are, one for one, the
+// file nodes the graph holds under the searched paths.
+func TestFindTranslation(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/store/store.go":      "package store\n",
+		"internal/store/store_test.go": "package store\n",
+		"internal/store/sub/deep.go":   "package sub\n",
+		"docs/a.md":                    "# A\n",
+	})
+	graph := graphOf(map[string][]string{"file": {
+		"file:internal/store/store.go", "file:internal/store/store_test.go", "file:internal/store/sub/deep.go",
+	}})
+	deps := Dependencies{GraphIDs: graph, scope: workspaceScope{root: root}}
+	stale := Dependencies{GraphIDs: func(context.Context, string) ([]string, bool) { return nil, false }, scope: workspaceScope{root: root}}
+	partial := Dependencies{GraphIDs: graphOf(map[string][]string{"file": {"file:internal/store/store.go"}}), scope: workspaceScope{root: root}}
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		arg     string // "" for no deny
+		answer  string
+	}{
+		{`find internal -name '*.go'`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`,
+			"Its answer (3 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go\n  file:internal/store/sub/deep.go"},
+		{`find internal/store -name '*_test.go' -type f | wc -l`, deps, `query kind=file 'id=~^file:internal/store/(?:.*/)?[^/]*_test\.go$' -o name`,
+			"Its answer (1 result):\n  file:internal/store/store_test.go\nThe pipe after the search is not reproduced"},
+		{`find . -name '*.go' | head -1`, deps, `query kind=file 'id=~^file:(?:.*/)?[^/]*\.go$' -o name`, "Its answer (3 results):"},
+		{`find internal/store/ -maxdepth 1 -name '*.go' | sort`, deps, `query kind=file 'id=~^file:internal/store/(?:[^/]+/){0,0}[^/]*\.go$' -o name`,
+			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
+		{`find internal -name '*.go' | xargs grep -l package`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`, "not reproduced"},
+		{`find internal -name 'deep.go' -print`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?deep\.go$' -o name`, "file:internal/store/sub/deep.go"},
+
+		// Markdown has no file node, so the sets differ.
+		{`find docs -name '*.md'`, deps, "", ""},
+		{`find . -name '*'`, deps, "", ""},
+		// A predicate the file nodes do not answer.
+		{`find internal -iname '*.go'`, deps, "", ""},
+		{`find internal -name '*.go' -newer go.mod`, deps, "", ""},
+		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, "", ""},
+		{`find internal -name '*.go' -exec cat {} \;`, deps, "", ""},
+		{`find internal -type f`, deps, "", ""},
+		// find negates a class with `[!x]`, which the proof would read as a literal.
+		{`find internal -name '[!s]*.go'`, deps, "", ""},
+		// The graph lacks a file, or cannot be trusted.
+		{`find internal -name '*.go'`, partial, "", ""},
+		{`find internal -name '*.go'`, stale, "", ""},
+		// Another tree.
+		{`find /tmp/other -name '*.go'`, deps, "", ""},
+	} {
+		v, ok := translateSearches(tt.deps, root, parseForTest(t, tt.command))
+		if tt.arg == "" {
+			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
+			continue
+		}
+		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
+	}
+}
+
+func TestGlobRegexp(t *testing.T) {
+	for glob, want := range map[string]string{
+		`*.go`:        `[^/]*\.go`,
+		`*_test.go`:   `[^/]*_test\.go`,
+		`magusfile.?`: `magusfile\.[^/]`,
+		`[ab]*.md`:    `[ab][^/]*\.md`,
+		`a+b`:         `a\+b`,
+	} {
+		assert.Equal(t, want, globRegexp(glob), glob)
 	}
 }
 

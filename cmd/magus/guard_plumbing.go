@@ -52,6 +52,7 @@ func guardDependencies() guard.Dependencies {
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
+		SymbolSites:      symbolSitesForGuard,
 		Revision:         revisionForGuard,
 		GraphIDs:         graphIDsForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
@@ -267,6 +268,27 @@ func symbolDefinedForGuard(ident string) (defined, definitive bool) {
 		return answer{idx.Has(knowledge.GuardSymbol, ident), idx.Fresh(knowledge.GuardSymbol)}
 	})
 	return a.defined, ok && a.definitive
+}
+
+// symbolSitesForGuard reads ident's sites from the refs file beside the guard index, on
+// the same freshness terms as symbolDefinedForGuard.
+func symbolSitesForGuard(ident string) ([]types.KnowledgeRefSite, bool) {
+	type answer struct {
+		sites      []types.KnowledgeRefSite
+		definitive bool
+	}
+	a, ok := withinBudget(guardLookupBudget, func() answer {
+		idx := guardIndex()
+		if idx == nil {
+			return answer{}
+		}
+		sites, err := idx.RefSites(ident)
+		if err != nil {
+			return answer{}
+		}
+		return answer{sites, idx.Fresh(knowledge.GuardSymbol)}
+	})
+	return a.sites, ok && a.definitive
 }
 
 // graphIDsForGuard lists kind's ids from the guard index, definitive only while the

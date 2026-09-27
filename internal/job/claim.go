@@ -95,35 +95,16 @@ func driverPattern(p string) string {
 	return "`" + path.Base(p) + "`"
 }
 
-// RefuseUnorderedFileShare refuses a fork whose write paths would hand a single claimable
-// file to two live, unordered jobs at once (MGS3032): one of candidate's entries and an
-// entry of another live row, held in a DIFFERENT checkout, name the same single literal
-// file (no glob, not a directory, not a project root), that file has a diff driver, the two
-// entries still intersect (see types.PathsIntersect, so two different declaration claims
-// pass each other), and neither row is the other's ancestor, descendant, or a depends_on
-// partner.
+// RefuseUnorderedFileShare refuses a fork whose write paths would hand one claimable file
+// (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
+// jobs at once (MGS3032): a candidate entry and a holder's entry name the same file, still
+// intersect (types.PathsIntersect), and neither row is the other's ancestor, descendant, or
+// depends_on partner.
 //
-// A FILE HAS ONE OWNER, unless the two rows say otherwise. Two whole-file leases on it both
-// read "mine wins" and neither refuses the other, which is what makes the whole-file
-// spelling look free; this is the fork-time cost that makes it not, once a file is
-// genuinely shared. Runs after RefuseSharedCheckout, so the same-checkout workspace-load
-// case keeps its own worktree message.
-//
-// SAME-CHECKOUT SHARING IS LEFT ALONE, on purpose: two rows one caller declared side by
-// side, or a worker fork of its own child, are the checkout RefuseSharedCheckout already
-// watches and WriteProof already records as overlapping, and
-// TestForkRecordsWhetherTheWritePathsWereProvenDisjoint pins that an overlap there is the
-// orchestrator's call, not a refusal. What nothing previously caught, and what this closes,
-// is the pair sitting in two DIFFERENT checkouts: WriteProof is scoped to "this checkout"
-// (heldHere) and reads a cross-checkout pair as WriteProofAlone, so the only trace of it
-// was an `ls jobs` overlap line nobody acted on.
-//
-// Narrow by construction otherwise. It says nothing about a glob, a directory, or a project
-// root (RefuseDirectoryWritePaths and the overlap report already cover those), nothing
-// about a file with no diff driver (recorded only, never refused: the only move for those
-// is depends_on), and nothing about a pair already ordered by parent or depends_on.
-//
-// A nil store, or one with no workspace root, has no tree to stat and refuses nothing.
+// Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
+// RefuseSharedCheckout and the overlap report already watch; a holder blocked on
+// depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
+// no diff driver, for which depends_on is the only move.
 func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, id string, candidate types.Job) error {
 	if store == nil || store.root == "" || len(candidate.WritePaths) == 0 {
 		return nil
@@ -142,9 +123,12 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 			if holder.ID == id || !holder.State.Live() || len(holder.WritePaths) == 0 {
 				continue
 			}
-			if here != "" && holder.CheckoutRoot == here {
+			// A row nobody has taken yet is not in a different checkout from anyone.
+			if holder.CheckoutRoot == "" || (here != "" && holder.CheckoutRoot == here) {
 				continue
 			}
+			// Blocked means holder owns none of its write paths yet; the fork that
+			// unblocks it runs this same check again, against whatever holds the file then.
 			if _, blocked := types.JobBlockedOn(rows, holder); blocked {
 				continue
 			}
@@ -196,7 +180,8 @@ func literalClaimableFile(root, entry string) (string, bool) {
 
 // orderedPair reports whether id and other are already sequenced: one an ancestor or
 // descendant of the other by parent chain, walked over combined (which must carry id even
-// when it is not declared yet), or one names the other directly in depends_on.
+// when it is not declared yet), or one reaches the other through depends_on, any number of
+// hops.
 func orderedPair(combined []types.Job, id, other string) bool {
 	if slices.ContainsFunc(types.JobAncestors(combined, id), func(r types.Job) bool { return r.ID == other }) {
 		return true
@@ -204,11 +189,31 @@ func orderedPair(combined []types.Job, id, other string) bool {
 	if slices.ContainsFunc(types.JobAncestors(combined, other), func(r types.Job) bool { return r.ID == id }) {
 		return true
 	}
-	dependsOn := func(from, on string) bool {
-		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == from })
-		return i >= 0 && slices.Contains(combined[i].DependsOn, on)
+	return dependsOnTransitively(combined, id, other) || dependsOnTransitively(combined, other, id)
+}
+
+// dependsOnTransitively reports whether from reaches on by following depends_on edges over
+// combined. seen guards a depends_on cycle from looping forever.
+func dependsOnTransitively(combined []types.Job, from, on string) bool {
+	seen := map[string]bool{from: true}
+	queue := []string{from}
+	for len(queue) > 0 {
+		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == queue[0] })
+		queue = queue[1:]
+		if i < 0 {
+			continue
+		}
+		for _, dep := range combined[i].DependsOn {
+			if dep == on {
+				return true
+			}
+			if !seen[dep] {
+				seen[dep] = true
+				queue = append(queue, dep)
+			}
+		}
 	}
-	return dependsOn(id, other) || dependsOn(other, id)
+	return false
 }
 
 // touchedInFile is what holder has changed inside file so far, restricted to file, for the

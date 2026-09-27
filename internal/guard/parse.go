@@ -4,6 +4,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -194,6 +195,21 @@ func writesToFile(op syntax.RedirOperator) bool {
 	return false
 }
 
+// duplicatesDescriptor reports a `>&` aimed at a descriptor or `-`, as in `2>&1`: it
+// points one stream at another, or closes it, and names no file. `>&file` still writes,
+// since bash reads it as `&>file`.
+func duplicatesDescriptor(r *syntax.Redirect) bool {
+	if r.Op != syntax.DplOut {
+		return false
+	}
+	target := redirectWord(r)
+	if target == "-" {
+		return true
+	}
+	_, err := strconv.Atoi(target)
+	return err == nil
+}
+
 // shellPayload returns the script a line hands to another shell to parse: a `-c` argument,
 // eval's joined words, or env's -S string, with any wrappers in front of it peeled.
 //
@@ -316,7 +332,7 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 			return true
 		}
 		for _, r := range stmt.Redirs {
-			if writesToFile(r.Op) {
+			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
 				out = append(out, literalWord(r.Word.Parts))
 			}
 		}
@@ -1005,7 +1021,7 @@ func redirectTargets(command string, depth int, d Dialect) []string {
 			return true
 		}
 		for _, r := range stmt.Redirs {
-			if writesToFile(r.Op) {
+			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
 				out = append(out, literalWord(r.Word.Parts))
 			}
 		}
