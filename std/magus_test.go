@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -727,7 +728,9 @@ func TestMemoryMembersRoundTrip(t *testing.T) {
 	assert.Equal(t, map[string]any{"records": int64(1), "issues": []any{}}, verified)
 
 	require.NoError(t, MagusDeleteMemory(ctx, "use-buzz"))
-	require.NoError(t, MagusDeleteMemory(ctx, "use-buzz"), "deleting twice converges")
+	err = MagusDeleteMemory(ctx, "use-buzz")
+	require.ErrorIs(t, err, os.ErrNotExist, "a second delete finds nothing and says so")
+	require.EqualError(t, err, `magus\memory.delete: memory: no entry named "use-buzz"`)
 	_, err = MagusGetMemory(ctx, "use-buzz")
 	require.ErrorContains(t, err, `no entry named "use-buzz"`)
 }

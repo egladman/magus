@@ -331,16 +331,91 @@ func TestValidateRejections(t *testing.T) {
 	}
 }
 
-func TestDeleteAllowMissing(t *testing.T) {
+// TestDeleteArchivesTheEntry pins that a delete is recoverable: the entry leaves every
+// listing, and its bytes survive in the archive unchanged.
+func TestDeleteArchivesTheEntry(t *testing.T) {
 	root := testRoot(t)
-	assert.NoError(t, Delete(root, "ghost", true), "idempotent delete of an absent record is a no-op")
-	assert.Error(t, Delete(root, "ghost", false), "strict delete of an absent record errors")
-
-	_, err := upsert(root, Record{Name: "real", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	stored, err := upsert(root, Record{Name: "real", Type: TypeDecision, Status: "accepted", Body: "Keep it.", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
 	require.NoError(t, err)
-	require.NoError(t, Delete(root, "real", false))
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	live := filepath.Join(dir, recordsSubdir, "real.md")
+	before, err := os.ReadFile(live)
+	require.NoError(t, err)
+
+	archived, err := Delete(root, "real")
+	require.NoError(t, err)
+	assert.Equal(t, stored, archived.Record)
+	assert.Equal(t, live, archived.Origin)
+	assert.Equal(t, filepath.Join(dir, archiveSubdir), filepath.Dir(archived.Path))
+	after, err := os.ReadFile(archived.Path)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+
 	_, err = Get(root, "real")
 	assert.ErrorIs(t, err, os.ErrNotExist)
+	recs, issues, err := Inspect(root)
+	require.NoError(t, err)
+	assert.Empty(t, recs)
+	assert.Empty(t, issues)
+}
+
+// TestDeletedEntryIsRestoredByAPut pins the restore every door offers: Update with the
+// archived record recreates the entry field for field.
+func TestDeletedEntryIsRestoredByAPut(t *testing.T) {
+	root := testRoot(t)
+	in := Record{
+		Name: "cache-key-drift", Type: TypeElimination, Status: "done",
+		Refs:       []Ref{{Kind: RefKindOutput, Target: "out1a2b3c"}},
+		References: []string{"other-entry"},
+		Body:       "Not the cache key.",
+		Excerpt:    "key inputs identical\n0 differing lines",
+	}
+	stored, err := upsert(root, in)
+	require.NoError(t, err)
+	archived, err := Delete(root, in.Name)
+	require.NoError(t, err)
+
+	restored, err := upsert(root, archived.Record)
+	require.NoError(t, err)
+	stored.Created, stored.Updated = restored.Created, restored.Updated
+	assert.Equal(t, stored, restored)
+}
+
+// TestDeleteArchivesAnUnreadableEntry keeps delete the repair for an entry nothing parses.
+func TestDeleteArchivesAnUnreadableEntry(t *testing.T) {
+	root := testRoot(t)
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, recordsSubdir), 0o755))
+	live := filepath.Join(dir, recordsSubdir, "broken.md")
+	require.NoError(t, os.WriteFile(live, []byte("no frontmatter"), 0o644))
+
+	archived, err := Delete(root, "broken")
+	require.NoError(t, err)
+	assert.Equal(t, Archived{Record: Record{Name: "broken"}, Path: archived.Path, Origin: live}, archived)
+	assert.FileExists(t, archived.Path)
+	assert.NoFileExists(t, live)
+}
+
+// TestDeleteOfAnAbsentNameIsNotFound pins that no door can report a typo as a delete, and
+// that the refusal names what the caller probably meant.
+func TestDeleteOfAnAbsentNameIsNotFound(t *testing.T) {
+	root := testRoot(t)
+	_, err := Delete(root, "ghost")
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.EqualError(t, err, `memory: no entry named "ghost"`)
+
+	_, err = upsert(root, Record{Name: "install-key", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	require.NoError(t, err)
+	_, err = Delete(root, "instal-key")
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.EqualError(t, err, `memory: no entry named "instal-key"; did you mean "install-key"?`)
+
+	_, err = Delete(root, "install-key")
+	require.NoError(t, err)
+	_, err = Delete(root, "install-key")
+	assert.ErrorIs(t, err, os.ErrNotExist, "a second delete of one name finds nothing: the archive is not the journal")
 }
 
 func TestReadCursor(t *testing.T) {

@@ -825,8 +825,8 @@ var Magus = Module{
 				},
 				{
 					Name: "delete",
-					Doc: "Delete the entry name. An absent name is not an error, so a cleanup " +
-						"that runs twice converges.",
+					Doc: "Archive the entry name inside the memory store; a put of its fields " +
+						"restores it. An absent name raises, naming the entries one typo away.",
 					Args:   []Arg{{Name: "name", Type: TypeString}},
 					Raises: true,
 					Extern: true,

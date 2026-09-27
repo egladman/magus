@@ -147,14 +147,18 @@ func memoryStrings(key string, v any) ([]string, error) {
 	return nil, fmt.Errorf("magus\\memory.put: %s must be a list of strings, got %T", key, v)
 }
 
-// MagusDeleteMemory backs magus\memory.delete. Deleting an absent name is not an error,
-// so a cleanup that runs twice converges.
+// MagusDeleteMemory backs magus\memory.delete. The entry moves into the store's archive
+// rather than being removed, and an absent name raises: a script that deletes a name it
+// never checked is more often holding a typo than running twice.
 func MagusDeleteMemory(ctx context.Context, name string) error {
 	root, err := memoryRoot(ctx, "memory.delete")
 	if err != nil {
 		return err
 	}
-	return memory.Delete(root, strings.TrimSpace(name), true)
+	if _, err := memory.Delete(root, strings.TrimSpace(name)); err != nil {
+		return fmt.Errorf("magus\\memory.delete: %w", err)
+	}
+	return nil
 }
 
 // MagusVerifyMemory backs magus\memory.verify: {records, issues} for malformed entries,

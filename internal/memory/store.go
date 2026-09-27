@@ -23,11 +23,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/vcs"
 	"gopkg.in/yaml.v3"
 )
@@ -135,6 +137,10 @@ const recordsSubdir = "records"
 // cursorFile is the single "where did I leave off" snapshot beside the record set. It
 // is NOT a record and never becomes a graph node: a cursor, not an accumulating log.
 const cursorFile = "cursor.md"
+
+// archiveSubdir holds deleted entries beside the live ones. scan reads recordsSubdir only,
+// so an archived entry never lists, verifies, or satisfies a reference.
+const archiveSubdir = "archive"
 
 // Dir resolves the per-repository memory directory:
 // <XDG state>/magus/memory/<repo-basename>-<hash12>. The hash keys on repository
@@ -538,24 +544,92 @@ func applyFields(prev, in Record, fields map[string]bool) (Record, error) {
 	return out, nil
 }
 
-// Delete removes a record. allowMissing decides whether deleting an absent record is a
-// no-op (AIP-135 idempotent delete) or an error.
-func Delete(root, name string, allowMissing bool) error {
+// Archived is an entry Delete moved aside: the file now at Path was at Origin. Record
+// carries only Name when the file could not be read, since deleting an entry nothing can
+// parse is how such an entry is repaired.
+type Archived struct {
+	Record Record `json:"record"`
+	Path   string `json:"path"`
+	Origin string `json:"origin"`
+}
+
+// Delete moves the entry name into the store's archive and returns what it moved. The file
+// is kept, not removed, so a delete made by mistake can be put back: the returned Record
+// holds every field Update needs to recreate the entry. An absent name is an error that
+// matches os.ErrNotExist and names the entries one typo away; a caller wanting an
+// idempotent delete tests for that itself.
+func Delete(root, name string) (Archived, error) {
 	dir, err := Dir(root)
 	if err != nil {
-		return err
+		return Archived{}, err
 	}
 	if !nameRE.MatchString(name) {
-		return fmt.Errorf("memory: invalid name %q", name)
+		return Archived{}, invalidf("memory: invalid name %q", name)
 	}
-	err = os.Remove(filepath.Join(dir, recordsSubdir, name+".md"))
-	if errors.Is(err, os.ErrNotExist) && allowMissing {
+	rdir := filepath.Join(dir, recordsSubdir)
+	path := filepath.Join(rdir, name+".md")
+	rec, err := readRecordFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return Archived{}, notFoundError{name: name, near: nearNames(rdir, name)}
+	case err != nil:
+		rec = Record{Name: name}
+	}
+	adir := filepath.Join(dir, archiveSubdir)
+	if err := os.MkdirAll(adir, 0o755); err != nil {
+		return Archived{}, fmt.Errorf("memory: delete %q: %w", name, err)
+	}
+	// One file per delete, so a name deleted in two of its lifetimes keeps both copies.
+	dst := filepath.Join(adir, name+"."+strconv.FormatInt(time.Now().UnixNano(), 10)+".md")
+	if err := os.Rename(path, dst); err != nil {
+		return Archived{}, fmt.Errorf("memory: delete %q: %w", name, err)
+	}
+	return Archived{Record: rec, Path: dst, Origin: path}, nil
+}
+
+// notFoundError matches os.ErrNotExist, so each door maps it to its own not-found answer.
+type notFoundError struct {
+	name string
+	near []string
+}
+
+func (e notFoundError) Error() string {
+	msg := fmt.Sprintf("memory: no entry named %q", e.name)
+	if len(e.near) > 0 {
+		msg += "; did you mean " + strings.Join(e.near, " or ") + "?"
+	}
+	return msg
+}
+
+func (e notFoundError) Unwrap() error { return os.ErrNotExist }
+
+// nearNames returns up to three entry names within typo distance of name, closest first.
+// It reads file names rather than records so an unreadable entry is still suggested.
+func nearNames(rdir, name string) []string {
+	ents, err := os.ReadDir(rdir)
+	if err != nil {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("memory: delete %q: %w", name, err)
+	type candidate struct {
+		name string
+		dist int
 	}
-	return nil
+	var cands []candidate
+	for _, e := range ents {
+		n, ok := strings.CutSuffix(e.Name(), ".md")
+		if !ok || e.IsDir() {
+			continue
+		}
+		if d := hint.Distance(name, n); d <= hint.Threshold(name) {
+			cands = append(cands, candidate{n, d})
+		}
+	}
+	slices.SortStableFunc(cands, func(a, b candidate) int { return a.dist - b.dist })
+	out := make([]string, 0, min(len(cands), 3))
+	for _, c := range cands[:min(len(cands), 3)] {
+		out = append(out, strconv.Quote(c.name))
+	}
+	return out
 }
 
 // ReadCursor returns the cursor snapshot ("where did I leave off"), or "" if unwritten.

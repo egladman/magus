@@ -20,7 +20,7 @@ import {
   type Memory,
 } from "@wire/memory/v1alpha1/memory_pb";
 import { createServerTransport, getLiveToken, isCapabilityDenied } from "../../lib/server";
-import { showToast } from "../../lib/refresh-toast";
+import { showToast, type ToastOptions } from "../../lib/refresh-toast";
 import { h } from "../view";
 
 // formControl wraps a control in PF's FormControl shell. PF's FormControl is a WRAPPER PLUS the
@@ -572,13 +572,15 @@ export function buildMemorySection(
     return rowEl;
   }
 
+  // A delete archives the entry on the server, so there is no confirm() in front of it: the toast
+  // that reports it carries Undo, which puts the records this view already held back.
   async function deleteOne(name: string): Promise<void> {
-    if (!confirm("Delete the memory " + name + "? This cannot be undone.")) return;
+    const rec = lastRecords.find((r) => r.name === name);
     try {
-      await client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal });
+      await client.deleteMemory({ name }, { signal: controller.signal });
       if (stale) return;
       selected.delete(name);
-      showToast("Agent memory", "Deleted " + name + ".");
+      showToast("Agent memory", "Deleted " + name + ".", "ok", undoOption(rec ? [rec] : []));
       void load();
     } catch (e) {
       showErrorToast("delete " + name, e);
@@ -587,44 +589,105 @@ export function buildMemorySection(
 
   // bulkDelete deletes each named record independently (Promise.allSettled, not all): a partial
   // failure clears only the names that succeeded, reports the count that failed, and reloads
-  // regardless - always with ONE aggregate toast, never one per record.
+  // regardless - always with ONE aggregate toast, never one per record. Undo covers only the
+  // records that were deleted.
   async function bulkDelete(names: string[]): Promise<void> {
     if (names.length === 0) return;
-    // Named, not just counted, up to a size a native confirm() can still show as a readable list -
-    // past that a wall of names is no more readable than the count was, so it falls back to one.
-    const roster = names.length <= 10 ? "\n\n" + names.join("\n") : "";
-    if (!confirm("Delete " + names.length + " memories? This cannot be undone." + roster)) return;
+    const held = new Map(lastRecords.map((r) => [r.name, r]));
     try {
       const results = await Promise.allSettled(
-        names.map((name) =>
-          client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal }),
-        ),
+        names.map((name) => client.deleteMemory({ name }, { signal: controller.signal })),
       );
       if (stale) return;
+      const deleted: Memory[] = [];
       let failed = 0;
       results.forEach((r, i) => {
-        if (r.status === "fulfilled") selected.delete(names[i]);
-        else failed++;
+        if (r.status !== "fulfilled") {
+          failed++;
+          return;
+        }
+        selected.delete(names[i]);
+        const rec = held.get(names[i]);
+        if (rec) deleted.push(rec);
       });
-      const deleted = names.length - failed;
+      const count = names.length - failed;
       if (failed === 0) {
-        showToast("Agent memory", "Deleted " + deleted + " memories.");
+        showToast("Agent memory", "Deleted " + count + " memories.", "ok", undoOption(deleted));
       } else {
         showToast(
           "Agent memory",
           "Deleted " +
-            deleted +
+            count +
             " of " +
             names.length +
             " memories; " +
             failed +
             " could not be deleted.",
           failed === names.length ? "error" : "warn",
+          undoOption(deleted),
         );
       }
     } finally {
       if (!stale) void load();
     }
+  }
+
+  // undoOption gives a delete toast its Undo action, lingering long enough to be pressed.
+  function undoOption(recs: Memory[]): ToastOptions {
+    if (recs.length === 0) return {};
+    return { ms: 10000, link: { label: "Undo", run: () => restore(recs) } };
+  }
+
+  // restore replays each record as a create. A name that exists again was written after the
+  // delete, so it is left alone rather than overwritten with the older copy; the listing is
+  // fetched fresh because Undo can be pressed before the post-delete reload lands.
+  async function restore(recs: Memory[]): Promise<void> {
+    // The notification history keeps this action past the section's lifetime, and a closed
+    // section has aborted its client.
+    if (stale) {
+      showToast(
+        "Agent memory",
+        "Undo ended when Agent memory closed. The server archived the entry; recreate it with magus memory put.",
+        "warn",
+      );
+      return;
+    }
+    let results: PromiseSettledResult<unknown>[];
+    let todo: Memory[];
+    try {
+      const list = await client.listMemories({}, { signal: controller.signal });
+      const live = new Set(list.memories.map((r) => r.name));
+      todo = recs.filter((r) => !live.has(r.name));
+      results = await Promise.allSettled(
+        todo.map((memory) =>
+          client.updateMemory({ memory, allowMissing: true }, { signal: controller.signal }),
+        ),
+      );
+    } catch (e) {
+      showErrorToast("restore", e);
+      return;
+    }
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const skipped = recs.length - todo.length;
+    const restored = todo.length - failed;
+    if (failed === 0 && skipped === 0) {
+      showToast("Agent memory", "Restored " + restored + (restored === 1 ? " memory." : " memories."));
+    } else {
+      showToast(
+        "Agent memory",
+        "Restored " +
+          restored +
+          " of " +
+          recs.length +
+          "; " +
+          (skipped > 0 ? skipped + " already exist again" : "") +
+          (skipped > 0 && failed > 0 ? ", " : "") +
+          (failed > 0 ? failed + " could not be restored" : "") +
+          ".",
+        restored === 0 ? "error" : "warn",
+      );
+    }
+    if (!stale) void load();
   }
 
   function showErrorToast(action: string, e: unknown): void {

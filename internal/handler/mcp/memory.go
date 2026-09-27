@@ -106,11 +106,24 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		return spells.InvokeResponse{Data: toRecordView(stored)}, nil
 
 	case "delete":
-		name := paramString(req.Params, "name", "")
-		if err := memory.Delete(root, name, true); err != nil {
+		name := strings.TrimSpace(paramString(req.Params, "name", ""))
+		archived, err := memory.Delete(root, name)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return spells.InvokeResponse{}, fmt.Errorf("mcp: %w; nothing was deleted, find the entry with op=list", err)
+			}
 			return spells.InvokeResponse{}, err
 		}
-		return spells.InvokeResponse{Data: map[string]any{"deleted": name}}, nil
+		restore := "op=put with this record's fields recreates the entry"
+		if archived.Record.Type == "" {
+			restore = "the entry could not be read, so only moving " + archived.Path + " back to " + archived.Origin + " restores it"
+		}
+		return spells.InvokeResponse{Data: map[string]any{
+			"deleted":  name,
+			"archived": archived.Path,
+			"record":   toRecordView(archived.Record),
+			"restore":  restore,
+		}}, nil
 
 	case "verify":
 		report, err := memory.Verify(root, func(ref memory.Ref) error {
