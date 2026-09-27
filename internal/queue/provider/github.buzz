@@ -942,6 +942,7 @@ fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}, labeled:
                 "branch": if (sameRepo) pr.q("head").q("ref").stringValue() else "",
                 "base": target,
                 "title": pr.q("title").stringValue(),
+                "author": pr.q("user").q("login").stringValue(),
                 "fork": !sameRepo,
                 "method": method.lower(),
                 "parent": parent,
@@ -1047,7 +1048,17 @@ fun unqueuedFrom(pages: [str], repo: str, queued: [any]) > [any] !> any {
         foreach (pr in serialize\jsonDecode(page).listValue()) {
             final number = "{pr.q("number").integerValue()}";
             if (listed[number] == null) {
-                unqueued.append({"id": number, "repo": repo, "head": pr.q("head").q("sha").stringValue(), "mark": markIn(labelNames(pr))});
+                final sameRepo = pr.q("head").q("repo").q("full_name").stringValue() == repo;
+                unqueued.append({
+                    "id": number,
+                    "repo": repo,
+                    "head": pr.q("head").q("sha").stringValue(),
+                    "mark": markIn(labelNames(pr)),
+                    "title": pr.q("title").stringValue(),
+                    "author": pr.q("user").q("login").stringValue(),
+                    "branch": if (sameRepo) pr.q("head").q("ref").stringValue() else "",
+                    "base": pr.q("base").q("ref").stringValue(),
+                });
             }
         }
     }
@@ -2139,6 +2150,7 @@ test "list keeps auto-merge pull requests against the base and drops drafts and 
     assert\equal(one.q("fork").booleanValue(), want: false, message: "fork is always said");
     assert\equal(one.q("method").stringValue(), want: "squash", message: "the method chosen with auto-merge");
     assert\equal(one.q("parent").stringValue(), want: "", message: "not a stack member");
+    assert\equal(one.q("author").stringValue(), want: "priya", message: "the author's login");
 }
 
 test "a fork is listed as one, with no branch to push to" {
@@ -2227,6 +2239,10 @@ test "every open pull request the listing leaves out is unqueued" {
     assert\equal(one.q("head").stringValue(), want: "a22", message: "and head");
     assert\equal(one.q("repo").stringValue(), want: "acme/acme", message: "and the repository a mark is cleared in");
     assert\equal(one.q("mark").stringValue(), want: "", message: "showing no mark");
+    assert\equal(one.q("title").stringValue(), want: "draft", message: "and what a person reads it by");
+    assert\equal(one.q("author").stringValue(), want: "bo", message: "who opened it");
+    assert\equal(one.q("branch").stringValue(), want: "d", message: "the branch a job's checkout joins it by");
+    assert\equal(one.q("base").stringValue(), want: "main", message: "and the branch it targets");
 }
 
 final MARKED = `[

@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -273,7 +275,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	url, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
+	remote, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
 	if err != nil {
 		return err
 	}
@@ -284,7 +286,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	defer p.Close()
 	// An empty --status-context asks for no setup, whose reads need permissions a pull
 	// request job's token may lack.
-	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
+	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: remote, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
 	var refused *types.SetupRefusedError
 	if errors.As(err, &refused) {
 		return fmt.Errorf("%w; then run: %s", err, renderRerun(e.root, fs, refused.App))
@@ -377,7 +379,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	url, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
+	remote, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
 	if err != nil {
 		return err
 	}
@@ -386,12 +388,26 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	changes, err := p.ListChanges(ctx, types.ListQuery{Base: f.Base, RemoteURL: url})
+	started := time.Now()
+	changes, err := p.ListChanges(ctx, types.ListQuery{Base: f.Base, RemoteURL: remote})
 	if err != nil {
 		return err
 	}
+	fetch := magustypes.InflightFetch{
+		Provider: f.Provider, Host: remoteHost(remote), Base: f.Base,
+		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
+	}
 	// One line, so a document on stdout is itself a JSONL record.
-	return queue.WriteChanges(e.stdout, changes)
+	if err := queue.WriteChanges(e.stdout, changes); err != nil {
+		return err
+	}
+	// Kept for every offline reader: ls jobs, describe job and the magus_job list.
+	if err := queue.WriteSnapshot(cl.Root, queue.Snapshot{Fetched: fetch, Changes: changes}); err != nil {
+		return fmt.Errorf("keep the snapshot: %w", err)
+	}
+	fmt.Fprintf(e.stderr, "queue: read %d queued and %d other open changes from %s in %dms\n",
+		len(changes.Changes), len(changes.Unqueued), orDash(fetch.Host), fetch.ElapsedMS)
+	return nil
 }
 
 func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
@@ -432,7 +448,24 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	return writeQueueFile(e.path(f.Out), func(w io.Writer) error { return queue.WritePlan(w, pl) })
+	if err := writeQueueFile(e.path(f.Out), func(w io.Writer) error { return queue.WritePlan(w, pl) }); err != nil {
+		return err
+	}
+	return queue.RecordPlan(cl.Root, pl)
+}
+
+// remoteHost is the host a remote URL names, "" when it names none. It reads URL forms
+// and git's scp form (user@host:path), and never returns the userinfo a URL may carry.
+func remoteHost(remote string) string {
+	if u, err := url.Parse(remote); err == nil && u.Host != "" {
+		return u.Hostname()
+	}
+	if _, rest, ok := strings.Cut(remote, "@"); ok {
+		if host, _, ok := strings.Cut(rest, ":"); ok {
+			return host
+		}
+	}
+	return ""
 }
 
 func readQueueChanges(file string, stdin io.Reader) (types.Changes, error) {

@@ -109,20 +109,47 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 
 	noStore := hint.NewGate("", "s1")
 	for range 2 {
-		got, ref := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "why", note)
+		got, ref, served := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "why", note, nil)
 		assert.Equal(t, "why"+note+see, got, "without a cache dir every firing is the first")
 		assert.Empty(t, ref)
+		assert.Nil(t, served)
 	}
 
 	gate := hint.NewGate(t.TempDir(), "s1")
+	remedy := []hint.Next{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
 	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate)} {
 		for range 2 {
-			got, ref := shapeDeny(t.Context(), gate, rule, "why", note)
+			got, ref, served := shapeDeny(t.Context(), gate, rule, "why", note, remedy)
 			assert.Equal(t, "why", got, "%s is not a catalogued deny, so its reason is untouched", rule)
 			assert.Empty(t, ref)
+			assert.Nil(t, served, "a rule with no page serves nothing")
 		}
 	}
 
-	got, _ := shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "why"+note, note)
+	got, _, _ := shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "why"+note, note, nil)
 	assert.Equal(t, "why"+note+see, got, "a reason already carrying the note does not repeat it")
+}
+
+// TestShapeDenyServesTheRemedyOnEveryFiring pins the layout a remedy adds and that it is
+// journaled, which is what pre-authorizes it: in full with its why the first time, and as
+// the command alone beside the full-verdict ref on a repeat.
+func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
+	const see = "\nsee: " + ruleDocsBase + "output-pipe/"
+	gate := hint.NewGate(t.TempDir(), "s1")
+	remedy := []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe),
+		[]string{"./magus", "run", "go-build", ".", "-s"}, "-s stays quiet until something fails.")}
+
+	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", remedy)
+	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."+see, got)
+	assert.Empty(t, ref)
+	assert.Equal(t, remedy, served)
+	assert.Equal(t, "deny-output-pipe", servedNextPreauthorizes(gate, "./magus run go-build . -s"))
+
+	got, ref, served = shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", remedy)
+	require.NotEmpty(t, ref)
+	doc, _ := Rule(string(denyRuleOutputPipe))
+	assert.Equal(t, "denied again [output-pipe]: "+doc.Catches+"\nnext:\n  ./magus run go-build . -s"+
+		"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got)
+	assert.Equal(t, remedy, served)
+	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 }

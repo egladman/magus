@@ -1857,6 +1857,101 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 	}
 }
 
+// TestBusyWaitOnAForeignProcessSaysWhatItProves pins the probe split: a loop over a pid,
+// the process table or magus's own pool and job rows waits on something nothing will
+// announce to the caller, so its deny drops that claim and names the held tool slot.
+func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
+	for _, cmd := range []string{
+		`while kill -0 4242 2>/dev/null; do sleep 30; done`,
+		`until ! kill -0 $PID; do sleep 10; done`,
+		`while pgrep -f go-build >/dev/null; do sleep 5; done`,
+		`until ./magus status -o json | jq -e '.idle'; do sleep 20; done`,
+		`until ./magus describe job worker-a -o name; do sleep 60; done`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "holds your tool slot for its whole wait", cmd)
+		assert.NotContains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+	own := Evaluate(testDependencies(), `until grep -q "^summary:" out.log; do sleep 25; done`)
+	assert.Contains(t, own.Deny, "you are told when it finishes", "a probe of the caller's own output keeps the claim")
+}
+
+// TestOutputPipeServesOnlyAnExactRemedy pins which pipes carry a next: the tail of a run,
+// a count, a join and a first-N over a known record. A search keeps rows no projection
+// chooses, a line already naming -o was asking something the projection cannot rewrite,
+// and after a cd the remedy would run somewhere else.
+func TestOutputPipeServesOnlyAnExactRemedy(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"magus run lint . | tail -20":        "magus run lint . -s",
+		"magus run test . -- -run X | head":  "magus run test . -s -- -run X",
+		"magus ls jobs | wc -l":              `magus ls jobs -o "template={{len .jobs}}"`,
+		"magus ls jobs | tr '\\n' ' '":       `magus ls jobs -o "template={{range .jobs}}{{.id}} {{end}}"`,
+		"magus ls jobs | grep running":       "",
+		"magus ls jobs -o json | grep id":    "",
+		"magus run lint . -s | tail -5":      "",
+		"magus ls | sort | uniq":             "",
+		"cd docs && magus run lint . | tail": "",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		require.Equal(t, denyRuleOutputPipe, v.Rule.Name, cmd)
+		if want == "" {
+			assert.Empty(t, v.Next, cmd)
+			continue
+		}
+		require.Len(t, v.Next, 1, cmd)
+		assert.Equal(t, want, v.Next[0].Run, cmd)
+		assert.Empty(t, Evaluate(testDependencies(), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
+	}
+}
+
+// TestOutputRedirectRemedyPassesOutputRedirect is the self-contradiction the plan found: the
+// --tee line the rule suggests must not be one the same rule refuses.
+func TestOutputRedirectRemedyPassesOutputRedirect(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"magus ls jobs -o json > f":            "magus ls jobs -o json --tee f",
+		"magus ls jobs > f 2>&1":               "magus ls jobs -o json --tee f",
+		"magus run lint . &> run.log":          "magus run lint . -o jsonl --tee run.log",
+		"magus run lint . > /dev/null 2>&1":    "magus run lint . --silent",
+		"magus run lint . -s > /dev/null 2>&1": "magus run lint . -s",
+		"magus ls jobs -o name > f":            "",
+		"magus run lint . 2> err.log":          "",
+		"magus ls jobs --tee a.json > b.json":  "",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		require.Equal(t, denyRuleOutputRedirect, v.Rule.Name, cmd)
+		if want == "" {
+			assert.Empty(t, v.Next, cmd)
+			continue
+		}
+		require.Len(t, v.Next, 1, cmd)
+		assert.Equal(t, want, v.Next[0].Run, cmd)
+		assert.Empty(t, Evaluate(testDependencies(), v.Next[0].Run).Deny, "the remedy for %q passes the guard", cmd)
+	}
+}
+
+// TestStageAllServesTheSamePathsThroughVcsAdd pins the paths carried over and the one
+// spelling left to the prose: `git add .` stages a subtree no vcs add form equals.
+func TestStageAllServesTheSamePathsThroughVcsAdd(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"git add -A":                    "magus vcs add",
+		"git add --all -- a.go b/c.go":  "magus vcs add a.go b/c.go",
+		"git add -u && git commit -m x": "magus vcs add",
+		"git add .":                     "",
+		"git add -A -f vendor/":         "",
+		"git -C ../other add -A":        "",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		require.Equal(t, denyRuleStageAll, v.Rule.Name, cmd)
+		if want == "" {
+			assert.Empty(t, v.Next, cmd)
+			continue
+		}
+		require.Len(t, v.Next, 1, cmd)
+		assert.Equal(t, want, v.Next[0].Run, cmd)
+	}
+}
+
 // Agents poll with pgrep/ps when a magus run is slow; status --watch already
 // names the lock holder. Measured 2026-09-15: pgrep -fl 'magus|go-build'.
 func TestGuardDeniesProcessPoll(t *testing.T) {

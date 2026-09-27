@@ -23,8 +23,10 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -184,9 +186,11 @@ func openJobs(root string) (*job.Store, error) {
 
 // lsJobs is `magus ls jobs`: every job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
+	var all bool
 	rest, err := cmdParse("ls jobs", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&all, "all", false, "List every in-flight change, not only yours")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--all] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
 			fmt.Fprintln(os.Stderr, "its fork could prove about its write paths (PROOF) and its check, followed by every")
@@ -194,6 +198,11 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "PROOF is what the checkout looked like when the job was forked: alone (nothing")
 			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Then the open changes in flight against the queue's base, as the last")
+			fmt.Fprintln(os.Stderr, "`magus queue ls --provider <provider> --base <branch>` read them; this never")
+			fmt.Fprintln(os.Stderr, "fetches. A change is yours when a job of your job tree works on its branch or")
+			fmt.Fprintln(os.Stderr, "your forge login opened it; the others print as one count line unless --all.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -217,13 +226,21 @@ func lsJobs(root string, args []string) error {
 	// the magus_job list op and the console's route use, so the three doors cannot
 	// disagree about whether two jobs claim one path.
 	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
+	ctx := context.Background()
+	list, me, err := joinInflight(ctx, root, store, list)
+	if err != nil {
+		return err
+	}
+	// Nothing names a caller with no lease and no login, so none of the changes is theirs
+	// and the list is everyone's.
+	all = all || !me.Known()
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
 	if opts.Format != outputName {
-		list.Overlaps = overlapFootprints(context.Background(), root, list.Jobs, list.Overlaps)
+		list.Overlaps = overlapFootprints(ctx, root, list.Jobs, list.Overlaps)
 	}
 	switch opts.Format {
 	case outputName:
@@ -234,11 +251,230 @@ func lsJobs(root string, args []string) error {
 		return emitNames(ids)
 	case outputText:
 		printJobTree(os.Stdout, list)
+		fmt.Fprintln(os.Stdout)
+		printInflight(os.Stdout, list, all)
 		printConsoleJobLine(os.Stdout, "")
 		return nil
 	default:
+		list.Changes = inflightScope(list.Changes, all)
 		return emitFormatted(opts, list)
 	}
+}
+
+// joinInflight joins list to the queue snapshot as the caller sees it: the job it acts
+// under, and the forge login this process has already learned.
+func joinInflight(ctx context.Context, root string, store *job.Store, list types.JobList) (types.JobList, job.Identity, error) {
+	me := job.Identity{Lease: store.Actor().Lease, Login: bindings.ReviewViewer()}
+	if root == "" {
+		return list, me, nil
+	}
+	joined, err := queue.JoinInflight(ctx, root, list, me)
+	return joined, me, err
+}
+
+// inflightScope keeps the caller's changes, or every change when all is set. Never nil,
+// so an empty scope encodes as [].
+func inflightScope(changes []types.InflightChange, all bool) []types.InflightChange {
+	if all {
+		return append([]types.InflightChange{}, changes...)
+	}
+	mine := []types.InflightChange{}
+	for _, c := range changes {
+		if c.Mine {
+			mine = append(mine, c)
+		}
+	}
+	return mine
+}
+
+// printInflight renders the in-flight changes grouped by whose turn each is, the ones
+// waiting on the reader first. Unless all is set it lists the reader's changes and
+// counts the rest on one line.
+func printInflight(out io.Writer, list types.JobList, all bool) {
+	f := list.Fetched
+	if f == nil {
+		fmt.Fprintf(out, "in flight: never fetched; `%s queue ls --provider <provider> --base <branch>` reads the open changes\n", hint.BinaryName())
+		return
+	}
+	at := f.Base
+	if f.Tip != "" {
+		at += " at " + shortRev(f.Tip)
+	}
+	fmt.Fprintf(out, "in flight on %s, as of %s (%s, %s, %dms)\n",
+		at, time.Unix(f.At, 0).UTC().Format("2006-01-02 15:04 UTC"), f.Provider, orDash(f.Host), f.ElapsedMS)
+
+	shown := inflightScope(list.Changes, all)
+	partitions := 0
+	for _, c := range list.Changes {
+		partitions = max(partitions, c.Partition)
+	}
+	needs := "needs me"
+	if all {
+		needs = "needs the author"
+	}
+	groups := []struct {
+		title     string
+		attention types.InflightAttention
+	}{
+		{needs, types.AttentionAuthor},
+		{"waiting on review", types.AttentionReview},
+		{"queued, in plan order", types.AttentionQueue},
+		{"not queued", types.AttentionNone},
+	}
+	for _, g := range groups {
+		var rows []types.InflightChange
+		for _, c := range shown {
+			if c.Attention == g.attention {
+				rows = append(rows, c)
+			}
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		if g.attention == types.AttentionQueue {
+			slices.SortStableFunc(rows, queueOrder)
+		}
+		fmt.Fprintf(out, "%s (%d)\n", g.title, len(rows))
+		var table strings.Builder
+		w := tabwriter.NewWriter(&table, 0, 0, 2, ' ', 0)
+		for _, c := range rows {
+			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), inflightDetail(c, partitions), inflightJobs(c.Jobs))
+		}
+		_ = w.Flush()
+		// An empty last column leaves the padding before it at the end of the line.
+		for line := range strings.Lines(table.String()) {
+			fmt.Fprintln(out, strings.TrimRight(line, " \n"))
+		}
+	}
+	if len(list.Unproposed) > 0 {
+		fmt.Fprintf(out, "jobs without a change (%d)\n", len(list.Unproposed))
+		for _, id := range list.Unproposed {
+			fmt.Fprintf(out, "  %s\n", id)
+		}
+	}
+	switch {
+	case len(shown) > 0 || len(list.Unproposed) > 0:
+	case all:
+		fmt.Fprintln(out, "nothing in flight")
+	default:
+		fmt.Fprintln(out, "nothing of yours in flight")
+	}
+	if !all {
+		printInflightOthers(out, list.Changes)
+	}
+	fmt.Fprintf(out, "refetch: %s queue ls --provider %s --base %s\n", hint.BinaryName(), f.Provider, f.Base)
+}
+
+// printInflightOthers counts the changes that are not the reader's on one line.
+func printInflightOthers(out io.Writer, changes []types.InflightChange) {
+	counts := map[types.InflightAttention]int{}
+	for _, c := range changes {
+		if !c.Mine {
+			counts[c.Attention]++
+		}
+	}
+	var parts []string
+	for _, a := range []struct {
+		attention types.InflightAttention
+		word      string
+	}{
+		{types.AttentionQueue, "queued"},
+		{types.AttentionAuthor, "kicked back"},
+		{types.AttentionReview, "waiting on review"},
+		{types.AttentionNone, "not queued"},
+	} {
+		if n := counts[a.attention]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, a.word))
+		}
+	}
+	if len(parts) > 0 {
+		fmt.Fprintf(out, "others: %s\n", strings.Join(parts, ", "))
+	}
+}
+
+// queueOrder puts planned changes first, by partition then position, and keeps the
+// provider's order among the rest.
+func queueOrder(a, b types.InflightChange) int {
+	switch {
+	case a.Position == 0 && b.Position == 0:
+		return 0
+	case a.Position == 0:
+		return 1
+	case b.Position == 0:
+		return -1
+	case a.Partition != b.Partition:
+		return a.Partition - b.Partition
+	}
+	return a.Position - b.Position
+}
+
+// inflightDetail is why a change is where it is: its place in the plan, and the
+// verdict's code and reason or the mark it shows.
+func inflightDetail(c types.InflightChange, partitions int) string {
+	var parts []string
+	if c.Position > 0 {
+		place := fmt.Sprintf("pos %d", c.Position)
+		if partitions > 1 {
+			place = fmt.Sprintf("partition %d pos %d", c.Partition, c.Position)
+		}
+		parts = append(parts, place)
+	}
+	switch {
+	case c.Code != "" && c.Reason != "":
+		parts = append(parts, c.Code+": "+c.Reason)
+	case c.Code != "":
+		parts = append(parts, c.Code)
+	case c.Mark != "":
+		parts = append(parts, strings.ReplaceAll(c.Mark, "_", " "))
+	}
+	return strings.Join(parts, "  ")
+}
+
+// printJobChange names the change job id's checkout carries, whose turn it is, and the
+// changes it touches.
+func printJobChange(out io.Writer, changes []types.InflightChange, id string) {
+	turns := map[types.InflightAttention]string{
+		types.AttentionAuthor: "its author's turn",
+		types.AttentionReview: "waiting on review",
+		types.AttentionQueue:  "the queue's turn",
+		types.AttentionNone:   "not queued",
+	}
+	for _, c := range changes {
+		if !slices.Contains(c.Jobs, id) {
+			continue
+		}
+		line := fmt.Sprintf("\nchange: #%s %s, %s", c.ID, clipTitle(c.Title, 48), turns[c.Attention])
+		if d := inflightDetail(c, 0); d != "" {
+			line += ", " + d
+		}
+		fmt.Fprintln(out, line)
+		for _, n := range c.Neighbours {
+			touched := slices.Concat(n.Paths, n.Declarations, n.Units)
+			fmt.Fprintf(out, "  touches #%s: %s %s\n", n.ID, n.Evidence, strings.Join(touched, ", "))
+		}
+	}
+}
+
+func inflightJobs(ids []string) string {
+	switch len(ids) {
+	case 0:
+		return ""
+	case 1:
+		return "job " + ids[0]
+	}
+	return "jobs " + strings.Join(ids, ", ")
+}
+
+// clipTitle cuts s to at most n bytes at a word boundary, marking the cut.
+func clipTitle(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := strings.LastIndexByte(s[:n], ' ')
+	if cut <= 0 {
+		cut = n
+	}
+	return strings.TrimRight(s[:cut], " ") + "..."
 }
 
 func printJobTree(out io.Writer, report types.JobList) {
@@ -455,6 +691,11 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	case outputText:
 		fmt.Print(brief.String())
 		printJobEntries(os.Stdout, row.Entries)
+		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
+		if err != nil {
+			return err
+		}
+		printJobChange(os.Stdout, joined.Changes, row.ID)
 		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:

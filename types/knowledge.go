@@ -1266,3 +1266,76 @@ type KnowledgeGraphOutput struct {
 	Nodes []KnowledgeNode `json:"nodes"         yaml:"nodes" jsonl:"primary"`
 	Links []KnowledgeEdge `json:"links"         yaml:"links"`
 }
+
+// PrecedentFamily names the shape a [Precedent] counts. Each slug names a rule, its reference
+// page and its opt-out alike.
+type PrecedentFamily string
+
+const (
+	// PrecedentDepDirection is which way package imports run between two top-level
+	// directories.
+	PrecedentDepDirection PrecedentFamily = "dep-direction"
+	// PrecedentDepFanout is how many distinct packages under one top-level directory a
+	// package imports.
+	PrecedentDepFanout PrecedentFamily = "dep-fanout"
+	// PrecedentErrSentinelName is whether a package-level error value's name leads with err.
+	PrecedentErrSentinelName PrecedentFamily = "err-sentinel-name"
+	// PrecedentTestPackageName is whether a test file declares the package its directory's
+	// sources declare.
+	PrecedentTestPackageName PrecedentFamily = "test-package-name"
+)
+
+// Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
+// shape. It is established only when Cohort and Share clear the conformance gate (a dep-fanout
+// row, whose share is at least 0.95 by construction, is gated on Cohort alone); the zero value,
+// and any row below the gate, is no precedent, a count and never a rule. Departures are the
+// cases that do not follow it, so a reader can check each one against the count.
+type Precedent struct {
+	Family PrecedentFamily `json:"family"`
+	Scope  PrecedentScope  `json:"scope"`
+	Key    PrecedentKey    `json:"key"`
+	Follow int             `json:"follow"`
+	Cohort int             `json:"cohort"`
+	// Share is Follow over Cohort, in [0, 1].
+	Share       float64 `json:"share"`
+	Established bool    `json:"established"`
+	// Cited is up to three cases that follow the precedent.
+	Cited      []Case `json:"cited,omitempty"`
+	Departures []Case `json:"departures,omitempty"`
+}
+
+// PrecedentScope is where a precedent's cases were drawn from. Which fields are set depends on
+// the family: Layers for the dep families, Language for the rest.
+type PrecedentScope struct {
+	// Layers are top-level directories, "." for the workspace root: the sorted pair a
+	// dep-direction row compares, or the one layer a dep-fanout row counts imports into.
+	Layers   []string `json:"layers,omitempty"`
+	Language string   `json:"language,omitempty"`
+}
+
+// PrecedentKey is the shape a precedent's following cases share. Which fields are set depends
+// on the family; a test-package-name key sets none, since the family names its one shape.
+type PrecedentKey struct {
+	// From and To are the layers a dep-direction precedent says imports run from and to.
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
+	// MaxImports is the most packages under the layer a dep-fanout precedent says one package
+	// imports: the cohort's 95th percentile. Where to draw a ceiling is a decision the row
+	// does not make.
+	MaxImports int `json:"max_imports,omitempty"`
+	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to
+	// lower case.
+	Prefix string `json:"prefix,omitempty"`
+}
+
+// Case is one instance in the graph a precedent counts.
+type Case struct {
+	// Node is the graph node the case was read from: a symbol, a file, or for a dep family the
+	// importing package's namespace.
+	Node string `json:"node"`
+	// Source is a workspace-relative path, with a line when the index recorded one. For a dep
+	// family it is the importing package's directory.
+	Source string `json:"source"`
+	// Imports are the directories a dep family case imports that the row counted, sorted.
+	Imports []string `json:"imports,omitempty"`
+}

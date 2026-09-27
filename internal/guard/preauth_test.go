@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -198,6 +200,80 @@ func servedNextTemplates(t *testing.T) map[string]string {
 	return rendered
 }
 
+// denyRemedyFixture is one refused line whose rule serves a remedy. ident is the constant
+// the rule hands hint.NextForDenyRemedy, which is how the sweep below finds a rule with no
+// fixture; setup builds whatever tree the rule reads and returns the line and its remedy.
+type denyRemedyFixture struct {
+	ident string
+	rule  denyRuleName
+	setup func(t *testing.T) (command, want string)
+}
+
+func fixed(command, want string) func(*testing.T) (string, string) {
+	return func(*testing.T) (string, string) { return command, want }
+}
+
+func denyRemedyFixtures() []denyRemedyFixture {
+	return []denyRemedyFixture{
+		{"denyRuleOutputPipe", denyRuleOutputPipe, fixed("magus run lint . | tail -20", "magus run lint . -s")},
+		{"denyRuleOutputPipe", denyRuleOutputPipe, fixed("magus ls jobs | wc -l", `magus ls jobs -o "template={{len .jobs}}"`)},
+		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus ls jobs -o json > jobs.json", "magus ls jobs -o json --tee jobs.json")},
+		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus ls jobs > jobs.txt", "magus ls jobs -o json --tee jobs.txt")},
+		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus run lint . > /dev/null 2>&1", "magus run lint . --silent")},
+		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A", "magus vcs add")},
+		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A -- cmd/magus/main.go", "magus vcs add cmd/magus/main.go")},
+		{"denyRuleProcessPoll", denyRuleProcessPoll, fixed("pgrep -fl magus", "magus status")},
+		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
+		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T) (string, string) {
+			const spellName = "guard-remedy-test"
+			project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
+				spellName,
+				spells.WithTargets("check"),
+				spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+					return "remedy-tool", []string{"check"}, target == "check", nil
+				}),
+			))
+			t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+			return "remedy-tool check", "magus run " + spellName + "::check"
+		}},
+		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T) (string, string) {
+			main, wt := twoCheckouts(t)
+			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			t.Chdir(main)
+			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
+			return "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker",
+				filepath.Join(wt, "magus") + " --root " + wt + " describe job harness/worker"
+		}},
+	}
+}
+
+// remedyRe finds the rules that construct a remedy in the guard's own source.
+var remedyRe = regexp.MustCompile(`NextForDenyRemedy\(string\((denyRule\w+)\)`)
+
+// TestEveryServedNextCoversEveryDenyRemedy is the sweep: a rule that serves a remedy with
+// no fixture above is a remedy nothing grades through the guard.
+func TestEveryServedNextCoversEveryDenyRemedy(t *testing.T) {
+	covered := map[string]bool{}
+	for _, f := range denyRemedyFixtures() {
+		covered[f.ident] = true
+	}
+	sources, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	found := 0
+	for _, src := range sources {
+		if strings.HasSuffix(src, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(src)
+		require.NoError(t, err)
+		for _, m := range remedyRe.FindAllStringSubmatch(string(body), -1) {
+			found++
+			assert.True(t, covered[m[1]], "%s serves a %s remedy and no fixture in denyRemedyFixtures drives it", src, m[1])
+		}
+	}
+	require.NotZero(t, found, "remedyRe no longer matches how a rule builds its remedy")
+}
+
 // TestEveryServedNextPassesTheGuardForEveryRole is the structural half of the
 // pre-authorization bargain.
 func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
@@ -212,6 +288,31 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	ctx, _ := fleetFixture(t, worker, reviewer)
 	templates := servedNextTemplates(t)
 
+	grade := func(t *testing.T, id, run, role, lease string) {
+		t.Helper()
+		if deny := Evaluate(testDependencies(), run).Deny; deny != "" {
+			t.Errorf("the %q breadcrumb serves %q, which the guard denies for every role:\n%s", id, run, deny)
+		}
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{
+			denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind,
+			// Pre-authorization stands the focus rule down too, so a template
+			// whose operands leave a reviewer's focus would clear with nothing
+			// having graded it.
+			func(ctx context.Context, deps Dependencies, lease, command string) string {
+				if grade := gradeFocusRead(ctx, deps, lease, command); grade.Decision == "deny" {
+					return grade.Reason
+				}
+				return ""
+			},
+		} {
+			if reason := rule(ctx, Dependencies{}, lease, run); reason != "" {
+				t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
+					"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
+					id, run, role, reason)
+			}
+		}
+	}
+
 	for _, role := range []struct {
 		name  string
 		lease string
@@ -221,27 +322,23 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		{"reviewer", reviewer.ID},
 	} {
 		for id, run := range templates {
-			t.Run(role.name+"/"+id, func(t *testing.T) {
-				if deny := Evaluate(testDependencies(), run).Deny; deny != "" {
-					t.Errorf("the %q breadcrumb serves %q, which the guard denies for every role:\n%s", id, run, deny)
+			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
+		}
+		// A deny's remedy is graded as Judge serves it to this role: whatever it drops
+		// was never served, and whatever it keeps must pass.
+		for _, f := range denyRemedyFixtures() {
+			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
+				command, want := f.setup(t)
+				v := Judge(ctx, testDependencies(), Request{Input: command, Lease: role.lease})
+				require.Equal(t, "deny", v.Decision, command)
+				require.Equal(t, string(f.rule), v.Rule, command)
+				if role.lease == "" {
+					require.Len(t, v.Next, 1, "unbound, %q serves its remedy", command)
+					assert.Equal(t, want, v.Next[0].Run)
 				}
-				for _, rule := range []func(context.Context, Dependencies, string, string) string{
-					denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind,
-					// Pre-authorization stands the focus rule down too, so a template
-					// whose operands leave a reviewer's focus would clear with nothing
-					// having graded it.
-					func(ctx context.Context, deps Dependencies, lease, command string) string {
-						if grade := gradeFocusRead(ctx, deps, lease, command); grade.Decision == "deny" {
-							return grade.Reason
-						}
-						return ""
-					},
-				} {
-					if reason := rule(ctx, Dependencies{}, role.lease, run); reason != "" {
-						t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
-							"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
-							id, run, role.name, reason)
-					}
+				for _, n := range v.Next {
+					assert.Equal(t, "deny-"+string(f.rule), n.ID)
+					grade(t, n.ID, n.Run, role.name, role.lease)
 				}
 			})
 		}

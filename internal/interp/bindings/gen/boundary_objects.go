@@ -1824,6 +1824,72 @@ func ObjectJobReadOnly(v types.JobReadOnly) vm.Value {
 	return out
 }
 
+func ObjectInflightNeighbour(v types.InflightNeighbour) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("evidence", vm.StrValue(v.Evidence))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	itemsDeclarations := make([]vm.Value, len(v.Declarations))
+	for indexDeclarations := range v.Declarations {
+		itemsDeclarations[indexDeclarations] = vm.StrValue(v.Declarations[indexDeclarations])
+	}
+	out.MapSet("declarations", vm.ListValue(itemsDeclarations))
+	itemsUnits := make([]vm.Value, len(v.Units))
+	for indexUnits := range v.Units {
+		itemsUnits[indexUnits] = vm.StrValue(v.Units[indexUnits])
+	}
+	out.MapSet("units", vm.ListValue(itemsUnits))
+	out.MapSet("base", vm.StrValue(v.Base))
+	return out
+}
+
+func ObjectInflightChange(v types.InflightChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("head", vm.StrValue(v.Head))
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("fork", vm.BoolValue(v.Fork))
+	itemsJobs := make([]vm.Value, len(v.Jobs))
+	for indexJobs := range v.Jobs {
+		itemsJobs[indexJobs] = vm.StrValue(v.Jobs[indexJobs])
+	}
+	out.MapSet("jobs", vm.ListValue(itemsJobs))
+	out.MapSet("intent", vm.StrValue(v.Intent))
+	out.MapSet("mark", vm.StrValue(v.Mark))
+	out.MapSet("decision", vm.StrValue(v.Decision))
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("partition", vm.IntValue(int64(v.Partition)))
+	out.MapSet("position", vm.IntValue(int64(v.Position)))
+	out.MapSet("below", vm.StrValue(v.Below))
+	out.MapSet("mine", vm.BoolValue(v.Mine))
+	out.MapSet("attention", vm.StrValue(string(v.Attention)))
+	itemsNeighbours := make([]vm.Value, len(v.Neighbours))
+	for indexNeighbours := range v.Neighbours {
+		itemsNeighbours[indexNeighbours] = ObjectInflightNeighbour(v.Neighbours[indexNeighbours])
+	}
+	out.MapSet("neighbours", vm.ListValue(itemsNeighbours))
+	return out
+}
+
+func ObjectInflightFetch(v types.InflightFetch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("provider", vm.StrValue(v.Provider))
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("tip", vm.StrValue(v.Tip))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("elapsedMS", vm.IntValue(int64(v.ElapsedMS)))
+	return out
+}
+
 func ObjectJobList(v types.JobList) vm.Value {
 	out := vm.NewMap()
 	itemsJobs := make([]vm.Value, len(v.Jobs))
@@ -1861,6 +1927,21 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsReadOnly[indexReadOnly] = ObjectJobReadOnly(v.ReadOnly[indexReadOnly])
 	}
 	out.MapSet("readOnly", vm.ListValue(itemsReadOnly))
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectInflightChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	optFetched := vm.Null
+	if v.Fetched != nil {
+		optFetched = ObjectInflightFetch((*v.Fetched))
+	}
+	out.MapSet("fetched", optFetched)
+	itemsUnproposed := make([]vm.Value, len(v.Unproposed))
+	for indexUnproposed := range v.Unproposed {
+		itemsUnproposed[indexUnproposed] = vm.StrValue(v.Unproposed[indexUnproposed])
+	}
+	out.MapSet("unproposed", vm.ListValue(itemsUnproposed))
 	return out
 }
 

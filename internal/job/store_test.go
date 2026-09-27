@@ -414,6 +414,54 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
 }
 
+// A re-fork that only moves a live row's boundaries widens it in place: the holder's state
+// and registration survive. One that changes anything else it declares, or no boundary at
+// all, hands the job out again as declared.
+func TestJobForkWidensALiveRowInPlace(t *testing.T) {
+	t.Parallel()
+
+	fork := func(criteria string, write, read []string) func(*types.Job) {
+		return Declare(types.Declaration{
+			ID: "a", Criteria: criteria, Checkpoint: "abc123", WritePaths: write, ReadPaths: read, State: types.StateDeclared,
+		}, 0)
+	}
+	for _, tc := range []struct {
+		name     string
+		from     types.JobState
+		criteria string
+		write    []string
+		read     []string
+		want     types.JobState
+	}{
+		{name: "a running row widened keeps running", from: types.StateRunning, criteria: "goal", write: []string{"a.go", "b.go"}, want: types.StateRunning},
+		{name: "an exited row given read paths stays exited", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, read: []string{"docs"}, want: types.StateExited},
+		{name: "a re-fork moving no boundary hands the job out again", from: types.StateExited, criteria: "goal", write: []string{"a.go"}, want: types.StateDeclared},
+		{name: "a rewritten criteria hands the job out again", from: types.StateRunning, criteria: "new goal", write: []string{"a.go", "b.go"}, want: types.StateDeclared},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			s := tmpStore(t, t.TempDir())
+			_, err := s.Update(ctx, "a", fork("goal", []string{"a.go"}, nil))
+			require.NoError(t, err)
+			taken, err := s.Exec(ctx, "a", "abc123")
+			require.NoError(t, err)
+			_, err = s.Update(ctx, "a", func(u *types.Job) { u.State = tc.from })
+			require.NoError(t, err)
+
+			stored, err := s.Update(ctx, "a", fork(tc.criteria, tc.write, tc.read))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, stored.State)
+			assert.ElementsMatch(t, tc.write, stored.WritePaths)
+			assert.ElementsMatch(t, tc.read, stored.ReadPaths)
+			assert.Equal(t, taken.Registered, stored.Registered)
+			assert.Equal(t, taken.ReportedBase, stored.ReportedBase)
+			assert.Equal(t, taken.CheckoutRoot, stored.CheckoutRoot)
+		})
+	}
+}
+
 // plantRaw writes body as the store's file, byte for byte.
 func plantRaw(t *testing.T, s *Store, body string) string {
 	t.Helper()

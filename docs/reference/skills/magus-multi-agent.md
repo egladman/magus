@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 39335
-skill_short_bytes: 29529
+skill_full_bytes: 39480
+skill_short_bytes: 29674
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `89` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `d91ac55ee03d` |
+| `skill-content` | `e7ad8a026083` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -519,6 +519,9 @@ This shows Magus process state, lock holders, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
+
+To wait for a process you did not start to end, use your host's own wait or monitor
+tool: a shell loop holds your tool slot for the whole wait.
 
 ### "How is it going" is a READ, never a message
 
@@ -1186,6 +1189,9 @@ This shows Magus process state, lock holders, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
+
+To wait for a process you did not start to end, use your host's own wait or monitor
+tool: a shell loop holds your tool slot for the whole wait.
 
 ### "How is it going" is a READ, never a message
 

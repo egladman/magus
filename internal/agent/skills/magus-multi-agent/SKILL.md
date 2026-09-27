@@ -587,6 +587,9 @@ state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
 
+To wait for a process you did not start to end, use your host's own wait or monitor
+tool: a shell loop holds your tool slot for the whole wait.
+
 ### "How is it going" is a READ, never a message
 
 Never message a worker to find out how it is doing. The question costs it the

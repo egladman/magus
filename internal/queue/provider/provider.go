@@ -344,7 +344,10 @@ func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Chan
 	for _, row := range unqueued {
 		var u types.UnqueuedChange
 		var mark string
-		if err := row.decode(required("id", &u.ID), required("head", &u.Head), optional("repo", &u.Repo), optional("mark", &mark)); err != nil {
+		if err := row.decode(
+			required("id", &u.ID), required("head", &u.Head), optional("repo", &u.Repo), optional("mark", &mark),
+			optional("title", &u.Title), optional("author", &u.Author), optional("branch", &u.Branch), optional("base", &u.Base),
+		); err != nil {
 			return types.Changes{}, err
 		}
 		u.Mark = types.Mark(mark)
@@ -374,7 +377,8 @@ func decodeChange(r record) (types.Change, error) {
 	if err := r.decode(
 		required("id", &c.ID), required("repo", &c.Repo), required("head", &c.Head), required("base", &c.Base),
 		required("method", &method), required("fork", &c.Fork),
-		optional("ref", &c.Ref), optional("branch", &c.Branch), optional("title", &c.Title), optional("parent", &c.Parent),
+		optional("ref", &c.Ref), optional("branch", &c.Branch), optional("title", &c.Title), optional("author", &c.Author),
+		optional("parent", &c.Parent),
 	); err != nil {
 		return types.Change{}, err
 	}

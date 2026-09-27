@@ -33,6 +33,7 @@ type Change struct {
 	Branch string `json:"branch,omitempty"` // head branch the queue may push an update commit to; empty when it may not
 	Base   string `json:"base"`             // branch the change targets
 	Title  string `json:"title,omitempty"`
+	Author string `json:"author,omitempty"` // provider's login for who opened the change; the queue acts on none of it
 	// Method is how the change merges. Required: a provider default the queue cannot see
 	// would make the merged shape a guess.
 	Method MergeMethod `json:"method"`
@@ -140,6 +141,12 @@ type UnqueuedChange struct {
 	ID   string `json:"id"`
 	Repo string `json:"repo,omitempty"` // provider's name for the repository, handed back to [Provider.Mark]
 	Head string `json:"head"`
+	// Title, Author, Branch and Base are for a person reading the change, as on [Change];
+	// the queue acts on none of them.
+	Title  string `json:"title,omitempty"`
+	Author string `json:"author,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Base   string `json:"base,omitempty"`
 	// Mark is the mark the change shows now. An applier clears [MarkQueued] from it: the
 	// change left the queue without the queue seeing it go.
 	Mark Mark `json:"mark,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -11,6 +12,8 @@ import (
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/queue"
+	qtypes "github.com/egladman/magus/internal/queue/types"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -213,6 +216,25 @@ func diffShows(paths ...string) job.Observer {
 	return func(context.Context, types.Job) (job.Observed, error) {
 		return job.Observed{Changed: paths, ChangedKnown: true}, nil
 	}
+}
+
+// The list op carries the in-flight changes the queue snapshot holds, joined by the same
+// constructor `magus ls jobs` uses.
+func TestJobToolListJoinsTheQueueSnapshot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	head := strings.Repeat("a", 40)
+	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{
+		Fetched: types.InflightFetch{Provider: "github", Base: "main", At: 5},
+		Changes: qtypes.Changes{Base: "main", Changes: []qtypes.Change{{ID: "7", Head: head, Base: "main", Method: qtypes.MethodSquash}}},
+	}))
+	tool := &jobTool{store: tmpJobStore(t, root), root: root}
+	resp, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "list"}})
+	require.NoError(t, err)
+	got, ok := resp.Data.(types.JobList)
+	require.True(t, ok)
+	assert.Equal(t, &types.InflightFetch{Provider: "github", Base: "main", At: 5}, got.Fetched)
+	assert.Equal(t, []types.InflightChange{{ID: "7", Head: head, Base: "main", Intent: "squash", Attention: types.AttentionQueue}}, got.Changes)
 }
 
 func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
