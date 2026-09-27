@@ -13,6 +13,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file             |
 | `importceiling` | a package importing more packages under a prefix than its ratchet allows         |
 | `stutter`       | an exported package-level name opening with its package's name                   |
+| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                 |
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain` |
 
@@ -22,9 +23,12 @@ so the analyzers carry the mechanism and the config carries the policy.
 ## Scope
 
 golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in
-each module under `libs/`, on the same config, with only `hostagnostic` and
-`stutter` enabled: the two rules the old tree walks held everywhere. The rest name
-root-module paths. Rules over source text also read the files a package's build
+each module under `libs/`, on the same config, with only `hostagnostic`,
+`stutter` and `filenames` enabled: the rules the old tree walks held everywhere.
+The rest name root-module paths.
+
+`filenames` reads beyond its package on purpose: its vocabulary is every Go file
+name under the root of `module`, nested modules included, walked once per run. Rules over source text also read the files a package's build
 constraints exclude on this platform, so a darwin run still checks the
 `_linux.go` files the walks did.
 
@@ -40,7 +44,7 @@ unset without them.
 ## Not here
 
 Rules whose subject is not one package's Go source stayed tests: a vocabulary or
-symbol index built from the whole tree (file names that mash two words, comments
-naming symbols that exist), and rules that also read Buzz, shell or markdown
+symbol index built from the whole tree (comments naming symbols that exist), and
+rules that also read Buzz, shell or markdown
 (environment sniffing, registered env vars, diagnostic raise sites, rescanning
 string loops).

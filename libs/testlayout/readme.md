@@ -69,6 +69,24 @@ paired, each off by default:
   instead: `X_linux.go`, `X_darwin.go`, `X_other.go`, and `X.go` for the shared
   part.
 
+## no-main-tests: tests trapped in package main
+
+With `no-main-tests` on, any `_test.go` declaring `package main` or its external
+`package main_test` variant is reported: move the logic the test drives into
+the package that owns it, then test it there. A test that only compiles inside
+the binary it drives usually means the code it drives never left `package
+main` either. This check runs regardless of the other options - it reads the
+package clause, not the file name, so it still fires on a `main_test.go` that
+`unpaired` would otherwise treat as the conventional `TestMain` file.
+
+Ships **off by default**. magus's own `cmd/magus`, `cmd/magus-utils`, the docs
+generators, gopherbuzz's CLI, and termcast/termshots/swegrade all test from
+inside `package main` today, and this repo moves that logic into domain
+packages over time rather than in one lift (see
+`plans/test-layers-lint-2026-09-26.md`). Turning this on before that lift
+finishes would report on every one of those tests; it is meant to switch on
+once the lift lands, not before.
+
 ## Where the conventions come from
 
 No published Go style guide states a test-file naming rule. Go by Example says the
@@ -130,6 +148,9 @@ linters:
           ignore-marker: false
           pair-benchmarks: false
           no-unix-suffix: false
+          # See "no-main-tests: tests trapped in package main". Off until this
+          # repo's cmd/ lift into domain packages lands.
+          no-main-tests: false
 ```
 
 ## Building the binary

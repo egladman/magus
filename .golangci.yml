@@ -124,6 +124,7 @@ linters:
     - asciistrings
     - importceiling
     - stutter
+    - filenames
     - nameoutput
     - testisolation
 
@@ -303,6 +304,26 @@ linters:
           # Packages whose exported names repeat the package name on purpose, each
           # with a reason.
           allow: []
+
+      filenames:
+        type: module
+        description: reports a Go file name that mashes two words together
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          skip-dirs: [.git, node_modules, .claude, gen, testdata]
+          suffixes: [test, linux, darwin, windows, unix, other, amd64, arm64, js, wasm, freebsd,
+                     openbsd, netbsd]
+          # Segments that are one established word. Adding one says "this is a
+          # word"; it is not a place to park a name nobody wanted to think about.
+          allow:
+            - runtime   # Go's own term
+            - stdlib
+            - keyring
+            - jsonv2    # names the GOEXPERIMENT
+            - libproc   # the Darwin API
+            - vmstat    # the Darwin tool
+            - jobserver # GNU make's name for the token protocol internal/proc/run implements
 
       nameoutput:
         type: module
@@ -592,6 +613,15 @@ linters:
         linters: [testlayout]
       - path: ^vcs/parity_test\.go$
         linters: [testlayout]
+
+      # filenames' backlog: concatenations already in the tree when the rule
+      # landed. Each is a rename waiting for a session with room for it, not an
+      # exemption; a rename touches every importer. No path, since the rule is
+      # by segment wherever it appears.
+      - linters: [filenames]
+        # magusfile names magusfile.buzz, so it may be right; lockfile is the
+        # standard term for a dependency lock file.
+        text: ^(magusfile|lockfile|eventstream|hostmodules|promptcache|selfupdate|toolref) mashes
 
       # stutter's backlog, in testlayout's shape above: each entry is a rename to
       # make, and the fix deletes it. The rule was a test that read the symbol graph
