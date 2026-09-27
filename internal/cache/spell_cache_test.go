@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -442,6 +443,46 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 		assert.Equal(t, key.remoteKey(now), got.Key, "the day before's verified bundle")
 		assert.Equal(t, "output", readTree(t, dst[0].Dir)["ab/ab01-d"], "no tampered byte is restored")
 	})
+}
+
+// unreachableBackend answers every GetArtifact with err and counts the calls.
+type unreachableBackend struct {
+	err   error
+	calls int
+}
+
+func (b *unreachableBackend) Name() string                { return "unreachable" }
+func (b *unreachableBackend) Active(context.Context) bool { return true }
+func (b *unreachableBackend) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	b.calls++
+	return nil, b.err
+}
+func (b *unreachableBackend) PutArtifact(context.Context, string, string, io.Reader) error {
+	return errors.ErrUnsupported
+}
+func (b *unreachableBackend) HasArtifact(context.Context, string, string) (bool, error) {
+	return false, errors.ErrUnsupported
+}
+
+func TestSpellCacheRestoreBuildsColdWhenTheStoreCannotAnswer(t *testing.T) {
+	pub, _ := genKeypair(t)
+	backend := &unreachableBackend{err: errors.New(`http.download: Get "https://blob.example.com/x": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	_, c := openSigned(t, backend, nil, [][]byte{pub})
+
+	got, err := c.restoreSpellCache(t.Context(), testSpellCacheKey(), destRoots(t), time.Now())
+	require.NoError(t, err, "a store that cannot answer builds cold rather than failing the run")
+	assert.Equal(t, SpellCacheResult{}, got, "nothing restored and nothing refused")
+	assert.Equal(t, 1, backend.calls, "an older key would wait out the same timeout against the same store")
+}
+
+func TestSpellCacheRestoreStopsWhenTheCallerCancels(t *testing.T) {
+	pub, _ := genKeypair(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, c := openSigned(t, &unreachableBackend{err: errors.New("request canceled")}, nil, [][]byte{pub})
+
+	_, err := c.restoreSpellCache(ctx, testSpellCacheKey(), destRoots(t), time.Now())
+	require.ErrorIs(t, err, context.Canceled, "a cancelled run stops rather than building cold")
 }
 
 // The local tier's archive never carries the caches a box keeps beside it, and an
