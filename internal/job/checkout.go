@@ -210,8 +210,8 @@ func ActingLease(cacheDir, claim string) (string, types.LeaseSource) {
 	return LeaseQuery{CheckoutJob: readRecord(MarkerPath(cacheDir)), Claim: claim}.Resolve()
 }
 
-// HeldIn returns the live rows with write paths whose holder recorded its base in the
-// checkout at root: the workers already working there, whoever they are.
+// HeldIn returns the rows with write paths whose holder recorded its base in the checkout
+// at root and is still [Editing]: the workers already working there, whoever they are.
 func HeldIn(rows []types.Job, root string) []types.Job {
 	if root == "" {
 		return nil
@@ -224,11 +224,18 @@ func HeldIn(rows []types.Job, root string) []types.Job {
 	for _, row := range rows {
 		// A row that is over holds nothing, or a checkout would stay refused over every job
 		// that ever passed in it.
-		if row.CheckoutRoot == abs && row.State.Live() && len(row.WritePaths) > 0 {
+		if row.CheckoutRoot == abs && Editing(row) && len(row.WritePaths) > 0 {
 			out = append(out, row)
 		}
 	}
 	return out
+}
+
+// Editing reports whether row's holder may still be writing its paths: declared or
+// running. An exited row stays live until it is graded, but its holder returned, so its
+// write paths no longer collide with another fork's.
+func Editing(row types.Job) bool {
+	return row.State == types.StateDeclared || row.State == types.StateRunning
 }
 
 // heldHere is [HeldIn] without the job being forked.
