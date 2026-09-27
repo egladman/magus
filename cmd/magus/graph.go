@@ -423,10 +423,8 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
 	var sf *gen.GraphStatsFlags
-	var norms bool
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
 		sf = gen.BindGraphStats(fs)
-		fs.BoolVar(&norms, "norms", false, "Print the norm table instead: the shapes most of the workspace agrees on, counted from the symbol index")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			fs.PrintDefaults()
@@ -439,7 +437,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if norms {
+	if sf.Norms {
 		return graphNorms(ctx, root, sf, outOpts)
 	}
 	// Stats stay domain-only unless --symbols (or a --kind symbol scope) opts in.

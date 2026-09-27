@@ -701,6 +701,7 @@ Subcommands (the first argument):
 			{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild first"},
 			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces) before computing stats"},
 			{Name: "symbols", Kind: FlagBool, Doc: "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph"},
+			{Name: "norms", Kind: FlagBool, Doc: "Print the norm table instead: the shapes most of the workspace agrees on, counted from the symbol index"},
 		}},
 		{
 			Name:  "diff",
