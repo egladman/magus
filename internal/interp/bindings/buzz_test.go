@@ -23,7 +23,8 @@ import (
 func TestMain(m *testing.M) {
 	// os.execute under a policy starts its child as this binary re-run as the launcher.
 	sandbox.MaybeLaunch()
-	testkit.Main(m)
+	// magusfile-api-generate rewrites the surface lock through this variable.
+	testkit.Main(m, "UPDATE_MAGUS_API_LOCK")
 }
 
 func TestBuzzEngine_Registered(t *testing.T) {

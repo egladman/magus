@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module magus -lang buzz -out ../internal/interp/bindings/gen/magus.go
@@ -62,7 +63,8 @@ var Magus = Module{
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
-		"`where` and `insight` all answer in-process, and so does `magus\\job` (list, put, " +
+		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`) " +
+		"and `output` all answer in-process, and so does `magus\\job` (list, put, " +
 		"register, exit, wait, clear): the job store an orchestrating agent declares about work it handed " +
 		"out (see types.Job). The `magus job` CLI subcommand is a third write door onto " +
 		"the same rows: ls and describe read, fork declares a row, exec records a worker's " +
@@ -180,6 +182,70 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
 			Raises:  true,
 			Impl:    MagusInsight,
+		},
+		{
+			Name: "query",
+			Doc:  "Search the knowledge graph: {definition, schema_version, query, budget, match_count, offset, matches, nodes, links, answer}, the record `magus query -o json` prints, keyed the same way. query is free text plus field matchers (kind=spell, project=pkg/foo, relation=uses, kind!=op, id=~build$). A query that seeds code symbols (kind=symbol) reads the symbol shards too; every other query reads the domain graph. opts.budget caps the neighborhood (default 50); opts.limit and opts.offset window the matches while match_count stays the total. Read answer.verdict before trusting zero matches: `unknown` means part of the workspace had no symbol index. An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "query", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusQuery,
+		},
+		{
+			Name: "explain",
+			Doc:  "One knowledge-graph node's context card: {definition, schema_version, node, blast_radius, out, in}, the record `magus explain -o json` prints. node is a node ID (target:pkg/foo:build) or a name that resolves to one. With `to`, answers the path from node to it instead, the record magus\\path returns. Raises when node resolves to nothing, naming magus\\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "node", Type: TypeString},
+				{Name: "to", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusExplain,
+		},
+		{
+			Name: "path",
+			Doc:  "The shortest chain of edges between two knowledge-graph nodes: {definition, schema_version, from, to, found, steps}, each step {from, to, relation, forward}, the record `magus path -o json` prints. Edges are walked in both directions. A resolved pair with no connection returns found false; only an endpoint that resolves to nothing raises. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "node", Type: TypeString},
+				{Name: "to", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusPath,
+		},
+		{
+			Name: "refs",
+			Doc:  "Where a code symbol is defined and every file that references it: {definition, schema_version, symbol, label, file_count, ref_count, defs, refs, answer}, each site {file, count, lines}, the record `magus refs -o json` prints. symbol is a symbol node ID or a name that resolves to one, drawn from the workspace's declared SCIP indexes. A symbol nothing defines is an answer, not a raise: answer.verdict says whether that is a verified absence or a blind spot. opts.limit and opts.offset window refs while file_count and ref_count stay the totals. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "symbol", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusRefs,
+		},
+		{
+			Name: "stats",
+			Doc:  "The knowledge graph's shape: {definition, node_count, edge_count, gods, orphans, coverage, isolated_count, component_count, largest_component_size}, the record `magus graph stats -o json` prints. gods are the most connected nodes, where structural risk concentrates; orphans are docs that document nothing and spells no target uses. kind scopes every section to one node kind (spell, target, doc, ...); omit it for the whole graph. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "kind", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusStats,
+		},
+		{
+			Name: "output",
+			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, duration_ms, output}, the bytes `magus query output <ref>` prints with the run's identity beside them. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "ref", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusOutput,
 		},
 		{
 			Name: "affected_impact",
@@ -714,6 +780,82 @@ var Magus = Module{
 				},
 			},
 		},
+		{
+			Name: "memory",
+			Doc: "The per-repository memory: named decisions, plans, pointers and ruled-out " +
+				"hypotheses, kept outside the checkout so every worktree of one repository reads " +
+				"the same entries. The same store `magus memory`, the magus_memory MCP tool and " +
+				"the console read. Records are the snake_case JSON `magus memory -o json` prints. " +
+				"Read straight off the workspace on the context; raises MGS1022 outside one. " +
+				"Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\\job is.",
+			Methods: []Method{
+				{
+					Name: "list",
+					Doc: "Every entry as {records, issues}. A malformed entry is an issue beside " +
+						"the readable records rather than a raise, since the listing is where a " +
+						"person finds the bad entry to delete.",
+					Returns: []Ret{{Type: TypeAnyMap}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "get",
+					Doc:     "One entry by name. An absent name raises; list finds the right one.",
+					Args:    []Arg{{Name: "name", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "put",
+					Doc: "Create the entry name, or write only the fields opts names on one that " +
+						"exists: type, status, refs ([str] of 'kind: target'), references ([str]), " +
+						"body, excerpt, allow_missing (default true; false turns a mistyped name " +
+						"into a raise instead of a second entry). A key opts omits is untouched; " +
+						"a key present with an empty value is an explicit clear. An unknown key " +
+						"raises. Returns the stored entry.",
+					Args: []Arg{
+						{Name: "name", Type: TypeString},
+						{Name: "opts", Type: TypeAnyMap, Optional: true},
+					},
+					Returns: []Ret{{Type: TypeAnyMap}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "delete",
+					Doc: "Delete the entry name. An absent name is not an error, so a cleanup " +
+						"that runs twice converges.",
+					Args:   []Arg{{Name: "name", Type: TypeString}},
+					Raises: true,
+					Extern: true,
+				},
+				{
+					Name: "verify",
+					Doc: "{records, issues} for malformed entries, broken links between entries, " +
+						"and output refs this checkout can no longer reopen.",
+					Returns: []Ret{{Type: TypeAnyMap}},
+					Raises:  true,
+					Extern:  true,
+				},
+			},
+		},
+		{
+			Name: "vcs",
+			Doc: "Facts about the workspace's version control that only magus computes. The " +
+				"`vcs` host module is the repository itself; this namespace is magus's reading " +
+				"of it. Bound by hand in internal/interp/bindings (buildVCS).",
+			Methods: []Method{{
+				Name: "checkpoint",
+				Doc: "The identity of the working state: revision, branch, dirtiness and the " +
+					"uncommitted patch's digest, the record `magus vcs checkpoint -o json` prints. " +
+					"It never preserves: minting an object in the repository is the CLI's " +
+					"--preserve. Raises MGS1022 outside a workspace.",
+				Returns: []Ret{{Type: TypeAnyMap, Object: "VCSCheckpoint"}},
+				Raises:  true,
+				Extern:  true,
+			}},
+		},
 	},
 	MCPTools: magusMCPTools,
 }
@@ -723,10 +865,10 @@ var Magus = Module{
 // literal rather than inside it because the descriptions are agent-facing prose and
 // dwarf the declarations they sit next to.
 //
-// Six tools name a Member today. The rest are the gap: a knowledge-graph verb with
-// no typed Buzz member (query, explain, path, refs, stats, output), or a tool whose
-// state a member cannot reach (the run engine's Options, the server's live review
-// session). Naming a Member as each one lands is what closes it.
+// Six tools name a Member today. query, explain, path, refs, stats, output, memory and
+// vcs_checkpoint have members their tools do not name yet; the rest wrap state a member cannot reach (the
+// run engine's Options, the server's live review session). Naming a Member on each is
+// what closes the gap.
 var magusMCPTools = []MCPTool{
 	{
 		Name:   hint.ToolDescribe.String(),
@@ -1067,6 +1209,22 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 		return "", nil
 	}
 	return p.Path, nil
+}
+
+// MagusVCSCheckpoint backs magus\vcs.checkpoint: the identity of the workspace's working
+// state (revision, branch, dirtiness, uncommitted-patch digest), the record `magus vcs
+// checkpoint -o json` prints. It never preserves: minting an object in the repository is
+// the CLI's --preserve, asked for rather than done on a read.
+func MagusVCSCheckpoint(ctx context.Context) (types.VCSCheckpoint, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.VCSCheckpoint{}, errNoWorkspace("vcs.checkpoint")
+	}
+	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
+	if err != nil {
+		return types.VCSCheckpoint{}, err
+	}
+	return vcs.Checkpoint(ctx, ws.Root(), res, false)
 }
 
 // MagusRaise fails with a caller-defined coded diagnostic.

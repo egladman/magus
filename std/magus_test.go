@@ -8,11 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -539,4 +542,227 @@ func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
+}
+
+// fakeGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
+// store, which is all the graph members and magus\output read off it.
+type fakeGraphWorkspace struct {
+	types.WorkspaceRepository
+	g        *knowledge.Graph
+	cacheDir string
+}
+
+func (f *fakeGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
+	return f.g, nil
+}
+func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+	return f.g, nil
+}
+func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+	return f.g, nil
+}
+func (f *fakeGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+	return nil, true
+}
+func (f *fakeGraphWorkspace) CacheDir() string { return f.cacheDir }
+
+const graphSymbol = "symbol:example.com/x Foo#"
+
+func graphContext(t *testing.T) context.Context {
+	g := knowledge.NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
+	g.AddNode(types.KnowledgeNode{ID: "project:pkg/b", Kind: types.KindProject, Label: "pkg/b"})
+	for _, name := range []string{"build", "test"} {
+		id := "target:pkg/a:" + name
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindTarget, Label: name})
+		g.AddEdge(types.KnowledgeEdge{Source: "project:pkg/a", Target: id, Relation: types.RelationContains, Confidence: types.ConfidenceExtracted, Score: 1})
+	}
+	g.AddNode(types.KnowledgeNode{ID: graphSymbol, Kind: types.KindSymbol, Label: "Foo"})
+	for _, f := range []string{"a", "b", "c"} {
+		g.AddEdge(types.KnowledgeEdge{
+			Source: "file:pkg/" + f + ".go", Target: graphSymbol,
+			Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1,
+			Provenance: "scip count=1 lines=3",
+		})
+	}
+	return types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+}
+
+func TestGraphMembersAreServedInProcess(t *testing.T) {
+	t.Parallel()
+	ctx := graphContext(t)
+
+	q, err := MagusQuery(ctx, "kind=target", map[string]any{"limit": int64(1)})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), q["match_count"], "the total survives the window, as an int rather than a double")
+	assert.Len(t, q["matches"], 1)
+	assert.Equal(t, string(types.VerdictFound), q["answer"].(map[string]any)["verdict"])
+
+	x, err := MagusExplain(ctx, "target:pkg/a:build", "")
+	require.NoError(t, err)
+	assert.Equal(t, "target:pkg/a:build", x["node"].(map[string]any)["id"])
+
+	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test")
+	require.NoError(t, err)
+	assert.Equal(t, true, p["found"])
+	viaExplain, err := MagusExplain(ctx, "target:pkg/a:build", "target:pkg/a:test")
+	require.NoError(t, err)
+	assert.Equal(t, p, viaExplain, "explain with to is the path member's answer")
+
+	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b")
+	require.NoError(t, err, "a resolved pair with no connection is an answer")
+	assert.Equal(t, false, unlinked["found"])
+
+	s, err := MagusStats(ctx, "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), s["node_count"])
+}
+
+func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
+	t.Parallel()
+	ctx := graphContext(t)
+
+	_, err := MagusExplain(ctx, "target:pkg/z:nope", "")
+	require.Error(t, err)
+	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope")
+	require.Error(t, err)
+	_, err = MagusQuery(ctx, " ", nil)
+	require.Error(t, err)
+}
+
+func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
+	t.Parallel()
+	ctx := graphContext(t)
+
+	r, err := MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(1), "limit": int64(1)})
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), r["file_count"])
+	assert.Equal(t, []any{map[string]any{"file": "pkg/b.go", "count": int64(1), "lines": []any{int64(3)}}}, r["refs"])
+
+	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", nil)
+	require.NoError(t, err, "a symbol nothing defines is an answer, not a raise")
+	assert.Equal(t, string(types.VerdictAbsent), absent["answer"].(map[string]any)["verdict"])
+}
+
+// A mistyped option would otherwise answer a different question than the one asked.
+func TestGraphOptionsAreStrict(t *testing.T) {
+	t.Parallel()
+	ctx := graphContext(t)
+
+	_, err := MagusQuery(ctx, "kind=target", map[string]any{"limt": int64(5)})
+	require.ErrorContains(t, err, `unknown option "limt"`)
+	_, err = MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(-1)})
+	require.ErrorContains(t, err, "must not be negative")
+	_, err = MagusQuery(ctx, "kind=target", map[string]any{"budget": "10"})
+	require.ErrorContains(t, err, "must be a number")
+}
+
+func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	calls := map[string]func() error{
+		"query":          func() error { _, err := MagusQuery(ctx, "x", nil); return err },
+		"explain":        func() error { _, err := MagusExplain(ctx, "x", ""); return err },
+		"path":           func() error { _, err := MagusPath(ctx, "x", "y"); return err },
+		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
+		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
+		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
+		"memory.list":    func() error { _, err := MagusListMemory(ctx); return err },
+		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
+	}
+	for member, call := range calls {
+		assert.ErrorIsf(t, call(), types.MagusfileOnlyMember, "magus\\%s", member)
+	}
+}
+
+func TestOutputReadsTheCheckoutsStore(t *testing.T) {
+	t.Parallel()
+	ctx := graphContext(t)
+	cacheDir := types.WorkspaceFromContext(ctx).(workspaceCacheDir).CacheDir()
+
+	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("ab", 32),
+		[]byte("ok\n"), cache.OutputDescriptor{Project: "pkg/a", Target: "build", DurationMs: 7})
+	require.NoError(t, err)
+
+	got, err := MagusOutput(ctx, desc.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{
+		"ref": desc.Ref, "project": "pkg/a", "target": "build",
+		"failed": false, "duration_ms": int64(7), "output": "ok\n",
+	}, got)
+
+	_, err = MagusOutput(ctx, "build")
+	require.ErrorContains(t, err, "not an output ref")
+	_, err = MagusOutput(ctx, "out0000000000")
+	require.ErrorContains(t, err, "no stored output")
+}
+
+// Not parallel: the memory store lives under the per-repository state directory, and
+// the environment is the only thing keeping these entries out of the developer's own.
+func TestMemoryMembersRoundTrip(t *testing.T) {
+	testkit.Isolate(t)
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+
+	_, err := MagusPutMemory(ctx, "use-buzz", map[string]any{
+		"type": "decision", "body": "compose in Buzz", "refs": []any{"doc: docs/doctrine.md"},
+	})
+	require.NoError(t, err)
+
+	stored, err := MagusPutMemory(ctx, "use-buzz", map[string]any{"status": "accepted"})
+	require.NoError(t, err)
+	assert.Equal(t, "compose in Buzz", stored["body"], "a key opts omits is kept")
+	assert.Equal(t, "accepted", stored["status"])
+
+	got, err := MagusGetMemory(ctx, "use-buzz")
+	require.NoError(t, err)
+	assert.Equal(t, stored, got)
+
+	listed, err := MagusListMemory(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"records": []any{stored}, "issues": []any{}}, listed)
+
+	verified, err := MagusVerifyMemory(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"records": int64(1), "issues": []any{}}, verified)
+
+	require.NoError(t, MagusDeleteMemory(ctx, "use-buzz"))
+	require.NoError(t, MagusDeleteMemory(ctx, "use-buzz"), "deleting twice converges")
+	_, err = MagusGetMemory(ctx, "use-buzz")
+	require.ErrorContains(t, err, `no entry named "use-buzz"`)
+}
+
+func TestMemoryPutRefusesWhatItWouldDrop(t *testing.T) {
+	testkit.Isolate(t)
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+
+	_, err := MagusPutMemory(ctx, "x", map[string]any{"stauts": "done"})
+	require.ErrorContains(t, err, `unknown option "stauts"`)
+	_, err = MagusPutMemory(ctx, "absent", map[string]any{"status": "done", "allow_missing": false})
+	require.ErrorContains(t, err, `no entry named "absent"`)
+	_, err = MagusPutMemory(ctx, "x", map[string]any{"refs": "doc: a.md"})
+	require.ErrorContains(t, err, "must be a list of strings")
+}
+
+// fakeCheckoutWorkspace is a workspace rooted at this package's own checkout.
+type fakeCheckoutWorkspace struct {
+	types.WorkspaceRepository
+}
+
+func (fakeCheckoutWorkspace) Root() string                 { return "." }
+func (fakeCheckoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+
+// The member and `magus vcs checkpoint` resolve the same tree the same way, so the two
+// cannot describe it differently.
+func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
+	t.Parallel()
+	ctx := types.WithWorkspace(t.Context(), fakeCheckoutWorkspace{})
+
+	got, gotErr := MagusVCSCheckpoint(ctx)
+
+	res, err := vcs.Resolve(ctx, ".", "", types.VCSOptions{})
+	require.NoError(t, err)
+	want, wantErr := vcs.Checkpoint(ctx, ".", res, false)
+	assert.Equal(t, want, got)
+	assert.Equal(t, wantErr, gotErr)
 }

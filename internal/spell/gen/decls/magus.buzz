@@ -821,16 +821,22 @@ export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
+export extern fun explain(node: str, to: str = "") > {str: any} !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
 export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun output(ref: str) > {str: any} !> any;
+export extern fun path(node: str, to: str) > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun projects() > Projects !> any;
 export extern fun pry() > void;
+export extern fun query(query: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
+export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
+export extern fun stats(kind: str = "") > {str: any} !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
@@ -897,5 +903,19 @@ export object job {
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
+}
+
+// The per-repository memory: named decisions, plans, pointers and ruled-out hypotheses, kept outside the checkout so every worktree of one repository reads the same entries. The same store `magus memory`, the magus_memory MCP tool and the console read. Records are the snake_case JSON `magus memory -o json` prints. Read straight off the workspace on the context; raises MGS1022 outside one. Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\job is.
+export object memory {
+    static extern fun delete(name: str) > void !> any;
+    static extern fun get(name: str) > {str: any} !> any;
+    static extern fun list() > {str: any} !> any;
+    static extern fun put(name: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
+    static extern fun verify() > {str: any} !> any;
+}
+
+// Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
+export object vcs {
+    static extern fun checkpoint() > VCSCheckpoint !> any;
 }
 
