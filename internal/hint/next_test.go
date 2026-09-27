@@ -250,6 +250,29 @@ func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
 	}
 }
 
+// TestNextForDenyRemedyServesTheArgvItWasGiven pins the id the uptake count keys on, and
+// that the argv is served as the rule computed it.
+func TestNextForDenyRemedyServesTheArgvItWasGiven(t *testing.T) {
+	argv := []string{"./magus", "ls", "jobs", "-o", "template={{len .jobs}}"}
+	n := NextForDenyRemedy("output-pipe", argv, "why")
+	assert.Equal(t, Next{
+		ID: "deny-output-pipe", Run: `./magus ls jobs -o "template={{len .jobs}}"`,
+		Argv: argv, Why: "why",
+	}, n)
+	argv[0] = "changed"
+	assert.Equal(t, "./magus", n.Argv[0], "the argv is copied, not aliased")
+}
+
+// TestServableToGradesVcsAddByItsPaths extends the worker's write-path rule to the one
+// write whose operands are paths: staging inside the write paths is the worker's own.
+func TestServableToGradesVcsAddByItsPaths(t *testing.T) {
+	inside := NextForDenyRemedy("stage-all", VCSAdd.Argv("internal/hint/next.go"), "why")
+	whole := NextForDenyRemedy("stage-all", VCSAdd.Argv(), "why")
+	assert.Equal(t, []Next{inside}, ServableTo(RoleWorker, []string{"internal/hint/**"}, []Next{inside, whole}))
+	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []Next{inside}))
+	assert.Nil(t, ServableTo(RoleReviewer, []string{"internal/hint/**"}, []Next{inside}))
+}
+
 // A bare `magus run` writes wherever the workspace declares default charms, so the
 // charm token is not what decides it; `affected` reads unless it is asked to run.
 func TestMutatesTreeJudgesTheCommand(t *testing.T) {

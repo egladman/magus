@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -42,25 +43,34 @@ func denyMarker(rule string) hint.MarkerKind {
 //
 // Every failure speaks in full. A repeat that cannot store the verdict it points at would
 // cite a ref that resolves to nothing, and a long reason beats a dead end.
-func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string) (shown, ref string) {
+//
+// remedy is the rule's own next, already graded for the acting lease. It is served on
+// every firing, the first included, since the command is what a reader acts on; it is
+// returned as served, and nil for a rule with no page, whose reason stays untouched.
+func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string, remedy []hint.Next) (shown, ref string, served []hint.Next) {
 	doc, ok := Rule(rule)
 	if !ok || doc.Decision != "deny" {
-		return reason, ""
+		return reason, "", nil
 	}
 	see := "\nsee: " + ruleDocsBase + rule + "/"
+	block := strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n")
 	full := reason
 	if note != "" && !strings.Contains(full, note) {
 		full += note
 	}
-	full += see
+	full += block + see
 	if !markers.MarkFired(denyMarker(rule)) {
-		return full, ""
+		hint.AppendServedNext(markers.CacheDir(), remedy)
+		return full, "", remedy
 	}
 	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
 	if ref == "" {
-		return full, ""
+		hint.AppendServedNext(markers.CacheDir(), remedy)
+		return full, "", remedy
 	}
 	next := hint.NextForDenial(ref)
-	hint.AppendServedNext(markers.CacheDir(), []hint.Next{next})
-	return "denied again [" + rule + "]: " + doc.Catches + note + "\nfull verdict: " + next.Run + see, ref
+	hint.AppendServedNext(markers.CacheDir(), append(slices.Clone(remedy), next))
+	// The remedy's why was spent on the first firing, so a repeat shows its command alone.
+	brief := strings.TrimSuffix(hint.Render(remedy, func(hint.Next) string { return "" }), "\n")
+	return "denied again [" + rule + "]: " + doc.Catches + note + brief + "\nfull verdict: " + next.Run + see, ref, remedy
 }

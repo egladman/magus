@@ -130,8 +130,24 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, routes 
 	v := ShellVerdict{Deny: denySymbolSearch(routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
 	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
 		v.Deny += "\n" + answerBlock("Its answer", answer) + pipeNote(piped)
+		// The answer is already in the deny, and a lead would drop it.
+		return v
 	}
-	return v
+	return v.withRemedy(routeClause(routes)+" this exactly, checked against the tree rather than matched against it.", routeNexts(routes)...)
+}
+
+// routeNexts serves each route as a remedy, or none when one of them cannot be.
+func routeNexts(routes []searchRoute) []hint.Next {
+	next := make([]hint.Next, 0, len(routes))
+	for _, r := range routes {
+		argv := servedArgv(r.run)
+		if len(argv) == 0 {
+			return nil
+		}
+		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv,
+			"the index holds every definition and use, generated and cross-language ones included."))
+	}
+	return next
 }
 
 func isDiagnosticRoute(r searchRoute) bool {
