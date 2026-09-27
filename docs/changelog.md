@@ -55,6 +55,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   remote; a remote hit is verified and promoted into the local tier; a build is stored in
   both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
   unset, it is written when a signing key is held; `true` makes remote writes required.
+- **`types.CheckoutReporter`**, a VCS driver capability that lists a
+  repository's registered checkouts with their revision and lock, and names the
+  revisions no remote-tracking ref or base reaches. git implements it.
 - **`magus queue gate` runs a command in the box `queue validate` gives a candidate.** It
   checks HEAD out with a private home and temporary directory under the hook sandbox.
   `--cache` keeps the local tier outside the box; `--env` passes named variables to the
@@ -315,10 +318,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **A run that may write the remote tier backfills it.** A local hit whose key the remote
   tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
   contract gains that optional function.
-- **Signed Go toolchain bundles.** `magus config cache export --toolchain go --remote`
-  signs `GOCACHE` and `GOMODCACHE` into the remote tier; `import --toolchain go
-  --remote` restores the newest bundle that verifies against the trust set, so a
-  magus miss recompiles only what changed. An unverified bundle is refused.
+- **Signed spell caches.** A spell's sandbox declaration names which locations
+  are caches, e.g. the go spell's `GOCACHE`/`GOMODCACHE`. `magus config cache
+  export --remote` signs each spell's caches into the remote tier, keeping only
+  the entries a run used; `import --remote` restores the newest bundle that
+  verifies against the trust set. An unverified bundle is refused.
+- **`magus queue gate --cache` keeps the spells' caches beside the local tier**, each in
+  the mode its spell grants it, so a restore and a save in boxes of the same `--cache`
+  reach what the gate built with. `validate` keeps them in the candidate's box.
 - **A spawn rule sees its continue target's facts and the job store.** `target` carries
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
@@ -540,6 +547,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and a write of such a file, get the busy-wait, scripted-rewrite, cd, output-pipe,
   output-redirect, capture-filter and unknown-env verdicts the script's lines would get
   typed inline. The refusal says the script was read.
+- **The guard judges `git worktree remove` instead of refusing every one.** It
+  passes a clean, unlocked worktree other than the session's own, with no live
+  job taken there and every commit reachable from a remote-tracking ref, the
+  base, or a finished job's filed result. Otherwise the refusal names the
+  failed condition; `--force` changes nothing. `jj workspace forget` stays
+  refused.
 - **The owned-path lease advisory speaks once per session per lease (`leased-path`).** It
   repeated on every write into a running lease's paths, 52% of all advisories served in one
   audit.
@@ -574,6 +587,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   declaration, which an older magus would match against no file and stop grading, so it
   refuses these rows instead. Records sent to `magus job fork --stdin` and `magus_job`
   carry 11. A magus that writes 10, which ends dead jobs, refuses them too.
+- **An older magus reads a job store a newer one wrote.** A newer row no longer locks
+  older binaries out of the store: its unknown fields and version survive a rewrite, and
+  only a row requiring something this build lacks turns read-only, named in `magus ls
+  jobs`. Adding a field no longer bumps the schema version.
 - **The job store refuses a write to another holder's row.** A leased session may record
   its base, shrink its own `write_paths`, end its own row, and fork inside its paths.
   `clear` archives what it drops.
@@ -586,10 +603,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   or nobody took it within `jobs.stale_after` (default 2h, `0` never). Older magus
   binaries refuse the store once this one writes it: restart the daemon and rebuild
   `./magus` after upgrading.
-- **A lease binding that does not read is an error.** A marker holding anything but a lease
-  id no longer reads as unbound: the guard denies with the path, the CLI commands that
-  resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
-  command and help through, so an agent can recover.
 - **Repository file conventions run as `lint-files`.** The checks on lockfiles, workflows,
   magusfiles, hook configs, skill declarations and the landing rotator moved out of a Go
   test into Buzz rules under `tools/lint/`, which the root `lint` target runs. Each
@@ -637,6 +650,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   itself after a minute. A success it cannot follow through goes back to `pending`.
   Breaking for providers: `list_green` is required, and `merge_change` reports
   `by_provider`, which `merged` events carry.
+- **MGS1040 reads as a list.** Each unknown `magus.yaml` key prints once, by its dotted
+  path, with every line it appears on and any suggestion. The version gap is stated once, followed by the fixes
+  as commands, including the `go build` bootstrap for a dev build in a magus checkout.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **`-o jsonl` runs emit only records.** Headers, progress, summaries, race diagnostics
@@ -644,6 +660,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   log lines and output printed outside a target are `run.notice` records on stderr.
   `magus x`, `affected --stdin` and `--detach` (`run.detach`) do the same. No record is
   dropped; the schema is now 5.
+- **An older magus refuses to replace what a newer one wrote.** Managed hook and
+  `.gitattributes` sections, the merge driver registration, the config and installed skills
+  record their writer; an older writer stops, naming both builds and the fix. `magus init`
+  writes a config holding no keys instead of every default.
 - **Per-session guard state is keyed per host.** Facts a rule reads, such as skill loads
   and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
   key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
@@ -764,6 +784,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **The `code-search` and `doc-search` guard advisories.** Measured uptake was 0.9% over
   6,075 servings and 2.5% over 812. A search the graph answers exactly is still refused by
   `symbol-search`, and a one-name precedent hunt still advises.
+- **Breaking: `magus job exec --session` and `--vacate`.** The guard now binds whoever
+  runs `magus job exec`, keyed on the host's session and subagent ids, so a subagent's
+  exec never binds its parent. Exec records only the base and checkout. After an exited
+  or ended job, the next exec takes a new one.
 - **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
   Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
@@ -782,6 +806,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
   `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
   headers through it, pass it with `WithSink` and close it after the run.
+- **`magus config cache export --toolchain` and `--used-within`, and `import
+  --toolchain`.** `--remote` carries every cache the workspace's spells declare, and a
+  save keeps only what was used since the last restore, with no flag to say so.
 - **The `stale-binary` advisory and the `go -C` deny into another checkout of magus.**
   Both judged only magus's own repository, which now keeps them in its guard policy.
 
@@ -1029,16 +1056,16 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `<parent>/<role> <job>` now binds the child's agent id beside the job store, so its
   hooks resolve the lease from any checkout, and its first call records that checkout's
   base. A title's `<job>` also matches `<parent>/<job>`.
+- **`config cache` verbs reach a spell-backed remote tier.** `export` and `import
+  --remote`, `prune --remote`, and `query output` publishing and remote lookup now carry
+  the workspace's secret resolver, so a backend spell that reads its token through
+  `magus\secret` no longer fails with "no secret resolver on this run".
 - **A step waiting on an upstream target no longer masks a stall.** Only a moving step
   beats the heartbeat; MGS3013 and MGS3012 still catch a wedge.
 - **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
   command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
   an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
   the long forms its matcher already covered.
-- **`config cache` verbs reach a spell-backed remote tier.** `export` and `import
-  --toolchain go --remote`, `prune --remote`, and `query output` publishing and remote
-  lookup now carry the workspace's secret resolver, so a backend spell that reads its
-  token through `magus\secret` no longer fails with "no secret resolver on this run".
 - **The unchanged-inputs hint no longer reads as a verdict.** It prints before the
   target runs, so it now says the target runs again, and it names the failed attempt
   rather than the step ref, which moved to the new run's result once that run landed.
