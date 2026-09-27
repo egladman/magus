@@ -313,6 +313,19 @@ func TestFailureExcerptKeepsTheCapturedOutputPathWhole(t *testing.T) {
 	assert.True(t, strings.HasSuffix(got, path), "path was cut: %s", got)
 }
 
+// A path long enough to fill the whole budget by itself still leaves the prose whole.
+func TestFailureExcerptKeepsTheProseBesideALongPath(t *testing.T) {
+	t.Parallel()
+	prose := `[MGS3011] target "slow" exceeded its declared timeout of 2s after 2.0s; its process tree was killed; `
+	path := "/" + strings.Repeat("d", 300) + "/.magus/logs/6122356f3c90df4ef0902d643a644a09cdd5e0e4fe048990d0e773779180edda.log"
+	cause := prose + failureCauseExcerptLogMarker + path
+	assert.Equal(t, cause, failureCauseExcerpt(cause))
+
+	long := strings.Repeat("x", 300) + " "
+	assert.Equal(t, strings.Repeat("x", 237)+"..."+failureCauseExcerptLogMarker+path,
+		failureCauseExcerpt(long+failureCauseExcerptLogMarker+path))
+}
+
 // TestReproTarget verifies the target token the repro line uses: the bare name, or
 // name:charm1,charm2 when charms are active (the `magus run` charm-suffix syntax).
 func TestReproTarget(t *testing.T) {

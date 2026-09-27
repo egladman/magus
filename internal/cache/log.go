@@ -1125,15 +1125,22 @@ func failureCauseExcerpt(cause string) string {
 	if len([]rune(cause)) <= maxRunes {
 		return cause
 	}
-	// A long TMPDIR can push the log path past the budget on its own; trimming the
-	// prose in front of it, rather than the path itself, keeps the path openable.
+	// The path is outside the budget: cut, it cannot be opened, and a long TMPDIR
+	// makes it long enough on its own to leave no room for the prose that says what
+	// failed.
 	if i := strings.LastIndex(cause, failureCauseExcerptLogMarker); i >= 0 {
-		prose := []rune(cause[:i])
-		rest := cause[i:] // marker plus the untouched path
-		budget := min(max(maxRunes-len([]rune(rest))-3, 0), len(prose))
-		return string(prose[:budget]) + "..." + rest
+		return truncateRunes(cause[:i], maxRunes) + cause[i:]
 	}
-	return string([]rune(cause)[:maxRunes-3]) + "..."
+	return truncateRunes(cause, maxRunes)
+}
+
+// truncateRunes cuts s to at most n runes, ending in "..." when it cut anything.
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-3]) + "..."
 }
 
 // hopChain rewrites a cause's dependency hops as a path and drops the plumbing
