@@ -579,6 +579,10 @@ func (c *Cache) RestoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 	return c.restoreSpellCache(ctx, key, roots, time.Now())
 }
 
+// errSpellCacheUnreachable ends a restore as a cold build: the store failed to answer
+// a fetch, so no older key is worth waiting on either.
+var errSpellCacheUnreachable = errors.New("cache: spell cache store unreachable")
+
 func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots []SpellCacheRoot, now time.Time) (SpellCacheResult, error) {
 	if c.remote == nil {
 		return SpellCacheResult{}, errors.New("cache: no remote backend configured")
@@ -595,12 +599,22 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 	tried := map[string]struct{}{}
 	try := func(want spellCacheWant) (bool, error) {
 		tried[want.name] = struct{}{}
+		start := time.Now()
 		rc, err := c.remote.backend.GetArtifact(ctx, spellCacheNamespace, want.name)
 		if errors.Is(err, ErrRemoteMiss) {
 			return false, nil
 		}
 		if err != nil {
-			return false, err
+			if ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			// The store did not answer this request, the way remoteTier.fail treats an
+			// artifact fetch: the build runs cold rather than red. Nothing was read, so it
+			// is no verification refusal, and misconfiguration was refused above.
+			c.log.WarnContext(ctx, "cache.spell_cache.unreachable",
+				slog.String("backend", c.remote.backend.Name()), slog.String("key", want.name),
+				slog.Duration("elapsed", time.Since(start)), slog.String("error", err.Error()))
+			return false, errSpellCacheUnreachable
 		}
 		defer rc.Close()
 		counted := &CountingReader{Reader: rc}
@@ -615,6 +629,10 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 	}
 	for i := range spellCacheLookback {
 		ok, err := try(spellCacheWant{key: key, name: key.remoteKey(now.AddDate(0, 0, -i))})
+		if errors.Is(err, errSpellCacheUnreachable) {
+			// Every older key would wait out the same timeout against the same store.
+			return res, nil
+		}
 		if ok || err != nil {
 			return res, err
 		}
@@ -644,6 +662,9 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 			continue
 		}
 		ok, err := try(spellCacheWant{key: key, name: ptr.Key, anyLocks: true})
+		if errors.Is(err, errSpellCacheUnreachable) {
+			return res, nil
+		}
 		if ok || err != nil {
 			return res, err
 		}

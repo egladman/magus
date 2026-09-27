@@ -95,6 +95,11 @@ final CACHE_VERSION = crypto\sha256Hex(CACHE_SALT);
 // Twirp service path; methods hang off this under ACTIONS_RESULTS_URL.
 final SERVICE = "twirp/github.actions.results.api.v1.CacheService/";
 
+// BLOB_TIMEOUT_SECS bounds a blob download end to end (curl --max-time, not an idle
+// timeout; http has none). A spell cache bundle has run past a gigabyte, which the
+// 30s default sized for an API call cut off mid-transfer; the Twirp calls keep it.
+final BLOB_TIMEOUT_SECS = 300;
+
 fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.
 //
@@ -185,7 +190,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     final loc = download_url("{io["hash"]}");
     if (loc == "") { return false; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    final dcode = http\download(loc, "{io["dest"]}", {});
+    final dcode = http\download(loc, "{io["dest"]}", {"timeout": BLOB_TIMEOUT_SECS});
     if (dcode != 200) {
         cache_fail("blob GET", "status {dcode}");
     }
