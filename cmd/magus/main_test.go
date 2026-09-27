@@ -423,7 +423,7 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 	want := "Usage: magus agent <install|harness|starter|adoption> [flags] Subcommands: " +
 		"install render the embedded skills and write or stream them into named destinations " +
 		"(<skills-dir>, ...) " +
-		"harness apply or verify a user-owned harness descriptor in this workspace " +
+		"harness install skills for, or verify, a harness wired in the magusfile " +
 		"starter print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
 		"adoption report how often agents used the graph versus grep, over shell commands piped in (stdin or --commands) " +
 		"magus never writes your AGENTS.md. That file is yours, and an installer that edits a file you own " +

@@ -18,7 +18,7 @@ import (
 //	magus\harness.provider(cursor);
 //
 // The spell exports harness_config / harness_skills / harness_entries; Magus
-// invokes them by name on apply/verify. A workspace may use several harnesses.
+// invokes them by name on describe/verify. A workspace may use several harnesses.
 func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	harness := vm.NewMap()
 	harness.MapSet("provider", directVal(obs, "magus.harness.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {

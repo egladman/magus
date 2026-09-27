@@ -40,7 +40,7 @@
 # The defaults are Claude Code's event and response shape.
 #
 # REQUIRED argument: `--agent-name <host>`, the host this entry is wired into, which the
-# configuration `magus agent harness apply` writes on the command
+# configuration `magus describe harness` prints puts on the command
 # (`sh magus-command.sh --agent-name codex`). It is the only place this file learns the
 # host, and without it `magus shell` refuses the call (MGS3024).
 #
@@ -225,7 +225,7 @@ codex_cannot_prompt() {
     fi
     rules_dir=${rules_dir%/*}
   done
-  printf 'no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes'
+  printf 'no .codex/rules/magus.rules carries the prompt rule for this push, which magus describe harness codex prints'
 }
 
 # Codex is the host the entry names, never one the event's shape suggests.

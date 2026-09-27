@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,7 +52,7 @@ var (
 	magusGuardInvocation = regexp.MustCompile(`(?:^|[^\w.-])magus(?:\s+|$)[^;\n]*\b(?:shell|session)\b`)
 )
 
-// HarnessDescriptor is a user-owned collaborator contract. Magus merges the
+// HarnessDescriptor is a user-owned collaborator contract. Magus prints the
 // opaque config fragments a descriptor declares; it does not inject a command
 // or a reply codec. Transport lives in host-native glue (shipped scripts or a
 // plugin) that already names magus shell. Optional MCP client wiring is a
@@ -76,9 +77,9 @@ type HarnessDisplay struct {
 	Icon  string `json:"icon,omitempty"`
 }
 
-// HarnessConfig identifies the workspace-local JSON document maintained by a
-// descriptor. Path must be relative to the workspace when set. Empty Path is
-// skills-only: apply has nothing to write, and verify does not claim guard
+// HarnessConfig identifies the workspace-local JSON document a descriptor's
+// fragments merge into. Path must be relative to the workspace when set. Empty Path
+// is skills-only: there is nothing to merge, and verify does not claim guard
 // coverage from a missing config.
 type HarnessConfig struct {
 	Path string `json:"path"`
@@ -97,41 +98,57 @@ type HarnessEntries struct {
 	Entries []map[string]any `json:"entries"`
 }
 
-// HarnessUpdate records an explicit, narrow harness mutation.
-type HarnessUpdate struct {
-	ID      string `json:"id"`
-	Path    string `json:"path"`
-	Changed bool   `json:"changed"`
-	Planned bool   `json:"planned,omitempty"`
+// HarnessPlan is what a host needs merged for one descriptor, computed against the files on
+// disk. Magus prints it and never writes it: the person runs Merge.
+type HarnessPlan struct {
+	ID string `json:"id"`
+	// Files is keyed by workspace-relative path and holds only the files missing something.
+	Files map[string]HarnessFile `json:"files,omitempty"`
+	// Merge is one POSIX shell command that brings every file in Files current, empty when
+	// none is missing anything. It reads this plan back through `magus describe harness
+	// <id> -o json` and needs jq.
+	Merge   string `json:"merge,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
-	// Removed marks this update as RemoveHarness's inverse of apply, so a renderer
-	// can print "removed"/"would remove" instead of "updated"/"would update"
-	// without a second, near-identical struct.
-	Removed bool `json:"removed,omitempty"`
-	// Prompts are the files outside Path whose host-native approval prompt this call wrote,
-	// removed, or would have.
-	Prompts []string `json:"prompts,omitempty"`
 }
 
-// HarnessRemoveOptions is RemoveHarness's sole input, mirroring
-// HarnessApplyOptions: root, which descriptor, whether to only plan, and the
-// acting lease authority a bound job cannot claim.
-type HarnessRemoveOptions struct {
-	Root        string
-	ID          string
-	DryRun      bool
-	ActingLease string
+// Current reports whether every host file already carries what the descriptor declares.
+func (p HarnessPlan) Current() bool { return len(p.Files) == 0 }
+
+// HarnessFile is what one host file needs: Fragment merged into the JSON document with jq's
+// `*` (objects merge key by key, any other value replaces the one on disk), or Content as the
+// whole file. A managed array appears in Fragment whole, with the entries a person added kept
+// in place, so replacing the array on disk is exactly the merge.
+type HarnessFile struct {
+	Exists   bool            `json:"exists"`
+	Fragment map[string]any  `json:"fragment,omitempty"`
+	Content  string          `json:"content,omitempty"`
+	Changes  []HarnessChange `json:"changes"`
 }
 
-// HarnessApplyOptions contains the sole authority needed to mutate a harness.
-// ActingLease must come from trusted command ingress, never a late environment
-// read in a nested process.
-type HarnessApplyOptions struct {
-	Root        string
-	ID          string
-	DryRun      bool
-	ActingLease string
+// HarnessChange is one thing merging a HarnessFile changes.
+type HarnessChange struct {
+	Op    HarnessChangeOp `json:"op"`
+	Key   string          `json:"key,omitempty"`
+	Value any             `json:"value,omitempty"`
 }
+
+// HarnessChangeOp names what a HarnessChange does to its key.
+type HarnessChangeOp string
+
+const (
+	// HarnessAdd appends an entry the managed array lacks.
+	HarnessAdd HarnessChangeOp = "add"
+	// HarnessReplace swaps an entry with the same matcher and commands for the declared one,
+	// so an edited timeout does not leave a second copy of the hook.
+	HarnessReplace HarnessChangeOp = "replace"
+	// HarnessRetire drops an entry that runs a shipped template the descriptor no longer
+	// declares, so an upgraded hook is not judged twice.
+	HarnessRetire HarnessChangeOp = "retire"
+	// HarnessSet sets a key the file does not hold yet.
+	HarnessSet HarnessChangeOp = "set"
+	// HarnessWrite writes the whole file.
+	HarnessWrite HarnessChangeOp = "write"
+)
 
 // HarnessVerification makes coverage gaps explicit. A missing or invalid
 // descriptor is not coverage; neither is a configuration that merely contains
@@ -311,261 +328,170 @@ func isSafeRelativePath(path string) bool {
 	return clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
 }
 
-// ApplyHarness atomically merges the descriptor-declared opaque fragments.
-// User entries that are not an exact match remain untouched beside them.
-// When the spell declares MCP setup guidance, apply records a hint for the
-// CLI to print. Magus never writes host MCP client config and never resolves
-// the MCP secret ref.
-func ApplyHarness(ctx context.Context, opts HarnessApplyOptions) (HarnessUpdate, error) {
+// PlanHarness computes what the host files under root need for descriptor id to be current,
+// and writes nothing. Entries a person added beside the managed ones stay in the plan's
+// fragments where they are. An existing config that is not JSON, a prompt key someone set to
+// another value, and a config that names no magus command are errors. MCP setup guidance is
+// carried as a hint only: magus never plans host MCP client config and never resolves its
+// secret ref.
+func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
 	if err := ctx.Err(); err != nil {
-		return HarnessUpdate{}, err
+		return HarnessPlan{}, err
 	}
-	if opts.Root == "" {
-		return HarnessUpdate{}, fmt.Errorf("workspace root is required")
+	if root == "" {
+		return HarnessPlan{}, fmt.Errorf("workspace root is required")
 	}
-	if opts.ActingLease != "" {
-		return HarnessUpdate{}, fmt.Errorf("a bound job (%s) cannot rewire a host harness; have its unbound orchestrator run the explicit apply", opts.ActingLease)
-	}
-	d, _, err := LoadHarness(ctx, opts.Root, opts.ID)
+	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
-		return HarnessUpdate{}, err
+		return HarnessPlan{}, err
 	}
-	update := HarnessUpdate{ID: d.ID}
-
+	plan := HarnessPlan{ID: d.ID}
 	if d.Config.Path != "" {
-		path, err := harnessConfigPath(opts.Root, d.Config.Path)
+		file, err := planHarnessConfig(root, d)
 		if err != nil {
-			return HarnessUpdate{}, err
+			return plan, err
 		}
-		update.Path = path
-		config := map[string]any{}
-		existing := false
-		if body, err := os.ReadFile(path); err == nil {
-			existing = true
-			if err := decodeHarnessJSON(body, &config); err != nil {
-				return update, fmt.Errorf("parse existing JSON: %w", err)
-			}
-		} else if !os.IsNotExist(err) {
-			return update, fmt.Errorf("agent: read harness config %s: %w", path, err)
+		if err := plan.addFile(d.Config.Path, file); err != nil {
+			return plan, err
 		}
-		changed := false
-		for key, value := range d.ConfigDefaults {
-			if _, present := config[key]; present {
-				continue
-			}
-			config[key] = value
-			changed = true
-		}
-		managedChanged, err := ensureManagedEntries(config, d.ManagedEntries)
+	}
+	for _, p := range d.Prompts {
+		file, err := planHarnessPrompt(root, p)
 		if err != nil {
-			return update, err
+			return plan, err
 		}
-		changed = changed || managedChanged
-		if changed {
-			if opts.DryRun {
-				update.Changed = true
-				update.Planned = true
-			} else {
-				encoded, err := json.MarshalIndent(config, "", "  ")
-				if err != nil {
-					return update, fmt.Errorf("encode merged JSON: %w", err)
-				}
-				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-					return update, fmt.Errorf("agent: mkdir harness config dir: %w", err)
-				}
-				if _, err := harnessConfigPath(opts.Root, d.Config.Path); err != nil {
-					return update, err
-				}
-				if err := writeHarnessAtomically(path, append(encoded, '\n')); err != nil {
-					return update, fmt.Errorf("agent: write harness config %s: %w", path, err)
-				}
-				update.Changed = true
-			}
-		} else if !existing {
-			if len(d.ManagedEntries) > 0 || len(d.ConfigDefaults) > 0 {
-				return update, fmt.Errorf("descriptor %q declares no harness fragments to write", d.ID)
-			}
-		} else if !configInvokesMagus(config) {
-			// Naming a config path is the obligation, not declaring entries. A descriptor
-			// that contributes no fragment still claims this file is the host's guard
-			// wiring, and a config nothing in it calls magus from is coverage in name only.
-			return update, fmt.Errorf("config does not invoke magus")
+		if err := plan.addFile(p.Path, file); err != nil {
+			return plan, err
 		}
 	}
-
-	if err := applyHarnessPrompts(opts.Root, d, opts.DryRun, &update); err != nil {
-		return update, err
+	hint, err := harnessMCPHint(d)
+	if err != nil {
+		return plan, err
 	}
-	if err := applyHarnessMCP(d, &update); err != nil {
-		return update, err
-	}
-	return update, nil
+	plan.MCPHint = hint
+	plan.Merge = harnessMergeCommand(d.ID, plan.Files)
+	return plan, nil
 }
 
-// RemoveHarness is ApplyHarness's inverse: it deletes ONLY what apply would have
-// written for this descriptor (the exact managed entries, matched the same way
-// apply finds "this is our hook, just edited", by managed identity, not merely by
-// byte-exact value; and a config_defaults key still holding the value apply wrote),
-// and leaves everything else in the file untouched, including a user's own hooks
-// living beside them.
-//
-// There was no way to undo `harness apply` before this: a descriptor that wires a
-// broken guard command could lock an agent out of editing the very file that is
-// denying it, with no command to recover short of hand-editing host config from
-// outside the session. A flag on apply was considered and rejected: apply's whole
-// contract is "merge toward the descriptor," and inverting that with a flag risks
-// a person reading `apply --remove` as "apply, and also remove something" or
-// forgetting the flag when they meant to restore. A separate verb matches how
-// install/apply/verify already split by concern, and needs no new vocabulary:
-// remove is exactly apply's opposite, so it is named the same way subtract names
-// the opposite of add.
-//
-// This does not ask for confirmation: nothing else on this surface does, and a
-// session locked out by a broken hook needs a command it can run in one shot
-// without an interactive prompt the broken guard might block anyway. What it does
-// instead is print exactly what it removed (RemoveHarness's caller renders
-// HarnessUpdate the same way apply's is rendered, just with different verbs), and
-// it honors --dry-run so a caller can preview a removal before committing to it.
-// The file itself stays under version control or otherwise recoverable, which is
-// the actual safety net for "removed something a person did not mean to remove".
-func RemoveHarness(ctx context.Context, opts HarnessRemoveOptions) (HarnessUpdate, error) {
-	if err := ctx.Err(); err != nil {
-		return HarnessUpdate{}, err
-	}
-	if opts.Root == "" {
-		return HarnessUpdate{}, fmt.Errorf("workspace root is required")
-	}
-	if opts.ActingLease != "" {
-		return HarnessUpdate{}, fmt.Errorf("a bound job (%s) cannot rewire a host harness; have its unbound orchestrator run the explicit remove", opts.ActingLease)
-	}
-	d, _, err := LoadHarness(ctx, opts.Root, opts.ID)
+func planHarnessConfig(root string, d HarnessDescriptor) (HarnessFile, error) {
+	path, err := harnessConfigPath(root, d.Config.Path)
 	if err != nil {
-		return HarnessUpdate{}, err
+		return HarnessFile{}, err
 	}
-	update := HarnessUpdate{ID: d.ID, Removed: true}
-	if err := removeHarnessPrompts(opts.Root, d, opts.DryRun, &update); err != nil {
-		return update, err
-	}
-	if d.Config.Path == "" {
-		// Skills-only: apply never wrote a config fragment, so there is nothing here
-		// for remove to undo.
-		return update, nil
-	}
-	path, err := harnessConfigPath(opts.Root, d.Config.Path)
-	if err != nil {
-		return HarnessUpdate{}, err
-	}
-	update.Path = path
-	body, readErr := os.ReadFile(path)
-	if os.IsNotExist(readErr) {
-		return update, nil
-	}
-	if readErr != nil {
-		return update, fmt.Errorf("agent: read harness config %s: %w", path, readErr)
-	}
+	var file HarnessFile
 	config := map[string]any{}
-	if err := decodeHarnessJSON(body, &config); err != nil {
-		return update, fmt.Errorf("parse existing JSON: %w", err)
+	if body, err := os.ReadFile(path); err == nil {
+		file.Exists = true
+		if err := decodeHarnessJSON(body, &config); err != nil {
+			return file, fmt.Errorf("parse existing JSON: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return file, fmt.Errorf("agent: read harness config %s: %w", path, err)
 	}
-	entriesChanged, err := removeManagedEntries(config, d.ManagedEntries)
-	if err != nil {
-		return update, err
+	fragment := map[string]any{}
+	for _, key := range slices.Sorted(maps.Keys(d.ConfigDefaults)) {
+		if _, present := config[key]; present {
+			continue
+		}
+		fragment[key] = d.ConfigDefaults[key]
+		file.Changes = append(file.Changes, HarnessChange{Op: HarnessSet, Key: key, Value: d.ConfigDefaults[key]})
 	}
-	defaultsChanged := removeConfigDefaults(config, d.ConfigDefaults)
-	if !entriesChanged && !defaultsChanged {
-		return update, nil
+	for _, group := range d.ManagedEntries {
+		entries, changes, err := mergeManagedGroup(config, group)
+		if err != nil {
+			return file, err
+		}
+		if len(changes) == 0 {
+			continue
+		}
+		setDescriptorEntries(fragment, group.Path, entries)
+		file.Changes = append(file.Changes, changes...)
 	}
-	if opts.DryRun {
-		update.Changed = true
-		update.Planned = true
-		return update, nil
+	if len(file.Changes) > 0 {
+		file.Fragment = fragment
+		return file, nil
 	}
-	encoded, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return update, fmt.Errorf("encode merged JSON: %w", err)
+	if file.Exists && !configInvokesMagus(config) {
+		// Naming a config path is the obligation, not declaring entries. A descriptor
+		// that contributes no fragment still claims this file is the host's guard
+		// wiring, and a config nothing in it calls magus from is coverage in name only.
+		return file, fmt.Errorf("%s does not invoke magus", d.Config.Path)
 	}
-	if err := writeHarnessAtomically(path, append(encoded, '\n')); err != nil {
-		return update, fmt.Errorf("agent: write harness config %s: %w", path, err)
-	}
-	update.Changed = true
-	return update, nil
+	return file, nil
 }
 
-// removeManagedEntries deletes, from each group's array, any entry that is either
-// byte-identical to one of group.Entries or shares its managed identity (so an
-// entry a person hand-edited (a different timeout, an added statusMessage) is
-// still recognized as OURS and removed, exactly as ensureManagedEntries still
-// recognizes it as ours to replace). Anything else in the array is left in place:
-// remove's whole point is to undo this descriptor without undoing entries magus
-// never wrote.
-func removeManagedEntries(config map[string]any, groups []HarnessEntries) (bool, error) {
-	changed := false
-	for _, group := range groups {
-		entries, err := pathEntries(config, group.Path)
-		if err != nil {
-			return false, err
-		}
-		if len(entries) == 0 {
-			continue
-		}
-		kept := make([]any, 0, len(entries))
-		groupChanged := false
-		for _, raw := range entries {
-			entry, ok := raw.(map[string]any)
-			if !ok {
-				kept = append(kept, raw)
-				continue
-			}
-			ours := false
-			for _, wanted := range group.Entries {
-				exact, err := containsExactEntry([]any{raw}, wanted)
-				if err != nil {
-					return false, err
-				}
-				if exact || sameManagedIdentity(entry, wanted) {
-					ours = true
-					break
-				}
-			}
-			if ours {
-				groupChanged = true
-				continue
-			}
-			kept = append(kept, raw)
-		}
-		if groupChanged {
-			setDescriptorEntries(config, group.Path, kept)
-			changed = true
-		}
+// addFile records what path needs, folding it into what another source of the same
+// descriptor already asked of that file. A file needing nothing is left out.
+func (p *HarnessPlan) addFile(path string, file HarnessFile) error {
+	if len(file.Changes) == 0 {
+		return nil
 	}
-	return changed, nil
+	if p.Files == nil {
+		p.Files = map[string]HarnessFile{}
+	}
+	have, ok := p.Files[path]
+	if !ok {
+		p.Files[path] = file
+		return nil
+	}
+	if have.Content != "" || file.Content != "" {
+		return fmt.Errorf("%s: a descriptor may own a whole file or keys inside it, not both", path)
+	}
+	if have.Fragment == nil {
+		have.Fragment = map[string]any{}
+	}
+	mergeFragment(have.Fragment, file.Fragment)
+	have.Changes = append(have.Changes, file.Changes...)
+	p.Files[path] = have
+	return nil
 }
 
-// removeConfigDefaults deletes a config_defaults key only when the file still
-// holds exactly the value apply wrote. A key a person changed since is theirs
-// now, not magus's to touch.
-func removeConfigDefaults(config map[string]any, defaults map[string]any) bool {
-	changed := false
-	for key, want := range defaults {
-		got, present := config[key]
-		if !present {
-			continue
+// mergeFragment folds src into dst with the semantics of jq's `*`, so two fragments for one
+// file merge the way the printed command merges each into the file.
+func mergeFragment(dst, src map[string]any) {
+	for key, value := range src {
+		if sub, ok := value.(map[string]any); ok {
+			if have, ok := dst[key].(map[string]any); ok {
+				mergeFragment(have, sub)
+				continue
+			}
 		}
-		gotJSON, err := json.Marshal(got)
-		if err != nil {
-			continue
-		}
-		wantJSON, err := json.Marshal(want)
-		if err != nil {
-			continue
-		}
-		if !bytes.Equal(gotJSON, wantJSON) {
-			continue
-		}
-		delete(config, key)
-		changed = true
+		dst[key] = value
 	}
-	return changed
+}
+
+// harnessMergeCommand renders the one command a person runs to bring files current. Each
+// step reads the plan back from `magus describe harness`, so the command stays short enough
+// to read before running, and re-running it after a partial failure redoes only what is
+// still missing.
+func harnessMergeCommand(id string, files map[string]HarnessFile) string {
+	if len(files) == 0 {
+		return ""
+	}
+	read := "magus describe harness " + id + " -o json | jq"
+	steps := make([]string, 0, len(files))
+	for _, path := range slices.Sorted(maps.Keys(files)) {
+		file := files[path]
+		q := posixQuote(path)
+		mkdir := ""
+		if dir := filepath.Dir(path); dir != "." {
+			mkdir = "mkdir -p " + posixQuote(dir) + " && "
+		}
+		switch {
+		case file.Content != "":
+			steps = append(steps, mkdir+read+" -j --arg p "+q+" '.files[$p].content' > "+q)
+		case file.Exists:
+			next := posixQuote(path + ".new")
+			steps = append(steps, read+" --arg p "+q+" --slurpfile cur "+q+" '$cur[0] * .files[$p].fragment' > "+next+" && mv "+next+" "+q)
+		default:
+			steps = append(steps, mkdir+read+" --arg p "+q+" '.files[$p].fragment' > "+q)
+		}
+	}
+	return strings.Join(steps, " && ")
+}
+
+func posixQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // VerifyHarness validates both the descriptor and the concrete harness config.
@@ -697,50 +623,48 @@ func pathEntries(config map[string]any, path []string) ([]any, error) {
 	return nil, fmt.Errorf("empty path")
 }
 
-func ensureManagedEntries(config map[string]any, groups []HarnessEntries) (bool, error) {
-	changed := false
-	for _, group := range groups {
-		entries, err := pathEntries(config, group.Path)
+// mergeManagedGroup returns group's array in config as it reads once the declared entries
+// are in place, and what that changes. config is not modified.
+func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []HarnessChange, error) {
+	existing, err := pathEntries(config, group.Path)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries := slices.Clone(existing)
+	key := strings.Join(group.Path, ".")
+	var changes []HarnessChange
+	for _, wanted := range group.Entries {
+		exact, err := containsExactEntry(entries, wanted)
 		if err != nil {
-			return false, err
+			return nil, nil, err
 		}
-		groupChanged := false
-		for _, wanted := range group.Entries {
-			exact, err := containsExactEntry(entries, wanted)
-			if err != nil {
-				return false, err
-			}
-			if exact {
+		if exact {
+			continue
+		}
+		replaced := false
+		for i, raw := range entries {
+			entry, ok := raw.(map[string]any)
+			if !ok {
 				continue
 			}
-			replaced := false
-			for i, raw := range entries {
-				entry, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				if sameManagedIdentity(entry, wanted) {
-					entries[i] = wanted
-					groupChanged = true
-					replaced = true
-					break
-				}
-			}
-			if !replaced {
-				entries = append(entries, wanted)
-				groupChanged = true
+			if sameManagedIdentity(entry, wanted) {
+				entries[i] = wanted
+				replaced = true
+				break
 			}
 		}
-		if pruned, dropped := dropSupersededEntries(entries, group.Entries); dropped {
-			entries = pruned
-			groupChanged = true
+		op := HarnessReplace
+		if !replaced {
+			entries = append(entries, wanted)
+			op = HarnessAdd
 		}
-		if groupChanged {
-			setDescriptorEntries(config, group.Path, entries)
-			changed = true
-		}
+		changes = append(changes, HarnessChange{Op: op, Key: key, Value: wanted})
 	}
-	return changed, nil
+	entries, retired := dropSupersededEntries(entries, group.Entries)
+	for _, entry := range retired {
+		changes = append(changes, HarnessChange{Op: HarnessRetire, Key: key, Value: entry})
+	}
+	return entries, changes, nil
 }
 
 func setDescriptorEntries(config map[string]any, path []string, entries []any) {
@@ -783,7 +707,7 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 // dropSupersededEntries removes, from one managed group, every entry that runs a
 // template magus ships and that this descriptor no longer wants.
 //
-// Without it apply APPENDS on any command rewrite, because managedIdentityKey is
+// Without it the merge APPENDS on any command rewrite, because managedIdentityKey is
 // built from the command: change the descriptor and the new entry matches nothing,
 // so both the old and the new wiring end up in the config and every tool call is
 // judged twice, recorded twice, and (where the old one is stale) answered by a
@@ -791,19 +715,18 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 //
 // Narrower than invokesMagus on purpose. That one also answers true for a bare
 // `magus ...` line, and a reader's own `magus session notify` hook is theirs to
-// keep. An entry naming a SHIPPED template is one apply wrote, so it is one apply
-// owns and may retire.
-func dropSupersededEntries(entries []any, wanted []map[string]any) ([]any, bool) {
+// keep. An entry naming a SHIPPED template came from a descriptor, so a descriptor
+// may retire it.
+func dropSupersededEntries(entries []any, wanted []map[string]any) (kept []any, dropped []any) {
 	keep := make(map[string]bool, len(wanted))
 	for _, entry := range wanted {
 		keep[managedIdentityKey(entry)] = true
 	}
-	kept := make([]any, 0, len(entries))
-	dropped := false
+	kept = make([]any, 0, len(entries))
 	for _, raw := range entries {
 		entry, ok := raw.(map[string]any)
 		if ok && runsAShippedTemplate(entry) && !keep[managedIdentityKey(entry)] {
-			dropped = true
+			dropped = append(dropped, raw)
 			continue
 		}
 		kept = append(kept, raw)
@@ -962,40 +885,6 @@ func firstSymlinkComponent(dir, rel string) (string, error) {
 // before a merge could collapse an ambiguous user document on re-encode.
 func decodeHarnessJSON(body []byte, dst any) error {
 	return json.UnmarshalLossless(body, dst)
-}
-
-func writeHarnessAtomically(path string, body []byte) error {
-	mode := os.FileMode(0o644)
-	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("agent: stat harness config %s: %w", path, err)
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
-	if err != nil {
-		return fmt.Errorf("agent: create temp harness config: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return fmt.Errorf("agent: chmod temp harness config: %w", err)
-	}
-	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		return fmt.Errorf("agent: write temp harness config: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("agent: sync temp harness config: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("agent: close temp harness config: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("agent: rename harness config into place: %w", err)
-	}
-	return nil
 }
 
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed

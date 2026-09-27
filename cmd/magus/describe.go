@@ -42,6 +42,7 @@ var describeAlias = map[string]string{
 	"tool": "tool", "tools": "tool",
 	"job": "job", "jobs": "job",
 	"rule": "rule", "rules": "rule",
+	"harness": "harness", "harnesses": "harness",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -76,6 +77,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeJob(ctx, root, rest)
 	case "rule":
 		return describeRules(rest)
+	case "harness":
+		return describeHarness(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
@@ -116,6 +119,7 @@ func describeUsage() {
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  harness      ", "host config a wired harness needs, and the command you run to merge it")
 	fmt.Fprintln(os.Stderr, "")
 	tty.Prose(os.Stderr, tty.SystemProbe, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
 	tty.Prose(os.Stderr, tty.SystemProbe,

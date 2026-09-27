@@ -308,8 +308,8 @@ func hostUnnamed() Verdict {
 		Decision:      "deny",
 		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
 			"this hook did not pass --agent-name, so magus cannot tell which agent host it is "+
-				"answering, and nothing was judged. Run `magus agent harness apply` to rewrite "+
-				"the host's hook configuration; the commands it writes name the host."),
+				"answering, and nothing was judged. Merge what `magus describe harness` prints into "+
+				"the host's hook configuration; the commands it prints name the host."),
 	}
 }
 

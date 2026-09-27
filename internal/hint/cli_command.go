@@ -113,6 +113,7 @@ var (
 	DescribeMCPTools    = cmd("describe", "mcp-tools")
 	DescribeRule        = cmd("describe", "rule")
 	DescribeRules       = cmd("describe", "rules")
+	DescribeHarness     = cmd("describe", "harness")
 	Explain             = cmd("explain")
 	Path                = cmd("path")
 	Diff                = cmd("diff")
@@ -153,9 +154,7 @@ var (
 	VCSCheckpoint       = cmd("vcs", "checkpoint")
 	AgentInstall        = cmd("agent", "install")
 	AgentStarter        = cmd("agent", "starter")
-	AgentHarnessApply   = cmd("agent", "harness", "apply")
 	AgentHarnessInstall = cmd("agent", "harness", "install")
-	AgentHarnessRemove  = cmd("agent", "harness", "remove")
 	AgentHarnessVerify  = cmd("agent", "harness", "verify")
 	ConfigView          = cmd("config", "view")
 	ConfigSet           = cmd("config", "set")
@@ -203,11 +202,11 @@ var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, BrokerStatus, BrokerStop, BrokerUnits, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
+	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, DescribeHarness, Explain, Path, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
-	AgentHarnessApply, AgentHarnessInstall, AgentHarnessRemove, AgentHarnessVerify,
+	AgentHarnessInstall, AgentHarnessVerify,
 	ConfigView, ConfigSet, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,

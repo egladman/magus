@@ -410,21 +410,22 @@ func TestUndeclaredLeaseRepairsReadsGitsSubcommand(t *testing.T) {
 // as a help request.
 func TestDenyLeaseScopedHarnessSeesPastGlobalFlags(t *testing.T) {
 	for _, command := range []string{
-		"magus agent harness apply",
-		"magus --root . agent harness apply",
+		"magus agent harness install",
+		"magus --root . agent harness install",
 		"magus -C /repo agent harness install",
-		"magus -o=template=hi agent harness apply",
-		"magus -root=/home/x agent harness remove",
-		"magus -cache-dir /tmp/c agent harness apply",
-		"magus -j 4 --tee /tmp/out -s agent harness apply --id x",
+		"magus -o=template=hi agent harness install",
+		"magus -root=/home/x agent harness install",
+		"magus -cache-dir /tmp/c agent harness install",
+		"magus -j 4 --tee /tmp/out -s agent harness install --id x",
 	} {
 		assert.NotEmpty(t, denyLeaseScopedHarness(t.Context(), Dependencies{}, "wave/a", command), "%q", command)
 	}
 	for _, command := range []string{
-		"magus agent harness apply --help",
-		"magus agent harness apply -h",
-		"magus -help agent harness apply",
+		"magus agent harness install --help",
+		"magus agent harness install -h",
+		"magus -help agent harness install",
 		"magus agent harness verify",
+		"magus describe harness claude-code",
 		"magus --root agent harness",
 	} {
 		assert.Empty(t, denyLeaseScopedHarness(t.Context(), Dependencies{}, "wave/a", command), "%q", command)

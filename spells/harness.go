@@ -33,7 +33,7 @@ const (
 	// register-mode hint/argv printed by apply (never a separate subcommand).
 	HarnessMCPContract = "harness_mcp"
 
-	// HarnessPromptsContract returns the host-native approval prompts apply keeps in
+	// HarnessPromptsContract returns the host-native approval prompts a harness keeps in
 	// place: [{path, content}] for a whole file, or [{path, key, value}] for one value
 	// inside a JSON document. It is how a guard verdict of ask reaches the person on a
 	// host whose hooks cannot prompt.

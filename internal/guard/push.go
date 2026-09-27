@@ -237,7 +237,7 @@ func builtFrom(version, commit string) bool {
 // that it renders one. Such a hook predates the decision, renders it as nothing, and its
 // host reads nothing as allow, so the push is refused instead of published unasked.
 const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the push is refused instead. " +
-	"Run `magus agent harness apply` or refresh the hook template from the magus docs, then push again; or push from your own terminal."
+	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then push again; or push from your own terminal."
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
 // "ask" for a session no job lease binds, "deny" for one a lease binds, and "" when a gate

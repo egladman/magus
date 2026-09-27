@@ -55,11 +55,11 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	assert.Contains(t, log.String(), "agent harness install: would remove skill this binary no longer ships")
 }
 
-// TestHarnessChangeRefusesABoundJobFromEitherSource pins that a harness change is refused
-// under the checkout's binding as well as under the claim the process was launched with.
-// Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE, could
-// rewire the hooks that grade it.
-func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
+// TestHarnessInstallRefusesABoundJobFromEitherSource pins that a harness skill install is
+// refused under the checkout's binding as well as under the claim the process was launched
+// with. Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE,
+// could rewrite the skills that steer it.
+func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, "")
 	saved := globalCfg
@@ -75,7 +75,7 @@ func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
 		require.NoError(t, err)
 		return lease
 	}
-	assert.Empty(t, acting(context.Background()), "an unbound caller rewires its own hosts")
+	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
 
 	claimed := proc.WithLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
@@ -87,4 +87,52 @@ func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
 	err = agentHarnessInstallCmd(context.Background(), root, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
+}
+
+// TestDescribeHarnessPrintsEachChangeAndTheMergeCommand pins the text a person reads before
+// merging: every file, every entry it gains or loses, and the command, which magus prints
+// and never runs.
+func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
+	var out bytes.Buffer
+	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{
+		ID: "claude-code",
+		Files: map[string]agent.HarnessFile{
+			".claude/settings.json": {
+				Exists:   true,
+				Fragment: map[string]any{"hooks": map[string]any{"Stop": []any{}}},
+				Changes: []agent.HarnessChange{
+					{Op: agent.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "sh magus-checkpoint.sh"}},
+					{Op: agent.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "sh old/magus-checkpoint.sh"}},
+				},
+			},
+			".codex/rules/magus.rules": {Content: "rule\n", Changes: []agent.HarnessChange{{Op: agent.HarnessWrite}}},
+		},
+		Merge:   "merge-command",
+		MCPHint: "register it",
+	}))
+	assert.Equal(t, `claude-code harness: 2 file(s) to merge
+  .claude/settings.json (exists)
+    add hooks.Stop: {"command":"sh magus-checkpoint.sh"}
+    retire hooks.Stop: {"command":"sh old/magus-checkpoint.sh"}
+  .codex/rules/magus.rules (missing)
+    write the whole file
+merge it yourself (magus never writes host config; needs jq):
+  merge-command
+mcp claude-code (user-owned; Magus does not write host MCP config):
+register it
+`, out.String())
+
+	out.Reset()
+	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{ID: "cursor"}))
+	assert.Equal(t, "cursor harness: current\n", out.String())
+}
+
+// TestAgentHarnessHasNoWritingVerb pins that the verbs which wrote host config stay gone:
+// magus prints host config through `describe harness` and the person merges it.
+func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
+	for _, verb := range []string{"apply", "remove"} {
+		err := agentHarnessCmd(context.Background(), t.TempDir(), []string{verb})
+		require.Error(t, err, verb)
+		assert.Contains(t, err.Error(), "magus describe harness", verb)
+	}
 }

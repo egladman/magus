@@ -43,11 +43,11 @@ new task after changing any of them.
 ## MCP
 
 Register the server in your user-level `~/.codex/config.toml`, never in the
-repository. `magus agent harness apply --id codex` prints the fragment to paste
+repository. `magus describe harness codex` prints the fragment to paste
 (secret ref `MAGUS_MCP_TOKEN`); Magus does not write that file:
 
 ```sh
-magus agent harness apply --id codex
+magus describe harness codex
 ```
 
 ```toml
@@ -94,25 +94,29 @@ versions apart from your magus binary; see
 [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
-magus agent harness apply
+magus describe harness
 magus agent harness verify
 ```
 
+`magus describe harness` prints each entry the host files lack and the one command
+that merges them. magus never writes them: read the command, run it yourself, then
+verify.
+
 To adapt that Buzz harness without modifying Magus source: copy the spell into
 the workspace, change only the import path (for example
-`import "harness/codex" as codex`), edit the workspace Buzz, then re-run apply
-and verify. Details:
+`import "harness/codex" as codex`), edit the workspace Buzz, then describe, merge,
+and verify again. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
 Or target Codex alone:
 
 ```sh
-magus agent harness apply --id codex
+magus describe harness codex
 magus agent harness verify --id codex
 ```
 
-The spell writes `.codex/hooks.json` and installs the guard entries
+The spell describes `.codex/hooks.json` with the guard entries
 shown here:
 
 ```json
@@ -239,8 +243,8 @@ missing.
 ### Maintaining the workspace harness
 
 This host is a Buzz harness spell. Adapt without Magus source edits by forking
-the spell and changing only the import path; then `magus agent harness apply`
-and `verify`. See
+the spell and changing only the import path; then merge what `magus describe
+harness` prints and run `magus agent harness verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 

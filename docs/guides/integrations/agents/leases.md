@@ -435,11 +435,11 @@ file write and every command. It denies:
 It advises on one more: your own path, written from a base that diverges from
 the checkpoint you were handed.
 
-Whatever the row says, it also refuses `magus agent harness apply`, `install`
-and `remove`: the hook wiring is what grades the holder, so only an unbound
-caller rewires it. The commands refuse themselves under the checkout's binding
-or a `BAGGAGE` claim; the guard adds the subagent and session sources a command
-cannot see.
+Whatever the row says, it also refuses `magus agent harness install`: the skills
+are what steer the holder, so only an unbound caller rewrites them. magus writes
+no hook wiring at all; `magus describe harness` prints it for a person to merge.
+The command refuses itself under the checkout's binding or a `BAGGAGE` claim; the
+guard adds the subagent and session sources a command cannot see.
 
 A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any

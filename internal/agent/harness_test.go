@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -17,8 +18,8 @@ import (
 // registerHarnessSpell decodes a JSON descriptor body — the same shape a
 // harnesses/<id>.json compat file used to carry — into a HarnessDescriptor and
 // registers it as a fake harness spell for id, restoring the previous loader when
-// the test ends. LoadHarness has no JSON fallback any more, and ApplyHarness,
-// RemoveHarness and VerifyHarness operate on whatever LoadHarness resolves without
+// the test ends. LoadHarness has no JSON fallback any more, and PlanHarness and
+// VerifyHarness operate on whatever LoadHarness resolves without
 // caring which source supplied it, so every fixture body below is unchanged from
 // the JSON-descriptor era; only how a test hands it to LoadHarness moved. body is
 // decoded, not validated, so a fixture that is deliberately invalid (an escaping
@@ -38,7 +39,44 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 	}
 }
 
-func TestApplyHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
+// mergeHarness plans id and merges the plan into the files with the semantics of the printed
+// command, standing in for the person who runs it. TestHarnessMergeCommandLeavesTheFileCurrent
+// pins that the command and this agree.
+func mergeHarness(t *testing.T, root, id string) HarnessPlan {
+	t.Helper()
+	plan, err := PlanHarness(context.Background(), root, id)
+	require.NoError(t, err)
+	for rel, file := range plan.Files {
+		path := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		if file.Content != "" {
+			require.NoError(t, os.WriteFile(path, []byte(file.Content), 0o644))
+			continue
+		}
+		doc := map[string]any{}
+		if file.Exists {
+			body, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.NoError(t, decodeHarnessJSON(body, &doc))
+		}
+		mergeFragment(doc, file.Fragment)
+		encoded, err := json.MarshalIndent(doc, "", "  ")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(path, append(encoded, '\n'), 0o644))
+	}
+	return plan
+}
+
+// requireCurrent plans id again and requires that nothing is left to merge.
+func requireCurrent(t *testing.T, root, id string) {
+	t.Helper()
+	plan, err := PlanHarness(context.Background(), root, id)
+	require.NoError(t, err)
+	assert.True(t, plan.Current(), "a merged plan leaves nothing to merge: %v", plan.Files)
+	assert.Empty(t, plan.Merge)
+}
+
+func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
@@ -46,34 +84,106 @@ func TestApplyHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	const original = "{\n  \"other\": {\"keep\": true},\n  \"hooks\": {\n    \"before\": [{\"match\": \"run\", \"commands\": [{\"type\": \"command\", \"command\": \"my-own-hook\"}]}]\n  }\n}\n"
 	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	plan, err := PlanHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, original, string(got), "planning writes nothing")
 
+	own := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "my-own-hook"}}}
+	command := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "sh magus-command.sh", "statusMessage": "magus guard: checking command"}}}
+	pathEntry := map[string]any{"match": "write", "commands": []any{map[string]any{"type": "command", "command": "sh magus-path.sh", "timeout": float64(10)}}}
+	assert.Equal(t, map[string]HarnessFile{
+		"test-host/hooks.json": {
+			Exists:   true,
+			Fragment: map[string]any{"hooks": map[string]any{"before": []any{own, command, pathEntry}}},
+			Changes: []HarnessChange{
+				{Op: HarnessAdd, Key: "hooks.before", Value: command},
+				{Op: HarnessAdd, Key: "hooks.before", Value: pathEntry},
+			},
+		},
+	}, normalizeFiles(t, plan.Files))
+
+	mergeHarness(t, root, "test-host")
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "my-own-hook")
-	assert.Contains(t, string(body), "magus-command.sh")
 	assert.Contains(t, string(body), `"other": {`)
-
-	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.False(t, second.Changed, "a second apply must be idempotent")
+	requireCurrent(t, root, "test-host")
 }
 
-func TestApplyHarnessRefusesMalformedOrWrongShapeJSON(t *testing.T) {
+// normalizeFiles round-trips files through JSON, the form `describe harness -o json` prints,
+// so a whole-value comparison does not depend on which Go types the descriptor decoded into.
+func normalizeFiles(t *testing.T, files map[string]HarnessFile) map[string]HarnessFile {
+	t.Helper()
+	encoded, err := json.Marshal(files)
+	require.NoError(t, err)
+	var out map[string]HarnessFile
+	require.NoError(t, json.Unmarshal(encoded, &out))
+	return out
+}
+
+func TestPlanHarnessRefusesMalformedOrWrongShapeJSON(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(`{"hooks":[]}`), 0o644))
 
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	_, err := PlanHarness(context.Background(), root, "test-host")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not an object")
 }
 
-func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
+// TestHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command, with the plan
+// served from a file where the command reads `magus describe harness`, and pins that it
+// merges exactly what the plan asks: afterwards nothing is left to merge, the person's own
+// entries survive, and a retired entry is gone.
+func TestHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("the merge command needs jq")
+	}
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	path := filepath.Join(root, "test-host", "hooks.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{
+  "large": 9007199254740993,
+  "hooks": {
+    "before": [
+      {"match": "run", "commands": [{"type": "command", "command": "sh old/magus-command.sh"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
+    ],
+    "after": [{"command": "theirs"}]
+  }
+}`), 0o644))
+
+	plan, err := PlanHarness(context.Background(), root, "test-host")
+	require.NoError(t, err)
+	encoded, err := json.Marshal(plan)
+	require.NoError(t, err)
+	planPath := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planPath, encoded, 0o644))
+	read := "magus describe harness test-host -o json"
+	require.Contains(t, plan.Merge, read)
+	command := strings.ReplaceAll(plan.Merge, read, "cat "+posixQuote(planPath))
+
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	requireCurrent(t, root, "test-host")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	doc := string(body)
+	assert.Contains(t, doc, "9007199254740993")
+	assert.Contains(t, doc, "my-own-hook")
+	assert.Contains(t, doc, `"theirs"`)
+	assert.NotContains(t, doc, "old/magus-command.sh")
+}
+
+func TestPlanHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
@@ -83,9 +193,8 @@ func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
   "hooks": {"before": [{"match": "run", "commands": [{"type":"command", "command":"my-own-hook", "statusMessage":"my custom status"}]}]}
 }`), 0o644))
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "test-host")
+	assert.False(t, plan.Current())
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "9007199254740993")
@@ -93,7 +202,7 @@ func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	assert.Contains(t, string(body), "magus-command.sh")
 }
 
-func TestApplyHarnessCanWireReadObserver(t *testing.T) {
+func TestPlanHarnessCanWireReadObserver(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "reader", `{
   "schema_version": 2,
@@ -107,9 +216,8 @@ func TestApplyHarnessCanWireReadObserver(t *testing.T) {
   }]
 }`)
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "reader"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "reader")
+	assert.False(t, plan.Current())
 
 	body, err := os.ReadFile(filepath.Join(root, "reader/hooks.json"))
 	require.NoError(t, err)
@@ -121,7 +229,7 @@ func TestApplyHarnessCanWireReadObserver(t *testing.T) {
 	assert.True(t, result.Guarded)
 }
 
-func TestApplyHarnessRejectsDuplicateKeys(t *testing.T) {
+func TestPlanHarnessRejectsDuplicateKeys(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
@@ -129,31 +237,25 @@ func TestApplyHarnessRejectsDuplicateKeys(t *testing.T) {
 	const body = `{"hooks":{},"hooks":{}}`
 	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	_, err := PlanHarness(context.Background(), root, "test-host")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate JSON object key")
-	got, readErr := os.ReadFile(path)
-	require.NoError(t, readErr)
-	assert.Equal(t, body, string(got), "a rejected document must not be rewritten")
 }
 
-func TestApplyHarnessDryRunPlansWithoutWriting(t *testing.T) {
+// TestPlanHarnessForAMissingFileCreatesIt pins the first-time case: the plan writes nothing,
+// and its command creates the directory and the file from the fragment alone.
+func TestPlanHarnessForAMissingFileCreatesIt(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host", DryRun: true})
+	plan, err := PlanHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
-	assert.True(t, update.Changed)
-	assert.True(t, update.Planned)
-	_, err = os.Stat(filepath.Join(root, "test-host", "hooks.json"))
-	assert.True(t, os.IsNotExist(err))
-}
-
-func TestApplyHarnessRejectsBoundLease(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host", ActingLease: "job-123"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bound job")
+	_, err = os.Stat(filepath.Join(root, "test-host"))
+	assert.True(t, os.IsNotExist(err), "planning writes nothing")
+	require.Contains(t, plan.Files, "test-host/hooks.json")
+	assert.False(t, plan.Files["test-host/hooks.json"].Exists)
+	assert.Equal(t,
+		"mkdir -p 'test-host' && magus describe harness test-host -o json | jq --arg p 'test-host/hooks.json' '.files[$p].fragment' > 'test-host/hooks.json'",
+		plan.Merge)
 }
 
 func TestWorkspaceHarnessLoads(t *testing.T) {
@@ -172,8 +274,7 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Status)
 
-	_, err = ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
+	mergeHarness(t, root, "test-host")
 	// The wired commands now have to actually answer, not merely be present: give
 	// them something real to run.
 	writeStubGuardScript(t, root, "magus-command.sh", "deny")
@@ -183,7 +284,7 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	assert.Equal(t, HarnessVerified, result.Status)
 }
 
-func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
+func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
@@ -199,9 +300,8 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
   ]
 }`)
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "flat")
+	assert.Equal(t, HarnessChange{Op: HarnessSet, Key: "version", Value: float64(1)}, normalizeFiles(t, plan.Files)["flat/hooks.json"].Changes[0])
 
 	body, err := os.ReadFile(filepath.Join(root, "flat/hooks.json"))
 	require.NoError(t, err)
@@ -218,12 +318,10 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 
-	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-	assert.False(t, second.Changed)
+	requireCurrent(t, root, "flat")
 }
 
-func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
+func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "managed", `{
   "schema_version": 2,
@@ -243,9 +341,8 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
   ]
 }`)
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "managed"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "managed")
+	assert.False(t, plan.Current())
 
 	// magus-checkpoint.sh renders no verdict and is never probed; magus-command.sh
 	// is, so it needs something real behind it now.
@@ -254,12 +351,10 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 
-	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "managed"})
-	require.NoError(t, err)
-	assert.False(t, second.Changed)
+	requireCurrent(t, root, "managed")
 }
 
-func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
+func TestPlanHarnessReplacesSameIdentityInPlace(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
@@ -273,9 +368,8 @@ func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
   }
 }`), 0o644))
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "test-host")
+	assert.Equal(t, HarnessReplace, plan.Files["test-host/hooks.json"].Changes[0].Op)
 
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -284,18 +378,17 @@ func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(string(body), "magus-command.sh"), "identity match must replace, not append")
 }
 
-// TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote pins the upgrade path.
+// TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote pins the upgrade path.
 //
 // managedIdentityKey is built from the COMMAND, so a descriptor that rewrites its
-// commands matches nothing already in the config and apply used to append beside
-// the old wiring. Both then fire: every tool call judged twice, recorded twice on
-// the activity trail, and answered in part by the version the tree just replaced.
-// A reader pulling the change got that with nothing saying so, which is the
-// failure this whole surface exists to refuse.
+// commands matches nothing already in the config, and a merge that only appended
+// would leave the old wiring beside the new. Both then fire: every tool call judged
+// twice, recorded twice on the activity trail, and answered in part by the version
+// the tree just replaced.
 //
-// The user's own hook survives. Only an entry naming a SHIPPED template is one
-// apply wrote, and therefore one apply may retire.
-func TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
+// The user's own hook survives. Only an entry naming a SHIPPED template came from a
+// descriptor, and therefore only one of those may be retired.
+func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
 	path := filepath.Join(root, "test-host", "hooks.json")
@@ -311,9 +404,14 @@ func TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
   }
 }`), 0o644))
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
+	plan := mergeHarness(t, root, "test-host")
+	var retired []any
+	for _, change := range plan.Files["test-host/hooks.json"].Changes {
+		if change.Op == HarnessRetire {
+			retired = append(retired, change.Value)
+		}
+	}
+	assert.Len(t, retired, 2, "the plan names each entry it retires")
 
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -325,9 +423,7 @@ func TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	assert.Contains(t, doc, "magus session notify", "a reader's own magus hook is theirs to keep")
 	assert.Contains(t, doc, "my-own-hook")
 
-	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.False(t, second.Changed, "applying again over the retired set changes nothing")
+	requireCurrent(t, root, "test-host")
 }
 
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
@@ -385,9 +481,7 @@ func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 	assert.Empty(t, result.Path)
 	assert.NotEmpty(t, result.Reason)
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "skills-only"})
-	require.NoError(t, err)
-	assert.False(t, update.Changed)
+	requireCurrent(t, root, "skills-only")
 }
 
 func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
@@ -407,7 +501,7 @@ func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 	assert.Equal(t, HarnessUncovered, result.Status)
 	assert.Contains(t, result.Reason, "does not invoke magus")
 
-	_, err = ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "empty"})
+	_, err = PlanHarness(context.Background(), root, "empty")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not invoke magus")
 }
@@ -494,7 +588,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 // writeStubGuardScript drops a trivial POSIX sh script at root/name that drains
 // stdin and prints output verbatim, standing in for a shipped guard script so
 // VerifyHarness's probe (harness_probe.go) has something real to execute. Tests
-// that only exercise ApplyHarness's own file-merge mechanics do not need this;
+// that only exercise PlanHarness's own merge mechanics do not need this;
 // only a test that calls VerifyHarness against a command probeHarnessCommands
 // recognizes as guard-shaped does, now that presence alone no longer earns
 // HarnessVerified. See harness_probe_test.go for the probe's own tests.
@@ -525,188 +619,6 @@ func writeTestHarness(t *testing.T, root string) {
 }`)
 }
 
-// TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults pins defect 1: before this,
-// there was no inverse of `harness apply` at all, so a descriptor that wires a
-// broken guard command could lock an agent out of editing the very file that is
-// denying it, with no command to recover short of hand-editing host config from
-// outside the session. This is the test apply's own existing suite never needed
-// and remove's whole reason to exist: it must undo EXACTLY what apply wrote, and
-// nothing a person added beside it.
-func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
-	root := t.TempDir()
-	registerHarnessSpell(t, "flat", `{
-  "schema_version": 2,
-  "id": "flat",
-  "display": {"name": "Flat"},
-  "config": {"path": "flat/hooks.json"},
-  "config_defaults": {"version": 1},
-  "skills": {"paths": [], "form": "short"},
-  "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
-  ]
-}`)
-
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-
-	path := filepath.Join(root, "flat", "hooks.json")
-	// A person's own key beside magus's, added after apply ran. Neither belongs
-	// to this descriptor, and neither may be touched by remove.
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var config map[string]any
-	require.NoError(t, json.Unmarshal(body, &config))
-	config["mine"] = map[string]any{"kept": true}
-	config["userVersion"] = 7
-	encoded, err := json.MarshalIndent(config, "", "  ")
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, encoded, 0o644))
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-	assert.True(t, update.Removed)
-	assert.True(t, update.Changed)
-	assert.False(t, update.Planned)
-
-	after, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.NotContains(t, string(after), "cursor-hook.sh", "magus's own managed entry must be gone")
-	assert.NotContains(t, string(after), `"version": 1`, "the config_default this descriptor wrote must be gone")
-	assert.Contains(t, string(after), `"kept": true`, "a user's own key must survive")
-	assert.Contains(t, string(after), `"userVersion": 7`, "a user's own key must survive")
-
-	// Verify now reports uncovered: apply's own fragments are gone.
-	result, err := VerifyHarness(context.Background(), root, "flat")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.Status)
-
-	// Idempotent: nothing left of ours to remove a second time.
-	second, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-	assert.False(t, second.Changed)
-}
-
-// TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone: a config_defaults key
-// only belongs to remove when the file still holds exactly the value apply wrote.
-// A value the user changed since is theirs now.
-func TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone(t *testing.T) {
-	root := t.TempDir()
-	registerHarnessSpell(t, "flat", `{
-  "schema_version": 2,
-  "id": "flat",
-  "display": {"name": "Flat"},
-  "config": {"path": "flat/hooks.json"},
-  "config_defaults": {"version": 1},
-  "skills": {"paths": [], "form": "short"},
-  "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
-  ]
-}`)
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-
-	path := filepath.Join(root, "flat", "hooks.json")
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	// A user bumped "version" themselves after apply ran.
-	changed := strings.Replace(string(body), `"version": 1`, `"version": 2`, 1)
-	require.NoError(t, os.WriteFile(path, []byte(changed), 0o644))
-
-	_, err = RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
-	require.NoError(t, err)
-
-	after, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(after), `"version": 2`, "a value the user changed since apply is theirs, not ours to delete")
-}
-
-// TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity mirrors apply's own
-// "same identity, different body" replace-in-place rule (sameManagedIdentity):
-// remove must still recognize an entry as OURS after a person tweaked its timeout
-// or statusMessage, or a stale edited copy of magus's hook survives every remove.
-func TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	path := filepath.Join(root, "test-host", "hooks.json")
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	edited := strings.Replace(string(body), "magus guard: checking command", "a person's own status text", 1)
-	require.NoError(t, os.WriteFile(path, []byte(edited), 0o644))
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
-
-	after, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.NotContains(t, string(after), "magus-command.sh")
-}
-
-// TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp: apply never writes a fragment for
-// a skills-only descriptor (empty config.path), so remove has nothing to undo.
-func TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp(t *testing.T) {
-	root := t.TempDir()
-	registerHarnessSpell(t, "skills-only", `{
-  "schema_version": 2,
-  "id": "skills-only",
-  "display": {"name": "Skills Only"},
-  "skills": {"paths": [".agents/skills"], "form": "both"}
-}`)
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "skills-only"})
-	require.NoError(t, err)
-	assert.True(t, update.Removed)
-	assert.False(t, update.Changed)
-	assert.Empty(t, update.Path)
-}
-
-// TestRemoveHarnessOnMissingConfigIsANoOp: nothing was ever applied, so there is
-// no file to touch and no error to raise.
-func TestRemoveHarnessOnMissingConfigIsANoOp(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	assert.False(t, update.Changed)
-	_, statErr := os.Stat(filepath.Join(root, "test-host", "hooks.json"))
-	assert.True(t, os.IsNotExist(statErr))
-}
-
-// TestRemoveHarnessRejectsBoundLease mirrors ApplyHarness's own rule: a bound job
-// cannot rewire a host harness, remove included.
-func TestRemoveHarnessRejectsBoundLease(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	_, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host", ActingLease: "job-123"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bound job")
-}
-
-// TestRemoveHarnessDryRunPlansWithoutWriting mirrors ApplyHarness's own --dry-run
-// contract: report what would change, touch nothing.
-func TestRemoveHarnessDryRunPlansWithoutWriting(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	path := filepath.Join(root, "test-host", "hooks.json")
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
-	require.NoError(t, err)
-	before, err := os.ReadFile(path)
-	require.NoError(t, err)
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host", DryRun: true})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
-	assert.True(t, update.Planned)
-
-	after, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, string(before), string(after), "a dry run must not touch the file")
-}
-
 const promptRules = "prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"
 
 // writePromptHarness registers a skills-only descriptor that keeps two host-native approval
@@ -730,9 +642,9 @@ func strconvQuote(s string) string {
 	return string(b)
 }
 
-// TestApplyHarnessWritesNativePrompts pins that apply puts the host's own approval prompt in
+// TestPlanHarnessPlansNativePrompts pins that the plan puts the host's own approval prompt in
 // place and leaves the rest of a shared config alone, and that verify then reports it.
-func TestApplyHarnessWritesNativePrompts(t *testing.T) {
+func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 	root := t.TempDir()
 	writePromptHarness(t, root)
 	config := filepath.Join(root, "opencode.json")
@@ -743,13 +655,15 @@ func TestApplyHarnessWritesNativePrompts(t *testing.T) {
 	assert.Equal(t, HarnessUncovered, before.PromptStatus)
 	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
 
-	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
-	assert.Equal(t, []string{
-		filepath.Join(root, ".codex/rules/magus.rules"),
-		filepath.Join(root, "opencode.json"),
-	}, update.Prompts)
+	plan := mergeHarness(t, root, "prompter")
+	assert.Equal(t, map[string]HarnessFile{
+		".codex/rules/magus.rules": {Content: promptRules, Changes: []HarnessChange{{Op: HarnessWrite}}},
+		"opencode.json": {
+			Exists:   true,
+			Fragment: map[string]any{"permission": map[string]any{"bash": map[string]any{"git push *": "ask"}}},
+			Changes:  []HarnessChange{{Op: HarnessSet, Key: "permission.bash.git push *", Value: "ask"}},
+		},
+	}, plan.Files)
 
 	rules, err := os.ReadFile(filepath.Join(root, ".codex/rules/magus.rules"))
 	require.NoError(t, err)
@@ -763,9 +677,7 @@ func TestApplyHarnessWritesNativePrompts(t *testing.T) {
 		"permission": map[string]any{"edit": "ask", "bash": map[string]any{"git push *": "ask"}},
 	}, got)
 
-	again, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
-	require.NoError(t, err)
-	assert.False(t, again.Changed, "a second apply must be idempotent")
+	requireCurrent(t, root, "prompter")
 
 	after, err := VerifyHarness(context.Background(), root, "prompter")
 	require.NoError(t, err)
@@ -773,46 +685,23 @@ func TestApplyHarnessWritesNativePrompts(t *testing.T) {
 	assert.Empty(t, after.PromptReason)
 }
 
-// TestApplyHarnessRefusesAPromptThePersonOverrode pins that apply does not overwrite a value
-// someone chose, and says which one: the prompt is missing either way, and silence would
+// TestPlanHarnessRefusesAPromptThePersonOverrode pins that no plan overwrites a value someone
+// chose, and that it says which one: the prompt is missing either way, and silence would
 // leave every ungated push refused with no clue why.
-func TestApplyHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
+func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 	root := t.TempDir()
 	writePromptHarness(t, root)
 	config := filepath.Join(root, "opencode.json")
 	const chosen = `{"permission": {"bash": {"git push *": "allow"}}}`
 	require.NoError(t, os.WriteFile(config, []byte(chosen), 0o644))
 
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
+	_, err := PlanHarness(context.Background(), root, "prompter")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission.bash.git push *")
-	body, err := os.ReadFile(config)
-	require.NoError(t, err)
-	assert.Equal(t, chosen, string(body))
 
 	result, err := VerifyHarness(context.Background(), root, "prompter")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.PromptStatus)
-}
-
-// TestRemoveHarnessDeletesItsPrompts pins remove as apply's inverse for prompts too.
-func TestRemoveHarnessDeletesItsPrompts(t *testing.T) {
-	root := t.TempDir()
-	writePromptHarness(t, root)
-	config := filepath.Join(root, "opencode.json")
-	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m"}`), 0o644))
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
-	require.NoError(t, err)
-
-	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "prompter"})
-	require.NoError(t, err)
-	assert.True(t, update.Changed)
-	assert.NoFileExists(t, filepath.Join(root, ".codex/rules/magus.rules"))
-	body, err := os.ReadFile(config)
-	require.NoError(t, err)
-	var got map[string]any
-	require.NoError(t, json.Unmarshal(body, &got))
-	assert.Equal(t, map[string]any{"model": "m"}, got)
 }
 
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file

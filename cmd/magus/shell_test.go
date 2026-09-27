@@ -1364,11 +1364,11 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 }
 
 // TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource pins that the guard refuses
-// `magus agent harness apply|install|remove` under a lease from any source. The CLI refuses
-// them too, but it cannot see the subagent or the host session, so a worker attributed by
-// either would otherwise rewire the hooks that grade it.
+// `magus agent harness install` under a lease from any source. The CLI refuses it too, but
+// it cannot see the subagent or the host session, so a worker attributed by either would
+// otherwise rewrite the skills that steer it.
 func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
-	const rewire = "magus agent harness apply"
+	const rewire = "magus agent harness install"
 	spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
 		`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
 		`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`

@@ -1,8 +1,8 @@
 ---
 title: magus describe
 generated_from: internal/cli/registry.go
-description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph) and list every entity of that kind, or detail one when a name is given.
-tags: [cli, magus describe, spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, introspection]
+description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, harness) and list every entity of that kind, or detail one when a name is given.
+tags: [cli, magus describe, spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, harness, introspection]
 ---
 
 # magus-describe
@@ -17,7 +17,7 @@ Define a magus concept and list its entities
 
 Define a magus concept and list every entity of that kind. The noun is
 one of spell, charm, target, project, workspace, module, mcp-tool, tool, file,
-or graph; singular and plural are interchangeable. Pass a name after the noun
+graph, or harness; singular and plural are interchangeable. Pass a name after the noun
 to detail a single entity instead of listing them all. (The knowledge graph
 lives under magus graph: export for the merged graph, stats for its shape.)
 
@@ -115,12 +115,27 @@ step at a time.
 **rule**
 : Detail one guard rule, by the name a verdict reported
 
+**harness**
+: Print the host config a wired harness needs and the command you run to merge it
+
 ## Examples
 
 *List every target*
 
 ```sh
 magus describe targets
+```
+
+*Print what every wired harness needs merged*
+
+```sh
+magus describe harness
+```
+
+*One harness's exact fragments, for review or your own merge*
+
+```sh
+magus describe harness <id> -o json
 ```
 
 *List what the guard enforces*

@@ -442,7 +442,7 @@ const (
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle DiagnosticCode = "MGS3023"
 	// HookHostUnnamed is a call from installed hook glue that names no agent host. The
-	// configuration `magus agent harness apply` writes passes the host explicitly, so a
+	// configuration `magus describe harness` prints passes the host explicitly, so a
 	// call without one comes from a hand-written or stale config, and it is refused
 	// rather than defaulted to one host.
 	HookHostUnnamed DiagnosticCode = "MGS3024"
