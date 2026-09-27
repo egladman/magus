@@ -3183,7 +3183,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/magusfile.buzz", "libs/diagram/magusfile.buzz",
                    "libs/gopherbuzz/magusfile.buzz", "libs/pricing/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
-                   "proto/magusfile.buzz",
+                   "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
                    "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static",
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
