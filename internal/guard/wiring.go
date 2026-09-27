@@ -69,28 +69,39 @@ func hookWiringSubject(writePath string) string {
 }
 
 // gradeHookWiringWrite judges a write to the guard's own installation: a deny under any
-// bound lease, and a once-per-session advisory for everybody else.
+// bound lease, a deny for any agent-attributed session even without one, and a
+// once-per-session advisory for a person's own unattributed session.
 //
-// The asymmetry is the whole rule. A bound lease was handed a scope by somebody else, and
-// rewiring the host is outside every scope anybody hands out. An unbound session is the
-// orchestrator, or a person in their own checkout, and both of them legitimately edit
-// these files: what they are owed is the sentence saying which file this is, since the
-// consequence of getting it wrong is invisible rather than loud.
+// The asymmetry is the whole rule, and it is drawn on ATTRIBUTION, not on binding. A bound
+// lease was handed a scope by somebody else, and rewiring the host is outside every scope
+// anybody hands out; an unleased subagent was handed no scope at all, and "nobody told me
+// not to" is not consent. Only a session the host attributes to no agent legitimately
+// edits these files: a person in their own checkout, or the orchestrator relaying for one.
+// What it is owed is the sentence saying which file this is, since the consequence of
+// getting it wrong is invisible rather than loud.
 //
 // It says nothing at all about any other path, like every rule here.
-func gradeHookWiringWrite(actingLease, writePath string) writeGrade {
+func gradeHookWiringWrite(actingLease string, agentAttributed bool, writePath string) writeGrade {
 	what := hookWiringSubject(writePath)
 	if what == "" {
 		return writeGrade{}
 	}
-	if actingLease != "" {
+	switch {
+	case actingLease != "":
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: leave the host's wiring alone. "+leaseActorClause("rewire a host")+"\n"+
 				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no write paths anybody hands out include that switch.",
 			writePath, what, actingLease)}
+	case agentAttributed:
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+			"magus workspace: leave the host's wiring alone. "+leaseActorClause("rewire a host")+"\n"+
+				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. The host attributes this call to an agent, and no scope anybody hands out includes that switch, leased or not.\n"+
+				"Have a person make this edit instead. If you need the wiring itself, `magus agent harness verify` reports a descriptor's current state without writing anything: magus prints host config for a person to merge, it does not author it.",
+			writePath, what)}
+	default:
+		return writeGrade{Decision: "advise", Kind: advisoryHookWiring, Context: fmt.Sprintf(
+			"magus workspace: keep the guard armed while you edit this, and re-read it afterwards: `"+hint.Doctor.String()+"` grades the wiring and the binary it resolves.\n"+
+				"%s is %s. It takes effect at the host's next session start, and a wiring that stopped working is silent: a disarmed guard and a clean session produce the same output. This is an advisory because the host attributes this call to no agent: a person's own session, or the orchestrator relaying for one.",
+			writePath, what)}
 	}
-	return writeGrade{Decision: "advise", Kind: advisoryHookWiring, Context: fmt.Sprintf(
-		"magus workspace: keep the guard armed while you edit this, and re-read it afterwards: `"+hint.Doctor.String()+"` grades the wiring and the binary it resolves.\n"+
-			"%s is %s. It takes effect at the host's next session start, and a wiring that stopped working is silent: a disarmed guard and a clean session produce the same output. This is an advisory because you are not acting under a lease, and rewiring a host is an unbound session's job.",
-		writePath, what)}
 }
