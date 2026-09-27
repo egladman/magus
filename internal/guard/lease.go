@@ -395,7 +395,7 @@ func repairInvocation(c hint.Invocation) bool {
 			return true
 		}
 		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && undeclaredLeaseVerbs[words[0]]
+		return len(words) > 0 && undeclaredLeaseVerbs[words[0]] && !renamesSymbol(c.Args)
 	}
 	if c.Name == "git" {
 		g := parseGit(c.Args)

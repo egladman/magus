@@ -46,7 +46,20 @@ Its exit code is grep's (0 matched, 1 no match, 2 error), not the verdict
 codes the symbol lookup above uses - the two modes answer different
 questions and are not meant to share a contract.
 
+--rename \<new\> is the one write: it replaces the symbol's name at every
+site --occurrences verified, and nowhere else. A bare name must resolve
+to exactly one symbol defined in the workspace; pass the symbol ID
+otherwise. Before anything is written, every file is checked and graded
+under the acting lease by the rules a host edit meets: a stale or
+missing index, an unverified site, a declared output, or a guard deny
+refuses the whole rename. Then every file is written or none is. --check
+prints the sites and writes nothing. The inverse is the same command with
+the two names swapped.
+
 ## Options
+
+**--check**
+: With --rename, resolve and grade every site and print them; write nothing
 
 **--definition**
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
@@ -62,6 +75,9 @@ questions and are not meant to share a contract.
 
 **--refresh**
 : Re-ingest the SCIP index before answering
+
+**--rename** *string*
+: Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is
 
 **--source**
 : With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n
@@ -105,6 +121,18 @@ magus refs Open --source
 
 ```sh
 magus refs TODO --text
+```
+
+*Preview a rename*
+
+```sh
+magus refs parseQuery --rename parseTerms --check
+```
+
+*Rename a symbol at every verified site*
+
+```sh
+magus refs parseQuery --rename parseTerms
 ```
 
 ## See Also
