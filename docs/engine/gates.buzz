@@ -14,6 +14,7 @@ namespace gates;
 import "os";
 import "fs";
 import "io";
+import "proc";
 import "std";
 import "engine/types" as _;
 import "lib/text" as _;
@@ -142,17 +143,11 @@ export fun orphanCheck(site: Site) > void !> any {
 
 
 export fun capture(cmd: str) > str !> any {
-    final tmp = os\tmpFilename("sitegen");
-    final code = os\execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
-    if (code != 0) {
-        fs\removeAll(tmp);
+    final res = proc\exec("sh", args: ["-c", cmd], opts: {"allow_failure": true, "quiet": true});
+    if (!res.ok) {
         return "";
     }
-    final f = io\File.open(tmp, io\FileMode.read);
-    final result = f.readAll();
-    f.close();
-    fs\removeAll(tmp);
-    return result.trim();
+    return res.stdout.trim();
 }
 
 // Map of repo-relative source path -> "full|short|date" of the newest commit that touched
