@@ -331,7 +331,8 @@ builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
-`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`, `link`.
+`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`, `link`,
+`package`.
 
 Nodes also carry static metadata the extractors already parse, surfaced as
 attributes so `magus explain` answers a question without a second describe: a
@@ -393,6 +394,40 @@ cache or rebuilt on the next query; 0, the default, is unlimited). When a remote
 build cache is configured, deterministic shards ride it - pushed on build,
 restored by fingerprint - so teammates and CI can reuse them. The `@runtime` shard
 is never pushed: it is local run history, not shareable derived data.
+
+## Third-party packages (@packages)
+
+Every manifest a shipped spell declares is read into `package` nodes, one per
+dependency a project declares directly, with a `depends_on` edge from the project.
+The node ID is `package:<manager> <name>`, and the manager matches the one its
+ecosystem's SCIP indexer writes into symbol monikers, so a package and the symbols
+indexed from it share a namespace.
+
+| Manager  | Manifest         | Versions read from                                                  |
+|----------|------------------|---------------------------------------------------------------------|
+| `gomod`  | `go.mod`         | `go.mod` itself: its require lines are exact versions               |
+| `npm`    | `package.json`   | `pnpm-lock.yaml` (v9), `package-lock.json` or `npm-shrinkwrap.json`, `yarn.lock` (berry) |
+| `python` | `pyproject.toml` | `uv.lock`, `poetry.lock`, `pdm.lock`, `Pipfile.lock`               |
+| `cargo`  | `Cargo.toml`     | `Cargo.lock`                                                        |
+
+A manifest holds ranges, so the version is the one the lockfile pins. The lockfile is
+the one the project resolves by walking up from its directory, so a lock hoisted to a
+workspace root serves each member. Python names are PEP 503 normalized, so `Pillow`
+and `pillow` are one node. A dependency with no registry release (a workspace, path,
+link or git dependency, an npm alias) gets no node.
+
+Not read: a yarn classic (v1) `yarn.lock`, `bun.lockb` (binary), `setup.py`
+(executable) and `setup.cfg`, neither of which has a lock. A manifest whose lockfile
+is missing or not understood contributes no nodes, and the graph build logs one info
+line naming the project.
+
+Each node carries `manager` and `version`, plus `version_conflict` (every version,
+when projects pin different ones), `indirect` and `replaced` when they apply. `magus
+explain package:npm @connectrpc/connect` prints a `docs:` line: pkg.go.dev, npmjs.com,
+pypi.org or docs.rs at the pinned version, one line per version in a conflict. The URL
+is derived from manager, name and version and never fetched, so it can point at a page
+that does not exist, such as a private module or a failed docs.rs build. A replaced
+package prints none.
 
 ## Runtime enrichment
 

@@ -209,7 +209,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 			cfg: cfg, root: root, cacheDir: cacheDir,
 			projects: projects, spells: spells, log: log,
 		}),
-		Packages:       loadKnowledgePackages(projects),
+		Packages:       loadKnowledgePackages(ctx, projects, log),
 		VCS:            vcsEntries,
 		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
 		DeclaredSpells: declaredSpellSet(projects),
@@ -235,24 +235,51 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 // that actually exist in the project's directory, in declared order. There is nothing
 // to re-derive here, only a file to read.
 //
-// Go is the only reader today. Its manifest states exact versions, so go.mod alone is a
-// resolved inventory; an ecosystem whose manifest holds ranges needs its lockfile
-// (ProjectEntry.Lockfiles, already resolved beside Manifests) and a reader that
-// understands that format. Best-effort throughout: an unreadable or unparsable
-// manifest contributes no packages rather than failing the graph build.
-func loadKnowledgePackages(projects types.ProjectsOutput) map[string][]types.KnowledgePackage {
+// deps.Readers says which manifests are read and with which lockfiles. go.mod states
+// exact versions and is read alone; every other manifest holds ranges and is read with
+// the lockfile ProjectEntry.Lockfiles resolved for it, which is workspace-relative
+// because a lock may be hoisted above the project. Best-effort throughout: an
+// unreadable or unparsable file contributes no packages rather than failing the build.
+// A manifest that needs a lock and yields nothing gets one info line per project, so a
+// missing or unread lockfile is visible rather than an empty inventory.
+func loadKnowledgePackages(ctx context.Context, projects types.ProjectsOutput, log *slog.Logger) map[string][]types.KnowledgePackage {
 	out := map[string][]types.KnowledgePackage{}
 	for _, p := range projects.Projects {
 		if p.Dir == "" {
 			continue
 		}
+		var unread []string
 		for _, manifest := range p.Manifests {
-			if manifest != "go.mod" {
+			r, ok := deps.Readers[manifest]
+			if !ok {
 				continue
 			}
-			if pkgs := deps.GoModule(filepath.Join(p.Dir, manifest)); len(pkgs) > 0 {
-				out[p.Path] = append(out[p.Path], pkgs...)
+			lock := ""
+			for _, l := range p.Lockfiles {
+				if r.UnderstandsLock(l) {
+					lock = filepath.Join(projects.Workspace, filepath.FromSlash(l))
+					break
+				}
 			}
+			pkgs := r.Read(filepath.Join(p.Dir, manifest), lock)
+			out[p.Path] = append(out[p.Path], pkgs...)
+			if len(r.Locks) == 0 || len(pkgs) > 0 {
+				continue
+			}
+			if lock != "" {
+				unread = append(unread, fmt.Sprintf("%s read, %s pinned none of its dependencies (a format this reader does not understand, or none declared); no %s nodes for %s",
+					manifest, filepath.Base(lock), r.Manager, p.Path))
+			} else {
+				unread = append(unread, fmt.Sprintf("%s read, no lockfile it understands (%s); no %s nodes for %s",
+					manifest, strings.Join(r.Locks, ", "), r.Manager, p.Path))
+			}
+		}
+		if len(out[p.Path]) == 0 {
+			delete(out, p.Path)
+		}
+		if len(unread) > 0 {
+			log.InfoContext(ctx, "knowledge: a manifest yielded no package versions",
+				slog.String("project", p.Path), slog.String("detail", strings.Join(unread, "; ")))
 		}
 	}
 	if len(out) == 0 {

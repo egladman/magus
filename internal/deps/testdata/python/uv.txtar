@@ -1,0 +1,76 @@
+A PEP 621 project with PEP 735 groups, a direct reference and an editable workspace
+sibling, locked by uv. urllib3 is in the closure but not declared.
+
+-- pyproject.toml --
+[project]
+name = "fixture"
+version = "0.1.0"
+dependencies = [
+    "Requests[socks]>=2.31",
+    "pydantic_core ; python_version >= '3.10'",
+    "local-lib @ file:///tmp/local-lib",
+    "sibling",
+]
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=6"]
+
+[dependency-groups]
+dev = ["pytest>=8", {include-group = "lint"}]
+lint = ["ruff"]
+
+[tool.uv.sources]
+sibling = { workspace = true }
+-- uv.lock --
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "fixture"
+version = "0.1.0"
+source = { virtual = "." }
+
+[[package]]
+name = "local-lib"
+version = "0.1.0"
+source = { url = "file:///tmp/local-lib" }
+
+[[package]]
+name = "pydantic-core"
+version = "2.27.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "pytest"
+version = "8.3.4"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "pyyaml"
+version = "6.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/pyyaml-6.0.2.tar.gz", hash = "sha256:x", size = 1 }
+
+[[package]]
+name = "requests"
+version = "2.32.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "urllib3" },
+]
+
+[[package]]
+name = "ruff"
+version = "0.8.4"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "sibling"
+version = "0.2.0"
+source = { editable = "packages/sibling" }
+
+[[package]]
+name = "urllib3"
+version = "2.2.3"
+source = { registry = "https://pypi.org/simple" }

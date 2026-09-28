@@ -41,6 +41,27 @@ func TestExplainText(t *testing.T) {
 	assert.NotContains(t, got, "out edges")
 }
 
+// TestExplainTextPrintsPackageDocs: a package card prints its docs URL, one per version
+// when projects pin it at several, and none when the card carries none.
+func TestExplainTextPrintsPackageDocs(t *testing.T) {
+	pkg := func(attrs map[string]string, docs string) string {
+		return ExplainText(types.KnowledgeExplainOutput{
+			Node:    types.KnowledgeNode{ID: "package:gomod golang.org/x/mod", Kind: types.KindPackage, Label: "golang.org/x/mod", Attrs: attrs},
+			DocsURL: docs,
+		})
+	}
+
+	got := pkg(map[string]string{"manager": "gomod", "version": "v0.37.0"}, "https://pkg.go.dev/golang.org/x/mod@v0.37.0")
+	assert.Contains(t, got, "docs: https://pkg.go.dev/golang.org/x/mod@v0.37.0\n")
+
+	got = pkg(map[string]string{"manager": "gomod", "version": "v0.37.0", "version_conflict": "v0.37.0,v0.38.0"},
+		"https://pkg.go.dev/golang.org/x/mod@v0.37.0")
+	assert.Contains(t, got, "docs: https://pkg.go.dev/golang.org/x/mod@v0.37.0\ndocs: https://pkg.go.dev/golang.org/x/mod@v0.38.0\n")
+
+	got = pkg(map[string]string{"manager": "gomod", "version": "v0.37.0", "replaced": "true"}, "")
+	assert.NotContains(t, got, "docs:", "a replaced package carries no URL, so none prints")
+}
+
 // TestExplainTextCountsAndFullIDs: a multi-edge group states its count before the
 // list and keeps full IDs, so an agent never miscounts and always has the next-call
 // token verbatim.

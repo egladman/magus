@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -97,6 +98,9 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 	for _, k := range slices.Sorted(maps.Keys(n.Attrs)) {
 		fmt.Fprintf(&b, "%s: %s\n", k, n.Attrs[k])
 	}
+	for _, u := range packageDocs(out) {
+		fmt.Fprintf(&b, "docs: %s\n", u)
+	}
 	if out.BlastRadius > 0 {
 		reach := "nodes reach"
 		if out.BlastRadius == 1 {
@@ -122,6 +126,27 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 		}
 	}
 	return b.String()
+}
+
+// packageDocs is one docs URL per version a package node pins across the workspace:
+// out.DocsURL alone, or one per version in the node's version_conflict attr, so a
+// reader of a split package sees the page for each release in use. The attr keys are
+// the ones internal/graph/knowledge/packages.go writes.
+func packageDocs(out types.KnowledgeExplainOutput) []string {
+	if out.DocsURL == "" {
+		return nil
+	}
+	versions := strings.Split(out.Node.Attrs["version_conflict"], ",")
+	if len(versions) < 2 {
+		return []string{out.DocsURL}
+	}
+	urls := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if u, ok := deps.DocsURL(out.Node.Attrs["manager"], out.Node.Label, v); ok {
+			urls = append(urls, u)
+		}
+	}
+	return urls
 }
 
 type relationGroup struct {
