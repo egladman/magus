@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -16,8 +17,9 @@ import (
 // bound one is a worker acting under one row, and the rules below are what it may do to
 // the book from inside it. Unbound says nothing about who is writing: an orchestrator and
 // an agent nobody bound are both unbound. A process binds through the checkout's record or
-// its BAGGAGE claim. The guard also reads the calling session's and subagent's record,
-// which no process can see, and refuses a bound caller's rebinding writes before they run
+// its BAGGAGE claim. An [Actor.Unstamped] caller counts as bound, to no row. The guard
+// also reads the calling session's and subagent's record, which no process can see, and
+// refuses a bound caller's rebinding writes before they run
 // (denyLeaseScopedRebind), so for a hook-identified worker that rule is the enforcement
 // and this store is the backstop for everyone else.
 //
@@ -27,18 +29,57 @@ import (
 type Actor struct {
 	// Lease is the row this session acts under, empty when it acts under none.
 	Lease string
+	// Unstamped is a caller the transport it arrived on could not name: a shared server
+	// serves callers other than itself, and one that sent no lease may be any of them. It
+	// is held to a worker's boundary with no row of its own: it may read, and every graded
+	// write it makes is refused. The server's own identity is never lent to it.
+	Unstamped bool
 }
+
+// EnvStampedLease marks a process whose BAGGAGE lease was stamped by the transport that
+// started it on behalf of a caller, rather than claimed by the process's own spawner: a
+// shared server forks a script for a remote caller with the caller's lease, or with none.
+//
+// It only ever DOWNGRADES: under it a missing lease is [Actor.Unstamped] rather than
+// unbound, and a checkout record naming a different lease makes the actor unstamped rather
+// than letting either win. A process that sets it on itself can lose rights, never gain one.
+const EnvStampedLease = "MAGUS_STAMPED_LEASE"
 
 // ActingActor is the party this process acts as for the checkout whose cache dir is
 // cacheDir: the lease [ActingLease] resolves from the checkout's record and this
-// process's BAGGAGE claim. A process with no lease is the unbound actor.
+// process's BAGGAGE claim. A process with no lease is the unbound actor, unless
+// [EnvStampedLease] says a transport stamped that absence.
 func ActingActor(cacheDir string) Actor {
-	lease, _ := ActingLease(cacheDir, trail.LeaseFromEnv())
-	return Actor{Lease: lease}
+	claim := trail.LeaseFromEnv()
+	lease, _ := ActingLease(cacheDir, claim)
+	if os.Getenv(EnvStampedLease) == "" {
+		return Actor{Lease: lease}
+	}
+	if claim == "" || lease != claim {
+		return Actor{Unstamped: true}
+	}
+	return Actor{Lease: claim}
 }
 
-// Bound reports whether this actor is a worker acting under a lease.
-func (a Actor) Bound() bool { return a.Lease != "" }
+// Bound reports whether this actor is held to a worker's boundary: a worker acting under a
+// lease, or an [Actor.Unstamped] caller.
+func (a Actor) Bound() bool { return a.Lease != "" || a.Unstamped }
+
+// As returns a Store over s's file that writes as a, for a door serving a caller other
+// than this process: the shared server's job tool acts as whoever called it. The view
+// takes its own mutex; the file lock still serializes it against s and every other writer.
+func (s *Store) As(a Actor) *Store {
+	return &Store{
+		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir,
+		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, outputs: s.outputs, landed: s.landed,
+	}
+}
+
+// RefuseUnstampedVerify is the refusal for an [Actor.Unstamped] caller verifying row id,
+// which [Actor.Verifies] answers only as a bool.
+func RefuseUnstampedVerify(id string) error {
+	return refuse(Actor{Unstamped: true}, id, "verifying a row grades its holder's work, and a caller magus cannot name may be that holder")
+}
 
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether
 // the acting party's boundary applies to it, and which store-owned fields it may set. Both
@@ -84,6 +125,13 @@ type RefusedError struct {
 func (e *RefusedError) Error() string {
 	msg := fmt.Sprintf("job: lease %s is bound to this session and row %s is what this targeted; %s",
 		e.Actor.Lease, e.Lease, e.Rule)
+	switch {
+	case e.Actor.Unstamped && e.Lease == "":
+		msg = "job: this call arrived with no lease stamped on it; " + e.Rule
+	case e.Actor.Unstamped:
+		msg = fmt.Sprintf("job: this call arrived with no lease stamped on it and row %s is what it targeted; %s",
+			e.Lease, e.Rule)
+	}
 	if e.Remedy == "" {
 		return msg
 	}
@@ -92,6 +140,13 @@ func (e *RefusedError) Error() string {
 
 // refuse builds the refusal for actor's attempt to WRITE lease id.
 func refuse(actor Actor, id, rule string) error {
+	if actor.Unstamped {
+		return &RefusedError{
+			Lease: id, Actor: actor, Rule: rule,
+			Remedy: "Send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
+				"), or make the write from your own checkout, where magus reads it for you",
+		}
+	}
 	return &RefusedError{
 		Lease: id, Actor: actor, Rule: rule,
 		Remedy: "Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
@@ -115,6 +170,9 @@ func refuse(actor Actor, id, rule string) error {
 func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
 	if !actor.Bound() {
 		return nil
+	}
+	if actor.Unstamped {
+		return refuse(actor, id, "a caller magus cannot name may be any row's holder or none, so it writes no row")
 	}
 	if id != actor.Lease {
 		return authorizeChild(actor, id, next, exists, rows)

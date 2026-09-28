@@ -7,6 +7,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -28,16 +29,26 @@ type nextFilter struct {
 //
 // The journal is per checkout, so the entries land beside the ones a CLI run in the
 // same tree writes. That is the scope the guard reads it at.
-func (f nextFilter) served(next []hint.Next) []hint.Next {
-	role, writePaths := f.role()
+func (f nextFilter) served(ctx context.Context, next []hint.Next) []hint.Next {
+	role, writePaths := f.role(ctx)
 	served := hint.OnPath(hint.ServableTo(role, writePaths, next))
 	hint.AppendServedNext(f.cacheDir, served)
 	return served
 }
 
-// role reads the acting job's row off this checkout's job store.
-func (f nextFilter) role() (hint.Role, []string) {
-	id, _ := job.ActingLease(f.cacheDir, trail.LeaseFromEnv())
+// role reads the calling job's row off this checkout's job store: the caller the job tool
+// writes as (see callerActor), so a remedy is never served for the server's role. A caller
+// the transport could not name is served as a worker holding no paths.
+func (f nextFilter) role(ctx context.Context) (hint.Role, []string) {
+	var id string
+	if actor, ok := callerActor(ctx); ok {
+		if actor.Unstamped {
+			return hint.RoleWorker, nil
+		}
+		id = actor.Lease
+	} else {
+		id, _ = job.ActingLease(f.cacheDir, trail.LeaseFromEnv())
+	}
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

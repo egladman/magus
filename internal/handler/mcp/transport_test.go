@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -261,6 +262,72 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		assert.True(t, strings.HasPrefix(allText(res), tc.want), "%s: %s", name, allText(res))
 	}
 	assert.Equal(t, 3, ran, "a refused call must not reach the tool")
+}
+
+// Over HTTP the caller's lease comes off the request's baggage header, the HTTP form of the
+// BAGGAGE a local process reads, and the job tool writes as it rather than as the server.
+func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	jobs := job.NewStore(job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{}})
+	for _, row := range []types.Job{
+		{ID: "root/worker", WritePaths: []string{"internal/job"}, State: types.StateRunning},
+		{ID: "root/other", WritePaths: []string{"internal/guard", "internal/hint"}, State: types.StateRunning},
+	} {
+		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	h, err := HTTPHandler(Options{Magus: fixtureMagus(t), Logger: quietLogger(), Jobs: jobs})
+	require.NoError(t, err)
+	connector := types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
+	}))
+	defer srv.Close()
+	post := func(baggage, session, body string) (http.Header, toolResult) {
+		req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if baggage != "" {
+			req.Header.Set("baggage", baggage)
+		}
+		if session != "" {
+			req.Header.Set("Mcp-Session-Id", session)
+		}
+		resp, err := srv.Client().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var frame rpcFrame
+		require.NoError(t, json.Unmarshal(raw, &frame), string(raw))
+		var result toolResult
+		if session != "" {
+			require.NoError(t, json.Unmarshal(frame.Result, &result), string(raw))
+		}
+		return resp.Header, result
+	}
+	hdr, _ := post("", "", initializeFrame)
+	session := hdr.Get("Mcp-Session-Id")
+	require.NotEmpty(t, session)
+	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"magus_job","arguments":{"op":"fork","id":"root/other","write_paths":"internal/guard"}}}`
+
+	for name, tc := range map[string]struct {
+		baggage, want string
+	}{
+		"another job's lease":  {"other.vendor=x,magus.lease=root/worker", "lease root/worker is bound to this session"},
+		"no lease at all":      {"", "no lease stamped on it"},
+		"a malformed lease id": {"magus.lease=has%20space", "no lease stamped on it"},
+	} {
+		_, result := post(tc.baggage, session, shrink)
+		require.True(t, result.IsError, name)
+		assert.Contains(t, result.Content[0].Text, tc.want, name)
+	}
+	_, result := post("magus.lease=root/other", session, shrink)
+	require.False(t, result.IsError, result.Content)
+	rows, err := jobs.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/guard"}, rows[1].WritePaths, "the row's own holder released a path")
 }
 
 // Over HTTP the credential reaches authorize on the request context, where the server's

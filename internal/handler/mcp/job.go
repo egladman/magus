@@ -47,10 +47,21 @@ type jobTool struct {
 
 func (t *jobTool) Name() string { return hint.ToolJob.String() }
 
+// storeFor is the store as the caller of ctx writes to it. A shared server's own lease is
+// nobody's caller, so over HTTP every write is graded as the lease the request stamped; see
+// callerActor.
+func (t *jobTool) storeFor(ctx context.Context) *job.Store {
+	if actor, ok := callerActor(ctx); ok {
+		return t.store.As(actor)
+	}
+	return t.store
+}
+
 func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+	store := t.storeFor(ctx)
 	switch op := paramString(req.Params, "op", "list"); op {
 	case "list":
-		jobs, err := t.store.List()
+		jobs, err := store.List()
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -59,7 +70,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// disagree about whether two jobs claim the same path.
 		list := types.NewJobList(jobs)
 		if t.root != "" {
-			me := job.Identity{Lease: t.store.Actor().Lease, Login: bindings.ReviewViewer()}
+			me := job.Identity{Lease: store.Actor().Lease, Login: bindings.ReviewViewer()}
 			if list, err = queue.JoinInflight(ctx, t.root, list, me); err != nil {
 				return spells.InvokeResponse{}, err
 			}
@@ -75,7 +86,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// lock. Two concurrent forks on one id (an orchestrator advancing state while a
 		// worker records its checkpoint) would each read the row before the other wrote
 		// it, and the second write would revert the first one's field.
-		stored, err := job.ForkMerge(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), merge, t.limits, t.symbols)
+		stored, err := job.ForkMerge(ctx, store, strings.TrimSpace(paramString(req.Params, "id", "")), merge, t.limits, t.symbols)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -88,7 +99,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// Text as well as Data, and the only op here that sets it. A worker calls this to
 		// learn where it stands, and "base_verdict":"diverged" in a record is a field it
 		// has to know to look for; the sentence names both revisions and what to do next.
-		stored, err := t.store.Exec(ctx,
+		stored, err := store.Exec(ctx,
 			strings.TrimSpace(paramString(req.Params, "id", "")),
 			paramString(req.Params, "reported_base", ""))
 		if err != nil {
@@ -108,7 +119,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		stored, err := job.Exit(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve)
+		stored, err := job.Exit(ctx, store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -119,11 +130,15 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve, t.observe)
+		id := strings.TrimSpace(paramString(req.Params, "id", ""))
+		if store.Actor().Unstamped {
+			return spells.InvokeResponse{}, job.RefuseUnstampedVerify(id)
+		}
+		status, err := job.Wait(ctx, store, id, result, t.resolve, t.observe)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		if rows, err := t.store.List(); err == nil {
+		if rows, err := store.List(); err == nil {
 			status.Entries = job.EntriesOf(rows, status.Job)
 		}
 		return spells.InvokeResponse{Data: status}, nil
@@ -132,7 +147,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// Report what was dropped. Clearing is how a fresh plan starts, and it is also
 		// how one orchestrator silently erases another's plan; a count is the cheapest
 		// way for the caller to notice it wiped rows it did not write.
-		dropped, err := t.store.Clear(ctx)
+		dropped, err := store.Clear(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
