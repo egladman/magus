@@ -13,9 +13,27 @@ import (
 //nolint:gosec // G101: an env var NAME, not a credential; the value it refers to never appears here
 const DefaultHarnessMCPTokenRef = "MAGUS_MCP_TOKEN"
 
-// DefaultHarnessMCPURL is the loopback Streamable HTTP endpoint when a spell
-// omits url.
+// DefaultHarnessMCPURL is the loopback Streamable HTTP endpoint a hint's __URL__
+// names when a spell omits url.
 const DefaultHarnessMCPURL = "http://127.0.0.1:7391/mcp"
+
+// DefaultHarnessMCPCommand is the stdio server an agent host launches per session, from
+// the checkout it works in: that checkout's own binary, so the session reads its own
+// tree at its own build. A hint's __COMMAND__ names it.
+const DefaultHarnessMCPCommand = "./magus mcp"
+
+// HarnessMCPTransport is how a host reaches magus's MCP server.
+type HarnessMCPTransport string
+
+const (
+	// HarnessMCPStdio is a `./magus mcp` process the host starts per session. It is the
+	// default for an agent host.
+	HarnessMCPStdio HarnessMCPTransport = "stdio"
+	// HarnessMCPHTTP is the long-lived `magus server` endpoint, shared by every client and
+	// answering from the checkout and build that started it. It is for the console and
+	// for clients with no shell.
+	HarnessMCPHTTP HarnessMCPTransport = "http"
+)
 
 // HarnessMCP is optional MCP setup guidance declared by a harness spell.
 // Magus never writes host MCP client config: the user owns registration.
@@ -24,7 +42,9 @@ const DefaultHarnessMCPURL = "http://127.0.0.1:7391/mcp"
 type HarnessMCP struct {
 	Enabled  *bool  `json:"enabled,omitempty"`
 	TokenRef string `json:"token_ref,omitempty"`
-	URL      string `json:"url,omitempty"`
+	// URL names the HTTP endpoint, and a spell that sets it is giving HTTP guidance.
+	// Empty means stdio.
+	URL string `json:"url,omitempty"`
 	// Hint is the short instruction describe prints (host CLI command, paste
 	// fragment, or "see docs"). Must not contain a resolved secret.
 	Hint string `json:"hint,omitempty"`
@@ -33,6 +53,15 @@ type HarnessMCP struct {
 	// Register is an optional argv sketch printed beside Hint (placeholders
 	// __URL__ / __TOKEN_REF__ only; Magus does not execute it).
 	Register []string `json:"register,omitempty"`
+}
+
+// Transport is the transport m's guidance registers: HTTP when the spell names a URL,
+// stdio otherwise.
+func (m *HarnessMCP) Transport() HarnessMCPTransport {
+	if m != nil && m.URL != "" {
+		return HarnessMCPHTTP
+	}
+	return HarnessMCPStdio
 }
 
 // GuidanceEnabled reports whether this block should contribute setup guidance.
@@ -122,37 +151,33 @@ func harnessMCPHint(d HarnessDescriptor) (string, error) {
 	return renderMCPSetupHint(m, m.urlOrDefault(), m.tokenRefOrDefault()), nil
 }
 
+// renderMCPSetupHint leads with the transport the guidance registers, so the choice reads
+// the same for every host whatever its spell's hint says.
 func renderMCPSetupHint(m *HarnessMCP, url, ref string) string {
-	hint := m.Hint
-	hint = strings.ReplaceAll(hint, "__URL__", url)
-	hint = strings.ReplaceAll(hint, "__TOKEN_REF__", ref)
-	hint = strings.ReplaceAll(hint, "{{url}}", url)
-	hint = strings.ReplaceAll(hint, "{{token_ref}}", ref)
-
+	placeholders := strings.NewReplacer(
+		"__URL__", url, "__TOKEN_REF__", ref, "__COMMAND__", DefaultHarnessMCPCommand,
+		"{{url}}", url, "{{token_ref}}", ref, "{{command}}", DefaultHarnessMCPCommand,
+	)
 	var b strings.Builder
-	if hint != "" {
-		b.WriteString(hint)
+	if m.Transport() == HarnessMCPHTTP {
+		fmt.Fprintf(&b, "transport: http, %s; one shared server answers from the checkout and build that started it", url)
+	} else {
+		fmt.Fprintf(&b, "transport: stdio, %s started per session in this checkout, so it serves this tree at this build", DefaultHarnessMCPCommand)
+	}
+	if m.Hint != "" {
+		b.WriteByte('\n')
+		b.WriteString(placeholders.Replace(m.Hint))
 	}
 	if len(m.Register) > 0 {
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
 		args := make([]string, len(m.Register))
 		for i, a := range m.Register {
-			a = strings.ReplaceAll(a, "__URL__", url)
-			a = strings.ReplaceAll(a, "__TOKEN_REF__", ref)
-			a = strings.ReplaceAll(a, "{{url}}", url)
-			a = strings.ReplaceAll(a, "{{token_ref}}", ref)
-			args[i] = a
+			args[i] = placeholders.Replace(a)
 		}
-		b.WriteString("command sketch (not executed): ")
+		b.WriteString("\ncommand sketch (not executed): ")
 		b.WriteString(strings.Join(args, " "))
 	}
 	if m.Docs != "" {
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString("docs: ")
+		b.WriteString("\ndocs: ")
 		b.WriteString(m.Docs)
 	}
 	return b.String()

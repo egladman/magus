@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,39 @@ func TestHarnessMCPHintRegisterSketch(t *testing.T) {
 	assert.Contains(t, hint, "claude mcp add")
 	assert.Contains(t, hint, DefaultHarnessMCPURL)
 	assert.Contains(t, hint, "command sketch (not executed)")
+}
+
+func TestHarnessMCPPlanDefaultsToStdioInTheCheckout(t *testing.T) {
+	registerHarnessSpell(t, "stdio-host", `{
+  "schema_version": 2,
+  "id": "stdio-host",
+  "display": {"name": "Stdio Host"},
+  "skills": {"paths": [".agents/skills"], "form": "short"},
+  "mcp": {
+    "hint": "register __COMMAND__ with project scope",
+    "register": ["host", "mcp", "add", "magus", "--", "./magus", "mcp"],
+    "docs": "docs/guides/integrations/mcp.md"
+  }
+}`)
+	plan, err := PlanHarness(context.Background(), t.TempDir(), "stdio-host")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessPlan{
+		ID: "stdio-host",
+		MCPHint: "transport: stdio, ./magus mcp started per session in this checkout, so it serves this tree at this build\n" +
+			"register ./magus mcp with project scope\n" +
+			"command sketch (not executed): host mcp add magus -- ./magus mcp\n" +
+			"docs: docs/guides/integrations/mcp.md",
+	}, plan)
+}
+
+func TestHarnessMCPTransportIsHTTPOnlyWhenTheSpellNamesAURL(t *testing.T) {
+	assert.Equal(t, HarnessMCPStdio, (*HarnessMCP)(nil).Transport())
+	assert.Equal(t, HarnessMCPStdio, (&HarnessMCP{Hint: "see docs"}).Transport())
+	assert.Equal(t, HarnessMCPHTTP, (&HarnessMCP{URL: DefaultHarnessMCPURL}).Transport())
+
+	hint, err := harnessMCPHint(HarnessDescriptor{ID: "remote", MCP: &HarnessMCP{URL: DefaultHarnessMCPURL, Hint: "see docs"}})
+	require.NoError(t, err)
+	assert.Equal(t, "transport: http, "+DefaultHarnessMCPURL+"; one shared server answers from the checkout and build that started it\nsee docs", hint)
 }
 
 func TestValidateHarnessMCPRejectsEmbeddedToken(t *testing.T) {
