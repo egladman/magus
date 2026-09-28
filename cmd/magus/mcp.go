@@ -82,12 +82,14 @@ func mcpUsage() {
 	fmt.Fprintln(w, "is the local process the host started, holding mcp=write. It stops when the")
 	fmt.Fprintln(w, "host closes stdin.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Register it with an MCP client as a stdio server:")
-	fmt.Fprintln(w, "  command  magus")
+	fmt.Fprintln(w, "Register it with an agent host as a project-scoped stdio server, so each")
+	fmt.Fprintln(w, "checkout's agent reaches that checkout at its own build:")
+	fmt.Fprintln(w, "  command  ./magus")
 	fmt.Fprintln(w, `  args     ["mcp"]`)
+	fmt.Fprintln(w, "magus describe harness <host> prints the registration for a known host.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "magus server start also serves MCP over Streamable HTTP, for one")
-	fmt.Fprintln(w, "long-lived server shared by several clients:")
+	fmt.Fprintln(w, "magus server start also serves MCP over Streamable HTTP, for the console and")
+	fmt.Fprintln(w, "clients with no shell. It answers from the checkout and build that started it:")
 	fmt.Fprintf(w, "  url        http://%s/mcp\n", mcpAddrString())
 	fmt.Fprintln(w, "  auth       Authorization: Bearer <token>, minted with")
 	fmt.Fprintln(w, "             magus config mcp connector create --name <client> --expires 366d")
@@ -99,6 +101,9 @@ func mcpUsage() {
 // serveMCPStdio serves MCP for m with wire as the protocol's output. For as long as it
 // serves, os.Stdout points at diag, so a stray print or a child process handed os.Stdout
 // lands on stderr rather than between two frames a host is parsing.
+//
+// It keeps m's graph and symbol indexes current while it serves, as the server does for
+// its own workspace: a session lives as long as the agent's, so graph reads answer warm.
 func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Writer, diag *os.File) error {
 	addr, err := mcpAddrPort()
 	if err != nil {
@@ -107,6 +112,10 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 	stdout := os.Stdout
 	os.Stdout = diag
 	defer func() { os.Stdout = stdout }()
+
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	watchWorkspace(ctx, m)
 
 	fmt.Fprintf(diag, "magus: serving MCP over stdio for %s; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)\n", m.Root())
 	return internalmcp.ServeStdio(ctx, internalmcp.Options{
@@ -211,20 +220,29 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	serveBridge(ctx, cancel, m, addr)
 }
 
-// startWatch keeps m's knowledge graph and symbol indexes current for the server's
-// life: the watcher invalidates the warm graph on source changes, so queries answer from
-// memory without re-parsing every magusfile per call, and the indexer re-runs SCIP in the
-// background, throttled and idle-gated. Neither is fatal: queries fall back to a
-// cache-first rebuild, and symbols go stale until a manual `magus run ::scip`.
+// startWatch keeps m's knowledge graph and symbol indexes current for the server's life
+// and lists m's root among the roots the server reports watching.
 func startWatch(ctx context.Context, m *magus.Magus) {
+	if watchWorkspace(ctx, m) {
+		watching(m.Root())
+	}
+}
+
+// watchWorkspace keeps m's knowledge graph and symbol indexes current until ctx ends: the
+// watcher invalidates the warm graph on source changes, so queries answer from memory
+// without re-parsing every magusfile per call, and the indexer re-runs SCIP in the
+// background, throttled and idle-gated. Neither is fatal: queries fall back to a
+// cache-first rebuild, and symbols go stale until a manual `magus run ::scip`. It reports
+// whether the symbol indexer started.
+func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
 		slog.Warn("[AGENT] knowledge-graph watcher unavailable; queries will rebuild per call", slog.String("error", werr.Error()))
 	}
 	if _, werr := m.WatchSymbolIndexing(ctx); werr != nil {
 		slog.Warn("[AGENT] symbol auto-indexer unavailable; symbol indexes will not refresh automatically", slog.String("error", werr.Error()))
-		return
+		return false
 	}
-	watching(m.Root())
+	return true
 }
 
 // serveUnloadedBridge serves the server's surface for a workspace that failed to load

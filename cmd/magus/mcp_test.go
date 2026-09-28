@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,6 +77,41 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(logged), "magus: serving MCP over stdio for "+m.Root())
 	assert.Contains(t, string(logged), "stray\n")
+}
+
+func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+	m, err := magus.Open(t.Context(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+	diag, err := os.CreateTemp(t.TempDir(), "stderr")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = diag.Close() })
+
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	served := make(chan error, 1)
+	go func() {
+		served <- serveMCPStdio(context.Background(), m, inR, outW, diag)
+		_ = outW.Close()
+	}()
+	wire := bufio.NewScanner(outR)
+	_, err = io.WriteString(inW, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cmd-test","version":"1"}}}`+"\n")
+	require.NoError(t, err)
+	require.True(t, wire.Scan(), "no reply to initialize")
+
+	watching, _ := m.KnowledgeGraphHealthy()
+	assert.True(t, watching, "a stdio session keeps its graph warm")
+
+	require.NoError(t, inW.Close())
+	require.NoError(t, <-served)
+	assert.Eventually(t, func() bool {
+		watching, _ := m.KnowledgeGraphHealthy()
+		return !watching
+	}, 5*time.Second, 10*time.Millisecond, "the watcher stops with the session")
 }
 
 func TestMCPCmdRefusesArguments(t *testing.T) {
