@@ -413,11 +413,10 @@ const (
 	// WorkspaceStillLoading is a server call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
 	WorkspaceStillLoading DiagnosticCode = "MGS3017"
-	// WritePathIsDirectory is a job fork whose write paths name an existing directory that
-	// is not a project root. A directory claims every file under it, so the job overlaps
-	// every other job that edits anything there, and the overlap report fills with pairs
-	// that share no file. A project root the job owns whole, and a directory the job
-	// creates, stay declarable.
+	// WritePathIsDirectory is a job fork whose write paths name an existing directory, a
+	// project root or the workspace root included. A directory claims every file under it,
+	// so the job overlaps every other job that edits anything there, and the overlap report
+	// fills with pairs that share no file. Only a directory the job creates stays declarable.
 	WritePathIsDirectory DiagnosticCode = "MGS3018"
 	// QueueCredentialMismatch is a merge queue whose base requires the queue's commit
 	// status from one integration while apply holds another's credential. The provider

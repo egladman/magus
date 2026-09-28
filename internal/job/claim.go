@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -161,16 +160,13 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 }
 
 // literalClaimableFile is the file entry names, whole or by declaration, cleaned and
-// workspace-relative, or "" when entry is a glob, the whole tree, a project root, or an
-// existing directory: none of those can be shared by a claim, so RefuseUnorderedFileShare
+// workspace-relative, or "" when entry is a glob, the whole tree, or an existing
+// directory: none of those can be shared by a claim, so RefuseUnorderedFileShare
 // has nothing to compare them against.
 func literalClaimableFile(root, entry string) (string, bool) {
 	p, _ := types.SplitClaim(entry)
 	p = path.Clean(strings.TrimSpace(p))
 	if p == "" || p == "." || strings.ContainsAny(p, globMeta) {
-		return "", false
-	}
-	if describe.IsProjectRoot(root, p) {
 		return "", false
 	}
 	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil && info.IsDir() {

@@ -127,8 +127,8 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 }
 
 // TestForkRefusesADirectoryWritePath pins MGS3018 on both doors that fork by merge: a
-// directory claims every file under it, so it is declarable only as a project root the job
-// owns whole, or as a directory the job creates.
+// directory claims every file under it, so no existing one is declarable, project roots
+// included. Only a directory the job creates passes.
 func TestForkRefusesADirectoryWritePath(t *testing.T) {
 	t.Parallel()
 
@@ -145,16 +145,17 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 		want  string // "" forks; otherwise a substring of the refusal
 	}{
 		{"a file", []string{"internal/job/store.go"}, ""},
-		{"a project root", []string{"libs/lib"}, ""},
-		{"the workspace root, itself a project", []string{"."}, ""},
 		{"a directory the job creates", []string{"internal/fresh"}, ""},
 		{"a file pattern", []string{"internal/job/*.go", "internal/**/*_test.go"}, ""},
-		{"a wildcard subtree of a project root", []string{"libs/lib/**"}, ""},
 		{"a plain directory", []string{"internal/job"}, `"internal/job", inside project "."`},
 		{"a directory inside a project", []string{"libs/lib/src"}, `"libs/lib/src", inside project "libs/lib"`},
 		{"a directory spelled as a glob", []string{"internal/**"}, `"internal/**" (matching the directory "internal")`},
 		{"a directory pattern", []string{"libs/*/src/*"}, `(matching the directory "libs/lib/src")`},
 		{"a vendored tree holding a magusfile", []string{"node_modules/pkg"}, `"node_modules/pkg"`},
+		{"a project root", []string{"libs/lib"}, `"libs/lib", the root of project "libs/lib"`},
+		{"the workspace root, itself a project", []string{"."}, `".", the workspace root`},
+		{"the workspace root spelled as a glob", []string{"**"}, `"**" (matching the directory "."), the workspace root`},
+		{"a wildcard subtree of a project root", []string{"libs/lib/**"}, `"libs/lib/**" (matching the directory "libs/lib"), the root of project "libs/lib"`},
 		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"internal", inside project "."; "libs/lib/src"`},
 	}
 	for _, tc := range cases {
@@ -170,6 +171,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			}
 			require.ErrorIs(t, err, types.WritePathIsDirectory)
 			assert.Contains(t, err.Error(), tc.want)
+			assert.Contains(t, err.Error(), "A write path names files")
 			assert.Contains(t, err.Error(), "List the files the job will edit")
 			rows, lerr := s.List()
 			require.NoError(t, lerr)
