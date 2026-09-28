@@ -263,12 +263,13 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	for _, t := range tools {
 		byName[t.Name()] = t
 	}
+	stamp := newServed(opts.Magus.Root(), opts.Build)
 	for _, d := range Registry {
 		t, ok := byName[d.Name]
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, authorize(adapt(t))))
+		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, stamp.annotate(authorize(adapt(t)))))
 	}
 	// The loop above only checks Registry -> driver; a driver built into allToolDrivers but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
