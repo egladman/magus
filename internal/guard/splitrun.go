@@ -14,18 +14,15 @@ import (
 
 // The SPLIT-RUN advisory: `magus run` (and `magus affected`) takes one target and many
 // projects, so the same target run twice on two different project sets is usually the one
-// call typed as two. Two shapes reach here:
+// call typed as two. On ONE line that is chained-run's shape, which refuses it and names
+// the combined call (combinedStage); splitRunLineAdvice words the combined form for a
+// chain it only advises on.
 //
-//   - ON ONE LINE (`magus run lint . && magus run lint docs`): chainedRunRe already flags
-//     this as a chain worth questioning; splitRunLineAdvice narrows its TEXT to the combined
-//     form when both sides share a target, and leaves chainedRunRe's general text in place
-//     when they do not (that is still its domain, per advisoryChainedRun).
-//   - ACROSS TWO CALLS: Evaluate sees one line at a time and remembers nothing between
-//     them, so this rung reads and writes a per-session fact instead: the target and
-//     project set of the last magus run/affected invocation. gradeScopeDrift's
-//     touched-projects file is the precedent for this, on the SAME `facts` gate guard.go
-//     already keys on the caller's facts (FactsKey) rather than its rendered text, so no new store
-//     is needed.
+// ACROSS TWO CALLS, Evaluate sees one line at a time and remembers nothing between them,
+// so this rung reads and writes a per-session fact instead: the target and project set of
+// the last magus run/affected invocation. gradeScopeDrift's touched-projects file is the
+// precedent for this, on the SAME `facts` gate guard.go already keys on the caller's facts
+// (FactsKey) rather than its rendered text, so no new store is needed.
 
 // splitRunWindow bounds how far apart two calls may be and still read as one mistake
 // rather than two unrelated runs. Ten minutes covers a rushed pair of back-to-back tool
@@ -115,7 +112,7 @@ func singleMagusRunInvocation(cmds []hint.Invocation) (verb, raw string, project
 	return verb, raw, projects, count == 1
 }
 
-// splitRunLineAdvice narrows a ONE-LINE chain (already matched by chainedRunRe) to the
+// splitRunLineAdvice narrows a ONE-LINE chain chained-run advises on to the
 // combined-run text when every magus run/affected invocation on the line names the same
 // target: charms included, since `lint` and `lint:rw` are different targets and combining
 // them would silently drop the charm. False falls back to the general chained-run text,

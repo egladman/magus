@@ -2,17 +2,22 @@ package guard
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -124,6 +129,7 @@ const (
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
+	denyRuleChainedRun        denyRuleName = "chained-run"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
 	denyRuleBacktickSubstitution denyRuleName = "backtick-substitution"
@@ -178,21 +184,314 @@ const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 // It is the text counterpart of parseGit, looser in the safe direction.
 const gitOpts = `git(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+`
 
-// chainedRunRe matches a second `magus run` on the same line.
+// chainedRunRe matches a second `magus run` sequenced after another on a line that does
+// not parse, where readRunChain cannot answer. A pipe is not a sequence: it is the remedy.
 //
-// Targets COMPOSE through ctx.needs, so a chain is usually one invocation that already did
-// the whole thing: in this workspace `lint` needs `format` needs `generate`, which makes
-// `magus run generate . ; magus run format . ; magus run lint .` three workspace loads to
-// produce what the third one produces alone.
-//
-// It matches the SHAPE rather than parsed commands because the mistake is the chaining, and
-// every spelling of it (; && ||) is the same mistake.
 // `affected` counts as a second one: the gate runs the whole pipeline over everything the diff
 // reaches, so building a project immediately before it is asking for the same work twice. That
 // spelling slipped past the first version of this rule, which only looked for `run`, and the
 // author of the rule then made exactly that mistake within the hour.
 var chainedRunRe = regexp.MustCompile(
-	cmdPos + `(?:\./)?magus\s+(?:run|affected)\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+(?:run|affected)\s`)
+	cmdPos + `(?:\./)?magus\s+(?:run|affected)\s[^;&|]*(?:;|&&?|\|\|)\s*(?:\./)?magus\s+(?:run|affected)\s`)
+
+// runStage is one `magus run` or `magus affected` invocation read off a chained line.
+type runStage struct {
+	argv     []string // binary first, as typed
+	verb     string
+	target   string
+	projects []string
+	at       []int    // where each project sits in argv
+	flags    []string // every flag name given before `--`, dashes and value stripped
+	root     string   // the --root or -C value, "" for the cwd's workspace
+}
+
+// runStageFlags are the flag sets a stage's own flags are read against, so a value flag
+// never reads its value as a project.
+var runStageFlags = sync.OnceValue(func() map[string]*flag.FlagSet {
+	run := flag.NewFlagSet("run", flag.ContinueOnError)
+	gen.BindRun(run)
+	run.String(gen.FlagRunSkip, "", "")
+	affected := flag.NewFlagSet("affected", flag.ContinueOnError)
+	gen.BindAffected(affected)
+	return map[string]*flag.FlagSet{"run": run, "affected": affected}
+})
+
+// stageFlagTakesValue reports whether flag name consumes the next word in verb's argv.
+// A name neither set knows is read as boolean, which fails toward a misread project and
+// so toward the advisory.
+func stageFlagTakesValue(verb, name string) bool {
+	f := runStageFlags()[verb].Lookup(name)
+	if f == nil {
+		takes, _ := MagusFlagTakesValue(name)
+		return takes
+	}
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return !ok || !b.IsBoolFlag()
+}
+
+// readRunStage reads c as a magus run or affected invocation, false for anything else.
+func readRunStage(c hint.Invocation) (runStage, bool) {
+	if !isMagusInvocation(c) {
+		return runStage{}, false
+	}
+	s := runStage{argv: append([]string{c.Name}, c.Args...)}
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		if a == "--" {
+			break
+		}
+		if a == "" || a == "-" || a[0] != '-' {
+			switch {
+			case s.verb == "" && (a == "run" || a == "affected"):
+				s.verb = a
+			case s.verb == "":
+				return runStage{}, false
+			case s.target == "":
+				s.target = a
+			default:
+				s.projects = append(s.projects, a)
+				s.at = append(s.at, i+1)
+			}
+			continue
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		s.flags = append(s.flags, name)
+		takes, _ := MagusFlagTakesValue(name)
+		if s.verb != "" {
+			takes = stageFlagTakesValue(s.verb, name)
+		}
+		if takes && !hasValue && i+1 < len(c.Args) {
+			i++
+			value = c.Args[i]
+		}
+		if name == "root" || name == "C" {
+			s.root = value
+		}
+	}
+	return s, s.verb != "" && s.target != ""
+}
+
+// runChain is a shell line read as magus stages. sequenced is a `&&` or `;` between two
+// of them; breaks is why a pipe of the same stages would not do what the line does, ""
+// when it would.
+type runChain struct {
+	stages    []runStage
+	sequenced bool
+	breaks    string
+}
+
+// readRunChain reads a line built only from magus run/affected stages joined by `&&`,
+// `;` or a pipe. ok is false for a line that does not parse or holds fewer than two
+// stages. A line holding anything else keeps its stages and says why in breaks.
+func readRunChain(command string, d Dialect) (runChain, bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return runChain{}, false
+	}
+	var ch runChain
+	runs := 0
+	var walk func(s *syntax.Stmt)
+	walk = func(s *syntax.Stmt) {
+		if s.Background || s.Negated || len(s.Redirs) > 0 {
+			ch.breakWith("a redirect, `&` or `!` on the line")
+		}
+		switch c := s.Cmd.(type) {
+		case *syntax.BinaryCmd:
+			switch c.Op {
+			case syntax.AndStmt:
+				ch.sequenced = true
+			case syntax.OrStmt:
+				ch.sequenced = true
+				ch.breakWith("`||` runs the next stage only when one FAILS")
+			}
+			walk(c.X)
+			walk(c.Y)
+		case *syntax.CallExpr:
+			stage, ok := readRunStage(literalInvocation(c))
+			if ok {
+				ch.stages = append(ch.stages, stage)
+			} else {
+				ch.breakWith("a command other than a plain magus run on the line")
+			}
+			if words := literalWords(c.Args); ok || len(words) > 0 && isRunStage(words) {
+				runs++
+			}
+		default:
+			ch.breakWith("a compound command on the line")
+		}
+	}
+	for i, s := range f.Stmts {
+		if i > 0 {
+			ch.sequenced = true
+		}
+		walk(s)
+	}
+	if runs < 2 {
+		return runChain{}, false
+	}
+	if ch.breaks == "" {
+		ch.breaks = pipeBreaks(ch.stages)
+	}
+	return ch, true
+}
+
+// isRunStage reports a magus run or affected call however its words expand, so a stage
+// the chain cannot render back still counts toward the chain.
+func isRunStage(words []string) bool {
+	_, ok := readRunStage(hint.Invocation{Name: words[0], Args: words[1:]})
+	return ok
+}
+
+// literalInvocation is c as the argv it runs, or an empty one when an assignment prefix or
+// an expansion means the stage cannot be rendered back exactly.
+func literalInvocation(c *syntax.CallExpr) hint.Invocation {
+	if len(c.Assigns) > 0 || len(c.Args) == 0 {
+		return hint.Invocation{}
+	}
+	words := make([]string, 0, len(c.Args))
+	for _, w := range c.Args {
+		word, ok := literalArg(w.Parts)
+		if !ok {
+			return hint.Invocation{}
+		}
+		words = append(words, word)
+	}
+	return hint.Invocation{Name: words[0], Args: words[1:]}
+}
+
+func (ch *runChain) breakWith(why string) {
+	if ch.breaks == "" {
+		ch.breaks = why
+	}
+}
+
+// pipeStdioFlags change what a stage reads from stdin or writes to stdout, or stop it
+// taking the project locks a pipe orders stages by.
+var pipeStdioFlags = []string{
+	gen.FlagRunStdin, gen.FlagRunStep, gen.FlagRunDetach, gen.FlagRunGraph,
+	"plan", "impact", "explain", "bisect", "dry-run", "h", "help",
+}
+
+// pipesProveStages is whether this platform proves who writes a pipe. Windows cannot, so
+// its stages meet as strangers: no ordering, no fail-fast.
+var pipesProveStages = runtime.GOOS != "windows"
+
+// pipeBreaks names what a pipe of stages would do differently from running them one
+// after another, or "" when nothing.
+func pipeBreaks(stages []runStage) string {
+	if !pipesProveStages {
+		return "this platform cannot prove a pipe's upstream, so a pipe would neither order nor stop the stages"
+	}
+	first := stages[0]
+	for i, s := range stages {
+		last := i == len(stages)-1
+		switch {
+		case s.argv[0] != first.argv[0] || s.root != first.root:
+			return "the stages run different magus binaries or workspaces, which a pipe cannot prove to each other"
+		case s.target == "ls":
+			return "`run ls` takes no locks, so a pipe would not wait on it"
+		case slices.ContainsFunc(s.flags, func(f string) bool { return slices.Contains(pipeStdioFlags, f) }):
+			return "a stage's flags read stdin, write elsewhere or take no locks"
+		case !last && slices.ContainsFunc(s.flags, func(f string) bool { return f == "o" || f == "output" || f == "tee" }):
+			return "an upstream stage's -o output would feed the next stage instead of the terminal"
+		case i > 0 && s.verb == "run" && len(s.projects) == 0:
+			return "a downstream run naming no projects would inherit the upstream's projects in a pipe"
+		case i > 0 && s.verb == "affected":
+			return "a downstream `affected` reads its projects from the diff before the upstream's writes land"
+		}
+	}
+	return ""
+}
+
+// rebuildTargets are the targets of magus's own magusfile that relink ./magus, in their
+// dashed spelling (`go_build` names the same one). The go spell's `go::go-build` op counts
+// too, since `-- -o ./magus ./cmd/magus` relinks through it. Every stage of a pipe starts
+// at once, so a stage after one of these would run the binary it replaces.
+var rebuildTargets = []string{"go-build", "build"}
+
+// rebuildsOwnBinary reports a stage before the last that relinks the magus binary, in a
+// checkout of magus's own source.
+func rebuildsOwnBinary(root string, stages []runStage) bool {
+	if root == "" {
+		return false
+	}
+	for _, s := range stages[:len(stages)-1] {
+		raw := s.target
+		if i := strings.LastIndex(raw, "::"); i >= 0 {
+			raw = raw[i+2:]
+		}
+		if t, err := types.ParseTarget(raw); err == nil && slices.Contains(rebuildTargets, strings.ReplaceAll(t.Name, "_", "-")) {
+			return ownSourceRoot(root)
+		}
+	}
+	return false
+}
+
+// chainedRunVerdict judges magus runs sequenced with `&&` or `;`. The same target on
+// several projects is refused toward the one invocation naming them all, any other chain
+// toward the pipe of its stages. A chain the pipe would change keeps the advisory and
+// says why. ok is false for a line that sequences fewer than two magus runs.
+func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdict, bool) {
+	ch, parsed := readRunChain(command, d)
+	if !parsed {
+		if chainedRunRe.MatchString(command) {
+			return ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: denyRuleChainedRun}}, true
+		}
+		return ShellVerdict{}, false
+	}
+	if !ch.sequenced {
+		return ShellVerdict{}, false
+	}
+	why := ch.breaks
+	if why == "" && rebuildsOwnBinary(deps.scope.root, ch.stages) {
+		why = "a pipe starts every stage at once, so a stage after one that relinks ./magus would run the binary it replaces"
+	}
+	if why != "" {
+		advice := adviseChainedRun
+		if cmds, ok := ParseCommandsDialect(command, d); ok {
+			if text, same := splitRunLineAdvice(cmds); same {
+				advice = text
+			}
+		}
+		return ShellVerdict{Context: advice + "\nNot refused, because " + why + ".", Rule: denyRule{Name: denyRuleChainedRun}}, true
+	}
+	stages := make([][]string, len(ch.stages))
+	for i, s := range ch.stages {
+		stages[i] = s.argv
+	}
+	pipe := hint.NextForDenyRemedyPipeline(string(denyRuleChainedRun), stages, "a pipe orders stages whose projects overlap and exits with the first that fails.")
+	more := chainedRunComposeNote
+	// The pipe is served even here: it keeps the order the chain chose, and one call
+	// orders projects only by their declared edges.
+	if argv, ok := combinedStage(ch.stages); ok {
+		more = "One call runs the same target on all of them when their order does not matter: `" + hint.NextForDenyRemedy(string(denyRuleChainedRun), argv, "").Run + "`."
+	}
+	deny := "Pipe magus runs instead of chaining them: `" + pipe.Run + "`.\n" + chainedRunPipeNote + "\n" + more
+	lead := "Pipe magus runs instead of chaining them.\n" + chainedRunPipeNote + "\n" + more
+	return ShellVerdict{Deny: deny, Rule: denyRule{Name: denyRuleChainedRun}}.withRemedy(lead, pipe), true
+}
+
+// combinedStage is the one invocation that covers a chain of the same target on several
+// project sets: every stage alike but for its projects, each naming some. Its argv is the
+// first stage's with every stage's projects where its own were.
+func combinedStage(stages []runStage) ([]string, bool) {
+	first := stages[0]
+	shape := func(s runStage) []string {
+		out := slices.Clone(s.argv)
+		for i := len(s.at) - 1; i >= 0; i-- {
+			out = slices.Delete(out, s.at[i], s.at[i]+1)
+		}
+		return out
+	}
+	projects := slices.Clone(first.projects)
+	for _, s := range stages {
+		if len(s.projects) == 0 || !slices.Equal(shape(s), shape(first)) {
+			return nil, false
+		}
+		projects = mergeProjects(projects, s.projects)
+	}
+	return slices.Insert(shape(first), first.at[0], projects...), true
+}
 
 // toolMatch is one command spell operation Magus can run on the caller's
 // behalf. It is derived from the registered spell catalog, never a hand-kept
@@ -1562,15 +1861,18 @@ var (
 	denyStageAll = "Stage through the workspace: `" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
 		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
-	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
-	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
-	// which case this is. What the guard can see is that the chain is worth questioning.
+	// The advisory a chain keeps when a pipe of its stages would change what it does; see
+	// pipeBreaks for each case.
 	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
 		"Check what a target already pulls in before chaining: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints the plan without executing it.\n" +
 		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice, and the second run can trip MGS4007 on an output the first one left behind.\n" +
 		"What it does NOT do is regenerate. A workspace whose default charms the gate strips (`--no-default-charms`) turns the composed `generate` into a drift GATE, so stale outputs fail it rather than being rewritten. Regenerate first, in ONE invocation across every affected project: `" + hint.Affected.With("generate:rw") + "`.\n" +
 		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `" + hint.Run.String() + "` takes one TARGET and many PROJECTS (`" + hint.Run.With("build", "api", "web") + "`), so two targets never belong in one call either."
 
+	// The facts the chained-run deny owes about the pipe it serves, where it differs from
+	// `&&`: a disjoint stage is not held back by a failure upstream.
+	chainedRunPipeNote    = "Stages whose projects overlap run in order and a failed stage stops the rest (MGS3030). A stage on disjoint projects runs alongside and still finishes after an upstream fails; the pipeline exits red either way."
+	chainedRunComposeNote = "The last target may cover the chain alone, since targets compose through ctx.needs: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints its plan."
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
 	// correction is the flag that returns that thing, not the prohibition.
@@ -2207,18 +2509,14 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if scriptedRewriteFires(command, d, deps.scope) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
-	var advisory ShellVerdict
-	// Held rather than returned, like the git advisories below: a deny found later on the
-	// same line outranks it.
-	if chainedRunRe.MatchString(command) {
-		advisory = ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: advisoryChainedRun}}
-		// Narrowed to the combined-run form when every magus run/affected invocation on
-		// the line names the same target: charms included. A chain of genuinely
-		// different targets stays chained-run's text, and its own domain.
-		if parsed {
-			if text, ok := splitRunLineAdvice(cmds); ok {
-				advisory = ShellVerdict{Context: text, Rule: denyRule{Name: denyRuleName(advisorySplitRun)}}
-			}
+	var advisory, chained ShellVerdict
+	// Held rather than returned, like the git advisories below: the rules that name a
+	// command outrank a deny about how commands are joined.
+	if v, ok := chainedRunVerdict(deps, command, d); ok {
+		if v.Deny != "" {
+			chained = v
+		} else {
+			advisory = v
 		}
 	}
 	// A help request for a program documented never to run on one prints usage, so the
@@ -2286,6 +2584,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	case redir.ok:
 		lead, next := redirectRemedy(redir)
 		return ShellVerdict{Deny: redirectDeny(redir.verb, redir.dest), Rule: denyRule{Name: denyRuleOutputRedirect}}.withRemedy(lead, next...)
+	case chained.Deny != "":
+		return chained
 	}
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}

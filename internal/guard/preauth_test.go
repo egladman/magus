@@ -223,6 +223,8 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A", "magus vcs add")},
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A -- cmd/magus/main.go", "magus vcs add cmd/magus/main.go")},
 		{"denyRuleProcessPoll", denyRuleProcessPoll, fixed("pgrep -fl magus", "magus status")},
+		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs")},
+		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test .")},
 		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
 		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T) (string, string) {
 			const spellName = "guard-remedy-test"
