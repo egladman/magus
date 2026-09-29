@@ -30,7 +30,9 @@ import (
 // object-src, frame-ancestors, base-uri, nor form-action inherits from default-src, so each is set
 // explicitly. style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles
 // inline; img-src allows data: for the inline SVG/data-URI icons the bundle embeds.
-const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+// 'wasm-unsafe-eval' lets the Diagrams surface compile the playground's Buzz runtime; it
+// admits WebAssembly compilation only, not eval or inline script.
+const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
 // StaticHandler serves the built console at /console/ for a consoleDir, with an SPA fallback for
 // the clean surface paths and a strict CSP on every HTML document. It is the ONE implementation
@@ -128,6 +130,8 @@ var shellExtensions = map[string]bool{
 	".html": true, ".js": true, ".css": true, ".webmanifest": true,
 	".svg": true, ".png": true, ".ico": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
+	// The Diagrams surface's Buzz runtime (gen/wasm/buzz.wasm); FileServer types it application/wasm.
+	".wasm": true,
 }
 
 // isShellFile reports whether urlPath (under /console/) names part of the app shell that

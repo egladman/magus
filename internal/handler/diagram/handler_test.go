@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
+	diagramsrc "github.com/egladman/magus/libs/diagram"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,6 +205,22 @@ func TestDiagramSourceURL(t *testing.T) {
 	var out Rendered
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	assert.Empty(t, out.SourceURL)
+}
+
+// The console lays a figure out itself only if it runs the code the server runs.
+func TestDiagramSourceServesTheEmbeddedLibrary(t *testing.T) {
+	w := get(t, chainWorkspace(), SourcePath)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var out Sources
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	flowSrc, err := diagramsrc.Source.ReadFile("flow.buzz")
+	require.NoError(t, err)
+	rendererSrc, err := diagramsrc.Source.ReadFile("diagram.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"libs/diagram/flow.buzz":    string(flowSrc),
+		"libs/diagram/diagram.buzz": string(rendererSrc),
+	}, out.Files)
 }
 
 func anchors(nodes []Node) []string {

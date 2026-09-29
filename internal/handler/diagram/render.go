@@ -319,7 +319,11 @@ func driver(g graph, desc string) string {
 	for _, e := range g.edges {
 		fmt.Fprintf(&b, "    f.edge(%s, dst: %s, claim: %s);\n", buzzString(e.src), buzzString(e.dst), buzzString(g.claim))
 	}
-	b.WriteString("    return f.svg(cssVarPalette());\n}\n")
+	if anchorHref == "" {
+		b.WriteString("    return f.svg(cssVarPalette());\n}\n")
+	} else {
+		fmt.Fprintf(&b, "    return f.svg(cssVarPalette(), s: Style{ anchorHref = %s });\n}\n", buzzString(anchorHref))
+	}
 	b.WriteString(`var serveSvg = "";
 var serveFindings = "";
 try {

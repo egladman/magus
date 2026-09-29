@@ -134,6 +134,39 @@ medium/large/tiny/pill + action/control roles) to **2px**, once, so the whole co
 (cards, buttons, inputs, tabs, chips) squares up together - no per-component CSS, and it
 survives version bumps.
 
+### Diagram figures (`--magus-diagram-*`)
+
+libs/diagram paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
+the end of `tokens.css` maps all nine roles (paper, surface, ink, muted, soft, rule, accent,
+accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
+with no per-theme copy. `diagrams/view-dom.test.ts` fails if a role goes missing.
+
+## The Diagrams surface (`src/console/diagrams/`)
+
+A lazy module surface (`gen/diagrams/diagrams.js` + `diagrams.css`) over
+`GET /api/v1/diagrams`. The server's SVG is the page: it is inlined the moment it arrives, every
+anchored node is a real `<a href>` to its source, and the node list beside it says the same thing
+in words. `interact.ts` then only adds listeners:
+
+- `f` fits, `+` `-` zoom, `0` is the figure's own size, Esc clears focus. Keys are read on the
+  figure's frame, never on document, and a modified key is always the browser's.
+- ctrl/cmd+wheel and pinch zoom about the pointer; a plain wheel scrolls the page; drag pans.
+- Double-click (or Focus) keeps a node, its declared edges and one-hop neighbours, and dims the
+  rest. Hover lights the declared edges. Nothing shows a relation the figure does not draw.
+- Tab walks the nodes in reading order, one tabbable at a time; Enter follows the link.
+- Reduced motion (the OS setting or the console's own) snaps instead of gliding.
+
+The lens form (scope, focus, depth) re-requests the figure and rides in the `#fragment`
+(`diagram=`, `scope=`, `focus=`, `depth=`). A 422 (over budget), 409 (no symbol index) or 400
+(bad lens) is the server's own sentence in an inline notice, and a toast, from `api.ts`.
+
+**Load interactive runtime** is the only thing that loads the playground's Buzz wasm (4.2MB).
+The build copies `../docs/gen/playground/{buzz.wasm,wasm_exec.js}` into `gen/wasm/` when docs'
+`build_playground` has run, and says so when it has not. Once loaded, a lens change cuts the
+declaration the server served (its nodes plus the SVG's `data-edge` set) and lays it out with the
+same `flow.buzz` + `diagram.buzz` the server evaluates (`GET /api/v1/diagrams/source`), swapping
+the SVG in place with the zoom kept. The server's CSP allows it with `'wasm-unsafe-eval'`.
+
 ## Class-vs-ID convention
 
 - **`pf-v6-*` classes are the ONLY borrowed class vocabulary.** Consume PF component/layout/

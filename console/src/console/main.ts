@@ -252,6 +252,12 @@ const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   {
+    pageId: "diagrams",
+    label: "Diagrams",
+    hint: "Figures drawn from the workspace graph",
+    server: { purpose: "Diagrams are drawn by a running server from this workspace's graph." },
+  },
+  {
     pageId: "diff",
     label: "Diff",
     hint: "Read what you have changed but not committed",
@@ -2387,6 +2393,14 @@ export function startConsole(
       title: "Runs",
       bundle: "runs/runs.js",
       css: "runs/runs.css",
+    }),
+  );
+  register(
+    moduleSurface({
+      id: "diagrams",
+      title: "Diagrams",
+      bundle: "diagrams/diagrams.js",
+      css: "diagrams/diagrams.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static

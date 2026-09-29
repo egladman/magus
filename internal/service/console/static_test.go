@@ -175,3 +175,21 @@ func TestShellDirNeverLists(t *testing.T) {
 	_, err = f.Readdir(-1)
 	require.ErrorIs(t, err, fs.ErrPermission)
 }
+
+// The Diagrams surface compiles the playground's Buzz runtime in the page: the wasm is served
+// typed for WebAssembly.instantiateStreaming, and the CSP admits compiling it and nothing more.
+func TestConsoleServesTheBuzzRuntime(t *testing.T) {
+	dir := consoleDir(t)
+	p := filepath.Join(dir, "wasm", "buzz.wasm")
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte("\x00asm\x01\x00\x00\x00"), 0o600))
+	h := StaticHandler(dir)
+
+	w := get(t, h, "/console/wasm/buzz.wasm")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/wasm", w.Header().Get("Content-Type"))
+
+	csp := get(t, h, "/console/").Header().Get("Content-Security-Policy")
+	assert.Contains(t, csp, "script-src 'self' 'wasm-unsafe-eval';")
+	assert.NotContains(t, csp, "'unsafe-eval'", "wasm compilation only, never eval")
+}
