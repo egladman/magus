@@ -1,0 +1,987 @@
+// flow.buzz: declare nodes and edges, get a laid-out Diagram; placement is never a knob.
+namespace flow;
+
+import "std";
+// Resolved against the workspace root: this project's test op runs from there, and a docs
+// figure importing ../libs/diagram/flow falls back to the root after its own project dir.
+import "libs/diagram/diagram" as _;
+
+// validate refuses a tag, a name and a sublabel stacked in less than this.
+final TallNodeH = 64;
+final Margin = 32;
+// A zone band reserves room for its label on the side the label is painted, and a narrower
+// pad everywhere else.
+final ZoneLabelPad = 32;
+final ZonePad = 16;
+// The legend strip needs this much below the content; renderLegend draws 32px off the bottom.
+final LegendRoom = 96;
+// A 20px title runs about 11px per character; the frame widens to fit it.
+final TitleCharW = 11;
+
+// FlowZone groups nodes into one band. Members keep their ranks; the band only fixes which
+// rows they occupy.
+export object FlowZone {
+    label: str = "",
+    members: [str] = [<str>],
+}
+
+// Flow is a figure under construction. Build one with flow(), chain the declarations, and
+// finish with diagram() or svg(). Nothing here takes a coordinate, a weight or an order:
+// when the layout cannot be drawn cleanly, the thrown findings name what to split.
+export object Flow {
+    id: str = "",
+    titleText: str = "",
+    eyebrowText: str = "",
+    descText: str = "",
+    topDown: bool = false,
+    nodes: mut [Node],
+    edges: mut [Edge],
+    zones: mut [FlowZone],
+    legendItems: mut [LegendItem],
+    scopeGlobs: mut [str],
+    omitted: mut {str: str},
+
+    mut fun title(t: str) > mut Flow {
+        this.titleText = t;
+        return this;
+    }
+
+    mut fun eyebrow(e: str) > mut Flow {
+        this.eyebrowText = e;
+        return this;
+    }
+
+    mut fun desc(d: str) > mut Flow {
+        this.descText = d;
+        return this;
+    }
+
+    // down lays ranks out top to bottom instead of left to right.
+    mut fun down() > mut Flow {
+        this.topDown = true;
+        return this;
+    }
+
+    // node declares a box. An empty label shows the id, as Mermaid does.
+    fun node(id: str, label: str = "", sub: str = "", tag: str = "", role: str = "default", anchor: str = "") > mut Flow {
+        var shown = label;
+        if (shown == "") { shown = id; }
+        this.nodes.append(Node{ id = id, label = shown, sub = sub, tag = tag, role = role, anchor = anchor });
+        return this;
+    }
+
+    fun edge(src: str, dst: str, label: str = "", kind: str = "default", dashed: bool = false, claim: str = "flow") > mut Flow {
+        this.edges.append(Edge{ src = src, dst = dst, label = label, kind = kind, dashed = dashed, claim = claim });
+        return this;
+    }
+
+    // zone stacks its members into one band, bands in declaration order, unzoned nodes
+    // last. A node belongs to at most one zone.
+    fun zone(label: str, members: [str]) > mut Flow {
+        this.zones.append(FlowZone{ label = label, members = members });
+        return this;
+    }
+
+    fun legend(role: str, label: str) > mut Flow {
+        this.legendItems.append(LegendItem{ role = role, label = label });
+        return this;
+    }
+
+    fun scope(globs: [str]) > mut Flow {
+        foreach (g in globs) { this.scopeGlobs.append(g); }
+        return this;
+    }
+
+    fun omit(path: str, why: str) > mut Flow {
+        this.omitted[path] = why;
+        return this;
+    }
+
+    // diagram lays the figure out and validates it. Throws every finding joined by "; "
+    // when no layout the search tries comes out clean. Same declarations, same Diagram.
+    fun diagram() > Diagram !> str {
+        return layoutFlow(this);
+    }
+
+    fun svg(p: Palette, s: Style = Style{}) > str !> str {
+        final d = this.diagram();
+        return renderSvg(d, p: p, s: s);
+    }
+}
+
+// flow starts an empty left-to-right figure. The collections are built here because a mut
+// collection field cannot carry a default.
+export fun flow(id: str) > mut Flow {
+    return mut Flow{
+        id = id,
+        nodes = mut [<Node>],
+        edges = mut [<Edge>],
+        zones = mut [<FlowZone>],
+        legendItems = mut [<LegendItem>],
+        scopeGlobs = mut [<str>],
+        omitted = mut {<str: str>},
+    };
+}
+
+// Plan is the placement that does not depend on the stagger: ranks, bands, row order and
+// each layout edge's chain of items. Items 0..nodes-1 are the declared nodes; the rest are
+// one dummy per rank a long edge passes through.
+object Plan {
+    nodeCount: int = 0,
+    bandCount: int = 0,
+    maxRank: int = 0,
+    rankOf: mut [int],
+    bandOf: mut [int],
+    orders: mut [mut [int]],
+    // Per declared edge, in the direction it is laid out (a back edge is reversed).
+    fromItem: mut [int],
+    toItem: mut [int],
+    reversed: mut [bool],
+    chains: mut [mut [int]],
+}
+
+fun zeros(n: int) > mut [int] {
+    final made: mut [int] = mut [<int>];
+    var i = 0;
+    while (i < n) {
+        made.append(0);
+        i = i + 1;
+    }
+    return made;
+}
+
+fun lists(n: int) > mut [mut [int]] {
+    final made: mut [mut [int]] = mut [<mut [int]>];
+    var i = 0;
+    while (i < n) {
+        made.append(mut [<int>]);
+        i = i + 1;
+    }
+    return made;
+}
+
+// declarationFindings reports what no placement can fix, before any placement runs: a
+// connector with nowhere to attach, and a node two bands claim.
+fun declarationFindings(f: Flow) > [str] {
+    final errs: mut [str] = mut [<str>];
+    final known: mut {str: bool} = mut {<str: bool>};
+    foreach (n in f.nodes) { known[n.id] = true; }
+    foreach (e in f.edges) {
+        if (known[e.src] == null) { errs.append("edge from unknown node \"{e.src}\""); }
+        if (known[e.dst] == null) { errs.append("edge to unknown node \"{e.dst}\""); }
+        if (e.src == e.dst) { errs.append("edge from \"{e.src}\" to itself"); }
+    }
+    final owner: mut {str: str} = mut {<str: str>};
+    foreach (z in f.zones) {
+        if (z.members.len() == 0) {
+            errs.append("zone \"{z.label}\" has no members");
+        }
+        foreach (m in z.members) {
+            if (known[m] == null) {
+                errs.append("zone \"{z.label}\" names unknown node \"{m}\"");
+            }
+            final prior = owner[m];
+            if (prior != null and prior! != z.label) {
+                errs.append("node \"{m}\" sits in zones \"{prior!}\" and \"{z.label}\"; a node belongs to one band");
+            }
+            if (prior == null) { owner[m] = z.label; }
+        }
+    }
+    return errs;
+}
+
+fun plan(f: Flow) > Plan {
+    final nn = f.nodes.len();
+    final nz = f.zones.len();
+    final idx: mut {str: int} = mut {<str: int>};
+    var i = 0;
+    while (i < nn) {
+        if (idx[f.nodes[i].id] == null) { idx[f.nodes[i].id] = i; }
+        i = i + 1;
+    }
+
+    final bandOf: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        bandOf.append(nz);
+        i = i + 1;
+    }
+    var z = 0;
+    while (z < nz) {
+        foreach (m in f.zones[z].members) {
+            final at = idx[m];
+            if (at != null) { bandOf[at!] = z; }
+        }
+        z = z + 1;
+    }
+
+    final fromItem: mut [int] = mut [<int>];
+    final toItem: mut [int] = mut [<int>];
+    final reversed: mut [bool] = mut [<bool>];
+    // declarationFindings has already refused a missing endpoint and a self loop.
+    foreach (e in f.edges) {
+        fromItem.append(idx[e.src] ?? 0);
+        toItem.append(idx[e.dst] ?? 0);
+        reversed.append(false);
+    }
+    final ne = fromItem.len();
+
+    // Cycle break: an edge into a node still on the DFS stack closes a cycle, and laying it
+    // out reversed leaves a DAG. Entry points and children in declaration order.
+    final outAdj = lists(nn);
+    var li = 0;
+    while (li < ne) {
+        outAdj[fromItem[li]].append(li);
+        li = li + 1;
+    }
+    final state = zeros(nn);
+    final stackNode: mut [int] = mut [<int>];
+    final stackNext: mut [int] = mut [<int>];
+    var start = 0;
+    while (start < nn) {
+        if (state[start] == 0) {
+            state[start] = 1;
+            stackNode.append(start);
+            stackNext.append(0);
+            while (stackNode.len() > 0) {
+                final top = stackNode.len() - 1;
+                final u = stackNode[top];
+                final k = stackNext[top];
+                if (k < outAdj[u].len()) {
+                    stackNext[top] = k + 1;
+                    final edgeAt = outAdj[u][k];
+                    final w = toItem[edgeAt];
+                    if (state[w] == 1) {
+                        reversed[edgeAt] = true;
+                    } else {
+                        if (state[w] == 0) {
+                            state[w] = 1;
+                            stackNode.append(w);
+                            stackNext.append(0);
+                        }
+                    }
+                } else {
+                    state[u] = 2;
+                    stackNode.pop();
+                    stackNext.pop();
+                }
+            }
+        }
+        start = start + 1;
+    }
+    li = 0;
+    while (li < ne) {
+        if (reversed[li]) {
+            final a = fromItem[li];
+            fromItem[li] = toItem[li];
+            toItem[li] = a;
+        }
+        li = li + 1;
+    }
+
+    // Longest path from the roots, in topological order.
+    final succAdj = lists(nn);
+    final indeg = zeros(nn);
+    li = 0;
+    while (li < ne) {
+        succAdj[fromItem[li]].append(li);
+        indeg[toItem[li]] = indeg[toItem[li]] + 1;
+        li = li + 1;
+    }
+    final rankOf = zeros(nn);
+    final queue: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        if (indeg[i] == 0) { queue.append(i); }
+        i = i + 1;
+    }
+    var head = 0;
+    while (head < queue.len()) {
+        final u = queue[head];
+        head = head + 1;
+        foreach (edgeAt in succAdj[u]) {
+            final v = toItem[edgeAt];
+            if (rankOf[u] + 1 > rankOf[v]) { rankOf[v] = rankOf[u] + 1; }
+            indeg[v] = indeg[v] - 1;
+            if (indeg[v] == 0) { queue.append(v); }
+        }
+    }
+    var maxRank = 0;
+    foreach (r in rankOf) {
+        if (r > maxRank) { maxRank = r; }
+    }
+
+    // One dummy per intermediate rank, in the band of the edge's source, so a long edge
+    // claims a row slot of its own in every column it crosses.
+    final chains: mut [mut [int]] = mut [<mut [int]>];
+    li = 0;
+    while (li < ne) {
+        final a = fromItem[li];
+        final b = toItem[li];
+        final chain: mut [int] = mut [a];
+        var r = rankOf[a] + 1;
+        while (r < rankOf[b]) {
+            chain.append(rankOf.len());
+            rankOf.append(r);
+            bandOf.append(bandOf[a]);
+            r = r + 1;
+        }
+        chain.append(b);
+        chains.append(chain);
+        li = li + 1;
+    }
+    final items = rankOf.len();
+    final preds = lists(items);
+    final succs = lists(items);
+    foreach (chain in chains) {
+        var s = 0;
+        while (s + 1 < chain.len()) {
+            succs[chain[s]].append(chain[s + 1]);
+            preds[chain[s + 1]].append(chain[s]);
+            s = s + 1;
+        }
+    }
+
+    final orders = lists(maxRank + 1);
+    i = 0;
+    while (i < items) {
+        orders[rankOf[i]].append(i);
+        i = i + 1;
+    }
+    final pos = zeros(items);
+    final scoreSum = zeros(items);
+    final scoreCnt = zeros(items);
+    // Band first, then barycenter compared as cross-multiplied fractions, then declaration
+    // index, so the order is total and never leans on sort stability. An item with no
+    // neighbors on the swept side sinks to the end of its band.
+    final before = fun (x: int, y: int) > bool {
+        if (bandOf[x] != bandOf[y]) { return bandOf[x] < bandOf[y]; }
+        final xLoose = scoreCnt[x] == 0;
+        final yLoose = scoreCnt[y] == 0;
+        if (xLoose != yLoose) { return yLoose; }
+        if (xLoose == false) {
+            final l = scoreSum[x] * scoreCnt[y];
+            final rr = scoreSum[y] * scoreCnt[x];
+            if (l != rr) { return l < rr; }
+        }
+        return x < y;
+    };
+    foreach (row in orders) { row.sort(before); }
+    foreach (row in orders) {
+        var j = 0;
+        foreach (it in row) {
+            pos[it] = j;
+            j = j + 1;
+        }
+    }
+
+    // Three barycenter sweeps: down, up, down. Each fixes the rank it reads from, so the
+    // first rank of a sweep is never reordered by it.
+    foreach (goingDown in [true, false, true]) {
+        var step = 1;
+        while (step <= maxRank) {
+            var r = step;
+            if (goingDown == false) { r = maxRank - step; }
+            foreach (it in orders[r]) {
+                var nbs = preds[it];
+                if (goingDown == false) { nbs = succs[it]; }
+                var sum = 0;
+                foreach (nb in nbs) { sum = sum + pos[nb]; }
+                scoreSum[it] = sum;
+                scoreCnt[it] = nbs.len();
+            }
+            orders[r].sort(before);
+            var j = 0;
+            foreach (it in orders[r]) {
+                pos[it] = j;
+                j = j + 1;
+            }
+            step = step + 1;
+        }
+    }
+
+    return Plan{
+        nodeCount = nn,
+        bandCount = nz + 1,
+        maxRank = maxRank,
+        rankOf = rankOf,
+        bandOf = bandOf,
+        orders = orders,
+        fromItem = fromItem,
+        toItem = toItem,
+        reversed = reversed,
+        chains = chains,
+    };
+}
+
+// place turns a plan into coordinates. Everything is computed on two axes: main runs along
+// the ranks and cross along the rows, and down() only swaps which of x and y each one is.
+// stagger shifts each rank by rank * stagger across, the same escape layered() uses when two
+// stubs land on one line.
+fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
+    final lr = f.topDown == false;
+    var nodeH = LayerNodeH;
+    foreach (n in f.nodes) {
+        if (n.tag != "" and n.sub != "") { nodeH = TallNodeH; }
+    }
+    var mainSize = LayerNodeW;
+    var crossSize = nodeH;
+    var mainStart = Margin;
+    var crossStart = LayerTop;
+    var crossLabelPad = ZoneLabelPad;
+    var mainLabelPad = ZonePad;
+    var outSide = "right";
+    var inSide = "left";
+    if (lr == false) {
+        mainSize = nodeH;
+        crossSize = LayerNodeW;
+        mainStart = LayerTop;
+        crossStart = Margin;
+        crossLabelPad = ZonePad;
+        mainLabelPad = ZoneLabelPad;
+        outSide = "bottom";
+        inSide = "top";
+    }
+    final mainPitch = mainSize + LayerColGap;
+    final crossPitch = crossSize + LayerRowGap;
+    final nz = f.zones.len();
+    final items = pl.rankOf.len();
+    final skew = pl.maxRank * stagger;
+
+    // A band is as tall as its fullest rank; each rank centers its share inside it.
+    final bandRows = zeros(pl.bandCount);
+    foreach (row in pl.orders) {
+        final count = zeros(pl.bandCount);
+        foreach (it in row) { count[pl.bandOf[it]] = count[pl.bandOf[it]] + 1; }
+        var k = 0;
+        while (k < pl.bandCount) {
+            if (count[k] > bandRows[k]) { bandRows[k] = count[k]; }
+            k = k + 1;
+        }
+    }
+    final bandStart = zeros(pl.bandCount);
+    var cursor = crossStart;
+    var k = 0;
+    while (k < pl.bandCount) {
+        final zoned = k < nz and bandRows[k] > 0;
+        if (zoned) { cursor = cursor + crossLabelPad; }
+        bandStart[k] = cursor;
+        cursor = cursor + bandRows[k] * crossPitch;
+        // A staggered band leans by the skew, so the next one starts past its lowest rank.
+        if (zoned) { cursor = cursor + ZonePad + skew; }
+        k = k + 1;
+    }
+    final crossEnd = cursor - LayerRowGap + skew;
+
+    final itemMain = zeros(items);
+    final itemCross = zeros(items);
+    var r = 0;
+    while (r <= pl.maxRank) {
+        final row = pl.orders[r];
+        final count = zeros(pl.bandCount);
+        foreach (it in row) { count[pl.bandOf[it]] = count[pl.bandOf[it]] + 1; }
+        final seen = zeros(pl.bandCount);
+        foreach (it in row) {
+            final b = pl.bandOf[it];
+            itemMain[it] = mainStart + r * mainPitch;
+            itemCross[it] = bandStart[b] + (bandRows[b] - count[b]) * crossPitch / 2
+                + seen[b] * crossPitch + r * stagger;
+            seen[b] = seen[b] + 1;
+        }
+        r = r + 1;
+    }
+
+    final nodes: mut [Node] = mut [<Node>];
+    var i = 0;
+    while (i < pl.nodeCount) {
+        final n = f.nodes[i];
+        var x = itemMain[i];
+        var y = itemCross[i];
+        if (lr == false) {
+            x = itemCross[i];
+            y = itemMain[i];
+        }
+        nodes.append(Node{
+            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor,
+            x = x, y = y, w = LayerNodeW, h = nodeH,
+        });
+        i = i + 1;
+    }
+
+    // Slots follow the rows of the far ends, so connectors leaving one side never cross
+    // each other at the box.
+    final ne = pl.fromItem.len();
+    final outSlot = zeros(ne);
+    final outSlots = zeros(ne);
+    final inSlot = zeros(ne);
+    final inSlots = zeros(ne);
+    final outsOf = lists(pl.nodeCount);
+    final insOf = lists(pl.nodeCount);
+    var li = 0;
+    while (li < ne) {
+        outsOf[pl.fromItem[li]].append(li);
+        insOf[pl.toItem[li]].append(li);
+        li = li + 1;
+    }
+    final byNext = fun (x: int, y: int) > bool {
+        final cx = itemCross[pl.chains[x][1]];
+        final cy = itemCross[pl.chains[y][1]];
+        if (cx != cy) { return cx < cy; }
+        return x < y;
+    };
+    final byPrev = fun (x: int, y: int) > bool {
+        final chx = pl.chains[x];
+        final chy = pl.chains[y];
+        final cx = itemCross[chx[chx.len() - 2]];
+        final cy = itemCross[chy[chy.len() - 2]];
+        if (cx != cy) { return cx < cy; }
+        return x < y;
+    };
+    foreach (outs in outsOf) {
+        outs.sort(byNext);
+        var s = 0;
+        foreach (edgeAt in outs) {
+            outSlot[edgeAt] = s + 1;
+            outSlots[edgeAt] = outs.len();
+            s = s + 1;
+        }
+    }
+    foreach (ins in insOf) {
+        ins.sort(byPrev);
+        var s = 0;
+        foreach (edgeAt in ins) {
+            inSlot[edgeAt] = s + 1;
+            inSlots[edgeAt] = ins.len();
+            s = s + 1;
+        }
+    }
+
+    // Every rank-to-rank hop of every layout edge, with the cross coordinate it enters the
+    // gap at and the one it leaves at. A hop that changes row needs a channel.
+    final hopGap: mut [int] = mut [<int>];
+    final hopIn: mut [int] = mut [<int>];
+    final hopOut: mut [int] = mut [<int>];
+    final hopChannel: mut [int] = mut [<int>];
+    final hopFirst = zeros(ne);
+    li = 0;
+    while (li < ne) {
+        final chain = pl.chains[li];
+        hopFirst[li] = hopGap.len();
+        final last = chain.len() - 1;
+        var s = 0;
+        while (s < last) {
+            var yIn = itemCross[chain[s]] + crossSize / 2;
+            if (s == 0) { yIn = itemCross[chain[0]] + snap(crossSize * outSlot[li] / (outSlots[li] + 1)); }
+            var yOut = itemCross[chain[s + 1]] + crossSize / 2;
+            if (s + 1 == last) { yOut = itemCross[chain[last]] + snap(crossSize * inSlot[li] / (inSlots[li] + 1)); }
+            hopGap.append(pl.rankOf[chain[s]]);
+            hopIn.append(yIn);
+            hopOut.append(yOut);
+            hopChannel.append(0);
+            s = s + 1;
+        }
+        li = li + 1;
+    }
+
+    // Channels per gap. A hop climbing to a higher row turns closer to its source the
+    // higher it climbs, and a descending one the lower it lands: that order keeps a run's
+    // turn clear of every other run it passes.
+    final byTurn = fun (x: int, y: int) > bool {
+        final upX = hopOut[x] < hopIn[x];
+        final upY = hopOut[y] < hopIn[y];
+        if (upX != upY) { return upX; }
+        if (hopOut[x] != hopOut[y]) {
+            if (upX) { return hopOut[x] < hopOut[y]; }
+            return hopOut[x] > hopOut[y];
+        }
+        return x < y;
+    };
+    var gap = 0;
+    while (gap < pl.maxRank) {
+        final turning: mut [int] = mut [<int>];
+        var h = 0;
+        while (h < hopGap.len()) {
+            if (hopGap[h] == gap and hopIn[h] != hopOut[h]) { turning.append(h); }
+            h = h + 1;
+        }
+        turning.sort(byTurn);
+        final gapStart = mainStart + gap * mainPitch + mainSize;
+        var c = 1;
+        foreach (hop in turning) {
+            hopChannel[hop] = gapStart + snap(LayerColGap * c / (turning.len() + 1));
+            c = c + 1;
+        }
+        gap = gap + 1;
+    }
+
+    final edges: mut [Edge] = mut [<Edge>];
+    li = 0;
+    while (li < ne) {
+        final e = f.edges[li];
+        final hops = pl.chains[li].len() - 1;
+        var bend = 0;
+        final via: mut [int] = mut [<int>];
+        var s = 0;
+        while (s < hops) {
+            final hop = hopFirst[li] + s;
+            final ch = hopChannel[hop];
+            if (ch != 0 and hops == 1) { bend = ch; }
+            if (ch != 0 and hops > 1) {
+                if (lr) {
+                    via.append(ch);
+                    via.append(hopIn[hop]);
+                    via.append(ch);
+                    via.append(hopOut[hop]);
+                } else {
+                    via.append(hopIn[hop]);
+                    via.append(ch);
+                    via.append(hopOut[hop]);
+                    via.append(ch);
+                }
+            }
+            s = s + 1;
+        }
+        if (pl.reversed[li]) {
+            // Drawn as declared, against the layout: it leaves its source's inbound side
+            // and walks the corners backwards. Dashed so the reversal reads as one.
+            final back: mut [int] = mut [<int>];
+            var v = via.len() - 2;
+            while (v >= 0) {
+                back.append(via[v]);
+                back.append(via[v + 1]);
+                v = v - 2;
+            }
+            edges.append(Edge{
+                src = e.src, dst = e.dst, label = e.label, kind = e.kind, dashed = true, claim = e.claim,
+                srcSide = inSide, dstSide = outSide,
+                srcSlot = inSlot[li], srcSlots = inSlots[li],
+                dstSlot = outSlot[li], dstSlots = outSlots[li],
+                bend = bend, via = back,
+            });
+        } else {
+            edges.append(Edge{
+                src = e.src, dst = e.dst, label = e.label, kind = e.kind, dashed = e.dashed, claim = e.claim,
+                srcSide = outSide, dstSide = inSide,
+                srcSlot = outSlot[li], srcSlots = outSlots[li],
+                dstSlot = inSlot[li], dstSlots = inSlots[li],
+                bend = bend, via = via,
+            });
+        }
+        li = li + 1;
+    }
+
+    final zones: mut [Zone] = mut [<Zone>];
+    k = 0;
+    while (k < nz) {
+        var lo = 0 - 1;
+        var hi = 0 - 1;
+        i = 0;
+        while (i < pl.nodeCount) {
+            if (pl.bandOf[i] == k) {
+                if (lo < 0 or itemMain[i] < lo) { lo = itemMain[i]; }
+                if (itemMain[i] > hi) { hi = itemMain[i]; }
+            }
+            i = i + 1;
+        }
+        if (lo >= 0) {
+            final mainLo = lo - mainLabelPad;
+            final mainHi = hi + mainSize + ZonePad;
+            final crossLo = bandStart[k] - crossLabelPad;
+            final crossHi = bandStart[k] + bandRows[k] * crossPitch - LayerRowGap + ZonePad + skew;
+            if (lr) {
+                zones.append(Zone{ label = f.zones[k].label, x = mainLo, y = crossLo, w = mainHi - mainLo, h = crossHi - crossLo });
+            } else {
+                zones.append(Zone{ label = f.zones[k].label, x = crossLo, y = mainLo, w = crossHi - crossLo, h = mainHi - mainLo });
+            }
+        }
+        k = k + 1;
+    }
+
+    var mainEnd = mainStart + pl.maxRank * mainPitch + mainSize;
+    if (nz > 0) { mainEnd = mainEnd + ZonePad; }
+    var bottom = Margin;
+    if (f.legendItems.len() > 0) { bottom = LegendRoom; }
+    var width = mainEnd + Margin;
+    var height = crossEnd + bottom;
+    if (lr == false) {
+        width = crossEnd + Margin;
+        height = mainEnd + bottom;
+    }
+    final titleW = snap(f.titleText.len() * TitleCharW) + 2 * Margin;
+    if (titleW > width) { width = titleW; }
+    final legendW = f.legendItems.len() * Style{}.legendPitch + 2 * Margin;
+    if (legendW > width) { width = legendW; }
+
+    return Diagram{
+        id = f.id,
+        title = f.titleText,
+        eyebrow = f.eyebrowText,
+        desc = f.descText,
+        width = width,
+        height = height,
+        zones = zones,
+        nodes = nodes,
+        edges = edges,
+        legend = f.legendItems,
+        scope = f.scopeGlobs,
+        omits = f.omitted,
+    };
+}
+
+// snap mirrors diagram.buzz's, which is module-private: derived geometry rounds onto the
+// 4px grid.
+fun snap(n: int) > int {
+    return n - n % 4;
+}
+
+fun layoutFlow(f: Flow) > Diagram !> str {
+    final structural = declarationFindings(f);
+    if (structural.len() > 0) {
+        throw "flow \"{f.id}\": " + structural.join("; ");
+    }
+    final pl = plan(f);
+    final first = place(f, pl: pl, stagger: 0);
+    final firstErrs = validate(first);
+    if (firstErrs.len() == 0) { return first; }
+    foreach (stagger in LayerStaggers) {
+        final attempt = place(f, pl: pl, stagger: stagger);
+        if (validate(attempt).len() == 0) { return attempt; }
+    }
+    // The unstaggered findings are the ones an author can act on; a staggered attempt
+    // only moves the same collision somewhere else.
+    throw "flow \"{f.id}\": " + firstErrs.join("; ");
+}
+
+fun nodeOf(d: Diagram, id: str) > Node {
+    foreach (n in d.nodes) {
+        if (n.id == id) { return n; }
+    }
+    return Node{};
+}
+
+fun imin(a: int, b: int) > int {
+    if (a < b) { return a; }
+    return b;
+}
+
+fun imax(a: int, b: int) > int {
+    if (a > b) { return a; }
+    return b;
+}
+
+fun sidePoint(n: Node, side: str, slot: int, slots: int) > [int] {
+    final fx = n.x + snap(n.w * slot / (slots + 1));
+    final fy = n.y + snap(n.h * slot / (slots + 1));
+    if (side == "left") { return [n.x, fy]; }
+    if (side == "right") { return [n.x + n.w, fy]; }
+    if (side == "top") { return [fx, n.y]; }
+    return [fx, n.y + n.h];
+}
+
+// edgeLegs rebuilds a connector's legs from its public fields the way the renderer draws
+// them, so a test reasons about geometry without the renderer's private helpers.
+fun edgeLegs(d: Diagram, e: Edge) > [[int]] {
+    final s = sidePoint(nodeOf(d, id: e.src), side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots);
+    final t = sidePoint(nodeOf(d, id: e.dst), side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots);
+    final pts: mut [int] = mut [s[0], s[1]];
+    foreach (v in e.via) { pts.append(v); }
+    if (e.via.len() == 0 and e.bend != 0) {
+        if (e.srcSide == "left" or e.srcSide == "right") {
+            pts.append(e.bend);
+            pts.append(s[1]);
+            pts.append(e.bend);
+            pts.append(t[1]);
+        } else {
+            pts.append(s[0]);
+            pts.append(e.bend);
+            pts.append(t[0]);
+            pts.append(e.bend);
+        }
+    }
+    pts.append(t[0]);
+    pts.append(t[1]);
+    final legs: mut [[int]] = mut [<[int]>];
+    var k = 2;
+    while (k + 1 < pts.len()) {
+        legs.append([pts[k - 2], pts[k - 1], pts[k], pts[k + 1]]);
+        k = k + 2;
+    }
+    return legs;
+}
+
+// legsCross reports horizontal leg a crossing vertical leg b strictly inside both, so a
+// shared endpoint or a touch is not a crossing.
+fun legsCross(a: [int], b: [int]) > bool {
+    if (a[1] != a[3] or b[0] != b[2]) { return false; }
+    return imin(a[0], b: a[2]) < b[0] and b[0] < imax(a[0], b: a[2])
+        and imin(b[1], b: b[3]) < a[1] and a[1] < imax(b[1], b: b[3]);
+}
+
+fun properCrossings(d: Diagram) > int {
+    var count = 0;
+    var i = 0;
+    while (i < d.edges.len()) {
+        var j = i + 1;
+        while (j < d.edges.len()) {
+            foreach (a in edgeLegs(d, e: d.edges[i])) {
+                foreach (b in edgeLegs(d, e: d.edges[j])) {
+                    if (legsCross(a, b: b) or legsCross(b, b: a)) { count = count + 1; }
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// legEntersBox reports a leg running through a box's interior. An attach point sits on the
+// border, so a leg that only touches it does not count.
+fun legEntersBox(leg: [int], n: Node) > bool {
+    final x1 = imin(leg[0], b: leg[2]);
+    final x2 = imax(leg[0], b: leg[2]);
+    final y1 = imin(leg[1], b: leg[3]);
+    final y2 = imax(leg[1], b: leg[3]);
+    if (y1 == y2) {
+        return n.y < y1 and y1 < n.y + n.h and imax(x1, b: n.x) < imin(x2, b: n.x + n.w);
+    }
+    return n.x < x1 and x1 < n.x + n.w and imax(y1, b: n.y) < imin(y2, b: n.y + n.h);
+}
+
+fun diamond() > mut Flow {
+    return flow("t").title("Diamond")
+        .node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("a", dst: "c").edge("b", dst: "d").edge("c", dst: "d");
+}
+
+// serverHttpTwin is docs/site/diagrams/server-http.buzz declared as a flow: the same boxes,
+// roles, anchors, connectors and legend, with every coordinate, slot and bend left out.
+fun serverHttpTwin() > mut Flow {
+    return flow("server-http")
+        .eyebrow("magus server")
+        .title("The HTTP surface, and the one route without a guard")
+        .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
+            + "plan routes and eleven typed Connect services through the DNS-rebind, "
+            + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
+            + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
+            + "are loopback only. The health endpoints answer probes directly, with no "
+            + "authentication.")
+        .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
+        .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
+        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: "external")
+        .node("guard", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: "focal", anchor: "internal/httpx")
+        .node("mcp", label: "/mcp", sub: "agent tools, SSE", anchor: "internal/handler/mcp")
+        .node("reads", label: "/api/v1 read views", sub: "graph, events, insight, outputs", anchor: "internal/handler/graph")
+        .node("review", label: "/api/v1 review + plans", sub: "diff, session, plan, review", anchor: "internal/handler/status")
+        .node("connect", label: "Connect RPC", sub: "eleven typed services", anchor: "internal/handler/metrics")
+        .node("health", label: "/livez /readyz", sub: "no authentication", role: "external", anchor: "internal/server")
+        .edge("agent", dst: "guard")
+        .edge("console", dst: "guard")
+        .edge("guard", dst: "mcp")
+        .edge("guard", dst: "reads")
+        .edge("guard", dst: "review")
+        .edge("guard", dst: "connect")
+        .edge("probe", dst: "health", label: "unguarded", kind: "accent")
+        .legend("focal", label: "authenticated")
+        .legend("external", label: "open to any caller");
+}
+
+test "a chain ranks into one column per step" {
+    final d = flow("t").node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "the layout is sound");
+    std\assert(nodeOf(d, id: "a").x < nodeOf(d, id: "b").x, message: "b sits right of a");
+    std\assert(nodeOf(d, id: "b").x < nodeOf(d, id: "c").x, message: "c sits right of b");
+    std\assert(nodeOf(d, id: "a").y == nodeOf(d, id: "c").y, message: "a chain runs straight");
+}
+
+test "a diamond lays out without a crossing" {
+    final d = diamond().diagram() catch Diagram{};
+    std\assert(d.nodes.len() == 4, message: "laid out");
+    std\assert(nodeOf(d, id: "b").x == nodeOf(d, id: "c").x, message: "b and c share a rank");
+    std\assert(properCrossings(d) == 0, message: "no two connectors cross");
+}
+
+test "an edge spanning three ranks routes around every box" {
+    final d = flow("t")
+        .node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d").edge("a", dst: "d")
+        .diagram() catch Diagram{};
+    std\assert(d.edges.len() == 4, message: "laid out");
+    final long = d.edges[3];
+    std\assert(long.via.len() > 0, message: "the long edge carries a via route");
+    foreach (leg in edgeLegs(d, e: long)) {
+        foreach (n in d.nodes) {
+            std\assert(legEntersBox(leg, n: n) == false, message: "leg {leg} runs through {n.id}");
+        }
+    }
+    std\assert(properCrossings(d) == 0, message: "and crosses nothing");
+}
+
+test "a cycle renders with one dashed reversed edge" {
+    final f = flow("t").node("a").node("b").node("c")
+        .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "a");
+    final d = f.diagram() catch Diagram{};
+    var dashed = 0;
+    foreach (e in d.edges) {
+        if (e.dashed) { dashed = dashed + 1; }
+    }
+    std\assert(dashed == 1, message: "exactly the back edge is dashed");
+    std\assert(d.edges[2].dashed and d.edges[2].src == "c" and d.edges[2].dst == "a", message: "drawn as declared");
+    final svg = f.svg(lightPalette()) catch "threw";
+    std\assert(svg != "threw", message: "and it renders");
+}
+
+test "a zone keeps its members contiguous" {
+    final d = flow("t")
+        .node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("a", dst: "c").edge("a", dst: "d")
+        .zone("pair", members: ["b", "d"])
+        .diagram() catch Diagram{};
+    final b = nodeOf(d, id: "b");
+    final c = nodeOf(d, id: "c");
+    final dd = nodeOf(d, id: "d");
+    std\assert(c.y > b.y and c.y > dd.y, message: "the unzoned node sits after the band");
+    std\assert(d.zones.len() == 1, message: "one band drawn");
+    final z = d.zones[0];
+    std\assert(z.y <= b.y and z.y <= dd.y and z.y + z.h >= b.y + b.h and z.y + z.h >= dd.y + dd.h,
+        message: "the band holds its members");
+    std\assert(z.y + z.h <= c.y, message: "and not the outsider");
+}
+
+test "the same declarations render the same bytes" {
+    final one = serverHttpTwin().svg(lightPalette()) catch "one threw";
+    final two = serverHttpTwin().svg(lightPalette()) catch "two threw";
+    std\assert(one == two, message: "deterministic");
+    std\assert(one.startsWith("<svg"), message: "and it rendered");
+}
+
+test "a node in two zones is a finding" {
+    var msg = "";
+    try {
+        flow("t").node("a").node("b").edge("a", dst: "b")
+            .zone("one", members: ["a"]).zone("two", members: ["a", "b"])
+            .diagram();
+    } catch (e: str) {
+        msg = e;
+    }
+    std\assert(msg.indexOf("sits in zones \"one\" and \"two\"") != null, message: "named: {msg}");
+}
+
+test "down() transposes the layout" {
+    final across = diamond().diagram() catch Diagram{};
+    final down = diamond().down().diagram() catch Diagram{};
+    std\assert(validate(down).len() == 0, message: "the transposed layout is sound");
+    std\assert(nodeOf(down, id: "b").y == nodeOf(down, id: "c").y, message: "a rank is a row");
+    std\assert(nodeOf(down, id: "b").x < nodeOf(down, id: "c").x, message: "ordered across it");
+    std\assert(nodeOf(down, id: "a").y < nodeOf(down, id: "b").y, message: "ranks run down");
+    std\assert(nodeOf(across, id: "b").y < nodeOf(across, id: "c").y, message: "where across they stack");
+    std\assert(down.edges[0].srcSide == "bottom" and down.edges[0].dstSide == "top", message: "connectors leave downward");
+    std\assert(properCrossings(down) == 0, message: "and still cross nothing");
+}
+
+test "the server-http twin lays out clean" {
+    final d = serverHttpTwin().diagram() catch Diagram{};
+    std\assert(d.nodes.len() == 9, message: "every box placed");
+    std\assert(validate(d).len() == 0, message: "no findings");
+    std\assert(properCrossings(d) == 0, message: "no crossings");
+}
