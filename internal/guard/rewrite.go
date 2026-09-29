@@ -107,7 +107,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 			if !scriptWrites(name, script, c.Args) {
 				continue
 			}
-			if rel := rewrittenWorkspaceFile(location, script, c.Args); rel != "" {
+			if rel := rewrittenWorkspaceFile(location, name, script, c.Args); rel != "" {
 				hit = rel
 				return false
 			}
@@ -125,9 +125,26 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 //
 // Existence is the discriminator: rewriting is what this refuses, and a path that is not
 // there yet is a script producing output. A scratch or temp destination is skipped for the
-// same reason, whether or not something sits at it.
-func rewrittenWorkspaceFile(location location, script string, args []string) string {
-	for _, candidate := range append(quotedLiterals(script), args...) {
+// same reason, whether or not something sits at it. Only a write's DESTINATION is a
+// candidate: a tracked path the program merely carries, in a list it prints or a report
+// it writes to scratch, is data.
+func rewrittenWorkspaceFile(location location, name, script string, args []string) string {
+	targets, unknown := scriptWriteTargets(name, script, args)
+	var candidates []string
+	for _, literals := range targets {
+		switch {
+		case len(literals) == 0:
+			unknown = true
+		case !slices.ContainsFunc(literals, throwawayDirRe.MatchString):
+			candidates = append(candidates, literals...)
+		}
+	}
+	// A destination spelled from no literal at all is most often argv, so the operands
+	// are what it writes.
+	if unknown {
+		candidates = append(candidates, args...)
+	}
+	for _, candidate := range candidates {
 		if candidate == "" || throwawayDirRe.MatchString(candidate) {
 			continue
 		}
@@ -144,6 +161,190 @@ func rewrittenWorkspaceFile(location location, script string, args []string) str
 		}
 	}
 	return ""
+}
+
+// pathWriterRe finds the calls whose first argument is the file they write: an open (whose
+// mode is checked separately) and node's and ruby's one-shot writers.
+var pathWriterRe = regexp.MustCompile(`\b(?:f?open|writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|File\.write|IO\.write)\s*\(`)
+
+// receiverWriterRe finds pathlib's writers, which write the path their receiver names.
+var receiverWriterRe = regexp.MustCompile(`\.(?:write_text|write_bytes)\s*\(`)
+
+// handleWriteRe finds a write through a handle, whose file is named where it was opened.
+var handleWriteRe = regexp.MustCompile(`\.(?:write|writelines)\s*\(|\bfputs\s*\(`)
+
+// awkTargetRe captures what follows awk's redirect after a print: the file it writes.
+var awkTargetRe = regexp.MustCompile(`\b(?:print|printf)\b[^;{}\n]*?>>?\s*([^;}\n]+)`)
+
+// writeModeRe is an open mode that writes: w, a, x, or an update `+`.
+var writeModeRe = regexp.MustCompile(`^(?:mode\s*=\s*)?['"][rbtU]*[wax+][rbtwax+]*['"]$`)
+
+// stdStreamRe is a receiver that is the program's own output rather than a file.
+var stdStreamRe = regexp.MustCompile(`^(?:sys\.|process\.|\$)?(?:stdout|stderr|STDOUT|STDERR)$`)
+
+var identRe = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+
+// moduleOpeners are receivers whose `.open(path, mode)` is the module function, not a
+// method on a path.
+var moduleOpeners = map[string]bool{"io": true, "os": true, "codecs": true, "gzip": true, "builtins": true}
+
+// scriptWriteTargets lists each file the program writes, as the literals its destination is
+// spelled from (a variable read through its assignment). unknown reports a write whose
+// destination this cannot read at all: an in-place flag, or a handle opened somewhere it
+// does not look.
+func scriptWriteTargets(name, script string, args []string) (targets [][]string, unknown bool) {
+	if (name == "perl" || name == "ruby") && hasFlag(args, 'i', "in-place") {
+		unknown = true
+	}
+	if name == "awk" {
+		for _, m := range awkTargetRe.FindAllStringSubmatch(script, -1) {
+			targets = append(targets, destinationLiterals(script, m[1]))
+		}
+	}
+	for _, loc := range pathWriterRe.FindAllStringIndex(script, -1) {
+		callArgs, ok := callArguments(script, loc[1]-1)
+		if !ok {
+			unknown = true
+			continue
+		}
+		parts := splitArguments(callArgs)
+		method := loc[0] > 0 && script[loc[0]-1] == '.'
+		recv := ""
+		if method {
+			recv = receiverBefore(script, loc[0]-1)
+		}
+		if strings.Contains(script[loc[0]:loc[1]], "open") {
+			modes := parts
+			if !method || moduleOpeners[recv] {
+				modes = parts[min(1, len(parts)):]
+			}
+			if !slices.ContainsFunc(modes, writeModeRe.MatchString) {
+				continue
+			}
+			if method && !moduleOpeners[recv] {
+				targets = append(targets, destinationLiterals(script, recv))
+				continue
+			}
+		}
+		if len(parts) > 0 {
+			targets = append(targets, destinationLiterals(script, parts[0]))
+		}
+	}
+	for _, loc := range receiverWriterRe.FindAllStringIndex(script, -1) {
+		targets = append(targets, destinationLiterals(script, receiverBefore(script, loc[0])))
+	}
+	if len(targets) == 0 {
+		for _, loc := range handleWriteRe.FindAllStringIndex(script, -1) {
+			if script[loc[0]] == '.' && stdStreamRe.MatchString(receiverBefore(script, loc[0])) {
+				continue
+			}
+			unknown = true
+		}
+	}
+	return targets, unknown
+}
+
+// destinationLiterals are the quoted strings a destination expression is built from, each
+// identifier in it read through its assignments, one level deep.
+func destinationLiterals(script, expr string) []string {
+	out := quotedLiterals(expr)
+	for _, ident := range identRe.FindAllString(expr, -1) {
+		assign := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(ident) + `\s*=\s*([^=\n].*)$`)
+		for _, m := range assign.FindAllStringSubmatch(script, -1) {
+			out = append(out, quotedLiterals(m[1])...)
+		}
+	}
+	return out
+}
+
+// callArguments is the text between the paren at open and its match.
+func callArguments(s string, open int) (string, bool) {
+	depth, quote := 0, byte(0)
+	for i := open; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+			if depth == 0 {
+				return s[open+1 : i], true
+			}
+		}
+	}
+	return "", false
+}
+
+// splitArguments splits a call's argument text at its top-level commas.
+func splitArguments(args string) []string {
+	var out []string
+	depth, quote, start := 0, byte(0), 0
+	for i := 0; i < len(args); i++ {
+		c := args[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+		case c == ',' && depth == 0:
+			out = append(out, strings.TrimSpace(args[start:i]))
+			start = i + 1
+		}
+	}
+	if rest := strings.TrimSpace(args[start:]); rest != "" {
+		out = append(out, rest)
+	}
+	return out
+}
+
+// receiverBefore is the expression ending just before the dot at dot: `Path('x')` in
+// `Path('x').write_text(`, `sys.stdout` in `sys.stdout.write(`.
+func receiverBefore(s string, dot int) string {
+	i := dot
+	for i > 0 {
+		c := s[i-1]
+		switch {
+		case c == ')' || c == ']':
+			depth := 0
+			j := i - 1
+			for ; j >= 0; j-- {
+				switch s[j] {
+				case ')', ']':
+					depth++
+				case '(', '[':
+					depth--
+				}
+				if depth == 0 {
+					break
+				}
+			}
+			if j < 0 {
+				return s[i:dot]
+			}
+			i = j
+		case c == '_' || c == '.' || c == '$' || c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z':
+			i--
+		default:
+			return s[i:dot]
+		}
+	}
+	return s[:dot]
 }
 
 // interpreterRewriteDenial names the editor tool, in the shape the raw-tool denials use to

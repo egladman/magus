@@ -1027,9 +1027,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// rule here reads: a command line. It is the SAME work the CLI verbs do, through
 		// a different transport, so a rule that held on one channel would move the
 		// traffic rather than stop it. Judged on the TOOL NAME rather than on a param
-		// being present: requiring `op` left nineteen of magus's twenty-one tools,
-		// magus_run_target and magus_run_affected among them, reaching no rule at all.
-		req.Value = renderMCPCall(tool, env.ToolInput)
+		// being present: requiring `op` left the tools that do not carry one,
+		// client and status among them, reaching no rule at all.
+		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")

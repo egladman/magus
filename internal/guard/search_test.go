@@ -139,6 +139,74 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	}
 }
 
+// TestGrepReaderDeniesContextReads pins grep-reader: a definition lookup with a context
+// flag is a read of the body, even of one named file, and is served refs where the index
+// vouches for the name and the declaration's own lines where it does not.
+func TestGrepReaderDeniesContextReads(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		// 3-4 HandleRequest, 6 serve, 8-10 Config.Load.
+		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n\nfunc (c *Config) Load() {\n\tserve()\n}\n",
+		"internal/api/config.go":  "package api\n\ntype Config struct{}\n",
+	})
+	indexed := map[string]bool{"HandleRequest": true, "Config": true}
+	sites := map[string][]types.KnowledgeRefSite{"Load": {{File: "internal/api/handler.go"}}}
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
+		SymbolSites:   func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], false },
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	stale := deps
+	stale.SymbolDefined = func(name string) (bool, bool) { return indexed[name], false }
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		serves  []string // the commands served, nil for no deny
+	}{
+		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		{`grep -nA20 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		{`grep -rn --after-context=40 '^type Config struct' internal/`, deps, []string{"magus refs Config --definition --source"}},
+		{`rg -C5 'func HandleRequest|type Config' internal/api`, deps, []string{"magus refs HandleRequest --definition --source", "magus refs Config --definition --source"}},
+		{`grep -n -5 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		{`grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		// A stale index gets the declaration's lines from a parse of the file.
+		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},
+		{`grep -n 'func HandleRequest' -A 20 internal/api/*.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},
+		// A method the index does not vouch for, found under a directory through the files
+		// the index last saw name it.
+		{`grep -rn 'func (c \*Config) Load' -A10 internal/`, deps, []string{"sed -n 8,10p internal/api/handler.go"}},
+
+		// No context flag: the search is a lookup, symbol-search's to judge.
+		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, nil},
+		// A use, not a definition; a case-insensitive search; one alternative that is text.
+		{`grep -n -A5 'HandleRequest' internal/api/handler.go`, deps, nil},
+		{`grep -in -A5 'func handlerequest' internal/api/handler.go`, deps, nil},
+		{`grep -n -A5 'func HandleRequest\|TODO' internal/api/handler.go`, deps, nil},
+		// No declaration of the name anywhere the search reads.
+		{`grep -n -A5 'func Missing' internal/api/handler.go`, deps, nil},
+		// A context flag's value is not a pattern, and -e's value is not a flag.
+		{`grep -n -e 'A' internal/api/handler.go`, deps, nil},
+	} {
+		v, ok := grepReaderVerdict(tt.deps, parseForTest(t, tt.command))
+		if tt.serves == nil {
+			assert.False(t, ok, "%q: %s", tt.command, v.Deny)
+			continue
+		}
+		require.True(t, ok, tt.command)
+		assert.Equal(t, denyRuleGrepReader, v.Rule.Name, tt.command)
+		for _, run := range tt.serves {
+			assert.Contains(t, v.Deny, run+"`", tt.command)
+		}
+		require.Len(t, v.Next, len(tt.serves), tt.command)
+	}
+
+	piped, _ := grepReaderVerdict(deps, parseForTest(t, `grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`))
+	assert.Contains(t, piped.Deny, "The pipe after the search is not reproduced")
+	// Evaluate reaches it ahead of symbol-search's single-file advice.
+	assert.Equal(t, denyRuleGrepReader, Evaluate(deps, `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`).Rule.Name)
+}
+
 // TestJudgeResolvesSearchPathsFromTheCallCwd pins that a relative path resolves from the
 // envelope's cwd, not the hook process's: the file exists only under the call's directory.
 func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {

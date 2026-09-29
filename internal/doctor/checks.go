@@ -1030,18 +1030,26 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
 	for _, p := range projects {
 		var dead []string
 		builtAny := false
-		for _, glob := range p.Outputs {
-			hits, err := globOutputs(p.Dir, glob)
-			if err != nil {
-				continue
-			}
-			if len(hits) > 0 {
-				if provesBuilt(r.runCtx(), tracked, p.Dir, hits) {
-					builtAny = true
+		// An exclusion matches nothing by design; a glob is judged by what its run's
+		// exclusions leave it.
+		for run := range types.GlobRuns(p.Outputs) {
+			for _, glob := range run.Globs {
+				hits, err := globOutputs(p.Dir, glob)
+				if err != nil {
+					continue
 				}
-				continue
+				hits = slices.DeleteFunc(hits, func(hit string) bool {
+					rel, err := filepath.Rel(p.Dir, hit)
+					return err == nil && run.Excludes(filepath.ToSlash(rel))
+				})
+				if len(hits) > 0 {
+					if provesBuilt(r.runCtx(), tracked, p.Dir, hits) {
+						builtAny = true
+					}
+					continue
+				}
+				dead = append(dead, glob)
 			}
-			dead = append(dead, glob)
 		}
 		if !builtAny {
 			continue
@@ -1082,6 +1090,10 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Che
 		owners := map[string][]string{}
 		for target, refs := range p.TargetOutputs {
 			for _, ref := range refs {
+				// Two targets carving out the same file both decline to own it.
+				if _, exclusion := types.CutExclusion(ref.Glob); exclusion {
+					continue
+				}
 				if !slices.Contains(owners[ref.Glob], target) {
 					owners[ref.Glob] = append(owners[ref.Glob], target)
 				}
@@ -1238,10 +1250,12 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Ch
 		return types.Check{Name: name, Status: types.CheckOK, Message: "could not list tracked files: " + err.Error()}
 	}
 
-	var globs []string
+	declared := make([][]string, 0, len(projects))
 	for _, p := range projects {
-		globs = append(globs, p.DeclaredGlobs()...)
+		declared = append(declared, p.DeclaredGlobs())
 	}
+	// Joined, not appended: one project's exclusions must not narrow another's globs.
+	globs := types.UnionGlobs(declared...)
 	// A glob the matcher cannot parse matches nothing, so every file it was meant to
 	// cover reads as undeclared and this check advises declaring what is already
 	// declared. Tolerated (the cache walk tolerates it too) but named in the report,
@@ -2034,32 +2048,22 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-command.sh",
-	"magus-path.sh",
-	// The Buzz ports of the two above, which a `magus buzz` wiring names instead.
-	// They carry the same verdicts, so a stale copy of one fails the same way a
-	// stale copy of its sh twin does, and both names have to be gradeable.
 	"magus-command.buzz",
 	"magus-path.buzz",
 	"magus-observe.buzz",
-	"cursor-hook.sh",
+	"cursor-hook.buzz",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
 	// where nobody ever stopped mid-task.
 	//
-	// This entry named magus-pause.sh for the whole life of the rename that produced
-	// magus-checkpoint.sh, so the one check written to catch a silently stale copy
-	// could not match the only name a config ever carries. TestGuardTemplateBasenames
+	// This entry once named magus-pause for the whole life of the rename that produced
+	// magus-checkpoint, so the one check written to catch a silently stale copy could
+	// not match the only name a config ever carries. TestGuardTemplateBasenames
 	// AreShipped is what makes the next rename fail loudly instead.
-	"magus-checkpoint.sh",
+	"magus-checkpoint.buzz",
 	// Judges nothing either, and graded for the same reason: a stale copy of it hands a
 	// compacted session a brief the current binary would not have written, and the only
 	// sign is a model working from a summary that looked complete.
-	"magus-rehydrate.sh",
-	// The Buzz ports of those two, for the reason the hook templates' ports are here:
-	// a config names one form or the other, and a name this list cannot match is a
-	// staleness check that silently grades nothing.
-	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 }
 
@@ -2117,7 +2121,7 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 
 // guardReferencedTemplates finds every known template basename mentioned in a
 // config's bytes and resolves each to a file on disk: first relative to the
-// workspace root (the dogfooded shape: `sh docs/guides/.../foo.sh`), then
+// workspace root (the dogfooded shape: `magus buzz -s docs/guides/.../foo.buzz`), then
 // relative to the config's own directory, then as written. A single config
 // commonly names two (this repository's own .claude/settings.json wires the
 // command and path templates as separate hooks), so this checks every
@@ -2128,7 +2132,6 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 // at a template that is not there runs nothing, and reporting only what
 // resolved would grade exactly that case as healthy.
 func guardReferencedTemplates(root, configDir string, body []byte) (found, missing []string) {
-	const workspaceRoot = "$(magus describe projects -o 'template={{.workspace}}')/"
 	for _, base := range guardTemplateBasenames {
 		idx := bytes.Index(body, []byte(base))
 		if idx == -1 {
@@ -2144,20 +2147,10 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 			}
 			break
 		}
-		// Hook commands run from the task's working directory, which can be below
-		// the repository root. The shipped config uses this exact VCS-neutral
-		// expansion so a template stays reachable there. Treat only that expansion
-		// as root-relative; executing or accepting arbitrary hook commands would
-		// turn a diagnostic into a risk.
-		if rootStart := bytes.LastIndex(body[:idx], []byte(workspaceRoot)); rootStart >= 0 &&
-			!bytes.ContainsAny(body[rootStart+len(workspaceRoot):idx], "\"'\n") {
-			start = rootStart
-		}
 		token := string(body[start : idx+len(base)])
-		rootToken := strings.TrimPrefix(token, workspaceRoot)
 		resolved := ""
 		for _, candidate := range []string{
-			filepath.Join(root, rootToken),
+			filepath.Join(root, token),
 			filepath.Join(configDir, token),
 			token,
 		} {
@@ -2569,21 +2562,25 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 // the one this workspace actually uses.
 func declaredOutputFiles(p *types.Project) []string {
 	var rels []string
-	for _, glob := range p.AllOutputs() {
-		hits, err := globOutputs(p.Dir, glob)
-		if err != nil {
-			continue
-		}
-		for _, hit := range hits {
-			info, err := os.Stat(hit)
-			if err != nil || info.IsDir() {
-				continue
-			}
-			rel, err := filepath.Rel(p.Dir, hit)
+	for run := range types.GlobRuns(p.AllOutputs()) {
+		for _, glob := range run.Globs {
+			hits, err := globOutputs(p.Dir, glob)
 			if err != nil {
 				continue
 			}
-			rels = append(rels, filepath.ToSlash(rel))
+			for _, hit := range hits {
+				info, err := os.Stat(hit)
+				if err != nil || info.IsDir() {
+					continue
+				}
+				rel, err := filepath.Rel(p.Dir, hit)
+				if err != nil {
+					continue
+				}
+				if rel = filepath.ToSlash(rel); !run.Excludes(rel) {
+					rels = append(rels, rel)
+				}
+			}
 		}
 	}
 	slices.Sort(rels)
@@ -2757,6 +2754,11 @@ func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.Ch
 	var details []string
 	for _, p := range projects {
 		for _, glob := range p.Sources {
+			// An exclusion under a pruned dir removes what the walk never yields: moot,
+			// never stale.
+			if _, exclusion := types.CutExclusion(glob); exclusion {
+				continue
+			}
 			if dir, ok := prunedPrefix(glob); ok {
 				details = append(details, fmt.Sprintf(
 					"%s: source glob %q can never match: the expansion walk prunes %q",
@@ -2824,10 +2826,15 @@ func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) t
 	const name = "output-is-another-projects-source"
 
 	// Rooted exact output paths, and who writes each.
+	// An exclusion is never an output path, however literal it reads.
+	exact := func(rooted string) bool {
+		_, exclusion := types.CutExclusion(rooted)
+		return !exclusion && !strings.ContainsAny(rooted, "*?[")
+	}
 	owners := map[string]string{}
 	for _, p := range projects {
 		for _, glob := range p.AllOutputs() {
-			if rooted := types.RootGlob(p.Path, glob); !strings.ContainsAny(rooted, "*?[") {
+			if rooted := types.RootGlob(p.Path, glob); exact(rooted) {
 				owners[rooted] = p.Path
 			}
 		}
@@ -2837,7 +2844,7 @@ func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) t
 				if owner == "" {
 					owner = p.Path
 				}
-				if rooted := types.RootGlob(owner, ref.Glob); !strings.ContainsAny(rooted, "*?[") {
+				if rooted := types.RootGlob(owner, ref.Glob); exact(rooted) {
 					owners[rooted] = owner
 				}
 			}
@@ -2849,19 +2856,22 @@ func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) t
 
 	var details []string
 	for _, p := range projects {
-		var sources []string
+		declared := [][]string{make([]string, 0, len(p.Sources))}
 		for _, glob := range p.Sources {
-			sources = append(sources, types.RootGlob(p.Path, glob))
+			declared[0] = append(declared[0], types.RootGlob(p.Path, glob))
 		}
 		for _, refs := range p.TargetInputs {
+			list := make([]string, 0, len(refs))
 			for _, ref := range refs {
 				owner := ref.Project
 				if owner == "" {
 					owner = p.Path
 				}
-				sources = append(sources, types.RootGlob(owner, ref.Glob))
+				list = append(list, types.RootGlob(owner, ref.Glob))
 			}
+			declared = append(declared, list)
 		}
+		sources := types.UnionGlobs(declared...)
 		for path, owner := range owners {
 			if owner == p.Path {
 				continue // its own output; writing it is what generate is for

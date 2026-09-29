@@ -150,8 +150,8 @@ func magusStateWrite(args []string) string {
 		return "config set"
 	case ops[0] == "agent" && sub == "install" && !magusFlag(args, "tar"):
 		return "agent install"
-	case ops[0] == "agent" && sub == "harness" && len(ops) > 2 && ops[2] == "install":
-		return "agent harness install"
+	case ops[0] == "agent" && sub == "harness" && len(ops) > 2 && (ops[2] == "install" || ops[2] == "apply" || ops[2] == "remove"):
+		return "agent harness " + ops[2]
 	}
 	return ""
 }

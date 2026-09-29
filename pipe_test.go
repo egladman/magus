@@ -1208,6 +1208,12 @@ func TestPipeExitRecordLifecycle(t *testing.T) {
 		t.Fatalf("a signalled stage exits %d, %q; want 1, stopped by a signal", got.exitCode(), got.ending())
 	}
 
+	// The writes above stamp a scan. Age it so this write is due to scan again:
+	// a due scan removes a dead record past exitRecordKeep.
+	past := time.Now().Add(-exitSweepEvery - time.Second)
+	if err := os.Chtimes(filepath.Join(dir, sweepName), past, past); err != nil {
+		t.Fatalf("age sweep stamp: %v", err)
+	}
 	stale := filepath.Join(dir, "999999"+exitSuffix)
 	writeRecord(t, stale, exitRecord{PID: 999999, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
 	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
@@ -1216,5 +1222,37 @@ func TestPipeExitRecordLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, strconv.Itoa(u.pid)+exitSuffix)); err != nil {
 		t.Fatalf("a fresh record was swept: %v", err)
+	}
+
+	// A stamp from that scan is fresh, so the next write must not scan. A day-old
+	// record planted after the stamp stays until a scan is due again.
+	held := filepath.Join(dir, "888888"+exitSuffix)
+	writeRecord(t, held, exitRecord{PID: 888888, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
+	writeExitRecord(dir, exitRecord{PID: 2, Ended: time.Now()})
+	if _, err := os.Stat(held); err != nil {
+		t.Fatalf("a fresh sweep stamp rescanned and removed a stale record: %v", err)
+	}
+}
+
+// A directory that cannot record the scan must not be walked. Recording
+// happens before the walk, so a failed record is not "never scanned": the
+// next exit would otherwise pay the full directory scan again.
+func TestExitSweepSkipsWhenTheRecordCannotBeWritten(t *testing.T) {
+	dir := t.TempDir()
+	past := time.Now().Add(-exitSweepEvery - time.Second)
+	sweep := filepath.Join(dir, sweepName)
+	if err := os.WriteFile(sweep, nil, 0o644); err != nil {
+		t.Fatalf("write sweep stamp: %v", err)
+	}
+	if err := os.Chtimes(sweep, past, past); err != nil {
+		t.Fatalf("age sweep stamp: %v", err)
+	}
+	stale := filepath.Join(dir, "999999"+exitSuffix)
+	writeRecord(t, stale, exitRecord{PID: 999999, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
+	stampSweep = func(string, time.Time, time.Time) error { return os.ErrPermission }
+	t.Cleanup(func() { stampSweep = os.Chtimes })
+	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("an unrecordable sweep was walked and removed a record: %v", err)
 	}
 }

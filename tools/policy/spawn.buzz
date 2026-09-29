@@ -141,28 +141,28 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         model = spawn.model;
     }
     var fork = "magus job fork {id}";
-    var tool = "\{\"op\": \"fork\", \"id\": \"{id}\"";
+    var tool = "magus\\job\\put(\"{id}\", .\{ ";
     if (parent != "orchestrator") {
         fork = fork + " --parent {parent}";
-        tool = tool + ", \"parent\": \"{parent}\"";
+        tool = tool + "parent = \"{parent}\", ";
     }
     fork = fork + " --model {model}";
-    tool = tool + ", \"model\": \"{model}\"";
+    tool = tool + "model = \"{model}\"";
     if (thinkingRoles.indexOf(role) != null) {
         fork = fork + " --read-only";
-        tool = tool + ", \"read_only\": true";
+        tool = tool + ", read_only = true";
     } else {
         fork = fork + " --write-paths <paths>";
-        tool = tool + ", \"write_paths\": [\"<paths>\"]";
+        tool = tool + ", write_paths = [\"<paths>\"]";
     }
     fork = fork + " --criteria \"<what done means>\"";
-    tool = tool + ", \"criteria\": \"<what done means>\"\}";
+    tool = tool + ", criteria = \"<what done means>\" })";
     var scope = "";
     if (spawn.lease != "") {
         scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "
             + "your row already holds, and the job store refuses anything wider.";
     }
-    return "Fork the row first: `{fork}` (or the magus_job tool: `{tool}`), then spawn with the "
+    return "Fork the row first: `{fork}` (or the client tool: `{tool}`), then spawn with the "
         + "description `{parent}/{role} {id}`. A thinking role (plan, review, research, scout, "
         + "integrate) forks `--read-only`; a change role declares its `--write-paths`.{scope}";
 }
@@ -200,7 +200,8 @@ test "a title naming a missing row is denied with the real command" {
     final v = decideSpawn(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "missing row");
     std\assert(v.reason.indexOf("magus job fork nothing-here --parent v050-prep --model opus --read-only") != null, message: v.reason);
-    std\assert(v.reason.indexOf("\"read_only\": true") != null, message: "names the tool write");
+    std\assert(v.reason.indexOf("magus\\job\\put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
+    std\assert(v.reason.indexOf("read_only = true") != null, message: "names the read-only field");
     std\assert(v.reason.indexOf("`v050-prep/scout nothing-here`") != null, message: "names the retitle");
 }
 

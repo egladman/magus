@@ -45,6 +45,10 @@ PY`,
 		// The append form of the same redirect.
 		`awk '{print >> "internal/ledger/store.go"}' f`,
 		"cat f | python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY",
+		// The destination named through a variable, a pathlib receiver, or argv.
+		"python3 - <<'PY'\np = 'internal/ledger/store.go'\ns = open(p).read()\nopen(p, 'w').write(s)\nPY",
+		`python3 -c "from pathlib import Path; Path('internal/ledger/store.go').write_text(x)"`,
+		"python3 - internal/ledger/store.go <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write(x)\nPY",
 	} {
 		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
 	}
@@ -80,6 +84,15 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 
 		// A quoted mention of the act is not the act.
 		`echo "python3 -c \"open('internal/ledger/store.go','w')\""`,
+
+		// A tracked path the program carries as DATA, while it writes elsewhere: to a
+		// scratch file by literal or by variable, or to its own stdout.
+		"python3 - <<'PY'\nimport json, subprocess\npaths = ['internal/ledger/store.go', 'CLAUDE.md']\n" +
+			"job = subprocess.run(['./magus', 'describe', 'job', 'x', '-o', 'json'], capture_output=True).stdout\n" +
+			"open('/private/tmp/claude-501/scratchpad/job.json', 'w').write(json.dumps({'paths': paths}))\nPY",
+		"python3 - <<'PY'\nimport json, os\nSCRATCH = '/private/tmp/claude-501/scratchpad'\nrows = {'internal/ledger/store.go': 1}\n" +
+			"with open(os.path.join(SCRATCH, 'rows.json'), 'w') as f:\n    f.write(json.dumps(rows))\nPY",
+		"python3 - <<'PY' > /private/tmp/claude-501/scratchpad/out.json\nimport json, sys\nsys.stdout.write(json.dumps(['internal/ledger/store.go']))\nPY",
 	} {
 		assert.Empty(t, denyInterpreterRewrite(at, command, DialectBash), "%q", command)
 	}

@@ -327,7 +327,7 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, "magus_job", "the advisory must name the surface that re-declares the plan")
+	assert.Contains(t, got.Context, "client tool", "the advisory must name the surface that re-declares the plan")
 }
 
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
@@ -633,8 +633,8 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
 
 		require.Equal(t, "deny", got.Decision, "owning the path is not enough; the base has to be on record")
-		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the command")
-		assert.Contains(t, got.Reason, "magus_job", "and where to exec what it prints")
+		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the base it records")
+		assert.Contains(t, got.Reason, "magus job exec lease-b", "and the command that records it")
 		assert.Contains(t, got.Reason, "lease-b")
 	})
 
@@ -691,7 +691,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		require.Equal(t, "advise", got.Decision)
 		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
 		assert.Equal(t, advisoryUnleasedWrite, got.Kind, "a standing fact, so it is held to one firing per session")
-		assert.Contains(t, got.Context, "magus_job", "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, `client tool (magus\job\put)`, "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
 
@@ -812,13 +812,17 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 //
 // The call carries the paths the row already had, because a put's write_paths REPLACES the
 // row's: a call naming only the blocked path hands back a narrower boundary than the worker
-// started with. It names the op the tool accepts, which is `fork`.
+// started with. It is a client tool script, and the guard reads that script back as the
+// widening it is.
 func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
 	require.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "magus_job op=fork id=lease-b write_paths=")
+	assert.Contains(t, got.Reason, `magus\job\put("lease-b", opts: {"write_paths": [`)
+	script := widenCall(types.Job{ID: "lease-b", WritePaths: []string{"cmd/magus/**"}}, "internal/thing/new.go")
+	assert.Equal(t, `client op=put id=lease-b write_paths=cmd/magus/**,internal/thing/new.go`,
+		buildCall(hint.ToolClient.String(), map[string]any{"script": script}, ""))
 	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
 	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
 	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
@@ -980,7 +984,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 
 	denied := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
 	require.Equal(t, "deny", denied.Decision)
-	assert.Contains(t, denied.Reason, "magus_job op=fork id=orch/worker enter=internal/ledger/store.go")
+	assert.Contains(t, denied.Reason, `magus\job\put("orch/worker", opts: {"enter": "internal/ledger/store.go"})`)
 
 	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/store.go")
 	require.NoError(t, err)

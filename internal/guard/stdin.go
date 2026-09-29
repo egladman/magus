@@ -282,6 +282,7 @@ var stdinReaders = map[string]stdinReader{
 // they hand the payload is theirs to decide.
 var stdinWrappers = map[string]bool{
 	"command": true, "env": true, "exec": true, "nice": true, "stdbuf": true, "time": true, "timeout": true,
+	"gtimeout": true,
 }
 
 // unfedReader names the first stdin reader on the line that nothing feeds, the shape that

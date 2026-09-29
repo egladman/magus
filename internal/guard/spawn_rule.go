@@ -379,16 +379,16 @@ func resolveLease(who hookAttribution, explicit, bound string) (string, types.Le
 	return q.Resolve()
 }
 
-// execTarget is the job a command line takes, through `magus job exec <job>` or the job
-// tool's `op=exec`, or "" when it takes none.
+// execTarget is the job a command line takes, through `magus job exec <job>` or a client
+// script's magus\job\register, or "" when it takes none.
 func execTarget(command string) string {
 	cmds, ok := ParseCommands(command)
 	if !ok {
 		return ""
 	}
 	for _, c := range cmds {
-		if c.Name == hint.ToolJob.String() {
-			if params := mcpParams(c.Args); params["op"] == "exec" {
+		if c.Name == hint.ToolClient.String() {
+			if params := mcpParams(c.Args); params["op"] == jobOpRegister {
 				return strings.TrimSpace(params["id"])
 			}
 			continue

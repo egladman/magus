@@ -3,9 +3,12 @@ package magus
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,6 +57,18 @@ type headPolicy struct {
 	workspace string
 	driver    types.VCSDriver
 	repoRoot  func(context.Context) (string, error)
+	// batch is the shared object process for this authority, when the driver
+	// can open one. One hook reads every pending policy source; a process per
+	// source was most of that wait.
+	batch *objectBatchState
+}
+
+// objectBatchState is the one batch headPolicy opens, shared across the copies
+// an interface value makes of the struct.
+type objectBatchState struct {
+	once  sync.Once
+	batch vcs.ObjectBatch
+	err   error
 }
 
 // loadShapingFiles are the files besides Buzz sources whose edit can change what a load
@@ -73,6 +88,20 @@ func (h headPolicy) Pending(ctx context.Context, scope []string) ([]string, erro
 	if len(scope) > 0 && len(pathspecs) == 0 {
 		return nil, nil
 	}
+	// The scope's bytes and the checkout id already say whether this answer
+	// can have changed. Status is a process, and a hook pays it on every command.
+	var (
+		preID, files  string
+		fingerprinted bool
+	)
+	if len(scope) > 0 {
+		if id, hashed, ok := h.pendingFingerprint(scope); ok {
+			preID, files, fingerprinted = id, hashed, true
+			if pending, hit := readPending(h.workspace, scope, pendingKey(id, hashed)); hit {
+				return pending, nil
+			}
+		}
+	}
 	dirty, err := h.driver.DirtyFiles(ctx, h.workspace, pathspecs)
 	if err != nil {
 		if _, rootErr := h.repoRoot(ctx); rootErr != nil {
@@ -82,6 +111,9 @@ func (h headPolicy) Pending(ctx context.Context, scope []string) ([]string, erro
 		return nil, err
 	}
 	if len(dirty) == 0 {
+		if fingerprinted {
+			h.keepPending(scope, preID, files, nil)
+		}
 		return nil, nil
 	}
 	repoRoot, err := h.repoRoot(ctx)
@@ -100,7 +132,235 @@ func (h headPolicy) Pending(ctx context.Context, scope []string) ([]string, erro
 			out = append(out, filepath.Join(repoRoot, filepath.FromSlash(p)))
 		}
 	}
+	if fingerprinted {
+		h.keepPending(scope, preID, files, out)
+	}
 	return out, nil
+}
+
+// keepPending records pending for the state status saw, which preID and files
+// named before it ran. A file rewritten while status ran, or a checkout moved
+// before the id is read again, would file one state's answer under another's
+// key, so either drops the record. jj is the exception for the id: its first
+// status of a dirty tree appends an operation without changing a byte, and
+// the answer belongs to that new id.
+func (h headPolicy) keepPending(scope []string, preID, files string, pending []string) {
+	id, ok := checkoutID(h.driver, h.workspace)
+	if !ok || strings.ContainsAny(id, " \n") {
+		return
+	}
+	if id != preID && h.driver.Name() != "jj" {
+		return
+	}
+	if again, ok := hashPending(h.workspace, scope); !ok || again != files {
+		return
+	}
+	writePending(h.workspace, scope, pendingKey(id, files), pending)
+}
+
+func pendingKey(id, files string) string { return id + " " + files }
+
+// checkoutID reads the id from the checkout dir sits in, which may be an
+// ancestor: a workspace nested in a repository has no marker of its own.
+func checkoutID(driver types.VCSDriver, dir string) (string, bool) {
+	r, ok := driver.(vcs.CheckoutIDReader)
+	if !ok {
+		return "", false
+	}
+	for d := filepath.Clean(dir); ; {
+		for _, marker := range driver.Claims() {
+			if _, err := os.Lstat(filepath.Join(d, marker)); err == nil {
+				return r.CheckoutID(d)
+			}
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return "", false
+		}
+		d = parent
+	}
+}
+
+// readPending returns the pending list recorded under fp. ok is false when the
+// record is missing or was written for a different fingerprint, and the caller
+// asks the tool.
+func readPending(workspace string, scope []string, fp string) ([]string, bool) {
+	path, ok := pendingCacheFile(workspace, scope)
+	if !ok {
+		return nil, false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	line, rest, found := strings.Cut(string(b), "\n")
+	if !found || line != fp {
+		return nil, false
+	}
+	rest = strings.TrimSuffix(rest, "\n")
+	if rest == "" {
+		return []string{}, true
+	}
+	return strings.Split(rest, "\n"), true
+}
+
+// writePending records pending as the answer for fp. A write failure leaves the
+// next call to ask git, which is the answer it would have given anyway. The
+// record is renamed into place: another hook reading a half-written list would
+// take every path it lost for approved.
+func writePending(workspace string, scope []string, fp string, pending []string) {
+	for _, p := range pending {
+		if strings.Contains(p, "\n") {
+			return
+		}
+	}
+	path, ok := pendingCacheFile(workspace, scope)
+	if !ok {
+		return
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	body := fp + "\n" + strings.Join(pending, "\n")
+	if len(pending) > 0 {
+		body += "\n"
+	}
+	f, err := os.CreateTemp(dir, ".partial-")
+	if err != nil {
+		return
+	}
+	tmp := f.Name()
+	_, werr := f.WriteString(body)
+	cerr := f.Close()
+	if werr != nil || cerr != nil || os.Rename(tmp, path) != nil {
+		_ = os.Remove(tmp)
+	}
+}
+
+// pendingFingerprint identifies the worktree state Pending would ask the tool
+// about. id is the driver's checkout id. files hashes the bytes of every
+// scoped file, and the names and buzz bytes under a scoped directory, so an
+// edit is a different fingerprint even when the size and mtime are not. The
+// id stays outside that hash so a jj status that moves it can be recorded
+// under the new id. ok is false when the id cannot be read without the tool.
+func (h headPolicy) pendingFingerprint(scope []string) (id, files string, ok bool) {
+	id, ok = checkoutID(h.driver, h.workspace)
+	if !ok || strings.ContainsAny(id, " \n") {
+		return "", "", false
+	}
+	files, ok = hashPending(h.workspace, scope)
+	return id, files, ok
+}
+
+// Kinds of the records hashPending frames. Each record is its kind, a length
+// and its bytes, so no file's content can read as a name or as a missing file.
+const (
+	framePath    = 'p'
+	frameMissing = 'm'
+	frameFile    = 'f'
+	frameDir     = 'd'
+	frameEntry   = 'e'
+)
+
+func frame(h hash.Hash, kind byte, b []byte) {
+	var hdr [9]byte
+	hdr[0] = kind
+	binary.LittleEndian.PutUint64(hdr[1:], uint64(len(b)))
+	_, _ = h.Write(hdr[:])
+	_, _ = h.Write(b)
+}
+
+func hashPending(workspace string, scope []string) (string, bool) {
+	paths := append([]string(nil), scope...)
+	slices.Sort(paths)
+	h := sha256.New()
+	parents := map[string]struct{}{}
+	for _, p := range paths {
+		frame(h, framePath, []byte(p))
+		info, err := os.Lstat(p)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				frame(h, frameMissing, nil)
+				if parent := filepath.Dir(p); parent != workspace {
+					parents[parent] = struct{}{}
+				}
+				continue
+			}
+			return "", false
+		}
+		if info.IsDir() {
+			if !writeDirBuzz(h, p) {
+				return "", false
+			}
+			continue
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return "", false
+		}
+		frame(h, frameFile, data)
+		if parent := filepath.Dir(p); parent != workspace {
+			parents[parent] = struct{}{}
+		}
+	}
+	dirs := make([]string, 0, len(parents))
+	for dir := range parents {
+		dirs = append(dirs, dir)
+	}
+	slices.Sort(dirs)
+	for _, dir := range dirs {
+		frame(h, framePath, []byte(dir))
+		if !writeDirBuzz(h, dir) {
+			return "", false
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// writeDirBuzz hashes a directory's entry names, and the bytes of each buzz
+// file directly in it. A new file changes the names; an edit to one changes
+// its bytes. Nested directories are names only: the scope lists the files it
+// cares about under them.
+func writeDirBuzz(h hash.Hash, dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	slices.Sort(names)
+	frame(h, frameDir, nil)
+	for _, name := range names {
+		frame(h, frameEntry, []byte(name))
+		if !strings.HasSuffix(name, ".buzz") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return false
+		}
+		frame(h, frameFile, data)
+	}
+	return true
+}
+
+// pendingCacheFile is where the pending answer for one scope of workspace is
+// recorded. Each scope has its own file, so the scopes a hook asks about in
+// turn do not evict each other. ok is false when the cache directory cannot be
+// resolved.
+func pendingCacheFile(workspace string, scope []string) (string, bool) {
+	dir, err := ResolveCacheDir(workspace)
+	if err != nil {
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(workspace + "\x00" + strings.Join(scope, "\x00")))
+	return filepath.Join(dir, "policy-pending", hex.EncodeToString(sum[:])), true
 }
 
 // pendingSet answers whether a path is one Pending covers. Paths are compared with their
@@ -165,11 +425,58 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 		// Outside the repository nothing is versioned, so both sides read the same bytes.
 		return os.ReadFile(path)
 	}
-	content, err := h.driver.ReadFileAt(ctx, repoRoot, "", filepath.ToSlash(rel))
+	relSlash := filepath.ToSlash(rel)
+	if content, ok, err := h.readBatch(ctx, repoRoot, relSlash); ok {
+		if err != nil {
+			return nil, err
+		}
+		return []byte(content), nil
+	}
+	content, err := h.driver.ReadFileAt(ctx, repoRoot, "", relSlash)
 	if err != nil {
 		return nil, err
 	}
 	return []byte(content), nil
+}
+
+// readBatch serves rel from the authority's object batch. ok is false when this
+// driver has no batch or the batch failed to start, and the caller reads one
+// path the way it always has. A missing object is ok with an error: that is the
+// answer, and starting a second process would only repeat it.
+func (h headPolicy) readBatch(ctx context.Context, repoRoot, rel string) (string, bool, error) {
+	opener, ok := h.driver.(vcs.ObjectBatchOpener)
+	if !ok || h.batch == nil {
+		return "", false, nil
+	}
+	h.batch.once.Do(func() {
+		h.batch.batch, h.batch.err = opener.OpenObjectBatch(ctx, repoRoot, "")
+	})
+	if h.batch.err != nil || h.batch.batch == nil {
+		return "", false, nil
+	}
+	content, err := h.batch.batch.Read(rel)
+	if err != nil && !errors.Is(err, vcs.ErrObjectMissing) {
+		_ = h.batch.batch.Close()
+		h.batch.batch = nil
+		return "", false, nil
+	}
+	return content, true, err
+}
+
+// Close finishes the object batch, if this authority opened one.
+func (h headPolicy) Close() error {
+	if h.batch == nil || h.batch.batch == nil {
+		return nil
+	}
+	err := h.batch.batch.Close()
+	h.batch.batch = nil
+	return err
+}
+
+func closeApproved(a ApprovedPolicy) {
+	if c, ok := a.(io.Closer); ok {
+		_ = c.Close()
+	}
 }
 
 // approvalAuthority is the loosening authority of the workspace at root, nil when it has
@@ -201,7 +508,7 @@ func approvalAuthority(ctx context.Context, root string, opts types.VCSOptions) 
 		})
 		return repoRoot, rootErr
 	}
-	return headPolicy{workspace: root, driver: driver, repoRoot: resolveRoot}, nil
+	return headPolicy{workspace: root, driver: driver, repoRoot: resolveRoot, batch: &objectBatchState{}}, nil
 }
 
 // SpawnRule returns the magus\guard.spawn rule the root magusfile registered, or nil.
@@ -276,9 +583,9 @@ func approvedRegistryIfChanged(ctx context.Context, root, projectPath string, op
 		// would read the same bytes and register the working tree's rules.
 		return nil, nil //nolint:nilnil // no approved difference is the documented nil answer
 	}
-	if scope != nil {
-		// The approved load may read an import the working tree's load no longer reaches,
-		// and that file can be pending too, so it evaluates against the whole tree.
+	if scope != nil && !batched(approved) {
+		// One status over the whole tree lets approvedReader read clean files from
+		// disk instead of starting a process for each.
 		if pending, err = approved.Pending(ctx, nil); err != nil {
 			return nil, err
 		}
@@ -380,23 +687,20 @@ func loadApprovedRegistry(ctx context.Context, root string) (*workspace.Workspac
 	return approvedRegistry(ctx, root, ".", secret.New(), approved, pending)
 }
 
-// approvedRegistry evaluates the root magusfile at root as approved holds it and returns
-// what it registered. pending names the sources the working tree changed, so a file it
-// deleted is still found. Nil with no error when there is no magusfile to evaluate.
-func approvedRegistry(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
-	if !interp.Available() {
-		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
-	}
+// approvedReader reads the approved bytes of each path once. A batched authority
+// serves every path, since pending may be scoped to what the working-tree load read
+// and a path outside that scope can still be pending. Without a batch each read is
+// a process, so a path pending does not cover is read from disk, which is only sound
+// because the caller passed the whole tree's pending answer.
+func approvedReader(ctx context.Context, approved ApprovedPolicy, pending []string) func(string) ([]byte, error) {
 	memo := map[string][]byte{}
+	disk := !batched(approved)
 	changed := newPendingSet(pending)
-	read := func(path string) ([]byte, error) {
+	return func(path string) ([]byte, error) {
 		if data, ok := memo[path]; ok {
 			return data, nil
 		}
-		// A file Pending does not cover holds its approved content on disk, and reading it
-		// there costs no VCS process. Only a failed read (a file moved away, say) asks the
-		// approval authority.
-		if !changed.covers(path) {
+		if disk && !changed.covers(path) {
 			if data, err := os.ReadFile(path); err == nil {
 				memo[path] = data
 				return data, nil
@@ -409,12 +713,39 @@ func approvedRegistry(ctx context.Context, root, projectPath string, resolver *s
 		memo[path] = data
 		return data, nil
 	}
-	files, err := approvedMagusfiles(root, pending, read)
+}
+
+// batched reports whether approved serves its reads from one process.
+func batched(approved ApprovedPolicy) bool {
+	h, ok := approved.(headPolicy)
+	if !ok {
+		return false
+	}
+	_, ok = h.driver.(vcs.ObjectBatchOpener)
+	return ok
+}
+
+// approvedRegistry evaluates the root magusfile at root as approved holds it and returns
+// what it registered. pending names the sources the working tree changed, so a file it
+// deleted is still found. It must be the whole tree's answer when approved is not
+// batched. Nil with no error when there is no magusfile to evaluate.
+func approvedRegistry(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
+	defer closeApproved(approved)
+	if !interp.Available() {
+		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
+	}
+	read := approvedReader(ctx, approved, pending)
+	files, err := approvedMagusfiles(root, pending, read, func() ([]string, error) {
+		// The single magusfile is absent from the approved state, so the load is
+		// the directory form. A file that form still imports can be pending
+		// without the working-tree load having read it.
+		return approved.Pending(ctx, nil)
+	})
 	if err != nil || len(files) == 0 {
 		return nil, err
 	}
 	reg := workspace.NewWorkspaceRegistry()
-	lctx := installWorkspaceRegistry(ctx, reg)
+	lctx := interp.WithGuardRules(installWorkspaceRegistry(ctx, reg))
 	lctx = secret.ContextWithResolver(lctx, resolver)
 	lctx = interp.WithProjectPath(lctx, projectPath)
 	lctx = interp.WithSourceReader(lctx, read)
@@ -429,7 +760,7 @@ func approvedRegistry(ctx context.Context, root, projectPath string, resolver *s
 // approvedMagusfiles is the root magusfile's files as approved holds them, in whichever
 // form it holds them. The working tree only proposes candidates, so neither deleting a file
 // nor adding the other form can hide one; a candidate approved lacks did not exist there.
-func approvedMagusfiles(root string, pending []string, read func(string) ([]byte, error)) ([]string, error) {
+func approvedMagusfiles(root string, pending []string, read func(string) ([]byte, error), expand func() ([]string, error)) ([]string, error) {
 	candidates, err := interp.MagusfileCandidates(root)
 	if err != nil {
 		return nil, err
@@ -437,6 +768,12 @@ func approvedMagusfiles(root string, pending []string, read func(string) ([]byte
 	single := candidates[0]
 	if _, err := read(single); err == nil {
 		return []string{single}, nil
+	}
+	if expand != nil {
+		pending, err = expand()
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Pending paths hang off the resolved repository root, which root may reach through a
 	// symlink; each is renamed onto root so a file named both ways is read once.
@@ -544,6 +881,7 @@ func approvedContentIDs(ctx context.Context, root string, opts types.VCSOptions,
 	if err != nil || approved == nil {
 		return nil
 	}
+	defer closeApproved(approved)
 	pending, err := approved.Pending(ctx, paths)
 	if err != nil {
 		return nil
@@ -594,7 +932,10 @@ func LoadGuardRules(ctx context.Context, root string, opts types.VCSOptions) (*G
 		return nil, err
 	}
 	log := &interp.SourceLog{}
-	lctx := installWorkspaceRegistry(ctx, rules.registry)
+	// Rules only. The rest of the magusfile (harness spells, release tooling,
+	// target imports) is not a guard rule, and compiling it is most of a hook's
+	// cost. See guardRulesFilter in internal/interp.
+	lctx := interp.WithGuardRules(installWorkspaceRegistry(ctx, rules.registry))
 	lctx = secret.ContextWithResolver(lctx, secret.New())
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithSourceLog(lctx, log)

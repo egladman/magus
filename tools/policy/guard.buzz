@@ -19,7 +19,7 @@
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
-//   go-into-checkout (deny): `go -C` into another checkout of magus, bootstrap link aside.
+//   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
 //   stale-write (deny): a magus verb that writes state other checkouts or magus versions
@@ -40,11 +40,16 @@
 //   code-comments (write): a Go comment block the write adds over the owner's budget is
 //     advised, over twice it or above the package clause denied; the first write of a
 //     session adding comments to any code file is advised once.
+//   host-capture (deny): cat, sed, rg, grep, head or tail of a run log or a task
+//     capture. The compiled rule only advises a filter of those files.
+//   host-terminals (deny): creating or reading a directory named terminals. A host
+//     session folder is not a run; magus status reads the lock.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
 // five), cadence.buzz (the gate and the push), binaries.buzz (foreign-binary and
-// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz and
-// comments.buzz. helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
+// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz,
+// comments.buzz and host.buzz (a run log, and a directory named terminals).
+// helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
 // already binds (github, changelog) shadows the one here, so these avoid them.
 namespace agentpolicy;
@@ -60,6 +65,7 @@ import "./tools/policy/spawn" as spawn;
 import "./tools/policy/commits" as subjects;
 import "./tools/policy/pull_requests" as pullRequests;
 import "./tools/policy/comments" as comments;
+import "./tools/policy/host" as host;
 import "./tools/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
@@ -185,6 +191,10 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
         before = "";
         after = req.content;
     }
+    final pathDenial = host\writePath(req.path);
+    if (pathDenial != "") {
+        return magus\guard.deny(pathDenial);
+    }
     if (!comments\hasComment(after)) {
         return magus\guard.allow();
     }
@@ -206,6 +216,10 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // when it is the base branch, "" otherwise; line is the shell line as sent, files the
 // description files it names, and diff reads the branch's diff for a description's budget.
 export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool) > GuardVerdict {
+    final hostVerdict = host\decideHost(programs);
+    if (hostVerdict.decision != "allow") {
+        return hostVerdict;
+    }
     final verdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
     if (verdict.decision != "allow") {
         return verdict;

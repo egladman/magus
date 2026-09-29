@@ -434,9 +434,17 @@ const (
 	holdsSuffix    = ".holds"
 	pipeWaitSuffix = ".wait"
 	exitSuffix     = ".exit"
+	// sweepName's mtime is the last scan, shared across processes that each
+	// exit before a timer could fire.
+	sweepName = ".sweep"
 	// exitRecordKeep is how long an exit record outlives its writer. It must cover the
 	// longest run downstream of it, which reads the record when it finishes.
 	exitRecordKeep = 24 * time.Hour
+	// exitSweepEvery spaces out that scan. A piped magus writes a record as it exits,
+	// and a hook's stdout is a pipe, so scanning on every write re-reads the whole
+	// directory on the way out of every verdict. Readers already ignore a record older
+	// than the proof they were shown; the scan only bounds the directory.
+	exitSweepEvery = time.Hour
 	// pipeWalkDepth bounds the walk back through upstream magus stages; a pipeline
 	// deeper than this is not one anybody types.
 	pipeWalkDepth = 16
@@ -1067,20 +1075,53 @@ func readExitRecord(dir string, u upstreamStage) (exitRecord, bool) {
 	return rec, true
 }
 
-// writeExitRecord stores rec, and sweeps the records nobody read in time.
 func writeExitRecord(dir string, rec exitRecord) {
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
-	matches, _ := filepath.Glob(filepath.Join(dir, "*"+exitSuffix))
-	for _, path := range matches {
-		var old exitRecord
-		if record.Read(path, &old) == nil && time.Since(old.Ended) > exitRecordKeep && !pid.Alive(old.PID) {
-			_ = record.Remove(path)
+	if sweepDue(dir) {
+		matches, _ := filepath.Glob(filepath.Join(dir, "*"+exitSuffix))
+		for _, path := range matches {
+			var old exitRecord
+			if record.Read(path, &old) == nil && time.Since(old.Ended) > exitRecordKeep && !pid.Alive(old.PID) {
+				_ = record.Remove(path)
+			}
 		}
 	}
 	_ = record.Write(filepath.Join(dir, strconv.Itoa(rec.PID)+exitSuffix), rec)
 }
+
+// sweepDue reports whether dir should be scanned, and records that decision
+// before the caller walks. The record is the file's mtime. A walk whose mtime
+// cannot be written would run again on the next exit, which is the full
+// directory scan this hour exists to skip, so that walk is not started.
+// A missing file is created; that first success is due. Any other stat or
+// update failure leaves the previous mtime alone and is not due.
+func sweepDue(dir string) bool {
+	path := filepath.Join(dir, sweepName)
+	info, err := os.Stat(path)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			return false
+		}
+		return true
+	}
+	if time.Since(info.ModTime()) < exitSweepEvery {
+		return false
+	}
+	now := time.Now()
+	if err := stampSweep(path, now, now); err != nil {
+		return false
+	}
+	return true
+}
+
+// stampSweep records a scan in the sweep file's mtime. A test swaps it to fail
+// the record while the directory stays writable.
+var stampSweep = os.Chtimes
 
 // stdinSpool drains a waiting run's stdin into an unlinked file, so the upstream writing
 // it never blocks on a full pipe, and then replays it: the spooled bytes first, then

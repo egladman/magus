@@ -574,11 +574,11 @@ type holder struct {
 // caller may not do, or "" for everything else. stdin is the record the command's
 // statement feeds it, "" when the line carries none the guard can read.
 //
-// The MCP form is graded here alongside the CLI ones because it is the SAME write through
-// a different transport, and a rule that held on one channel would move the traffic rather
-// than stop it.
+// A client script's magus\job write is graded here alongside the CLI ones because it is
+// the SAME write through a different transport, and a rule that held on one channel would
+// move the traffic rather than stop it.
 func leaseRebind(c hint.Invocation, stdin string, h holder) string {
-	if c.Name == hint.ToolJob.String() {
+	if c.Name == hint.ToolClient.String() {
 		return jobToolRebind(mcpParams(c.Args), h)
 	}
 	if path.Base(c.Name) != "magus" {
@@ -672,7 +672,7 @@ func childForkRebind(f childFork, h holder, verb string) string {
 	return ""
 }
 
-// forkFlagsUnbounded are the `job fork` flags, and the magus_job params, that declare no
+// forkFlagsUnbounded are the `job fork` flags, and the magus\job\put opts, that declare no
 // boundary: the lineage, the prose, the timing and read_only.
 var forkFlagsUnbounded = map[string]bool{
 	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true,
@@ -797,31 +797,31 @@ func literalParts(parts []syntax.WordPart) bool {
 	return true
 }
 
-// jobToolRebind judges one call to the job tool against the job the caller holds, naming
-// what the call would do when it is something a holder may not.
+// jobToolRebind judges one magus\job write from a client script against the job the
+// caller holds, naming what the call would do when it is something a holder may not.
 //
 // Four carve-outs, and each is somebody else's job rather than a hole:
 //
-//   - `op=exec` on the caller's OWN job records the base it landed on. That is the
+//   - `register` on the caller's OWN job records the base it landed on. That is the
 //     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
 //     and denying it here would leave a holder unable to write anywhere at all. On
 //     another job it is refused only while the held one is in flight, as the CLI form is.
-//   - `op=fork` on the caller's own job that only SHRINKS its write paths gives ground
+//   - `put` on the caller's own job that only SHRINKS its write paths gives ground
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a path cannot widen a role.
-//   - `op=fork` of a new row naming the caller's job as `parent` is a child, graded by
+//   - `put` of a new row naming the caller's job as `parent` is a child, graded by
 //     the store against its parent (childForkRebind).
-//   - a read (`op=list`, and the default) is not a write.
+//   - a read (list, and every member that writes nothing) is not a write.
 //
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
 // must already be one the job carries, and there must be fewer of them. A cleverer pattern
 // that happens to cover less is not something this rule will try to prove.
 func jobToolRebind(params map[string]string, h holder) string {
 	op, id := params["op"], params["id"]
-	if op == "clear" {
+	if op == jobOpClear {
 		return "drop every job"
 	}
-	if op != "fork" && op != "exec" {
+	if op != jobOpPut && op != jobOpRegister && op != jobOpUnread {
 		return ""
 	}
 	standing := h.standing()
@@ -832,17 +832,20 @@ func jobToolRebind(params map[string]string, h holder) string {
 		// rules are not running.
 		return ""
 	}
-	if op == "exec" && (id == standing.row.ID || !standing.inFlight()) {
+	if op == jobOpUnread {
+		return "run a client script the guard cannot read, which may write any job"
+	}
+	if op == jobOpRegister && (id == standing.row.ID || !standing.inFlight()) {
 		return ""
 	}
-	if _, entering := params["enter"]; entering && op == "fork" {
+	if _, entering := params["enter"]; entering && op == jobOpPut {
 		// The store refuses anything but an entry beside `enter`, and grades the rest.
 		if id != standing.row.ID && mayHandOut(standing.rows, standing.row.ID, id) {
 			return ""
 		}
 		return "enter a job not forked beneath the one it holds"
 	}
-	if op == "fork" && id != standing.row.ID {
+	if op == jobOpPut && id != standing.row.ID {
 		return childForkRebind(mcpFork(params), h, "write another job")
 	}
 	if id == "" || id != standing.row.ID {
@@ -855,12 +858,12 @@ func jobToolRebind(params map[string]string, h holder) string {
 	return "rewrite the job it holds"
 }
 
-// mcpFork reads the child an `op=fork` call declares.
+// mcpFork reads the child a magus\job\put declares.
 func mcpFork(params map[string]string) childFork {
 	f := childFork{
 		id: strings.TrimSpace(params["id"]), parent: strings.TrimSpace(params["parent"]),
 		readOnly:   params["read_only"] == "true",
-		writePaths: params[writePathsParam]+params[writePathsLegacyParam] != "",
+		writePaths: params[writePathsParam] != "",
 	}
 	for key := range params {
 		f.bounded = f.bounded || !forkFlagsUnbounded[key]
@@ -880,12 +883,7 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	for key, value := range params {
 		switch key {
 		case "op", "id":
-		case writePathsParam, writePathsLegacyParam:
-			if present {
-				// Both spellings at once: nothing says which the store would apply, so
-				// this is not a shrink anyone can prove.
-				return false
-			}
+		case writePathsParam:
 			declared, present = value, true
 		default:
 			return false

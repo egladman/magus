@@ -27,8 +27,10 @@ name is the entry below. `magus describe rules` prints the same list.
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
 | [filter-without-input](filter-without-input.md)   | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                        |
+| [grep-reader](grep-reader.md)                     | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body  |
 | [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                |
 | [interpreter-rewrite](interpreter-rewrite.md)     | an inline interpreter rewriting a file this tree already carries                                  |
+| [magus-timeout](magus-timeout.md)                 | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside            |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                          |
 | [output-pipe](output-pipe.md)                     | magus output piped into a filter, when magus projects the record itself                           |
@@ -36,7 +38,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [process-poll](process-poll.md)                   | a process table inspected to wait on magus work the lock already reports                          |
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused               |
 | [raw-tool](raw-tool.md)                           | a toolchain command a spell already wraps, run outside the cache                                  |
-| [read-navigation](read-navigation.md)             | a whole read of a mapped Go or Markdown file over 120 lines                                       |
+| [read-navigation](read-navigation.md)             | a whole read of a Go, Buzz or Markdown file over 120 lines                                        |
 | [scripted-rewrite](scripted-rewrite.md)           | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                |
 | [search-translation](search-translation.md)       | a text search whose pattern a graph query provably answers with the same entities                 |
 | [sed-in-place](sed-in-place.md)                   | `sed -i`, whose two spellings destroy each other's work across platforms                          |

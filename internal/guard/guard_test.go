@@ -137,9 +137,9 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 	// A field arriving with an unexpected type still reaches the MCP arm. Typed, it
 	// failed the unmarshal outright and the raw JSON was judged as a shell line, which is
 	// the one outcome the default arm of the decoder exists to prevent.
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__magus_job","tool_input":{"op":123,"id":"a/b"}}`)
+	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__buzz","tool_input":{"path":123}}`)
 	require.True(t, ok)
-	assert.Equal(t, "magus_job op=123 id=a/b", req.Value)
+	assert.Equal(t, "magus buzz 123", req.Value)
 }
 
 // TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
@@ -305,6 +305,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
+		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "A directory named terminals is not a run"},
 	}
 
 	covered := map[string]bool{}
@@ -486,8 +488,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
-		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
-			"the bootstrap link into a checkout with no binary passes")
+		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
+			"the bootstrap into a checkout with no binary passes")
+		assert.Equal(t, "deny", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
+			"a bare link is not the bootstrap")
 	})
 
 	// The binary answering this hook is the test binary, so a workspace whose ./magus is it

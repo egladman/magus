@@ -278,6 +278,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "bash -c 'go test ./...'", rule: rawTool(`go test ./...`)},
 		{command: `sh -c "gofmt -w x.go"`, rule: rawTool(`gofmt -w x.go`)},
 		{command: "timeout 300 go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "gtimeout 60 go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "nohup pnpm build"},
 		{command: "time npx prettier --write ."},
 		{command: "nice -n 10 cargo build", rule: rawTool(`cargo build`)},
@@ -366,13 +367,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// The wrapper peeling that judges `time go test` as `go test` would erase
 		// the token this rule reads, so it works off the raw line.
 		{command: "time go test ./...", rule: rawTool(`go test ./...`)},
-		// Bounding magus with the shell. Advisory: run and affected take --timeout,
-		// which cancels the run instead of signalling the process.
-		{command: "timeout 300 magus run ci .", context: "--timeout 5m"},
-		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", context: "names the target"},
+		// Bounding magus with the shell kills it from outside; magustimeout_test.go
+		// covers each shape and the command it serves.
+		{command: "timeout 300 magus run ci .", rule: denyRule{Name: denyRuleMagusTimeout}},
+		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", rule: denyRule{Name: denyRuleMagusTimeout}},
 		{command: "timeout 60 sleep 30"},
-		// Only run and affected carry the flag, so nothing else is advised toward it.
-		{command: "timeout 60 magus graph build"},
+		{command: "timeout 60 magus graph build", rule: denyRule{Name: denyRuleMagusTimeout}},
 		{command: "magus run test ."},
 		// A cd ahead of magus is the same command as the project operand, so it passes.
 		// A cd into a temp or scratchpad copy is the throwaway rule above, and one into

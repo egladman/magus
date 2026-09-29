@@ -27,7 +27,7 @@ import (
 // not a smuggled command, and peeling it would misattribute the task's contents.
 var wrappers = map[string]bool{
 	"env": true, "nohup": true, "command": true, "exec": true,
-	"time": true, "timeout": true, "nice": true, "stdbuf": true,
+	"time": true, "timeout": true, "gtimeout": true, "nice": true, "stdbuf": true,
 	"xargs": true, "setsid": true, "sudo": true, "doas": true,
 	"mise": true, "rtx": true,
 	"sh": true, "bash": true, "zsh": true, "ksh": true, "dash": true,
@@ -465,7 +465,7 @@ func skipWrapperArgs(wrapper string, words []string) []string {
 		case strings.Contains(w, "=") && !strings.HasPrefix(w, "/"):
 			// `env VAR=value cmd`: an assignment operand, not the program.
 			words = words[1:]
-		case wrapper == "timeout":
+		case wrapper == "timeout" || wrapper == "gtimeout":
 			// timeout's first non-flag operand is the DURATION, not the program.
 			words = words[1:]
 			wrapper = ""

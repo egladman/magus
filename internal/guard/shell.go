@@ -128,8 +128,10 @@ const (
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"
+	denyRuleGrepReader        denyRuleName = "grep-reader"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleChainedRun        denyRuleName = "chained-run"
+	denyRuleMagusTimeout      denyRuleName = "magus-timeout"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
 	denyRuleBacktickSubstitution denyRuleName = "backtick-substitution"
@@ -1740,11 +1742,6 @@ var (
 	// `time go test` be judged as `go test` would erase the very token this rule is
 	// about.
 	timedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
-	// `timeout 300 magus run ci .`, read off the raw line for the same reason as the
-	// rule above: `timeout` is a peeled wrapper. Narrowed to run and affected, the
-	// only two subcommands carrying --timeout: naming it on `magus graph build`
-	// would advise a flag that does not exist there.
-	timeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -2224,12 +2221,6 @@ var (
 	// Advise, not deny: timing a command is legitimate, and the point is that magus
 	// already answered the question better than the shell can.
 	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
-
-	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies;
-	// nothing is unrecoverable, nothing is written, and the equivalent is close but
-	// not exact.
-	timeoutMagusAdvice = "magus has its own: `" + hint.Run.With("<target>", "<project>", "--timeout", "5m") + "` (and the same flag on `" + hint.Affected.String() + "`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
-		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
 // denySharedStash refuses an unqualified stash restore. The verb it names in the
@@ -2590,10 +2581,22 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}
 	}
+	// Below the rules that name what the magus call does, whose remedies keep the
+	// wrapper: the next call is judged here once they are fixed.
+	var timeoutAdvice ShellVerdict
+	if v, ok := magusTimeoutVerdict(command, d); ok {
+		if v.Deny != "" {
+			return v
+		}
+		timeoutAdvice = v
+	}
 	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
 		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	}
+	if timeoutAdvice.Context != "" {
+		return timeoutAdvice
 	}
 	if captureAdvice.Context != "" {
 		return captureAdvice
@@ -2603,6 +2606,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	if parsed {
 		if v, ok := readVerdict(deps, command, d); ok {
+			return v
+		}
+		if v, ok := grepReaderVerdict(deps, cmds); ok {
 			return v
 		}
 	}
@@ -2625,8 +2631,6 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Context: echoOnSuccessAdvice}
 	case timedMagusRe.MatchString(command):
 		return ShellVerdict{Context: timedMagusAdvice}
-	case timeoutMagusRe.MatchString(command):
-		return ShellVerdict{Context: timeoutMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory
