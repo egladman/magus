@@ -18,20 +18,19 @@ export fun ciPipelineDiagram() > Diagram !> str {
         .desc("A ci target names its steps in a single needs call, so they are independent "
             + "and run in parallel. Order comes from edges the steps themselves declare, "
             + "such as test depending on build. magus enforces none of this list.")
-        .node("cmd", label: "magus affected ci", role: "focal")
-        .node("generate", label: "generate")
-        .node("format", label: "format")
-        .node("lint", label: "lint")
-        .node("build", label: "build")
-        .node("test", label: "test")
-        .node("security", label: "security")
+        .node("cmd", label: "magus affected ci", role: Role.focal)
+        .node("generate")
+        .node("format")
+        .node("lint")
+        .node("build")
+        .node("test")
+        .node("security")
         .edge("cmd", dst: "generate")
         .edge("cmd", dst: "build")
         .edge("cmd", dst: "format")
         .edge("cmd", dst: "test")
         .edge("cmd", dst: "lint")
         .edge("cmd", dst: "security")
-        // A magusfile convention, not a package: nothing in the tree to hold it to.
-        .scope([<str>])
+        .unscoped("a magusfile convention, not a package: nothing in the tree to hold it to")
         .diagram();
 }

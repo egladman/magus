@@ -9,31 +9,30 @@ import "../libs/diagram/flow" as _;
 import "site/diagrams/gen/server-socket" as serverSocketGen;
 
 export fun serverSocketDiagram() > Diagram !> str {
-    return flow("server-socket")
-        .observed(serverSocketGen\serverSocketObserved())
+    return flow("server-socket", observed: serverSocketGen\serverSocketObserved())
         .eyebrow("magus server")
         .title("How a local command reaches the server")
         .desc("The magus CLI dispatches over a private unix domain socket into the "
             + "concurrency pool, the workspace registry and the run registry; shared services "
             + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
-        .node("cli", label: "magus CLI", sub: "run, status, query", tag: "shell", role: "external")
-        .node("sock", label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", role: "focal", anchor: "internal/proc")
+        .node("cli", label: "magus CLI", sub: "run, status, query", tag: "shell", role: Role.external)
+        .node("sock", label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", role: Role.focal, anchor: "internal/proc")
         .node("pool", label: "Concurrency pool")
-        .node("ws", label: "Workspace registry", sub: "graph, SCIP, cache", role: "store", anchor: "internal/graph")
-        .node("runs", label: "Run registry", sub: "live runs", role: "store")
-        .node("svc", label: "Broker client", sub: "shared services", role: "external", anchor: "broker")
+        .node("ws", label: "Workspace registry", sub: "graph, SCIP, cache", role: Role.store, anchor: "internal/graph")
+        .node("runs", label: "Run registry", sub: "live runs", role: Role.store)
+        .node("svc", label: "Broker client", sub: "shared services", role: Role.external, anchor: "broker")
         // --open is the destination flag; --serve only changes how the graph is handed
         // over (a loopback server rather than a URL fragment), so naming --serve alone
         // would describe the transport and omit the command.
-        .node("serve", label: "Loopback server", sub: "graph export --open", role: "optional", anchor: "internal/share")
+        .node("serve", label: "Loopback server", sub: "graph export --open", role: Role.optional, anchor: "internal/share")
         .edge("cli", dst: "sock", label: "dispatch")
         .edge("sock", dst: "pool")
         .edge("sock", dst: "ws")
         .edge("sock", dst: "runs")
         .edge("sock", dst: "svc")
-        .edge("cli", dst: "serve", label: "spawns", dashed: true)
-        .legend("store", label: "shared server state")
-        .legend("optional", label: "spawned on demand")
+        .edge("cli", dst: "serve", label: "spawns", role: EdgeRole.optional)
+        .legend(Role.store, label: "shared server state")
+        .legend(Role.optional, label: "spawned on demand")
         .scope(["internal/proc", "internal/share", "broker"])
         .diagram();
 }

@@ -8,8 +8,7 @@ import "../libs/diagram/flow" as _;
 import "site/diagrams/gen/volatility" as volatilityGen;
 
 export fun volatilityDiagram() > Diagram !> str {
-    return flow("volatility")
-        .observed(volatilityGen\volatilityObserved())
+    return flow("volatility", observed: volatilityGen\volatilityObserved())
         .down()
         .eyebrow("volatility")
         .title("When a failure is retried, and when it is believed")
@@ -17,14 +16,14 @@ export fun volatilityDiagram() > Diagram !> str {
             + "measured volatility is above the threshold. A retry that passes is recorded "
             + "as volatile and the run continues; anything else is a suspected regression.")
         .node("fail", label: "Target fails")
-        .node("det", label: "detection on?", role: "decision")
+        .node("det", label: "detection on?", role: Role.decision)
         .node("report", label: "Report failure")
-        .node("hist", label: "enough history?", role: "decision")
-        .node("rate", label: "over threshold?", role: "decision")
+        .node("hist", label: "enough history?", role: Role.decision)
+        .node("rate", label: "over threshold?", role: Role.decision)
         .node("retry", label: "Retry once", sub: "the same target", anchor: "internal/retry")
-        .node("pass", label: "retry passed?", role: "decision")
+        .node("pass", label: "retry passed?", role: Role.decision)
         .node("volatile", label: "Record volatile", sub: "the run continues")
-        .node("regress", label: "Suspected regression", sub: "chase with --bisect", role: "focal")
+        .node("regress", label: "Suspected regression", sub: "chase with --bisect", role: Role.focal)
         .edge("fail", dst: "det")
         .edge("det", dst: "report", label: "no")
         .edge("det", dst: "hist", label: "yes")
@@ -35,7 +34,7 @@ export fun volatilityDiagram() > Diagram !> str {
         .edge("retry", dst: "pass")
         .edge("pass", dst: "volatile", label: "yes")
         .edge("pass", dst: "regress", label: "no")
-        .legend("focal", label: "wants a human")
+        .legend(Role.focal, label: "wants a human")
         .scope(["internal/retry"])
         .diagram();
 }

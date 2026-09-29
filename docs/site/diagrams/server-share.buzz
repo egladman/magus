@@ -17,8 +17,7 @@ import "../libs/diagram/flow" as _;
 import "site/diagrams/gen/server-share" as serverShareGen;
 
 export fun serverShareDiagram() > Diagram !> str {
-    return flow("server-share")
-        .observed(serverShareGen\serverShareObserved())
+    return flow("server-share", observed: serverShareGen\serverShareObserved())
         .eyebrow("magus server")
         .title("The only listener a second machine can reach")
         .desc("Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
@@ -28,19 +27,19 @@ export fun serverShareDiagram() > Diagram !> str {
             + "/mcp and job control stay loopback only.")
         .node("dash", label: "Console", sub: "dashboard", tag: "pwa")
         .node("sharep", label: "/api/v1/share", sub: "loopback + bearer", tag: "route", anchor: "internal/share")
-        .node("lan", label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", role: "focal", anchor: "internal/share")
-        .node("phone", label: "Phone on the LAN", sub: "same-origin viewer", tag: "client", role: "external")
-        .node("served", label: "Shared read routes", sub: "events, insight, outputs, output", role: "store", anchor: "internal/handler/viewer")
-        .node("connectreads", label: "Shared Connect reads", sub: "status, activity, metrics, insight", role: "store", anchor: "internal/handler/status")
-        .node("withheld", label: "Never on a share", sub: "graph, diff, plan, job, /mcp", role: "optional", anchor: "internal/handler/graph")
+        .node("lan", label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", role: Role.focal, anchor: "internal/share")
+        .node("phone", label: "Phone on the LAN", sub: "same-origin viewer", tag: "client", role: Role.external)
+        .node("served", label: "Shared read routes", sub: "events, insight, outputs, output", role: Role.store, anchor: "internal/handler/viewer")
+        .node("connectreads", label: "Shared Connect reads", sub: "status, activity, metrics, insight", role: Role.store, anchor: "internal/handler/status")
+        .node("withheld", label: "Never on a share", sub: "graph, diff, plan, job, /mcp", role: Role.optional, anchor: "internal/handler/graph")
         .edge("dash", dst: "sharep", label: "share")
         .edge("sharep", dst: "lan", label: "mints token")
-        .edge("phone", dst: "lan", label: "read-only", kind: "accent")
+        .edge("phone", dst: "lan", label: "read-only", role: EdgeRole.focal)
         .edge("lan", dst: "served", label: "serves")
         .edge("lan", dst: "connectreads", label: "serves")
-        .legend("focal", label: "reachable off-machine")
-        .legend("store", label: "served on a share")
-        .legend("optional", label: "loopback only")
+        .legend(Role.focal, label: "reachable off-machine")
+        .legend(Role.store, label: "served on a share")
+        .legend(Role.optional, label: "loopback only")
         .scope(["internal/share", "internal/handler/viewer", "internal/handler/status", "internal/handler/graph"])
         .diagram();
 }

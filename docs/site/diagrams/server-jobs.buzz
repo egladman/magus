@@ -9,27 +9,26 @@ import "../libs/diagram/flow" as _;
 import "site/diagrams/gen/server-jobs" as serverJobsGen;
 
 export fun serverJobsDiagram() > Diagram !> str {
-    return flow("server-jobs")
-        .observed(serverJobsGen\serverJobsObserved())
+    return flow("server-jobs", observed: serverJobsGen\serverJobsObserved())
         .eyebrow("magus server")
         .title("What keeps the warm workspace current")
         .desc("File changes drive the watchers and the SCIP auto-indexer; a magus run "
             + "queues a coalesced graph-build job. All three write into the workspace "
             + "registry, which is the server's single warm copy of the knowledge graph.")
-        .node("fs", label: "Source files", sub: "magusfiles, code", tag: "input", role: "external")
-        .node("cli", label: "magus run", sub: "any invocation", tag: "input", role: "external")
+        .node("fs", label: "Source files", sub: "magusfiles, code", tag: "input", role: Role.external)
+        .node("cli", label: "magus run", sub: "any invocation", tag: "input", role: Role.external)
         .node("watch", label: "File watchers", sub: "internal/file/watch", tag: "job", anchor: "internal/file")
         .node("idx", label: "SCIP indexer", sub: "symbol index", tag: "job")
         .node("job", label: "Graph build", sub: "coalesced, async", tag: "job")
-        .node("ws", label: "Workspace registry", sub: "the warm graph", tag: "state", role: "focal", anchor: "internal/graph")
+        .node("ws", label: "Workspace registry", sub: "the warm graph", tag: "state", role: Role.focal, anchor: "internal/graph")
         .edge("fs", dst: "watch")
         .edge("fs", dst: "idx")
         .edge("cli", dst: "job", label: "queues")
         .edge("watch", dst: "ws", label: "invalidate")
         .edge("idx", dst: "ws", label: "symbols")
         .edge("job", dst: "ws", label: "rebuild")
-        .legend("external", label: "outside the server")
-        .legend("focal", label: "the one warm copy")
+        .legend(Role.external, label: "outside the server")
+        .legend(Role.focal, label: "the one warm copy")
         .scope(["internal/file"])
         .diagram();
 }

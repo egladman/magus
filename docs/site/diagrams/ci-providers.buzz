@@ -8,8 +8,7 @@ import "../libs/diagram/flow" as _;
 import "site/diagrams/gen/ci-providers" as ciProvidersGen;
 
 export fun ciProvidersDiagram() > Diagram !> str {
-    return flow("ci-providers")
-        .observed(ciProvidersGen\ciProvidersObserved())
+    return flow("ci-providers", observed: ciProvidersGen\ciProvidersObserved())
         .eyebrow("ci providers")
         .title("Vendor syntax lives in the spell, never in the binary")
         .desc("A failing project reaches the annotator contract, which speaks generic "
@@ -20,15 +19,15 @@ export fun ciProvidersDiagram() > Diagram !> str {
         .node("quote", label: "QuoteWith", sub: "per line, in Go", anchor: "internal/ci")
         .node("ops", label: "Provider ops", sub: "group start, end, annotate")
         .node("prefixes", label: "quote_prefixes", sub: "declared once")
-        .node("vendor", label: "CI system", sub: "job log, pull request", role: "external")
+        .node("vendor", label: "CI system", sub: "job log, pull request", role: Role.external)
         .edge("run", dst: "contract")
         .edge("contract", dst: "ops", label: "generic verbs")
         .edge("ops", dst: "vendor", label: "vendor syntax")
-        .edge("prefixes", dst: "quote", label: "read once", dashed: true)
+        .edge("prefixes", dst: "quote", label: "read once", role: EdgeRole.optional)
         .edge("quote", dst: "vendor", label: "de-fanged")
         .zone("magus binary, names no ci system", members: ["run", "contract", "quote"])
         .zone("provider spell, in buzz", members: ["ops", "prefixes"])
-        .legend("external", label: "outside magus")
+        .legend(Role.external, label: "outside magus")
         .scope(["internal/ci"])
         .diagram();
 }

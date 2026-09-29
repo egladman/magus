@@ -18,8 +18,8 @@ export fun projectReferenceDiagram() > Diagram !> str {
         .node("rel", label: "pkg/api")
         .node("dot", label: "./pkg/api")
         .node("root", label: "workspace://", sub: "the root alias")
-        .node("parse", label: "parse", tag: "step")
-        .node("ref", label: "One reference", sub: "path: pkg/api", role: "focal")
+        .node("parse", tag: "step")
+        .node("ref", label: "One reference", sub: "path: pkg/api", role: Role.focal)
         .node("human", label: "Human output", sub: "pkg/api")
         .node("machine", label: "Machine output", sub: "workspace://pkg/api")
         .edge("rel", dst: "parse")
@@ -30,8 +30,7 @@ export fun projectReferenceDiagram() > Diagram !> str {
         .edge("ref", dst: "human", label: "printed")
         .edge("ref", dst: "machine", label: "-o json")
         .zone("accepted as input, interchangeable", members: ["url", "rel", "dot", "root"])
-        .legend("focal", label: "one canonical form")
-        // An input and output contract, drawn with no anchors to hold a scope to.
-        .scope([<str>])
+        .legend(Role.focal, label: "one canonical form")
+        .unscoped("an input and output contract, drawn with no anchors to hold a scope to")
         .diagram();
 }

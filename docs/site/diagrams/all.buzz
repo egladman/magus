@@ -285,7 +285,7 @@ fun figureFindings(d: Diagram, root: str, imports: ObservedImports?) > [str] !> 
 }
 
 // summaryLine says how much of a figure is backed by anything. An all-flow figure reads as
-// unverified here rather than passing quietly.
+// unverified here rather than passing quietly, and an unscoped one says why it names no code.
 fun summaryLine(d: Diagram, verified: bool) > str {
     var anchored = 0;
     foreach (n in d.nodes) {
@@ -299,8 +299,9 @@ fun summaryLine(d: Diagram, verified: bool) > str {
         if (e.claim == "calls") { calls = calls + 1; }
         if (e.claim == "flow") { narrative = narrative + 1; }
     }
-    final line = "{d.id}: {d.nodes.len()} nodes, {anchored} anchored; "
+    var line = "{d.id}: {d.nodes.len()} nodes, {anchored} anchored; "
         + "edges: {imports} imports, {calls} calls, {narrative} flow (unverified)";
+    if (d.unscoped != "") { line = line + "; unscoped: " + d.unscoped; }
     if (verified == false) {
         return line + "; imports and observed stamp unverified (run with --verify-imports)";
     }
@@ -581,6 +582,10 @@ test "the summary counts nodes, anchors and each claim" {
     assert\equal(summaryLine(stamped, verified: true),
         want: "t: 0 nodes, 0 anchored; edges: 0 imports, 0 calls, 0 flow (unverified); imports and observed stamp verified",
         message: "stamped");
+    final unscoped = Diagram{ id = "t", unscoped = "a decision a person makes" };
+    assert\equal(summaryLine(unscoped, verified: false),
+        want: "t: 0 nodes, 0 anchored; edges: 0 imports, 0 calls, 0 flow (unverified); unscoped: a decision a person makes; imports and observed stamp unverified (run with --verify-imports)",
+        message: "unscoped says why");
 }
 
 test "verifying imports refuses without an index and checks each imports claim" {
@@ -738,6 +743,7 @@ test "server-http composed over its observation lays out clean" {
         refusal = "{e}";
     }
     assert\equal(refusal, want: "", message: "composed");
-    assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 12], message: "nodes, edges, omits");
+    // 13 omits: internal/handler/diagram joined the scope after the observed set was written.
+    assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 13], message: "nodes, edges, omits");
     assert\equal(d.stamp, want: serverHttpGen\serverHttpObserved().stamp, message: "stamped by its observation");
 }

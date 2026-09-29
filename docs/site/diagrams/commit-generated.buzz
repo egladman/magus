@@ -16,12 +16,12 @@ export fun commitGeneratedDiagram() > Diagram !> str {
             + "sources, is not already produced by the build, is read by something that "
             + "never runs the build, and is neither large nor churning.")
         .node("start", label: "A target writes a file")
-        .node("pure", label: "pure function?", role: "decision")
-        .node("needed", label: "build makes it?", role: "decision")
-        .node("read", label: "read unbuilt?", role: "decision")
-        .node("churn", label: "big or churns?", role: "decision")
+        .node("pure", label: "pure function?", role: Role.decision)
+        .node("needed", label: "build makes it?", role: Role.decision)
+        .node("read", label: "read unbuilt?", role: Role.decision)
+        .node("churn", label: "big or churns?", role: Role.decision)
         .node("skip", label: "Do not commit", sub: "CI builds it")
-        .node("commit", label: "Commit it", sub: "generate is the gate", role: "focal")
+        .node("commit", label: "Commit it", sub: "generate is the gate", role: Role.focal)
         .edge("start", dst: "pure")
         .edge("pure", dst: "needed", label: "yes")
         .edge("needed", dst: "read", label: "no")
@@ -31,8 +31,7 @@ export fun commitGeneratedDiagram() > Diagram !> str {
         .edge("churn", dst: "skip", label: "yes")
         .edge("read", dst: "commit", label: "yes")
         .edge("churn", dst: "commit", label: "no")
-        .legend("focal", label: "needs a drift gate")
-        // A decision a person makes, not a Go package.
-        .scope([<str>])
+        .legend(Role.focal, label: "needs a drift gate")
+        .unscoped("a decision a person makes, not a Go package")
         .diagram();
 }

@@ -906,7 +906,7 @@ export fun importFlow(id: str, title: str, scope: [str], graph: ImportGraph) > m
     foreach (pkg in ordered) {
         foreach (dep in graph.packages[pkg] ?? [<str>]) {
             if (inScope[dep] != null) {
-                f.edge(diagrams\observedNodeId(pkg), dst: diagrams\observedNodeId(dep), claim: "imports");
+                f.edge(diagrams\observedNodeId(pkg), dst: diagrams\observedNodeId(dep), claim: Claim.imports);
             }
         }
     }

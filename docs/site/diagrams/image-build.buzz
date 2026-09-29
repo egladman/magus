@@ -13,10 +13,10 @@ export fun imageBuildDiagram() > Diagram !> str {
         .desc("Without the cd charm an image-build loads locally and pushes nothing. With "
             + "it, the channel decides: the default commit channel adds one immutable tag "
             + "to one registry, and only stable moves the floating latest tag.")
-        .node("run", label: "magus run image-build", role: "focal")
-        .node("cd", label: "cd?", role: "decision")
+        .node("run", label: "magus run image-build", role: Role.focal)
+        .node("cd", label: "cd?", role: Role.decision)
         .node("local", label: "Load locally", sub: "pushes nothing")
-        .node("channel", label: "channel", role: "decision")
+        .node("channel", role: Role.decision)
         .node("commit", label: "Commit", sub: "ghcr, tagged by hash")
         .node("unstable", label: "Prerelease", sub: "no floating tag")
         .node("stable", label: "Release", sub: "version and latest")
@@ -26,7 +26,6 @@ export fun imageBuildDiagram() > Diagram !> str {
         .edge("channel", dst: "commit", label: "default")
         .edge("channel", dst: "unstable", label: "unstable")
         .edge("channel", dst: "stable", label: "stable")
-        // A spell's decision process, not a Go package.
-        .scope([<str>])
+        .unscoped("a spell's decision process, not a Go package")
         .diagram();
 }
