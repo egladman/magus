@@ -44,10 +44,11 @@ type slotHold struct {
 	slots int
 	// blocked names what this step is waiting on, empty while it is running.
 	blocked string
-	// yielded marks slots handed back for a ctx.needs fan-out. The step still exists and
-	// still has a hold record, but it is occupying nothing, so it neither fills the pool
-	// nor keeps a verdict from being reached.
-	yielded bool
+	// yields counts the fan-outs the step's slots are handed back for. While it is above
+	// zero the step still has a hold record but occupies nothing, so it neither fills the
+	// pool nor keeps a verdict from being reached. A count, not a flag: a yield nested in
+	// another on the same hold must not end the outer one when it returns.
+	yields int
 }
 
 // slotWaiter is one queued request for slots. cancel is what a refusal pulls: the waiter
@@ -118,6 +119,29 @@ func (l *Limiter) acquireWatched(ctx context.Context, n int, label string) (*slo
 	return w.admit(label, n), nil
 }
 
+// Admit takes one slot for work named label that runs outside a cache step: a pooled
+// Buzz target, one spell of a fan-out. It returns ctx marked as holding the slot, the
+// way a step's body is marked, so work inside yields it before queueing for another
+// ([Limiter.Yield]) and the slot watch sees what it waits on. release gives the slot
+// back. A holder that took its slot with a bare Acquire is invisible to the watch, and
+// a pool it wedges hangs instead of being refused with MGS3013.
+//
+// Under an admitted step, a wait message names the work as "<step> > <label>", so label
+// need only say what the work is within the step that started it.
+func (l *Limiter) Admit(ctx context.Context, label string) (context.Context, func(), error) {
+	if parent := admissionFrom(ctx).hold; parent != nil {
+		label = parent.label + " > " + label
+	}
+	hold, err := l.acquireWatched(ctx, 1, label)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return withSlotHold(WithSlotHeld(ctx), hold), func() {
+		hold.done()
+		l.Release()
+	}, nil
+}
+
 // admit records that the named step now holds slots.
 func (w *slotWatch) admit(label string, slots int) *slotHold {
 	h := &slotHold{w: w, label: label, slots: slots}
@@ -174,14 +198,14 @@ func (h *slotHold) yield() func() {
 	if h == nil {
 		return func() {}
 	}
-	set := func(y bool) {
+	add := func(n int) {
 		h.w.mu.Lock()
 		defer h.w.mu.Unlock()
-		h.yielded = y
+		h.yields += n
 		h.w.evaluateLocked()
 	}
-	set(true)
-	return func() { set(false) }
+	add(1)
+	return func() { add(-1) }
 }
 
 func (w *slotWatch) beginWait(label string, n int, cancel context.CancelFunc) *slotWaiter {
@@ -237,7 +261,7 @@ func (w *slotWatch) wedgedLocked() bool {
 	}
 	held := 0
 	for h := range w.holds {
-		if h.yielded {
+		if h.yields > 0 {
 			continue
 		}
 		if h.blocked == "" {
@@ -277,7 +301,7 @@ func (w *slotWatch) fireVerdict() {
 func (w *slotWatch) refusalLocked() error {
 	holders := make([]string, 0, len(w.holds))
 	for h := range w.holds {
-		if h.yielded {
+		if h.yields > 0 {
 			continue
 		}
 		holders = append(holders, fmt.Sprintf("%s holds %d and is waiting on %s", h.label, h.slots, h.blocked))

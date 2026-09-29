@@ -613,19 +613,20 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	defer untrack()
 	ctx = WithSubOp(ctx, call.SubOp)
 
-	if err := s.lim.Acquire(ctx); err != nil {
+	admitted, release, err := s.lim.Admit(ctx, "adopted run")
+	if err != nil {
 		reply.ExitCode = 1
 		reply.Err = err.Error()
 		return nil
 	}
-	defer s.lim.Release()
+	defer release()
 
 	// The acquired slot gates admission, but the forwarded build runs its own
 	// RunAll against the same shared Limiter. Holding our slot for the whole
 	// forwarded run would steal one slot from that pool per adopted child and
 	// inflate Status.Running, so yield it for the duration of the handler and
 	// reacquire before returning (mirrors RunChildSync's Yield).
-	if err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) }); err != nil {
+	if err := s.lim.Yield(admitted, func() error { return s.handler(ctx, req.Args) }); err != nil {
 		if errors.Is(err, ErrNotAdoptable) { // propagate so client falls back to local execution
 			return err
 		}
@@ -708,14 +709,15 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		// stranger, and tell every process it forks that it descends from one.
 		ctx = types.WithInvocationAncestors(ctx, nil)
 
-		if err := s.lim.Acquire(ctx); err != nil {
+		admitted, release, err := s.lim.Admit(ctx, "background job")
+		if err != nil {
 			return
 		}
-		defer s.lim.Release()
+		defer release()
 		// Yield the admission slot for the handler's duration, as run does, so the job
 		// competes fairly in the shared pool instead of pinning a slot.
 		jobStart := time.Now()
-		err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) })
+		err = s.lim.Yield(admitted, func() error { return s.handler(ctx, req.Args) })
 		if s.onJobDone != nil {
 			s.onJobDone(ctx, req.Args, time.Since(jobStart), err)
 		}

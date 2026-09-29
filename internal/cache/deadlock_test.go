@@ -176,3 +176,60 @@ func TestSlotWatchSeesAYieldReacquire(t *testing.T) {
 	composer.done()
 	lim.Release()
 }
+
+// TestAdmitShowsItsHolderToTheSlotWatch: work admitted outside a cache step (a pooled
+// Buzz target reached through ctx.needs) that then queues for a step of its own, without
+// yielding, is the width-one hang. Its holder has to be on the watch, named under the
+// step that needed it, or the run waits out --target-timeout instead of being refused.
+func TestAdmitShowsItsHolderToTheSlotWatch(t *testing.T) {
+	withShortDeadlockGrace(t, 50*time.Millisecond)
+	lim := NewLimiter(1)
+	parent, err := lim.acquireWatched(context.Background(), 1, "libs/textsearch test")
+	require.NoError(t, err)
+	ctx := withSlotHold(WithSlotHeld(context.Background()), parent)
+
+	err = lim.Yield(ctx, func() error {
+		held, release, err := lim.Admit(WithoutSlotHeld(ctx), "install")
+		require.NoError(t, err)
+		defer release()
+		assert.Equal(t, 1, SlotsHeld(held), "the admitted work runs marked as holding its slot")
+
+		_, err = lim.acquireWatched(held, 1, "libs/textsearch install")
+		return err
+	})
+	require.ErrorIs(t, err, types.BuildSlotsDeadlocked)
+	assert.Contains(t, err.Error(), "libs/textsearch test > install holds 1 and is waiting on 1 build slot(s)")
+
+	parent.done()
+	lim.Release()
+	assert.Equal(t, LimiterStats{Capacity: 1}, lim.Snapshot(), "Admit's release gave its slot back")
+}
+
+// TestSlotWatchKeepsANestedYieldUntilTheOuterEnds: a yield nested inside another on the
+// same hold (a spell's install inside the spell fan-out that yielded for it) returns
+// first. The hold still occupies nothing until the outer one returns, so the watch must
+// not read it as holding the slot someone else took in the meantime.
+func TestSlotWatchKeepsANestedYieldUntilTheOuterEnds(t *testing.T) {
+	withShortDeadlockGrace(t, 50*time.Millisecond)
+	lim := NewLimiter(1)
+	composer, err := lim.acquireWatched(context.Background(), 1, ". test")
+	require.NoError(t, err)
+	composer.block("its spells")
+
+	outer := composer.yield()
+	lim.Release()
+	// A tool's own worker reservation takes the freed slot, the kind of holder the watch
+	// never counts.
+	require.NoError(t, lim.AcquireN(context.Background(), 1))
+	composer.yield()()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	_, err = lim.acquireWatched(ctx, 1, ". mocks-generate")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotErrorIs(t, err, types.BuildSlotsDeadlocked, "the composer's slot is still handed back")
+
+	lim.Release()
+	outer()
+	composer.done()
+}

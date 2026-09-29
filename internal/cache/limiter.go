@@ -118,11 +118,10 @@ func (l *Limiter) ReleaseN(n int) {
 // its slots (RunAll releases unconditionally; a slotless return would panic), and it
 // re-enters the FIFO queue at the back.
 //
-// The floor of 1 is the contract for a caller holding a slot the CONTEXT does not name,
-// which proc's server does at both of its Yield sites: it takes its admission slot with a
-// raw Acquire, so an unmarked ctx there means one slot held, not none. Callers holding
-// nothing (magus.go's spell fan-out, proc.RunChildSync) check SlotHeld and never reach
-// here, which is what keeps the floor from over-releasing.
+// Every holder takes its slot through Admit, which marks the context, so SlotsHeld names
+// what the caller holds. The floor of 1 covers a caller that acquired with a raw Acquire;
+// callers holding nothing check SlotHeld and never reach here, which is what keeps the
+// floor from over-releasing.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
 // limiter even after ctx is cancelled, slowing shutdown until peers free the slots.

@@ -12,14 +12,18 @@ import (
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-// Semaphore is the concurrency budget the pool draws from. *cache.Limiter
-// satisfies this interface (Acquire/Release/Yield are defined on it).
+// Semaphore is the concurrency budget the pool draws from. The host owns what
+// holding a slot means: Acquire marks the context a target body runs under, and
+// Yield reads that mark. Host code a body calls then sees the slot its caller
+// holds, and can hand it back before waiting on work that needs one.
 type Semaphore interface {
-	Acquire(ctx context.Context) error
-	Release()
-	// Yield releases one slot for the duration of fn and re-acquires it before
-	// returning. The caller must hold a slot; use only when buzzSlotHeld is true.
-	Yield(ctx context.Context, fn func() error) error
+	// Acquire takes one slot for the named target. It returns the context the
+	// target's body runs under and the func that gives the slot back.
+	Acquire(ctx context.Context, name string) (context.Context, func(), error)
+	// Yield gives back the slots ctx holds while fn runs and takes them back
+	// before returning. fn receives a context holding none. When ctx holds no
+	// slot, fn runs at once under ctx.
+	Yield(ctx context.Context, fn func(context.Context) error) error
 }
 
 // WorkerSession is the pre-warmed pair a WorkerFunc returns: a freshly-executed
@@ -241,8 +245,8 @@ func TargetMemoFromContext(ctx context.Context) *TargetMemo {
 // until they finish never starves the children of a goroutine to run on — nested
 // dispatch cannot deadlock on GOROUTINE OR SEMAPHORE availability, regardless of
 // fan-out. Parallelism is bounded by the semaphore, which Dispatch yields (via
-// getSem.Yield) so a child can acquire the slot its parent holds, even at
-// MAGUS_CONCURRENCY=1.
+// Semaphore.Yield) so a child can acquire the slot its parent holds, even at a
+// budget of one slot.
 //
 // That invariant does not, by itself, rule out every deadlock: two in-flight
 // SIBLINGS that mutually depend on each other (B needs C, C needs B) each hold
@@ -357,8 +361,8 @@ func (p *Pool) Submit(ctx context.Context, name string, ancestors []string) <-ch
 	return ch
 }
 
-// Dispatch fans out names concurrently, yielding the caller's buzz slot if
-// held so that children can acquire it (deadlock-free at MAGUS_CONCURRENCY=1).
+// Dispatch fans out names concurrently, yielding whatever slot ctx holds so
+// that children can acquire it (deadlock-free at a budget of one slot).
 // TargetMemo deduplication is applied when a memo is present in ctx: a target
 // already in-flight is subscribed to (not re-submitted); the waitFn is called
 // without holding the slot, so it cannot deadlock.
@@ -367,13 +371,12 @@ func (p *Pool) Dispatch(ctx context.Context, names []string, ancestors []string)
 		return nil
 	}
 	sem := p.getSemFrom(ctx)
-	if sem != nil && buzzSlotHeld(ctx) {
-		childCtx := withoutBuzzSlot(ctx)
-		return sem.Yield(ctx, func() error {
-			return p.dispatchInner(childCtx, names, ancestors)
-		})
+	if sem == nil {
+		return p.dispatchInner(ctx, names, ancestors)
 	}
-	return p.dispatchInner(ctx, names, ancestors)
+	return sem.Yield(ctx, func(ctx context.Context) error {
+		return p.dispatchInner(ctx, names, ancestors)
+	})
 }
 
 func (p *Pool) dispatchInner(ctx context.Context, names []string, ancestors []string) error {
@@ -463,11 +466,12 @@ func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []strin
 	}
 	sem := p.getSemFrom(ctx)
 	if sem != nil && !alreadyAdmitted {
-		if err := sem.Acquire(ctx); err != nil {
+		held, release, err := sem.Acquire(ctx, name)
+		if err != nil {
 			return err
 		}
-		defer sem.Release()
-		ctx = withBuzzSlot(ctx)
+		defer release()
+		ctx = held
 	}
 
 	w, err := p.acquireWorker(ctx)
@@ -597,21 +601,7 @@ func (p *Pool) Close() error {
 
 // --- package-private context keys ---
 
-type buzzSlotKey struct{}
 type buzzAncestorKey struct{}
-
-func withBuzzSlot(ctx context.Context) context.Context {
-	return context.WithValue(ctx, buzzSlotKey{}, true)
-}
-
-func withoutBuzzSlot(ctx context.Context) context.Context {
-	return context.WithValue(ctx, buzzSlotKey{}, false)
-}
-
-func buzzSlotHeld(ctx context.Context) bool {
-	v, _ := ctx.Value(buzzSlotKey{}).(bool)
-	return v
-}
 
 // WithAncestors installs stack as the dispatch ancestor stack. The pool maintains it
 // itself while dispatching; it is exported for the two boundaries the pool cannot

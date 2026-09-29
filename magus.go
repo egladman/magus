@@ -1737,11 +1737,27 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 			if l == nil {
 				return nil
 			}
-			return l
+			return poolSlots{l}
 		}
 		m.buzzPoolReg = buzz.NewPoolRegistry(getSem, lim.Capacity())
 	})
 	return m.buzzPoolReg
+}
+
+// poolSlots is the Buzz pool's view of the workspace limiter. A pooled target's body runs
+// under the same slot mark a cache step's does, so an install or a child magus it starts
+// sees the slot the body holds and yields it rather than queueing behind it.
+type poolSlots struct{ lim *cache.Limiter }
+
+func (s poolSlots) Acquire(ctx context.Context, name string) (context.Context, func(), error) {
+	return s.lim.Admit(ctx, name)
+}
+
+func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) error {
+	if !cache.SlotHeld(ctx) {
+		return fn(ctx)
+	}
+	return s.lim.Yield(ctx, func() error { return fn(cache.WithoutSlotHeld(ctx)) })
 }
 
 // Close releases workspace resources (VM pools, telemetry); cache and limiter are
@@ -2033,12 +2049,13 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 				defer wg.Done()
 				spellCtx := ctx
 				if bounded {
-					if err := lim.Acquire(ctx); err != nil {
+					held, release, err := lim.Admit(ctx, s.Name()+" spell")
+					if err != nil {
 						results[i] = result{name: s.Name(), err: err}
 						return
 					}
-					spellCtx = cache.WithSlotHeld(ctx)
-					defer lim.Release()
+					spellCtx = held
+					defer release()
 				}
 				results[i] = result{name: s.Name(), err: fn(spellCtx, s)}
 			}(i, s)
