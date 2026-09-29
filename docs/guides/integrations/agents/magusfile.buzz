@@ -27,6 +27,7 @@ import "./lib/embed" as embed;
 // The workspace's shared drift helper, so this project's generated files are gated the
 // same way the root's are rather than by a second implementation of the same idea.
 import "../../../../tools/drift" as drift;
+import "../../../../tools/index" as index;
 // os shells out to pnpm for the install and the two gates.
 import "os";
 
@@ -102,7 +103,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // The other generated thing this project owns. Its own comment claimed the drift gate
     // compared its output byte for byte, and nothing ran it: measured by planting a probe
     // in a committed schema and watching a full green gate keep it.
-    ctx.needs(cursor_schemas_generate);
+    ctx.needs(cursor_schemas_generate, index_generate);
     ctx.readsFiles("guard-templates.md.tmpl", "*.sh", "*.buzz", "lib/*.buzz");
     ctx.writesFiles("guard-templates.md");
     final tmpl = fs\readFile("guard-templates.md.tmpl");
@@ -133,6 +134,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
             + "`magus run generate:rw docs/guides/integrations/agents` and commit: "
             + changed.join(", ");
     }
+}
+
+// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
+// body and the reasons for them are in tools/index.buzz.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("MAGUS.md");
+    ctx.readsFiles("magusfile.buzz", "../../../../magus.yaml", "../../../../internal/render/target_graph.go",
+                   "../../../../internal/render/md/md.go", "../../../../internal/hint/cli_command.go");
+    index\render("docs/guides/integrations/agents");
 }
 
 // Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.

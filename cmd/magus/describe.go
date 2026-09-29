@@ -162,6 +162,10 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	// Before the scope filter, so a scoped index can still link the neighbors it
+	// leaves out of the render.
+	indexes := declareIndexes(ws, out.Projects)
+
 	// A trailing list of project paths scopes the graph to those projects; the
 	// cross-project edge pass in the renderer drops edges to projects left out.
 	if len(pos) > 0 {
@@ -199,16 +203,19 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		//
 		// The routing tables are workspace-wide, so only an unscoped index carries them:
 		// in a scoped one they would move with changes to projects `magus affected` never
-		// attributes to it. Best-effort, so a graph build failure just omits the tables.
+		// attributes to it. A graph build failure is an error: the project table is the
+		// only route to a project whose targets live in its own index.
 		var routing *types.KnowledgeRouting
 		if len(pos) == 0 {
-			if g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil); err == nil {
-				r := g.Routing()
-				r.CatalogFingerprint = magus.CatalogFingerprint()
-				routing = &r
+			g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil)
+			if err != nil {
+				return fmt.Errorf("build knowledge graph for the routing index: %w", err)
 			}
+			r := g.Routing()
+			r.CatalogFingerprint = magus.CatalogFingerprint()
+			routing = &r
 		}
-		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
+		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, indexes, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
 	}
 
 	// text / wide
@@ -232,6 +239,25 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		fmt.Println()
 	}
 	return nil
+}
+
+// indexFile is the routing index a project may declare as an output.
+const indexFile = "MAGUS.md"
+
+// declareIndexes sets Index on each project whose declared outputs include MAGUS.md
+// and returns the path to index-path map of those that do. Declarations only: an
+// index that has not been generated yet still counts.
+func declareIndexes(ws types.WorkspaceReader, projects []types.TargetGraphProject) map[string]string {
+	indexes := map[string]string{}
+	for i := range projects {
+		p := ws.Get(projects[i].Path)
+		if p == nil || !slices.Contains(p.AllOutputs(), indexFile) {
+			continue
+		}
+		projects[i].Index = indexFile
+		indexes[projects[i].Path] = indexFile
+	}
+	return indexes
 }
 
 // filterByName returns a single-element slice holding the item whose name equals

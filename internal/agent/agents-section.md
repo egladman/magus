@@ -19,8 +19,8 @@ after something breaks:
 | edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
 | recurring guard feedback or a proposed local rule          | magus-workspace-rules |
 
-Query before grepping. The committed MAGUS.md lists every project, target,
-and the graph's routing table.
+Query before grepping.
+{{routing-index}}
 
 ```sh
 magus query "<terms>"        # find/relate entities: kind=spell, project=web, kind!=op, id=~regex
