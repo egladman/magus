@@ -44,6 +44,9 @@ export fun serverHttpDiagram() > Diagram !> str {
         .edge("guard", dst: "review")
         .edge("guard", dst: "connect")
         .edge("probe", dst: "health", label: "unguarded", role: EdgeRole.focal)
+        // Every route in one column, the unguarded one included, so the figure reads as
+        // five routes of which one skips the guard.
+        .rank(["mcp", "reads", "review", "connect", "health"])
         .zone("through the guard", members: ["agent", "console", "guard", "mcp", "reads", "review", "connect"])
         .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
         .omitEdge("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
