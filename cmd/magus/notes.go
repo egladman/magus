@@ -529,7 +529,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	}
 	if changed != 0 {
 		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s: this note now reads as reviewed against the code as it is today.\n",
-			changed, pluralSuffix(changed, "", "s"))
+			changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -708,7 +708,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		return fmt.Errorf("magus notes edit: wrote %s, but recording its anchors failed: %w", path, err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, pluralSuffix(changed, "", "s"))
+		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -794,10 +794,10 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 	}
 	if failures == 0 && dangling != 0 {
 		return fmt.Errorf("magus notes verify: %d dangling anchor%s; re-anchor the note or remove the anchor",
-			dangling, pluralSuffix(dangling, "", "s"))
+			dangling, plural(dangling, "", "s"))
 	}
 	if failures != 0 {
-		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, pluralSuffix(failures, "", "s"))
+		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, plural(failures, "", "s"))
 	}
 	return nil
 }
@@ -899,7 +899,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	// whose most useful line came from somebody else.
 	said := len(sess.Comments) + len(threads)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
-		said, pluralSuffix(said, "", "s"),
+		said, plural(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
 	if line := newRemarkLine(threads); line != "" {
 		fmt.Println(line)
@@ -931,7 +931,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes capture: captured the thread, but recording its anchors failed: %w", err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, pluralSuffix(changed, "", "s"))
+		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -1201,7 +1201,7 @@ func newRemarkLine(threads []types.ReviewThread) string {
 		return ""
 	}
 	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `"+hint.Diff.String()+"` marks them new.",
-		fresh, pluralSuffix(fresh, "", "s"))
+		fresh, plural(fresh, "", "s"))
 }
 
 // tagList collects a repeatable --tag flag.
@@ -1218,16 +1218,3 @@ func (t *tagList) Set(v string) error {
 	return nil
 }
 
-// openInEditor runs the reader's own $VISUAL/$EDITOR against path and waits.
-func openInEditor(path string) error {
-	editor := strings.TrimSpace(firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
-	if editor == "" {
-		return fmt.Errorf("neither $VISUAL nor $EDITOR is set; set one, or open %s directly", path)
-	}
-	cmd := exec.Command("sh", "-c", editor+" \"$1\"", "sh", path) //nolint:gosec // the editor is the user's own configured command, by design
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w", editor, err)
-	}
-	return nil
-}

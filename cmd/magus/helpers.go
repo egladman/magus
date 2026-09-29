@@ -391,10 +391,3 @@ func (s *stringList) Set(v string) error {
 	*s = append(*s, v)
 	return nil
 }
-
-func pluralSuffix(n int, singular, plural string) string {
-	if n == 1 {
-		return singular
-	}
-	return plural
-}

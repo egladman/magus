@@ -713,8 +713,8 @@ func criteriaLine(u types.Job) string {
 // adviseInstructionWrite reminds a writer of a cross-host instruction file what the
 // file costs, or returns "" for every other path.
 //
-// Every host loads AGENTS.md and CLAUDE.md whole at session start, so a sentence there
-// is paid for on every session that follows. The advisory is the one line the repo's own
+// Every host loads its instruction file whole at session start, so a sentence there is
+// paid for on every session that follows. The advisory is the one line the repo's own
 // instruction file already carries: keep only what no tool says.
 func adviseInstructionWrite(path string) string {
 	// Matched as a bare filename stem, which is the sanctioned form: these name

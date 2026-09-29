@@ -14,7 +14,7 @@ A write to a cross-host instruction file, which every session loads whole.
 
 ## Why
 
-AGENTS.md and CLAUDE.md are read in full at the start of every session on every host, so a sentence there costs context forever. A rule the guard already refuses or doctor already reports is restated context: delete it the moment the tool starts saying it.
+A cross-host instruction file is read in full at the start of every session on every host, so a sentence there costs context forever. A rule the guard already refuses or doctor already reports is restated context: delete it the moment the tool starts saying it.
 
 ## Seeing it
 

@@ -306,7 +306,7 @@ var advisoryDocs = []RuleDoc{
 		Why: "The writer is either that lease, not saying so, or a second agent about to collide with it; magus cannot tell which, so it advises rather than refuses. " +
 			"It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first."},
 	{Name: string(advisoryInstruction), Decision: "advise", Catches: "a write to a cross-host instruction file, which every session loads whole",
-		Why: "AGENTS.md and CLAUDE.md are read in full at the start of every session on every host, so a sentence there costs context forever. " +
+		Why: "A cross-host instruction file is read in full at the start of every session on every host, so a sentence there costs context forever. " +
 			"A rule the guard already refuses or doctor already reports is restated context: delete it the moment the tool starts saying it."},
 	{Name: string(advisoryNewFile), Decision: "advise", Catches: "a new file in a directory whose naming has settled"},
 	{Name: string(advisoryNewSourceDir), Decision: "advise", Catches: "a new file that opens a directory, which is a boundary rather than a file"},
