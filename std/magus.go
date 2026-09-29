@@ -1034,7 +1034,7 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "doctor": true, "clean": true, "session": true,
+	"run": true, "describe": true, "doctor": true, "clean": true,
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called

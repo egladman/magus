@@ -792,3 +792,15 @@ func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
 	assert.Equal(t, want, got)
 	assert.Equal(t, wantErr, gotErr)
 }
+
+// TestTypedMagusSubcommandsNameRealMembers pins the hint magus.cmd prints: every
+// subcommand it steers away from must have the typed member it steers toward.
+func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
+	members := map[string]bool{}
+	for _, m := range Magus.Methods {
+		members[m.Name] = true
+	}
+	for sub := range typedMagusSubcommands {
+		assert.True(t, members[sub], "magus.cmd(%q) points at magus.%s, which does not exist", sub, sub)
+	}
+}

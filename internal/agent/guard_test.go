@@ -430,10 +430,11 @@ func claimsGuardHost(body, host string) bool {
 var failOpenArmRe = regexp.MustCompile(`stdout === null` +
 	`|!(?:\w+\\)?isExecutable\(bin\)|(?:\w+\\)?trimTrailingNewlines\(result!\.stdout\) == ""`)
 
-// failOpenRetryRe marks a block that re-invokes magus rather than answering. Every
-// template tests the same empty-verdict condition twice (once to retry without the
-// attribution flags, once to give up), and only the second is a fail-open arm.
-var failOpenRetryRe = regexp.MustCompile(`runOnce\(|judge\(guard, extra: \[<str>\]\)`)
+// failOpenRetryRe marks a block that re-invokes magus rather than answering. A template
+// tests the same empty-verdict condition once per fallback (dropping a capability flag
+// an older magus rejects, then the attribution flags) and once more to give up; only the
+// last is a fail-open arm.
+var failOpenRetryRe = regexp.MustCompile(`runOnce\(|judge\(guard, extra: `)
 
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: a console
 // warning, or the fallback a Buzz template hands envOr for one of the

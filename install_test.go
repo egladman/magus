@@ -93,7 +93,7 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	step := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw"})
 	assert.Equal(t, "pnpm-install", step.Target)
 	assert.Equal(t, "typescript", step.Spell)
-	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml", "web/.npmrc"}, step.Sources)
+	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml", "web/.npmrc"), step.Sources)
 	assert.Equal(t, []string{"web/node_modules/.pnpm/lock.yaml"}, step.Stamps)
 	assert.Equal(t, []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0"}, step.ToolVersions)
 	assert.Empty(t, step.Charms)
@@ -105,7 +105,7 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	update := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw", types.CharmUpdate})
 	assert.Equal(t, []string{types.CharmUpdate}, update.Charms)
 	assert.True(t, update.NoCache, "a replayed update is an update that never happened")
-	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml"}, update.Updates)
+	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml"), update.Updates)
 
 	choice.Install.Stamps = nil
 	assert.True(t, m.installStep(p, "typescript", "pnpm-install", choice, tools, nil).NoCache,

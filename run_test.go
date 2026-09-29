@@ -440,9 +440,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	assert.Contains(t, m.buildStep(p, "generate").Updates, "CHANGELOG.md",
+	changelog := types.Glob{Pattern: "CHANGELOG.md"}
+	assert.Contains(t, m.buildStep(p, "generate").Updates, changelog,
 		"the composer runs the edit inside its own window, so the declaration covers it")
-	assert.Contains(t, m.buildStep(p, "changelog-generate").Updates, "CHANGELOG.md",
+	assert.Contains(t, m.buildStep(p, "changelog-generate").Updates, changelog,
 		"the declaring target keeps its own declaration")
 	assert.NotContains(t, m.buildStep(p, "test").Updates, "CHANGELOG.md",
 		"a target composing nothing must not inherit another target's declared write")
@@ -466,7 +467,7 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 		}
 		return nil
 	}
-	assert.Equal(t, []string{"libs/gb/MAGUS.md"}, types.ChainSkipCacheOutputs(root, "ci", lookup),
+	assert.Equal(t, types.MustParseGlobs("libs/gb/MAGUS.md"), types.ChainSkipCacheOutputs(root, "ci", lookup),
 		"a cross-project step's output is rooted at the project that declares it")
 	assert.Equal(t, []types.ChainStep{{Project: "libs/gb", Target: "index-generate"}},
 		types.ChainSkipCacheSteps(root, "ci", lookup),
@@ -478,7 +479,7 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 		TargetOutputs:  map[string][]types.OutputRef{"b": {{Glob: "out.txt"}}},
 		TargetChains:   map[string][]types.ChainStep{"a": {{Target: "b"}}, "b": {{Target: "a"}}},
 	}
-	assert.Equal(t, []string{"out.txt"}, types.ChainSkipCacheOutputs(looped, "a", nil))
+	assert.Equal(t, types.MustParseGlobs("out.txt"), types.ChainSkipCacheOutputs(looped, "a", nil))
 	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "b"}},
 		types.ChainSkipCacheSteps(looped, "a", nil))
 }
@@ -503,7 +504,7 @@ func TestChainSkipCacheStepsDropsAGateItsCallerAlreadyCovers(t *testing.T) {
 	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "generate"}},
 		types.ChainSkipCacheSteps(p, "lint", nil),
 		"descending past generate would run index-generate a second time")
-	assert.Equal(t, []string{"MAGUS.md"}, types.ChainSkipCacheOutputs(p, "lint", nil),
+	assert.Equal(t, types.MustParseGlobs("MAGUS.md"), types.ChainSkipCacheOutputs(p, "lint", nil),
 		"the artifact lives on the inner target, so keying stops at neither")
 }
 

@@ -358,7 +358,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.impact("main");
     magus.describeFile(["magusfile.buzz"]);
     magus.insight({});
-    final state = magus.tools().lifecycle.state;
+    final _state = magus.tools().lifecycle.state;
 }
 `
 	r := Run(context.Background(), src, "work", nil)
