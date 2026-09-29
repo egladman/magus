@@ -34,6 +34,7 @@ export object Flow {
     eyebrowText: str = "",
     descText: str = "",
     topDown: bool = false,
+    isGenerated: bool = false,
     nodes: mut [Node],
     edges: mut [Edge],
     zones: mut [FlowZone],
@@ -62,6 +63,13 @@ export object Flow {
         return this;
     }
 
+    // generated marks a figure computed from data nobody authored, as layered() does: the
+    // hand-authored node, edge and accent budgets stop applying, every structural check stays.
+    mut fun generated() > mut Flow {
+        this.isGenerated = true;
+        return this;
+    }
+
     // node declares a box. An empty label shows the id, as Mermaid does.
     fun node(id: str, label: str = "", sub: str = "", tag: str = "", role: str = "default", anchor: str = "") > mut Flow {
         var shown = label;
@@ -76,7 +84,7 @@ export object Flow {
     }
 
     // zone stacks its members into one band, bands in declaration order, unzoned nodes
-    // last. A node belongs to at most one zone.
+    // last unless one alone feeds a band. A node belongs to at most one zone.
     fun zone(label: str, members: [str]) > mut Flow {
         this.zones.append(FlowZone{ label = label, members = members });
         return this;
@@ -132,6 +140,8 @@ object Plan {
     maxRank: int = 0,
     rankOf: mut [int],
     bandOf: mut [int],
+    // Per declared node: a member of the band it sits in, so its zone box encloses it.
+    inZone: mut [bool],
     orders: mut [mut [int]],
     // Per declared edge, in the direction it is laid out (a back edge is reversed).
     fromItem: mut [int],
@@ -279,6 +289,44 @@ fun plan(f: Flow) > Plan {
         li = li + 1;
     }
 
+    final inZone: mut [bool] = mut [<bool>];
+    foreach (b in bandOf) { inZone.append(b < nz); }
+    // Layout parent of each node: -1 none yet, -2 more than one.
+    final parentOf: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        parentOf.append(0 - 1);
+        i = i + 1;
+    }
+    li = 0;
+    while (li < ne) {
+        final t = toItem[li];
+        if (parentOf[t] == 0 - 1) {
+            parentOf[t] = fromItem[li];
+        } else {
+            if (parentOf[t] != fromItem[li]) { parentOf[t] = 0 - 2; }
+        }
+        li = li + 1;
+    }
+    z = 0;
+    while (z < nz) {
+        var sole = 0 - 1;
+        var shared = true;
+        foreach (m in f.zones[z].members) {
+            final at = idx[m];
+            if (at == null) {
+                shared = false;
+            } else {
+                final p = parentOf[at!];
+                if (p < 0 or (sole >= 0 and p != sole)) { shared = false; }
+                if (sole < 0) { sole = p; }
+            }
+        }
+        // An unzoned sole parent of every member of a band sits beside it, not after the last band.
+        if (shared and sole >= 0 and bandOf[sole] == nz) { bandOf[sole] = z; }
+        z = z + 1;
+    }
+
     // Longest path from the roots, in topological order.
     final succAdj = lists(nn);
     final indeg = zeros(nn);
@@ -406,6 +454,7 @@ fun plan(f: Flow) > Plan {
         maxRank = maxRank,
         rankOf = rankOf,
         bandOf = bandOf,
+        inZone = inZone,
         orders = orders,
         fromItem = fromItem,
         toItem = toItem,
@@ -424,7 +473,30 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     foreach (n in f.nodes) {
         if (n.tag != "" and n.sub != "") { nodeH = TallNodeH; }
     }
-    var mainSize = LayerNodeW;
+    final ne = pl.fromItem.len();
+    final outsOf = lists(pl.nodeCount);
+    final insOf = lists(pl.nodeCount);
+    var li = 0;
+    while (li < ne) {
+        outsOf[pl.fromItem[li]].append(li);
+        insOf[pl.toItem[li]].append(li);
+        li = li + 1;
+    }
+    var fan = 0;
+    foreach (outs in outsOf) {
+        if (outs.len() > fan) { fan = outs.len(); }
+    }
+    foreach (ins in insOf) {
+        if (ins.len() > fan) { fan = ins.len(); }
+    }
+    // Slot k of n attaches at k/(n+1) of the side, snapped to the grid, so a side needs one
+    // grid step per slot or two connectors leave from one point. Rounded to 8: a band
+    // centers a short rank by half a row pitch, which must stay on the grid.
+    final fanRoom = 4 * (fan + 1) + 4 * ((fan + 1) % 2);
+    var nodeW = LayerNodeW;
+    if (lr and fanRoom > nodeH) { nodeH = fanRoom; }
+    if (lr == false and fanRoom > nodeW) { nodeW = fanRoom; }
+    var mainSize = nodeW;
     var crossSize = nodeH;
     var mainStart = Margin;
     var crossStart = LayerTop;
@@ -434,7 +506,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     var inSide = "left";
     if (lr == false) {
         mainSize = nodeH;
-        crossSize = LayerNodeW;
+        crossSize = nodeW;
         mainStart = LayerTop;
         crossStart = Margin;
         crossLabelPad = ZonePad;
@@ -442,7 +514,6 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         outSide = "bottom";
         inSide = "top";
     }
-    final mainPitch = mainSize + LayerColGap;
     final crossPitch = crossSize + LayerRowGap;
     final nz = f.zones.len();
     final items = pl.rankOf.len();
@@ -473,7 +544,6 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     }
     final crossEnd = cursor - LayerRowGap + skew;
 
-    final itemMain = zeros(items);
     final itemCross = zeros(items);
     var r = 0;
     while (r <= pl.maxRank) {
@@ -483,7 +553,6 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         final seen = zeros(pl.bandCount);
         foreach (it in row) {
             final b = pl.bandOf[it];
-            itemMain[it] = mainStart + r * mainPitch;
             itemCross[it] = bandStart[b] + (bandRows[b] - count[b]) * crossPitch / 2
                 + seen[b] * crossPitch + r * stagger;
             seen[b] = seen[b] + 1;
@@ -491,38 +560,12 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         r = r + 1;
     }
 
-    final nodes: mut [Node] = mut [<Node>];
-    var i = 0;
-    while (i < pl.nodeCount) {
-        final n = f.nodes[i];
-        var x = itemMain[i];
-        var y = itemCross[i];
-        if (lr == false) {
-            x = itemCross[i];
-            y = itemMain[i];
-        }
-        nodes.append(Node{
-            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor,
-            x = x, y = y, w = LayerNodeW, h = nodeH,
-        });
-        i = i + 1;
-    }
-
     // Slots follow the rows of the far ends, so connectors leaving one side never cross
     // each other at the box.
-    final ne = pl.fromItem.len();
     final outSlot = zeros(ne);
     final outSlots = zeros(ne);
     final inSlot = zeros(ne);
     final inSlots = zeros(ne);
-    final outsOf = lists(pl.nodeCount);
-    final insOf = lists(pl.nodeCount);
-    var li = 0;
-    while (li < ne) {
-        outsOf[pl.fromItem[li]].append(li);
-        insOf[pl.toItem[li]].append(li);
-        li = li + 1;
-    }
     final byNext = fun (x: int, y: int) > bool {
         final cx = itemCross[pl.chains[x][1]];
         final cy = itemCross[pl.chains[y][1]];
@@ -554,6 +597,23 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
             inSlots[edgeAt] = ins.len();
             s = s + 1;
         }
+    }
+    li = 0;
+    while (li < ne) {
+        final ends = pl.chains[li];
+        // Neighbouring ranks on one row run straight: a side's lone connector takes the far slot.
+        if (ends.len() == 2 and itemCross[ends[0]] == itemCross[ends[1]]) {
+            if (inSlots[li] == 1) {
+                inSlot[li] = outSlot[li];
+                inSlots[li] = outSlots[li];
+            } else {
+                if (outSlots[li] == 1) {
+                    outSlot[li] = inSlot[li];
+                    outSlots[li] = inSlots[li];
+                }
+            }
+        }
+        li = li + 1;
     }
 
     // Every rank-to-rank hop of every layout edge, with the cross coordinate it enters the
@@ -596,6 +656,9 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         }
         return x < y;
     };
+    // A gap widens past LayerColGap only when its channels would otherwise share a grid line.
+    final rankMain = zeros(pl.maxRank + 1);
+    rankMain[0] = mainStart;
     var gap = 0;
     while (gap < pl.maxRank) {
         final turning: mut [int] = mut [<int>];
@@ -605,13 +668,39 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
             h = h + 1;
         }
         turning.sort(byTurn);
-        final gapStart = mainStart + gap * mainPitch + mainSize;
+        var gapW = LayerColGap;
+        if (4 * (turning.len() + 1) > gapW) { gapW = 4 * (turning.len() + 1); }
+        final gapStart = rankMain[gap] + mainSize;
         var c = 1;
         foreach (hop in turning) {
-            hopChannel[hop] = gapStart + snap(LayerColGap * c / (turning.len() + 1));
+            hopChannel[hop] = gapStart + snap(gapW * c / (turning.len() + 1));
             c = c + 1;
         }
+        rankMain[gap + 1] = gapStart + gapW;
         gap = gap + 1;
+    }
+    final itemMain = zeros(items);
+    var item = 0;
+    while (item < items) {
+        itemMain[item] = rankMain[pl.rankOf[item]];
+        item = item + 1;
+    }
+
+    final nodes: mut [Node] = mut [<Node>];
+    var i = 0;
+    while (i < pl.nodeCount) {
+        final n = f.nodes[i];
+        var x = itemMain[i];
+        var y = itemCross[i];
+        if (lr == false) {
+            x = itemCross[i];
+            y = itemMain[i];
+        }
+        nodes.append(Node{
+            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor,
+            x = x, y = y, w = nodeW, h = nodeH,
+        });
+        i = i + 1;
     }
 
     final edges: mut [Edge] = mut [<Edge>];
@@ -677,7 +766,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         var hi = 0 - 1;
         i = 0;
         while (i < pl.nodeCount) {
-            if (pl.bandOf[i] == k) {
+            if (pl.bandOf[i] == k and pl.inZone[i]) {
                 if (lo < 0 or itemMain[i] < lo) { lo = itemMain[i]; }
                 if (itemMain[i] > hi) { hi = itemMain[i]; }
             }
@@ -697,7 +786,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         k = k + 1;
     }
 
-    var mainEnd = mainStart + pl.maxRank * mainPitch + mainSize;
+    var mainEnd = rankMain[pl.maxRank] + mainSize;
     if (nz > 0) { mainEnd = mainEnd + ZonePad; }
     var bottom = Margin;
     if (f.legendItems.len() > 0) { bottom = LegendRoom; }
@@ -714,6 +803,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
 
     return Diagram{
         id = f.id,
+        generated = f.isGenerated,
         title = f.titleText,
         eyebrow = f.eyebrowText,
         desc = f.descText,
@@ -886,6 +976,46 @@ fun serverHttpTwin() > mut Flow {
         .legend("external", label: "open to any caller");
 }
 
+// observedServerScope is magus\importGraph() over internal/handler/*, internal/httpx and
+// internal/server on 09-29, declared the way docs/engine/page.buzz importFlow declares it.
+fun observedServerScope() > mut Flow {
+    final pkgs = [
+        "internal/handler/activity", "internal/handler/attention", "internal/handler/diff",
+        "internal/handler/graph", "internal/handler/insight", "internal/handler/job",
+        "internal/handler/mcp", "internal/handler/memory", "internal/handler/metrics",
+        "internal/handler/notes", "internal/handler/plan", "internal/handler/status",
+        "internal/handler/token", "internal/handler/tool", "internal/handler/trailrpc",
+        "internal/handler/viewer", "internal/httpx", "internal/server",
+    ];
+    final imports = [
+        ["internal/handler/graph", "internal/httpx"],
+        ["internal/handler/viewer", "internal/httpx"],
+        ["internal/server", "internal/handler/activity"],
+        ["internal/server", "internal/handler/attention"],
+        ["internal/server", "internal/handler/diff"],
+        ["internal/server", "internal/handler/graph"],
+        ["internal/server", "internal/handler/insight"],
+        ["internal/server", "internal/handler/job"],
+        ["internal/server", "internal/handler/mcp"],
+        ["internal/server", "internal/handler/memory"],
+        ["internal/server", "internal/handler/metrics"],
+        ["internal/server", "internal/handler/notes"],
+        ["internal/server", "internal/handler/plan"],
+        ["internal/server", "internal/handler/status"],
+        ["internal/server", "internal/handler/token"],
+        ["internal/server", "internal/handler/tool"],
+        ["internal/server", "internal/handler/trailrpc"],
+        ["internal/server", "internal/handler/viewer"],
+        ["internal/server", "internal/httpx"],
+    ];
+    final f = flow("observed-server").title("internal/server and its handlers, as imported");
+    foreach (p in pkgs) { f.node("pkg-" + p.replace("/", with: "-"), label: p, anchor: p); }
+    foreach (pair in imports) {
+        f.edge("pkg-" + pair[0].replace("/", with: "-"), dst: "pkg-" + pair[1].replace("/", with: "-"), claim: "imports");
+    }
+    return f;
+}
+
 test "a chain ranks into one column per step" {
     final d = flow("t").node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "the layout is sound");
@@ -984,4 +1114,59 @@ test "the server-http twin lays out clean" {
     std\assert(d.nodes.len() == 9, message: "every box placed");
     std\assert(validate(d).len() == 0, message: "no findings");
     std\assert(properCrossings(d) == 0, message: "no crossings");
+}
+
+test "an observed import scope lays out clean once generated" {
+    var msg = "";
+    try {
+        observedServerScope().diagram();
+    } catch (e: str) {
+        msg = e;
+    }
+    std\assert(msg.indexOf("18 nodes exceeds the budget") != null, message: "authored budgets apply by default: {msg}");
+    final d = observedServerScope().generated().diagram() catch Diagram{};
+    std\assert(d.generated, message: "marked generated");
+    std\assert(d.nodes.len() == 18 and d.edges.len() == 19, message: "every package and import placed");
+    std\assert(validate(d).len() == 0, message: "no findings: {validate(d)}");
+}
+
+test "a fan past a gap's channels widens the gap and the boxes" {
+    final f = flow("t").generated().node("root");
+    var i = 0;
+    while (i < 20) {
+        f.node("c{i}").edge("root", dst: "c{i}");
+        i = i + 1;
+    }
+    final d = f.diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "twenty connectors, twenty lines");
+    final root = nodeOf(d, id: "root");
+    std\assert(root.h == 88, message: "a slot per grid step: {root.h}");
+    std\assert(nodeOf(d, id: "c0").x - root.x - root.w == 84, message: "a channel per grid step");
+}
+
+test "neighbouring ranks on one row connect straight" {
+    final d = serverHttpTwin().diagram() catch Diagram{};
+    var straight = 0;
+    foreach (e in d.edges) {
+        final a = nodeOf(d, id: e.src);
+        final b = nodeOf(d, id: e.dst);
+        if (a.y == b.y and b.x - a.x == LayerNodeW + LayerColGap) {
+            std\assert(edgeLegs(d, e: e).len() == 1, message: "{e.src}->{e.dst} detours");
+            straight = straight + 1;
+        }
+    }
+    std\assert(straight > 0, message: "the guard shares a row with a route");
+}
+
+test "a band's sole parent sits beside it" {
+    final d = flow("t")
+        .node("u").node("b").node("c").node("v").node("w")
+        .edge("u", dst: "b").edge("u", dst: "c").edge("v", dst: "w")
+        .zone("pair", members: ["b", "c"])
+        .diagram() catch Diagram{};
+    final u = nodeOf(d, id: "u");
+    final z = d.zones[0];
+    std\assert(u.y >= z.y and u.y + u.h <= z.y + z.h, message: "u sits within the band's rows");
+    std\assert(u.x + u.w <= z.x, message: "and outside its box");
+    std\assert(nodeOf(d, id: "v").y >= z.y + z.h, message: "an unrelated node still sits after the band");
 }

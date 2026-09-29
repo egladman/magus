@@ -235,7 +235,7 @@ export object LegendItem {
 // arrowhead at the first definition.
 export object Diagram {
     id: str = "",
-    // Set by layered(): the node and edge budgets exist to stop a HAND-authored figure
+    // Set by layered() and flow's generated(): the node and edge budgets exist to stop a HAND-authored figure
     // growing past what a reader can hold, and a graph computed from the workspace has no
     // author to push back on. Every structural check still applies.
     generated: bool = false,
