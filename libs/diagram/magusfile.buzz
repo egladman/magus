@@ -1,6 +1,7 @@
 // magusfile.buzz for the diagram renderer at libs/diagram - the Buzz library that turns a
 // declared figure into SVG, and the validator that refuses to draw an unreadable one.
 // flow.buzz beside it lays a declared graph out for an author who places nothing.
+// The design system is cathrynlavery/diagram-design (MIT); diagram.buzz's header says what it takes.
 //
 // Registered as its own first-class project for the same reason libs/textsearch is: it is
 // shared SOURCE with its own test suite, and `magus affected ci` should run that suite when
