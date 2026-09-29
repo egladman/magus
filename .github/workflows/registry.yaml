@@ -56,19 +56,16 @@ jobs:
       # Its own step so a network failure stops here, loudly, rather than being
       # folded into a build that would then publish a half-refreshed snapshot.
       - name: Fetch from endoflife.date
-        env:
-          REGISTRY_MODE: fetch
-        run: magus buzz hack/registry.buzz
+        run: magus buzz hack/registry.buzz -- fetch
 
       - name: Build and sign the registry
         env:
-          REGISTRY_MODE: build
           MAGUS_REGISTRY_KEY: ${{ secrets.MAGUS_REGISTRY_KEY }}
         run: |
           # 180 days, matching the release index. Long because nothing republishes on
           # a timer - this workflow does, and `magus doctor` warns as it nears.
-          REGISTRY_EXPIRES="$(date -u -d '+180 days' +%Y-%m-%dT%H:%M:%SZ)" \
-            magus buzz hack/registry.buzz
+          magus buzz hack/registry.buzz -- build \
+            --expires "$(date -u -d '+180 days' +%Y-%m-%dT%H:%M:%SZ)"
 
       # Everything below goes through `gh`, which already holds a token, rather than
       # through git plumbing. No credential juggling, no persist-credentials
@@ -119,6 +116,6 @@ jobs:
           Every upstream response's digest is recorded in the file, so anyone can rebuild
           it and diff rather than take our word for it:
 
-              REGISTRY_MODE=verify magus buzz hack/registry.buzz
+              magus buzz hack/registry.buzz -- verify --expires <the file's expires_at>
           BODY
           )" 2>/dev/null || echo "a pull request for $branch is already open"

@@ -178,8 +178,8 @@ it is deliberately not vendored.
 `hack/host-schemas.buzz` re-fetches the `published` rows and reports what moved. It never runs from a test.
 
 ```sh
-HOST_SCHEMAS_MODE=verify magus buzz hack/host-schemas.buzz   # re-fetch, report drift, change nothing
-HOST_SCHEMAS_MODE=fetch  magus buzz hack/host-schemas.buzz   # re-fetch and write, then update sha256 above
+magus buzz hack/host-schemas.buzz -- verify   # re-fetch, report drift, change nothing
+magus buzz hack/host-schemas.buzz -- fetch    # re-fetch and write, then update sha256 above
 ```
 
 A `derived` row has no fetchable artifact, so `verify` skips it and prints the URL to re-read by hand. Refresh those

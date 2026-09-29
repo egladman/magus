@@ -3,6 +3,11 @@
 //
 //	magus buzz hack/lint.buzz
 //
+// A person narrows a run to the files they touched or to one rule:
+//
+//	magus buzz hack/lint.buzz -- <path>...       the findings at these files
+//	magus buzz hack/lint.buzz -- --rule <name>   one rule over the whole tree
+//
 // Each rule is a file hack/lint/<rule>.buzz exporting reads(), the globs it reads, and
 // check(files), which returns a Finding per violation. The runner walks the tree once,
 // hands each rule the files its globs match, prints every finding as
@@ -12,6 +17,7 @@
 namespace lint;
 
 import "assert";
+import "flags";
 import "fs";
 import "os";
 import "path";
@@ -20,6 +26,7 @@ import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
@@ -54,6 +61,7 @@ export fun rules() > [Rule] {
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
+        Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
     ];
 }
 
@@ -258,18 +266,187 @@ export fun render(f: Finding) > str {
     return s;
 }
 
-export fun main(args: [str]) > void !> any {
-    final all = rules();
-    final files = walk(".");
-    final found = run(all, files: files) + footprint(all, files: files);
+final usage = "usage: magus buzz hack/lint.buzz [-- [--rule <name>] [<path>...]]\n"
+    + "  bare            every rule over the whole tree\n"
+    + "  <path>...       only the findings at these files, from the rules that read them\n"
+    + "  --rule <name>   only that rule";
+
+// Selection is what a run lints: the rule it names, or every rule when rule is null, and
+// the findings at paths, or every finding when paths is empty.
+export object Selection {
+    rule: str?,
+    paths: [str],
+}
+
+// parse reads --rule and the paths, refusing any other flag and a rule not in names. A
+// path after `--` may start with a dash.
+export fun parse(args: [str], names: [str]) > Selection !> any {
+    final parsed = flags\parse(args, switches: [<str>], valued: ["--rule"]);
+    final paths = mut [<str>];
+    foreach (word in parsed.unknown) {
+        if (word.startsWith("-")) {
+            throw "lint: unknown flag {word}\n{usage}";
+        }
+        paths.append(word);
+    }
+    foreach (word in parsed.positionals) {
+        paths.append(word);
+    }
+    // walk yields paths with no ./ prefix, and at() compares against them.
+    final clean = mut [<str>];
+    foreach (p in paths) {
+        if (p.startsWith("./")) {
+            clean.append(p.sub(2, len: p.len() - 2));
+        } else {
+            clean.append(p);
+        }
+    }
+    final rule = parsed.values["--rule"];
+    if (rule != null) {
+        var known = false;
+        foreach (n in names) {
+            known = known or n == rule!;
+        }
+        if (!known) {
+            throw "lint: no rule is named \"{rule!}\"; the rules are:\n  " + names.join("\n  ");
+        }
+    }
+    return Selection{ rule = rule, paths = clean };
+}
+
+// pick returns the rules sel runs: the one it names, or all, less those reading none of
+// its paths.
+export fun pick(all: [Rule], sel: Selection) > [Rule] !> any {
+    final picked = mut [<Rule>];
+    foreach (r in all) {
+        if (sel.rule != null and r.name != sel.rule!) {
+            continue;
+        }
+        var reads = sel.paths.len() == 0;
+        foreach (p in sel.paths) {
+            reads = reads or path\matchesAny(r.reads, path: p);
+        }
+        if (reads) {
+            picked.append(r);
+        }
+    }
+    return picked;
+}
+
+// at keeps the findings located at one of paths, or every finding when paths is empty.
+export fun at(found: [Finding], paths: [str]) > [Finding] {
+    if (paths.len() == 0) {
+        return found;
+    }
+    final kept = mut [<Finding>];
     foreach (f in found) {
+        var named = false;
+        foreach (p in paths) {
+            named = named or f.path == p;
+        }
+        if (named) {
+            kept.append(f);
+        }
+    }
+    return kept;
+}
+
+// Report is a run's findings and how many rules produced them.
+export object Report {
+    rules: int,
+    findings: [Finding],
+}
+
+// check lints the tree under the working directory as sel says. A picked rule still reads
+// every file it declares, since some rules relate several files and a subset would judge
+// half a relation. The footprint check runs only with no --rule, and only when its
+// findings, which sit at magusfile.buzz, could be reported.
+export fun check(sel: Selection) > Report !> any {
+    final all = rules();
+    final picked = pick(all, sel: sel);
+    final files = walk(".");
+    var found = run(picked, files: files);
+    var magusfile = sel.paths.len() == 0;
+    foreach (p in sel.paths) {
+        magusfile = magusfile or p == "magusfile.buzz";
+    }
+    if (sel.rule == null and magusfile) {
+        found = found + footprint(all, files: files);
+    }
+    return Report{ rules = picked.len(), findings = at(found, paths: sel.paths) };
+}
+
+export fun main(args: [str]) > void !> any {
+    final names = mut [<str>];
+    foreach (r in rules()) {
+        names.append(r.name);
+    }
+    final sel = parse(args, names: names);
+    final report = check(sel);
+    foreach (f in report.findings) {
         std\print(render(f));
     }
-    if (found.len() > 0) {
-        std\print("lint: {found.len()} finding(s)");
+    if (report.findings.len() > 0) {
+        std\print("lint: {report.findings.len()} finding(s)");
         os\exit(1);
     }
-    std\print("lint: {all.len()} rules, no findings");
+    if (report.rules == 0) {
+        std\print("lint: no rule reads " + sel.paths.join(" "));
+        return;
+    }
+    std\print("lint: {report.rules} rules, no findings");
+}
+
+// refusal is the message parse throws for args, or "" when it accepts them.
+fun refusal(args: [str]) > str {
+    try {
+        parse(args, names: ["a", "b"]);
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "a bare run selects every rule over the whole tree" {
+    final sel = parse([<str>], names: ["a"]);
+    assert\equal(sel.rule, want: null, message: "no rule");
+    assert\equal(sel.paths.len(), want: 0, message: "no paths");
+}
+
+test "paths and --rule parse in any order, and a dashed path follows --" {
+    final sel = parse(["./x.lock", "--rule", "b", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
+    assert\equal(sel.rule!, want: "b", message: "rule");
+    assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
+}
+
+test "an unknown flag and an unknown rule are refused" {
+    assert\equal(refusal(["--fix"]), want: "lint: unknown flag --fix\n" + usage, message: "flag");
+    assert\equal(refusal(["--rule", "c"]), want: "lint: no rule is named \"c\"; the rules are:\n  a\n  b", message: "rule");
+    assert\equal(refusal(["--rule", ""]), want: "lint: no rule is named \"\"; the rules are:\n  a\n  b", message: "empty rule");
+    assert\isTrue(refusal(["--rule"]) != "", message: "--rule with no value");
+}
+
+test "paths pick the rules that read them, and a path no rule reads picks none" {
+    final none = fun (files: [Path]) > [Finding] !> any => [<Finding>];
+    final all = [
+        Rule{ name = "locks", reads = ["**/*.lock"], check = none },
+        Rule{ name = "workflows", reads = [".github/workflows/*.yaml"], check = none },
+    ];
+    assert\equal(pick(all, sel: Selection{ rule = null, paths = [<str>] }).len(), want: 2, message: "bare");
+    final locks = pick(all, sel: Selection{ rule = null, paths = ["docs/a.lock"] });
+    assert\equal(locks.len(), want: 1, message: "one rule reads it");
+    assert\equal(locks[0].name, want: "locks", message: "the lockfile rule");
+    assert\equal(pick(all, sel: Selection{ rule = null, paths = ["README.md"] }).len(), want: 0, message: "no rule reads it");
+    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = [<str>] })[0].name, want: "workflows", message: "--rule");
+    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = ["a.lock"] }).len(), want: 0, message: "--rule and a path it does not read");
+}
+
+test "with paths, only the findings at them are reported" {
+    final found = [Finding{ path = "a.lock", message = "m" }, Finding{ path = "b.lock", message = "m" }];
+    assert\equal(at(found, paths: [<str>]).len(), want: 2, message: "bare keeps all");
+    final kept = at(found, paths: ["b.lock", "c.lock"]);
+    assert\equal(kept.len(), want: 1, message: "one named");
+    assert\equal(kept[0].path, want: "b.lock", message: "the named file");
 }
 
 test "render names the position, message, rule and indented fix" {

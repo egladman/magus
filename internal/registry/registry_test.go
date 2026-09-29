@@ -309,9 +309,9 @@ func TestLoadDegradesRatherThanFailing(t *testing.T) {
 //
 // Regenerate it with:
 //
-//	REGISTRY_MODE=build REGISTRY_UPSTREAM=cmd/magus-utils/testdata/upstream \
-//	  REGISTRY_RELEASES=releases REGISTRY_OUT=internal/registry/testdata \
-//	  REGISTRY_EXPIRES=2027-01-01T00:00:00Z REGISTRY_NO_SIGN=1 magus buzz hack/registry.buzz
+//	magus buzz hack/registry.buzz -- build --upstream cmd/magus-utils/testdata/upstream \
+//	  --releases releases --out internal/registry/testdata \
+//	  --expires 2027-01-01T00:00:00Z --no-sign
 func TestBuzzProducerMatchesThisReader(t *testing.T) {
 	raw, err := os.ReadFile("testdata/buzz-built.json")
 	require.NoError(t, err)
