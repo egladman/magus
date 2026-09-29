@@ -27,10 +27,6 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 		return nil
 	case "update":
 		return selfUpdateCmd(ctx, rest)
-	case "refresh":
-		return selfRefreshCmd(ctx, rest)
-	case "registry":
-		return selfRegistryCmd(ctx, rest)
 	case "install-shorthand":
 		return installShorthandCmd(rest)
 	default:
@@ -43,9 +39,9 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 // noselfupdate binary prints does not advertise a subcommand it will refuse.
 func selfSubcommands() string {
 	if selfUpdateCompiled {
-		return "update, refresh, registry, install-shorthand"
+		return "update, install-shorthand"
 	}
-	return "refresh, registry, install-shorthand"
+	return "install-shorthand"
 }
 
 func selfCmdUsage() {
@@ -57,8 +53,6 @@ func selfCmdUsage() {
 	} else {
 		fmt.Fprintln(os.Stderr, "  update               not available (built with -tags noselfupdate)")
 	}
-	fmt.Fprintln(os.Stderr, "  refresh              fetch and cache the registry (a data file; does not upgrade magus)")
-	fmt.Fprintln(os.Stderr, "  registry             what is cached, how old, and from where")
 	fmt.Fprintln(os.Stderr, "  install-shorthand    symlink mgs to the running binary")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To bootstrap a workspace, use: magus init")

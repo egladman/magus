@@ -149,7 +149,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Manage skills, harnesses, and agent feedback. See [**magus-agent**(1)](magus-agent.md).
 
 **self**
-: Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print the client and server versions. See [**magus-version**(1)](magus-version.md).
@@ -426,11 +426,8 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_NO_BOOTSTRAP_EXEC**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 
-**MAGUS_REGISTRY_URL**
-: Env-only, no magus.yaml equivalent: override the built-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
-
 **MAGUS_OFFLINE**
-: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote-spell fetch fails with a named error instead of sending a request (default: false)
+: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch fails with a named error instead of sending a request (default: false)
 
 **MAGUS_DIFFTOOL**
 : Env-only, no magus.yaml equivalent: the command, taking two paths, that \`--then file \<path\> diff\` compares a cached artifact with (default: $DIFFTOOL, then git diff --no-index)

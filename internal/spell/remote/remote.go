@@ -602,7 +602,7 @@ func (o Options) client(ctx context.Context) (*oci.Client, error) {
 	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}, nil
 }
 
-// offline matches internal/registry: MAGUS_OFFLINE set to anything but 0 or false.
+// offline reports whether MAGUS_OFFLINE is set to anything but 0 or false.
 func offline() bool {
 	v := os.Getenv("MAGUS_OFFLINE")
 	return v != "" && v != "0" && v != "false"

@@ -213,15 +213,13 @@ magus\project({
         // make a project read its own product as a source.
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
-        "internal/registry/testdata/*",
         // benchmarks/agent carries no go.mod, so it is part of THIS module and
         // `go test ./...` runs the package that reads these.
         "benchmarks/agent/internal/bench/testdata/*",
-        // Go embeds both key rings INTO the binary, so rotating a key changes what
+        // Go embeds the release key ring INTO the binary, so rotating a key changes what
         // every build produces while matching no glob above: an embedded JSON is
         // neither *.go nor *.txtar. This is MGS1028's silent half at its worst - the
         // artifact differs and the cache cannot tell.
-        "internal/registry/registry-keys.json",
         "internal/selfupdate/release-keys.json",
     ],
     "targets": {
@@ -258,8 +256,7 @@ magus\project({
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
-        "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},
-        // NO skip_cache, and the reason it used to carry is now an input instead. The
+        "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},        // NO skip_cache, and the reason it used to carry is now an input instead. The
         // answer still depends on trivy's vulnerability database rather than on this tree
         // alone, which is why a hit once reported yesterday's CVEs against today's image;
         // the docker spell now declares an observe probe on trivy, so the database's own
@@ -2800,7 +2797,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //   */testdata/*                      hand-authored corpora and goldens the tests
     //                                     beside them read; *.go and *.txtar do not cover
     //                                     a .txt, .jsonl, .golden or a fixture .json
-    //   internal/{registry,selfupdate}    the two go:embed'd key rings, which are a
+    //   internal/selfupdate               the go:embed'd release key ring, which is a
     //                                     compile-time input exactly as the skills
     //                                     directory above is
     //   **/*.lock                         conventions_test holds every line-per-entry
@@ -2812,9 +2809,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "internal/agent/skills/**", "internal/agent/agents-section.md",
                    "docs/reference/codes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
-                   "internal/registry/testdata/*", "internal/queue/testdata/**",
+                   "internal/queue/testdata/**",
                    "benchmarks/agent/internal/bench/testdata/*",
-                   "internal/registry/registry-keys.json",
                    "internal/selfupdate/release-keys.json");
     // The benchmark's embedded price table, named for the same reason go:embed'd key
     // rings are: undeclared, a price edit leaves this key unmoved.
@@ -3083,10 +3079,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   `import "assert";`, so they failed the moment anything ran them.
     //                   An embedded stdlib module, so --embedded like the spells.
     //
-    //   hack/*.buzz     toolchain-releases.buzz did not PARSE. Three steps of
-    //                   .github/workflows/registry.yaml invoke it as
-    //                   `magus buzz hack/toolchain-releases.buzz`, so the registry workflow was
-    //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
+    //   hack/*.buzz     a script a scheduled workflow ran with `magus buzz` did not
+    //                   PARSE, so that workflow was dead with nothing saying so.
     //
     // The MODE is per file, not per directory, because hack/ is not uniform. A script
     // there is run bare, by a workflow, a person or lint-files, so strict is the default
@@ -3094,8 +3088,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // so its run is theirs). The named exceptions are magusfile imports and therefore
     // always embedded; running THEM strict would fail a top-level `if` or an unlabeled
     // second argument that is legal everywhere they actually load - a red for a defect
-    // that does not exist. (toolchain.buzz has no importer and no invoker at all; it is
-    // gated embedded on the assumption it is meant to be one.)
+    // that does not exist.
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }

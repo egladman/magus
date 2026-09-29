@@ -505,7 +505,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "self",
 			print: selfCmdUsage,
-			want:  []string{"Usage: magus self", "update", "refresh", "registry", "install-shorthand", "magus init"},
+			want:  []string{"Usage: magus self", "update", "install-shorthand", "magus init"},
 		},
 		{
 			name:  "install-shorthand",

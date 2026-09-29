@@ -862,8 +862,11 @@ func decodeTools(src obj) (map[string]spells.Tool, error) {
 		if d, ok := o.Str("diagnostics"); ok {
 			t.Diagnostics = spells.DiagnosticFormat(d)
 		}
+		if l, ok := o.Str("lifecycle"); ok {
+			t.Lifecycle = l
+		}
 		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
-			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone {
+			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone && t.Lifecycle == "" {
 			continue
 		}
 		if out == nil {

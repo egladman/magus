@@ -137,7 +137,7 @@ Build, publish, pull and list spells as OCI artifacts, and pin them in magus.loc
 Manage skills, harnesses, and agent feedback. See \fBmagus\-agent\fR(1).
 .TP
 \fBself\fR
-Manage the magus binary (update, refresh, registry, install\-shorthand). See \fBmagus\-self\fR(1).
+Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print the client and server versions. See \fBmagus\-version\fR(1).
@@ -415,11 +415,8 @@ Env\-only, no magus.yaml equivalent: override the release index URL for `magus s
 \fBMAGUS_NO_BOOTSTRAP_EXEC\fR
 Env\-only, no magus.yaml equivalent: when 1, true or yes, disable the pre\-workspace\-load check that replaces this process with a workspace\-local ./magus found by walking up from the working directory (or \-\-root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 .TP
-\fBMAGUS_REGISTRY_URL\fR
-Env\-only, no magus.yaml equivalent: override the built\-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
-.TP
 \fBMAGUS_OFFLINE\fR
-Env\-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote\-spell fetch fails with a named error instead of sending a request (default: false)
+Env\-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote\-spell fetch fails with a named error instead of sending a request (default: false)
 .TP
 \fBMAGUS_DIFFTOOL\fR
 Env\-only, no magus.yaml equivalent: the command, taking two paths, that `\-\-then file <path> diff` compares a cached artifact with (default: $DIFFTOOL, then git diff \-\-no\-index)

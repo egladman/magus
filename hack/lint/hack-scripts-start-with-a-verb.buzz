@@ -20,7 +20,7 @@ final WRITE_VERBS = ["rename", "split"];
 // rule. labels, host-schemas and pull-requests are run by a person, so each is due a verb
 // name.
 final NOUNS = ["advisories", "changelog", "commits", "drift", "lint", "toolchain", "toolchain-policy",
-    "toolchain-releases", "labels", "host-schemas", "pull-requests"];
+    "labels", "host-schemas", "pull-requests"];
 
 export fun reads() > [str] {
     return ["hack/*.buzz", "hack/README.md"];

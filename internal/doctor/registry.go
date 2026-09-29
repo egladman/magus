@@ -308,13 +308,6 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkReleaseIndexExpiry() },
 	},
 	{
-		Name:           "registry-freshness",
-		Doc:            "how long ago the tool registry was synced",
-		Evidence:       types.EvidenceMeasured,
-		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkRegistryFreshness() },
-	},
-	{
 		Name:           "symlinks",
 		Doc:            "symlinks whose resolved target escapes the workspace root",
 		Evidence:       types.EvidenceMeasured,

@@ -214,7 +214,7 @@ test "the allowed dirs, top-level hack files and named files pass; a nested hack
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
-        "hack/toolchain-releases.buzz": `namespace x;
+        "hack/labels.buzz": `namespace x;
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,

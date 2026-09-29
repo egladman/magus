@@ -822,6 +822,16 @@ func TestDecode_CommandExternal(t *testing.T) {
 // and the emptiness rule they share: a tool entry declaring only an observe command is
 // still a tool magus knows something about, so it must survive the drop that removes
 // entries declaring nothing.
+// A lifecycle alone keeps the entry: it names the product a reader looks dates up by.
+func TestDecode_ToolLifecycle(t *testing.T) {
+	m, err := Decode(mapObj{
+		"name":  "ts",
+		"tools": map[string]any{"node": map[string]any{"lifecycle": "nodejs"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "nodejs", m.Tools["node"].Lifecycle)
+}
+
 func TestDecode_ToolObserve(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",

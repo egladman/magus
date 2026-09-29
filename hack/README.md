@@ -41,7 +41,6 @@ The command after `--` runs there. Its stdout, stderr and exit code are its own.
 | `magus buzz hack/count-refusals.buzz` | read-only: this checkout's recurring guard refusals by rule | none |
 | `magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
 | `magus buzz hack/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
-| `magus buzz hack/toolchain-releases.buzz -- fetch \| build \| verify` | builds the signed toolchain end-of-life data from endoflife.date | fetch uses the network; build and verify are local |
 
 Named before the verb rule, each due a verb name:
 

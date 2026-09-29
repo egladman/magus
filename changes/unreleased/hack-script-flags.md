@@ -1,13 +1,10 @@
 ### Changed
 
-- **`hack/registry.buzz` is now `hack/toolchain-releases.buzz`, and `hack/gha-queue.buzz`
-  is now `hack/ci/merge-queue.buzz`.** hack/ci/ holds the steps only a workflow runs.
-- **`hack/toolchain-releases.buzz` and `hack/host-schemas.buzz` take steps and flags, not
-  environment variables.** Run `magus buzz hack/toolchain-releases.buzz -- fetch | build | verify`
-  with `--upstream`, `--releases`, `--out`, `--expires` and `--no-sign`, and
-  `magus buzz hack/host-schemas.buzz -- verify | fetch`. Neither has a default step: a
-  bare run prints the usage line and fails, so nothing signs the registry unless `build`
-  is named. `MAGUS_REGISTRY_KEY` stays an environment variable because it is a secret.
+- **`hack/gha-queue.buzz` is now `hack/ci/merge-queue.buzz`.** hack/ci/ holds the steps
+  only a workflow runs.
+- **`hack/host-schemas.buzz` takes steps, not an environment variable.** Run
+  `magus buzz hack/host-schemas.buzz -- verify | fetch`. It has no default step: a bare
+  run prints the usage line and fails.
 
 ### Added
 

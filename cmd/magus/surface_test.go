@@ -382,6 +382,17 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 	}
 }
 
+// TestSelfManagesOnlyTheBinary pins what `magus self` offers: the binary and its
+// shorthand. The refresh and registry verbs fetched and reported per-machine data that
+// no pipeline ever published, and are gone rather than aliased.
+func TestSelfManagesOnlyTheBinary(t *testing.T) {
+	got := registryChildren(t, "self")
+	slices.Sort(got)
+	if want := []string{"install-shorthand", "update"}; !slices.Equal(got, want) {
+		t.Errorf("self Children = %v, want %v", got, want)
+	}
+}
+
 // TestServerDispatcherChildrenAreDeclared covers `magus server` separately:
 // serverCmd's switch compares against hint.ServerStart.Leaf() and friends
 // rather than string literals (see server.go), so dispatcherCases's literal

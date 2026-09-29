@@ -73,7 +73,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
 export fun mgs_getTools() > {str: Tool} {
     return {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
-                   supported = VersionBounds{min = "1.21"}},
+                   supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
     };

@@ -31,7 +31,8 @@
 // the tag objects, which means a fetch rather than a listing, and that trade has not been
 // worth making.
 //
-// END-OF-LIFE IS DELIBERATELY UNIMPLEMENTED. See eolFor() at the bottom.
+// It reports no end-of-life date, because a tag carries none. A spell names each tool's
+// endoflife.date product (Tool.lifecycle); reading dates for it is not this file's job.
 
 import "std";
 import "os";
@@ -126,34 +127,6 @@ fun probe(bin: str, args: [str]) > str {
     }
 }
 
-// eolFor is the end-of-life resolver, DELIBERATELY UNIMPLEMENTED. It always answers
-// "unknown", and every caller must treat that as a real answer rather than as "supported".
-//
-// Not built because no source for it clears the bar the version list clears. A tag comes
-// from the project's own repository; a support window does not exist in any repository,
-// so every candidate is a third party restating a policy published as prose:
-//
-//   - endoflife.date is the obvious aggregator and carries exactly the right schema, but
-//     it is a volunteer-maintained intermediary. We would be trusting its accuracy, its
-//     refresh cadence, and its uptime, and it is not clear that a build tool polling it on
-//     every check is a use its maintainers have sanctioned. Depending on an unsanctioned
-//     endpoint is how a tool gets rate-limited into a broken gate.
-//   - a table compiled into magus would freeze third-party claims into a binary and put
-//     us in the business of keeping them fresh.
-//   - hosting our own would make it our aggregator, with the same freshness obligation and
-//     one more thing to keep up.
-//
-// So this reports unknown, on purpose, until there is a first-party machine-readable
-// source or an explicit blessing from one that already exists. Unknown is a useful answer:
-// it says nobody here knows, which is true, instead of implying a check happened.
-//
-// If you implement it: absent must stay distinguishable from "supported". Inferring
-// support from a missing field is the same defect as reading a zero timestamp as an old
-// one.
-fun eolFor(bin: str, version: str) > str {
-    return "unknown";
-}
-
 // observe prints one line about one tool. It never throws.
 //
 // Within-line first, because "3 patches behind on 1.26" is a fact about a release you
@@ -221,7 +194,6 @@ fun observe(name: str, bin: str, args: [str]) > void {
     } catch (e) {
         std\print("toolchain " + name + " " + current + ": could not compare against upstream tags");
     }
-    std\print("toolchain " + name + " " + current + ": end of life " + eolFor(bin, version: current));
 }
 
 // report observes every wired toolchain. It prints and never throws: nothing here is a

@@ -169,8 +169,7 @@ var (
 	ConfigMCPConnectorLs     = cmd("config", "mcp", "connector", "ls")
 	ConfigMCPConnectorRevoke = cmd("config", "mcp", "connector", "revoke")
 
-	SelfUpdate  = cmd("self", "update")
-	SelfRefresh = cmd("self", "refresh")
+	SelfUpdate = cmd("self", "update")
 )
 
 // Lookup resolves a space-separated verb path ("agent improve") to the canonical
@@ -210,5 +209,5 @@ var AllCommands = []Command{
 	ConfigView, ConfigSet, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
-	SelfUpdate, SelfRefresh,
+	SelfUpdate,
 }

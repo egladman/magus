@@ -390,6 +390,13 @@ type Tool struct {
 	// prose. On the tool rather than the op because the format is the binary's:
 	// hadolint reports the same way whichever op invokes it.
 	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
+	// Lifecycle names the endoflife.date product that publishes this binary's release
+	// cycles and their end-of-life dates ("go", "nodejs"). Empty means none is known.
+	//
+	// Declared beside the probe because it is a fact about the same binary, and a
+	// workspace should not have to restate which upstream product its go is. It names
+	// what to look up and carries no dates.
+	Lifecycle string `json:"lifecycle,omitempty"`
 }
 
 // HasProbe reports whether magus can learn a version for this tool, by running one or
