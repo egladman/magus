@@ -229,7 +229,10 @@ import (
 // 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
 // adapted harness through `magus describe harness`, which prints the host config and the
 // merge command a person runs; magus never writes host config.
-const SkillVersion = 92
+// 93: the AGENTS.md block links the root MAGUS.md through a `{{routing-index}}` line
+// that `magus agent install` renders only when the workspace declares MAGUS.md as an
+// output, instead of asserting a committed MAGUS.md unconditionally.
+const SkillVersion = 93
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -1072,8 +1075,17 @@ const agentsSectionEnd = "<!-- magus:skills:end -->"
 
 var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<!-- magus:skills:end -->`)
 
+// routingIndexPlaceholder is the line of agents-section.md that AgentsBlock swaps for
+// routingIndexLine or drops. The digest hashes the template, so both renderings carry one
+// stamp and a pasted block grades current in either.
+const routingIndexPlaceholder = "{{routing-index}}\n"
+
+const routingIndexLine = "Routing index: [MAGUS.md](MAGUS.md), what this workspace holds; each project's own MAGUS.md is linked from it.\n"
+
 // AgentsBlock returns the managed magus guidance wrapped in its begin/end
-// markers, ready to paste into a repo's AGENTS.md.
+// markers, ready to paste into a repo's AGENTS.md. routingIndex adds the line
+// linking the root MAGUS.md; pass true only when the workspace declares that file
+// as an output, since a link to a file the workspace never writes is a dead end.
 //
 // Magus deliberately has no counterpart that WRITES this into AGENTS.md, and
 // the reason is the same one that makes an installer appending to your
@@ -1081,8 +1093,13 @@ var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<
 // is never as careful as it looks, and re-runs leave cruft nobody wrote and
 // nobody can audit. Instruct, do not mutate. Reading AGENTS.md back to grade
 // the block's stamp (CheckStatuses) is a different thing and stays.
-func (c *Catalog) AgentsBlock() string {
-	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(c.agentsSection) + "\n\n" + agentsSectionEnd + "\n"
+func (c *Catalog) AgentsBlock(routingIndex bool) string {
+	line := ""
+	if routingIndex {
+		line = routingIndexLine
+	}
+	section := strings.Replace(c.agentsSection, routingIndexPlaceholder, line, 1)
+	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(section) + "\n\n" + agentsSectionEnd + "\n"
 }
 
 func (c *Catalog) provenance(name string, v Variant) string {
@@ -1490,7 +1507,8 @@ func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Statu
 	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVersion, schemaVersion, wantDigest)}
 }
 
-// Section returns the provider-neutral always-on AGENTS.md guidance.
+// Section returns the provider-neutral always-on AGENTS.md guidance as embedded, with the
+// routing-index placeholder line unrendered; AgentsBlock is what a caller pastes.
 func (c *Catalog) Section() string { return c.agentsSection }
 
 // VariantSize returns the total rendered size of every skill's PRIMARY entry

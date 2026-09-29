@@ -24,7 +24,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, &types.KnowledgeRouting{}, nil, "", nil))
 	got := b.String()
 
 	// The rendered index must NOT carry the catalog fingerprint, even when the routing
@@ -35,7 +35,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 	t.Run("catalog fingerprint stays out of the committed index", func(t *testing.T) {
 		var fb bytes.Buffer
 		routing := &types.KnowledgeRouting{CatalogFingerprint: "deadbeefcafe0123"}
-		require.NoError(t, WriteTargetGraphMarkdown(&fb, out, routing, "", nil))
+		require.NoError(t, WriteTargetGraphMarkdown(&fb, out, routing, nil, "", nil))
 		assert.NotContains(t, fb.String(), "deadbeefcafe0123",
 			"a per-binary fingerprint in a drift-gated file makes content-identical output look changed")
 		assert.Contains(t, fb.String(),
@@ -51,7 +51,6 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		"| `fmt`   |                   |",
 		"[Glossary](https://eli.gladman.cc/magus/glossary/)", // terms link out to the hosted docs
 		"magus describe target <name>",                       // pointer: a target's evaluated plan is one command away
-		"magus describe mcp-tools",                           // pointer: the agent tool list
 		// Provenance and staleness contract, rendered as a blockquote near the header so a
 		// reader sees it (an HTML comment does not survive rendering), and the front-loaded
 		// "route by question" block with its exact routing commands.
@@ -74,8 +73,8 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 	// No default_charms passed here, so the header carries no default-charms line.
 	assert.NotContains(t, got, "Default charms:", "default-charms line must be omitted when none are set")
 	// The dispatch plan and the embedded graphs are gone; that bulk is what made
-	// the file useless as in-context routing.
-	for _, bad := range []string{"```mermaid", "**Run order**", "**Toolchain**", "**Defaults**", "**Charms**", "**Executes**", "Shared defaults", "#data="} {
+	// the file useless as in-context routing. Agent tooling is left to host discovery.
+	for _, bad := range []string{"```mermaid", "**Run order**", "**Toolchain**", "**Defaults**", "**Charms**", "**Executes**", "Shared defaults", "#data=", "MCP", "mcp-tools"} {
 		assert.NotContains(t, got, bad, "routing index should not carry %q", bad)
 	}
 }
@@ -91,7 +90,7 @@ func TestWriteTargetGraphMarkdownDefaultCharms(t *testing.T) {
 	// With default charms set: the line renders and sits near the header, before the
 	// route table.
 	var withCharms bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&withCharms, out, nil, "", []string{"rw"}))
+	require.NoError(t, WriteTargetGraphMarkdown(&withCharms, out, &types.KnowledgeRouting{}, nil, "", []string{"rw"}))
 	got := withCharms.String()
 	assert.Contains(t, got, "Default charms: rw (local runs write; CI strips them with `--no-default-charms`).",
 		"default-charms line should render when the workspace sets them")
@@ -100,7 +99,7 @@ func TestWriteTargetGraphMarkdownDefaultCharms(t *testing.T) {
 
 	// With no default charms: the line is omitted entirely, no empty section.
 	var noCharms bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&noCharms, out, nil, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&noCharms, out, &types.KnowledgeRouting{}, nil, "", nil))
 	assert.NotContains(t, noCharms.String(), "Default charms:",
 		"default-charms line must be omitted when none are set")
 }
@@ -120,7 +119,7 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, &types.KnowledgeRouting{}, nil, "", nil))
 	got := b.String()
 	assert.Contains(t, got, "## Project: magus", "heading should use the repo-relative path")
 	i, j := strings.Index(got, "| `build`"), strings.Index(got, "| `worker`")
@@ -143,7 +142,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 3, KeyTargets: []string{"ci"}}},
 	}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, routing, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, routing, nil, "", nil))
 	got := b.String()
 	for _, want := range []string{
 		"## Query first",
@@ -161,22 +160,90 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	assert.NotContains(t, got, "99 edges", "routing section must not carry churning totals")
 }
 
-// A scoped index (nil routing) carries no figure a change in another project can move:
-// no kind or project table and no schema version, only the verbs and its own scope.
-func TestWriteTargetGraphMarkdownScopedIndexOmitsWorkspaceFigures(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path: "libs/foo", RelPath: "libs/foo", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
-	}}}
+// A scoped index (nil routing) is a breadcrumb leaf: it links its neighbors' indexes,
+// names the query that scopes to it, and lists its targets. No workspace-wide figure
+// or intro section can move it.
+func TestWriteTargetGraphMarkdownLeaf(t *testing.T) {
+	nodes := []types.TargetGraphNode{{Name: "build", Doc: "Builds foo."}}
+	indexes := map[string]string{".": "MAGUS.md", "libs/foo": "MAGUS.md", "libs/bar": "MAGUS.md"}
+
+	t.Run("links up and to each dependency", func(t *testing.T) {
+		out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+			Path: "libs/foo", RelPath: "libs/foo", Engine: "buzz", Index: "MAGUS.md", Nodes: nodes,
+			DependsOn: []string{"libs/bar", "libs/plain"},
+		}}}
+		var b bytes.Buffer
+		require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, indexes, "https://explorer.example/", []string{"rw"}))
+		assert.Equal(t, "# libs/foo\n"+
+			"\n"+
+			"<!-- Generated by `magus describe graph -o markdown`. Do not edit by hand. -->\n"+
+			"\n"+
+			"Up: [workspace index](../../MAGUS.md)\n"+
+			"\n"+
+			"Depends on: [libs/bar](../bar/MAGUS.md), libs/plain\n"+
+			"\n"+
+			"Query: `magus query project=libs/foo`\n"+
+			"\n"+
+			"| Target  | What it does |\n"+
+			"| ------- | ------------ |\n"+
+			"| `build` | Builds foo.  |\n"+
+			"\n", b.String())
+	})
+
+	t.Run("nested depth and no workspace index or dependencies", func(t *testing.T) {
+		out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+			Path: "docs/guides/integrations/agents", RelPath: "docs/guides/integrations/agents", Engine: "buzz", Nodes: nodes,
+		}}}
+		var deep bytes.Buffer
+		require.NoError(t, WriteTargetGraphMarkdown(&deep, out, nil, map[string]string{".": "MAGUS.md"}, "", nil))
+		assert.Contains(t, deep.String(), "Up: [workspace index](../../../../MAGUS.md)\n")
+		assert.NotContains(t, deep.String(), "Depends on:")
+
+		var bare bytes.Buffer
+		require.NoError(t, WriteTargetGraphMarkdown(&bare, out, nil, nil, "", nil))
+		assert.NotContains(t, bare.String(), "Up:", "no workspace index is declared, so nothing to link up to")
+	})
+
+	t.Run("drops the workspace-wide sections", func(t *testing.T) {
+		out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+			Path: "libs/foo", RelPath: "libs/foo", Engine: "buzz", Nodes: nodes,
+		}}}
+		var b bytes.Buffer
+		require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, indexes, "https://explorer.example/", []string{"rw"}))
+		for _, bad := range []string{
+			"Default charms", "## ", "Route by question", "Quick start", "Glossary", "Need the detail",
+			"Query first", "Graph Explorer", "schema v", "> Generated by", "generate:rw",
+		} {
+			assert.NotContains(t, b.String(), bad, "a leaf must not carry %q", bad)
+		}
+	})
+}
+
+// The workspace index links each project that declares an index and inlines a target
+// table only for the root project and for projects with no index of their own.
+func TestWriteTargetGraphMarkdownLinksIndexedProjects(t *testing.T) {
+	build := []types.TargetGraphNode{{Name: "build", Doc: "Builds."}}
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", RelPath: "magus", Engine: "buzz", Index: "MAGUS.md", Nodes: build},
+		{Path: "libs/coldread", RelPath: "libs/coldread", Engine: "buzz", Index: "MAGUS.md", Nodes: build},
+		{Path: "libs/plain", RelPath: "libs/plain", Engine: "buzz", Nodes: build},
+	}}
+	indexes := map[string]string{".": "MAGUS.md", "libs/coldread": "MAGUS.md"}
+	routing := &types.KnowledgeRouting{Projects: []types.KnowledgeRoutingProject{
+		{Path: "libs/coldread", TargetCount: 1, KeyTargets: []string{"build"}},
+		{Path: "libs/plain", TargetCount: 1, KeyTargets: []string{"build"}},
+	}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, routing, indexes, "", nil))
 	got := b.String()
 
-	assert.Contains(t, got, "## Query first")
-	assert.Contains(t, got, "magus explain <node>")
-	assert.Contains(t, got, "Scope a query to this index: `magus query project=libs/foo`. `magus graph stats` sizes up the whole workspace.")
-	for _, bad := range []string{"| Kind", "| Project", "schema v", "Anchors"} {
-		assert.NotContains(t, got, bad, "a scoped index must not carry workspace-wide %q", bad)
-	}
+	assert.Contains(t, got, "| [libs/coldread](libs/coldread/MAGUS.md) |")
+	assert.Contains(t, got, "| libs/plain ")
+	assert.NotContains(t, got, "](libs/plain/MAGUS.md)")
+	assert.Contains(t, got, "## Project: magus\n")
+	assert.Contains(t, got, "## Project: libs/plain\n")
+	assert.NotContains(t, got, "## Project: libs/coldread", "an indexed project is reached by its link, not repeated")
+	assert.Equal(t, 2, strings.Count(got, "| `build` | Builds."), "one table each for the root and the unindexed project")
 }
 
 // TestFirstDocLine pins the target-list cell helper: it keeps only the first
@@ -342,7 +409,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 
 	// Without explorerURL: query cells are plain inline code, no href.
 	var plain bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, routing, "", nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, routing, nil, "", nil))
 	plainStr := plain.String()
 	assert.Contains(t, plainStr, "`magus query kind=spell`", "query cell should be inline code without explorerURL")
 	assert.NotContains(t, plainStr, "#q=", "no #q= link without explorerURL")
@@ -353,7 +420,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 	// leaves '+' as a literal plus character, which would corrupt multi-word queries.
 	const explorerURL = "https://example.com/graph/"
 	var withLink bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, routing, explorerURL, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, routing, nil, explorerURL, nil))
 	linkedStr := withLink.String()
 	// url.PathEscape encodes spaces as %20 and slashes as %2F but leaves the query
 	// operators (= and :) unescaped (both are valid in a URI path component).
@@ -417,8 +484,8 @@ func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2}},
 	}
 	var first, second bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&first, out, routing, explorerURL, []string{"rw"}))
-	require.NoError(t, WriteTargetGraphMarkdown(&second, out, routing, explorerURL, []string{"rw"}))
+	require.NoError(t, WriteTargetGraphMarkdown(&first, out, routing, nil, explorerURL, []string{"rw"}))
+	require.NoError(t, WriteTargetGraphMarkdown(&second, out, routing, nil, explorerURL, []string{"rw"}))
 	assert.Equal(t, first.String(), second.String(), "WriteTargetGraphMarkdown output is not deterministic")
 }
 

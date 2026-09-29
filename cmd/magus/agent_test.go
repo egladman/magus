@@ -167,27 +167,62 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 // scroll past this command's output, including the parts that matter.
 func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+agentSkills.AgentsBlock()), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+agentSkills.AgentsBlock(false)), 0o644))
 
 	out := captureStderr(t, func() { printAgentsBlockToPaste(dir) })
 	assert.Empty(t, out, "a current block is not reprinted")
 
 	// A stale one is, with the replace-in-place instruction rather than the add-it one.
-	stale := strings.Replace(agentSkills.AgentsBlock(), "skill-content: ", "skill-content: 0", 1)
+	stale := strings.Replace(agentSkills.AgentsBlock(false),"skill-content: ", "skill-content: 0", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+stale), 0o644))
 	out = captureStderr(t, func() { printAgentsBlockToPaste(dir) })
 	assert.Contains(t, out, "older copy")
 	assert.Contains(t, out, "<!-- magus:skills:begin")
 }
 
+// TestDeclaresRoutingIndex holds the link line to the workspace's own declaration: only a
+// root project that writes MAGUS.md earns it, and a directory that is no workspace root
+// never does.
+func TestDeclaresRoutingIndex(t *testing.T) {
+	const writer = "import \"magus\";\nexport fun index_generate(ctx: magus\\Context, args: [str]) > void !> any {\n    ctx.writesFiles(\"MAGUS.md\");\n}\n"
+	const silent = "import \"magus\";\nexport fun noop(ctx: magus\\Context, args: [str]) > void !> any {\n}\n"
+
+	for name, tc := range map[string]struct {
+		magusfile string
+		want      bool
+	}{
+		"root declares MAGUS.md":    {writer, true},
+		"root declares no MAGUS.md": {silent, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tc.magusfile), 0o644))
+			assert.Equal(t, tc.want, declaresRoutingIndex(context.Background(), root))
+		})
+	}
+
+	t.Run("not a workspace", func(t *testing.T) {
+		assert.False(t, declaresRoutingIndex(context.Background(), t.TempDir()))
+	})
+	t.Run("below the root", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(writer), 0o644))
+		sub := filepath.Join(root, "sub")
+		require.NoError(t, os.Mkdir(sub, 0o755))
+		assert.False(t, declaresRoutingIndex(context.Background(), sub))
+	})
+}
+
 // TestAgentStarterPrintsAMarkedBlock keeps the two print paths on one set of
 // bytes: a paste from `sample` must be gradeable by `magus doctor` exactly as a
 // paste from install's offer is.
 func TestAgentStarterPrintsAMarkedBlock(t *testing.T) {
-	out := captureStdout(t, func() { require.NoError(t, agentStarterCmd()) })
+	out := captureStdout(t, func() { require.NoError(t, agentStarterCmd(context.Background(), "")) })
 	assert.True(t, strings.HasPrefix(out, "# AGENTS.md\n"))
 	assert.Contains(t, out, "## Conventions")
-	assert.Contains(t, out, agentSkills.AgentsBlock())
+	assert.Contains(t, out, agentSkills.AgentsBlock(false))
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(out), 0o644))
@@ -248,7 +283,7 @@ func TestCheckSkillStatusesCurrent(t *testing.T) {
 	_, _, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
 	require.NoError(t, err)
 	// Pasted the way a developer would, since magus no longer writes this file.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock(false)), 0o644))
 
 	statuses := agentSkills.CheckStatuses(context.Background(), dir, "status-test")
 	require.Len(t, statuses, 2, "one status per installed location")
@@ -457,7 +492,7 @@ func extractTar(t *testing.T, src, dst string) {
 }
 
 func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
-	doc := agentStarterDoc()
+	doc := agentStarterDoc(false)
 	assert.Contains(t, doc, "# AGENTS.md")
 	assert.Contains(t, doc, "## Project")  // a project placeholder to fill in
 	assert.Contains(t, doc, "## magus")    // the reproduced magus block

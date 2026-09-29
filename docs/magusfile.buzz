@@ -3,6 +3,7 @@ import "../tools/toolchain-policy" as policy;
 // The shared advisory gate; see tools/advisories.buzz for why an exit code is the wrong question.
 import "../tools/advisories" as advisories;
 import "../tools/drift" as drift;
+import "../tools/index" as index;
 import "../tools/changelog" as changelog;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // npm), vcs (drift gate), http (serve). render.buzz owns the rendering
@@ -170,11 +171,10 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 // standalone after editing targets: `magus run index-generate docs`.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
-    // Scoped to this project; see libs/coldread for why these are its inputs.
+    // Reasons for these inputs are in tools/index.buzz.
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
                    "../internal/render/md/md.go", "../internal/hint/cli_command.go");
-    final doc = magus\describe(["graph", "-o", "markdown", "docs"], {"quiet": true, "root": ROOT}).stdout;
-    fs\writeFile("MAGUS.md", doc + "\n");
+    index\render("docs");
 }
 
 // content-generate regenerates the committed docs Markdown derived from the Go source

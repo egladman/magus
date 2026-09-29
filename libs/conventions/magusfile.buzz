@@ -14,6 +14,7 @@
 
 import "magus";
 import "../../tools/drift" as drift;
+import "../../tools/index" as index;
 
 // go spell claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration: magus binds the magusfile driver to every project.
@@ -22,8 +23,6 @@ import "magus/spell/go";
 // would also claim this tree's **/*.md for markdownlint, which the root project lints.
 import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
-
-import "fs";
 
 magus\project({
     "spells": [go],
@@ -43,15 +42,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(index_generate);
 }
 
-// Renders MAGUS.md, this project's target catalog, from this magusfile.
+// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
+// body and the reasons for them are in tools/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared so `magus vcs resolve` can find the target that settles a conflict here.
     ctx.writesFiles("MAGUS.md");
-    // Scoped to this project; see libs/coldread for why these are its inputs.
     ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
                    "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
-    final doc = magus\describe(["graph", "-o", "markdown", "libs/conventions"], {"quiet": true}).stdout;
-    fs\writeFile("MAGUS.md", doc + "\n");
+    index\render("libs/conventions");
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
