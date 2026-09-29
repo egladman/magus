@@ -5,9 +5,12 @@
 namespace diagrams;
 
 import "assert";
+import "crypto";
 import "fs";
 import "magus";
+import "strings";
 import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
 import "site/diagrams/server-http" as _;
 import "site/diagrams/server-socket" as _;
 import "site/diagrams/server-jobs" as _;
@@ -21,6 +24,17 @@ import "site/diagrams/volatility" as _;
 import "site/diagrams/commit-generated" as _;
 import "site/diagrams/lease-loop" as _;
 import "site/diagrams/cache-trust" as _;
+// The observed halves diagrams-observe writes, one per figure with a scope. Aliased, never
+// flat: a flat import is skipped when its basename is already bound, and each shares its
+// basename with the declared figure imported above.
+import "site/diagrams/gen/server-http" as serverHttpGen;
+import "site/diagrams/gen/server-socket" as serverSocketGen;
+import "site/diagrams/gen/server-jobs" as serverJobsGen;
+import "site/diagrams/gen/server-share" as serverShareGen;
+import "site/diagrams/gen/ci-providers" as ciProvidersGen;
+import "site/diagrams/gen/volatility" as volatilityGen;
+import "site/diagrams/gen/lease-loop" as leaseLoopGen;
+import "site/diagrams/gen/cache-trust" as cacheTrustGen;
 
 export fun allDiagrams() > [Diagram] {
     return [
@@ -38,6 +52,41 @@ export fun allDiagrams() > [Diagram] {
         leaseLoopDiagram(),
         cacheTrustDiagram(),
     ];
+}
+
+// observedFor is the observed half diagrams-observe last wrote for the figure id, or null for
+// a figure without one. What it answers is only as fresh as that run.
+export fun observedFor(id: str) > Observed? {
+    if (id == "server-http") { return serverHttpGen\serverHttpObserved(); }
+    if (id == "server-socket") { return serverSocketGen\serverSocketObserved(); }
+    if (id == "server-jobs") { return serverJobsGen\serverJobsObserved(); }
+    if (id == "server-share") { return serverShareGen\serverShareObserved(); }
+    if (id == "ci-providers") { return ciProvidersGen\ciProvidersObserved(); }
+    if (id == "volatility") { return volatilityGen\volatilityObserved(); }
+    if (id == "lease-loop") { return leaseLoopGen\leaseLoopObserved(); }
+    if (id == "cache-trust") { return cacheTrustGen\cacheTrustObserved(); }
+    return null;
+}
+
+// composeOver rebuilds a hand-placed figure as flow id over an observed set: its nodes, edges,
+// legend, scope and omits become declarations, and every coordinate is dropped. Zones are
+// dropped too; a hand-placed Zone is a rectangle, and flow needs its members.
+export fun composeOver(id: str, d: Diagram, o: Observed) > mut Flow {
+    final f = flow(id);
+    f.observed(o);
+    f.title(d.title);
+    f.eyebrow(d.eyebrow);
+    f.desc(d.desc);
+    foreach (n in d.nodes) {
+        f.node(n.id, label: n.label, sub: n.sub, tag: n.tag, role: n.role, anchor: n.anchor);
+    }
+    foreach (e in d.edges) {
+        f.edge(e.src, dst: e.dst, label: e.label, kind: e.kind, dashed: e.dashed, claim: e.claim);
+    }
+    foreach (item in d.legend) { f.legend(item.role, label: item.label); }
+    f.scope(d.scope);
+    foreach (path, why in d.omits) { f.omit(path, why: why); }
+    return f;
 }
 
 // rendered caches the one result renderAll can ever produce. Not a speed tweak: on the
@@ -174,6 +223,12 @@ fun checkFigures(figures: [Diagram], root: str, sourceGlobs: [str], imports: Obs
     final summaries: mut [str] = mut [<str>];
     foreach (d in figures) {
         foreach (msg in figureFindings(d, root: root, imports: imports)) { findings.append(msg); }
+        if (imports != null and d.stamp != "") {
+            final fresh = observeScope(d.scope, imports: imports!).stamp;
+            if (fresh != d.stamp) {
+                findings.append("diagram \"{d.id}\": observed set is stale (stamp {d.stamp}, fresh {fresh}); rerun magus run diagrams_observe docs");
+            }
+        }
         summaries.append(summaryLine(d, verified: imports != null));
     }
     foreach (msg in unknownMarkers(figures, root: root, sourceGlobs: sourceGlobs)) { findings.append(msg); }
@@ -263,14 +318,13 @@ fun summaryLine(d: Diagram, verified: bool) > str {
         if (e.claim == "calls") { calls = calls + 1; }
         if (e.claim == "flow") { narrative = narrative + 1; }
     }
-    var line = "{d.id}: {d.nodes.len()} nodes, {anchored} anchored; "
+    final line = "{d.id}: {d.nodes.len()} nodes, {anchored} anchored; "
         + "edges: {imports} imports, {calls} calls, {narrative} flow (unverified)";
-    if (verified) {
-        line = line + "; imports verified";
-    } else {
-        line = line + "; imports unverified (run with --verify-imports)";
+    if (verified == false) {
+        return line + "; imports and observed stamp unverified (run with --verify-imports)";
     }
-    return line;
+    if (d.stamp == "") { return line + "; imports verified; no observed set"; }
+    return line + "; imports and observed stamp verified";
 }
 
 // anchorDir is the package an anchor depicts: the anchor itself, or the directory holding
@@ -333,6 +387,122 @@ export fun scopeMatches(dir: str, glob: str) > bool {
         reach = next;
     }
     return reach[gs.len()];
+}
+
+fun inAnyScope(dir: str, scope: [str]) > bool {
+    foreach (glob in scope) {
+        if (scopeMatches(dir, glob: glob)) { return true; }
+    }
+    return false;
+}
+
+// observedNodeId is the id every generated box takes for a package; a slash is not welcome
+// in the SVG's id space.
+export fun observedNodeId(pkg: str) > str {
+    return "pkg-" + pkg.replace("/", with: "-");
+}
+
+// observeScope is what the import graph holds under scope: every package a glob matches,
+// whether it imports or is only imported, and each import between two of them. Sorted by
+// path, so one index always yields the same Observed; the stamp digests exactly that.
+export fun observeScope(scope: [str], imports: ObservedImports) > Observed {
+    final member: mut {str: bool} = mut {<str: bool>};
+    foreach (pkg, deps in imports.packages) {
+        member[pkg] = inAnyScope(pkg, scope: scope);
+        foreach (dep in deps) { member[dep] = inAnyScope(dep, scope: scope); }
+    }
+    final pkgs: mut [str] = mut [<str>];
+    foreach (dir, within in member) {
+        if (within) { pkgs.append(dir); }
+    }
+    final byPath = fun (a: str, b: str) > bool { return a < b; };
+    final nodes: mut [ObservedNode] = mut [<ObservedNode>];
+    final edges: mut [ObservedEdge] = mut [<ObservedEdge>];
+    final pairs: mut [str] = mut [<str>];
+    foreach (src in pkgs.sort(byPath)) {
+        nodes.append(ObservedNode{ id = observedNodeId(src), label = src, anchor = src });
+        // A host list is immutable, so it is copied before sorting.
+        final deps: mut [str] = mut [<str>];
+        foreach (dep in imports.packages[src] ?? [<str>]) { deps.append(dep); }
+        foreach (dst in deps.sort(byPath)) {
+            if (member[dst] ?? false) {
+                edges.append(ObservedEdge{ src = observedNodeId(src), dst = observedNodeId(dst) });
+                pairs.append("{src}->{dst}");
+            }
+        }
+    }
+    final digest = crypto\sha256Hex(pkgs.join("\n") + "\n\n" + pairs.join("\n"));
+    return Observed{ nodes = nodes, edges = edges, stamp = "sha256:" + digest };
+}
+
+// quoted spells s as a Buzz string literal; \{ keeps a brace from interpolating.
+fun quoted(s: str) > str {
+    return "\"" + s.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\{", with: "\\\{") + "\"";
+}
+
+// observedModule is the Buzz source of one figure's observed half, named after the figure the
+// way a declared figure's module is: server-http gives serverHttpObserved().
+export fun observedModule(id: str, o: Observed) > str {
+    final name = strings\camelCase(id) + "Observed";
+    final lines: mut [str] = mut [
+        "// Code generated by magus run diagrams_observe docs; DO NOT EDIT.",
+        "namespace {name};",
+        "",
+        "import \"../libs/diagram/flow\" as _;",
+        "",
+        "export fun {name}() > Observed \{",
+        "    return Observed\{",
+    ];
+    if (o.nodes.len() == 0) {
+        lines.append("        nodes = [<ObservedNode>],");
+    } else {
+        lines.append("        nodes = [");
+        foreach (n in o.nodes) {
+            lines.append("            ObservedNode\{ id = {quoted(n.id)}, label = {quoted(n.label)}, anchor = {quoted(n.anchor)} },");
+        }
+        lines.append("        ],");
+    }
+    if (o.edges.len() == 0) {
+        lines.append("        edges = [<ObservedEdge>],");
+    } else {
+        lines.append("        edges = [");
+        foreach (e in o.edges) {
+            lines.append("            ObservedEdge\{ src = {quoted(e.src)}, dst = {quoted(e.dst)} },");
+        }
+        lines.append("        ],");
+    }
+    lines.append("        stamp = {quoted(o.stamp)},");
+    lines.append("    };");
+    lines.append("}");
+    lines.append("");
+    return lines.join("\n");
+}
+
+// writeObservedFigures writes dir/<id>.buzz for every figure that declares a scope and returns
+// the paths written. It owns every .buzz file in dir, so a figure that dropped its scope, or
+// no longer exists, loses its file here rather than lingering as a module nothing composes.
+//
+// Raises when imports is not indexed: an empty graph would write every figure an empty
+// observation stamped as if it were true.
+export fun writeObservedFigures(dir: str, imports: ObservedImports) > [str] !> any {
+    if (imports.indexed == false) {
+        throw "diagrams_observe needs the symbol index, and magus\\importGraph() answered indexed=false: "
+            + "no index was ingested. Build it with `magus graph build`, then rerun.";
+    }
+    fs\mkdirAll(dir);
+    final written: mut [str] = mut [<str>];
+    final expected: mut {str: bool} = mut {<str: bool>};
+    foreach (d in allDiagrams()) {
+        if (d.scope.len() == 0) { continue; }
+        final path = dir + "/" + d.id + ".buzz";
+        fs\writeFile(path, observedModule(d.id, o: observeScope(d.scope, imports: imports)));
+        written.append(path);
+        expected[d.id + ".buzz"] = true;
+    }
+    foreach (candidate in fs\glob(dir + "/*.buzz")) {
+        if (expected[fs\basename(candidate.value)] == null) { fs\remove(candidate.value); }
+    }
+    return written;
 }
 
 // unknownMarkers is the reverse half: a magus:diagram marker naming no figure means a figure
@@ -421,11 +591,15 @@ test "the summary counts nodes, anchors and each claim" {
         ],
     };
     assert\equal(summaryLine(d, verified: false),
-        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports unverified (run with --verify-imports)",
+        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports and observed stamp unverified (run with --verify-imports)",
         message: "unverified");
     assert\equal(summaryLine(d, verified: true),
-        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports verified",
+        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports verified; no observed set",
         message: "verified");
+    final stamped = Diagram{ id = "t", stamp = "sha256:00" };
+    assert\equal(summaryLine(stamped, verified: true),
+        want: "t: 0 nodes, 0 anchored; edges: 0 imports, 0 calls, 0 flow (unverified); imports and observed stamp verified",
+        message: "stamped");
 }
 
 test "verifying imports refuses without an index and checks each imports claim" {
@@ -466,4 +640,123 @@ test "scope wildcards are whole segments" {
     assert\isTrue(scopeMatches("internal/graph", glob: "internal/graph/**"), message: "** may be empty");
     assert\isTrue(scopeMatches("internal/graph/knowledge/gen", glob: "internal/graph/**"), message: "or span several");
     assert\isFalse(scopeMatches("internal/grapher", glob: "internal/graph/**"), message: "a prefix is no segment");
+}
+
+fun sampleImports() > ObservedImports {
+    return ObservedImports{
+        indexed = true,
+        packages = {
+            "pkg/b": ["pkg/a", "other/x"],
+            "pkg/a": ["pkg/c"],
+            "other/y": ["pkg/a"],
+        },
+    };
+}
+
+test "an observation keeps the scope's packages and imports, sorted" {
+    final got = observeScope(["pkg/*"], imports: sampleImports());
+    assert\equal(got.nodes, want: [
+        ObservedNode{ id = "pkg-pkg-a", label = "pkg/a", anchor = "pkg/a" },
+        ObservedNode{ id = "pkg-pkg-b", label = "pkg/b", anchor = "pkg/b" },
+        ObservedNode{ id = "pkg-pkg-c", label = "pkg/c", anchor = "pkg/c" },
+    ], message: "pkg/c is only imported, and still observed; other/* is out of scope");
+    assert\equal(got.edges, want: [
+        ObservedEdge{ src = "pkg-pkg-a", dst = "pkg-pkg-c" },
+        ObservedEdge{ src = "pkg-pkg-b", dst = "pkg-pkg-a" },
+    ], message: "only imports between two in-scope packages");
+    assert\equal(got.stamp, want: "sha256:" + crypto\sha256Hex("pkg/a\npkg/b\npkg/c\n\npkg/a->pkg/c\npkg/b->pkg/a"),
+        message: "the stamp digests the package list and the import pairs");
+
+    final moved = ObservedImports{ indexed = true, packages = {"pkg/b": ["pkg/c"], "pkg/a": ["pkg/c"]} };
+    assert\isTrue(observeScope(["pkg/*"], imports: moved).stamp != got.stamp, message: "a changed import changes the stamp");
+}
+
+test "an observed module is Buzz naming the figure" {
+    final o = Observed{
+        nodes = [ObservedNode{ id = "pkg-a", label = "a", anchor = "a" }],
+        stamp = "sha256:00",
+    };
+    assert\equal(observedModule("cache-trust", o: o), want: [
+        "// Code generated by magus run diagrams_observe docs; DO NOT EDIT.",
+        "namespace cacheTrustObserved;",
+        "",
+        "import \"../libs/diagram/flow\" as _;",
+        "",
+        "export fun cacheTrustObserved() > Observed \{",
+        "    return Observed\{",
+        "        nodes = [",
+        "            ObservedNode\{ id = \"pkg-a\", label = \"a\", anchor = \"a\" },",
+        "        ],",
+        "        edges = [<ObservedEdge>],",
+        "        stamp = \"sha256:00\",",
+        "    };",
+        "}",
+        "",
+    ].join("\n"), message: "module source");
+}
+
+test "writing observations refuses without an index, writes each scoped figure, prunes the rest" {
+    final dir = fs\tempDir("magus-observed-");
+    var refusal = "";
+    try {
+        _ = writeObservedFigures(dir, imports: ObservedImports{ indexed = false });
+    } catch (e) {
+        refusal = "{e}";
+    }
+    assert\isTrue(refusal.indexOf("magus graph build") != null, message: "an absent index is an error naming the fix");
+
+    fs\writeFile(dir + "/retired.buzz", "stale");
+    fs\writeFile(dir + "/notes.txt", "authored");
+    final written = writeObservedFigures(dir, imports: sampleImports());
+    var scoped = 0;
+    foreach (d in allDiagrams()) {
+        if (d.scope.len() > 0) {
+            scoped = scoped + 1;
+            assert\isTrue(fs\exists(dir + "/" + d.id + ".buzz"), message: "{d.id} observed");
+        }
+    }
+    assert\equal(written.len(), want: scoped, message: "one file per scoped figure");
+    assert\isFalse(fs\exists(dir + "/retired.buzz"), message: "a figure that is gone loses its file");
+    assert\isTrue(fs\exists(dir + "/notes.txt"), message: "only .buzz files are owned");
+    fs\removeAll(dir);
+}
+
+test "observedFor answers exactly the figures with a scope" {
+    foreach (d in allDiagrams()) {
+        assert\equal(observedFor(d.id) != null, want: d.scope.len() > 0, message: d.id);
+    }
+    assert\isTrue(observedFor("no-such-figure") == null, message: "an unknown id");
+}
+
+test "a figure composed from a stale observation is a finding only when verifying" {
+    final root = driftTree();
+    final fresh = observeScope(["pkg/*"], imports: sampleImports());
+    final d = Diagram{
+        id = "t",
+        nodes = [Node{ id = "a", anchor = "pkg/a" }, Node{ id = "b", anchor = "pkg/b" }],
+        scope = ["pkg/*"],
+        stamp = "sha256:old",
+    };
+    assert\equal(checkFigures([d], root: root, sourceGlobs: [<str>], imports: sampleImports()).findings, want: [
+        "diagram \"t\": observed set is stale (stamp sha256:old, fresh {fresh.stamp}); rerun magus run diagrams_observe docs",
+    ], message: "stale");
+    assert\equal(checkFigures([d], root: root, sourceGlobs: [<str>], imports: null).findings,
+        want: [<str>], message: "without --verify-imports no stamp is checked");
+    final current = Diagram{ id = "t", nodes = d.nodes, scope = d.scope, stamp = fresh.stamp };
+    assert\equal(checkFigures([current], root: root, sourceGlobs: [<str>], imports: sampleImports()).findings,
+        want: [<str>], message: "a current stamp passes");
+    fs\removeAll(root);
+}
+
+test "server-http composed over its observation" {
+    var refusal = "";
+    try {
+        _ = composeOver("server-http-composed", d: serverHttpDiagram(), o: observedFor("server-http")!).diagram();
+    } catch (e) {
+        refusal = "{e}";
+    }
+    // TODO: omit does not drop the observed boxes it names, so the twelve omitted handler
+    // packages still arrive and break the budget. Once flow honours omits against the
+    // observed set, this lays out clean and should assert so.
+    assert\isTrue(refusal.indexOf("nodes exceeds the budget of 9") != null, message: "composed: {refusal}");
 }
