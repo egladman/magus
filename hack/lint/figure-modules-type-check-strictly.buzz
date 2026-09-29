@@ -11,7 +11,6 @@ import "magus/lint";
 import "hack/lint/support" as support;
 
 final FIGURES = "docs/site/diagrams/";
-final GEN = "docs/site/diagrams/gen/";
 
 // DIAGNOSTIC matches one line --check prints: an optional code, the file as passed, its
 // position and the message. Unanchored, because a raised magus\cmd prefixes the first one.
@@ -49,15 +48,13 @@ export fun findings(output: str) > [Finding] {
     return found;
 }
 
-// check runs one --check over the declared figures. The observed halves under gen/ are not
-// passed themselves: each imports flow.buzz alone, whose renderer import resolves only
-// once a figure has bound it, so gen/ is checked through the figures that import it.
+// check runs one --check over the declared figures and the observed halves under gen/.
 export fun check(files: [Path]) > [Finding] !> any {
     final argv = mut [<str>];
     argv.append("--check");
     var base = "";
     foreach (f in files) {
-        if (f.value.startsWith(FIGURES) and !f.value.startsWith(GEN)) {
+        if (f.value.startsWith(FIGURES)) {
             argv.append(f.value.sub("docs/".len()));
             base = f.base;
         }
@@ -98,7 +95,7 @@ test "findings reads each diagnostic, its code and its see line" {
     assert\equal(got[1].url, want: "https://example.test/BZZ3002.md", message: "see line");
 }
 
-test "a figure with an unlabeled argument or a warning is reported, a clean one and gen/ are not" {
+test "a figure or an observed half with an unlabeled argument or a warning is reported, a clean one is not" {
     final lib = "fun add(a: int, b: int) > int \{\n    return a + b;\n}\n\n";
     final got = check(support\fixture({
         "docs/site/diagrams/clean.buzz": "namespace clean;\n\n" + lib + "fun sum() > int \{\n    return add(1, b: 2);\n}\n",
@@ -111,8 +108,9 @@ test "a figure with an unlabeled argument or a warning is reported, a clean one 
     foreach (f in got) {
         paths.append("{f.path}:{f.line}");
     }
-    assert\equal(paths.len(), want: 2, message: "two findings: {paths}");
+    assert\equal(paths.len(), want: 3, message: "three findings: {paths}");
     assert\contains(paths, item: "docs/site/diagrams/positional.buzz:8", message: "the unlabeled argument");
-    assert\isTrue(got[0].path == "docs/site/diagrams/rebuilt.buzz" or got[1].path == "docs/site/diagrams/rebuilt.buzz",
-        message: "the warning fails too");
+    assert\contains(paths, item: "docs/site/diagrams/gen/positional.buzz:8", message: "gen/ is checked too");
+    assert\isTrue(got[0].path == "docs/site/diagrams/rebuilt.buzz" or got[1].path == "docs/site/diagrams/rebuilt.buzz"
+        or got[2].path == "docs/site/diagrams/rebuilt.buzz", message: "the warning fails too");
 }
