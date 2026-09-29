@@ -152,8 +152,11 @@ func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
 
 // Runtime holds per-run volatility state; safe for concurrent use.
 type Runtime struct {
-	mu       sync.Mutex
-	history  *forecast.History
+	mu      sync.Mutex
+	history *forecast.History
+	// recorded is every outcome Record took since the last Save, which is what Save
+	// replays onto the file as it stands then; see forecast.UpdateHistory.
+	recorded []recorded
 	path     string
 	cfg      Config
 	affected map[string]bool
@@ -225,13 +228,23 @@ func (rt *Runtime) Record(projectPath, target string, o forecast.Outcome) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
-	if rt.history.Projects == nil {
-		rt.history.Projects = make(map[string]map[string]forecast.Stats)
+	applyOutcome(rt.history, projectPath, target, o)
+	rt.recorded = append(rt.recorded, recorded{project: projectPath, target: target, outcome: o})
+}
+
+type recorded struct {
+	project, target string
+	outcome         forecast.Outcome
+}
+
+func applyOutcome(h *forecast.History, projectPath, target string, o forecast.Outcome) {
+	if h.Projects == nil {
+		h.Projects = make(map[string]map[string]forecast.Stats)
 	}
-	targets, ok := rt.history.Projects[projectPath]
+	targets, ok := h.Projects[projectPath]
 	if !ok {
 		targets = make(map[string]forecast.Stats)
-		rt.history.Projects[projectPath] = targets
+		h.Projects[projectPath] = targets
 	}
 	targets[target] = recordOutcome(targets[target], o)
 }
@@ -261,14 +274,30 @@ func (rt *Runtime) LastPassTime(projectPath, target string) time.Time {
 	return lastPassTime(s)
 }
 
-// Save writes updated history to disk.
+// Save adds the outcomes recorded since the last Save to the history on disk. It replays
+// them onto the file as it stands NOW rather than writing back the snapshot this run
+// loaded, so a run that overlapped this one, in any workspace on the host, keeps its
+// outcomes too.
 func (rt *Runtime) Save(ctx context.Context) error {
 	if rt.path == "" {
 		return nil
 	}
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
-	return rt.history.Save(ctx, rt.path)
+	if len(rt.recorded) == 0 {
+		return nil
+	}
+	err := forecast.UpdateHistory(ctx, rt.path, func(h *forecast.History) error {
+		for _, r := range rt.recorded {
+			applyOutcome(h, r.project, r.target, r.outcome)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	rt.recorded = nil
+	return nil
 }
 
 // stats returns the Stats for (projectPath, target). Caller must hold mu.

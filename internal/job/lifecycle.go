@@ -412,11 +412,8 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	if err != nil || len(dead) == 0 {
 		return f, err
 	}
-	err = s.withFileLock(context.Background(), func() error {
-		cur, err := s.read()
-		if err != nil {
-			return err
-		}
+	err = s.update(context.Background(), func(cur *jobsFile) error {
+		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
 			return err
 		}
@@ -426,12 +423,10 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 			cur.Jobs[i].EndReason = e.reason
 			cur.Jobs[i].Updated = w.now
 		}
-		if len(dead) > 0 {
-			if err := s.write(cur); err != nil {
-				return err
-			}
+		f = *cur
+		if len(dead) == 0 {
+			return file.SkipWrite
 		}
-		f = cur
 		return nil
 	})
 	if err != nil {
@@ -500,13 +495,13 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 	w.landed = s.landings(f.Jobs, w.now)
 
 	var out []Ending
-	err = s.withFileLock(ctx, func() error {
-		cur, err := s.read()
-		if err != nil {
+	err = s.update(ctx, func(cur *jobsFile) error {
+		var err error
+		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
 			return err
 		}
-		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil || opts.DryRun || len(out) == 0 {
-			return err
+		if opts.DryRun || len(out) == 0 {
+			return file.SkipWrite
 		}
 		for _, e := range out {
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
@@ -514,7 +509,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Updated = w.now
 		}
-		return s.write(cur)
+		return nil
 	})
 	if err != nil {
 		return nil, err

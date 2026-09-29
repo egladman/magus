@@ -754,7 +754,7 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(dir, []sessions.LoadEvent{{
+	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{{
 		Session: "s1",
 		Event: sessions.AgentEvent{
 			Host: "h1", Kind: sessions.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",

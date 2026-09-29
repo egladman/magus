@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -72,34 +73,9 @@ func saveWSCache(root string, ws *types.Workspace, dirMtimes map[string]int64) {
 	if err != nil {
 		return
 	}
-	_ = writeFileAtomic(filepath.Join(root, wsCacheFile), data, 0o600)
-}
-
-// writeFileAtomic writes via a temp file and rename so a reader never sees a partial
-// file. Best-effort: a write failure is treated as a cache miss.
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".workspace.cache-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
+	// Not fsync'd: a cache lost to a crash is a full walk, which costs less than a flush on
+	// every load.
+	_ = file.ReplaceFile(filepath.Join(root, wsCacheFile), data, 0o600)
 }
 
 // restoreFromCache reconstructs a *types.Workspace from c, re-binding spells from the registry.

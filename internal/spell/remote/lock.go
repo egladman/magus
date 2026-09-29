@@ -9,9 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/gofrs/flock"
 	"github.com/opencontainers/go-digest"
 	"gopkg.in/yaml.v3"
 
@@ -104,53 +102,27 @@ func (l Lock) Marshal() ([]byte, error) {
 // A result that pins nothing removes magus.lock rather than writing one: a workspace
 // with no remote spells has no lock, which ReadLock already reads as an empty one.
 func UpdateLock(ctx context.Context, root string, next func(Lock) (Lock, error)) error {
-	dir := filepath.Join(root, ".magus")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	fl := flock.New(filepath.Join(dir, LockFile+".flock"))
-	got, err := fl.TryLock()
-	if err != nil {
-		return fmt.Errorf("%s: lock %s: %w", LockFile, fl.Path(), err)
-	}
-	if !got {
-		wait, cancel := context.WithTimeout(ctx, lockWait)
-		defer cancel()
-		if got, err = fl.TryLockContext(wait, lockRetryDelay); err != nil || !got {
-			if ctx.Err() != nil {
-				return fmt.Errorf("%s: cancelled while waiting for %s, so nothing was written: %w", LockFile, fl.Path(), ctx.Err())
-			}
-			return fmt.Errorf("%s: another process has held %s for more than %s, so nothing was written;"+
-				" look for a stuck magus process with `magus status`, then retry", LockFile, fl.Path(), lockWait)
-		}
-	}
-	defer func() { _ = fl.Unlock() }()
-
-	cur, err := ReadLock(root)
-	if err != nil {
-		return err
-	}
-	l, err := next(cur)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(root, LockFile)
-	if len(l.Spells) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	lockPath := filepath.Join(root, ".magus", LockFile+".flock")
+	return file.WithLock(ctx, lockPath, file.LockWait, func() error {
+		cur, err := ReadLock(root)
+		if err != nil {
 			return err
 		}
-		return nil
-	}
-	raw, err := l.Marshal()
-	if err != nil {
-		return err
-	}
-	return file.WriteFileAtomic(path, raw, 0o644)
+		l, err := next(cur)
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(root, LockFile)
+		if len(l.Spells) == 0 {
+			if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			return nil
+		}
+		raw, err := l.Marshal()
+		if err != nil {
+			return err
+		}
+		return file.WriteFileAtomic(path, raw, 0o644)
+	})
 }
-
-// The file lock's shape, matching the job store's: a lock rewrite is a small file, so
-// a wait past lockWait means the holder is stuck rather than busy.
-const (
-	lockWait       = 10 * time.Second
-	lockRetryDelay = 20 * time.Millisecond
-)

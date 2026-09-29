@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
 )
@@ -301,15 +301,14 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 	if c.outputs == nil || b.Descriptor.Key == "" || b.Descriptor.Attempt == "" {
 		return
 	}
+	// Replaced by rename, as Persist writes them: newestAttemptBlob can pick a blob
+	// before its descriptor lands, so one written in place is readable mid-write.
 	dir := filepath.Join(c.outputs.outputsDir(), b.Descriptor.Key)
-	if os.MkdirAll(dir, 0o755) != nil {
-		return
-	}
-	if os.WriteFile(filepath.Join(dir, b.Descriptor.Attempt+outExt), data, 0o644) != nil {
+	if file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+outExt), data, 0o644) != nil {
 		return
 	}
 	if meta, err := json.Marshal(b.Descriptor); err == nil {
-		_ = os.WriteFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
+		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
 	}
 	if len(b.KeyInputs) > 0 {
 		// Already masked and redacted by the publisher; PersistKeyInputs is idempotent

@@ -52,3 +52,20 @@ func TestReplaceFile(t *testing.T) {
 		assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 	}
 }
+
+// A failed rename leaves no temp file behind in the target's directory.
+func TestWriteFileAtomic_FailedRenameRemovesTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "occupied")
+	require.NoError(t, os.MkdirAll(filepath.Join(path, "child"), 0o755))
+
+	require.Error(t, WriteFileAtomic(path, []byte("data"), 0o644))
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Equal(t, []string{"occupied"}, names)
+}

@@ -492,12 +492,12 @@ func TestLoadEventsDedupsOnHostSessionRef(t *testing.T) {
 		loadable("s2", "h1", "r1", 30),
 	}
 
-	first, err := LoadEvents(dir, events, InvocationStart{})
+	first, err := LoadEvents(t.Context(), dir, events, InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, LoadResult{Loaded: 3, ByKind: map[string]int{EventFileRead: 3}}, first,
 		"r1 under two sessions is two events")
 
-	second, err := LoadEvents(dir, events, InvocationStart{})
+	second, err := LoadEvents(t.Context(), dir, events, InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, LoadResult{Deduped: 3, ByKind: map[string]int{}}, second,
 		"a dedup run reports no kinds: the breakdown counts what was written")
@@ -512,7 +512,7 @@ func TestLoadEventsDedupsOnHostSessionRef(t *testing.T) {
 // session has to carry it on the session record and not only on its events.
 func TestLoadEventsRecordsTheHostOnTheInvocationStart(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
+	_, err := LoadEvents(t.Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
@@ -549,7 +549,7 @@ func TestSummaryKeepsTheInvocationApartFromTheHostSession(t *testing.T) {
 // that is the pair today's rules would be checked against, not what it began with.
 func TestSummarizeReadsTheNewestModelAndHostVersionPair(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadEvents(dir, []LoadEvent{
+	_, err := LoadEvents(t.Context(), dir, []LoadEvent{
 		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r1", AtMs: 10, Agent: Agent{Model: "claude-opus-5", HostVersion: "2.1.260"}}},
 		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r2", AtMs: 20, Agent: Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}}},
 	}, InvocationStart{})
@@ -567,7 +567,7 @@ func TestSummarizeReadsTheNewestModelAndHostVersionPair(t *testing.T) {
 // not "no model".
 func TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
+	_, err := LoadEvents(t.Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
@@ -581,7 +581,7 @@ func TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne(t *testing.T) {
 // transcript is a month-old audit, and the doctor check ages against that.
 func TestNewestEventMsReadsTheHostTimestamp(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadEvents(dir, []LoadEvent{
+	_, err := LoadEvents(t.Context(), dir, []LoadEvent{
 		loadable("s1", "h1", "r1", 10),
 		loadable("s1", "h1", "r2", 900),
 	}, InvocationStart{})

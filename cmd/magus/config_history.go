@@ -96,12 +96,11 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		return nil
 	}
 
-	var hist forecast.History
-	if err := hist.Load(ctx, hf.History); err != nil {
-		return err
-	}
-	hist.RecordRun(forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
-	if err := hist.Save(ctx, hf.History); err != nil {
+	err := forecast.UpdateHistory(ctx, hf.History, func(h *forecast.History) error {
+		h.RecordRun(forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "config history run recorded",
@@ -143,11 +142,9 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		return errors.New("magus config history import: pass at least one history file")
 	}
 
-	var hist forecast.History
-	if err := hist.Load(ctx, imf.History); err != nil {
-		return err
-	}
-	files := 0
+	// The inputs are read before the lock is taken, so decoding megabytes of shard
+	// history never holds up another writer of the shared file.
+	var loaded []forecast.History
 	for _, p := range inputs {
 		matches, err := filepath.Glob(p)
 		if err != nil {
@@ -161,16 +158,23 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 			if err := in.Load(ctx, m); err != nil {
 				return fmt.Errorf("config history import: load %q: %w", m, err)
 			}
-			hist.Merge(&in)
-			files++
+			loaded = append(loaded, in)
 		}
 	}
-	if err := hist.Save(ctx, imf.History); err != nil {
+	var projects int
+	err := forecast.UpdateHistory(ctx, imf.History, func(h *forecast.History) error {
+		for i := range loaded {
+			h.Merge(&loaded[i])
+		}
+		projects = len(h.Projects)
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "config history import complete",
-		slog.Int("files", files),
-		slog.Int("projects", len(hist.Projects)),
+		slog.Int("files", len(loaded)),
+		slog.Int("projects", projects),
 		slog.String("history_path", imf.History))
 	return nil
 }

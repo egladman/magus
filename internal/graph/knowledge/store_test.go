@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -585,4 +586,59 @@ func TestShardKeysRefusesAForeignSchema(t *testing.T) {
 func TestReadStoreExportWithoutAStore(t *testing.T) {
 	_, err := ReadStoreExport(t.TempDir())
 	assert.ErrorIs(t, err, ErrNoStore)
+}
+
+// gatedRemote parks the first PutShard until released, which stops its Sync after the
+// shard file is written and before the manifest is.
+type gatedRemote struct {
+	*fakeRemote
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func (g *gatedRemote) PutShard(ctx context.Context, key string, r io.Reader) error {
+	g.once.Do(func() {
+		close(g.entered)
+		<-g.release
+	})
+	return g.fakeRemote.PutShard(ctx, key, r)
+}
+
+// Two processes Sync one store with different content for a shard. Unlocked, the
+// slower one's manifest lands over the faster one's shard file: the manifest names fp2
+// while the file holds fp1, and since later builds compare fingerprints against the
+// manifest, the stale file is never rewritten.
+func TestStoreConcurrentSyncsLeaveManifestAndShardsAgreeing(t *testing.T) {
+	cacheDir := t.TempDir()
+	shard := func(label string) []Shard {
+		return []Shard{{Name: "project:x", Nodes: []types.KnowledgeNode{{ID: "project:x", Label: label}}}}
+	}
+	remote := &gatedRemote{fakeRemote: newFakeRemote(), entered: make(chan struct{}), release: make(chan struct{})}
+
+	slow := make(chan error, 1)
+	go func() {
+		_, err := NewStore(cacheDir, false, 0, remote, nil).Sync(t.Context(), shard("v2"), map[string]string{"project:x": "fp2"}, false)
+		slow <- err
+	}()
+	<-remote.entered
+
+	fast := make(chan error, 1)
+	go func() {
+		_, err := NewStore(cacheDir, false, 0, nil, nil).Sync(t.Context(), shard("v1"), map[string]string{"project:x": "fp1"}, false)
+		fast <- err
+	}()
+	// Unlocked, the second Sync finishes inside this window; locked, it waits for the first.
+	select {
+	case err := <-fast:
+		fast <- err
+	case <-time.After(500 * time.Millisecond):
+	}
+	close(remote.release)
+	require.NoError(t, <-slow)
+	require.NoError(t, <-fast)
+
+	man := readManifest(t, cacheDir)
+	sf, err := NewStore(cacheDir, false, 0, nil, nil).readShard("project:x")
+	require.NoError(t, err)
+	assert.Equal(t, man.Shards["project:x"].Fingerprint, sf.Fingerprint, "the manifest names a shard the file does not hold")
 }

@@ -28,9 +28,11 @@
 package changeset
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -601,14 +603,30 @@ func (s *Store) loadSeen() []string {
 	return out
 }
 
-// saveSeen persists the watermark, best-effort for the same reason saveViewed is.
+// saveSeen adds ids to the persisted watermark, best-effort for the same reason saveViewed
+// is, though a failure is logged.
+//
+// A union with the file as it stands, under its lock, and never a replacement: saves run
+// outside s.mu, and the server and a check-review job each hold a Store over this file, so
+// a set computed earlier can land last. A replacement would then mark read threads new
+// again; a union cannot remove one.
 func (s *Store) saveSeen(ids []string) {
 	if s.seenPath == "" {
 		return
 	}
-	b, err := json.Marshal(ids)
+	err := file.Doc[[]string]{Path: s.seenPath}.Update(context.Background(), func(stored *[]string) error {
+		n := len(*stored)
+		for _, id := range ids {
+			if !slices.Contains(*stored, id) {
+				*stored = append(*stored, id)
+			}
+		}
+		if len(*stored) == n {
+			return file.SkipWrite
+		}
+		return nil
+	})
 	if err != nil {
-		return
+		slog.Warn("magus: could not persist the review's seen threads", slog.String("err", err.Error()))
 	}
-	_ = file.WriteFileAtomic(s.seenPath, b, 0o644)
 }

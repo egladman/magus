@@ -29,8 +29,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
@@ -67,7 +65,7 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // that merge done under a single acquisition, and it is what a field-at-a-time writer (the
 // client MCP tool's magus\job\put) has to use.
 //
-// READS take neither. write replaces the file by rename, so a reader either sees the
+// READS take neither. Every write replaces the file by rename, so a reader either sees the
 // whole previous ledger or the whole next one; blocking List behind a writer in another
 // process would buy nothing and would let a wedged writer stall the console.
 type Store struct {
@@ -520,11 +518,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 	actor := s.Actor()
 	var stored types.Job
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
 		var prev types.Job
 		if i >= 0 {
@@ -608,9 +602,6 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
 			f.Jobs = append(f.Jobs, row)
 		}
-		if werr := s.write(f); werr != nil {
-			return werr
-		}
 		stored = row.Clone()
 		return nil
 	})
@@ -669,18 +660,15 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 	defer s.mu.Unlock()
 
 	var dropped int
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		if len(f.Jobs) > 0 {
-			if err := s.archive(f); err != nil {
+			if err := s.archive(*f); err != nil {
 				return err
 			}
 		}
 		dropped = len(f.Jobs)
-		return s.write(jobsFile{Schema: f.Schema})
+		*f = jobsFile{Schema: f.Schema}
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -853,107 +841,67 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 // is from the reader's side.
 const maxDigestBytes = 32 << 20
 
+// doc is the ledger file. Every rewrite goes through its Update, under the OS file lock
+// beside jobs.json, so a read-modify-write cannot interleave with one from another magus
+// process. The lock wait is BOUNDED, where the workspace project locks (magus/lock.go)
+// wait forever with a heartbeat: their holder is a build that may run for hours, and a
+// ledger write is a small file rewrite, so a longer wait means a stuck holder.
+func (s *Store) doc() file.Doc[jobsFile] {
+	return file.Doc[jobsFile]{Path: s.path, Decode: s.decode, Encode: encodeJobs}
+}
+
+// update runs fn over the ledger as it stands under the file lock and writes what fn
+// leaves. fn returning an error, file.SkipWrite included, writes nothing.
+func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.doc().Update(ctx, fn)
+}
+
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet for this repository.
+func (s *Store) read() (jobsFile, error) {
+	if s.err != nil {
+		return jobsFile{}, s.err
+	}
+	return s.doc().Load()
+}
+
+// decode parses the ledger.
 //
 // A row newer than this magus is read like any other: the members it does not declare
 // ride in the row's Schema.Unknown and go back out on the next write, and authorizeRow and
 // jobOverlaps need only fields every version carries. A row requiring a feature this magus
 // lacks is read too, and only a write to it is refused (see readOnly).
-func (s *Store) read() (jobsFile, error) {
-	if s.err != nil {
-		return jobsFile{}, s.err
-	}
-	raw, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return jobsFile{}, nil
-	}
-	if err != nil {
-		return jobsFile{}, err
-	}
-	var f jobsFile
-	if err := json.Unmarshal(raw, &f); err != nil {
-		return jobsFile{}, err
+func (s *Store) decode(raw []byte, f *jobsFile) error {
+	if err := json.Unmarshal(raw, f); err != nil {
+		return err
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return jobsFile{}, fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks; update magus",
+		return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks; update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	if err := foldStoredNames(f.Jobs); err != nil {
-		return jobsFile{}, fmt.Errorf("job: %s: %w", s.path, err)
+		return fmt.Errorf("job: %s: %w", s.path, err)
 	}
-	return f, nil
+	return nil
 }
 
-// withFileLock runs fn while this process holds the ledger's exclusive OS file lock, so a
-// read-modify-write cannot interleave with one from another magus process.
-//
-// The same idiom the workspace project locks use (magus/lock.go): gofrs/flock, TryLock
-// first and TryLockContext to poll while contended. An OS lock rather than a lockfile
-// because the kernel drops it when the holder exits, so a killed worker never leaves the
-// ledger wedged. Advisory, like that one: it serializes the code that takes it and
-// nothing else, so a hand-edit of leases.json ignores it entirely.
-//
-// The wait is BOUNDED, which is where this parts company with the project locks. Those
-// wait forever with a heartbeat because the holder is a build that may legitimately run
-// for hours; a ledger write is a small file rewrite, so a wait past lockWait means the
-// holder is stuck rather than busy, and blocking a worker's registration on it forever
-// hides that. ctx shortens the wait and never lengthens it.
-func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
-	if s.err != nil {
-		return s.err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
-	fl := flock.New(s.path + lockSuffix)
-	got, err := fl.TryLock()
-	if err != nil {
-		return fmt.Errorf("job: lock %s: %w", fl.Path(), err)
-	}
-	if !got {
-		wait, cancel := context.WithTimeout(ctx, lockWait)
-		defer cancel()
-		if got, err = fl.TryLockContext(wait, lockRetryDelay); err != nil || !got {
-			// Whose deadline ended the wait decides which of two different problems the
-			// caller has, and blaming a stuck holder for their own cancellation would send
-			// them looking for a process that is working fine.
-			if ctx.Err() != nil {
-				return fmt.Errorf("job: the caller was cancelled while waiting for the lease ledger lock at %s,"+
-					" so this write was not applied: %w", fl.Path(), ctx.Err())
-			}
-			return fmt.Errorf("job: another process has held the lease ledger lock at %s for more than %s,"+
-				" so this write was not applied. Look for a stuck magus process with `magus status`, then retry;"+
-				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
-		}
-	}
-	defer func() { _ = fl.Unlock() }()
-	return fn()
-}
-
-// The file lock's shape. lockWait bounds one acquisition and lockRetryDelay is how often a
-// blocked one re-polls, matching the project locks' cadence in magus/lock.go.
-const (
-	lockSuffix     = ".lock"
-	lockWait       = 10 * time.Second
-	lockRetryDelay = 20 * time.Millisecond
-)
-
-// write replaces the file atomically, so a reader never sees a half-written job store.
-// Every row, touched this call or not, carries its Schema.Unknown back out, and the
-// file's stamp never drops below what it read.
-func (s *Store) write(f jobsFile) error {
+// encodeJobs serializes the ledger. Every row, touched this call or not, carries its
+// Schema.Unknown back out, and the file's stamp never drops below what it read.
+func encodeJobs(f jobsFile) ([]byte, error) {
 	f.Version = max(f.Version, types.JobSchemaVersion)
 	rows, err := mirrorLegacyGoals(f.Jobs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f.Jobs = rows
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
+	return append(raw, '\n'), nil
 }
 
 // mirrorLegacyGoals writes each row's goals under their old name too, on a copy.
@@ -1002,11 +950,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 	defer s.mu.Unlock()
 
 	var dropped types.Job
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(row types.Job) bool { return row.ID == id })
 		if i < 0 {
 			return fmt.Errorf("job: there is no job %q", id)
@@ -1020,11 +964,11 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" Delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if err := s.archive(f); err != nil {
+		if err := s.archive(*f); err != nil {
 			return err
 		}
 		f.Jobs = slices.Delete(f.Jobs, i, i+1)
-		return s.write(f)
+		return nil
 	})
 	if err != nil {
 		return types.Job{}, err

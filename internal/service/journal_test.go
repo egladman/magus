@@ -27,6 +27,25 @@ func TestJournalRecordForget(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "forget removed the file")
 }
 
+// A record is replaced by rename, never rewritten in place. Written in place, a crash
+// mid-write leaves a torn record that Sweep deletes as corrupt without reaping its
+// service, the one case the journal exists for.
+func TestJournalRecordReplacesByRename(t *testing.T) {
+	j, err := NewJournal(t.TempDir())
+	require.NoError(t, err)
+	j.record("svc", spells.Command{Bin: "true"})
+	before, err := os.Stat(j.path("svc"))
+	require.NoError(t, err)
+
+	j.record("svc", spells.Command{Bin: "false"})
+	after, err := os.Stat(j.path("svc"))
+	require.NoError(t, err)
+	assert.False(t, os.SameFile(before, after), "the record was rewritten in place")
+	e, ok := readEntry(j.path("svc"))
+	require.True(t, ok)
+	assert.Equal(t, journalEntry{Key: "svc", Stop: spells.Command{Bin: "false"}}, e)
+}
+
 // TestJournalRecordsAnyKey pins that a real registry key, which carries the workspace
 // root and a NUL (identity.InstanceKey), is recorded: as a file name it was invalid,
 // and the ignored write error left crash reaping with nothing to replay.

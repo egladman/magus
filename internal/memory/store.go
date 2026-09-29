@@ -17,6 +17,7 @@
 package memory
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -105,6 +106,10 @@ type Record struct {
 	Updated    int64      `json:"updated" yaml:"updated,omitempty"`
 	Excerpt    string     `json:"excerpt,omitempty" yaml:"excerpt,omitempty"`
 	Body       string     `json:"body,omitempty" yaml:"-"`
+	// Unknown holds every frontmatter key this build does not declare, written back
+	// unchanged, so an older magus updating an entry keeps what a newer one stored. The
+	// YAML counterpart of types.Schema.Unknown, which is JSON-only.
+	Unknown map[string]yaml.Node `json:"-" yaml:",inline"`
 }
 
 // Issue is one actionable problem found by Verify. Severity says whether a human has
@@ -437,6 +442,26 @@ func Update(root string, r Record, opts UpdateOptions) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	var stored Record
+	err = withStoreLock(dir, func() error {
+		var err error
+		stored, err = update(dir, r, fields, opts)
+		return err
+	})
+	return stored, err
+}
+
+// withStoreLock serializes the store's read-modify-writes across processes: every
+// worktree and clone of the repository shares one memory, so two updates of one entry
+// would otherwise merge into the same stale base and the second would drop the first's
+// field. One lock for the whole store, since writes are rare and a lock file per entry
+// would sit beside every record. The callers take no ctx; the wait is bounded instead.
+func withStoreLock(dir string, fn func() error) error {
+	return file.WithLock(context.Background(), filepath.Join(dir, ".records.lock"), file.LockWait, fn)
+}
+
+// update is Update's read-merge-write, run under withStoreLock.
+func update(dir string, r Record, fields map[string]bool, opts UpdateOptions) (Record, error) {
 	rdir := filepath.Join(dir, recordsSubdir)
 	path := filepath.Join(rdir, r.Name+".md")
 	prev, exists, err := mergeBase(path, fields)
@@ -566,25 +591,30 @@ func Delete(root, name string) (Archived, error) {
 	if !nameRE.MatchString(name) {
 		return Archived{}, invalidf("memory: invalid name %q", name)
 	}
-	rdir := filepath.Join(dir, recordsSubdir)
-	path := filepath.Join(rdir, name+".md")
-	rec, err := readRecordFile(path)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		return Archived{}, notFoundError{name: name, near: nearNames(rdir, name)}
-	case err != nil:
-		rec = Record{Name: name}
-	}
-	adir := filepath.Join(dir, archiveSubdir)
-	if err := os.MkdirAll(adir, 0o755); err != nil {
-		return Archived{}, fmt.Errorf("memory: delete %q: %w", name, err)
-	}
-	// One file per delete, so a name deleted in two of its lifetimes keeps both copies.
-	dst := filepath.Join(adir, name+"."+strconv.FormatInt(time.Now().UnixNano(), 10)+".md")
-	if err := os.Rename(path, dst); err != nil {
-		return Archived{}, fmt.Errorf("memory: delete %q: %w", name, err)
-	}
-	return Archived{Record: rec, Path: dst, Origin: path}, nil
+	var out Archived
+	err = withStoreLock(dir, func() error {
+		rdir := filepath.Join(dir, recordsSubdir)
+		path := filepath.Join(rdir, name+".md")
+		rec, err := readRecordFile(path)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			return notFoundError{name: name, near: nearNames(rdir, name)}
+		case err != nil:
+			rec = Record{Name: name}
+		}
+		adir := filepath.Join(dir, archiveSubdir)
+		if err := os.MkdirAll(adir, 0o755); err != nil {
+			return fmt.Errorf("memory: delete %q: %w", name, err)
+		}
+		// One file per delete, so a name deleted in two of its lifetimes keeps both copies.
+		dst := filepath.Join(adir, name+"."+strconv.FormatInt(time.Now().UnixNano(), 10)+".md")
+		if err := os.Rename(path, dst); err != nil {
+			return fmt.Errorf("memory: delete %q: %w", name, err)
+		}
+		out = Archived{Record: rec, Path: dst, Origin: path}
+		return nil
+	})
+	return out, err
 }
 
 // notFoundError matches os.ErrNotExist, so each door maps it to its own not-found answer.
@@ -694,14 +724,8 @@ func marshalRecord(r Record) []byte {
 	return []byte(b.String())
 }
 
-// writeAtomic writes data to path, atomically and durably.
-//
-// It delegates rather than reimplementing the temp-file-and-rename dance, because the
-// obvious hand-rolled version gets two things wrong and both are silent. It does not fsync
-// before the rename, so a crash can make the rename durable while the bytes are not,
-// leaving a truncated file behind a comment promising that cannot happen. And
-// os.CreateTemp creates 0600, which the rename carries through, so entries end up
-// owner-only when the surrounding files are not.
+// writeAtomic replaces path with data by rename, the bytes flushed first; see
+// file.WriteFileAtomic for what a crash can and cannot lose.
 func writeAtomic(path string, data []byte) error {
 	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("memory: write %s: %w", filepath.Base(path), err)

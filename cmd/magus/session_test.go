@@ -286,7 +286,7 @@ func loadStream(t *testing.T, root string, lines ...string) (string, error) {
 	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600))
 
 	var err error
-	out := captureStdout(t, func() { err = sessionLoad(root, []string{"--file", path}) })
+	out := captureStdout(t, func() { err = sessionLoad(t.Context(), root, []string{"--file", path}) })
 	return out, err
 }
 

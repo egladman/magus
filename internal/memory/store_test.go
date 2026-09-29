@@ -1,10 +1,13 @@
 package memory
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -578,4 +581,56 @@ func mustDir(t *testing.T, root string) string {
 	dir, err := Dir(root)
 	require.NoError(t, err)
 	return dir
+}
+
+// An entry a newer magus wrote carries frontmatter this build does not declare. Updating
+// it here must write those keys back unchanged: the store is shared by binaries of many
+// ages, and a key dropped by the older one is gone for the newer one too.
+func TestMemoryUpdateKeepsFrontmatterItDoesNotKnow(t *testing.T) {
+	root := testRoot(t)
+	path := filepath.Join(mustDir(t, root), recordsSubdir, "newer.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("---\nname: newer\ntype: pointer\nrefs:\n    - kind: node\n      target: project:magus\n"+
+		"confidence: high\nreviewed: 2026-09-01\n---\n"), 0o644))
+
+	_, err := upsert(root, Record{Name: "newer", Status: "done"})
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "status: done\n")
+	assert.Contains(t, string(raw), "confidence: high\n")
+	assert.Contains(t, string(raw), "reviewed: 2026-09-01\n", "the value is written back as stored, not re-typed")
+}
+
+// Updates take the store's cross-process lock, so two that overlap merge in turn rather
+// than into one stale base, where the second would drop the field the first wrote.
+func TestUpdateWaitsForTheStoreLock(t *testing.T) {
+	root := testRoot(t)
+	dir := mustDir(t, root)
+	held := make(chan struct{})
+	release := make(chan struct{})
+	holder := make(chan error, 1)
+	go func() {
+		holder <- file.WithLock(context.Background(), filepath.Join(dir, ".records.lock"), time.Second, func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := upsert(root, Record{Name: "locked", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("Update finished while another process held the store lock (err %v)", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-holder)
+	require.NoError(t, <-done)
 }

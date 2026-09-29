@@ -232,10 +232,10 @@ func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
 // plant writes rows exactly as given, timestamps included, which no write door allows.
 func plant(t *testing.T, s *Store, rows ...types.Job) {
 	t.Helper()
-	path, err := s.Path()
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, s.write(jobsFile{Jobs: rows}))
+	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
+		*f = jobsFile{Jobs: rows}
+		return nil
+	}))
 }
 
 // sweepStore is a temp store whose sweep runs at now with a fixed jobs.stale_after, its
