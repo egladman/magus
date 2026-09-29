@@ -186,7 +186,8 @@ export object Flow {
     }
 
     // zone stacks its members into one band, bands in declaration order, unzoned nodes
-    // last unless one alone feeds a band or its rank lies outside every zone, where it
+    // last unless one alone feeds a band, its neighbours all lie in two adjacent bands,
+    // where it takes a row between them, or its rank lies outside every zone, where it
     // lines up with its neighbours across the figure. A node belongs to at most one zone or
     // boundary.
     mut fun zone(label: str, members: [str]) > mut Flow {
@@ -306,7 +307,10 @@ object Plan {
     bandCount: int = 0,
     maxRank: int = 0,
     rankOf: mut [int],
+    // Bands 0..zones-1 are the zones, the next the unzoned rest, and after it one per gap
+    // between neighbouring zones. stackOf is each band's place in the stack, top first.
     bandOf: mut [int],
+    stackOf: mut [int],
     // Per declared node: a member of the band it sits in, so its zone box encloses it.
     inZone: mut [bool],
     orders: mut [mut [int]],
@@ -824,8 +828,9 @@ fun constraintFindings(f: Flow, pl: Plan) > [str] {
             if (za != null and zb != null and za! > zb!) {
                 errs.append("{named} puts {quote(ids[k - 1])} first, but zone {quote(f.zones[za!].label)} stacks after zone {quote(f.zones[zb!].label)}; reorder the zones or drop the order");
             }
-            // An unzoned node stacks after every zone, save a band's sole parent.
-            if ((za == null or zb == null) and pl.bandOf[a] > pl.bandOf[b]) {
+            // An unzoned node stacks after every zone, save a band's sole parent and a node
+            // between two bands.
+            if ((za == null or zb == null) and pl.stackOf[pl.bandOf[a]] > pl.stackOf[pl.bandOf[b]]) {
                 errs.append("{named} puts {quote(ids[k - 1])} first, but it stacks in a later band than {quote(ids[k])}; put both in one zone or drop the order");
             }
             k = k + 1;
@@ -1036,6 +1041,43 @@ fun plan(f: Flow) > Plan {
         if (shared and sole >= 0 and bandOf[sole] == nz) { bandOf[sole] = z; }
         z = z + 1;
     }
+    var gapCount = 0;
+    if (nz > 1) { gapCount = nz - 1; }
+    final stackOf: mut [int] = mut [<int>];
+    var sb = 0;
+    while (sb < nz + 1 + gapCount) {
+        if (sb < nz) { stackOf.append(2 * sb); }
+        if (sb == nz) { stackOf.append(nz + gapCount); }
+        if (sb > nz) { stackOf.append(2 * (sb - nz - 1) + 1); }
+        sb = sb + 1;
+    }
+    // An unzoned node joining two adjacent bands is what both sides share, so it takes a row
+    // between them. Neighbours in bands further apart, in three bands, or in the unzoned
+    // rest leave it after the last band: no one gap sits beside them all. Read against the
+    // bands before any move, so no move depends on another.
+    final nearLo: mut [int] = mut [<int>];
+    final nearHi: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        nearLo.append(nz);
+        nearHi.append(0 - 1);
+        i = i + 1;
+    }
+    li = 0;
+    while (li < ne) {
+        final a = fromItem[li];
+        final b = toItem[li];
+        if (bandOf[b] < nearLo[a]) { nearLo[a] = bandOf[b]; }
+        if (bandOf[b] > nearHi[a]) { nearHi[a] = bandOf[b]; }
+        if (bandOf[a] < nearLo[b]) { nearLo[b] = bandOf[a]; }
+        if (bandOf[a] > nearHi[b]) { nearHi[b] = bandOf[a]; }
+        li = li + 1;
+    }
+    i = 0;
+    while (i < nn) {
+        if (bandOf[i] == nz and nearHi[i] == nearLo[i] + 1 and nearHi[i] < nz) { bandOf[i] = nz + 1 + nearLo[i]; }
+        i = i + 1;
+    }
 
     // Longest path from the roots, in topological order. A back edge closes a cycle over a
     // forward path, so leaving it out orders nothing differently.
@@ -1156,7 +1198,7 @@ fun plan(f: Flow) > Plan {
     // index, so the order is total and never leans on sort stability. An item with no
     // neighbors on the swept side sinks to the end of its band.
     final before = fun (x: int, y: int) > bool {
-        if (bandOf[x] != bandOf[y]) { return bandOf[x] < bandOf[y]; }
+        if (bandOf[x] != bandOf[y]) { return stackOf[bandOf[x]] < stackOf[bandOf[y]]; }
         final xLoose = scoreCnt[x] == 0;
         final yLoose = scoreCnt[y] == 0;
         if (xLoose != yLoose) { return yLoose; }
@@ -1225,10 +1267,11 @@ fun plan(f: Flow) > Plan {
 
     return Plan{
         nodeCount = nn,
-        bandCount = nz + 1,
+        bandCount = nz + 1 + gapCount,
         maxRank = maxRank,
         rankOf = rankOf,
         bandOf = bandOf,
+        stackOf = stackOf,
         inZone = inZone,
         orders = orders,
         fromItem = fromItem,
@@ -1671,8 +1714,8 @@ fun place(f: Flow, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             while (r <= pl.rankOf[s]) {
                 if (free[r]) { owned = false; }
                 foreach (x in pl.orders[r]) {
-                    if (side < 0 and pl.bandOf[x] < band) { owned = false; }
-                    if (side > 0 and pl.bandOf[x] > band) { owned = false; }
+                    if (side < 0 and pl.stackOf[pl.bandOf[x]] < pl.stackOf[band]) { owned = false; }
+                    if (side > 0 and pl.stackOf[pl.bandOf[x]] > pl.stackOf[band]) { owned = false; }
                 }
                 r = r + 1;
             }
@@ -1800,7 +1843,7 @@ fun place(f: Flow, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     }
     alignRanks(pl, pos: pos, pc: pc, free: free, phaseTwo: false);
 
-    // Bands stack in declaration order, each as tall as its aligned content: a zone's label
+    // Bands stack in stackOf order, each as tall as its aligned content: a zone's label
     // pad, the lanes of the back edges it owns, its content, its bottom pad, a row gap.
     final bandLo = zeros(pl.bandCount);
     final bandHi = zeros(pl.bandCount);
@@ -1825,21 +1868,25 @@ fun place(f: Flow, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     final bandOffset = zeros(pl.bandCount);
     final boxLo = zeros(pl.bandCount);
     final boxHi = zeros(pl.bandCount);
-    var cursor = crossStart;
+    final stacked = zeros(pl.bandCount);
     b = 0;
     while (b < pl.bandCount) {
-        if (hasBand[b]) {
-            final zoned = b < nz;
-            boxLo[b] = cursor;
+        stacked[pl.stackOf[b]] = b;
+        b = b + 1;
+    }
+    var cursor = crossStart;
+    foreach (sk in stacked) {
+        if (hasBand[sk]) {
+            final zoned = sk < nz;
+            boxLo[sk] = cursor;
             if (zoned) { cursor = cursor + crossLabelPad; }
-            cursor = cursor + padBefore[b];
-            bandOffset[b] = cursor - bandLo[b];
-            cursor = cursor + bandHi[b] - bandLo[b] + padAfter[b];
+            cursor = cursor + padBefore[sk];
+            bandOffset[sk] = cursor - bandLo[sk];
+            cursor = cursor + bandHi[sk] - bandLo[sk] + padAfter[sk];
             if (zoned) { cursor = cursor + ZonePad; }
-            boxHi[b] = cursor;
+            boxHi[sk] = cursor;
             cursor = cursor + LayerRowGap;
         }
-        b = b + 1;
     }
     item = 0;
     while (item < items) {
@@ -3037,6 +3084,32 @@ test "a band's sole parent sits beside it" {
     std\assert(u.y >= z.y and u.y + u.h <= z.y + z.h, message: "u sits within the band's rows");
     std\assert(u.x + u.w <= z.x, message: "and outside its box");
     std\assert(nodeOf(d, id: "v").y >= z.y + z.h, message: "an unrelated node still sits after the band");
+}
+
+test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap row between them" {
+    final d = fig()
+        .node("p").node("l").node("s").node("k").node("r").node("v")
+        .edge("p", dst: "l").edge("s", dst: "p").edge("k", dst: "s").edge("s", dst: "r")
+        .zone("top", members: ["p", "l"]).zone("bottom", members: ["k", "r"])
+        .diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
+    final s = nodeOf(d, id: "s");
+    final top = d.zones[0];
+    final bottom = d.zones[1];
+    std\assert(s.y >= top.y + top.h and s.y + s.h <= bottom.y, message: "s sits between the bands at y {s.y}");
+    std\assert(nodeOf(d, id: "k").x < s.x and s.x < nodeOf(d, id: "p").x, message: "and keeps its rank");
+    std\assert(nodeOf(d, id: "v").y >= bottom.y + bottom.h, message: "a node with no edges still sits after the last band");
+
+    final apart = fig()
+        .node("x0").node("x1").node("x2").node("y0").node("y1").node("z2").node("s")
+        .edge("x0", dst: "x1").edge("x1", dst: "x2").edge("y0", dst: "y1").edge("x0", dst: "s").edge("s", dst: "z2").edge("y1", dst: "z2")
+        .zone("one", members: ["x0", "x1", "x2"]).zone("two", members: ["y0", "y1"]).zone("three", members: ["z2"])
+        .diagram() catch Diagram{};
+    std\assert(apart.zones.len() == 3, message: "laid out");
+    final far = nodeOf(apart, id: "s");
+    foreach (z in apart.zones) {
+        std\assert(far.y >= z.y + z.h, message: "bands that are not adjacent leave s after the last band");
+    }
 }
 
 fun pair() > Observed {
