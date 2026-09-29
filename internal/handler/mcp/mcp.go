@@ -199,7 +199,6 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&statusTool{opts: opts},
 		&affectedPlanTool{opts: opts, next: next},
 		&configGetTool{cfg: opts.Config},
-		&memoryTool{opts: opts},
 		&queryTool{graph: opts.Magus, next: next},
 		&outputTool{reader: opts.Magus},
 		&explainTool{graph: opts.Magus, next: next},

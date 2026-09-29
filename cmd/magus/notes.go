@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/memory"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -50,15 +49,13 @@ func notesCmd(ctx context.Context, root string, args []string) error {
 		return notesVerify(ctx, root, args[1:])
 	case "capture":
 		return notesCapture(ctx, root, args[1:])
-	case "promote":
-		return notesPromote(ctx, root, args[1:])
 	case "put":
 		// Named rather than left to the generic unknown-subcommand error, because the
 		// reason it is absent is the whole point of the store and is worth stating at the
 		// moment someone reaches for it.
 		return usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
 	default:
-		return usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, capture, or promote)", args[0])
+		return usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
 	}
 }
 
@@ -75,7 +72,6 @@ func notesUsage() {
 	fmt.Fprintln(os.Stderr, "  edit     open one note in $VISUAL or $EDITOR (creates it if absent)")
 	fmt.Fprintln(os.Stderr, "  verify   check malformed notes and anchors that no longer resolve")
 	fmt.Fprintln(os.Stderr, "  capture  keep the review conversation, yours and the host's, as a note")
-	fmt.Fprintln(os.Stderr, "  promote  edit an agent-drafted memory record into a note of your own")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Set knowledge.notes.shared (in the repo, your team gets it) or knowledge.notes.private")
 	fmt.Fprintln(os.Stderr, "(anywhere, this machine only) in magus.yaml to enable a store. There is no `put`:")
@@ -178,7 +174,7 @@ var errUnreadableNote = errors.New("exists but could not be read")
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 	return fs.Bool("shared", false, "Only notes committed to this repository (your team has these)"),
-		fs.Bool("private", false, "Only your own notes (superseded: `magus memory` plus `notes promote` is the drafting tier now)")
+		fs.Bool("private", false, "Only your own notes")
 }
 
 func notesScope(shared, private bool) (string, error) {
@@ -533,7 +529,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	}
 	if changed != 0 {
 		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s: this note now reads as reviewed against the code as it is today.\n",
-			changed, pluralSuffix(changed, "", "s"))
+			changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -712,7 +708,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		return fmt.Errorf("magus notes edit: wrote %s, but recording its anchors failed: %w", path, err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, pluralSuffix(changed, "", "s"))
+		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -798,10 +794,10 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 	}
 	if failures == 0 && dangling != 0 {
 		return fmt.Errorf("magus notes verify: %d dangling anchor%s; re-anchor the note or remove the anchor",
-			dangling, pluralSuffix(dangling, "", "s"))
+			dangling, plural(dangling, "", "s"))
 	}
 	if failures != 0 {
-		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, pluralSuffix(failures, "", "s"))
+		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, plural(failures, "", "s"))
 	}
 	return nil
 }
@@ -903,7 +899,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	// whose most useful line came from somebody else.
 	said := len(sess.Comments) + len(threads)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
-		said, pluralSuffix(said, "", "s"),
+		said, plural(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
 	if line := newRemarkLine(threads); line != "" {
 		fmt.Println(line)
@@ -935,7 +931,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes capture: captured the thread, but recording its anchors failed: %w", err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, pluralSuffix(changed, "", "s"))
+		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
 	}
 	return nil
 }
@@ -1205,7 +1201,7 @@ func newRemarkLine(threads []types.ReviewThread) string {
 		return ""
 	}
 	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `"+hint.Diff.String()+"` marks them new.",
-		fresh, pluralSuffix(fresh, "", "s"))
+		fresh, plural(fresh, "", "s"))
 }
 
 // tagList collects a repeatable --tag flag.
@@ -1222,196 +1218,3 @@ func (t *tagList) Set(v string) error {
 	return nil
 }
 
-// --- promote -----------------------------------------------------------------------------
-//
-// Promotion is the second write path, and it is the one that answers why this store is empty.
-//
-// A note costs a person a deliberate act of composition, and the evidence is that they do not
-// pay it: across 921 GitHub projects carrying architecture decision records, about half of
-// those that adopt the shape at all end up with between one and five entries. This repository
-// has one. The same knowledge (what bit us, what was rejected, what is invisible in the
-// resulting code) accumulated by the hundreds of files in an agent-written store instead.
-// That is not a demand failure; it is capture cost landing on the party that collects none of
-// the benefit, which Grudin published in 1996 and nothing since has repealed.
-//
-// So the expensive step moves. An agent drafts into memory, which is cheap and already
-// happens; a person promotes, and the promotion is the signature. What makes it a signature
-// rather than a rubber stamp is that it goes through $EDITOR and REFUSES an unmodified body:
-// promoting without changing a word means nobody read it, and a store of unread claims signed
-// by a person is worse than an empty one.
-//
-// Anchors come from the record's own node refs rather than being asked for again. A memory
-// record already points into the graph, and making the promoter restate that is the same
-// friction this path exists to remove.
-
-// notesPromote turns an agent-drafted memory record into a human-authored note.
-func notesPromote(ctx context.Context, root string, args []string) error {
-	var name string
-	pos, err := cmdParse("notes promote", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&name, "name", "", "Note name (defaults to the record's name)")
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus notes promote <record> [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Open an agent-drafted memory record in $VISUAL (else $EDITOR) and write it to the")
-			fmt.Fprintln(os.Stderr, "shared notes store under your own name. Anchors come from the record's node refs.")
-			fmt.Fprintln(os.Stderr, "A body you did not change is refused: promotion is an act of reading.")
-			fs.PrintDefaults()
-		}
-	})
-	if err != nil {
-		return err
-	}
-	if len(pos) != 1 {
-		return usagef("magus notes promote: requires exactly one record name")
-	}
-	rec, err := memory.Get(root, pos[0])
-	if err != nil {
-		return fmt.Errorf("magus notes promote: %w", err)
-	}
-	anchors, err := anchorsFromRefs(rec)
-	if err != nil {
-		return err
-	}
-	// Shared, always. A promotion whose destination was machine-local would be a signature
-	// nobody can read; the point is that git records who vouched for this.
-	stores, err := notesStores(root, knowledge.ScopeShared)
-	if err != nil {
-		return err
-	}
-	target := stores[0]
-
-	noteName := firstNonEmpty(name, rec.Name)
-	if _, gerr := store.Get(target.dir, noteName); gerr == nil {
-		return fmt.Errorf("magus notes promote: note %q already exists; pass --name to promote alongside it", noteName)
-	}
-	draft := store.Note{
-		Name:    noteName,
-		Title:   firstNonEmpty(rec.Status, strings.ReplaceAll(noteName, "-", " ")),
-		Anchors: anchors,
-		Body:    promoteBody(rec),
-	}
-	if err := store.Save(target.dir, draft); err != nil {
-		return fmt.Errorf("magus notes promote: %w", err)
-	}
-	path, err := store.Path(target.dir, noteName)
-	if err != nil {
-		return fmt.Errorf("magus notes promote: %w", err)
-	}
-	before, _ := os.ReadFile(path)
-
-	if err := openInEditor(path); err != nil {
-		// The draft exists only because this command wrote it a moment ago, so an editor
-		// that never started leaves nothing behind rather than a half-promoted note.
-		_ = os.Remove(path)
-		return fmt.Errorf("magus notes promote: %w", err)
-	}
-	after, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("magus notes promote: reading back %s: %w", path, err)
-	}
-	// The refusal, and the whole reason this is a promotion rather than a copy. An unmodified
-	// body is an agent's prose with a person's name on the commit, which is exactly the
-	// unattributable author this store exists to keep out.
-	if bytes.Equal(before, after) {
-		_ = os.Remove(path)
-		return fmt.Errorf("magus notes promote: nothing was changed, so nothing was promoted.\n"+
-			"  A promotion is you vouching for this prose, and an unedited draft is an agent's claim with your name on the commit.\n"+
-			"  Read it against the code, fix what is wrong or unclear, and run this again. The record is still in memory as %q", rec.Name)
-	}
-	if _, err := store.Get(target.dir, noteName); err != nil {
-		return fmt.Errorf("magus notes promote: %s no longer reads as a note after editing: %w", path, err)
-	}
-	fmt.Printf("Promoted %s to %s [shared]. Commit it to put your name on it.\n",
-		rec.Name, relativeToRoot(root, path))
-
-	res, err := notesResolver(ctx, root)
-	if err != nil {
-		return fmt.Errorf("magus notes promote: wrote %s, but its anchors could not be fingerprinted: %w", path, err)
-	}
-	changed, err := store.RecordDigests(ctx, target.dir, noteName, notesRevision(ctx, root), res.ForScope(string(target.scope)))
-	if err != nil {
-		return fmt.Errorf("magus notes promote: wrote %s, but recording its anchors failed: %w", path, err)
-	}
-	if changed != 0 {
-		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, pluralSuffix(changed, "", "s"))
-	}
-	return nil
-}
-
-// anchorsFromRefs derives a note's anchors from the record's node refs.
-//
-// Node refs only. A query, a command and an output ref are re-runnable strings rather than
-// graph entities, so they carry into the body as evidence and cannot anchor anything. A
-// record with none of them is refused rather than given an anchor of convenience: an anchor
-// the note is not really about passes verify forever while pointing at the wrong thing.
-func anchorsFromRefs(rec memory.Record) ([]store.Anchor, error) {
-	var anchors []store.Anchor
-	for _, ref := range rec.Refs {
-		if ref.Kind != memory.RefKindNode {
-			continue
-		}
-		a, err := store.ParseAnchor(ref.Target)
-		if err != nil {
-			continue // a node id whose prefix is not an anchor kind (a package, say)
-		}
-		anchors = append(anchors, a)
-	}
-	if len(anchors) == 0 {
-		return nil, fmt.Errorf("magus notes promote: %q has no node ref naming a symbol, file, project or target, so the note would be unanchored and nobody would find it again.\n"+
-			"  Add one with `%s`, or write the note directly with `%s`", rec.Name, hint.MemoryPut.With(rec.Name, "--ref", "node:<id>"), hint.NotesEdit)
-	}
-	return anchors, nil
-}
-
-// promoteBody seeds the editor with the record's prose and the evidence behind it, so the
-// promoter edits a draft rather than facing a blank file.
-//
-// The re-runnable refs are listed because they are what makes the claim checkable, and
-// checking it is the act being asked for. They stay prose: a note's anchors are its
-// structure, and copying a query into frontmatter would create a second thing to keep in step.
-func promoteBody(rec memory.Record) string {
-	var b strings.Builder
-	if body := strings.TrimSpace(rec.Body); body != "" {
-		b.WriteString(body + "\n")
-	} else {
-		b.WriteString("(This record carried no prose. Say what is true, and why it is worth keeping.)\n")
-	}
-	var evidence []string
-	for _, ref := range rec.Refs {
-		if ref.Kind == memory.RefKindNode {
-			continue // already an anchor
-		}
-		evidence = append(evidence, string(ref.Kind)+": "+ref.Target)
-	}
-	if len(evidence) > 0 {
-		b.WriteString("\nEvidence recorded with the draft:\n")
-		for _, e := range evidence {
-			b.WriteString("  " + e + "\n")
-		}
-	}
-	// An elimination's excerpt is the half of the record that survives its refs, so a
-	// promotion carrying only the refs hands the reader the dangling half.
-	if excerpt := strings.TrimSpace(rec.Excerpt); excerpt != "" {
-		b.WriteString("\nCaptured evidence:\n")
-		for _, line := range strings.Split(excerpt, "\n") {
-			b.WriteString("  " + line + "\n")
-		}
-	}
-	b.WriteString("\nDrafted by an agent as memory record " + rec.Name +
-		". Delete this line once the prose above is yours.\n")
-	return b.String()
-}
-
-// openInEditor runs the reader's own $VISUAL/$EDITOR against path and waits.
-func openInEditor(path string) error {
-	editor := strings.TrimSpace(firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
-	if editor == "" {
-		return fmt.Errorf("neither $VISUAL nor $EDITOR is set; set one, or open %s directly", path)
-	}
-	cmd := exec.Command("sh", "-c", editor+" \"$1\"", "sh", path) //nolint:gosec // the editor is the user's own configured command, by design
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w", editor, err)
-	}
-	return nil
-}

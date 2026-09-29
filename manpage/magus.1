@@ -97,9 +97,6 @@ View or update magus configuration. See \fBmagus\-config\fR(1).
 \fBsession\fR
 What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See \fBmagus\-session\fR(1).
 .TP
-\fBmemory\fR
-Durable cross\-session project memory. See \fBmagus\-memory\fR(1).
-.TP
 \fBjob\fR
 Fork a job, take it, return it with its result, and verify that result. See \fBmagus\-job\fR(1).
 .TP
@@ -412,6 +409,9 @@ Comma\-separated names or globs (e.g. MISE_*) added to the sandbox's child\-proc
 \fBMAGUS_UPDATE_URL\fR
 Env\-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self\-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
 .TP
+\fBMAGUS_STAMPED_LEASE\fR
+Set by a shared server on a script it forks for a remote caller: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant
+.TP
 \fBMAGUS_NO_BOOTSTRAP_EXEC\fR
 Env\-only, no magus.yaml equivalent: when 1, true or yes, disable the pre\-workspace\-load check that replaces this process with a workspace\-local ./magus found by walking up from the working directory (or \-\-root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 .TP
@@ -492,7 +492,6 @@ MAGUS_CACHE_DIR.
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
-\fBmagus\-memory\fR(1),
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),

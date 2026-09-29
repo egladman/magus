@@ -38,9 +38,9 @@ import { Code, ConnectError, type Interceptor, type Transport } from "@connectrp
 import { getDefaultHost, getRememberedHost } from "./settings";
 
 // isCapabilityDenied reports whether a Connect RPC error is the server DECLINING the capability to
-// this client (not a transient outage). A read-only LAN-share session cannot reach TokenService
-// or MemoryService: the LAN share listener never mounts them (Unimplemented/NotFound) and a share
-// token cannot pass their guard (Unauthenticated/PermissionDenied). A capability-gated section
+// this client (not a transient outage). A read-only LAN-share session cannot reach TokenService:
+// the LAN share listener never mounts it (Unimplemented/NotFound) and a share token cannot pass
+// its guard (Unauthenticated/PermissionDenied). A capability-gated section
 // keys its visibility on this so the SERVER decides what a client may see - never a client-side
 // mode guess. A plain outage (Unavailable, network error) is NOT a denial; it keeps its empty state.
 export function isCapabilityDenied(e: unknown): boolean {
@@ -675,10 +675,7 @@ function makeBearerInterceptor(token: string | null): Interceptor {
 
 // The services a client may be DENIED by design (see isCapabilityDenied): a denial from one of these
 // hides a section rather than failing anything, so it is the one error the transport does not report.
-const CAPABILITY_GATED = new Set([
-  "magus.token.v1alpha1.TokenService",
-  "magus.memory.v1alpha1.MemoryService",
-]);
+const CAPABILITY_GATED = new Set(["magus.token.v1alpha1.TokenService"]);
 
 // reportRpcFailure is the transport's half of the rule that every failure reaches the person. The
 // caller still receives the error; this only makes sure it cannot vanish into an empty list.

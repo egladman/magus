@@ -194,10 +194,8 @@ const fileExt = ".jsonl"
 //
 // The hash keys on repository IDENTITY rather than the checkout path, which is the
 // whole point: every worktree AND every clone of one repo resolves to the same
-// directory, so a session started in one is visible from another. Both this and
-// internal/memory.Dir key through vcs.StateDir, deliberately: they answer "state that
-// belongs to the repo, not to the checkout", and must not drift into disagreeing
-// about what a repo is.
+// directory, so a session started in one is visible from another. Keyed through
+// vcs.StateDir so it agrees with every other per-repo store about what a repo is.
 func Dir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {

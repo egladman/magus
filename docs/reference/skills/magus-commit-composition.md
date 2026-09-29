@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4432
-skill_short_bytes: 3824
+skill_full_bytes: 4365
+skill_short_bytes: 3757
 ---
 
 # magus-commit-composition
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `93` |
+| `agent-skill-version` | `94` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `82ac2b6e8eb1` |
+| `skill-content` | `4f1fef0ddfa7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -151,13 +151,12 @@ magus affected ci
 ## What does not belong in a commit at all
 
 Session notes and scratch plans are not repository content unless the repository
-already tracks them. Untracked session state belongs in the
-repository's memory, not the branch.
+already tracks them. Untracked session state belongs in your
+harness's own memory, not the branch.
 
 ## See also
 
 - **magus-vcs-hygiene** - classifying paths and staging one commit safely.
-- **magus-memory** - where session notes live instead of the branch.
 ````
 
 
@@ -274,14 +273,13 @@ magus affected ci
 
 Session notes and scratch plans are not repository content unless the repository
 already tracks them - check the path's history on the base branch
-before assuming either way. Untracked session state belongs in the
-repository's memory, not the branch, and dropping those commits is
+before assuming either way. Untracked session state belongs in your
+harness's own memory, not the branch, and dropping those commits is
 often the single largest reduction available.
 
 ## See also
 
 - **magus-vcs-hygiene** - classifying paths and staging one commit safely.
-- **magus-memory** - where session notes live instead of the branch.
 ````
 
 

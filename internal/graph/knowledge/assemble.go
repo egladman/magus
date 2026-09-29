@@ -80,7 +80,7 @@ type Inputs struct {
 	NotesPath string
 	// Notes carries the workspace's human-authored notes with their anchors already
 	// resolved to node IDs (empty unless knowledge.notes.path is declared). Committed to
-	// the repo, so deterministic and remote-shareable, the opposite of @memory.
+	// the repo, so deterministic and remote-shareable.
 	Notes []types.KnowledgeNote
 	// PrivateNotes are the reader's own notes (knowledge.notes.personal), which may live
 	// outside any repository. Same shape and same anchors as Notes; different trust, and a

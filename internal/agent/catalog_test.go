@@ -952,7 +952,7 @@ func TestOfferedNameSelectsOneSkillOrNamesNearMatches(t *testing.T) {
 	assert.Equal(t, "local", got[0].Source)
 
 	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-qery"})
-	assert.EqualError(t, err, `agent: no skill named "magus-qery"; near matches: magus-query, magus-memory`)
+	assert.EqualError(t, err, `agent: no skill named "magus-qery"; near matches: magus-query`)
 
 	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "zzzzzzzzzzzzzzzzzzzz"})
 	assert.ErrorContains(t, err, "none of the")

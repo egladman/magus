@@ -545,8 +545,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
-		// outranks the heuristics below; the memory nudge is a heuristic on the
-		// filename and only fills the silence it leaves.
+		// outranks the heuristics below; the instruction-file nudge is a heuristic on
+		// the filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseGeneratedWrite(ctx, deps, input); text != "" {
 				advice, adviceKind, spoken = text, advisoryGeneratedWrite, true
@@ -572,8 +572,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			spoken = true
 		}
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseMemoryWrite(input); text != "" {
-				advice, adviceKind, spoken = text, advisoryMemoryWrite, true
+			if text := adviseInstructionWrite(input); text != "" {
+				advice, adviceKind, spoken = text, advisoryInstruction, true
 			}
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.

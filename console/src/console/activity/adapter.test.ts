@@ -45,7 +45,6 @@ test("kindLabel maps every kind to its terse tag", () => {
   assert.equal(kindLabel(Kind.CONFIG_CHANGE), "config");
   assert.equal(kindLabel(Kind.TOKEN_LIFECYCLE), "token");
   assert.equal(kindLabel(Kind.SANDBOX_DENIAL), "sandbox");
-  assert.equal(kindLabel(Kind.MEMORY), "memory");
   assert.equal(kindLabel(Kind.AGENT_COMMAND), "agent");
   assert.equal(kindLabel(Kind.CREDENTIAL_GRANT), "credential");
   assert.equal(kindLabel(Kind.AGENT_SPAWN), "spawn");
@@ -234,8 +233,8 @@ test("groupEventsByKind collects an unknown kind under Other", () => {
 });
 
 // kindLabel and KIND_GROUP_ORDER are both hand-maintained switches/tables over the wire Kind
-// enum, and KindMemory and KindCredentialGrant already shipped in the proto and encodeKind while
-// staying absent here: their events silently fell back to the "event" label and the "Other"
+// enum, and KindCredentialGrant already shipped in the proto and encodeKind while
+// staying absent here: its events silently fell back to the "event" label and the "Other"
 // bucket in the console. Enumerated straight off the generated Kind enum's own reverse mapping
 // (not a second hand-maintained list), so the NEXT kind added to the proto fails this test the
 // moment it lands, rather than shipping half-wired.

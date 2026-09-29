@@ -347,7 +347,7 @@ rather than `magus targets`, because the latter invites `magus spells`, then
 learn. One verb, a noun that says what.
 
 Enumeration is spelled `ls` everywhere - `magus ls`, `magus run ls`,
-`magus memory ls` - never `list`.
+`magus notes ls` - never `list`.
 
 ### Package names mirror the contract they serve
 

@@ -12,7 +12,6 @@ tags:
     hooks,
     guard,
     knowledge graph,
-    memory,
     claude,
     codex,
     cursor,
@@ -345,20 +344,17 @@ concern: configure it once for the host that owns it. An agent checks
 the surface is unavailable; it must not manually start Magus merely to obtain
 MCP.
 
-One tool carries state across sessions: `magus_memory`, a user-owned memory of
-per-repository records, each pointing at something magus can reopen,
-kept in the user state directory outside the repo and shared across branches and
-worktrees. It is pull-based - nothing is injected into an agent's context - and
-also available through `magus memory ls|get|put|delete|verify`. Use `verify` to
-surface stale, malformed, or broken linked entries. Captured build output is
-addressed by [output references](../../concepts/cache/output-refs.md).
+No tool carries state across sessions: magus remembers nothing an agent told it,
+and the agent's own harness owns what persists between sessions. Captured build
+output is addressed by [output references](../../concepts/cache/output-refs.md),
+and the workspace's human-authored notes are read through `magus notes` and the
+graph.
 
 ### The CLI works without it
 
 The CLI still reads the workspace, runs targets, uses the cache, and answers
 graph queries with no server running. What it lacks is MCP tool discovery, the
-warm graph and background indexes, structured output retrieval, and MCP-only
-capabilities such as the memory store.
+warm graph and background indexes, and structured output retrieval.
 
 An agent must not turn that into a blocker. At task start, or after an MCP
 error, run `magus status --probe=mcp`; if it is unavailable, use the CLI

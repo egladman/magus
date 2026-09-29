@@ -141,7 +141,7 @@ func TestConsultationOfReadsTheVerbAndItsSubject(t *testing.T) {
 		// Rule 1: the token is shared with `graph build`, which writes.
 		{cmd: "magus graph stats", ok: false},
 		// Rule 3: the subject sits in a second token, which this verb model cannot address.
-		{cmd: "magus memory get spawn-chain", ok: false},
+		{cmd: "magus notes get spawn-chain", ok: false},
 		// A flag that takes a separate value must not hand the value to the verb slot, and a
 		// trailing flag is not part of what was asked.
 		{cmd: "magus --root /repo -o json query kind=op -s", verb: "query", subject: "kind=op", ok: true},

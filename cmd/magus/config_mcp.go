@@ -101,7 +101,6 @@ func configMCPConnector(args []string) error {
 		fs.Usage()
 		return nil
 	case "list":
-		// Renamed to ls in v0.4.0; see the note in memoryCmd.
 		return usagef("magus config mcp connector: `list` is now `ls` "+
 			"(run `%s`)", hint.ConfigMCPConnectorLs)
 	default:

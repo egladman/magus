@@ -11,11 +11,10 @@ $__magus_scriptblock = {
     # magus-utils:subcommands:begin
     $subcommands = 'ls', 'describe', 'where', 'run', 'affected', 'x',
                    'clean', 'shell', 'query', 'refs', 'explain', 'path',
-                   'graph', 'diff', 'vcs', 'session', 'memory', 'job',
-                   'notes', 'queue', 'watch', 'events', 'server', 'broker',
-                   'mcp', 'status', 'buzz', 'spell', 'agent', 'init',
-                   'doctor', 'config', 'completion', 'man', 'self', 'version',
-                   'help'
+                   'graph', 'diff', 'vcs', 'session', 'job', 'notes',
+                   'queue', 'watch', 'events', 'server', 'broker', 'mcp',
+                   'status', 'buzz', 'spell', 'agent', 'init', 'doctor',
+                   'config', 'completion', 'man', 'self', 'version', 'help'
     # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'graph', 'project', 'workspace', 'module', 'mcp-tool', 'file', 'tool'
     $sessionSubs   = 'ls', 'attention', 'dispose', 'hook', 'notify'

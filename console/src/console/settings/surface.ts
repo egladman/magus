@@ -45,7 +45,6 @@ import {
 } from "../layoutPrefs";
 import { LICENSE_TEXT } from "./license";
 import { buildTokensSection } from "./tokens";
-import { buildMemorySection } from "./memory";
 import { buildInstallSection } from "./install";
 import type { InstallStore } from "../../lib/install";
 import {
@@ -179,7 +178,7 @@ function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElem
 }
 
 // buildStackedPanel stacks several titled sections into one tab panel - the settings surface keeps a
-// small set of tabs (General, Access, Memory), so a tab groups its related sections rather than fanning
+// small set of tabs (General, Access), so a tab groups its related sections rather than fanning
 // out one tab per section.
 function buildStackedPanel(...sections: HTMLElement[]): HTMLElement {
   const panel = h("div", "console-settings-panel");
@@ -196,9 +195,9 @@ interface SettingsTab {
 
 // buildSettingsTabs renders a horizontal tab strip (role=tablist) over the section panels, showing
 // exactly one panel at a time so the surface is a set of focused views rather than one long scroll.
-// Returns the nav strip, the panels host, and setHidden - the server-gated Access tokens / Agent memory
-// tabs call setHidden(id, true) when the server declines the service, dropping both the tab and its
-// panel; hiding the active tab falls back to the first still-visible one.
+// Returns the nav strip, the panels host, and setHidden - the server-gated Access tokens tab calls
+// setHidden(id, true) when the server declines the service, dropping both the tab and its panel;
+// hiding the active tab falls back to the first still-visible one.
 function buildSettingsTabs(tabs: SettingsTab[]): {
   root: HTMLElement;
   setHidden: (id: string, hidden: boolean) => void;
@@ -1088,19 +1087,17 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     setStatus("Reset pending changes.", "ok");
   });
 
-  // The two LIVE sections talk to the server directly (not the staged-config model): they act on the
-  // server's own state - its auth tokens and the durable agent-memory files - so their edits apply
-  // immediately over RPC rather than staging into the draft. Both resolve the same loopback host and
-  // degrade to a clear "connect first" state when none is found.
+  // The tokens section is LIVE: it talks to the server directly (not the staged-config model) because
+  // it acts on the server's own auth tokens, so its edits apply immediately over RPC rather than
+  // staging into the draft. It resolves the loopback host and degrades to a clear "connect first"
+  // state when none is found.
   //
-  // The two LIVE sections are gated by the SERVER, not a client-side mode guess: they always build,
-  // and each hides ITS OWN TAB (via tabs.setHidden below) if the server declines the service to this
-  // client (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted on
-  // the share listener, and guarded by token class), so those RPCs come back denied and that tab
-  // vanishes. Enforcement lives at the server; this only mirrors what the server already refuses.
-  // Tokens (access control) and memory (the records agents write) are DISTINCT concerns, so each owns
-  // its own tab - Access and Memory - and hides independently. (tabs is const-declared below; onDenied
-  // only fires after an async RPC, so it is initialized by then.)
+  // It is gated by the SERVER, not a client-side mode guess: it always builds, and hides ITS OWN TAB
+  // (via tabs.setHidden below) if the server declines the service to this client (onDenied) - a
+  // read-only phone share cannot reach TokenService (not mounted on the share listener, and guarded
+  // by token class), so those RPCs come back denied and the tab vanishes. Enforcement lives at the
+  // server; this only mirrors what the server already refuses. (tabs is const-declared below;
+  // onDenied only fires after an async RPC, so it is initialized by then.)
   // Install is LIVE too, for a different reason: it acts on the browser, not on console state. There is
   // nothing to persist, nothing to diff, and nothing Reset could undo, so it stays out of the staged
   // model and applies the moment it is clicked.
@@ -1109,13 +1106,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const tokensSection = buildTokensSection(resolveServerHost(), {
     onDenied: () => tabs.setHidden("access", true),
   });
-  const memorySection = buildMemorySection(resolveServerHost(), {
-    onDenied: () => tabs.setHidden("memory", true),
-  });
 
-  // Three tabs. General stacks the staged client sections (server address, appearance, keybindings,
-  // backup) plus About; Access and Memory each host one live server-facing section, kept apart because
-  // access control and the agents' knowledge store are distinct concerns. The action bar and pending
+  // Two tabs. General stacks the staged client sections (server address, appearance, keybindings,
+  // backup) plus About; Access hosts the one live server-facing section. The action bar and pending
   // diff stay above the tabs: the staged draft is shared across the staged sections, so its commit
   // controls are global to the surface, not per-tab.
   const tabs = buildSettingsTabs([
@@ -1150,17 +1143,6 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         ),
       ),
     },
-    {
-      id: "memory",
-      label: "Memory",
-      panel: buildStackedPanel(
-        buildSection(
-          "Agent memory",
-          memorySection.el,
-          "View, edit, and prune the durable memory records agents write across sessions: typed pointers into the codebase, not free notes. Editing is the safety valve against the store growing unbounded.",
-        ),
-      ),
-    },
   ]);
 
   page.append(bar, status, diffWrap, tabs.root);
@@ -1172,7 +1154,6 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     editor.destroy();
     installSection.destroy();
     tokensSection?.destroy();
-    memorySection?.destroy();
   };
 }
 

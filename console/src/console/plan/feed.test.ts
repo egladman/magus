@@ -82,9 +82,9 @@ test("rowOf separates a failed run from one that worked", () => {
 // A feed that silently binned what it could not classify would go quiet exactly when the server
 // grew something new to say, and nothing on screen would admit it.
 test("rowOf renders a kind it does not know rather than dropping it", () => {
-  const row = rowOf(event({ kind: Kind.MEMORY, action: "memory.get", preview: "read" }));
+  const row = rowOf(event({ kind: Kind.TOKEN_LIFECYCLE, action: "token.mint", preview: "minted" }));
   assert.equal(row.kind, "other");
-  assert.equal(row.label, "memory.get");
+  assert.equal(row.label, "token.mint");
 });
 
 // The timestamp comes off the wire, not off this machine's clock: a row stamped "now" on

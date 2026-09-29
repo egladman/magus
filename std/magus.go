@@ -782,66 +782,6 @@ var Magus = Module{
 			},
 		},
 		{
-			Name: "memory",
-			Doc: "The per-repository memory: named decisions, plans, pointers and ruled-out " +
-				"hypotheses, kept outside the checkout so every worktree of one repository reads " +
-				"the same entries. The same store `magus memory`, the magus_memory MCP tool and " +
-				"the console read. Records are the snake_case JSON `magus memory -o json` prints. " +
-				"Read straight off the workspace on the context; raises MGS1022 outside one. " +
-				"Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\\job is.",
-			Methods: []Method{
-				{
-					Name: "list",
-					Doc: "Every entry as {records, issues}. A malformed entry is an issue beside " +
-						"the readable records rather than a raise, since the listing is where a " +
-						"person finds the bad entry to delete.",
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name:    "get",
-					Doc:     "One entry by name. An absent name raises; list finds the right one.",
-					Args:    []Arg{{Name: "name", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name: "put",
-					Doc: "Create the entry name, or write only the fields opts names on one that " +
-						"exists: type, status, refs ([str] of 'kind: target'), references ([str]), " +
-						"body, excerpt, allow_missing (default true; false turns a mistyped name " +
-						"into a raise instead of a second entry). A key opts omits is untouched; " +
-						"a key present with an empty value is an explicit clear. An unknown key " +
-						"raises. Returns the stored entry.",
-					Args: []Arg{
-						{Name: "name", Type: TypeString},
-						{Name: "opts", Type: TypeAnyMap, Optional: true},
-					},
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name: "delete",
-					Doc: "Archive the entry name inside the memory store; a put of its fields " +
-						"restores it. An absent name raises, naming the entries one typo away.",
-					Args:   []Arg{{Name: "name", Type: TypeString}},
-					Raises: true,
-					Extern: true,
-				},
-				{
-					Name: "verify",
-					Doc: "{records, issues} for malformed entries, broken links between entries, " +
-						"and output refs this checkout can no longer reopen.",
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-			},
-		},
-		{
 			Name: "vcs",
 			Doc: "Facts about the workspace's version control that only magus computes. The " +
 				"`vcs` host module is the repository itself; this namespace is magus's reading " +
@@ -982,22 +922,6 @@ var magusMCPTools = []MCPTool{
 	{
 		Name: hint.ToolConfigGet.String(),
 		Doc:  "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
-	},
-	{
-		Name: hint.ToolMemory.String(),
-		Doc:  "A user-owned per-repository memory, shared across worktrees and kept outside the checkout. It is not automatic model memory: create a named entry only for a decision, plan, saved pointer, or ruled-out hypothesis a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision, plan and elimination entries carry a short why. Record an elimination when an investigation kills a hypothesis, so the next session reopens the reasoning; without one it re-derives the search and re-proposes a branch that is already dead. put writes only the fields you send: an entry that exists keeps every field you omit, so updating a status cannot drop the body beside it, and clearing a field means deleting the entry and creating it again. Use verify to surface malformed, stale, broken-linked entries and evidence refs that no longer resolve. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's entry.",
-		Params: []MCPParam{
-			{Name: "op", Type: TypeString, Doc: "One of: list (default; records plus issues), get, put (create by name, or write the fields you send on an entry that exists), delete, verify. cursor is legacy read-only."},
-			{Name: "name", Type: TypeString, Doc: "The record's kebab-slug identity. Required for get, put, delete."},
-			{Name: "type", Type: TypeString, Doc: "put only: one of pointer, decision, plan, elimination. Required to create. On an entry that exists it must match the type already stored - a record cannot be updated into another type, because the type decides which fields it may carry; delete it and create the entry you want."},
-			{Name: "refs", Type: TypeString, Doc: "put only, REQUIRED to create: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc. Sending refs on an entry that exists replaces its whole ref list; omitting them keeps it."},
-			{Name: "allow_missing", Type: TypeBool, Doc: "put only, default true: create the entry when the name is absent. Pass false when you mean to update something that already exists, so a mistyped name is an error instead of a stray second entry."},
-			{Name: "body", Type: TypeString, Doc: "put only: the one-line caption for a decision/plan, or for an elimination the reason the hypothesis is dead. Omit for a pointer; a pointer carries no prose."},
-			{Name: "excerpt", Type: TypeString, Doc: "put only, REQUIRED for an elimination and rejected on every other type: the evidence that ruled the hypothesis out, copied inline. An output ref resolves only from the checkout that minted it, so paste the deciding lines into the record."},
-			{Name: "status", Type: TypeString, Doc: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
-			{Name: "references", Type: TypeString, Doc: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: TypeString, Doc: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
-		},
 	},
 	{
 		Name: hint.ToolQuery.String(),

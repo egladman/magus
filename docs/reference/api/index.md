@@ -23,7 +23,6 @@ Start the server with `magus server start`. See [the console reference](../conso
 | [GraphService](graph/v1alpha1/graph.md)          | 7       | `magus.graph.v1alpha1`    |
 | [InsightService](insight/v1alpha1/insight.md)    | 1       | `magus.insight.v1alpha1`  |
 | [JobService](job/v1alpha1/job.md)                | 2       | `magus.job.v1alpha1`      |
-| [MemoryService](memory/v1alpha1/memory.md)       | 5       | `magus.memory.v1alpha1`   |
 | [MetricsService](metrics/v1alpha1/metrics.md)    | 2       | `magus.metrics.v1alpha1`  |
 | [NotesService](notes/v1alpha1/notes.md)          | 2       | `magus.notes.v1alpha1`    |
 | [StatusService](status/v1alpha1/status.md)       | 2       | `magus.status.v1alpha1`   |

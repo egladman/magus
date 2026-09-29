@@ -417,7 +417,6 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, encodeKind(trail.KindTokenLifecycle))
 	assert.Equal(t, activityv1.Kind_KIND_SANDBOX_DENIAL, encodeKind(trail.KindSandboxDenial))
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, encodeKind(trail.KindAgentCommand))
-	assert.Equal(t, activityv1.Kind_KIND_MEMORY, encodeKind(trail.KindMemory))
 	assert.Equal(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind("who-knows"))
 
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, encodeOutcome(trail.OutcomeOK))
@@ -439,7 +438,6 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 		trail.KindConfigChange,
 		trail.KindTokenLifecycle,
 		trail.KindSandboxDenial,
-		trail.KindMemory,
 		trail.KindAgentCommand,
 		trail.KindCredentialGrant,
 		trail.KindAgentSpawn,

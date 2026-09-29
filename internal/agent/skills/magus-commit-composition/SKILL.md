@@ -102,11 +102,10 @@ magus affected ci
 
 Session notes and scratch plans are not repository content unless the repository
 already tracks them{{if .Full}} - check the path's history on the base branch
-before assuming either way{{end}}. Untracked session state belongs in the
-repository's memory, not the branch{{if .Full}}, and dropping those commits is
+before assuming either way{{end}}. Untracked session state belongs in your
+harness's own memory, not the branch{{if .Full}}, and dropping those commits is
 often the single largest reduction available{{end}}.
 
 ## See also
 
 - **{{skill "vcs-hygiene"}}** - classifying paths and staging one commit safely.
-- **{{skill "memory"}}** - where session notes live instead of the branch.

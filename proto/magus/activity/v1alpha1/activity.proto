@@ -30,7 +30,7 @@ enum Kind {
   KIND_CONFIG_CHANGE = 3;   // reserved: magus.yaml changed on reload, or a `magus config set` mutation
   KIND_TOKEN_LIFECYCLE = 4; // reserved: a connector token was minted or revoked
   KIND_SANDBOX_DENIAL = 5;  // magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
-  KIND_MEMORY = 6;          // a console MemoryService action on the durable magus_memory files (reads audited too)
+  reserved 6; // KIND_MEMORY, retired with the memory store
   // An agent host observed a shell or file-tool invocation. The request blob contains normalized
   // host/tool/session data and the command or path; the response blob contains the guard decision.
   // OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.

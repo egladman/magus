@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -380,4 +381,13 @@ func hintCanonicalSpellingTo(w io.Writer, t types.Target) {
 	for _, c := range t.DeclaredCharms {
 		interactive.Emit(w, fmt.Sprintf("charm %q is canonically %q", c, types.NormalizeCharm(c)))
 	}
+}
+
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (s *stringList) String() string { return strings.Join(*s, ", ") }
+func (s *stringList) Set(v string) error {
+	*s = append(*s, v)
+	return nil
 }

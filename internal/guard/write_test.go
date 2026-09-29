@@ -385,19 +385,19 @@ func TestDeclarationCovering(t *testing.T) {
 // The lease-id shape itself is pinned in internal/trail's TestValidLeaseID; the guard's
 // treated-as-absent behavior for a bad id is pinned by TestGradeLeasedWriteInvalidLeaseID.
 
-// TestAdviseMemoryWrite pins the nudge to the two cross-host instruction files
-// and to a capture-not-replication wording: it must name the journal WITHOUT
-// telling the reader not to write the file, since host instructions belong
-// exactly where they are being written.
-func TestAdviseMemoryWrite(t *testing.T) {
+// TestAdviseInstructionWrite pins the nudge to the two cross-host instruction files and
+// to a wording that says what the file costs without telling the reader not to write it:
+// host instructions belong exactly where they are being written.
+func TestAdviseInstructionWrite(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "claude.md", "/repo/nested/AGENTS.md", "  AGENTS.md  "} {
-		advice := adviseMemoryWrite(path)
-		require.NotEmpty(t, advice, "expected a memory advisory for %q", path)
-		assert.Contains(t, advice, "magus memory put", "the advisory must name the command it is routing to")
+		advice := adviseInstructionWrite(path)
+		require.NotEmpty(t, advice, "expected an advisory for %q", path)
+		assert.Contains(t, advice, "every session", "the advisory names the cost")
+		assert.Contains(t, advice, "magus doctor", "and the tool whose output makes a sentence here redundant")
 	}
 	for _, path := range []string{"", "README.md", "MAGUS.md", "docs/agents.md.tmpl", "agents.mdx"} {
-		assert.Empty(t, adviseMemoryWrite(path), "no advisory belongs on %q", path)
+		assert.Empty(t, adviseInstructionWrite(path), "no advisory belongs on %q", path)
 	}
 }
 
@@ -429,7 +429,6 @@ func TestDenyNotesWrite(t *testing.T) {
 		reason := denyNotesWrite(deps, path)
 		require.NotEmpty(t, reason, "expected a deny for %q", path)
 		assert.Contains(t, reason, "NOTES store", "the reason names what was blocked")
-		assert.Contains(t, reason, "magus memory put", "and routes the agent somewhere it MAY write")
 		assert.Contains(t, reason, "magus notes edit", "and says how a person writes it instead")
 	}
 
@@ -524,15 +523,9 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		"magus notes capture --shared --title x",
 		"./magus --root . notes capture",
 		"magus notes capture && (",
-		// `promote` always writes the SHARED store.
-		"magus notes promote review-cache-keys",
-		"magus -o json notes promote foo --name bar",
-		"cd /tmp && ./magus notes promote foo",
-		"magus notes promote foo && (",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "magus memory put", "the reason routes to the store an agent MAY write")
 		assert.Equal(t, denyRule{Name: denyRuleNotesAuthor}, v.Rule, "%q must deny as the notes rule", cmd)
 	}
 	// Tokens after `--` go to the spell's tool, not to magus.
