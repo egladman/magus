@@ -394,10 +394,10 @@ fun segmentsOverlap(a: [int], b: [int]) > bool {
     if (aVert != bVert) { return false; }
     if (aVert) {
         if (a[0] != b[0]) { return false; }
-        return overlapLen(a[1], a[3], b[1], b[3]) > 0;
+        return overlapLen(a[1], p2: a[3], q1: b[1], q2: b[3]) > 0;
     }
     if (a[1] != b[1]) { return false; }
-    return overlapLen(a[0], a[2], b[0], b[2]) > 0;
+    return overlapLen(a[0], p2: a[2], q1: b[0], q2: b[2]) > 0;
 }
 
 // overlapLen measures the shared extent of two 1-D spans, each given in either order.
@@ -426,9 +426,9 @@ fun overlappingConnectors(d: Diagram) > [Fault] {
             final a = d.edges[i];
             final b = d.edges[j];
             var found = false;
-            foreach (sa in edgeSegments(d, a)) {
-                foreach (sb in edgeSegments(d, b)) {
-                    if (segmentsOverlap(sa, sb)) { found = true; }
+            foreach (sa in edgeSegments(d, e: a)) {
+                foreach (sb in edgeSegments(d, e: b)) {
+                    if (segmentsOverlap(sa, b: sb)) { found = true; }
                 }
             }
             if (found) {
@@ -542,7 +542,7 @@ export fun faults(d: Diagram) > [Fault] {
             final a = d.nodes[i];
             final b = d.nodes[j];
             if (a.id == b.id) { errs.append(Fault{ rule = "duplicateId", subjects = [a.id], text = "duplicate node id \"{a.id}\"" }); }
-            if (boxesOverlap([a.x, a.y, a.w, a.h], b) and bounds(a, inner: b) == false and bounds(b, inner: a) == false) {
+            if (boxesOverlap([a.x, a.y, a.w, a.h], n: b) and bounds(a, inner: b) == false and bounds(b, inner: a) == false) {
                 errs.append(Fault{ rule = "overlap", subjects = [a.id, b.id], text = "nodes \"{a.id}\" and \"{b.id}\" overlap" });
             }
             j = j + 1;
@@ -552,8 +552,8 @@ export fun faults(d: Diagram) > [Fault] {
 
     foreach (e in d.edges) {
         final ends = [e.src, e.dst];
-        if (findNode(d, e.src) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge from unknown node \"{e.src}\"" }); }
-        if (findNode(d, e.dst) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge to unknown node \"{e.dst}\"" }); }
+        if (findNode(d, id: e.src) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge from unknown node \"{e.src}\"" }); }
+        if (findNode(d, id: e.dst) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge to unknown node \"{e.dst}\"" }); }
         if (e.src == e.dst) { errs.append(Fault{ rule = "selfLoop", subjects = ends, text = "edge from \"{e.src}\" to itself" }); }
         if (e.srcSlot < 1 or e.srcSlot > e.srcSlots) {
             errs.append(Fault{ rule = "slot", subjects = ends, text = "edge {e.src}->{e.dst}: srcSlot {e.srcSlot} outside 1..{e.srcSlots}" });
@@ -564,16 +564,16 @@ export fun faults(d: Diagram) > [Fault] {
         if (e.label.len() > MaxEdgeLabel) {
             errs.append(Fault{ rule = "labelLength", subjects = ends, text = "edge {e.src}->{e.dst}: label \"{e.label}\" exceeds {MaxEdgeLabel} characters" });
         }
-        if (isDecision(d, e.src) and e.srcSlots > 1) {
+        if (isDecision(d, id: e.src) and e.srcSlots > 1) {
             errs.append(Fault{ rule = "decisionFan", subjects = ends, text = "edge {e.src}->{e.dst}: leaves decision \"{e.src}\" on a fanned slot, off the diamond" });
         }
-        if (isDecision(d, e.dst) and e.dstSlots > 1) {
+        if (isDecision(d, id: e.dst) and e.dstSlots > 1) {
             errs.append(Fault{ rule = "decisionFan", subjects = ends, text = "edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond" });
         }
         foreach (f in viaFaults(d, e: e)) { errs.append(f); }
         // A generated layout packs its channels one grid step apart and has no author to
         // move a bend, so there the painter clamps the radius down instead.
-        if (d.generated == false and findNode(d, e.src) != null and findNode(d, e.dst) != null) {
+        if (d.generated == false and findNode(d, id: e.src) != null and findNode(d, id: e.dst) != null) {
             final tight = tightestBend(d, e);
             if (tight < BendFloor) {
                 errs.append(Fault{
@@ -605,7 +605,7 @@ fun viaFaults(d: Diagram, e: Edge) > [Fault] {
             errs.append(Fault{ rule = "via", subjects = ends, text = "edge {e.src}->{e.dst}: via coordinate {v} is off the {Grid}px grid" });
         }
     }
-    if (findNode(d, e.src) == null or findNode(d, e.dst) == null) { return errs; }
+    if (findNode(d, id: e.src) == null or findNode(d, id: e.dst) == null) { return errs; }
     final pts = edgePoints(edgeGeometry(d, e), e);
     var i = 2;
     while (i + 1 < pts.len()) {
@@ -655,7 +655,7 @@ fun tightestBend(d: Diagram, e: Edge) > int {
                 var outLen = iabs(nx - cx) + iabs(ny - cy);
                 if (i > 1) { inLen = inLen / 2; }
                 if (i < n - 2) { outLen = outLen / 2; }
-                tight = imin(tight, imin(inLen, outLen));
+                tight = imin(tight, b: imin(inLen, b: outLen));
             }
             i = i + 1;
         }
@@ -670,12 +670,12 @@ fun tightestBend(d: Diagram, e: Edge) > int {
         if (y1 == y2) { return BendFloor; }
         var bx = e.bend;
         if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
-        return imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2));
+        return imin(iabs(bx - x1), b: imin(iabs(x2 - bx), b: iabs(y2 - y1) / 2));
     }
     if (x1 == x2) { return BendFloor; }
     var by = e.bend;
     if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
-    return imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2));
+    return imin(iabs(by - y1), b: imin(iabs(y2 - by), b: iabs(x2 - x1) / 2));
 }
 
 // sharedAttachPoints reports connectors that land on the same point of the same box. Two
@@ -684,8 +684,8 @@ fun sharedAttachPoints(d: Diagram) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     final seen: mut [str] = mut [<str>];
     foreach (e in d.edges) {
-        final a = attachKey(d, e, true);
-        final b = attachKey(d, e, false);
+        final a = attachKey(d, e, isFrom: true);
+        final b = attachKey(d, e, isFrom: false);
         foreach (k in seen) {
             if (k == a) {
                 errs.append(Fault{ rule = "sharedAttach", subjects = [e.src, e.dst], text = "two connectors share the attach point {a}", fix = "fan them with distinct slots" });
@@ -720,8 +720,8 @@ fun resolveSide(d: Diagram, e: Edge, isFrom: bool) > str {
     if (isFrom) { declared = e.srcSide; }
     if (declared != "auto") { return declared; }
 
-    final a = findNode(d, e.src);
-    final b = findNode(d, e.dst);
+    final a = findNode(d, id: e.src);
+    final b = findNode(d, id: e.dst);
     if (a == null or b == null) { return "right"; }
     final ax = a!.x + a!.w / 2;
     final ay = a!.y + a!.h / 2;
@@ -776,7 +776,7 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
         if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
         // Clamp the radius so a short leg cannot make the two quarter-rounds overlap and
         // bow the connector back on itself.
-        final r = imin(radius, imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2)));
+        final r = imin(radius, b: imin(iabs(bx - x1), b: imin(iabs(x2 - bx), b: iabs(y2 - y1) / 2)));
         if (r <= 0) { return "M {x1} {y1} L {bx} {y1} L {bx} {y2} L {x2} {y2}"; }
         final sx = isign(bx - x1);
         final sy = isign(y2 - y1);
@@ -791,7 +791,7 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
 
     var by = bend;
     if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
-    final r = imin(radius, imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2)));
+    final r = imin(radius, b: imin(iabs(by - y1), b: imin(iabs(y2 - by), b: iabs(x2 - x1) / 2)));
     if (r <= 0) { return "M {x1} {y1} L {x1} {by} L {x2} {by} L {x2} {y2}"; }
     final sy = isign(by - y1);
     final sx = isign(x2 - x1);
@@ -822,7 +822,7 @@ fun routePath(pts: [int], radius: int) > str {
         var outLen = iabs(nx - cx) + iabs(ny - cy);
         if (i > 1) { inLen = inLen / 2; }
         if (i < n - 2) { outLen = outLen / 2; }
-        final r = imin(radius, imin(inLen, outLen));
+        final r = imin(radius, b: imin(inLen, b: outLen));
         if (r <= 0) {
             parts.append("L {cx} {cy}");
         } else {
@@ -1063,7 +1063,7 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     if (e.via.len() > 0) {
         route = routePath(edgePoints(geo, e), radius: radius);
     } else {
-        route = connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: radius);
+        route = connectorPath(geo[0], y1: geo[1], x2: geo[2], y2: geo[3], horizontal: geo[4] == 1, bend: e.bend, radius: radius);
     }
     return "<path data-edge=\"" + escapeSvg(e.src) + "->" + escapeSvg(e.dst) + "\" d=\"" + route + "\""
         + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
@@ -1073,13 +1073,13 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
 // edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a
 // five-int list beats threading five result params through the painters.
 fun edgeGeometry(d: Diagram, e: Edge) > [int] {
-    final a = findNode(d, e.src);
-    final b = findNode(d, e.dst);
+    final a = findNode(d, id: e.src);
+    final b = findNode(d, id: e.dst);
     if (a == null or b == null) { return [0, 0, 0, 0, 1]; }
     final fromSide = resolveSide(d, e, isFrom: true);
     final toSide = resolveSide(d, e, isFrom: false);
-    final s = attachPoint(a!, fromSide, e.srcSlot, e.srcSlots);
-    final t = attachPoint(b!, toSide, e.dstSlot, e.dstSlots);
+    final s = attachPoint(a!, side: fromSide, slot: e.srcSlot, slots: e.srcSlots);
+    final t = attachPoint(b!, side: toSide, slot: e.dstSlot, slots: e.dstSlots);
     final horizontal = fromSide == "left" or fromSide == "right";
     var h = 0;
     if (horizontal) { h = 1; }
@@ -1198,7 +1198,7 @@ fun twoBox() > Diagram {
 }
 
 test "a well-formed diagram validates clean" {
-    assert\equal(validate(twoBox()).len(), 0, "no findings on the reference diagram");
+    assert\equal(validate(twoBox()).len(), want: 0, message: "no findings on the reference diagram");
 }
 
 test "authored coordinates must sit on the grid" {
@@ -1207,7 +1207,7 @@ test "authored coordinates must sit on the grid" {
         id = d.id, width = d.width, height = d.height,
         nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
     };
-    assert\equal(validate(bad).len(), 1, "x=33 is off the 4px grid");
+    assert\equal(validate(bad).len(), want: 1, message: "x=33 is off the 4px grid");
 }
 
 test "overlapping nodes are a finding" {
@@ -1218,7 +1218,7 @@ test "overlapping nodes are a finding" {
             Node{ id = "b", label = "B", x = 96, y = 112, w = 160, h = 56 },
         ],
     };
-    assert\equal(validate(bad).len(), 1, "b starts inside a");
+    assert\equal(validate(bad).len(), want: 1, message: "b starts inside a");
 }
 
 test "an edge naming a missing node is a finding" {
@@ -1227,7 +1227,7 @@ test "an edge naming a missing node is a finding" {
         nodes = [ Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 } ],
         edges = [ Edge{ src = "a", dst = "ghost" } ],
     };
-    assert\equal(validate(bad).len(), 1, "ghost is not a node");
+    assert\equal(validate(bad).len(), want: 1, message: "ghost is not a node");
 }
 
 // The rule this pins is the one that makes a diagram unreadable rather than merely ugly:
@@ -1261,15 +1261,15 @@ test "fanning the same side with distinct slots validates clean" {
             Edge{ src = "a", dst = "c", srcSide = "right", srcSlot = 2, srcSlots = 2 },
         ],
     };
-    assert\equal(validate(good).len(), 0, "distinct slots on one side are fine");
+    assert\equal(validate(good).len(), want: 0, message: "distinct slots on one side are fine");
 }
 
 test "attachPoint spreads slots along the edge" {
     final n = Node{ id = "a", label = "A", x = 0, y = 0, w = 160, h = 60 };
-    final one = attachPoint(n, "right", 1, 2);
-    final two = attachPoint(n, "right", 2, 2);
-    assert\equal(one[0], 160, "both leave the right face");
-    assert\equal(two[0], 160, "both leave the right face");
+    final one = attachPoint(n, side: "right", slot: 1, slots: 2);
+    final two = attachPoint(n, side: "right", slot: 2, slots: 2);
+    assert\equal(one[0], want: 160, message: "both leave the right face");
+    assert\equal(two[0], want: 160, message: "both leave the right face");
     std\assert(one[1] != two[1], message: "slot 1 of 2 and slot 2 of 2 are distinct points");
 }
 
@@ -1277,19 +1277,19 @@ test "attachPoint spreads slots along the edge" {
 // line rather than emit a bend, and a route across both axes must cross on a single
 // segment, which is what keeps a diagonal unrepresentable.
 test "a shared axis routes straight" {
-    assert\equal(connectorPath(0, 40, 200, 40, true, 0, radius: defaultStyle().bendRadius), "M 0 40 L 200 40", "same y");
-    assert\equal(connectorPath(40, 0, 40, 200, false, 0, radius: defaultStyle().bendRadius), "M 40 0 L 40 200", "same x");
+    assert\equal(connectorPath(0, y1: 40, x2: 200, y2: 40, horizontal: true, bend: 0, radius: defaultStyle().bendRadius), want: "M 0 40 L 200 40", message: "same y");
+    assert\equal(connectorPath(40, y1: 0, x2: 40, y2: 200, horizontal: false, bend: 0, radius: defaultStyle().bendRadius), want: "M 40 0 L 40 200", message: "same x");
 }
 
 test "a two-axis route bends on one crossing segment" {
-    final path = connectorPath(0, 0, 200, 120, true, 100, radius: defaultStyle().bendRadius);
+    final path = connectorPath(0, y1: 0, x2: 200, y2: 120, horizontal: true, bend: 100, radius: defaultStyle().bendRadius);
     std\assert(path.startsWith("M 0 0"), message: "starts at the source attach point");
     std\assert(path.endsWith("L 200 120"), message: "ends at the destination attach point");
     std\assert(path.indexOf("Q") != null, message: "corners are rounded, not mitered");
 }
 
 test "marker ids are namespaced by diagram id" {
-    final svg = renderSvg(twoBox(), lightPalette()) catch "threw";
+    final svg = renderSvg(twoBox(), p: lightPalette()) catch "threw";
     std\assert(svg.indexOf("id=\"t-arrow-default\"") != null, message: "marker id carries the diagram id");
     std\assert(svg.indexOf("url(#t-arrow-default)") != null, message: "the edge references it");
 }
@@ -1299,8 +1299,8 @@ test "an invalid diagram fails the render rather than shipping crooked" {
         id = "t", width = 480, height = 240,
         nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
     };
-    final svg = renderSvg(bad, lightPalette()) catch "threw";
-    assert\equal(svg, "threw", "renderSvg throws on a validation finding");
+    final svg = renderSvg(bad, p: lightPalette()) catch "threw";
+    assert\equal(svg, want: "threw", message: "renderSvg throws on a validation finding");
 }
 
 // A diff nobody intended here is a default that drifted; a deliberate change to the design
@@ -1326,21 +1326,21 @@ test "the default Style renders the pre-Style bytes" {
         + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
         + `<text x="368" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text></g>`
         + `</g></svg>`;
-    assert\equal(renderSvg(twoBox(), lightPalette()) catch "threw", want, "twoBox at the shipped defaults");
-    assert\equal(renderSvg(twoBox(), lightPalette(), defaultStyle()) catch "threw", want,
-        "naming the default explicitly changes nothing");
+    assert\equal(renderSvg(twoBox(), p: lightPalette()) catch "threw", want, message: "twoBox at the shipped defaults");
+    assert\equal(renderSvg(twoBox(), p: lightPalette(), s: defaultStyle()) catch "threw", want,
+        message: "naming the default explicitly changes nothing");
 }
 
 // A knob nothing reaches is not customization. Three field kinds at once - a double, an int
 // and a string - because each one reaches its attribute by a different formatting path.
 test "a customized Style field reaches the attribute" {
-    final styled = renderSvg(twoBox(), lightPalette(),
-        Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }) catch "threw";
+    final styled = renderSvg(twoBox(), p: lightPalette(),
+        s: Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }) catch "threw";
     std\assert(styled.indexOf("stroke-width=\"2\"") != null, message: "the wider stroke landed");
     std\assert(styled.indexOf("rx=\"12\"") != null, message: "the rounder corner landed");
     std\assert(styled.indexOf("font-family=\"Iosevka\"") != null, message: "the family landed");
     std\assert(styled.indexOf("stroke-width=\"1\"") == null, message: "and the default is gone from it");
-    final plain = renderSvg(twoBox(), lightPalette()) catch "threw";
+    final plain = renderSvg(twoBox(), p: lightPalette()) catch "threw";
     std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
 }
 
@@ -1378,7 +1378,7 @@ fun leaseLoopGeometry() > Diagram {
 
 test "an edge label on a bent route clears every box" {
     final d = leaseLoopGeometry();
-    assert\equal(validate(d).len(), 0, "the lease-loop geometry is sound");
+    assert\equal(validate(d).len(), want: 0, message: "the lease-loop geometry is sound");
     foreach (e in d.edges) {
         if (e.label != "") {
             final at = labelPlacement(d, e);
@@ -1388,27 +1388,27 @@ test "an edge label on a bent route clears every box" {
             }
         }
     }
-    final release = labelPlacement(d, d.edges[6]);
-    assert\equal(release[0] - release[2] / 2, 736 + LabelGap, "release sits beside its vertical run, a 10px gap off it");
+    final release = labelPlacement(d, e: d.edges[6]);
+    assert\equal(release[0] - release[2] / 2, want: 736 + LabelGap, message: "release sits beside its vertical run, a 10px gap off it");
 }
 
 test "a horizontal leg long enough for the label carries it above the stroke" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = [ Edge{ src = "a", dst = "b", label = "calls" } ] };
-    assert\equal(labelPlacement(d, d.edges[0]), [240, 126, 36], "centred on the leg, mask bottom 10px above y=140");
+    assert\equal(labelPlacement(d, e: d.edges[0]), want: [240, 126, 36], message: "centred on the leg, mask bottom 10px above y=140");
 }
 
 test "the legend strip carries its word and keeps nodes out" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = base.edges, legend = [ LegendItem{ role = "focal", label = "focal" } ] };
-    final svg = renderSvg(d, lightPalette()) catch "threw";
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
     std\assert(svg.indexOf(">LEGEND</text>") != null, message: "the strip is labelled");
     final low = Diagram{ id = base.id, width = base.width, height = base.height, legend = d.legend,
         nodes = [ Node{ id = "a", label = "A", x = 32, y = 176, w = 160, h = 56 } ] };
     final errs = validate(low);
-    assert\equal(errs.len(), 1, "a box reaching y=232 sits in the strip below y=180");
+    assert\equal(errs.len(), want: 1, message: "a box reaching y=232 sits in the strip below y=180");
     std\assert(errs[0].indexOf("legend strip") != null, message: "named: {errs[0]}");
 }
 
@@ -1422,15 +1422,15 @@ test "input and security paint the skill's treatments" {
         ],
         edges = [ Edge{ src = "a", dst = "b" } ],
     };
-    assert\equal(validate(d).len(), 0, "a node wholly inside a boundary is not an overlap");
-    final svg = renderSvg(d, lightPalette()) catch "threw";
+    assert\equal(validate(d).len(), want: 0, message: "a node wholly inside a boundary is not an overlap");
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
     std\assert(svg.indexOf("fill=\"#4f5d75\" fill-opacity=\"0.1\" stroke=\"#7a8399\"") != null, message: "input is muted at 10%");
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
     std\assert((svg.indexOf("data-node=\"trust\"") ?? 0) < (svg.indexOf("data-edge=") ?? 0), message: "the boundary paints under the connector");
     final straddle = Diagram{ id = "t", width = 640, height = 320,
         nodes = [ d.nodes[0], Node{ id = "b", label = "B", x = 320, y = 64, w = 160, h = 56 } ] };
-    assert\equal(validate(straddle).len(), 1, "a box straddling the boundary still overlaps it");
+    assert\equal(validate(straddle).len(), want: 1, message: "a box straddling the boundary still overlaps it");
 }
 
 test "a boundary zone paints the security treatment and a plain zone does not" {
@@ -1487,11 +1487,11 @@ test "a decision takes at most three exits" {
         Edge{ src = "q", dst = "e", srcSide = "right", dstSide = "left" },
         Edge{ src = "q", dst = "s", srcSide = "bottom", dstSide = "top" },
     ];
-    assert\equal(validate(Diagram{ id = "t", width = 640, height = 360, nodes = nodes, edges = three }).len(), 0, "three exits");
+    assert\equal(validate(Diagram{ id = "t", width = 640, height = 360, nodes = nodes, edges = three }).len(), want: 0, message: "three exits");
     final four = Diagram{ id = "t", width = 640, height = 360, nodes = nodes,
         edges = [ three[0], three[1], three[2], Edge{ src = "q", dst = "w", srcSide = "left", dstSide = "right" } ] };
     final errs = validate(four);
-    assert\equal(errs.len(), 1, "a fourth exit is a finding");
+    assert\equal(errs.len(), want: 1, message: "a fourth exit is a finding");
     std\assert(errs[0].indexOf("4 exits") != null, message: "named: {errs[0]}");
 }
 
@@ -1499,12 +1499,12 @@ test "zones paint a solid hairline wash and stop at three" {
     final base = twoBox();
     final z = Zone{ label = "core", x = 16, y = 80, w = 448, h = 120 };
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
-    final svg = renderSvg(d, lightPalette()) catch "threw";
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
     std\assert(svg.indexOf("fill=\"#2d3142\" fill-opacity=\"0.02\" stroke=\"#2d3142\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
         message: "ink wash, ink hairline, no dash");
     std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#2d3142\" fill-opacity=\"0.4\" font-size=\"7\"") != null, message: "label centred, 7px");
     final four = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
-    assert\equal(validate(four).len(), 1, "a fourth zone is a finding");
+    assert\equal(validate(four).len(), want: 1, message: "a fourth zone is a finding");
 }
 
 test "a bend too tight for the floor is a finding, not a sharper corner" {
@@ -1513,11 +1513,11 @@ test "a bend too tight for the floor is a finding, not a sharper corner" {
     final tight = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left", bend = 196 } ] };
     final errs = validate(tight);
-    assert\equal(errs.len(), 1, "a 4px leg cannot seat a 6px bend");
+    assert\equal(errs.len(), want: 1, message: "a 4px leg cannot seat a 6px bend");
     std\assert(errs[0].indexOf("leaves 4px") != null, message: "named: {errs[0]}");
     final roomy = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left" } ] };
-    final svg = renderSvg(roomy, lightPalette(), Style{ bendRadius = 2 }) catch "threw";
+    final svg = renderSvg(roomy, p: lightPalette(), s: Style{ bendRadius = 2 }) catch "threw";
     std\assert(svg.indexOf("L 234 140 Q 240 140 240 146") != null, message: "a radius under the floor is raised to 6");
 }
 
@@ -1525,11 +1525,11 @@ test "anchorHref links an anchored node and leaves the rest alone" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
         nodes = [ Node{ id = "a", label = "A", anchor = "internal/job", x = 32, y = 112 }, base.nodes[1] ] };
-    final linked = renderSvg(d, lightPalette(), Style{ anchorHref = "/code/\{path\}" }) catch "threw";
+    final linked = renderSvg(d, p: lightPalette(), s: Style{ anchorHref = "/code/\{path\}" }) catch "threw";
     std\assert(linked.indexOf("<a href=\"/code/internal/job\" data-node=\"a\" data-anchor=\"internal/job\"><g>") != null,
         message: "the anchored node is wrapped in a link");
     std\assert(linked.indexOf("<g data-node=\"b\">") != null, message: "the unanchored node is a plain group");
-    final plain = renderSvg(d, lightPalette()) catch "threw";
+    final plain = renderSvg(d, p: lightPalette()) catch "threw";
     std\assert(plain.indexOf("<a ") == null, message: "no template, no link");
     std\assert(plain.indexOf("<g data-node=\"a\" data-anchor=\"internal/job\">") != null, message: "the anchor still reaches the group");
 }
@@ -1548,7 +1548,7 @@ export fun inlineDiagrams(html: str, svgById: {str: str}) > str {
         final svg = svgById[id] ?? "";
         final figure = "<figure class=\"magus-diagram-figure\">" + svg + "</figure>";
         page = page.split("<!--diagram:" + id + "-->").join(figure);
-        page = replacePicture(page, "diagram-" + id + ".svg", figure);
+        page = replacePicture(page, needle: "diagram-" + id + ".svg", replacement: figure);
     }
     return page;
 }
@@ -1557,31 +1557,36 @@ export fun inlineDiagrams(html: str, svgById: {str: str}) > str {
 // the element bounds beats a regex here: the srcset and img inside carry attributes in no
 // fixed order, and a <picture> that does not mention the needle has to survive untouched.
 fun replacePicture(html: str, needle: str, replacement: str) > str {
-    var done = "";
+    final done = mut [<str>];
     var page = html;
     var guard = 0;
     while (guard < 64) {
         final start = page.indexOf("<picture");
-        if (start == null) { return done + page; }
+        if (start == null) { break; }
         final rest = page.sub(start!);
         final close = rest.indexOf("</picture>");
-        if (close == null) { return done + page; }
+        if (close == null) { break; }
         final element = rest.sub(0, len: close! + 10);
         if (element.indexOf(needle) != null) {
-            return done + page.sub(0, len: start!) + replacement + rest.sub(close! + 10);
+            done.append(page.sub(0, len: start!));
+            done.append(replacement);
+            page = rest.sub(close! + 10);
+            break;
         }
         // Carry this one through and keep scanning. Returning on the first miss skips
         // every diagram that follows an unrelated <picture>, and the README opens with
         // one: the hero terminal recording.
-        done = done + page.sub(0, len: start!) + element;
+        done.append(page.sub(0, len: start!));
+        done.append(element);
         page = rest.sub(close! + 10);
         guard = guard + 1;
     }
-    return done + page;
+    done.append(page);
+    return done.join("");
 }
 
 test "a comment marker is replaced by the svg" {
-    final page = inlineDiagrams("<p>before</p>\n<!--diagram:x-->\n<p>after</p>", {"x": "<svg/>"});
+    final page = inlineDiagrams("<p>before</p>\n<!--diagram:x-->\n<p>after</p>", svgById: {"x": "<svg/>"});
     std\assert(page.indexOf("<svg/>") != null, message: "the svg landed");
     std\assert(page.indexOf("<!--diagram:x-->") == null, message: "the marker is gone");
     std\assert(page.indexOf("<p>after</p>") != null, message: "surrounding content survives");
@@ -1590,7 +1595,7 @@ test "a comment marker is replaced by the svg" {
 test "a picture element referencing the diagram is replaced whole" {
     final markup = "<p>a</p><picture><source srcset=\"assets/gen/diagram-x-light.svg\">"
         + "<img src=\"assets/gen/diagram-x.svg\" alt=\"x\"></picture><p>b</p>";
-    final page = inlineDiagrams(markup, {"x": "<svg/>"});
+    final page = inlineDiagrams(markup, svgById: {"x": "<svg/>"});
     std\assert(page.indexOf("<picture") == null, message: "the whole element is replaced");
     std\assert(page.indexOf("<img") == null, message: "the fallback img goes with it");
     std\assert(page.indexOf("<svg/>") != null, message: "the svg landed");
@@ -1599,13 +1604,13 @@ test "a picture element referencing the diagram is replaced whole" {
 
 test "an unrelated picture is left alone" {
     final markup = "<picture><img src=\"assets/gen/core-loop.svg\" alt=\"a recording\"></picture>";
-    assert\equal(inlineDiagrams(markup, {"x": "<svg/>"}), markup, "a terminal recording is not a diagram");
+    assert\equal(inlineDiagrams(markup, svgById: {"x": "<svg/>"}), want: markup, message: "a terminal recording is not a diagram");
 }
 
 test "a diagram picture is found after an unrelated one" {
     final markup = "<picture><img src=\"assets/gen/core-loop.svg\" alt=\"a recording\"></picture>"
         + "<p>mid</p><picture><img src=\"docs/assets/gen/diagram-x.svg\" alt=\"x\"></picture>";
-    final page = inlineDiagrams(markup, {"x": "<svg/>"});
+    final page = inlineDiagrams(markup, svgById: {"x": "<svg/>"});
     std\assert(page.indexOf("core-loop.svg") != null, message: "the recording survives");
     std\assert(page.indexOf("diagram-x.svg") == null, message: "the diagram is replaced");
     std\assert(page.indexOf("<p>mid</p>") != null, message: "content between them survives");
@@ -1614,19 +1619,19 @@ test "a diagram picture is found after an unrelated one" {
 test "an explicit bend beats the shared-axis shortcut" {
     // Both ends on y=224, detouring via y=288: a straight line here would run back through
     // the boxes it connects.
-    final path = connectorPath(772, 224, 180, 224, false, 288, radius: defaultStyle().bendRadius);
+    final path = connectorPath(772, y1: 224, x2: 180, y2: 224, horizontal: false, bend: 288, radius: defaultStyle().bendRadius);
     std\assert(path.indexOf("288") != null, message: "the route reaches the declared bend");
     std\assert(path != "M 772 224 L 180 224", message: "not the straight shortcut");
 }
 
 test "a shared axis with no bend still routes straight" {
-    assert\equal(connectorPath(0, 40, 200, 40, true, 0, radius: defaultStyle().bendRadius), "M 0 40 L 200 40", "unchanged");
+    assert\equal(connectorPath(0, y1: 40, x2: 200, y2: 40, horizontal: true, bend: 0, radius: defaultStyle().bendRadius), want: "M 0 40 L 200 40", message: "unchanged");
 }
 
 test "a via route rounds every corner" {
     assert\equal(routePath([0, 0, 40, 0, 40, 80, 120, 80, 120, 120], radius: 8),
-        "M 0 0 L 32 0 Q 40 0 40 8 L 40 72 Q 40 80 48 80 L 112 80 Q 120 80 120 88 L 120 120",
-        "three corners, three quarter-rounds");
+        want: "M 0 0 L 32 0 Q 40 0 40 8 L 40 72 Q 40 80 48 80 L 112 80 Q 120 80 120 88 L 120 120",
+        message: "three corners, three quarter-rounds");
 }
 
 // The via legs feed the same overlap check a single-bend route does, and a diagonal leg
@@ -1641,12 +1646,12 @@ test "a via route is validated leg by leg" {
                   via = [112, 200, 368, 200] },
         ],
     };
-    assert\equal(validate(routed).len(), 0, "a straight via and a return leg are sound");
+    assert\equal(validate(routed).len(), want: 0, message: "a straight via and a return leg are sound");
     final diagonal = Diagram{
         id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = "bottom", dstSide = "left", via = [112, 200, 240, 200] } ],
     };
-    assert\equal(validate(diagonal).len(), 1, "the leg into b's left side runs diagonally");
+    assert\equal(validate(diagonal).len(), want: 1, message: "the leg into b's left side runs diagonally");
 }
 
 // LayeredItem is one node handed to layered(): an id, its display label, and the ids it
@@ -1703,7 +1708,7 @@ fun fitLabel(label: str) > str {
 export final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
 
 export fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
-    var best = layoutWithStagger(id, title, desc, items, LayerStaggers[0]);
+    var best = layoutWithStagger(id, title, desc, items, stagger: LayerStaggers[0]);
     foreach (stagger in LayerStaggers) {
         final attempt = layoutWithStagger(id, title, desc, items, stagger);
         if (validate(attempt).len() == 0) { return attempt; }
@@ -1837,27 +1842,27 @@ fun layoutWithStagger(id: str, title: str, desc: str, items: [LayeredItem], stag
 }
 
 test "layered ranks a chain into one column per step" {
-    final d = layered("t", "chain", "a to c", [
+    final d = layered("t", title: "chain", desc: "a to c", items: [
         LayeredItem{ id = "a", label = "A" },
         LayeredItem{ id = "b", label = "B", deps = ["a"] },
         LayeredItem{ id = "c", label = "C", deps = ["b"] },
     ]);
-    assert\equal(validate(d).len(), 0, "a generated layout is structurally sound");
-    assert\equal(d.nodes.len(), 3, "every item placed");
-    assert\equal(d.edges.len(), 2, "every dependency drawn");
+    assert\equal(validate(d).len(), want: 0, message: "a generated layout is structurally sound");
+    assert\equal(d.nodes.len(), want: 3, message: "every item placed");
+    assert\equal(d.edges.len(), want: 2, message: "every dependency drawn");
     // Three ranks, so three distinct columns, left to right.
     std\assert(d.nodes[0].x < d.nodes[1].x, message: "b sits right of a");
     std\assert(d.nodes[1].x < d.nodes[2].x, message: "c sits right of b");
 }
 
 test "layered stacks independent roots in one column" {
-    final d = layered("t", "fan", "two roots into one sink", [
+    final d = layered("t", title: "fan", desc: "two roots into one sink", items: [
         LayeredItem{ id = "a", label = "A" },
         LayeredItem{ id = "b", label = "B" },
         LayeredItem{ id = "sink", label = "Sink", deps = ["a", "b"] },
     ]);
-    assert\equal(validate(d).len(), 0, "no overlap, no shared attach point");
-    assert\equal(d.nodes[0].x, d.nodes[1].x, "both roots share rank 0");
+    assert\equal(validate(d).len(), want: 0, message: "no overlap, no shared attach point");
+    assert\equal(d.nodes[0].x, want: d.nodes[1].x, message: "both roots share rank 0");
     std\assert(d.nodes[0].y != d.nodes[1].y, message: "and are stacked, not overlapping");
 }
 
@@ -1868,8 +1873,8 @@ test "layered exceeds the authored budgets without complaint" {
         items.append(LayeredItem{ id = "n{i}", label = "N{i}" });
         i = i + 1;
     }
-    final d = layered("t", "wide", "more nodes than a human should draw", items);
-    assert\equal(validate(d).len(), 0, "budgets are for hand-authored figures only");
+    final d = layered("t", title: "wide", desc: "more nodes than a human should draw", items: items);
+    assert\equal(validate(d).len(), want: 0, message: "budgets are for hand-authored figures only");
 }
 
 // The regression this pins: distinct attach slots are NOT enough. Two connectors can leave
@@ -1908,17 +1913,17 @@ test "offsetting one bend clears the overlap" {
                   dstSide = "left", bend = 320 },
         ],
     };
-    assert\equal(validate(good).len(), 0, "distinct crossing lines are traceable");
+    assert\equal(validate(good).len(), want: 0, message: "distinct crossing lines are traceable");
 }
 
 // The generated path has to satisfy the same rule, and it is where the defect actually
 // shipped: a fan-out is the shape every run-order figure ends in.
 test "layered fans siblings onto distinct crossing lines" {
-    final d = layered("t", "fan out", "one root, three children", [
+    final d = layered("t", title: "fan out", desc: "one root, three children", items: [
         LayeredItem{ id = "root", label = "Root" },
         LayeredItem{ id = "x", label = "X", deps = ["root"] },
         LayeredItem{ id = "y", label = "Y", deps = ["root"] },
         LayeredItem{ id = "z", label = "Z", deps = ["root"] },
     ]);
-    assert\equal(validate(d).len(), 0, "no two generated connectors share a line");
+    assert\equal(validate(d).len(), want: 0, message: "no two generated connectors share a line");
 }

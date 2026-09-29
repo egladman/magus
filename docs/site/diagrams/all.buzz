@@ -85,7 +85,7 @@ export fun renderAll() > {str: str} !> any {
     if (rendered != null) { return rendered!; }
     final byId: mut {str: str} = mut {<str: str>};
     foreach (d in allDiagrams()) {
-        byId[d.id] = renderSvg(d, cssVarPalette());
+        byId[d.id] = renderSvg(d, p: cssVarPalette());
     }
     rendered = byId;
     return byId;
@@ -106,8 +106,8 @@ export fun writeStandalonePair(dir: str) > void !> any {
         final light = dir + "/diagram-" + d.id + "-light.svg";
         expected.append(dark);
         expected.append(light);
-        fs\writeFile(dark, renderSvg(d, darkPalette()));
-        fs\writeFile(light, renderSvg(d, lightPalette()));
+        fs\writeFile(dark, content: renderSvg(d, p: darkPalette()));
+        fs\writeFile(light, content: renderSvg(d, p: lightPalette()));
     }
     // This target owns every diagram-*.svg in its output directory. Prune an
     // obsolete id or a filesystem-de-collided copy before the output glob is
@@ -123,14 +123,14 @@ export fun writeStandalonePair(dir: str) > void !> any {
 
 test "writeStandalonePair prunes an obsolete owned diagram" {
     final dir = fs\tempDir("magus-diagrams-");
-    fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", "stale copy");
-    fs\writeFile(dir + "/not-a-diagram.svg", "authored");
+    fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", content: "stale copy");
+    fs\writeFile(dir + "/not-a-diagram.svg", content: "authored");
 
     writeStandalonePair(dir);
 
-    assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), true, "current diagram remains");
-    assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), false, "stale diagram copy removed");
-    assert\equal(fs\exists(dir + "/not-a-diagram.svg"), true, "outside the owned prefix remains");
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), want: true, message: "current diagram remains");
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), want: false, message: "stale diagram copy removed");
+    assert\equal(fs\exists(dir + "/not-a-diagram.svg"), want: true, message: "outside the owned prefix remains");
     fs\removeAll(dir);
 }
 
@@ -141,7 +141,7 @@ export fun inlinePageDiagrams(html: str) > str !> any {
     if (html.indexOf("<!--diagram:") == null and html.indexOf("diagram-") == null) {
         return html;
     }
-    return inlineDiagrams(html, renderAll());
+    return inlineDiagrams(html, svgById: renderAll());
 }
 
 // BackrefMarker is the token a source file uses to point back at a diagram, as in
@@ -477,7 +477,7 @@ export fun writeObservedFigures(dir: str, imports: ObservedImports) > [str] !> a
     foreach (d in allDiagrams()) {
         if (d.scope.len() == 0) { continue; }
         final path = dir + "/" + d.id + ".buzz";
-        fs\writeFile(path, observedModule(d.id, o: observeScope(d.scope, imports: imports)));
+        fs\writeFile(path, content: observedModule(d.id, o: observeScope(d.scope, imports: imports)));
         written.append(path);
         expected[d.id + ".buzz"] = true;
     }
@@ -529,10 +529,10 @@ fun driftTree() > str !> any {
     fs\mkdirAll(root + "/pkg/a");
     fs\mkdirAll(root + "/pkg/b");
     fs\mkdirAll(root + "/pkg/c");
-    fs\writeFile(root + "/pkg/a/a.go", "package a\n");
-    fs\writeFile(root + "/pkg/b/b.go", "package b\n");
-    fs\writeFile(root + "/pkg/b/b_test.go", "package b\n");
-    fs\writeFile(root + "/pkg/c/c_test.go", "package c\n");
+    fs\writeFile(root + "/pkg/a/a.go", content: "package a\n");
+    fs\writeFile(root + "/pkg/b/b.go", content: "package b\n");
+    fs\writeFile(root + "/pkg/b/b_test.go", content: "package b\n");
+    fs\writeFile(root + "/pkg/c/c_test.go", content: "package c\n");
     return root;
 }
 
@@ -691,8 +691,8 @@ test "writing observations refuses without an index, writes each scoped figure, 
     }
     assert\isTrue(refusal.indexOf("magus graph build") != null, message: "an absent index is an error naming the fix");
 
-    fs\writeFile(dir + "/retired.buzz", "stale");
-    fs\writeFile(dir + "/notes.txt", "authored");
+    fs\writeFile(dir + "/retired.buzz", content: "stale");
+    fs\writeFile(dir + "/notes.txt", content: "authored");
     final written = writeObservedFigures(dir, imports: sampleImports());
     var scoped = 0;
     foreach (d in allDiagrams()) {
