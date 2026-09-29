@@ -54,6 +54,8 @@ A project owns:
 
 Discovery is cached against directory mtimes, so a repeat open on an unchanged tree restores the project set without re-walking.
 
+<!--diagram:workspace-load-->
+
 ## The magusfile
 
 A project's magusfile is `magusfile.buzz` (or the split `magusfiles/*.buzz` form). Its **mere presence registers the project on defaults** - a magusfile that only exports target functions is complete:

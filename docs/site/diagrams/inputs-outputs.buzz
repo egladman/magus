@@ -1,0 +1,66 @@
+// site/diagrams/inputs-outputs.buzz: where a target's globs stop, and what reaches its cache key.
+//
+// The figure has one claim: an output glob stops at a nested project's directory, an input
+// glob does not, and a project handle is the declared way across. The accents are the key
+// and the handle's crossing.
+//
+// The boundary rules it draws, as the code states them:
+//   types/workspace.go:91 "A file inside a nested project is that project's, so
+//     `**/gen/*.go` claims the root's gen/ and not a nested project's, while a declared
+//     cross-project output such as `leaf/gen/*.go` still reaches in."
+//   internal/cache/cache.go:151 NestedDirs is "Unhashed: it narrows what a snapshot records
+//     and a replay writes, never the key." The source walk (hash.go expandSources) takes no
+//     nested dirs, so an input glob matches inside them.
+//   project/affected.go:287 "the root's "**/*.go" reaches every nested Go file in this
+//     very repo".
+//   internal/audit/audit.go:382 MGS3001: "project %q target %q wrote into descendant
+//     project %q".
+//   describe.go:400 a cross-project input's owner "is also unioned into DependsOn".
+//
+// The snapshot's connector to the claim rule is a real import (internal/cache imports
+// types); every other connector is a declaration or a step, and claims flow.
+namespace inputsOutputs;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/inputs-outputs" as inputsOutputsGen;
+
+export fun inputsOutputsDiagram() > Diagram !> str {
+    return flow("inputs-outputs", observed: inputsOutputsGen\inputsOutputsObserved())
+        .eyebrow("inputs and outputs")
+        .title("An output stops at a nested project; an input does not")
+        .desc("A target's ctx.readsFiles and ctx.writesFiles globs resolve from its own "
+            + "project's directory. The source walk matches every file a glob names, so the "
+            + "root's **/*.go keys every nested Go file too. An output glob claims a file "
+            + "inside a nested project only when the glob is rooted there; the snapshot, "
+            + "the replay and the drift gate all ask the same rule, and a write that lands "
+            + "there anyway fails the run as MGS3001. A nested project reads the root's "
+            + "tree through a project handle, workspace\\file, which also makes the root "
+            + "its upstream. The matched files and the probed tool versions are the key; an "
+            + "input nobody declared never reaches it.")
+        .node("reads", label: "readsFiles(\"**/*.go\")", sub: "matches nested files too", tag: "root", anchor: "magusfile.buzz")
+        .node("writes", label: "writesFiles(\"**/gen/mocks/*.go\")", sub: "the root's gen/ only", tag: "root", anchor: "magusfile.buzz")
+        .node("handle", label: "workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", anchor: "docs/magusfile.buzz")
+        .node("audit", label: "Descendant audit", sub: "MGS3001 on a write inside", anchor: "internal/audit")
+        .node("walk", label: "Source walk", sub: "every file a glob matches", anchor: "internal/cache/hash.go")
+        .node("probe", label: "Tool probe", sub: "the version, or UNPROBED", anchor: "run.go")
+        .node("key", label: "Cache key", sub: "src:, dep:, tool: lines", role: Role.focal, anchor: "internal/cache")
+        .node("snapshot", label: "Snapshot + replay", sub: "owned outputs only", anchor: "internal/cache/snapshot.go")
+        .node("claims", label: "Output claim", sub: "stops at a nested dir", anchor: "types/workspace.go")
+        .edge("reads", dst: "walk")
+        .edge("handle", dst: "walk", label: "+ depends_on", role: EdgeRole.focal)
+        .edge("walk", dst: "key", label: "src:")
+        .edge("probe", dst: "key", label: "tool:")
+        .edge("writes", dst: "snapshot")
+        .edge("key", dst: "snapshot", label: "hit replays")
+        .edge("snapshot", dst: "claims", claim: Claim.imports)
+        .edge("writes", dst: "audit", label: "stray write", role: EdgeRole.optional)
+        // Nested above root, so the handle's crossing and a stray write each cross the one
+        // zone edge between the two projects.
+        .zone("a nested project", members: ["handle", "audit"])
+        .zone("root project .", members: ["reads", "writes"])
+        .zone("the cache", members: ["walk", "probe", "key", "snapshot", "claims"])
+        .legend(Role.focal, label: "what a hit is keyed on")
+        .scope(["internal/cache"])
+        .diagram();
+}

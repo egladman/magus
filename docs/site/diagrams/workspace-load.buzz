@@ -1,0 +1,52 @@
+// site/diagrams/workspace-load.buzz: how magus reads a workspace in before any target runs.
+//
+// The figure has one claim: a target exists only because a magusfile exported it, and the
+// project model the load builds from those magusfiles is the one thing the cache, describe
+// and a command's directory context read. The accent is that model.
+//
+// The load is orchestrated by the root package (magus.go load), so the steps between the
+// boxes claim flow: no box imports the next. The readers do import types, but the arrow
+// runs from the model to them, against the import, so those claim flow too.
+namespace workspaceLoad;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/workspace-load" as workspaceLoadGen;
+
+export fun workspaceLoadDiagram() > Diagram !> str {
+    return flow("workspace-load", observed: workspaceLoadGen\workspaceLoadObserved())
+        .eyebrow("workspace")
+        .title("A target exists because a magusfile exported it")
+        .desc("Discovery walks the tree from the root marker and registers one project per "
+            + "magusfile: the root's is project ., each nested one declares its own. Every "
+            + "magusfile is evaluated: its exported functions are its targets and "
+            + "magus\\project layers policy on. A static read of each target body recovers "
+            + "ctx.readsFiles, ctx.writesFiles and cross-project ctx.needs as literals. The "
+            + "project model that results is what the cache keys, what describe answers "
+            + "from, and what a command resolves its project against from the current "
+            + "directory.")
+        .node("rootmf", label: "Root magusfile", sub: "declares project .", role: Role.input, anchor: "magusfile.buzz")
+        .node("nestedmf", label: "Nested magusfiles", sub: "docs/, proto/, libs/*", role: Role.input, anchor: "docs/magusfile.buzz")
+        .node("discover", label: "Discovery", sub: "a magusfile is a project", anchor: "project")
+        .node("interp", label: "Evaluate", sub: "export fun is a target", anchor: "internal/interp")
+        .node("extract", label: "Static read", sub: "literal reads, writes, needs", anchor: "internal/describe")
+        .node("model", label: "Projects and targets", sub: "sources, outputs, depends_on", role: Role.focal, anchor: "types/project.go")
+        .node("cache", label: "Cache key", sub: "one step per target", anchor: "internal/cache")
+        .node("describe", label: "magus describe", sub: "targets, claims, the graph", anchor: "describe.go")
+        .node("cwd", label: "Directory context", sub: "cwd picks the project", anchor: "project/affected.go")
+        .edge("rootmf", dst: "discover", label: "registers .")
+        .edge("nestedmf", dst: "discover", label: "registers dir")
+        .edge("discover", dst: "interp")
+        .edge("discover", dst: "extract")
+        .edge("interp", dst: "model", label: "targets")
+        .edge("extract", dst: "model", label: "footprints")
+        .edge("model", dst: "cache")
+        .edge("model", dst: "describe")
+        .edge("model", dst: "cwd", label: "Where(cwd)")
+        .omitEdge("interp", dst: "discover", why: "the bindings build project options from project's types; the order the load runs in is discovery first, drawn the other way")
+        .zone("written by hand", members: ["rootmf", "nestedmf"])
+        .legend(Role.focal, label: "what every reader reads")
+        .legend(Role.input, label: "the only declarations")
+        .scope(["project", "internal/interp", "internal/describe"])
+        .diagram();
+}
