@@ -295,6 +295,9 @@ export object Diagram {
     // Why a figure with no scope depicts no code, as its author said it. Painted nowhere;
     // the drift summary reports it so an unchecked figure says why it is unchecked.
     unscoped: str = "",
+    // 0 spreads slot k of n at k/(n+1) along its side, the authored form. A positive pitch
+    // puts the n slots that far apart, symmetric about the side's midline, as flow fans.
+    pitch: int = 0,
 }
 
 fun iabs(n: int) > int {
@@ -744,15 +747,32 @@ fun resolveSide(d: Diagram, e: Edge, isFrom: bool) > str {
     return "bottom";
 }
 
-// attachPoint places connector k of n along a box edge at k/(n+1), snapped to the grid, so
-// connectors sharing a side stay independently traceable.
-fun attachPoint(n: Node, side: str, slot: int, slots: int) > [int] {
-    final fx = n.x + snap(n.w * slot / (slots + 1));
-    final fy = n.y + snap(n.h * slot / (slots + 1));
+// attachPoint places connector k of n along a box edge at k/(n+1), snapped to the grid, or
+// on the pitch lattice about the side's midline, so connectors sharing a side stay
+// independently traceable.
+fun attachPoint(n: Node, side: str, slot: int, slots: int, pitch: int) > [int] {
+    var fx = n.x + snap(n.w * slot / (slots + 1));
+    var fy = n.y + snap(n.h * slot / (slots + 1));
+    if (pitch > 0) {
+        final off = latticeOffset(slot, slots: slots, pitch: pitch);
+        fx = n.x + snap(n.w / 2) + off;
+        fy = n.y + snap(n.h / 2) + off;
+    }
     if (side == "left") { return [n.x, fy]; }
     if (side == "right") { return [n.x + n.w, fy]; }
     if (side == "top") { return [fx, n.y]; }
     return [fx, n.y + n.h];
+}
+
+// latticeOffset is where slot k of n sits from its side's midline on a pitch lattice: an
+// odd n puts its middle slot on the midline, an even n straddles it. A half pitch off the
+// 4px grid rounds away from the midline, so the lattice stays symmetric and no two slots
+// close to under a pitch.
+export fun latticeOffset(slot: int, slots: int, pitch: int) > int {
+    final v = (2 * slot - slots - 1) * pitch / 2;
+    final r = iabs(v) % Grid;
+    if (r == 0) { return v; }
+    return v + isign(v) * (Grid - r);
 }
 
 // connectorPath emits an orthogonal route with rounded bends. Diagonals are not
@@ -807,6 +827,8 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
 // routePath is connectorPath for a polyline of x,y pairs: one rounded bend per interior
 // corner. A corner may take all of an end leg but only half of an inner one, which the
 // corner at its other end shares.
+// TODO(diagram/routing-2): every proper crossing hops the dashed or lesser edge, and flow's
+// properCrossings check moves into validate (critique rule 9).
 fun routePath(pts: [int], radius: int) > str {
     final n = pts.len() / 2;
     final parts: mut [str] = mut ["M {pts[0]} {pts[1]}"];
@@ -1078,8 +1100,8 @@ fun edgeGeometry(d: Diagram, e: Edge) > [int] {
     if (a == null or b == null) { return [0, 0, 0, 0, 1]; }
     final fromSide = resolveSide(d, e, isFrom: true);
     final toSide = resolveSide(d, e, isFrom: false);
-    final s = attachPoint(a!, side: fromSide, slot: e.srcSlot, slots: e.srcSlots);
-    final t = attachPoint(b!, side: toSide, slot: e.dstSlot, slots: e.dstSlots);
+    final s = attachPoint(a!, side: fromSide, slot: e.srcSlot, slots: e.srcSlots, pitch: d.pitch);
+    final t = attachPoint(b!, side: toSide, slot: e.dstSlot, slots: e.dstSlots, pitch: d.pitch);
     final horizontal = fromSide == "left" or fromSide == "right";
     var h = 0;
     if (horizontal) { h = 1; }
@@ -1266,11 +1288,21 @@ test "fanning the same side with distinct slots validates clean" {
 
 test "attachPoint spreads slots along the edge" {
     final n = Node{ id = "a", label = "A", x = 0, y = 0, w = 160, h = 60 };
-    final one = attachPoint(n, side: "right", slot: 1, slots: 2);
-    final two = attachPoint(n, side: "right", slot: 2, slots: 2);
+    final one = attachPoint(n, side: "right", slot: 1, slots: 2, pitch: 0);
+    final two = attachPoint(n, side: "right", slot: 2, slots: 2, pitch: 0);
     assert\equal(one[0], want: 160, message: "both leave the right face");
     assert\equal(two[0], want: 160, message: "both leave the right face");
     std\assert(one[1] != two[1], message: "slot 1 of 2 and slot 2 of 2 are distinct points");
+}
+
+test "a pitch lattice sits symmetric about the side's midline" {
+    final n = Node{ id = "a", label = "A", x = 0, y = 0, w = 160, h = 64 };
+    final odd: mut [int] = mut [<int>];
+    foreach (k in [1, 2, 3]) { odd.append(attachPoint(n, side: "left", slot: k, slots: 3, pitch: 12)[1]); }
+    assert\equal(odd, want: [20, 32, 44], message: "the middle slot of three on the midline");
+    final even: mut [int] = mut [<int>];
+    foreach (k in [1, 2, 3, 4]) { even.append(latticeOffset(k, slots: 4, pitch: 12)); }
+    assert\equal(even, want: [0 - 20, 0 - 8, 8, 20], message: "an even fan straddles it, rounded away onto the grid");
 }
 
 // Connectors are orthogonal by construction. A shared axis must degenerate to a straight
