@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -506,4 +508,103 @@ func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
 
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Username: "bot", Password: "s3cret-token"})
 	require.NoError(t, err)
+}
+
+// A shipped spell's artifact is the one Build packs from the same directory on disk
+// with ShippedProvenance: the digest a binary computes from its embedded copy is the
+// digest a release publishes.
+func TestShippedMatchesBuild(t *testing.T) {
+	entries, err := fs.ReadDir(spells.Shipped(), ".")
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	for _, e := range entries {
+		dir := e.Name()
+		ref, shipped, err := Shipped(dir, dir)
+		require.NoError(t, err, dir)
+		built, err := Build(t.Context(), filepath.Join("..", "..", "..", "spells", dir), allTracked{}, ShippedProvenance(dir))
+		require.NoError(t, err, dir)
+		assert.Equal(t, built, shipped, dir)
+		_, d, err := built.Manifest()
+		require.NoError(t, err)
+		assert.Equal(t, "ghcr.io/egladman/magus/spells/"+dir+"@"+d.String(), ref.String())
+		assert.Equal(t, map[string]string{
+			ocispec.AnnotationTitle:  dir,
+			ocispec.AnnotationSource: "https://github.com/egladman/magus",
+		}, shipped.Annotations, "no revision or creation time, so the digest follows the files alone")
+	}
+}
+
+func TestEjectReadsBackAsItsOrigin(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "spells", "go")
+	ref, err := Eject("go", "golang", dst)
+	require.NoError(t, err)
+	want, _, err := Shipped("go", "golang")
+	require.NoError(t, err)
+	assert.Equal(t, want, ref)
+
+	for _, name := range []string{"spell.buzz", "gomod.buzz"} {
+		embedded, err := fs.ReadFile(spells.Shipped(), "golang/"+name)
+		require.NoError(t, err)
+		got, err := os.ReadFile(filepath.Join(dst, name))
+		require.NoError(t, err)
+		if name == "spell.buzz" {
+			embedded = append([]byte("// magus:origin "+ref.String()+"\n"), embedded...)
+		}
+		assert.Equal(t, string(embedded), string(got), name)
+	}
+	fork, err := ReadFork(dst, "go", "golang")
+	require.NoError(t, err)
+	assert.Equal(t, Fork{Origin: ref, Shipped: ref, Edited: false}, fork)
+
+	_, err = Eject("go", "golang", dst)
+	require.ErrorContains(t, err, "not empty", "a copy is never written over another")
+}
+
+func TestReadFork(t *testing.T) {
+	eject := func(t *testing.T) string {
+		dst := filepath.Join(t.TempDir(), "go")
+		_, err := Eject("go", "golang", dst)
+		require.NoError(t, err)
+		return dst
+	}
+	shipped, _, err := Shipped("go", "golang")
+	require.NoError(t, err)
+	older := shipped
+	older.Digest = digest.FromString("an older release")
+
+	for _, c := range []struct {
+		name string
+		edit func(t *testing.T, dir string)
+		want Fork
+	}{
+		{"edited", func(t *testing.T, dir string) {
+			f, err := os.OpenFile(filepath.Join(dir, "spell.buzz"), os.O_APPEND|os.O_WRONLY, 0)
+			require.NoError(t, err)
+			_, err = f.WriteString("// ours\n")
+			require.NoError(t, err)
+			require.NoError(t, f.Close())
+		}, Fork{Origin: shipped, Shipped: shipped, Edited: true}},
+		{"a file added", func(t *testing.T, dir string) {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.buzz"), nil, 0o644))
+		}, Fork{Origin: shipped, Shipped: shipped, Edited: true}},
+		{"no stamp", func(t *testing.T, dir string) {
+			body, err := fs.ReadFile(spells.Shipped(), "golang/spell.buzz")
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "spell.buzz"), body, 0o644))
+		}, Fork{Shipped: shipped}},
+		{"pulled from another release", func(t *testing.T, dir string) {
+			p := filepath.Join(dir, "spell.buzz")
+			body, err := os.ReadFile(p)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(p, bytes.Replace(body, []byte(shipped.Digest.String()), []byte(older.Digest.String()), 1), 0o644))
+		}, Fork{Origin: older, Shipped: shipped}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := eject(t)
+			c.edit(t, dir)
+			got, err := ReadFork(dir, "go", "golang")
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
 }

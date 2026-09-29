@@ -122,14 +122,27 @@ A spell only takes effect when its **handle** is passed to `magus\project.regist
 
 ### Built-in
 
-Built-in spells are compiled into the magus binary.
+Built-in spells ship in the magus binary as their Buzz source and compile when magus
+starts.
 
 ```buzz
 import "magus/spell/go";
 magus\project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 ```
 
-Available built-ins: `go`, `typescript`, `python`, `rust`, `bash`, `buf`, `buzz`, `docker`, `cosign`, `markdown`.
+Available built-ins: `go`, `typescript`, `python`, `rust`, `bash`, `buf`, `buzz`, `docker`, `cosign`, `markdown`, `podman`.
+
+To change one, copy it out and own the copy:
+
+```sh
+magus spell pull magus/spell/go spells/go
+```
+
+That writes the spell's files into `spells/go`, the first line of `spell.buzz` naming the
+published artifact it came from, and prints the `magus.yaml` entry that makes the copy
+replace the built-in ([Overrides](../reference/remote-spells.md#overrides)). The copy is
+yours: as long as it keeps the spell contract, edit it however you like. `magus doctor`
+says when the built-in has changed since you pulled it.
 
 ### File spell
 
@@ -155,7 +168,7 @@ import "ghcr.io/<owner>/<repo>/spells/ruby" as rb;
 
 ## Composing spells
 
-Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/spell` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
+Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-Buzz `magus/spell`, `magus/charm` and `magus/lint` modules (the session that loads built-ins offers nothing else). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
 ```buzz
 import "magus/spell/go";

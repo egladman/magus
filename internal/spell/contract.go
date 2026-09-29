@@ -14,7 +14,7 @@ type contractEntry struct {
 	// resolve.go, because a field name spelled in two places is a field name that can
 	// be renamed in one. That is not hypothetical: renaming mgs_listManifests to
 	// mgs_listVersionFiles updated this list, the decoder and all four spell sources,
-	// and strings(1) confirmed the regenerated .bo exported the new name, but the
+	// and the compiled spells exported the new name, but the
 	// switch still said "manifests", so pathValues quietly stopped running, the Path
 	// objects were never reduced to strings, and the decoded field came back EMPTY with
 	// nothing pointing at the cause. The rename was reverted over it. One list means the

@@ -22,7 +22,7 @@ func resolve(t *testing.T, src string) (spells.Descriptor, error) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	sess.SetModuleDecls(SpellModulePath, builtinModuleSources[SpellModulePath])
+	sess.SetModuleDecls(SpellModulePath, SpellModuleSource)
 	require.NoError(t, sess.Exec(ctx, src), "exec")
 	return Resolve(ctx, sess)
 }

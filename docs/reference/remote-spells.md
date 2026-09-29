@@ -105,6 +105,17 @@ an embedded spell's name, without an entry is [MGS1002](codes/magusfile/MGS1002.
 An override points at a workspace directory only; replacing one registry path with
 another is not supported.
 
+`magus spell pull magus/spell/<name> <dir>` writes the copy to start from. It prints what
+a registry pull of `ghcr.io/egladman/magus/spells/<name>` prints, the reference pinned by
+digest and then the directory, and lands the same files, read from the binary with no
+network. `spell.buzz` opens on one extra line, `// magus:origin <reference>`, and pull
+prints the `magus.yaml` entry to add rather than writing it. `magus doctor`'s
+`spell-overrides` check compares that stamp with the spell this binary ships and advises
+when the built-in has changed since, or when a copy is identical to it; merging is left to
+you. A release publishes every spell magus ships with no revision or creation annotation,
+so the digest follows the spell's files alone: a release that leaves a spell unchanged
+publishes the digest the last one did, and the binary computes it from what it embeds.
+
 ## Publish your own spell
 
 A spell is a directory holding a `spell.buzz`, committed to a repository. Four verbs

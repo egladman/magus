@@ -46,18 +46,23 @@ The directory name and the registered name are **independent** - the `go` spell 
 
 The constraint that decides how your spell is loaded:
 
-> **A spell that imports any host module (`os`, `http`, `fs`, `vcs`, ...) cannot be
-> compiled into the magus binary.** Built-ins are bare-compiled to bytecode at build time
-> (`cmd/magus-utils spells`), and that compile has no host modules to link against.
+> **A spell that imports any host module (`os`, `http`, `fs`, `vcs`, ...) is not a
+> built-in.** magus embeds its spells as source and loads the built-ins at startup in a
+> session that offers only `magus/spell`, `magus/charm` and `magus/lint`; any other
+> import fails there with [BZZ2001](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/BZZ2001.md).
 
 So there are two shapes, and you do not get to choose - the imports choose for you:
 
-|             | Built-in spell                       | Workspace-local spell                  |
-| ----------- | ------------------------------------ | -------------------------------------- |
-| Imports     | `magus/spell` only (pure types)      | anything, including host modules       |
-| Ships       | compiled into the binary             | as source in your repo                 |
-| Imported as | `import "magus/spell/go"`            | `import "spells/onepassword"` (a path) |
-| Examples    | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword`        |
+|             | Built-in spell                                  | Workspace-local spell                  |
+| ----------- | ----------------------------------------------- | -------------------------------------- |
+| Imports     | `magus/spell`, `magus/charm`, `magus/lint` only | anything, including host modules       |
+| Ships       | as source in the binary, loaded at startup      | as source in your repo                 |
+| Imported as | `import "magus/spell/go"`                       | `import "spells/onepassword"` (a path) |
+| Examples    | `go`, `docker`, `cosign`, `markdown`            | `github-actions`, `onepassword`        |
+
+`endoflife-date`, `onepassword` and `system-keychain` ship in the binary as source only:
+they import host modules, so they never load as built-ins, and
+`magus spell pull magus/spell/<name> <dir>` copies one into a workspace to import by path.
 
 Almost every provider is workspace-local, because reaching a provider means `proc\exec` or
 `http`. That is expected, not a downgrade: `spells/github/actions` backs this repo's own

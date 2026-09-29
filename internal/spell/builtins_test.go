@@ -2,6 +2,7 @@ package spell
 
 import (
 	"context"
+	"errors"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -11,6 +12,8 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"io/fs"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -34,6 +37,78 @@ func TestBuiltins_KeyedByName(t *testing.T) {
 	assert.Contains(t, m, "go", `Builtins()["go"] not found`)
 	// …and not by its source directory.
 	assert.NotContains(t, m, "golang", `Builtins()["golang"] present — registry is keyed by name, not source dir`)
+}
+
+// Every shipped spell loads in the built-in session or is refused there for a host
+// import; nothing else. The two sets are pinned because a built-in that grows a host
+// import leaves the registry without an error, and this is where that shows.
+func TestShippedSpellsLoad(t *testing.T) {
+	entries, err := fs.ReadDir(spells.Shipped(), ".")
+	require.NoError(t, err)
+	var sourceOnly []string
+	for _, e := range entries {
+		src, err := fs.ReadFile(spells.Shipped(), e.Name()+"/spell.buzz")
+		require.NoError(t, err)
+		spec, err := compileBuiltin(t.Context(), string(src))
+		if errors.As(err, new(hostImportError)) {
+			sourceOnly = append(sourceOnly, e.Name())
+			continue
+		}
+		require.NoError(t, err, "spells/%s", e.Name())
+		assert.Equal(t, Builtins()[spec.Name], spec, "spells/%s", e.Name())
+	}
+	assert.ElementsMatch(t, []string{
+		"bash", "buf", "buzz", "cosign", "docker", "go", "markdown", "podman", "python", "rust", "typescript",
+	}, slices.Collect(maps.Keys(Builtins())))
+	assert.Equal(t, []string{"endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
+}
+
+// The built-in session offers the spell type modules and nothing else, so its own
+// import failure (BZZ2001) is what keeps a host-importing spell out of the registry.
+// Any other failure is a broken spell, which must not read as source-only.
+func TestBuiltinSessionRefusesHostImports(t *testing.T) {
+	const name = "export fun mgs_getName() > str { return \"x\"; }\n"
+	for module, src := range map[string]string{
+		"proc":        "import \"magus/spell\";\nimport \"proc\";\n" + name,
+		"http":        "import \"http\";\n" + name,
+		"spells/peer": "import \"spells/peer\";\n" + name,
+	} {
+		_, err := compileBuiltin(t.Context(), src)
+		require.ErrorIs(t, err, buzz.UnresolvedImport, module)
+		var hostErr hostImportError
+		require.ErrorAs(t, err, &hostErr)
+		assert.Equal(t, module, hostErr.module)
+	}
+
+	spec, err := compileBuiltin(t.Context(), "import \"magus/spell\";\nimport \"magus/charm\";\nimport \"magus/lint\";\n"+name)
+	require.NoError(t, err)
+	assert.Equal(t, "x", spec.Name)
+
+	_, err = compileBuiltin(t.Context(), "export fun mgs_getName() > str { return 1; }\n")
+	require.Error(t, err)
+	assert.False(t, errors.As(err, new(hostImportError)), "a type error is a broken spell: %v", err)
+}
+
+// BenchmarkLoadShipped is the startup cost every workspace-loading process pays for
+// the built-in registry.
+func BenchmarkLoadShipped(b *testing.B) {
+	for b.Loop() {
+		loadShipped()
+	}
+}
+
+func TestShippedDir(t *testing.T) {
+	for name, want := range map[string]string{
+		"go":             "golang",
+		"bash":           "bash",
+		"endoflife-date": "endoflife-date", // ships as source only, found by its directory
+		"golang":         "",               // the go built-in's directory, not a spell name
+		"nope":           "",
+	} {
+		dir, ok := ShippedDir(name)
+		assert.Equal(t, want, dir, name)
+		assert.Equal(t, want != "", ok, name)
+	}
 }
 
 // TestBuiltinCommentSyntax pins the decoded mgs_getCommentSyntax declarations

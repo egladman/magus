@@ -469,16 +469,12 @@ fun ld_flags() > str !> any {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
-    // The compiled built-in spells are go:embed'd into this binary, so the link has to
-    // happen AFTER they are regenerated. The cache key cannot express that on its own:
-    // spells/**/*.buzz is a project source, so editing a spell does invalidate this
-    // target, but the .bo it produces is an OUTPUT and never enters the key. Build before
-    // regenerating and the unchanged key then replays that binary - which is how a magus
-    // came out missing two tools its typescript spell had just been given. Ordering the
-    // dependency is the fix; declaring the .bo as an input is not, because ctx.readsFiles
+    // The spell type mirrors (internal/spell/gen/types) are go:embed'd into this binary
+    // and are an OUTPUT, so they never enter this key: the link has to happen AFTER they
+    // are regenerated. Declaring them as an input is not the fix, because ctx.readsFiles
     // REPLACES a target's footprint rather than adding to it, and would drop **/*.go.
     ctx.needs(spells_generate);
-    // The stamp is read AFTER spells_generate, so it records the bytecode this link embeds.
+    // The stamp is read AFTER spells_generate, so it records the declarations this link embeds.
     // The guard policy compares it with the checkout to say when ./magus is stale.
     final stamp = agentpolicy\buildStamp(".");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
@@ -1104,7 +1100,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
               mcp_tools_generate, config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
@@ -1209,7 +1205,7 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
@@ -1268,7 +1264,7 @@ export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/handler/mcp/gen/registry.go");
     proc\exec("go", ["generate", "./internal/handler/mcp"]);
@@ -1291,29 +1287,29 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
     // of the two has to go first.
     ctx.needs(types_generate, spells_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz");
     ctx.writesFiles("internal/job/gen/*.json");
     proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen),
-// the Buzz value-type mirrors (internal/spell/gen/types) and the per-module
-// host declarations (internal/spell/gen/decls), all driven by the
-// go:generate directives in internal/spell.
+// Regenerates the Buzz value-type mirrors (internal/spell/gen/types) and the
+// per-module host declarations (internal/spell/gen/decls), both driven by the
+// go:generate directives in internal/spell. The built-in spells themselves need no
+// generation: they ship as their spells/<dir> source.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 //
-// internal/spell go:embeds all three trees, and cmd/magus-utils imports internal/spell,
+// internal/spell go:embeds both trees, and cmd/magus-utils imports internal/spell,
 // so every generator that runs magus-utils compiles them. Each declares the trees as reads
 // and needs this target, and MGS4008 refuses a run where one does not. A compile beside a
 // replay of these files failed with "pattern gen/types/<name>.buzz: no matching files
 // found".
 export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
-    ctx.writesFiles("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+    ctx.writesFiles("internal/spell/gen/types/*.buzz",
                     "internal/spell/gen/decls/*.buzz");
     proc\exec("go", ["generate", "./internal/spell/..."]);
 }
@@ -1327,7 +1323,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
               bindings_generate, config_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
     ctx.writesFiles("**/gen/mocks/*.go");
@@ -1441,7 +1437,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
@@ -3025,8 +3021,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 //
 // The stronger middle claim - "every spells/<dir>/spell.buzz by the registry compile
 // that doctor's spell-contract check exercises" - is false in both halves. The
-// built-in compile in cmd/magus-utils only sees one directory level and skips anything in
-// its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
+// built-in load compiles only the spells/<dir> directories magus ships, and only those
+// that import no host module; doctor only ever observes spells that REGISTERED, which a
 // spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
@@ -3129,9 +3125,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // to name three spell sources by hand, which silently left `spells/aws/s3-cache` and
     // `spells/onepassword` under NO gate at all: neither is imported by any magusfile, so
     // neither ever registers for doctor's spell-contract check, and neither reaches the
-    // built-in compile in cmd/magus-utils either - that scanner reads `spells/<dir>/spell.buzz`
-    // one level deep, so a nested `aws/s3-cache` is invisible to it, and `onepassword` is
-    // named in its workspaceLocalSpells skip list. A hand-maintained list reproduces exactly
+    // built-in load either - that reads only the `spells/<dir>` directories magus ships, so
+    // a nested `aws/s3-cache` is invisible to it, and `onepassword` imports a host module,
+    // so it ships as source and never loads as a built-in. A hand-maintained list reproduces exactly
     // that failure on the next spell someone adds, so match every source instead and let a
     // new spell be covered by existing.
     //

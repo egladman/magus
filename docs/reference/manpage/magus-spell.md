@@ -31,7 +31,11 @@ build    Pack \<dir\> exactly as push would and print the manifest digest the
            and print the pinned reference and the directory holding the files:
            [\<dir\>] when given, otherwise the user cache. A bare registry path,
            as a magusfile imports it, pulls the digest magus.lock pins.
-  ls       List \<registry\>/\<repository\>'s tags, following pagination.
+           magus/spell/\<name\> \<dir\> copies a spell magus ships instead, from
+           the binary with no network: the files its published artifact holds,
+           spell.buzz opening on a "// magus:origin \<reference\>" line, and
+           prints the magus.yaml override to add.
+  ls      List \<registry\>/\<repository\>'s tags, following pagination.
   lock     Check that magus.lock pins every remote spell magus.yaml declares,
            for its declared tag, and verify each pinned digest; no tag is
            resolved. --update resolves each tag and rewrites magus.lock, and is
@@ -93,7 +97,7 @@ someone makes it public.
 : Push a spell directory's tracked files as an OCI artifact and print its pinned reference
 
 **pull**
-: Fetch and verify a published spell into the cache or a directory
+: Fetch and verify a published spell into the cache or a directory, or copy out one magus ships
 
 **ls**
 : List a spell repository's tags

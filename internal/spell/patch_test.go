@@ -328,7 +328,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs: []string{"**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		Tools: map[string]spells.Tool{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
-				Supported: spells.VersionBounds{Min: "1.21"}},
+				Supported: spells.VersionBounds{Min: "1.21"}, Lifecycle: "go"},
 			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			// Observe only, no Probe: a version probe keys every target in the project,
 			// so the database date `-version` prints reached targets that never run the
@@ -426,12 +426,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"podman-push":     {Command: spells.Command{Bin: "podman", Args: []string{"push"}, External: spells.ExternalMutates, Hints: goldenPodmanHints}},
 			"podman-manifest": {Command: spells.Command{Bin: "podman", Args: []string{"manifest"}, Hints: goldenPodmanHints}},
 			"podman-run":      {Command: spells.Command{Bin: "podman", Args: []string{"run", "--rm"}, Hints: goldenPodmanHints}},
+			"machine": {Kind: "service", Command: spells.Command{Bin: "podman", Args: []string{"machine", "start"}}, Service: &spells.Service{
+				Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},
+				Readiness: spells.Command{Bin: "podman", Args: []string{"info"}},
+				Stop:      spells.Command{Bin: "podman", Args: []string{"machine", "stop"}},
+				Idle:      "30m",
+			}},
 		},
 	},
 	"python": {
 		Name:               "python",
 		Needs:              []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
-		Tools:              map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}}},
+		Tools:              map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"}},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
 		Comments: &spells.CommentSyntax{
@@ -469,7 +475,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"rust": {
 		Name:               "rust",
 		Needs:              []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
-		Tools:              map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}}},
+		Tools:              map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"}},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Comments: &spells.CommentSyntax{
@@ -505,7 +511,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1018).
 		Opaque: true,
 		Tools: map[string]spells.Tool{
-			"node": {Probe: spells.Command{Bin: "node", Args: []string{"--version"}}},
+			"node": {Probe: spells.Command{Bin: "node", Args: []string{"--version"}}, Lifecycle: "nodejs"},
 			"pnpm": {Probe: spells.Command{Bin: "pnpm", Args: []string{"--version"}},
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},

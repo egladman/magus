@@ -1,19 +1,19 @@
 // Pure-Buzz mirror of the core charm constructors (std/charm.go),
-// shipped as the magus/charm declarations so a SELF-CONTAINED built-in fork
-// spell — which compiles to bare bytecode with no host bindings — can build
-// charm patches without hand-writing brittle positional JSON Pointers.
+// shipped as the magus/charm declarations so a built-in fork spell — which
+// loads with no host bindings — can build charm patches without
+// hand-writing brittle positional JSON Pointers.
 //
 // `import "magus/charm"` brings the constructors into scope as bare names (the
 // flat-import idiom magus/spell uses for Target); the runtime registers the
-// module and the built-in generator inlines its source (SelfContainedBuiltinSource).
+// module, and so does the session that loads the built-ins.
 // Each returns a Charm (the magus/spell object) holding RFC 6902 ops — the same
 // patch the Go host module produces, kept in lockstep by charm_parity_test. A
 // namespace map is not used: the built-in map methods (remove/size/keys/…) would
-// shadow stored keys of the same name, and inlining flattens exports to top level
-// regardless.
+// shadow stored keys of the same name, and a declaration module's exports merge
+// flat regardless.
 //
-// magus/spell is imported for the Charm / PatchOp object types (the recursive
-// built-in inliner resolves it). This is the inlinable CORE
+// magus/spell is imported for the Charm / PatchOp object types, a declaration
+// module like this one. This is the pure-Buzz CORE
 // (append/prepend/after/before/set/drop) the bundled spells need; the full
 // constructor set (move/copy/test, predicate _func variants) remains on the
 // charm.* host module for magusfiles and function-op spells.

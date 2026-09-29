@@ -16,7 +16,9 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -50,7 +52,7 @@ func spellUsage() {
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  build    pack a spell directory and print the manifest digest a push would produce")
 	fmt.Fprintln(os.Stderr, "  push     publish a spell directory as an OCI artifact and print its pinned reference")
-	fmt.Fprintln(os.Stderr, "  pull     fetch and verify a published spell, into the cache or a directory")
+	fmt.Fprintln(os.Stderr, "  pull     fetch and verify a published spell into the cache or a directory, or copy out one magus ships")
 	fmt.Fprintln(os.Stderr, "  ls       list a spell repository's tags")
 	fmt.Fprintln(os.Stderr, "  lock     verify magus.lock against magus.yaml, or rewrite it with --update")
 }
@@ -216,6 +218,16 @@ type spellPullResult struct {
 	Reference string        `json:"reference"`
 	Digest    digest.Digest `json:"digest"`
 	Dir       string        `json:"dir"`
+	// Override is the magus.yaml entry that makes a copy of a built-in replace it, set
+	// only when pulling one (magus/spell/<name>). Pull never writes magus.yaml: the
+	// declaration is the acknowledgment.
+	Override spellOverride `json:"override,omitzero"`
+}
+
+// spellOverride is one `spells: {<import>: {path: <path>}}` entry.
+type spellOverride struct {
+	Import string `json:"import"`
+	Path   string `json:"path"`
 }
 
 func spellPull(ctx context.Context, root string, args []string) error {
@@ -230,6 +242,14 @@ func spellPull(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "when given (it must be empty or absent), otherwise the user cache. A bare")
 			fmt.Fprintln(os.Stderr, "registry path, as a magusfile imports it, pulls the digest magus.lock pins.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "       magus spell pull magus/spell/<name> <dir>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Copy a spell magus ships into <dir> for this workspace to own and edit: the files")
+			fmt.Fprintln(os.Stderr, "its published artifact holds, read from this binary with no network, spell.buzz")
+			fmt.Fprintln(os.Stderr, "opening on a `// magus:origin` line naming that artifact. It prints what a")
+			fmt.Fprintln(os.Stderr, "registry pull prints, and on stderr the magus.yaml entry that makes the copy")
+			fmt.Fprintln(os.Stderr, "replace the built-in; pull never writes magus.yaml.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -243,6 +263,20 @@ func spellPull(ctx context.Context, root string, args []string) error {
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
+	}
+	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
+		if len(pos) != 2 {
+			return usagef("magus spell pull %s: want the <dir> to write the copy into", pos[0])
+		}
+		res, next, err := ejectSpell(root, name, pos[1])
+		if err != nil {
+			return fmt.Errorf("spell pull: %w", err)
+		}
+		if err := emitPull(opts, res); err != nil {
+			return err
+		}
+		fmt.Fprint(os.Stderr, next)
+		return nil
 	}
 	ref, err := pullReference(root, pos[0])
 	if err != nil {
@@ -262,6 +296,41 @@ func spellPull(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("spell pull: %w", err)
 	}
+	return emitPull(opts, res)
+}
+
+// ejectSpell copies the spell magus ships as name into dst for the workspace at root to
+// own. next says how the workspace puts the copy to use.
+func ejectSpell(root, name, dst string) (res spellPullResult, next string, err error) {
+	dir, ok := spell.ShippedDir(name)
+	if !ok {
+		return spellPullResult{}, "", fmt.Errorf("magus ships no spell %q; `magus describe spells` lists the built-ins", name)
+	}
+	abs, err := filepath.Abs(dst)
+	if err != nil {
+		return spellPullResult{}, "", err
+	}
+	ref, err := remotespell.Eject(name, dir, abs)
+	if err != nil {
+		return spellPullResult{}, "", err
+	}
+	res = spellPullResult{Reference: ref.String(), Digest: ref.Digest, Dir: abs}
+	rel := abs
+	if ws := resolveRootOrEmpty(root); ws != "" {
+		if r, err := filepath.Rel(ws, abs); err == nil && filepath.IsLocal(r) {
+			rel = filepath.ToSlash(r)
+		}
+	}
+	if _, builtin := spell.Builtins()[name]; !builtin {
+		return res, fmt.Sprintf("%s ships as source only: it imports a host module, so there is no built-in to replace. Import the copy by its path: import %q;\n",
+			spells.ModulePath(name), rel), nil
+	}
+	res.Override = spellOverride{Import: spells.ModulePath(name), Path: rel}
+	return res, fmt.Sprintf("to run this copy in place of the built-in, declare it in magus.yaml:\n\nspells:\n  %s:\n    path: %s\n",
+		res.Override.Import, res.Override.Path), nil
+}
+
+func emitPull(opts OutputOptions, res spellPullResult) error {
 	switch opts.Format {
 	case FormatText:
 		return emitNames([]string{res.Reference, res.Dir})

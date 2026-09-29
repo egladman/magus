@@ -531,6 +531,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkStaleShadowAcks() },
 	},
 	{
+		Name:           "spell-overrides",
+		Doc:            "a workspace copy of a built-in spell, against the built-in this binary ships and the one the copy was pulled from",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSpellOverrides() },
+	},
+	{
 		Name:           "vcs-base-ref",
 		Doc:            "the configured VCS base ref resolves, so affected tracking has something to diff",
 		Evidence:       types.EvidenceMeasured,

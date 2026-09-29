@@ -11,12 +11,12 @@ import "./hack/policy/helpers" as helpers;
 import "./hack/policy/binaries" as binaries;
 
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
-// the skills it serves, and the host declarations and spell bytecode it embeds, which are
+// the skills it serves, and the host declarations and spell sources it embeds, which are
 // what a magusfile loads against. go-build links a digest of each into the binary.
 final stampGlobs = [
     "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
     "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
-    "internal/spell/gen/decls/*.buzz", "internal/spell/gen/*.bo",
+    "internal/spell/gen/decls/*.buzz", "spells/*/*.buzz",
 ];
 
 // stampFiles are the stamped files under root, root-relative, tests left out: a test is
