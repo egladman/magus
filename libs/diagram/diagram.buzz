@@ -36,10 +36,13 @@ fun escapeSvg(s: str) > str {
 // divisible by 4. Derived values (edge attach points, label masks) are rounded onto it.
 final Grid = 4;
 
-// Budgets. Exceeding one means the diagram is trying to be two diagrams.
-final MaxNodes = 9;
-final MaxEdges = 12;
-final MaxAccent = 2;
+// Budgets. Exceeding one means the diagram is trying to be two diagrams. Exported so flow
+// can refuse a declaration in its own terms before any placement runs.
+export final MaxNodes = 9;
+export final MaxEdges = 12;
+export final MaxAccent = 2;
+// An edge label is a word or two on a connector; past this it is a note.
+export final MaxEdgeLabel = 14;
 
 // HeaderPad is the band a title reserves above the figure. Content keeps its authored
 // coordinates and the whole group is translated down by this much, so a diagram never has
@@ -51,9 +54,9 @@ final HeaderPad = 40;
 // a finding, since the design system forbids a legend inside the diagram area.
 final LegendStrip = 60;
 // More zones than this and the figure is a swimlane.
-final MaxZones = 3;
+export final MaxZones = 3;
 // Four exits from one diamond is a nested decision drawn flat.
-final MaxDecisionExits = 3;
+export final MaxDecisionExits = 3;
 // The tightest corner the design system allows. In an authored figure a leg too short to
 // seat it is a finding, never a sharper corner.
 final BendFloor = 6;
@@ -207,6 +210,9 @@ export object Node {
     // tree that no longer exists. Empty means the box depicts no single place in the code
     // (an external actor, a decision), which is legitimate and not an omission.
     anchor: str = "",
+    // A URL the box links to when what it depicts lives outside the repo: another service,
+    // a vendor's docs. Painted as an <a>; unlike anchor, nothing checks it.
+    link: str = "",
     x: int = 0,
     y: int = 0,
     w: int = 160,
@@ -242,13 +248,15 @@ export object Edge {
 }
 
 // Zone is a labeled container drawn behind the nodes it groups. Zones are painted first,
-// so a connector label may overlap one safely.
+// so a connector label may overlap one safely. A boundary zone is a trust boundary and
+// takes the security treatment: dashed accent, its label masked on the top border.
 export object Zone {
     label: str = "",
     x: int = 0,
     y: int = 0,
     w: int = 0,
     h: int = 0,
+    boundary: bool = false,
 }
 
 // LegendItem is one entry in the bottom strip. It names a node role rather than a color so
@@ -284,6 +292,9 @@ export object Diagram {
     // Digest of the observed set a flow composed in, empty for a figure nobody observed.
     // Painted nowhere; a drift check compares it against a fresh observation.
     stamp: str = "",
+    // Why a figure with no scope depicts no code, as its author said it. Painted nowhere;
+    // the drift summary reports it so an unchecked figure says why it is unchecked.
+    unscoped: str = "",
 }
 
 fun iabs(n: int) > int {
@@ -406,8 +417,8 @@ fun overlapLen(p1: int, p2: int, q1: int, q2: int) > int {
 
 // overlappingConnectors reports each pair of edges that share a stroke line. Runs on
 // generated layouts too: automatic placement is exactly where this goes wrong unnoticed.
-fun overlappingConnectors(d: Diagram) > [str] {
-    final errs: mut [str] = mut [<str>];
+fun overlappingConnectors(d: Diagram) > [Fault] {
+    final errs: mut [Fault] = mut [<Fault>];
     var i = 0;
     while (i < d.edges.len()) {
         var j = i + 1;
@@ -421,7 +432,11 @@ fun overlappingConnectors(d: Diagram) > [str] {
                 }
             }
             if (found) {
-                errs.append("connectors {a.src}->{a.dst} and {b.src}->{b.dst} run along the same line; offset one of their bends");
+                errs.append(Fault{
+                    rule = "sameLine", subjects = [a.src, a.dst, b.src, b.dst],
+                    text = "connectors {a.src}->{a.dst} and {b.src}->{b.dst} run along the same line",
+                    fix = "offset one of their bends",
+                });
             }
             j = j + 1;
         }
@@ -430,44 +445,69 @@ fun overlappingConnectors(d: Diagram) > [str] {
     return errs;
 }
 
-// validate returns one message per broken rule, empty when the diagram is sound. These are
-// the design system's non-negotiables plus the structural ones a renderer cannot paper
-// over: an edge naming a missing node, two nodes occupying the same space, two connectors
-// landing on the same point of the same box.
-export fun validate(d: Diagram) > [str] {
-    final errs: mut [str] = mut [<str>];
+// Fault is one broken rule. rule names the check, subjects the node or edge ids it is
+// about (an edge as src then dst), text the fault and fix the author's remedy, empty when
+// the text says it all. A caller that builds diagrams itself, as flow does, reads rule and
+// subjects to restate a fault in its own terms.
+export object Fault {
+    rule: str = "",
+    subjects: [str] = [<str>],
+    text: str = "",
+    fix: str = "",
+}
 
-    if (d.id == "") { errs.append("diagram has no id; marker ids would collide when inlined"); }
+// validate returns one message per broken rule, empty when the diagram is sound: each
+// fault's text, then its fix after "; ".
+export fun validate(d: Diagram) > [str] {
+    final msgs: mut [str] = mut [<str>];
+    foreach (f in faults(d)) {
+        if (f.fix == "") {
+            msgs.append(f.text);
+        } else {
+            msgs.append(f.text + "; " + f.fix);
+        }
+    }
+    return msgs;
+}
+
+// faults is validate before the messages are joined. These are the design system's
+// non-negotiables plus the structural ones a renderer cannot paper over: an edge naming a
+// missing node, two nodes occupying the same space, two connectors landing on the same
+// point of the same box.
+export fun faults(d: Diagram) > [Fault] {
+    final errs: mut [Fault] = mut [<Fault>];
+
+    if (d.id == "") { errs.append(Fault{ rule = "id", text = "diagram has no id", fix = "marker ids would collide when inlined" }); }
     if (d.generated == false and d.nodes.len() > MaxNodes) {
-        errs.append("{d.nodes.len()} nodes exceeds the budget of {MaxNodes}; split into overview plus detail");
+        errs.append(Fault{ rule = "nodeBudget", text = "{d.nodes.len()} nodes exceeds the budget of {MaxNodes}", fix = "split into overview plus detail" });
     }
     if (d.generated == false and d.edges.len() > MaxEdges) {
-        errs.append("{d.edges.len()} edges exceeds the budget of {MaxEdges}; split into overview plus detail");
+        errs.append(Fault{ rule = "edgeBudget", text = "{d.edges.len()} edges exceeds the budget of {MaxEdges}", fix = "split into overview plus detail" });
     }
 
     var accent = 0;
     foreach (n in d.nodes) {
         if (n.role == "focal") { accent = accent + 1; }
         if (onGrid(n.x) == false or onGrid(n.y) == false or onGrid(n.w) == false or onGrid(n.h) == false) {
-            errs.append("node \"{n.id}\" is off the {Grid}px grid at {n.x},{n.y} {n.w}x{n.h}");
+            errs.append(Fault{ rule = "grid", subjects = [n.id], text = "node \"{n.id}\" is off the {Grid}px grid at {n.x},{n.y} {n.w}x{n.h}" });
         }
         if (n.x < 0 or n.y < 0 or n.x + n.w > d.width or n.y + n.h > d.height) {
-            errs.append("node \"{n.id}\" falls outside the {d.width}x{d.height} viewBox");
+            errs.append(Fault{ rule = "viewBox", subjects = [n.id], text = "node \"{n.id}\" falls outside the {d.width}x{d.height} viewBox" });
         }
         // A tag chip, a name and a sublabel need 64px to stack without colliding.
         if (n.tag != "" and n.sub != "" and n.h < 64) {
-            errs.append("node \"{n.id}\" stacks a tag, a name and a sublabel in {n.h}px; needs 64");
+            errs.append(Fault{ rule = "stack", subjects = [n.id], text = "node \"{n.id}\" stacks a tag, a name and a sublabel in {n.h}px", fix = "needs 64" });
         }
         // Only a diamond's four vertices sit on the shape, so a fanned connector would
         // attach to empty space beside it.
         if (n.role == "decision" and (n.tag != "" or n.sub != "")) {
-            errs.append("decision \"{n.id}\" carries a tag or sublabel; a diamond has room for neither");
+            errs.append(Fault{ rule = "decisionText", subjects = [n.id], text = "decision \"{n.id}\" carries a tag or sublabel", fix = "a diamond has room for neither" });
         }
         if (n.role == "security" and (n.tag != "" or n.sub != "")) {
-            errs.append("security boundary \"{n.id}\" carries a tag or sublabel; only its border label is painted");
+            errs.append(Fault{ rule = "securityText", subjects = [n.id], text = "security boundary \"{n.id}\" carries a tag or sublabel", fix = "only its border label is painted" });
         }
         if (d.legend.len() > 0 and n.y + n.h > d.height - LegendStrip) {
-            errs.append("node \"{n.id}\" enters the legend strip; keep the bottom {LegendStrip}px clear");
+            errs.append(Fault{ rule = "legendStrip", subjects = [n.id], text = "node \"{n.id}\" enters the legend strip", fix = "keep the bottom {LegendStrip}px clear" });
         }
         if (n.role == "decision") {
             var exits = 0;
@@ -475,7 +515,7 @@ export fun validate(d: Diagram) > [str] {
                 if (e.src == n.id) { exits = exits + 1; }
             }
             if (exits > MaxDecisionExits) {
-                errs.append("decision \"{n.id}\" has {exits} exits; past {MaxDecisionExits}, nest a second decision");
+                errs.append(Fault{ rule = "decisionExits", subjects = [n.id], text = "decision \"{n.id}\" has {exits} exits", fix = "past {MaxDecisionExits}, nest a second decision" });
             }
         }
     }
@@ -483,16 +523,16 @@ export fun validate(d: Diagram) > [str] {
         if (e.kind == "accent") { accent = accent + 1; }
     }
     if (d.generated == false and accent > MaxAccent) {
-        errs.append("{accent} accent elements exceeds the budget of {MaxAccent}; the focal signal is gone");
+        errs.append(Fault{ rule = "accentBudget", text = "{accent} accent elements exceeds the budget of {MaxAccent}", fix = "the focal signal is gone" });
     }
 
     foreach (z in d.zones) {
         if (onGrid(z.x) == false or onGrid(z.y) == false or onGrid(z.w) == false or onGrid(z.h) == false) {
-            errs.append("zone \"{z.label}\" is off the {Grid}px grid");
+            errs.append(Fault{ rule = "zoneGrid", subjects = [z.label], text = "zone \"{z.label}\" is off the {Grid}px grid" });
         }
     }
     if (d.generated == false and d.zones.len() > MaxZones) {
-        errs.append("{d.zones.len()} zones exceeds the budget of {MaxZones}; a figure banded that finely is a swimlane");
+        errs.append(Fault{ rule = "zoneBudget", text = "{d.zones.len()} zones exceeds the budget of {MaxZones}", fix = "a figure banded that finely is a swimlane" });
     }
 
     var i = 0;
@@ -501,9 +541,9 @@ export fun validate(d: Diagram) > [str] {
         while (j < d.nodes.len()) {
             final a = d.nodes[i];
             final b = d.nodes[j];
-            if (a.id == b.id) { errs.append("duplicate node id \"{a.id}\""); }
+            if (a.id == b.id) { errs.append(Fault{ rule = "duplicateId", subjects = [a.id], text = "duplicate node id \"{a.id}\"" }); }
             if (boxesOverlap([a.x, a.y, a.w, a.h], b) and bounds(a, inner: b) == false and bounds(b, inner: a) == false) {
-                errs.append("nodes \"{a.id}\" and \"{b.id}\" overlap");
+                errs.append(Fault{ rule = "overlap", subjects = [a.id, b.id], text = "nodes \"{a.id}\" and \"{b.id}\" overlap" });
             }
             j = j + 1;
         }
@@ -511,52 +551,58 @@ export fun validate(d: Diagram) > [str] {
     }
 
     foreach (e in d.edges) {
-        if (findNode(d, e.src) == null) { errs.append("edge from unknown node \"{e.src}\""); }
-        if (findNode(d, e.dst) == null) { errs.append("edge to unknown node \"{e.dst}\""); }
-        if (e.src == e.dst) { errs.append("edge from \"{e.src}\" to itself"); }
+        final ends = [e.src, e.dst];
+        if (findNode(d, e.src) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge from unknown node \"{e.src}\"" }); }
+        if (findNode(d, e.dst) == null) { errs.append(Fault{ rule = "unknownEnd", subjects = ends, text = "edge to unknown node \"{e.dst}\"" }); }
+        if (e.src == e.dst) { errs.append(Fault{ rule = "selfLoop", subjects = ends, text = "edge from \"{e.src}\" to itself" }); }
         if (e.srcSlot < 1 or e.srcSlot > e.srcSlots) {
-            errs.append("edge {e.src}->{e.dst}: srcSlot {e.srcSlot} outside 1..{e.srcSlots}");
+            errs.append(Fault{ rule = "slot", subjects = ends, text = "edge {e.src}->{e.dst}: srcSlot {e.srcSlot} outside 1..{e.srcSlots}" });
         }
         if (e.dstSlot < 1 or e.dstSlot > e.dstSlots) {
-            errs.append("edge {e.src}->{e.dst}: dstSlot {e.dstSlot} outside 1..{e.dstSlots}");
+            errs.append(Fault{ rule = "slot", subjects = ends, text = "edge {e.src}->{e.dst}: dstSlot {e.dstSlot} outside 1..{e.dstSlots}" });
         }
-        if (e.label.len() > 14) {
-            errs.append("edge {e.src}->{e.dst}: label \"{e.label}\" exceeds 14 characters");
+        if (e.label.len() > MaxEdgeLabel) {
+            errs.append(Fault{ rule = "labelLength", subjects = ends, text = "edge {e.src}->{e.dst}: label \"{e.label}\" exceeds {MaxEdgeLabel} characters" });
         }
         if (isDecision(d, e.src) and e.srcSlots > 1) {
-            errs.append("edge {e.src}->{e.dst}: leaves decision \"{e.src}\" on a fanned slot, off the diamond");
+            errs.append(Fault{ rule = "decisionFan", subjects = ends, text = "edge {e.src}->{e.dst}: leaves decision \"{e.src}\" on a fanned slot, off the diamond" });
         }
         if (isDecision(d, e.dst) and e.dstSlots > 1) {
-            errs.append("edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond");
+            errs.append(Fault{ rule = "decisionFan", subjects = ends, text = "edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond" });
         }
-        foreach (msg in viaFindings(d, e)) { errs.append(msg); }
+        foreach (f in viaFaults(d, e: e)) { errs.append(f); }
         // A generated layout packs its channels one grid step apart and has no author to
         // move a bend, so there the painter clamps the radius down instead.
         if (d.generated == false and findNode(d, e.src) != null and findNode(d, e.dst) != null) {
             final tight = tightestBend(d, e);
             if (tight < BendFloor) {
-                errs.append("edge {e.src}->{e.dst}: a leg leaves {tight}px for a bend that needs {BendFloor}; move the bend or the boxes");
+                errs.append(Fault{
+                    rule = "bend", subjects = ends,
+                    text = "edge {e.src}->{e.dst}: a leg leaves {tight}px for a bend that needs {BendFloor}",
+                    fix = "move the bend or the boxes",
+                });
             }
         }
     }
 
-    foreach (msg in sharedAttachPoints(d)) { errs.append(msg); }
-    foreach (msg in overlappingConnectors(d)) { errs.append(msg); }
+    foreach (f in sharedAttachPoints(d)) { errs.append(f); }
+    foreach (f in overlappingConnectors(d)) { errs.append(f); }
     return errs;
 }
 
-// viaFindings holds a polyline to the rules connectorPath enforces by construction: every
+// viaFaults holds a polyline to the rules connectorPath enforces by construction: every
 // corner on the grid, and every leg axis-aligned, so a via cannot smuggle in a diagonal.
-fun viaFindings(d: Diagram, e: Edge) > [str] {
-    final errs: mut [str] = mut [<str>];
+fun viaFaults(d: Diagram, e: Edge) > [Fault] {
+    final errs: mut [Fault] = mut [<Fault>];
+    final ends = [e.src, e.dst];
     if (e.via.len() == 0) { return errs; }
     if (e.via.len() % 2 != 0) {
-        errs.append("edge {e.src}->{e.dst}: via carries {e.via.len()} coordinates; it takes x,y pairs");
+        errs.append(Fault{ rule = "via", subjects = ends, text = "edge {e.src}->{e.dst}: via carries {e.via.len()} coordinates", fix = "it takes x,y pairs" });
         return errs;
     }
     foreach (v in e.via) {
         if (onGrid(v) == false) {
-            errs.append("edge {e.src}->{e.dst}: via coordinate {v} is off the {Grid}px grid");
+            errs.append(Fault{ rule = "via", subjects = ends, text = "edge {e.src}->{e.dst}: via coordinate {v} is off the {Grid}px grid" });
         }
     }
     if (findNode(d, e.src) == null or findNode(d, e.dst) == null) { return errs; }
@@ -564,7 +610,7 @@ fun viaFindings(d: Diagram, e: Edge) > [str] {
     var i = 2;
     while (i + 1 < pts.len()) {
         if (pts[i - 2] != pts[i] and pts[i - 1] != pts[i + 1]) {
-            errs.append("edge {e.src}->{e.dst}: via runs diagonally from {pts[i - 2]},{pts[i - 1]} to {pts[i]},{pts[i + 1]}");
+            errs.append(Fault{ rule = "via", subjects = ends, text = "edge {e.src}->{e.dst}: via runs diagonally from {pts[i - 2]},{pts[i - 1]} to {pts[i]},{pts[i + 1]}" });
         }
         i = i + 2;
     }
@@ -634,15 +680,19 @@ fun tightestBend(d: Diagram, e: Edge) > int {
 
 // sharedAttachPoints reports connectors that land on the same point of the same box. Two
 // edges may share a side, but only by declaring different slots of the same total.
-fun sharedAttachPoints(d: Diagram) > [str] {
-    final errs: mut [str] = mut [<str>];
+fun sharedAttachPoints(d: Diagram) > [Fault] {
+    final errs: mut [Fault] = mut [<Fault>];
     final seen: mut [str] = mut [<str>];
     foreach (e in d.edges) {
         final a = attachKey(d, e, true);
         final b = attachKey(d, e, false);
         foreach (k in seen) {
-            if (k == a) { errs.append("two connectors share the attach point {a}; fan them with distinct slots"); }
-            if (k == b) { errs.append("two connectors share the attach point {b}; fan them with distinct slots"); }
+            if (k == a) {
+                errs.append(Fault{ rule = "sharedAttach", subjects = [e.src, e.dst], text = "two connectors share the attach point {a}", fix = "fan them with distinct slots" });
+            }
+            if (k == b) {
+                errs.append(Fault{ rule = "sharedAttach", subjects = [e.src, e.dst], text = "two connectors share the attach point {b}", fix = "fan them with distinct slots" });
+            }
         }
         seen.append(a);
         seen.append(b);
@@ -897,6 +947,9 @@ fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
 // renderZone paints a band as an ink wash with an ink hairline, the label centred in the
 // band's top margin on a paper mask.
 fun renderZone(z: Zone, p: Palette, s: Style) > str {
+    if (z.boundary) {
+        return renderSecurity(Node{ label = z.label, role = "security", x = z.x, y = z.y, w = z.w, h = z.h }, p: p, s: s);
+    }
     final rect = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"{s.zoneRadius}\""
         + " fill=\"{p.ink}\" fill-opacity=\"0.02\" stroke=\"{p.ink}\" stroke-opacity=\"0.1\" stroke-width=\"{s.hairlineWidth}\"/>";
     if (z.label == "") { return rect; }
@@ -941,11 +994,14 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 
 // renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
 // Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
-// followable before any script loads.
+// followable before any script loads. A node with a link of its own is always one.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
     if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
     final body = renderNodeBody(n, p, s);
+    if (n.link != "") {
+        return "<a href=\"" + escapeSvg(n.link) + "\"" + attrs + "><g>" + body + "</g></a>";
+    }
     if (s.anchorHref != "" and n.anchor != "") {
         final href = s.anchorHref.replace("\{path\}", with: escapeSvg(n.anchor));
         return "<a href=\"" + href + "\"" + attrs + "><g>" + body + "</g></a>";
@@ -1375,6 +1431,47 @@ test "input and security paint the skill's treatments" {
     final straddle = Diagram{ id = "t", width = 640, height = 320,
         nodes = [ d.nodes[0], Node{ id = "b", label = "B", x = 320, y = 64, w = 160, h = 56 } ] };
     assert\equal(validate(straddle).len(), 1, "a box straddling the boundary still overlaps it");
+}
+
+test "a boundary zone paints the security treatment and a plain zone does not" {
+    final base = twoBox();
+    final z = Zone{ label = "trusted", x = 16, y = 80, w = 448, h = 120, boundary = true };
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
+    assert\equal(validate(d).len(), want: 0, message: "a boundary is a zone, so boxes inside it are no overlap");
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "dashed accent at half");
+    std\assert(svg.indexOf(">TRUSTED</text>") != null and svg.indexOf("y=\"74\"") != null, message: "the label masked on the top border");
+    std\assert(svg.indexOf("fill-opacity=\"0.02\"") == null, message: "not the plain band's wash");
+}
+
+test "a node link paints an <a> whatever anchorHref says" {
+    final base = twoBox();
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
+        nodes = [ Node{ id = "a", label = "A", link = "https://stripe.com/docs", x = 32, y = 112 }, base.nodes[1] ] };
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    std\assert(svg.indexOf("<a href=\"https://stripe.com/docs\" data-node=\"a\"><g>") != null, message: "linked: {svg}");
+    std\assert(svg.indexOf("<g data-node=\"b\">") != null, message: "the other node is a plain group");
+}
+
+test "faults carry the rule and subjects validate's message leaves in prose" {
+    final bad = Diagram{
+        id = "t", width = 640, height = 400,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
+            Node{ id = "b", label = "B", x = 400, y = 256, w = 160, h = 64 },
+            Node{ id = "c", label = "C", x = 400, y = 336, w = 160, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right", srcSlot = 1, srcSlots = 2, dstSide = "left", bend = 296 },
+            Edge{ src = "a", dst = "c", srcSide = "right", srcSlot = 2, srcSlots = 2, dstSide = "left", bend = 296 },
+        ],
+    };
+    final got = faults(bad);
+    assert\equal(got.len(), want: 1, message: "one fault");
+    assert\equal(got[0].rule, want: "sameLine", message: "the rule");
+    assert\equal(got[0].subjects, want: ["a", "b", "a", "c"], message: "both edges' ends");
+    assert\equal(validate(bad)[0], want: "connectors a->b and a->c run along the same line; offset one of their bends",
+        message: "the message joins text and fix");
 }
 
 test "a decision takes at most three exits" {

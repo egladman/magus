@@ -17,13 +17,29 @@ final ZonePad = 16;
 final LegendRoom = 96;
 // A 20px title runs about 11px per character; the frame widens to fit it.
 final TitleCharW = 11;
+// Channels in a gap and slots on a side keep at least this far apart, the connector rule's
+// minimum, so no leg falls under the renderer's 6px bend floor. A stopgap: the routing unit
+// replaces it with channels and slots placed symmetrically about their gap and side.
+final Pitch = 12;
+// The offsets the stagger search tries once a straight placement fails. Multiples of Pitch,
+// since a smaller shift leaves a leg too short to bend.
+final Staggers = [12, 24, 36, 48, 60, 72];
 
-// FlowZone groups nodes into one band. Members keep their ranks; the band only fixes which
-// rows they occupy.
-export object FlowZone {
-    label: str = "",
-    members: [str] = [<str>],
-}
+// Role picks a box's treatment. focal takes the accent (two per figure, counting focal
+// edges); store is a persistent thing; external sits outside what the figure depicts; input
+// is data arriving from outside; optional is dashed; decision is a diamond with at most
+// three exits and no tag or sub. A trust boundary is a group, not a box: boundary().
+export enum<str> Role { default, focal, store, external, input, optional, decision }
+
+// EdgeRole picks a connector's treatment: focal takes the accent, external the link colour
+// of a call leaving the system, optional is dashed. A back edge draws dashed whatever its
+// role, since it runs against the flow.
+export enum<str> EdgeRole { default, focal, external, optional }
+
+// Claim is what a connector asserts about the code. flow is narrative and never checked;
+// imports is checked against the import graph; calls is declared and counted until its
+// source marker is settled.
+export enum<str> Claim { flow, imports, calls }
 
 // ObservedNode is one box an observation supplies: a package, a target, whatever the
 // caller extracted. An empty label shows the id.
@@ -33,7 +49,7 @@ export object ObservedNode {
     anchor: str = "",
 }
 
-// ObservedEdge is one relationship an observation found; it is drawn with claim "imports".
+// ObservedEdge is one relationship an observation found; it is drawn with Claim.imports.
 export object ObservedEdge {
     src: str = "",
     dst: str = "",
@@ -47,6 +63,14 @@ export object Observed {
     stamp: str = "",
 }
 
+// FlowZone is one band. Members keep their ranks; the band only fixes which rows they
+// occupy. A boundary band paints as a trust boundary.
+object FlowZone {
+    label: str = "",
+    members: [str] = [<str>],
+    boundary: bool = false,
+}
+
 object Hidden {
     src: str = "",
     dst: str = "",
@@ -54,8 +78,9 @@ object Hidden {
 }
 
 // Flow is a figure under construction. Build one with flow(), chain the declarations, and
-// finish with diagram() or svg(). Nothing here takes a coordinate, a weight or an order:
-// when the layout cannot be drawn cleanly, the thrown findings name what to split.
+// finish with diagram() or svg(). Nothing here takes a coordinate or a weight: rank, row and
+// order relate declared nodes, and a declaration the layout cannot honour is refused with a
+// finding naming the flow call to change.
 export object Flow {
     id: str = "",
     titleText: str = "",
@@ -63,19 +88,28 @@ export object Flow {
     descText: str = "",
     topDown: bool = false,
     isGenerated: bool = false,
+    isUnscoped: bool = false,
+    unscopedWhy: str = "",
     nodes: mut [Node],
     edges: mut [Edge],
     zones: mut [FlowZone],
     legendItems: mut [LegendItem],
     scopeGlobs: mut [str],
     omitted: mut {str: str},
+    omittedTwice: mut [str],
     // The observed half stays apart from the declared lists until layout, where the merge
     // rule needs to know which side supplied what.
     observedNodes: mut [ObservedNode],
     observedEdges: mut [ObservedEdge],
-    observedSets: int = 0,
     stamp: str = "",
     hidden: mut [Hidden],
+    // gopherbuzz's checker lets a str through where an enum is declared, and its value then
+    // reads null; each such argument is recorded here and refused with the declarations.
+    stringly: mut [str],
+    // Only flow reads the constraints, so they stay here rather than on the Diagram.
+    ranks: mut [[str]],
+    rows: mut [[str]],
+    orders: mut [[str]],
 
     mut fun title(t: str) > mut Flow {
         this.titleText = t;
@@ -99,67 +133,119 @@ export object Flow {
     }
 
     // generated marks a figure computed from data nobody authored, as layered() does: the
-    // hand-authored node, edge and accent budgets stop applying, every structural check stays.
+    // hand-authored node, edge, accent and zone budgets stop applying, every structural
+    // check stays, and it needs no scope.
     mut fun generated() > mut Flow {
         this.isGenerated = true;
         return this;
     }
 
-    // observed composes a generated set into the figure: its nodes and edges are drawn
-    // unless a declaration overrides them. A figure takes one observed set.
-    mut fun observed(o: Observed) > mut Flow {
-        foreach (n in o.nodes) { this.observedNodes.append(n); }
-        foreach (e in o.edges) { this.observedEdges.append(e); }
-        this.observedSets = this.observedSets + 1;
-        this.stamp = o.stamp;
+    // node declares a box. An empty label shows the observed label for the id, else the id.
+    // A node sharing an observed node's id, or its anchor, overrides it. anchor is a path in
+    // this repo the drift check holds the box to; link is a URL for anything outside it,
+    // and a node takes one or the other. role defaults to Role.default.
+    //
+    // The enum parameters default to null rather than to a case: gopherbuzz resolves a
+    // default in the caller's scope, where an importer that aliases this module has no
+    // bare Role.
+    mut fun node(id: str, label: str = "", sub: str = "", tag: str = "", role: Role? = null, anchor: str = "", link: str = "") > mut Flow {
+        final r: str? = (role ?? Role.default).value;
+        if (r == null) { this.stringly.append("node {quote(id)} takes role: Role.<case>"); }
+        this.nodes.append(Node{ id = id, label = label, sub = sub, tag = tag, role = r ?? Role.default.value, anchor = anchor, link = link });
         return this;
     }
 
-    // without hides one observed edge. The reason is required, so the next reader of the
-    // figure learns why the code's edge is missing from the picture.
-    fun without(src: str, dst: str, why: str) > mut Flow {
-        this.hidden.append(Hidden{ src = src, dst = dst, why = why });
-        return this;
-    }
-
-    // node declares a box. An empty label shows the observed label for the id, else the id,
-    // as Mermaid does. A node sharing an observed node's id overrides it.
-    fun node(id: str, label: str = "", sub: str = "", tag: str = "", role: str = "default", anchor: str = "") > mut Flow {
-        this.nodes.append(Node{ id = id, label = label, sub = sub, tag = tag, role = role, anchor = anchor });
-        return this;
-    }
-
-    // edge declares a connector. One sharing an observed edge's ends replaces it.
-    fun edge(src: str, dst: str, label: str = "", kind: str = "default", dashed: bool = false, claim: str = "flow") > mut Flow {
-        this.edges.append(Edge{ src = src, dst = dst, label = label, kind = kind, dashed = dashed, claim = claim });
+    // edge declares a connector, EdgeRole.default and Claim.flow unless named. One sharing an
+    // observed edge's ends replaces it, and must then claim imports or be omitted with
+    // omitEdge: a narrative edge over a real import would hide what the code does.
+    mut fun edge(src: str, dst: str, label: str = "", role: EdgeRole? = null, claim: Claim? = null) > mut Flow {
+        final r = role ?? EdgeRole.default;
+        final roleName: str? = r.value;
+        final c: str? = (claim ?? Claim.flow).value;
+        if (roleName == null) { this.stringly.append("{edgeName(src, dst: dst)} takes role: EdgeRole.<case>"); }
+        if (c == null) { this.stringly.append("{edgeName(src, dst: dst)} takes claim: Claim.<case>"); }
+        var kind = "default";
+        if (r == EdgeRole.focal) { kind = "accent"; }
+        if (r == EdgeRole.external) { kind = "link"; }
+        this.edges.append(Edge{ src = src, dst = dst, label = label, kind = kind, dashed = r == EdgeRole.optional, claim = c ?? Claim.flow.value });
         return this;
     }
 
     // zone stacks its members into one band, bands in declaration order, unzoned nodes
     // last unless one alone feeds a band or its rank lies outside every zone, where it
-    // centers across the figure. A node belongs to at most one zone.
-    fun zone(label: str, members: [str]) > mut Flow {
+    // centers across the figure. A node belongs to at most one zone or boundary.
+    mut fun zone(label: str, members: [str]) > mut Flow {
         this.zones.append(FlowZone{ label = label, members = members });
         return this;
     }
 
-    fun legend(role: str, label: str) > mut Flow {
-        this.legendItems.append(LegendItem{ role = role, label = label });
+    // boundary is a zone painted as a trust boundary: dashed accent, its label on the
+    // border. It counts against the same three-band budget.
+    mut fun boundary(label: str, members: [str]) > mut Flow {
+        this.zones.append(FlowZone{ label = label, members = members, boundary = true });
         return this;
     }
 
-    fun scope(globs: [str]) > mut Flow {
+    mut fun legend(role: Role, label: str) > mut Flow {
+        final r: str? = role.value;
+        if (r == null) { this.stringly.append("legend {quote(label)} takes Role.<case>"); }
+        this.legendItems.append(LegendItem{ role = r ?? Role.default.value, label = label });
+        return this;
+    }
+
+    // scope names the directories the figure depicts, so the drift check can report a
+    // package under them that no node anchors and no omit names.
+    mut fun scope(globs: [str]) > mut Flow {
         foreach (g in globs) { this.scopeGlobs.append(g); }
         return this;
     }
 
-    fun omit(path: str, why: str) > mut Flow {
+    // unscoped says why a figure depicts no code: a decision process, a CI arrangement. The
+    // reason reaches the drift summary.
+    mut fun unscoped(why: str) > mut Flow {
+        this.isUnscoped = true;
+        this.unscopedWhy = why;
+        return this;
+    }
+
+    // omit leaves a path under scope out on purpose, and drops any observed box anchored
+    // there along with its connectors.
+    mut fun omit(path: str, why: str) > mut Flow {
+        if (this.omitted[path] != null) { this.omittedTwice.append(path); }
         this.omitted[path] = why;
         return this;
     }
 
-    // diagram lays the figure out and validates it. Throws every finding joined by "; "
-    // when no layout the search tries comes out clean. Same declarations, same Diagram.
+    // omitEdge hides one observed edge. The reason is required, so the next reader of the
+    // figure learns why the code's edge is missing from the picture.
+    mut fun omitEdge(src: str, dst: str, why: str) > mut Flow {
+        this.hidden.append(Hidden{ src = src, dst = dst, why = why });
+        return this;
+    }
+
+    // rank puts its nodes in one rank; refused when a path between two of them orders them.
+    mut fun rank(ids: [str]) > mut Flow {
+        this.ranks.append(ids);
+        return this;
+    }
+
+    // row lines its nodes up on one midline across ranks, so the connectors between them
+    // run straight; refused for two nodes in one rank or in different bands.
+    mut fun row(ids: [str]) > mut Flow {
+        this.rows.append(ids);
+        return this;
+    }
+
+    // order sorts nodes within their shared rank, first to last; refused across ranks,
+    // against the zone order, or in a cycle with another order.
+    mut fun order(ids: [str]) > mut Flow {
+        this.orders.append(ids);
+        return this;
+    }
+
+    // diagram lays the figure out and validates it. Throws one finding per line, each
+    // naming the flow call to change, when the declaration contradicts itself or no layout
+    // the search tries comes out clean. Same declarations, same Diagram.
     fun diagram() > Diagram !> str {
         return layoutFlow(this);
     }
@@ -170,10 +256,11 @@ export object Flow {
     }
 }
 
-// flow starts an empty left-to-right figure. The collections are built here because a mut
-// collection field cannot carry a default.
-export fun flow(id: str) > mut Flow {
-    return mut Flow{
+// flow starts an empty left-to-right figure, composed over observed when a generator
+// supplies one: its nodes and edges are drawn unless a declaration overrides them. The
+// collections are built here because a mut collection field cannot carry a default.
+export fun flow(id: str, observed: Observed = Observed{}) > mut Flow {
+    final f = mut Flow{
         id = id,
         nodes = mut [<Node>],
         edges = mut [<Edge>],
@@ -181,10 +268,19 @@ export fun flow(id: str) > mut Flow {
         legendItems = mut [<LegendItem>],
         scopeGlobs = mut [<str>],
         omitted = mut {<str: str>},
+        omittedTwice = mut [<str>],
         observedNodes = mut [<ObservedNode>],
         observedEdges = mut [<ObservedEdge>],
+        stamp = observed.stamp,
         hidden = mut [<Hidden>],
+        stringly = mut [<str>],
+        ranks = mut [<[str]>],
+        rows = mut [<[str]>],
+        orders = mut [<[str]>],
     };
+    foreach (n in observed.nodes) { f.observedNodes.append(n); }
+    foreach (e in observed.edges) { f.observedEdges.append(e); }
+    return f;
 }
 
 // Plan is the placement that does not depend on the stagger: ranks, bands, row order and
@@ -235,6 +331,21 @@ fun edgeKey(src: str, dst: str) > str {
     return "{src} -> {dst}";
 }
 
+fun quote(s: str) > str {
+    return "\"{s}\"";
+}
+
+fun edgeName(src: str, dst: str) > str {
+    return "edge {quote(src)} -> {quote(dst)}";
+}
+
+// call spells a constraint the way its author wrote it: rank(["a", "b"]).
+fun call(verb: str, ids: [str]) > str {
+    final quoted: mut [str] = mut [<str>];
+    foreach (id in ids) { quoted.append(quote(id)); }
+    return verb + "([" + quoted.join(", ") + "])";
+}
+
 // anchorRenames maps an observed id to the declared id that takes it over by anchor: the
 // anchor names what a box depicts, so a declaration anchored where an observation sits is
 // the same box under the author's id. An id match is settled first and never renamed; each
@@ -266,6 +377,35 @@ fun observedEdgeKey(o: ObservedEdge, renames: {str: str}) > str {
     return edgeKey(renames[o.src] ?? o.src, dst: renames[o.dst] ?? o.dst);
 }
 
+// rebuilt is f with its node and edge lists replaced, every other declaration kept.
+fun rebuilt(f: Flow, nodes: mut [Node], edges: mut [Edge], observedNodes: mut [ObservedNode], observedEdges: mut [ObservedEdge], hidden: mut [Hidden]) > Flow {
+    return Flow{
+        id = f.id,
+        titleText = f.titleText,
+        eyebrowText = f.eyebrowText,
+        descText = f.descText,
+        topDown = f.topDown,
+        isGenerated = f.isGenerated,
+        isUnscoped = f.isUnscoped,
+        unscopedWhy = f.unscopedWhy,
+        nodes = nodes,
+        edges = edges,
+        zones = f.zones,
+        legendItems = f.legendItems,
+        scopeGlobs = f.scopeGlobs,
+        omitted = f.omitted,
+        omittedTwice = f.omittedTwice,
+        observedNodes = observedNodes,
+        observedEdges = observedEdges,
+        stamp = f.stamp,
+        hidden = hidden,
+        stringly = f.stringly,
+        ranks = f.ranks,
+        rows = f.rows,
+        orders = f.orders,
+    };
+}
+
 // dropOmitted removes every observed box anchored at an omitted path, and every observed
 // connector touching one, so the observation cannot put back what the author left out.
 fun dropOmitted(f: Flow) > Flow {
@@ -282,25 +422,7 @@ fun dropOmitted(f: Flow) > Flow {
     foreach (e in f.observedEdges) {
         if (dropped[e.src] == null and dropped[e.dst] == null) { edges.append(e); }
     }
-    return Flow{
-        id = f.id,
-        titleText = f.titleText,
-        eyebrowText = f.eyebrowText,
-        descText = f.descText,
-        topDown = f.topDown,
-        isGenerated = f.isGenerated,
-        nodes = f.nodes,
-        edges = f.edges,
-        zones = f.zones,
-        legendItems = f.legendItems,
-        scopeGlobs = f.scopeGlobs,
-        omitted = f.omitted,
-        observedNodes = nodes,
-        observedEdges = edges,
-        observedSets = f.observedSets,
-        stamp = f.stamp,
-        hidden = f.hidden,
-    };
+    return rebuilt(f, nodes: f.nodes, edges: f.edges, observedNodes: nodes, observedEdges: edges, hidden: f.hidden);
 }
 
 // compose applies the merge rule and returns the flow the layout places: the declared boxes
@@ -332,16 +454,13 @@ fun compose(declared: Flow) > Flow {
     while (i < f.nodes.len()) {
         final d = f.nodes[i];
         final o = mergedFrom[i];
-        if (o == null) {
-            nodes.append(Node{ id = d.id, label = shownLabel(d.label, id: d.id), sub = d.sub, tag = d.tag, role = d.role, anchor = d.anchor });
-        } else {
-            var anchor = d.anchor;
+        var label = shownLabel(d.label, id: d.id);
+        var anchor = d.anchor;
+        if (o != null) {
+            label = shownLabel(d.label, id: shownLabel(o!.label, id: o!.id));
             if (anchor == "") { anchor = o!.anchor; }
-            nodes.append(Node{
-                id = d.id, label = shownLabel(d.label, id: shownLabel(o!.label, id: o!.id)),
-                sub = d.sub, tag = d.tag, role = d.role, anchor = anchor,
-            });
         }
+        nodes.append(Node{ id = d.id, label = label, sub = d.sub, tag = d.tag, role = d.role, anchor = anchor, link = d.link });
         i = i + 1;
     }
     foreach (o in observedOnly) {
@@ -361,38 +480,22 @@ fun compose(declared: Flow) > Flow {
         final dst = renames[o.dst] ?? o.dst;
         final key = edgeKey(src, dst: dst);
         if (hiddenKeys[key] == null and declaredKeys[key] == null) {
-            edges.append(Edge{ src = src, dst = dst, claim = "imports" });
+            edges.append(Edge{ src = src, dst = dst, claim = Claim.imports.value });
         }
     }
-
-    return Flow{
-        id = f.id,
-        titleText = f.titleText,
-        eyebrowText = f.eyebrowText,
-        descText = f.descText,
-        topDown = f.topDown,
-        isGenerated = f.isGenerated,
-        nodes = nodes,
-        edges = edges,
-        zones = f.zones,
-        legendItems = f.legendItems,
-        scopeGlobs = f.scopeGlobs,
-        omitted = f.omitted,
-        observedNodes = mut [<ObservedNode>],
-        observedEdges = mut [<ObservedEdge>],
-        observedSets = f.observedSets,
-        stamp = f.stamp,
-        hidden = mut [<Hidden>],
-    };
+    return rebuilt(f, nodes: nodes, edges: edges,
+        observedNodes: mut [<ObservedNode>], observedEdges: mut [<ObservedEdge>], hidden: mut [<Hidden>]);
 }
 
-// compositionFindings reports what the merge rule cannot settle on its own: an override that
-// no longer overrides anything, one without a reason, and two sides disagreeing on where
-// a box lives in the code, and a declared box drawing a path the figure omits.
+// compositionFindings reports what the merge rule cannot settle on its own: an omitEdge that
+// no longer hides anything or gives no reason, two sides disagreeing on where a box lives in
+// the code, a declared box drawing a path the figure omits, and a declared edge passing an
+// observed import off as narrative.
 fun compositionFindings(declared: Flow) > mut [str] {
     final errs: mut [str] = mut [<str>];
-    if (declared.observedSets > 1) {
-        errs.append("observed() called {declared.observedSets} times; a figure composes one observed set");
+    foreach (arg in declared.stringly) { errs.append("{arg}, not a string; name the case"); }
+    foreach (path in declared.omittedTwice) {
+        errs.append("omit {quote(path)} is declared twice; keep one omit({quote(path)}, why:) with one reason");
     }
     // Read before the drop: a declaration overriding an omitted observation by id inherits
     // its anchor.
@@ -403,7 +506,7 @@ fun compositionFindings(declared: Flow) > mut [str] {
         if (anchor == "") { anchor = observedAnchor[n.id] ?? ""; }
         final why = declared.omitted[anchor];
         if (anchor != "" and why != null) {
-            errs.append("node {n.id} anchors {anchor}, which the figure omits ({why!}); draw it or drop the omit");
+            errs.append("node {quote(n.id)} anchors {quote(anchor)}, which omit leaves out ({why!}); drop the node or the omit({quote(anchor)})");
         }
     }
     final f = dropOmitted(declared);
@@ -414,7 +517,7 @@ fun compositionFindings(declared: Flow) > mut [str] {
     foreach (o in f.observedNodes) {
         final d = declaredAnchor[o.id] ?? "";
         if (d != "" and o.anchor != "" and d != o.anchor) {
-            errs.append("node {o.id} is declared with anchor {d} but observed at {o.anchor}");
+            errs.append("node {quote(o.id)} is anchored at {quote(d)} but observed at {quote(o.anchor)}; anchor it at {quote(o.anchor)} or give it an id of its own");
         }
     }
     // Whatever the merge left unmerged under a declared anchor would draw the same place
@@ -427,62 +530,360 @@ fun compositionFindings(declared: Flow) > mut [str] {
         if (n.anchor != "") {
             foreach (o in f.observedNodes) {
                 if (o.anchor == n.anchor and declaredIds[o.id] == null and renames[o.id] == null) {
-                    errs.append("node {n.id} anchors {n.anchor}, which observed node {o.id} already carries");
+                    errs.append("node {quote(n.id)} anchors {quote(n.anchor)}, which observed node {quote(o.id)} already carries; override it with node({quote(o.id)}) or omit({quote(n.anchor)}, why:)");
                 }
             }
         }
     }
     final observedKeys: mut {str: bool} = mut {<str: bool>};
     foreach (o in f.observedEdges) { observedKeys[observedEdgeKey(o, renames: renames)] = true; }
+    final hiddenKeys: mut {str: bool} = mut {<str: bool>};
     foreach (h in f.hidden) {
+        final hidden = "omitEdge {quote(h.src)} -> {quote(h.dst)}";
+        hiddenKeys[edgeKey(h.src, dst: h.dst)] = true;
         if (h.why == "") {
-            errs.append("without {h.src} -> {h.dst} gives no reason; say why the observed edge is hidden");
+            errs.append("{hidden} gives no reason; say why in omitEdge({quote(h.src)}, dst: {quote(h.dst)}, why:)");
         }
         if (observedKeys[edgeKey(h.src, dst: h.dst)] == null) {
-            errs.append("without {h.src} -> {h.dst}: the observed set has no such edge; drop the override");
+            errs.append("{hidden} names no observed edge; drop the omitEdge");
+        }
+    }
+    foreach (e in f.edges) {
+        final key = edgeKey(e.src, dst: e.dst);
+        if (hiddenKeys[key] != null) {
+            errs.append("{edgeName(e.src, dst: e.dst)} is declared and also hidden by omitEdge; drop one of them");
+        }
+        if (observedKeys[key] != null and hiddenKeys[key] == null and e.claim == Claim.flow.value) {
+            errs.append("{edgeName(e.src, dst: e.dst)} replaces an observed import but claims flow; claim Claim.imports or omitEdge it");
         }
     }
     return errs;
 }
 
-// declarationFindings reports what no placement can fix, before any placement runs: a
-// connector with nowhere to attach, and a node two bands claim.
+// declarationFindings reports, before any placement runs, every fault the declaration
+// itself carries: what no layout could fix, and what the renderer would refuse in its own
+// terms. What validate finds after placement is then the layout's alone.
 fun declarationFindings(f: Flow) > [str] {
     final errs: mut [str] = mut [<str>];
     final known: mut {str: bool} = mut {<str: bool>};
-    foreach (n in f.nodes) { known[n.id] = true; }
-    foreach (e in f.edges) {
-        if (f.observedSets > 0) {
-            foreach (end in [e.src, e.dst]) {
-                if (known[end] == null) {
-                    errs.append("edge {e.src} -> {e.dst} names {end}, which neither the declaration nor the observed set supplies");
-                }
-            }
-        } else {
-            if (known[e.src] == null) { errs.append("edge from unknown node \"{e.src}\""); }
-            if (known[e.dst] == null) { errs.append("edge to unknown node \"{e.dst}\""); }
+    final exits: mut {str: int} = mut {<str: int>};
+    var focal = 0;
+    foreach (n in f.nodes) {
+        final id = quote(n.id);
+        if (known[n.id] != null) {
+            errs.append("node {id} is declared twice; merge the two node({id}) calls");
         }
-        if (e.src == e.dst) { errs.append("edge from \"{e.src}\" to itself"); }
+        known[n.id] = true;
+        if (n.anchor != "" and n.link != "") {
+            errs.append("node {id} sets both anchor and link; keep anchor for a path in this repo, link for anything outside it");
+        }
+        if (n.role == Role.decision.value and (n.tag != "" or n.sub != "")) {
+            errs.append("node {id} is a Role.decision with a tag or sub; drop them from node({id}), a diamond has room for neither");
+        }
+        if (n.role == Role.focal.value) { focal = focal + 1; }
     }
+    final seenEdge: mut {str: bool} = mut {<str: bool>};
+    foreach (e in f.edges) {
+        final name = edgeName(e.src, dst: e.dst);
+        foreach (end in [e.src, e.dst]) {
+            if (known[end] == null) {
+                errs.append("{name} names {quote(end)}, which neither a node nor the observed set supplies; declare node({quote(end)})");
+            }
+        }
+        if (e.src == e.dst) { errs.append("{name} loops to itself; drop the edge"); }
+        final key = edgeKey(e.src, dst: e.dst);
+        if (seenEdge[key] != null) { errs.append("{name} is declared twice; keep one edge({quote(e.src)}, dst: {quote(e.dst)})"); }
+        seenEdge[key] = true;
+        if (e.label.len() > MaxEdgeLabel) {
+            errs.append("{name} label {quote(e.label)} runs past {MaxEdgeLabel} characters; shorten it or move it to desc()");
+        }
+        if (e.kind == "accent") { focal = focal + 1; }
+        exits[e.src] = (exits[e.src] ?? 0) + 1;
+    }
+    foreach (n in f.nodes) {
+        final leaving = exits[n.id] ?? 0;
+        if (n.role == Role.decision.value and leaving > MaxDecisionExits) {
+            errs.append("node {quote(n.id)} has {leaving} exits; a Role.decision takes {MaxDecisionExits}, so nest a second decision node");
+        }
+    }
+
     final owner: mut {str: str} = mut {<str: str>};
+    final labels: mut {str: bool} = mut {<str: bool>};
     foreach (z in f.zones) {
+        var kind = "zone";
+        if (z.boundary) { kind = "boundary"; }
+        final label = quote(z.label);
+        if (labels[z.label] != null) {
+            errs.append("{kind} {label} is declared twice; merge the members into one {kind}({label}, members:)");
+        }
+        labels[z.label] = true;
         if (z.members.len() == 0) {
-            errs.append("zone \"{z.label}\" has no members");
+            errs.append("{kind} {label} has no members; name them in {kind}({label}, members: [...]) or drop it");
         }
         foreach (m in z.members) {
             if (known[m] == null) {
-                errs.append("zone \"{z.label}\" names unknown node \"{m}\"");
+                errs.append("{kind} {label} names {quote(m)}, which no node declares; declare node({quote(m)}) or drop it from members");
             }
             final prior = owner[m];
             if (prior != null and prior! != z.label) {
-                errs.append("node \"{m}\" sits in zones \"{prior!}\" and \"{z.label}\"; a node belongs to one band");
+                errs.append("node {quote(m)} sits in zones {quote(prior!)} and {label}; keep it in one of them");
             }
             if (prior == null) { owner[m] = z.label; }
         }
     }
+
+    final scoped = f.scopeGlobs.len() > 0;
+    if (scoped == false and f.isUnscoped == false and f.isGenerated == false) {
+        errs.append("names no code; add scope([...]) or unscoped(why:)");
+    }
+    if (scoped and f.isUnscoped) {
+        errs.append("declares both scope([...]) and unscoped(why:); keep one");
+    }
+    if (f.isUnscoped and f.unscopedWhy == "") {
+        errs.append("unscoped gives no reason; say why in unscoped(why:)");
+    }
+
+    if (f.isGenerated == false) {
+        // internal/handler/diagram's 422 test pins "split into overview plus detail".
+        final split = "split into overview plus detail, one flow() each";
+        if (f.nodes.len() > MaxNodes) { errs.append("{f.nodes.len()} nodes exceeds the budget of {MaxNodes}; {split}"); }
+        if (f.edges.len() > MaxEdges) { errs.append("{f.edges.len()} edges exceeds the budget of {MaxEdges}; {split}"); }
+        if (focal > MaxAccent) {
+            errs.append("{focal} focal nodes and edges exceed the budget of {MaxAccent}; keep Role.focal and EdgeRole.focal for the one point the figure makes");
+        }
+        if (f.zones.len() > MaxZones) {
+            errs.append("{f.zones.len()} zones and boundaries exceed the budget of {MaxZones}; merge bands or {split}");
+        }
+    }
+
+    foreach (verb in ["rank", "row", "order"]) {
+        var sets = f.ranks;
+        if (verb == "row") { sets = f.rows; }
+        if (verb == "order") { sets = f.orders; }
+        foreach (ids in sets) {
+            final named = call(verb, ids: ids);
+            if (ids.len() < 2) { errs.append("{named} relates fewer than two nodes; name two or more, or drop it"); }
+            final seen: mut {str: bool} = mut {<str: bool>};
+            foreach (id in ids) {
+                if (known[id] == null) {
+                    errs.append("{named} names {quote(id)}, which no node declares; declare node({quote(id)}) or drop it from {verb}([...])");
+                }
+                if (seen[id] != null) { errs.append("{named} names {quote(id)} twice; name each node once"); }
+                seen[id] = true;
+            }
+        }
+    }
     return errs;
 }
 
+// Groups is a union-find over node indices, for constraints that chain: rank(a, b) and
+// rank(b, c) put all three in one rank.
+object Groups {
+    parent: mut [int],
+
+    fun find(i: int) > int {
+        var at = i;
+        while (this.parent[at] != at) { at = this.parent[at]; }
+        return at;
+    }
+
+    fun join(a: int, b: int) > void {
+        final ra = this.find(a);
+        final rb = this.find(b);
+        if (ra < rb) { this.parent[rb] = ra; }
+        if (rb < ra) { this.parent[ra] = rb; }
+    }
+}
+
+fun groupsOf(n: int, sets: [[str]], idx: {str: int}) > Groups {
+    final g = Groups{ parent = zeros(n) };
+    var i = 0;
+    while (i < n) {
+        g.parent[i] = i;
+        i = i + 1;
+    }
+    foreach (ids in sets) {
+        var k = 1;
+        while (k < ids.len()) {
+            g.join(idx[ids[0]] ?? 0, b: idx[ids[k]] ?? 0);
+            k = k + 1;
+        }
+    }
+    return g;
+}
+
+// constraintFindings checks rank, row and order against the edges, the zones and the ranks
+// the plan assigned. declarationFindings has already refused an unknown id.
+fun constraintFindings(f: Flow, pl: Plan) > [str] {
+    final errs: mut [str] = mut [<str>];
+    final nn = f.nodes.len();
+    if (f.ranks.len() + f.rows.len() + f.orders.len() == 0) { return errs; }
+    final idx: mut {str: int} = mut {<str: int>};
+    var i = 0;
+    while (i < nn) {
+        if (idx[f.nodes[i].id] == null) { idx[f.nodes[i].id] = i; }
+        i = i + 1;
+    }
+    final succ = lists(nn);
+    foreach (e in f.edges) { succ[idx[e.src] ?? 0].append(idx[e.dst] ?? 0); }
+    // reach[a][b]: a directed path runs from a to b, walked from every node; figures are small.
+    final reach: mut [mut {int: bool}] = mut [<mut {int: bool}>];
+    i = 0;
+    while (i < nn) {
+        final seen: mut {int: bool} = mut {<int: bool>};
+        final queue: mut [int] = mut [i];
+        var head = 0;
+        while (head < queue.len()) {
+            foreach (w in succ[queue[head]]) {
+                if (seen[w] == null) {
+                    seen[w] = true;
+                    queue.append(w);
+                }
+            }
+            head = head + 1;
+        }
+        reach.append(seen);
+        i = i + 1;
+    }
+    final zoneOf: mut {str: int} = mut {<str: int>};
+    var z = 0;
+    while (z < f.zones.len()) {
+        foreach (m in f.zones[z].members) {
+            if (zoneOf[m] == null) { zoneOf[m] = z; }
+        }
+        z = z + 1;
+    }
+    final ranked = groupsOf(nn, sets: f.ranks, idx: idx);
+    final sameRank = fun (a: int, b: int) > bool {
+        return ranked.find(a) == ranked.find(b) or pl.rankOf[a] == pl.rankOf[b];
+    };
+
+    // Each group of rank() calls, in declaration order, against every path between two of
+    // its members.
+    final reported: mut {int: bool} = mut {<int: bool>};
+    i = 0;
+    while (i < nn) {
+        final root = ranked.find(i);
+        if (reported[root] == null) {
+            reported[root] = true;
+            final members: mut [int] = mut [<int>];
+            var m = 0;
+            while (m < nn) {
+                if (ranked.find(m) == root) { members.append(m); }
+                m = m + 1;
+            }
+            if (members.len() > 1) {
+                final ids: mut [str] = mut [<str>];
+                foreach (at in members) { ids.append(f.nodes[at].id); }
+                foreach (a in members) {
+                    foreach (b in members) {
+                        if (a != b and reach[a][b] != null) {
+                            errs.append("{call("rank", ids: ids)} contradicts the path {quote(f.nodes[a].id)} -> {quote(f.nodes[b].id)}; drop one of them from rank([...])");
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+
+    foreach (ids in f.orders) {
+        final named = call("order", ids: ids);
+        var k = 1;
+        while (k < ids.len()) {
+            final a = idx[ids[k - 1]] ?? 0;
+            final b = idx[ids[k]] ?? 0;
+            final pair = "{quote(ids[k - 1])} and {quote(ids[k])}";
+            if (reach[a][b] != null or reach[b][a] != null) {
+                errs.append("{named} names {pair}, which a path puts in different ranks; order sorts one rank, so drop it or use row([...])");
+            } else {
+                if (sameRank(a, b: b) == false) {
+                    errs.append("{named} names {pair}, which sit in different ranks; add rank([...]) with both or drop the order");
+                }
+            }
+            final za = zoneOf[ids[k - 1]];
+            final zb = zoneOf[ids[k]];
+            if (za != null and zb != null and za! > zb!) {
+                errs.append("{named} puts {quote(ids[k - 1])} first, but zone {quote(f.zones[za!].label)} stacks after zone {quote(f.zones[zb!].label)}; reorder the zones or drop the order");
+            }
+            k = k + 1;
+        }
+    }
+    // Kahn's walk over the order pairs: whatever it cannot drain sits on a cycle.
+    final before = lists(nn);
+    final indeg = zeros(nn);
+    foreach (ids in f.orders) {
+        var k = 1;
+        while (k < ids.len()) {
+            final a = idx[ids[k - 1]] ?? 0;
+            final b = idx[ids[k]] ?? 0;
+            before[a].append(b);
+            indeg[b] = indeg[b] + 1;
+            k = k + 1;
+        }
+    }
+    final queue: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        if (indeg[i] == 0) { queue.append(i); }
+        i = i + 1;
+    }
+    var head = 0;
+    while (head < queue.len()) {
+        foreach (w in before[queue[head]]) {
+            indeg[w] = indeg[w] - 1;
+            if (indeg[w] == 0) { queue.append(w); }
+        }
+        head = head + 1;
+    }
+    if (queue.len() < nn) {
+        final cycle: mut [str] = mut [<str>];
+        i = 0;
+        while (i < nn) {
+            if (indeg[i] > 0) { cycle.append(quote(f.nodes[i].id)); }
+            i = i + 1;
+        }
+        errs.append("order puts {cycle.join(", ")} each before the other; drop the order([...]) that reverses them");
+    }
+
+    final lined = groupsOf(nn, sets: f.rows, idx: idx);
+    final seenRow: mut {int: bool} = mut {<int: bool>};
+    i = 0;
+    while (i < nn) {
+        final root = lined.find(i);
+        if (seenRow[root] == null) {
+            seenRow[root] = true;
+            final members: mut [int] = mut [<int>];
+            var m = 0;
+            while (m < nn) {
+                if (lined.find(m) == root) { members.append(m); }
+                m = m + 1;
+            }
+            final ids: mut [str] = mut [<str>];
+            foreach (at in members) { ids.append(f.nodes[at].id); }
+            var x = 0;
+            while (x < members.len()) {
+                var y = x + 1;
+                while (y < members.len()) {
+                    final a = f.nodes[members[x]].id;
+                    final b = f.nodes[members[y]].id;
+                    if (sameRank(members[x], b: members[y])) {
+                        errs.append("{call("row", ids: ids)} names {quote(a)} and {quote(b)}, which share a rank; a row lines up across ranks, so use order([...]) within one");
+                    }
+                    final za = zoneOf[a];
+                    final zb = zoneOf[b];
+                    if (za != null and zb != null and za! != zb!) {
+                        errs.append("{call("row", ids: ids)} names {quote(a)} in zone {quote(f.zones[za!].label)} and {quote(b)} in zone {quote(f.zones[zb!].label)}; bands never share a row, so drop one of them");
+                    }
+                    y = y + 1;
+                }
+                x = x + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return errs;
+}
 fun plan(f: Flow) > Plan {
     final nn = f.nodes.len();
     final nz = f.zones.len();
@@ -611,6 +1012,7 @@ fun plan(f: Flow) > Plan {
     }
 
     // Longest path from the roots, in topological order.
+    // TODO(diagram/routing): honour rank() here, pulling each group to its deepest member's rank.
     final succAdj = lists(nn);
     final indeg = zeros(nn);
     li = 0;
@@ -706,6 +1108,7 @@ fun plan(f: Flow) > Plan {
         }
     }
 
+    // TODO(diagram/routing): honour order() in before(), ahead of the barycenter.
     // Three barycenter sweeps: down, up, down. Each fixes the rank it reads from, so the
     // first rank of a sweep is never reordered by it.
     foreach (goingDown in [true, false, true]) {
@@ -772,10 +1175,11 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     foreach (ins in insOf) {
         if (ins.len() > fan) { fan = ins.len(); }
     }
-    // Slot k of n attaches at k/(n+1) of the side, snapped to the grid, so a side needs one
-    // grid step per slot or two connectors leave from one point. Rounded to 8: a band
-    // centers a short rank by half a row pitch, which must stay on the grid.
-    final fanRoom = 4 * (fan + 1) + 4 * ((fan + 1) % 2);
+    // Slot k of n attaches at k/(n+1) of the side, snapped to the grid, so a side needs a
+    // Pitch per slot. Rounded up to 8: a band centers a short rank by half a row pitch,
+    // which must stay on the grid.
+    final slotRoom = Pitch * (fan + 1);
+    final fanRoom = slotRoom + (8 - slotRoom % 8) % 8;
     var nodeW = LayerNodeW;
     if (lr and fanRoom > nodeH) { nodeH = fanRoom; }
     if (lr == false and fanRoom > nodeW) { nodeW = fanRoom; }
@@ -882,6 +1286,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     }
     final crossEnd = cursor - LayerRowGap + skew;
 
+    // TODO(diagram/routing): honour row() here, giving each group one cross coordinate.
     final itemCross = zeros(items);
     var r = 0;
     while (r <= pl.maxRank) {
@@ -947,7 +1352,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
     // exitOf is -1 for the vertex before the outbound one across the flow, +1 after it.
     final exitOf = zeros(ne);
     final isDecision: mut [bool] = mut [<bool>];
-    foreach (n in f.nodes) { isDecision.append(n.role == "decision"); }
+    foreach (n in f.nodes) { isDecision.append(n.role == Role.decision.value); }
     var dn = 0;
     while (dn < pl.nodeCount) {
         final outs = outsOf[dn];
@@ -1039,7 +1444,8 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         }
         return x < y;
     };
-    // A gap widens past LayerColGap only when its channels would otherwise share a grid line.
+    // A gap widens past LayerColGap only when its channels would otherwise sit closer than
+    // Pitch.
     final rankMain = zeros(pl.maxRank + 1);
     rankMain[0] = mainStart;
     var gap = 0;
@@ -1052,7 +1458,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         }
         turning.sort(byTurn);
         var gapW = LayerColGap;
-        if (4 * (turning.len() + 1) > gapW) { gapW = 4 * (turning.len() + 1); }
+        if (Pitch * (turning.len() + 1) > gapW) { gapW = Pitch * (turning.len() + 1); }
         final gapStart = rankMain[gap] + mainSize;
         var c = 1;
         foreach (hop in turning) {
@@ -1080,7 +1486,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
             y = itemMain[i];
         }
         nodes.append(Node{
-            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor,
+            id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor, link = n.link,
             x = x, y = y, w = nodeW, h = nodeH,
         });
         i = i + 1;
@@ -1177,10 +1583,11 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
             final mainHi = hi + mainSize + ZonePad;
             final crossLo = bandStart[k] - crossLabelPad;
             final crossHi = bandStart[k] + bandRows[k] * crossPitch - LayerRowGap + ZonePad + skew;
+            final band = f.zones[k];
             if (lr) {
-                zones.append(Zone{ label = f.zones[k].label, x = mainLo, y = crossLo, w = mainHi - mainLo, h = crossHi - crossLo });
+                zones.append(Zone{ label = band.label, boundary = band.boundary, x = mainLo, y = crossLo, w = mainHi - mainLo, h = crossHi - crossLo });
             } else {
-                zones.append(Zone{ label = f.zones[k].label, x = crossLo, y = mainLo, w = crossHi - crossLo, h = mainHi - mainLo });
+                zones.append(Zone{ label = band.label, boundary = band.boundary, x = crossLo, y = mainLo, w = crossHi - crossLo, h = mainHi - mainLo });
             }
         }
         k = k + 1;
@@ -1216,6 +1623,7 @@ fun place(f: Flow, pl: Plan, stagger: int) > Diagram {
         scope = f.scopeGlobs,
         omits = f.omitted,
         stamp = f.stamp,
+        unscoped = f.unscopedWhy,
     };
 }
 
@@ -1225,24 +1633,52 @@ fun snap(n: int) > int {
     return n - n % 4;
 }
 
+
+// voiced puts the figure's id in front of every finding, one per line.
+fun voiced(id: str, found: [str]) > str {
+    final lines: mut [str] = mut [<str>];
+    foreach (msg in found) { lines.append("flow {quote(id)}: {msg}"); }
+    return lines.join("\n");
+}
+
+// layoutFindings restates what validate found in a placed figure. declarationFindings has
+// already refused every fault a declaration can cause, so what is left is the layout's own,
+// and an author can only report it.
+fun layoutFindings(found: [Fault]) > [str] {
+    final msgs: mut [str] = mut [<str>];
+    foreach (fault in found) {
+        final s = fault.subjects;
+        if (fault.rule == "sameLine") {
+            msgs.append("edges {quote(s[0])} -> {quote(s[1])} and {quote(s[2])} -> {quote(s[3])} cannot be routed apart; layout bug, report it");
+            continue;
+        }
+        if (fault.rule == "bend") {
+            msgs.append("{edgeName(s[0], dst: s[1])} has a leg too short to bend; layout bug, report it");
+            continue;
+        }
+        msgs.append("{fault.text}; layout bug, report it");
+    }
+    return msgs;
+}
+
 fun layoutFlow(declared: Flow) > Diagram !> str {
     final f = compose(declared);
     final structural = compositionFindings(declared);
     foreach (msg in declarationFindings(f)) { structural.append(msg); }
-    if (structural.len() > 0) {
-        throw "flow \"{f.id}\": " + structural.join("; ");
-    }
+    if (structural.len() > 0) { throw voiced(f.id, found: structural); }
     final pl = plan(f);
+    final contradictions = constraintFindings(f, pl: pl);
+    if (contradictions.len() > 0) { throw voiced(f.id, found: contradictions); }
     final first = place(f, pl: pl, stagger: 0);
-    final firstErrs = validate(first);
-    if (firstErrs.len() == 0) { return first; }
-    foreach (stagger in LayerStaggers) {
+    final firstFaults = faults(first);
+    if (firstFaults.len() == 0) { return first; }
+    foreach (stagger in Staggers) {
         final attempt = place(f, pl: pl, stagger: stagger);
-        if (validate(attempt).len() == 0) { return attempt; }
+        if (faults(attempt).len() == 0) { return attempt; }
     }
-    // The unstaggered findings are the ones an author can act on; a staggered attempt
-    // only moves the same collision somewhere else.
-    throw "flow \"{f.id}\": " + firstErrs.join("; ");
+    // The unstaggered faults are the ones worth reporting; a staggered attempt only moves the
+    // same collision somewhere else.
+    throw voiced(f.id, found: layoutFindings(firstFaults));
 }
 
 fun nodeOf(d: Diagram, id: str) > Node {
@@ -1341,16 +1777,21 @@ fun legEntersBox(leg: [int], n: Node) > bool {
     return n.x < x1 and x1 < n.x + n.w and imax(y1, b: n.y) < imin(y2, b: n.y + n.h);
 }
 
+// fig is a test figure: laid out for its own sake, depicting no code.
+fun fig(observed: Observed = Observed{}) > mut Flow {
+    return flow("t", observed: observed).unscoped("a layout test");
+}
+
 fun diamond() > mut Flow {
-    return flow("t").title("Diamond")
+    return fig().title("Diamond")
         .node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("a", dst: "c").edge("b", dst: "d").edge("c", dst: "d");
 }
 
 // serverHttpTwin is docs/site/diagrams/server-http.buzz declared as a flow: the same boxes,
 // roles, anchors, connectors and legend, with every coordinate, slot and bend left out.
-fun serverHttpTwin() > mut Flow {
-    return flow("server-http")
+fun serverHttpTwin(observed: Observed = Observed{}) > mut Flow {
+    return flow("server-http", observed: observed)
         .eyebrow("magus server")
         .title("The HTTP surface, and the one route without a guard")
         .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
@@ -1361,22 +1802,23 @@ fun serverHttpTwin() > mut Flow {
             + "authentication.")
         .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
         .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
-        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: "external")
-        .node("guard", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: "focal", anchor: "internal/httpx")
+        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: Role.external)
+        .node("guard", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: Role.focal, anchor: "internal/httpx")
         .node("mcp", label: "/mcp", sub: "agent tools, SSE", anchor: "internal/handler/mcp")
         .node("reads", label: "/api/v1 read views", sub: "graph, events, insight, outputs", anchor: "internal/handler/graph")
         .node("review", label: "/api/v1 review + plans", sub: "diff, session, plan, review", anchor: "internal/handler/status")
         .node("connect", label: "Connect RPC", sub: "eleven typed services", anchor: "internal/handler/metrics")
-        .node("health", label: "/livez /readyz", sub: "no authentication", role: "external", anchor: "internal/server")
+        .node("health", label: "/livez /readyz", sub: "no authentication", role: Role.external, anchor: "internal/server")
         .edge("agent", dst: "guard")
         .edge("console", dst: "guard")
         .edge("guard", dst: "mcp")
         .edge("guard", dst: "reads")
         .edge("guard", dst: "review")
         .edge("guard", dst: "connect")
-        .edge("probe", dst: "health", label: "unguarded", kind: "accent")
-        .legend("focal", label: "authenticated")
-        .legend("external", label: "open to any caller");
+        .edge("probe", dst: "health", label: "unguarded", role: EdgeRole.focal)
+        .legend(Role.focal, label: "authenticated")
+        .legend(Role.external, label: "open to any caller")
+        .scope(["internal/handler/*", "internal/httpx", "internal/server"]);
 }
 
 // observedServerScope is magus\importGraph() over internal/handler/*, internal/httpx and
@@ -1411,16 +1853,17 @@ fun observedServerScope() > mut Flow {
         ["internal/server", "internal/handler/viewer"],
         ["internal/server", "internal/httpx"],
     ];
-    final f = flow("observed-server").title("internal/server and its handlers, as imported");
+    final f = flow("observed-server").title("internal/server and its handlers, as imported")
+        .scope(["internal/handler/*", "internal/httpx", "internal/server"]);
     foreach (p in pkgs) { f.node("pkg-" + p.replace("/", with: "-"), label: p, anchor: p); }
     foreach (pair in imports) {
-        f.edge("pkg-" + pair[0].replace("/", with: "-"), dst: "pkg-" + pair[1].replace("/", with: "-"), claim: "imports");
+        f.edge("pkg-" + pair[0].replace("/", with: "-"), dst: "pkg-" + pair[1].replace("/", with: "-"), claim: Claim.imports);
     }
     return f;
 }
 
 test "a chain ranks into one column per step" {
-    final d = flow("t").node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
+    final d = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "the layout is sound");
     std\assert(nodeOf(d, id: "a").x < nodeOf(d, id: "b").x, message: "b sits right of a");
     std\assert(nodeOf(d, id: "b").x < nodeOf(d, id: "c").x, message: "c sits right of b");
@@ -1435,7 +1878,7 @@ test "a diamond lays out without a crossing" {
 }
 
 test "an edge spanning three ranks routes around every box" {
-    final d = flow("t")
+    final d = fig()
         .node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d").edge("a", dst: "d")
         .diagram() catch Diagram{};
@@ -1451,7 +1894,7 @@ test "an edge spanning three ranks routes around every box" {
 }
 
 test "a cycle renders with one dashed reversed edge" {
-    final f = flow("t").node("a").node("b").node("c")
+    final f = fig().node("a").node("b").node("c")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "a");
     final d = f.diagram() catch Diagram{};
     var dashed = 0;
@@ -1465,7 +1908,7 @@ test "a cycle renders with one dashed reversed edge" {
 }
 
 test "a zone keeps its members contiguous" {
-    final d = flow("t")
+    final d = fig()
         .node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("a", dst: "c").edge("a", dst: "d")
         .zone("pair", members: ["b", "d"])
@@ -1485,19 +1928,13 @@ test "the same declarations render the same bytes" {
     final one = serverHttpTwin().svg(lightPalette()) catch "one threw";
     final two = serverHttpTwin().svg(lightPalette()) catch "two threw";
     std\assert(one == two, message: "deterministic");
-    std\assert(one.startsWith("<svg"), message: "and it rendered");
+    std\assert(one.startsWith("<svg"), message: "and it rendered: {one}");
 }
 
 test "a node in two zones is a finding" {
-    var msg = "";
-    try {
-        flow("t").node("a").node("b").edge("a", dst: "b")
-            .zone("one", members: ["a"]).zone("two", members: ["a", "b"])
-            .diagram();
-    } catch (e: str) {
-        msg = e;
-    }
-    std\assert(msg.indexOf("sits in zones \"one\" and \"two\"") != null, message: "named: {msg}");
+    final msg = thrown(fig().node("a").node("b").edge("a", dst: "b")
+        .zone("one", members: ["a"]).zone("two", members: ["a", "b"]));
+    std\assert(msg.indexOf("node \"a\" sits in zones \"one\" and \"two\"; keep it in one of them") != null, message: "named: {msg}");
 }
 
 test "down() transposes the layout" {
@@ -1513,6 +1950,8 @@ test "down() transposes the layout" {
 }
 
 test "the server-http twin lays out clean" {
+    final msg = thrown(serverHttpTwin());
+    std\assert(msg == "", message: "no findings: {msg}");
     final d = serverHttpTwin().diagram() catch Diagram{};
     std\assert(d.nodes.len() == 9, message: "every box placed");
     std\assert(validate(d).len() == 0, message: "no findings");
@@ -1520,19 +1959,17 @@ test "the server-http twin lays out clean" {
 }
 
 test "an observed import scope lays out clean once generated" {
-    var msg = "";
-    try {
-        observedServerScope().diagram();
-    } catch (e: str) {
-        msg = e;
-    }
-    std\assert(msg.indexOf("18 nodes exceeds the budget") != null, message: "authored budgets apply by default: {msg}");
+    final msg = thrown(observedServerScope());
+    std\assert(msg.indexOf("flow \"observed-server\": 18 nodes exceeds the budget of 9; split into overview plus detail, one flow() each") != null,
+        message: "authored budgets apply by default: {msg}");
     final d = observedServerScope().generated().diagram() catch Diagram{};
     std\assert(d.generated, message: "marked generated");
     std\assert(d.nodes.len() == 18 and d.edges.len() == 19, message: "every package and import placed");
     std\assert(validate(d).len() == 0, message: "no findings: {validate(d)}");
 }
 
+// Pitch 12: twenty slots need 252px, rounded up to 256 to keep a band's half row on the grid,
+// and twenty channels 252px of gap.
 test "a fan past a gap's channels widens the gap and the boxes" {
     final f = flow("t").generated().node("root");
     var i = 0;
@@ -1543,8 +1980,23 @@ test "a fan past a gap's channels widens the gap and the boxes" {
     final d = f.diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "twenty connectors, twenty lines");
     final root = nodeOf(d, id: "root");
-    std\assert(root.h == 88, message: "a slot per grid step: {root.h}");
-    std\assert(nodeOf(d, id: "c0").x - root.x - root.w == 84, message: "a channel per grid step");
+    std\assert(root.h == 256, message: "a Pitch per slot: {root.h}");
+    std\assert(nodeOf(d, id: "c0").x - root.x - root.w == 252, message: "a Pitch per channel");
+}
+
+test "a fan keeps its slots and channels a Pitch apart, so every leg seats the bend floor" {
+    final f = fig().node("root");
+    foreach (id in ["a", "b", "c", "d", "e"]) { f.node(id).edge("root", dst: id); }
+    final msg = thrown(f);
+    std\assert(msg == "", message: "an authored fan of five passes the bend floor: {msg}");
+    final d = f.diagram() catch Diagram{};
+    final ys: mut [int] = mut [<int>];
+    foreach (e in d.edges) { ys.append(sidePoint(nodeOf(d, id: "root"), side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots)[1]); }
+    var k = 1;
+    while (k < ys.len()) {
+        std\assert(imax(ys[k] - ys[k - 1], b: ys[k - 1] - ys[k]) >= Pitch, message: "slots {ys}");
+        k = k + 1;
+    }
 }
 
 test "neighbouring ranks on one row connect straight" {
@@ -1562,7 +2014,7 @@ test "neighbouring ranks on one row connect straight" {
 }
 
 test "a band's sole parent sits beside it" {
-    final d = flow("t")
+    final d = fig()
         .node("u").node("b").node("c").node("v").node("w")
         .edge("u", dst: "b").edge("u", dst: "c").edge("v", dst: "w")
         .zone("pair", members: ["b", "c"])
@@ -1624,34 +2076,34 @@ fun serverHttpComposed() > mut Flow {
         edges.append(ObservedEdge{ src = "pkg-" + imp[0].replace("/", with: "-"), dst = "pkg-" + imp[1].replace("/", with: "-") });
     }
     final mounts = "the server mounts every handler; the figure draws the request path";
-    return flow("server-http")
-        .observed(Observed{ nodes = nodes, edges = edges, stamp = "sha256:0929" })
+    return flow("server-http", observed: Observed{ nodes = nodes, edges = edges, stamp = "sha256:0929" })
         .eyebrow("magus server")
         .title("The HTTP surface, and the one route without a guard")
         .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
         .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
-        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: "external")
-        .node("pkg-internal-httpx", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: "focal")
+        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: Role.external)
+        .node("pkg-internal-httpx", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: Role.focal)
         .node("pkg-internal-handler-mcp", label: "/mcp", sub: "agent tools, SSE")
         .node("pkg-internal-handler-graph", label: "/api/v1 read views", sub: "graph, events, insight, outputs")
         .node("pkg-internal-handler-status", label: "/api/v1 review + plans", sub: "diff, session, plan, review")
         .node("pkg-internal-handler-metrics", label: "Connect RPC", sub: "eleven typed services")
-        .node("pkg-internal-server", label: "/livez /readyz", sub: "no authentication", role: "external")
+        .node("pkg-internal-server", label: "/livez /readyz", sub: "no authentication", role: Role.external)
         .edge("agent", dst: "pkg-internal-httpx")
         .edge("console", dst: "pkg-internal-httpx")
         .edge("pkg-internal-httpx", dst: "pkg-internal-handler-mcp")
         .edge("pkg-internal-httpx", dst: "pkg-internal-handler-graph")
         .edge("pkg-internal-httpx", dst: "pkg-internal-handler-status")
         .edge("pkg-internal-httpx", dst: "pkg-internal-handler-metrics")
-        .edge("probe", dst: "pkg-internal-server", label: "unguarded", kind: "accent")
-        .without("pkg-internal-handler-graph", dst: "pkg-internal-httpx", why: "the read views use guard helpers; requests run the other way")
-        .without("pkg-internal-server", dst: "pkg-internal-handler-graph", why: mounts)
-        .without("pkg-internal-server", dst: "pkg-internal-handler-mcp", why: mounts)
-        .without("pkg-internal-server", dst: "pkg-internal-handler-metrics", why: mounts)
-        .without("pkg-internal-server", dst: "pkg-internal-handler-status", why: mounts)
-        .without("pkg-internal-server", dst: "pkg-internal-httpx", why: mounts)
-        .legend("focal", label: "authenticated")
-        .legend("external", label: "open to any caller");
+        .edge("probe", dst: "pkg-internal-server", label: "unguarded", role: EdgeRole.focal)
+        .omitEdge("pkg-internal-handler-graph", dst: "pkg-internal-httpx", why: "the read views use guard helpers; requests run the other way")
+        .omitEdge("pkg-internal-server", dst: "pkg-internal-handler-graph", why: mounts)
+        .omitEdge("pkg-internal-server", dst: "pkg-internal-handler-mcp", why: mounts)
+        .omitEdge("pkg-internal-server", dst: "pkg-internal-handler-metrics", why: mounts)
+        .omitEdge("pkg-internal-server", dst: "pkg-internal-handler-status", why: mounts)
+        .omitEdge("pkg-internal-server", dst: "pkg-internal-httpx", why: mounts)
+        .legend(Role.focal, label: "authenticated")
+        .legend(Role.external, label: "open to any caller")
+        .scope(["internal/handler/*", "internal/httpx", "internal/server"]);
 }
 
 // serverHttpAnchored composes the twin as an author would keep it: its own ids, each box
@@ -1677,13 +2129,12 @@ fun serverHttpAnchored() > mut Flow {
         stamp = "sha256:0929",
     };
     final mounts = "the server mounts every handler; the figure draws the request path";
-    return serverHttpTwin()
-        .observed(o)
-        .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
-        .without("health", dst: "reads", why: mounts)
-        .without("health", dst: "mcp", why: mounts)
-        .without("health", dst: "connect", why: mounts)
-        .without("health", dst: "review", why: mounts);
+    return serverHttpTwin(observed: o)
+        .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
+        .omitEdge("health", dst: "reads", why: mounts)
+        .omitEdge("health", dst: "mcp", why: mounts)
+        .omitEdge("health", dst: "connect", why: mounts)
+        .omitEdge("health", dst: "review", why: mounts);
 }
 
 test "a declared anchor takes over the observed box it depicts" {
@@ -1712,12 +2163,13 @@ test "a declared anchor takes over the observed box it depicts" {
 }
 
 test "a node matching one observation by id and another by anchor is a finding" {
-    final msg = thrown(flow("t").observed(pair()).node("a", anchor: "pkg/b"));
-    std\assert(msg.indexOf("node a anchors pkg/b, which observed node b already carries") != null, message: "named: {msg}");
+    final msg = thrown(fig(observed: pair()).node("a", anchor: "pkg/b"));
+    std\assert(msg.indexOf("node \"a\" anchors \"pkg/b\", which observed node \"b\" already carries; override it with node(\"b\") or omit(\"pkg/b\", why:)") != null,
+        message: "named: {msg}");
 }
 
 test "observed nodes and edges render" {
-    final f = flow("t").observed(pair());
+    final f = fig(observed: pair());
     final d = f.diagram() catch Diagram{};
     std\assert(d.nodes.len() == 2 and d.edges.len() == 1, message: "both boxes and the import placed");
     std\assert(nodeOf(d, id: "a").label == "pkg/a" and nodeOf(d, id: "b").label == "b", message: "an empty label shows the id");
@@ -1728,47 +2180,60 @@ test "observed nodes and edges render" {
 }
 
 test "a declared node overrides an observed label and keeps its anchor" {
-    final d = flow("t").observed(pair()).node("a", label: "Alpha", sub: "the source", role: "focal").diagram() catch Diagram{};
+    final d = fig(observed: pair()).node("a", label: "Alpha", sub: "the source", role: Role.focal).diagram() catch Diagram{};
     std\assert(d.nodes.len() == 2, message: "merged, not duplicated");
     final a = nodeOf(d, id: "a");
     std\assert(a.label == "Alpha" and a.sub == "the source" and a.role == "focal", message: "the declaration wins");
     std\assert(a.anchor == "pkg/a", message: "an empty declared anchor keeps the observed one");
-    final plain = flow("t").observed(pair()).node("a", sub: "only a sub").diagram() catch Diagram{};
+    final plain = fig(observed: pair()).node("a", sub: "only a sub").diagram() catch Diagram{};
     std\assert(nodeOf(plain, id: "a").label == "pkg/a", message: "an empty declared label keeps the observed one");
 }
 
 test "a node anchored apart from its observation is a finding" {
-    final msg = thrown(flow("t").observed(pair()).node("a", anchor: "pkg/elsewhere"));
-    std\assert(msg.indexOf("node a is declared with anchor pkg/elsewhere but observed at pkg/a") != null, message: "named: {msg}");
+    final msg = thrown(fig(observed: pair()).node("a", anchor: "pkg/elsewhere"));
+    std\assert(msg.indexOf("node \"a\" is anchored at \"pkg/elsewhere\" but observed at \"pkg/a\"; anchor it at \"pkg/a\" or give it an id of its own") != null,
+        message: "named: {msg}");
 }
 
 test "a declared edge replaces an observed one" {
-    final d = flow("t").observed(pair()).edge("a", dst: "b", label: "http", claim: "calls").diagram() catch Diagram{};
+    final d = fig(observed: pair()).edge("a", dst: "b", label: "http", claim: Claim.calls).diagram() catch Diagram{};
     std\assert(d.edges.len() == 1, message: "replaced, not doubled");
     std\assert(d.edges[0].claim == "calls" and d.edges[0].label == "http", message: "the declaration's claim and label win");
 }
 
-test "without hides an observed edge and is reported when stale" {
+test "a declared edge over an observed import must claim it or omit it" {
+    final flowing = thrown(fig(observed: pair()).edge("a", dst: "b", label: "reads"));
+    std\assert(flowing == "flow \"t\": edge \"a\" -> \"b\" replaces an observed import but claims flow; claim Claim.imports or omitEdge it",
+        message: "named: {flowing}");
+    final d = fig(observed: pair()).edge("a", dst: "b", label: "reads", claim: Claim.imports).diagram() catch Diagram{};
+    std\assert(d.edges.len() == 1 and d.edges[0].claim == "imports" and d.edges[0].label == "reads", message: "claimed, it relabels the import");
+    final both = thrown(fig(observed: pair()).edge("a", dst: "b").omitEdge("a", dst: "b", why: "drawn by hand"));
+    std\assert(both.indexOf("edge \"a\" -> \"b\" is declared and also hidden by omitEdge; drop one of them") != null, message: "both: {both}");
+}
+
+test "omitEdge hides an observed edge and is reported when stale" {
     final o = Observed{
         nodes = [ObservedNode{ id = "a" }, ObservedNode{ id = "b" }, ObservedNode{ id = "c" }],
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }],
     };
-    final d = flow("t").observed(o).without("a", dst: "b", why: "a test seam").diagram() catch Diagram{};
+    final d = fig(observed: o).omitEdge("a", dst: "b", why: "a test seam").diagram() catch Diagram{};
     std\assert(d.edges.len() == 1 and edgeOf(d, src: "a", dst: "b") == null, message: "hidden");
-    final stale = thrown(flow("t").observed(o).without("a", dst: "c", why: "gone"));
-    std\assert(stale.startsWith("flow \"t\": "), message: "prefixed: {stale}");
-    std\assert(stale.indexOf("without a -> c: the observed set has no such edge; drop the override") != null, message: "stale: {stale}");
-    final bare = thrown(flow("t").observed(o).without("a", dst: "b", why: ""));
-    std\assert(bare.indexOf("without a -> b gives no reason") != null, message: "unexplained: {bare}");
+    final stale = thrown(fig(observed: o).omitEdge("a", dst: "c", why: "gone"));
+    std\assert(stale == "flow \"t\": omitEdge \"a\" -> \"c\" names no observed edge; drop the omitEdge", message: "stale: {stale}");
+    final bare = thrown(fig(observed: o).omitEdge("a", dst: "b", why: ""));
+    std\assert(bare == "flow \"t\": omitEdge \"a\" -> \"b\" gives no reason; say why in omitEdge(\"a\", dst: \"b\", why:)", message: "unexplained: {bare}");
 }
 
 test "an edge to an id neither side supplies is a finding" {
-    final msg = thrown(flow("t").observed(pair()).edge("a", dst: "z"));
-    std\assert(msg.indexOf("edge a -> z names z, which neither the declaration nor the observed set supplies") != null, message: "named: {msg}");
+    final msg = thrown(fig(observed: pair()).edge("a", dst: "z"));
+    std\assert(msg == "flow \"t\": edge \"a\" -> \"z\" names \"z\", which neither a node nor the observed set supplies; declare node(\"z\")",
+        message: "named: {msg}");
+    final bare = thrown(fig().node("a").edge("a", dst: "z"));
+    std\assert(bare == msg, message: "one message whether or not a set is observed: {bare}");
 }
 
 test "the stamp reaches the Diagram" {
-    final d = flow("t").observed(pair()).diagram() catch Diagram{};
+    final d = fig(observed: pair()).diagram() catch Diagram{};
     std\assert(d.stamp == "sha256:0123", message: "stamped: {d.stamp}");
     final plain = diamond().diagram() catch Diagram{};
     std\assert(plain.stamp == "", message: "an unobserved figure carries none");
@@ -1790,18 +2255,25 @@ test "an omit drops the observed box it names and every connector touching it" {
         nodes = [ObservedNode{ id = "a", anchor = "pkg/a" }, ObservedNode{ id = "b", anchor = "pkg/b" }, ObservedNode{ id = "c", anchor = "pkg/c" }],
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }, ObservedEdge{ src = "a", dst = "c" }],
     };
-    final d = flow("t").observed(o).omit("pkg/b", why: "folded into a").diagram() catch Diagram{};
+    final d = fig(observed: o).omit("pkg/b", why: "folded into a").diagram() catch Diagram{};
     std\assert(d.nodes.len() == 2 and nodeOf(d, id: "b").id == "", message: "b is gone: {d.nodes.len()}");
     std\assert(d.edges.len() == 1 and edgeOf(d, src: "a", dst: "c") != null, message: "only a -> c remains: {d.edges.len()}");
     std\assert(d.omits["pkg/b"] == "folded into a", message: "the omit reaches the Diagram");
 }
 
 test "a declared node anchored at an omitted path is a finding" {
-    final byAnchor = thrown(flow("t").observed(pair()).node("x", anchor: "pkg/b").omit("pkg/b", why: "folded into a"));
-    std\assert(byAnchor == "flow \"t\": node x anchors pkg/b, which the figure omits (folded into a); draw it or drop the omit",
+    final byAnchor = thrown(fig(observed: pair()).node("x", anchor: "pkg/b").omit("pkg/b", why: "folded into a"));
+    std\assert(byAnchor == "flow \"t\": node \"x\" anchors \"pkg/b\", which omit leaves out (folded into a); drop the node or the omit(\"pkg/b\")",
         message: "named: {byAnchor}");
-    final byId = thrown(flow("t").observed(pair()).node("b", label: "B").omit("pkg/b", why: "folded into a"));
-    std\assert(byId.indexOf("node b anchors pkg/b, which the figure omits") != null, message: "an override inherits the anchor: {byId}");
+    final byId = thrown(fig(observed: pair()).node("b", label: "B").omit("pkg/b", why: "folded into a"));
+    std\assert(byId.indexOf("node \"b\" anchors \"pkg/b\", which omit leaves out") != null, message: "an override inherits the anchor: {byId}");
+}
+
+test "an omit or a zone declared twice is a finding" {
+    final omits = thrown(fig().node("a").omit("pkg/a", why: "one").omit("pkg/a", why: "two"));
+    std\assert(omits == "flow \"t\": omit \"pkg/a\" is declared twice; keep one omit(\"pkg/a\", why:) with one reason", message: "omit: {omits}");
+    final zones = thrown(fig().node("a").node("b").zone("x", members: ["a"]).boundary("x", members: ["b"]));
+    std\assert(zones == "flow \"t\": boundary \"x\" is declared twice; merge the members into one boundary(\"x\", members:)", message: "zone: {zones}");
 }
 
 // serverHttpObserved is docs/site/diagrams/gen/server-http.buzz: the whole scope, every
@@ -1859,15 +2331,13 @@ fun serverHttpObserved() > Observed {
 fun serverHttpOmitting() > mut Flow {
     final connect = "a Connect service, inside the Connect RPC box";
     final mounts = "the server mounts every handler; the figure draws the request path";
-    return serverHttpTwin()
-        .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
-        .without("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
-        .without("health", dst: "reads", why: mounts)
-        .without("health", dst: "mcp", why: mounts)
-        .without("health", dst: "connect", why: mounts)
-        .without("health", dst: "review", why: mounts)
-        .observed(serverHttpObserved())
-        .scope(["internal/handler/*", "internal/httpx", "internal/server"])
+    return serverHttpTwin(observed: serverHttpObserved())
+        .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
+        .omitEdge("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
+        .omitEdge("health", dst: "reads", why: mounts)
+        .omitEdge("health", dst: "mcp", why: mounts)
+        .omitEdge("health", dst: "connect", why: mounts)
+        .omitEdge("health", dst: "review", why: mounts)
         .omit("internal/handler/activity", why: connect)
         .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
         .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
@@ -1894,8 +2364,8 @@ test "the server-http twin over its whole scope lays out clean once it omits the
 }
 
 fun decisionTree(down: bool) > mut Flow {
-    final f = flow("t")
-        .node("start").node("q", label: "which?", role: "decision").node("r", label: "again?", role: "decision")
+    final f = fig()
+        .node("start").node("q", label: "which?", role: Role.decision).node("r", label: "again?", role: Role.decision)
         .node("a").node("b").node("c").node("d")
         .edge("start", dst: "q").edge("q", dst: "a").edge("q", dst: "r").edge("q", dst: "b")
         .edge("r", dst: "c").edge("r", dst: "d");
@@ -1928,9 +2398,18 @@ test "a decision leaves by its vertices, one connector each" {
     }
 }
 
+test "a decision's faults are refused as declarations" {
+    final text = thrown(fig().node("q", sub: "why", role: Role.decision).node("a").edge("q", dst: "a"));
+    std\assert(text == "flow \"t\": node \"q\" is a Role.decision with a tag or sub; drop them from node(\"q\"), a diamond has room for neither",
+        message: "text: {text}");
+    final f = fig().node("q", role: Role.decision);
+    foreach (id in ["a", "b", "c", "d"]) { f.node(id).edge("q", dst: id); }
+    std\assert(thrown(f).indexOf("node \"q\" has 4 exits; a Role.decision takes 3, so nest a second decision node") != null, message: "exits: {thrown(f)}");
+}
+
 test "two declared boxes may share the anchor of one observed package" {
     final o = Observed{ nodes = [ObservedNode{ id = "pkg-a", label = "pkg/a", anchor = "pkg/a" }] };
-    final f = flow("t").observed(o)
+    final f = fig(observed: o)
         .node("contract", label: "Contract", anchor: "pkg/a")
         .node("quote", label: "Quote", anchor: "pkg/a")
         .edge("contract", dst: "quote");
@@ -1940,18 +2419,18 @@ test "two declared boxes may share the anchor of one observed package" {
 }
 
 test "merging an observation keeps the declaration's order" {
-    final d = flow("t").observed(pair())
+    final d = fig(observed: pair())
         .node("b", label: "B").node("a", label: "A").node("c")
         .diagram() catch Diagram{};
     final ids: mut [str] = mut [<str>];
     foreach (n in d.nodes) { ids.append(n.id); }
     std\assert(ids.join(",") == "b,a,c", message: "declared order: {ids.join(",")}");
-    final extra = flow("t").observed(pair()).node("z").diagram() catch Diagram{};
+    final extra = fig(observed: pair()).node("z").diagram() catch Diagram{};
     std\assert(extra.nodes[0].id == "z" and extra.nodes[1].id == "a", message: "observed-only boxes follow the declared ones");
 }
 
 test "a rank no zone reaches centers between the bands" {
-    final d = flow("t")
+    final d = fig()
         .node("s").node("a1").node("a2").node("b1").node("b2")
         .edge("s", dst: "a1").edge("a1", dst: "a2").edge("s", dst: "b1").edge("b1", dst: "b2")
         .zone("one", members: ["a1", "a2"]).zone("two", members: ["b1", "b2"])
@@ -1963,7 +2442,7 @@ test "a rank no zone reaches centers between the bands" {
 }
 
 test "a zone's box never takes in a rank it spans without a member there" {
-    final d = flow("t")
+    final d = fig()
         .node("p").node("m").node("q")
         .edge("p", dst: "m").edge("m", dst: "q")
         .zone("pair", members: ["p", "q"])
@@ -1971,4 +2450,108 @@ test "a zone's box never takes in a rank it spans without a member there" {
     final m = nodeOf(d, id: "m");
     final z = d.zones[0];
     std\assert(m.y >= z.y + z.h or m.y + m.h <= z.y, message: "m sits outside the band's box");
+}
+
+test "edge roles map onto the renderer's treatments" {
+    final d = fig().node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b", role: EdgeRole.focal)
+        .edge("a", dst: "c", role: EdgeRole.external)
+        .edge("a", dst: "d", role: EdgeRole.optional)
+        .diagram() catch Diagram{};
+    std\assert(d.edges[0].kind == "accent" and d.edges[0].dashed == false, message: "focal is the accent");
+    std\assert(d.edges[1].kind == "link" and d.edges[1].dashed == false, message: "external is the link colour");
+    std\assert(d.edges[2].kind == "default" and d.edges[2].dashed, message: "optional is dashed");
+    std\assert(d.edges[0].claim == "flow", message: "a declared edge claims flow by default");
+}
+
+// The checker accepts a str where an enum is declared; the old string surface must still
+// fail loudly rather than paint a null role.
+test "a string where a Role, EdgeRole or Claim belongs is a finding" {
+    final msg = thrown(fig().node("a", role: "focal").node("b").edge("a", dst: "b", role: "focal", claim: "imports").legend("focal", label: "x"));
+    final want = [
+        "flow \"t\": node \"a\" takes role: Role.<case>, not a string; name the case",
+        "flow \"t\": edge \"a\" -> \"b\" takes role: EdgeRole.<case>, not a string; name the case",
+        "flow \"t\": edge \"a\" -> \"b\" takes claim: Claim.<case>, not a string; name the case",
+        "flow \"t\": legend \"x\" takes Role.<case>, not a string; name the case",
+    ];
+    std\assert(msg == want.join("\n"), message: "stringly: {msg}");
+}
+
+test "a node links outside the repo or anchors inside it, never both" {
+    final d = fig().node("stripe", label: "Stripe", role: Role.external, link: "https://stripe.com/docs").diagram() catch Diagram{};
+    std\assert(nodeOf(d, id: "stripe").link == "https://stripe.com/docs", message: "the link reaches the node");
+    final both = thrown(fig().node("a", anchor: "pkg/a", link: "https://example.com"));
+    std\assert(both == "flow \"t\": node \"a\" sets both anchor and link; keep anchor for a path in this repo, link for anything outside it",
+        message: "both: {both}");
+}
+
+test "a figure says what code it depicts, or why it depicts none" {
+    final bare = thrown(flow("t").node("a"));
+    std\assert(bare == "flow \"t\": names no code; add scope([...]) or unscoped(why:)", message: "bare: {bare}");
+    std\assert(thrown(flow("t").node("a").scope(["pkg/a"])) == "", message: "a scope names code");
+    std\assert(thrown(flow("t").node("a").generated()) == "", message: "a generated figure needs neither");
+    final d = flow("t").node("a").unscoped("a decision a person makes").diagram() catch Diagram{};
+    std\assert(d.unscoped == "a decision a person makes", message: "the reason reaches the Diagram: {d.unscoped}");
+    final silent = thrown(flow("t").node("a").unscoped(""));
+    std\assert(silent == "flow \"t\": unscoped gives no reason; say why in unscoped(why:)", message: "silent: {silent}");
+    final both = thrown(flow("t").node("a").scope(["pkg/a"]).unscoped("both"));
+    std\assert(both == "flow \"t\": declares both scope([...]) and unscoped(why:); keep one", message: "both: {both}");
+}
+
+test "a boundary paints as a trust boundary and counts against the band budget" {
+    final f = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c")
+        .boundary("trusted", members: ["b", "c"]);
+    final d = f.diagram() catch Diagram{};
+    std\assert(d.zones.len() == 1 and d.zones[0].boundary, message: "one boundary band: {thrown(f)}");
+    final svg = f.svg(lightPalette()) catch "threw";
+    std\assert(svg.indexOf("stroke-dasharray=\"4,4\"") != null and svg.indexOf(">TRUSTED</text>") != null, message: "the security treatment");
+    final many = fig().node("a").node("b").node("c").node("d")
+        .zone("one", members: ["a"]).zone("two", members: ["b"])
+        .boundary("three", members: ["c"]).boundary("four", members: ["d"]);
+    std\assert(thrown(many).indexOf("4 zones and boundaries exceed the budget of 3") != null, message: "budget: {thrown(many)}");
+}
+
+test "constraints that hold lay out, and ones that contradict are refused" {
+    std\assert(thrown(diamond().rank(["b", "c"]).order(["c", "b"]).row(["a", "d"])) == "", message: "a consistent set: {thrown(diamond().rank(["b", "c"]))}");
+    final path = thrown(diamond().rank(["a", "d"]));
+    std\assert(path == "flow \"t\": rank([\"a\", \"d\"]) contradicts the path \"a\" -> \"d\"; drop one of them from rank([...])", message: "path: {path}");
+    final chained = thrown(diamond().rank(["a", "x"]).rank(["x", "b"]).node("x"));
+    std\assert(chained.indexOf("rank([\"a\", \"b\", \"x\"]) contradicts the path \"a\" -> \"b\"") != null, message: "chained: {chained}");
+    final unknown = thrown(diamond().row(["a", "zz"]));
+    std\assert(unknown == "flow \"t\": row([\"a\", \"zz\"]) names \"zz\", which no node declares; declare node(\"zz\") or drop it from row([...])", message: "unknown: {unknown}");
+    final lone = thrown(diamond().order(["a"]));
+    std\assert(lone == "flow \"t\": order([\"a\"]) relates fewer than two nodes; name two or more, or drop it", message: "lone: {lone}");
+    final cycle = thrown(diamond().order(["b", "c"]).order(["c", "b"]));
+    std\assert(cycle == "flow \"t\": order puts \"b\", \"c\" each before the other; drop the order([...]) that reverses them", message: "cycle: {cycle}");
+    final across = thrown(diamond().order(["a", "b"]));
+    std\assert(across.indexOf("order([\"a\", \"b\"]) names \"a\" and \"b\", which a path puts in different ranks") != null, message: "across: {across}");
+    final apart = thrown(fig().node("x").node("y").node("p").node("q").edge("x", dst: "y").edge("p", dst: "q").order(["x", "q"]));
+    std\assert(apart.indexOf("which sit in different ranks; add rank([...]) with both or drop the order") != null, message: "apart: {apart}");
+    final zoned = thrown(diamond().zone("one", members: ["c"]).zone("two", members: ["b"]).order(["b", "c"]));
+    std\assert(zoned.indexOf("order([\"b\", \"c\"]) puts \"b\" first, but zone \"two\" stacks after zone \"one\"") != null, message: "zoned: {zoned}");
+    final ranked = thrown(diamond().row(["b", "c"]));
+    std\assert(ranked.indexOf("row([\"b\", \"c\"]) names \"b\" and \"c\", which share a rank") != null, message: "ranked: {ranked}");
+    final banded = thrown(diamond().zone("one", members: ["a"]).zone("two", members: ["d"]).row(["a", "d"]));
+    std\assert(banded.indexOf("names \"a\" in zone \"one\" and \"d\" in zone \"two\"; bands never share a row") != null, message: "banded: {banded}");
+}
+
+test "every finding names the figure, one per line, with a fix" {
+    final msg = thrown(flow("t").node("a").node("a").edge("a", dst: "z"));
+    final lines = msg.split("\n");
+    std\assert(lines.len() == 3, message: "three findings: {msg}");
+    foreach (line in lines) {
+        std\assert(line.startsWith("flow \"t\": ") and line.indexOf("; ") != null, message: "voiced: {line}");
+    }
+}
+
+test "a layout fault reaches the author as a layout bug, never as a bend to move" {
+    final got = layoutFindings([
+        Fault{ rule = "sameLine", subjects = ["a", "b", "c", "d"], text = "connectors a->b and c->d run along the same line", fix = "offset one of their bends" },
+        Fault{ rule = "bend", subjects = ["a", "b"], text = "edge a->b: a leg leaves 4px for a bend that needs 6", fix = "move the bend or the boxes" },
+        Fault{ rule = "overlap", subjects = ["a", "b"], text = "nodes \"a\" and \"b\" overlap" },
+    ]);
+    std\assert(got[0] == "edges \"a\" -> \"b\" and \"c\" -> \"d\" cannot be routed apart; layout bug, report it", message: "{got[0]}");
+    std\assert(got[1] == "edge \"a\" -> \"b\" has a leg too short to bend; layout bug, report it", message: "{got[1]}");
+    std\assert(got[2] == "nodes \"a\" and \"b\" overlap; layout bug, report it", message: "{got[2]}");
+    foreach (line in got) { std\assert(line.indexOf("move") == null, message: "no bend to move: {line}"); }
 }
