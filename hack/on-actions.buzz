@@ -1,0 +1,940 @@
+// Runs a magus command on a GitHub-hosted runner the way it would run here: a prefix, like
+// sudo or nice, in front of the command you would type. This repository's glue, not part
+// of magus; docs/decisions/0004-running-a-branch-on-a-hosted-runner.md says what it is for
+// and what a run on a public repository leaves visible.
+//
+//	magus buzz hack/on-actions.buzz -- [options] magus <argv>
+//	    push HEAD to run-<sha12>, start .github/workflows/run.yaml there, wait, print the
+//	    command's output, exit with its exit code, then delete the run and the branch
+//	magus buzz hack/on-actions.buzz -- --result <run> | --delete <run> | --ls
+//
+// Options come first; the first word that is not one of them starts the command, which
+// passes through untouched, so `-- --keep magus run test --keep` keeps the run and hands
+// the second --keep to magus. Every step talks to github.com through `gh`, which holds the
+// laptop's token. The decisions are pure functions tested at the bottom, with gh, git and
+// the clock stubbed.
+namespace onactions;
+
+import "fs";
+import "io";
+import "os";
+import "proc";
+import "serialize";
+import "std";
+import "vcs";
+
+import "assert";
+
+// WORKFLOW is the only workflow this script starts, reads or deletes: it holds no secret
+// beyond the job's read-only token.
+final WORKFLOW = ".github/workflows/run.yaml";
+final SCRIPT = "magus buzz hack/on-actions.buzz --";
+final SANDBOXES = ["required", "best-effort"];
+final SCRATCH_PREFIX = "run-";
+// ARTIFACT is what run.yaml uploads from the command step: `output` and `exit-code`.
+final ARTIFACT = "command-output";
+final POLL_MS = 15000.0;
+final POLL_MISSES = 3;
+// UNFINISHED is EX_TEMPFAIL: --result on a run still going, so a caller can ask again.
+final UNFINISHED = 75;
+
+final SWITCHES = ["--keep", "--detach", "--head", "--ls"];
+final VALUED = ["--ref", "--sandbox", "--result", "--delete"];
+
+// Reply is one gh or git call's outcome.
+export object Reply {
+    ok: bool,
+    stdout: str,
+    stderr: str,
+}
+
+export fun call(cmd: str, args: [str]) > Reply !> any {
+    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    return Reply{ ok = res.ok, stdout = res.stdout, stderr = res.stderr };
+}
+
+// Outcome is what the command step left in the run's artifact; a field is null when the
+// step never wrote it, as when setup failed before the command ran.
+export object Outcome {
+    output: str?,
+    code: int?,
+}
+
+// Session is everything a step reaches outside itself, so the tests stand in for gh, git,
+// the artifact download, the clock and both output streams.
+export object Session {
+    exec: fun (cmd: str, args: [str]) > Reply !> any,
+    fetch: fun (id: str) > Outcome !> any,
+    sleep: fun (ms: double) > void !> any,
+    say: fun (line: str) > void,
+    emit: fun (text: str) > void,
+}
+
+// Head is the checkout a step compares a run against.
+export object Head {
+    sha: str,
+    clean: bool,
+}
+
+fun short(sha: str) > str {
+    if (sha.len() <= 12) {
+        return sha;
+    }
+    return sha.sub(0, len: 12);
+}
+
+fun must(cmd: str, args: [str], exec: fun (cmd: str, args: [str]) > Reply !> any) > str !> any {
+    final r = exec(cmd, args: args);
+    if (!r.ok) {
+        throw "on-actions: {cmd} {args.join(" ")}: {r.stderr.trim()}";
+    }
+    return r.stdout;
+}
+
+fun elapsed(began: double, requests: int) > str {
+    return "github.com, {requests} request(s), {std\toInt(os\time() - began)}ms";
+}
+
+fun took(began: double) > str {
+    final s = std\toInt((os\time() - began) / 1000.0);
+    if (s < 60) {
+        return "{s}s";
+    }
+    return "{s / 60}m{s % 60}s";
+}
+
+fun only(word: str, alphabet: str) > bool {
+    if (word == "") {
+        return false;
+    }
+    var i = 0;
+    while (i < word.len()) {
+        if (alphabet.indexOf(word.sub(i, len: 1)) == null) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fun hex(word: str) > bool {
+    return only(word, alphabet: "0123456789abcdef");
+}
+
+fun digits(word: str) > bool {
+    return only(word, alphabet: "0123456789");
+}
+
+// scratchBranch is the branch a run of HEAD is pushed to. A run's branch is deleted only
+// when its name is this for the run's own commit, so no branch a person named is lost.
+export fun scratchBranch(sha: str) > str {
+    return SCRATCH_PREFIX + short(sha);
+}
+
+// isScratch says whether branch has the shape scratchBranch gives, whatever its commit.
+export fun isScratch(branch: str) > bool {
+    return branch.startsWith(SCRATCH_PREFIX) and branch.len() == SCRATCH_PREFIX.len() + 12
+        and hex(branch.sub(SCRATCH_PREFIX.len()));
+}
+
+// argvProblem says why argv cannot travel as the workflow's argv input, or null. The
+// runner word-splits that input unquoted, so a word carrying whitespace would arrive as
+// two and a glob character would be expanded there.
+export fun argvProblem(argv: [str]) > str? {
+    if (argv.len() == 0) {
+        return "no magus argv after `magus`";
+    }
+    foreach (word in argv) {
+        if (word == "") {
+            return "an empty word cannot survive the runner's word split";
+        }
+        foreach (c in [" ", "\t", "\n", "*", "?", "["]) {
+            if (word.indexOf(c) != null) {
+                return "\"{word}\" would not reach magus as one word: the runner word-splits and globs the argv";
+            }
+        }
+    }
+    return null;
+}
+
+// Options is one invocation's parsed options; argv is the command after `magus`.
+export object Options {
+    keep: bool,
+    detach: bool,
+    head: bool,
+    ls: bool,
+    ref: str,
+    sandbox: str,
+    result: str,
+    delete: str,
+    argv: [str],
+}
+
+final usage = "usage: {SCRIPT} [options] magus <argv>\n"
+    + "  --ref <branch>    run on <branch>, whose tip must be HEAD, instead of pushing HEAD to run-<sha12>\n"
+    + "  --head            run HEAD although this checkout has uncommitted changes, which do not go\n"
+    + "  --sandbox <mode>  required (the default) or best-effort\n"
+    + "  --keep            keep the run and the branch it pushed\n"
+    + "  --detach          print the run id and return without waiting\n"
+    + "usage: {SCRIPT} --result <run> | --delete <run> | --ls\n"
+    + "  --result <run>    print a run's output and exit with its exit code, or {UNFINISHED} while it runs\n"
+    + "  --delete <run>    delete a completed run and the branch pushed for it; --delete run-<sha12> deletes that branch\n"
+    + "  --ls              list every run and pushed branch left behind";
+
+// parse reads options up to the first word that is not one, sudo-style: that word and
+// everything after it is the command, untouched.
+export fun parse(args: [str]) > Options !> any {
+    final seen = mut {<str: str>};
+    var i = 0;
+    while (i < args.len()) {
+        var name = args[i];
+        var value: str? = null;
+        final eq = name.indexOf("=");
+        if (name.startsWith("--") and eq != null) {
+            value = name.sub(eq! + 1);
+            name = name.sub(0, len: eq!);
+        }
+        if (SWITCHES.indexOf(name) == null and VALUED.indexOf(name) == null) {
+            break;
+        }
+        if (SWITCHES.indexOf(name) != null and value != null) {
+            throw "on-actions: {name} takes no value\n{usage}";
+        }
+        if (VALUED.indexOf(name) != null and value == null) {
+            if (i + 1 >= args.len()) {
+                throw "on-actions: {name} needs a value\n{usage}";
+            }
+            i = i + 1;
+            value = args[i];
+        }
+        if (seen[name] != null) {
+            throw "on-actions: {name} is given twice";
+        }
+        seen[name] = value ?? "";
+        i = i + 1;
+    }
+    final command = args.sub(i);
+    final o = Options{
+        keep = seen["--keep"] != null,
+        detach = seen["--detach"] != null,
+        head = seen["--head"] != null,
+        ls = seen["--ls"] != null,
+        ref = seen["--ref"] ?? "",
+        sandbox = seen["--sandbox"] ?? "required",
+        result = seen["--result"] ?? "",
+        delete = seen["--delete"] ?? "",
+        argv = if (command.len() > 0) command.sub(1) else [<str>],
+    };
+
+    var modes = 0;
+    foreach (on in [command.len() > 0, o.ls, seen["--result"] != null, seen["--delete"] != null]) {
+        if (on) {
+            modes = modes + 1;
+        }
+    }
+    if (modes == 0) {
+        throw "on-actions: no command given\n{usage}";
+    }
+    if (modes > 1) {
+        throw "on-actions: give one of a command, --result, --delete and --ls\n{usage}";
+    }
+    if (command.len() == 0) {
+        foreach (opt in ["--keep", "--detach", "--head", "--ref", "--sandbox"]) {
+            if (seen[opt] != null) {
+                throw "on-actions: {opt} applies to a command it starts, not to --result, --delete or --ls";
+            }
+        }
+        if (seen["--result"] != null and !digits(o.result)) {
+            throw "on-actions: --result takes a run id, not \"{o.result}\"";
+        }
+        if (seen["--delete"] != null and !digits(o.delete) and !isScratch(o.delete)) {
+            throw "on-actions: --delete takes a run id or a {SCRATCH_PREFIX}<sha12> branch, not \"{o.delete}\"";
+        }
+        return o;
+    }
+    if (command[0] != "magus") {
+        if (command[0].startsWith("-")) {
+            throw "on-actions: {command[0]} is not an option of this script, and the command starts with magus\n{usage}";
+        }
+        throw "on-actions: the command starts with magus, not \"{command[0]}\": run.yaml runs one magus invocation\n{usage}";
+    }
+    final problem = argvProblem(o.argv);
+    if (problem != null) {
+        throw "on-actions: {problem!}\n{usage}";
+    }
+    if (o.keep and o.detach) {
+        throw "on-actions: --keep does nothing with --detach: a detached run stays until {SCRIPT} --delete <run>";
+    }
+    if (SANDBOXES.indexOf(o.sandbox) == null) {
+        throw "on-actions: --sandbox is one of {SANDBOXES.join(", ")}, not \"{o.sandbox}\"";
+    }
+    return o;
+}
+
+// dispatchArgs is the gh call that starts run.yaml on ref. -f, never -F, so a word
+// starting with @ is not read as a file.
+export fun dispatchArgs(ref: str, argv: [str], sandbox: str) > [str] {
+    return ["workflow", "run", "run.yaml", "--ref", ref, "-f", "argv={argv.join(" ")}", "-f", "sandbox={sandbox}"];
+}
+
+export fun refArgs(ref: str) > [str] {
+    return ["api", "repos/\{owner\}/\{repo\}/git/ref/heads/{ref}", "--jq", ".object.sha"];
+}
+
+export fun pushArgs(sha: str) > [str] {
+    return ["push", "origin", "{sha}:refs/heads/{scratchBranch(sha)}"];
+}
+
+export fun runArgs(id: str) > [str] {
+    return ["api", "repos/\{owner\}/\{repo\}/actions/runs/{id}"];
+}
+
+export fun deleteRunArgs(id: str) > [str] {
+    return ["api", "--method", "DELETE", "repos/\{owner\}/\{repo\}/actions/runs/{id}"];
+}
+
+export fun deleteBranchArgs(branch: str) > [str] {
+    return ["api", "--method", "DELETE", "repos/\{owner\}/\{repo\}/git/refs/heads/{branch}"];
+}
+
+export fun downloadArgs(id: str, dir: str) > [str] {
+    return ["run", "download", id, "--name", ARTIFACT, "--dir", dir];
+}
+
+export fun failedLogArgs(id: str) > [str] {
+    return ["run", "view", id, "--log-failed"];
+}
+
+export fun runsArgs() > [str] {
+    return ["api", "--paginate", "repos/\{owner\}/\{repo\}/actions/workflows/run.yaml/runs",
+        "--jq", ".workflow_runs[] | [.id, .status, .conclusion // \"\", .head_branch, .head_sha, .html_url] | @tsv"];
+}
+
+export fun branchesArgs() > [str] {
+    return ["api", "--paginate", "repos/\{owner\}/\{repo\}/git/matching-refs/heads/{SCRATCH_PREFIX}", "--jq", ".[].ref"];
+}
+
+// runURL finds the run URL gh prints after a dispatch, or null when GitHub returned none.
+export fun runURL(text: str) > str? {
+    foreach (line in text.split("\n")) {
+        foreach (word in line.trim().split(" ")) {
+            if (word.startsWith("https://") and word.indexOf("/actions/runs/") != null) {
+                return word;
+            }
+        }
+    }
+    return null;
+}
+
+export fun runID(url: str) > str {
+    final at = url.indexOf("/actions/runs/")! + "/actions/runs/".len();
+    final rest = url.sub(at);
+    final slash = rest.indexOf("/");
+    if (slash == null) {
+        return rest;
+    }
+    return rest.sub(0, len: slash!);
+}
+
+// Run is the part of `gh api repos/<repo>/actions/runs/<id>` the steps read.
+export object Run {
+    id: str,
+    path: str,
+    status: str,
+    conclusion: str,
+    branch: str,
+    sha: str,
+    url: str,
+}
+
+// readRun refuses a run of any other workflow: this script acts on run.yaml alone.
+export fun readRun(body: str) > Run !> any {
+    final doc = serialize\jsonDecode(body);
+    final r = Run{
+        id = "{doc.q("id").integerValue()}",
+        path = doc.q("path").stringValue(),
+        status = doc.q("status").stringValue(),
+        conclusion = doc.q("conclusion").stringValue(),
+        branch = doc.q("head_branch").stringValue(),
+        sha = doc.q("head_sha").stringValue(),
+        url = doc.q("html_url").stringValue(),
+    };
+    if (r.path != WORKFLOW) {
+        throw "on-actions: run {r.id} is a run of {r.path}, not {WORKFLOW}";
+    }
+    return r;
+}
+
+fun state(r: Run) > str {
+    if (r.status == "completed") {
+        return r.conclusion;
+    }
+    return r.status;
+}
+
+// exitCode is the command's own exit code when the run recorded one. Otherwise the run's
+// conclusion stands in: 0 for success, 1 for anything else.
+export fun exitCode(outcome: Outcome, r: Run) > int {
+    if (outcome.code != null) {
+        return outcome.code!;
+    }
+    if (r.conclusion == "success") {
+        return 0;
+    }
+    return 1;
+}
+
+// Started is a dispatched run and what the invocation owes it on the way out.
+export object Started {
+    id: str,
+    url: str,
+    branch: str,
+    lines: [str],
+}
+
+// start pushes HEAD (or checks --ref's tip is HEAD) and dispatches run.yaml. A branch it
+// pushed for a dispatch that then failed is deleted unless --keep, so nothing leaks.
+export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > Reply !> any) > Started !> any {
+    final lines = mut [<str>];
+    if (!head.clean) {
+        if (!o.head) {
+            throw "on-actions: this checkout has uncommitted changes and a run tests a pushed commit; commit them, or pass --head to run HEAD {short(head.sha)} without them";
+        }
+        lines.append("on-actions: running HEAD {short(head.sha)}; the uncommitted changes here do not go");
+    }
+    final began = os\time();
+    var requests = 0;
+    var ref = o.ref;
+    final pushed = ref == "";
+    if (pushed) {
+        ref = scratchBranch(head.sha);
+        must("git", args: pushArgs(head.sha), exec: exec);
+        requests = requests + 1;
+        lines.append("on-actions: pushed HEAD to {ref}");
+    } else {
+        final tip = must("gh", args: refArgs(ref), exec: exec).trim();
+        requests = requests + 1;
+        if (tip != head.sha) {
+            throw "on-actions: {ref} on github.com is at {short(tip)} and HEAD is {short(head.sha)}; push HEAD to it, or drop --ref to run HEAD on a branch of its own";
+        }
+    }
+    final args = dispatchArgs(ref, argv: o.argv, sandbox: o.sandbox);
+    final r = exec("gh", args: args);
+    requests = requests + 1;
+    final url = runURL(r.stdout + "\n" + r.stderr);
+    if (!r.ok or url == null) {
+        var why = "GitHub returned no run URL (gh prints one from v2.87.0)";
+        if (!r.ok) {
+            why = "gh {args.join(" ")}: {r.stderr.trim()}";
+        }
+        if (pushed and !o.keep) {
+            final d = exec("gh", args: deleteBranchArgs(ref));
+            if (d.ok) {
+                why = why + "; deleted {ref}";
+            } else {
+                why = why + "; {ref} was not deleted ({d.stderr.trim()}): {SCRIPT} --delete {ref}";
+            }
+        } else if (pushed) {
+            why = why + "; {ref} stays; find its run with gh run list --workflow run.yaml --branch {ref}";
+        }
+        throw "on-actions: {why}";
+    }
+    lines.append("on-actions: dispatched {WORKFLOW} on {ref} at {short(head.sha)} (sandbox {o.sandbox}); {elapsed(began, requests: requests)}");
+    return Started{ id = runID(url!), url = url!, branch = ref, lines = lines };
+}
+
+// wait polls the run until it completes. A few failed polls in a row end the wait, not
+// the run: the error says how to pick it up again.
+export fun wait(id: str, s: Session) > Run !> any {
+    var misses = 0;
+    var last: Run? = null;
+    while (last == null or last!.status != "completed") {
+        s.sleep(POLL_MS);
+        final r = s.exec("gh", args: runArgs(id));
+        if (r.ok) {
+            misses = 0;
+            last = readRun(r.stdout);
+        } else {
+            misses = misses + 1;
+            if (misses >= POLL_MISSES) {
+                throw "on-actions: gave up waiting after {misses} failed polls ({r.stderr.trim()}); the run goes on: {SCRIPT} --result {id}";
+            }
+        }
+    }
+    return last!;
+}
+
+// finish prints the command's output (or the failed steps' log when the command never
+// wrote any) and returns the exit code to leave with.
+fun finish(r: Run, s: Session) > int !> any {
+    final outcome = s.fetch(r.id);
+    if (outcome.output != null) {
+        s.emit(outcome.output!);
+    } else if (r.conclusion != "success") {
+        s.say("on-actions: the command left no output; the failed steps' log follows");
+        final log = s.exec("gh", args: failedLogArgs(r.id));
+        s.emit(log.stdout);
+    }
+    return exitCode(outcome, r: r);
+}
+
+// remove deletes a completed run.yaml run, with its logs and artifacts, and the branch
+// pushed for it. It says what stays visible, since a public run was already public.
+export fun remove(r: Run, exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+    if (r.status != "completed") {
+        throw "on-actions: run {r.id} is {r.status}; GitHub deletes only a completed run, so cancel it first (gh run cancel {r.id})";
+    }
+    must("gh", args: deleteRunArgs(r.id), exec: exec);
+    final lines = mut ["on-actions: deleted run {r.id} with its logs and artifacts"];
+    if (r.branch == scratchBranch(r.sha)) {
+        final d = exec("gh", args: deleteBranchArgs(r.branch));
+        if (d.ok) {
+            lines.append("on-actions: deleted branch {r.branch}");
+        } else {
+            lines.append("on-actions: branch {r.branch} was not deleted: {d.stderr.trim()}");
+        }
+    } else {
+        lines.append("on-actions: kept branch {r.branch}: this script did not push it");
+    }
+    lines.append("on-actions: still visible: commit {short(r.sha)} by its id, and any branch or pull request that holds it; GitHub does not say a deleted run is gone from its side");
+    return lines;
+}
+
+// run is the prefix itself: start, wait, print, clean up, and return the command's code.
+export fun run(o: Options, head: Head, s: Session) > int !> any {
+    final began = os\time();
+    final st = start(o, head: head, exec: s.exec);
+    s.say("on-actions: `magus {o.argv.join(" ")}` runs on a GitHub Actions runner (ubuntu-latest), not here, and spends CI minutes: {st.url}");
+    foreach (l in st.lines) {
+        s.say(l);
+    }
+    if (o.detach) {
+        s.emit("{st.id}\n");
+        s.say("on-actions: {SCRIPT} --result {st.id} reads it; {SCRIPT} --delete {st.id} removes it");
+        return 0;
+    }
+    s.say("on-actions: waiting; Ctrl-C ends the wait, not the run: {SCRIPT} --result {st.id} reads it later");
+    final r = wait(st.id, s: s);
+    final code = finish(r, s: s);
+    s.say("on-actions: run {r.id}: {r.conclusion}, exit {code}, {took(began)}");
+    if (o.keep) {
+        s.say("on-actions: kept run {r.id} and branch {r.branch}; {SCRIPT} --delete {r.id} removes them");
+        return code;
+    }
+    foreach (l in remove(r, exec: s.exec)) {
+        s.say(l);
+    }
+    return code;
+}
+
+// result answers from one request: an unfinished run exits UNFINISHED, a finished one
+// prints its output and exits with its code.
+export fun result(id: str, head: Head, s: Session) > int !> any {
+    final r = readRun(must("gh", args: runArgs(id), exec: s.exec));
+    s.say("on-actions: run {r.id}: {state(r)}, {r.branch} at {short(r.sha)}, {r.url}");
+    if (r.sha != head.sha) {
+        s.say("on-actions: it ran {short(r.sha)}; this checkout is at {short(head.sha)}");
+    }
+    if (r.status != "completed") {
+        s.say("on-actions: not finished; ask again: {SCRIPT} --result {r.id}");
+        return UNFINISHED;
+    }
+    final code = finish(r, s: s);
+    s.say("on-actions: exit {code}; magus's own logs: gh run download {r.id} --name magus-logs; {SCRIPT} --delete {r.id} removes the run");
+    return code;
+}
+
+// deleteOne deletes a run by id, or one pushed branch by name.
+export fun deleteOne(target: str, exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+    final began = os\time();
+    if (isScratch(target)) {
+        must("gh", args: deleteBranchArgs(target), exec: exec);
+        return ["on-actions: deleted branch {target}", "on-actions: {elapsed(began, requests: 1)}"];
+    }
+    final r = readRun(must("gh", args: runArgs(target), exec: exec));
+    final lines = mut [<str>];
+    foreach (l in remove(r, exec: exec)) {
+        lines.append(l);
+    }
+    var requests = 2;
+    if (r.branch == scratchBranch(r.sha)) {
+        requests = 3;
+    }
+    lines.append("on-actions: {elapsed(began, requests: requests)}");
+    return lines;
+}
+
+// ls lists every run.yaml run and every pushed branch no run holds, each with the
+// command that deletes it.
+export fun ls(exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+    final lines = mut [<str>];
+    final held = mut [<str>];
+    foreach (row in must("gh", args: runsArgs(), exec: exec).split("\n")) {
+        final f = row.split("\t");
+        if (f.len() < 6) {
+            continue;
+        }
+        final r = Run{ id = f[0], path = WORKFLOW, status = f[1], conclusion = f[2], branch = f[3], sha = f[4], url = f[5] };
+        held.append(r.branch);
+        lines.append("run {r.id}: {state(r)}, {r.branch} at {short(r.sha)}, {r.url}; {SCRIPT} --delete {r.id}");
+    }
+    foreach (ref in must("gh", args: branchesArgs(), exec: exec).split("\n")) {
+        final branch = ref.trim().replace("refs/heads/", with: "");
+        if (isScratch(branch) and held.indexOf(branch) == null) {
+            lines.append("branch {branch}: no run; {SCRIPT} --delete {branch}");
+        }
+    }
+    return lines;
+}
+
+fun checkout() > Head !> any {
+    return Head{ sha = vcs\commit().id, clean = vcs\status().clean };
+}
+
+fun fetch(id: str) > Outcome !> any {
+    final dir = fs\tempDir("on-actions-");
+    final r = call("gh", args: downloadArgs(id, dir: dir));
+    var output: str? = null;
+    var code: int? = null;
+    if (r.ok) {
+        if (fs\exists(dir + "/output")) {
+            output = fs\readFile(dir + "/output");
+        }
+        if (fs\exists(dir + "/exit-code")) {
+            code = std\parseInt(fs\readFile(dir + "/exit-code").trim());
+        }
+    }
+    fs\removeAll(dir);
+    return Outcome{ output = output, code = code };
+}
+
+fun session() > Session {
+    return Session{
+        exec = call,
+        fetch = fetch,
+        sleep = fun (ms: double) > void !> any { os\sleep(ms); },
+        say = fun (line: str) > void { io\stderr.write(line + "\n") catch void; },
+        emit = fun (text: str) > void { io\stdout.write(text) catch void; },
+    };
+}
+
+export fun main(args: [str]) > void !> any {
+    final o = parse(args);
+    final s = session();
+    var code = 0;
+    if (o.ls) {
+        final lines = ls(s.exec);
+        if (lines.len() == 0) {
+            s.say("on-actions: nothing left behind");
+        }
+        foreach (l in lines) {
+            s.emit(l + "\n");
+        }
+    } else if (o.result != "") {
+        code = result(o.result, head: checkout(), s: s);
+    } else if (o.delete != "") {
+        foreach (l in deleteOne(o.delete, exec: s.exec)) {
+            s.say(l);
+        }
+    } else {
+        code = run(o, head: checkout(), s: s);
+    }
+    if (code != 0) {
+        os\exit(code);
+    }
+}
+
+// Stub answers each call by the first rule whose words start the argv, and keeps every
+// call it was asked, so a test asserts the exact gh and git argv a step built. A rule
+// with a later rule of the same words answers once, so a sequence of polls can change.
+object Stub {
+    rules: mut [[str]],
+    replies: mut [Reply],
+    spent: mut [bool],
+    calls: mut [str],
+    said: mut [str],
+    emitted: mut [str],
+    sleeps: mut [double],
+}
+
+fun stub() > Stub {
+    return Stub{ rules = mut [<[str]>], replies = mut [<Reply>], spent = mut [<bool>], calls = mut [<str>],
+        said = mut [<str>], emitted = mut [<str>], sleeps = mut [<double>] };
+}
+
+fun on(s: Stub, words: [str], reply: Reply) > void {
+    s.rules.append(words);
+    s.replies.append(reply);
+    s.spent.append(false);
+}
+
+fun exec(s: Stub) > fun (cmd: str, args: [str]) > Reply !> any {
+    return fun (cmd: str, args: [str]) > Reply !> any {
+        final line = cmd + " " + args.join(" ");
+        s.calls.append(line);
+        var i = 0;
+        while (i < s.rules.len()) {
+            final prefix = s.rules[i].join(" ");
+            if (!s.spent[i] and line.startsWith(prefix)) {
+                var j = i + 1;
+                while (j < s.rules.len()) {
+                    if (s.rules[j].join(" ") == prefix) {
+                        s.spent[i] = true;
+                    }
+                    j = j + 1;
+                }
+                return s.replies[i];
+            }
+            i = i + 1;
+        }
+        throw "stub: nothing answers {line}";
+    };
+}
+
+fun sessionOf(s: Stub, outcome: Outcome) > Session {
+    return Session{
+        exec = exec(s),
+        fetch = fun (id: str) > Outcome !> any {
+            s.calls.append("fetch {id}");
+            return outcome;
+        },
+        sleep = fun (ms: double) > void !> any { s.sleeps.append(ms); },
+        say = fun (line: str) > void { s.said.append(line); },
+        emit = fun (text: str) > void { s.emitted.append(text); },
+    };
+}
+
+fun ok(stdout: str) > Reply {
+    return Reply{ ok = true, stdout = stdout, stderr = "" };
+}
+
+fun failed(stderr: str) > Reply {
+    return Reply{ ok = false, stdout = "", stderr = stderr };
+}
+
+fun refusal(step: fun () > void !> any) > bool {
+    try {
+        step();
+    } catch (e) {
+        return true;
+    }
+    return false;
+}
+
+final SHA = "0123456789abcdef0123456789abcdef01234567";
+final RUNS = "https://github.com/o/r/actions/runs/42";
+
+fun runBody(path: str, status: str, conclusion: str?, branch: str, sha: str) > str {
+    return serialize\jsonEncode(serialize\Boxed.init({"id": 42, "path": path, "status": status, "conclusion": conclusion,
+        "head_branch": branch, "head_sha": sha, "html_url": RUNS}));
+}
+
+test "options end at the first word that is not one, and the command passes through untouched" {
+    final o = parse(["--keep", "--sandbox", "best-effort", "magus", "run", "test", "--keep", "--detach", "--", "-run", "TestX"]);
+    assert\equal([o.keep, o.detach, o.sandbox, o.argv.join(" ")], want: [true, false, "best-effort", "run test --keep --detach -- -run TestX"], message: "the command's own --keep and --detach stay its own");
+    final d = parse(["--detach", "--ref=wip", "--head", "magus", "affected", "ci"]);
+    assert\equal([d.detach, d.ref, d.head, d.sandbox, d.argv.join(" ")], want: [true, "wip", true, "required", "affected ci"], message: "--ref=value");
+    final m = parse(["magus", "run", "test", "--ls"]);
+    assert\equal([m.ls, m.argv.join(" ")], want: [false, "run test --ls"], message: "no option after the command");
+    assert\equal(parse(["--result", "42"]).result, want: "42", message: "--result");
+    assert\equal(parse(["--delete", "run-0123456789ab"]).delete, want: "run-0123456789ab", message: "--delete a pushed branch");
+    assert\equal(parse(["--ls"]).ls, want: true, message: "--ls");
+}
+
+test "parse refuses what it cannot run" {
+    foreach (argv in [
+        [<str>],
+        ["--kep", "magus", "run", "test"],
+        ["--", "magus", "run", "test"],
+        ["go", "test", "./..."],
+        ["magus"],
+        ["magus", "run", "a b"],
+        ["--ref"],
+        ["--ref", "a", "--ref", "b", "magus", "run"],
+        ["--keep=yes", "magus", "run"],
+        ["--sandbox", "off", "magus", "run"],
+        ["--detach", "--keep", "magus", "run"],
+        ["--ls", "magus", "run"],
+        ["--result", "42", "--ls"],
+        ["--result", "42", "--keep"],
+        ["--head", "--delete", "42"],
+        ["--result", "42/../../pulls"],
+        ["--delete", "wip"],
+        ["--delete", "run-fix"],
+    ]) {
+        assert\equal(refusal(fun () > void !> any { parse(argv); }), want: true, message: argv.join(" "));
+    }
+}
+
+test "an argv word the runner would split or glob is refused" {
+    assert\equal(argvProblem(["run", "test", "."]), want: null, message: "plain words");
+    assert\equal(argvProblem(["run", "test", "./internal/..."]), want: null, message: "a Go package pattern is no glob");
+    foreach (argv in [[<str>], ["run", ""], ["run", "a b"], ["run", "*"], ["run", "a?"], ["run", "[x]"]]) {
+        assert\equal(argvProblem(argv) != null, want: true, message: argv.join("|"));
+    }
+}
+
+test "a run pushes HEAD, waits, prints the output, exits with its code, then deletes the run and the branch" {
+    final s = stub();
+    on(s, words: ["git", "push"], reply: ok(""));
+    on(s, words: ["gh", "workflow", "run"], reply: Reply{ ok = true, stdout = RUNS + "\n", stderr = "Created workflow_dispatch event\n" });
+    on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "in_progress", conclusion: null, branch: "run-0123456789ab", sha: SHA)));
+    on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "run-0123456789ab", sha: SHA)));
+    on(s, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    final code = run(parse(["magus", "run", "lint", "."]), head: Head{ sha = SHA, clean = true }, s: sessionOf(s, outcome: Outcome{ output = "lint: 2 findings\n", code = 3 }));
+    assert\equal(code, want: 3, message: "the remote exit code");
+    assert\equal(s.calls, want: [
+        "git push origin {SHA}:refs/heads/run-0123456789ab",
+        "gh workflow run run.yaml --ref run-0123456789ab -f argv=run lint . -f sandbox=required",
+        "gh api repos/\{owner\}/\{repo\}/actions/runs/42",
+        "gh api repos/\{owner\}/\{repo\}/actions/runs/42",
+        "fetch 42",
+        "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42",
+        "gh api --method DELETE repos/\{owner\}/\{repo\}/git/refs/heads/run-0123456789ab",
+    ], message: "calls");
+    assert\equal(s.said[0], want: "on-actions: `magus run lint .` runs on a GitHub Actions runner (ubuntu-latest), not here, and spends CI minutes: {RUNS}", message: "the first line says where, what it costs, and the run");
+    assert\equal(s.emitted, want: ["lint: 2 findings\n"], message: "the command's output, untouched");
+    assert\equal(s.sleeps, want: [POLL_MS, POLL_MS], message: "one sleep per poll");
+    assert\equal(s.said.indexOf("on-actions: deleted branch run-0123456789ab") != null, want: true, message: "says so");
+}
+
+test "--keep leaves the run and the branch, and --ref deletes only the run" {
+    final kept = stub();
+    on(kept, words: ["git", "push"], reply: ok(""));
+    on(kept, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
+    on(kept, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "run-0123456789ab", sha: SHA)));
+    final code = run(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(kept, outcome: Outcome{ output = "", code = 0 }));
+    assert\equal([code, kept.calls.len()], want: [0, 4], message: "nothing deleted");
+    assert\equal(kept.said[kept.said.len() - 1], want: "on-actions: kept run 42 and branch run-0123456789ab; {SCRIPT} --delete 42 removes them", message: "says how to delete them");
+
+    final named = stub();
+    on(named, words: ["gh", "api", "repos/\{owner\}/\{repo\}/git/ref/heads/wip"], reply: ok(SHA + "\n"));
+    on(named, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
+    on(named, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
+    on(named, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    run(parse(["--ref", "wip", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(named, outcome: Outcome{ output = "", code = 0 }));
+    assert\equal(named.calls[named.calls.len() - 1], want: "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42", message: "a branch this script did not push is kept");
+}
+
+test "--detach prints the run id and returns without waiting" {
+    final s = stub();
+    on(s, words: ["git", "push"], reply: ok(""));
+    on(s, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
+    final code = run(parse(["--detach", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(s, outcome: Outcome{ output = null, code = null }));
+    assert\equal([code, s.calls.len(), s.sleeps.len()], want: [0, 2, 0], message: "no wait");
+    assert\equal(s.emitted, want: ["42\n"], message: "the id on stdout");
+}
+
+test "a refused dispatch deletes the branch it pushed, unless --keep" {
+    final s = stub();
+    on(s, words: ["git", "push"], reply: ok(""));
+    on(s, words: ["gh", "workflow", "run"], reply: failed("HTTP 422"));
+    on(s, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    assert\equal(refusal(fun () > void !> any { start(parse(["magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, exec: exec(s)); }), want: true, message: "refused");
+    assert\equal(s.calls[2], want: "gh api --method DELETE repos/\{owner\}/\{repo\}/git/refs/heads/run-0123456789ab", message: "no branch leaks");
+    final kept = stub();
+    on(kept, words: ["git", "push"], reply: ok(""));
+    on(kept, words: ["gh", "workflow", "run"], reply: ok("no url here\n"));
+    assert\equal(refusal(fun () > void !> any { start(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, exec: exec(kept)); }), want: true, message: "no URL is said, not guessed");
+    assert\equal(kept.calls.len(), want: 2, message: "--keep keeps the branch");
+}
+
+test "a run refuses a branch whose tip is not HEAD, and a dirty tree without --head" {
+    final s = stub();
+    on(s, words: ["gh", "api"], reply: ok("fedcba9876543210fedcba9876543210fedcba98\n"));
+    final o = parse(["--ref", "wip", "magus", "run", "test"]);
+    assert\equal(refusal(fun () > void !> any { start(o, head: Head{ sha = SHA, clean = true }, exec: exec(s)); }), want: true, message: "stale branch");
+    assert\equal(s.calls.len(), want: 1, message: "nothing dispatched");
+    final quiet = stub();
+    assert\equal(refusal(fun () > void !> any { start(parse(["magus", "run", "test"]), head: Head{ sha = SHA, clean = false }, exec: exec(quiet)); }), want: true, message: "dirty");
+    assert\equal(quiet.calls.len(), want: 0, message: "no network before the tree is judged");
+    final head = stub();
+    on(head, words: ["git", "push"], reply: ok(""));
+    on(head, words: ["gh", "workflow", "run"], reply: ok(RUNS));
+    final st = start(parse(["--head", "magus", "run", "test"]), head: Head{ sha = SHA, clean = false }, exec: exec(head));
+    assert\equal(st.lines[0], want: "on-actions: running HEAD 0123456789ab; the uncommitted changes here do not go", message: "--head says so");
+}
+
+test "a wait survives a failed poll, and gives up after a few in a row" {
+    final s = stub();
+    on(s, words: ["gh", "api"], reply: failed("timeout"));
+    on(s, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
+    assert\equal(wait("42", s: sessionOf(s, outcome: Outcome{ output = null, code = null })).status, want: "completed", message: "one miss");
+    final down = stub();
+    on(down, words: ["gh", "api"], reply: failed("timeout"));
+    assert\equal(refusal(fun () > void !> any { wait("42", s: sessionOf(down, outcome: Outcome{ output = null, code = null })); }), want: true, message: "down");
+    assert\equal(down.calls.len(), want: POLL_MISSES, message: "gives up");
+}
+
+test "a run whose command never ran prints the failed steps' log and exits 1" {
+    final s = stub();
+    on(s, words: ["gh", "run", "view"], reply: ok("run\tsetup\tbuild failed\n"));
+    final r = readRun(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: SHA));
+    final code = finish(r, s: sessionOf(s, outcome: Outcome{ output = null, code = null }));
+    assert\equal([code, s.calls[1]], want: [1, "gh run view 42 --log-failed"], message: "the log instead");
+    assert\equal(s.emitted, want: ["run\tsetup\tbuild failed\n"], message: "printed");
+    assert\equal(exitCode(Outcome{ output = null, code = null }, r: readRun(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA))), want: 0, message: "success with no record");
+    assert\equal(exitCode(Outcome{ output = "", code = 0 }, r: r), want: 0, message: "the command's code over the conclusion");
+}
+
+test "--result answers from one request, and exits with the command's code once it completes" {
+    final head = Head{ sha = SHA, clean = true };
+    final queued = stub();
+    on(queued, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "queued", conclusion: null, branch: "wip", sha: SHA)));
+    assert\equal(result("42", head: head, s: sessionOf(queued, outcome: Outcome{ output = null, code = null })), want: UNFINISHED, message: "unfinished");
+    assert\equal(queued.calls, want: ["gh api repos/\{owner\}/\{repo\}/actions/runs/42"], message: "one request");
+    final done = stub();
+    on(done, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: "fedcba9876543210")));
+    assert\equal(result("42", head: head, s: sessionOf(done, outcome: Outcome{ output = "x\n", code = 2 })), want: 2, message: "the command's code");
+    assert\equal([done.said[1], done.emitted[0]], want: ["on-actions: it ran fedcba987654; this checkout is at 0123456789ab", "x\n"], message: "names the commit, prints the output");
+}
+
+test "--delete refuses a run of another workflow or one still going" {
+    final other = stub();
+    on(other, words: ["gh", "api"], reply: ok(runBody(".github/workflows/release.yaml", status: "completed", conclusion: "success", branch: "main", sha: SHA)));
+    assert\equal(refusal(fun () > void !> any { deleteOne("42", exec: exec(other)); }), want: true, message: "release.yaml");
+    final live = stub();
+    on(live, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "in_progress", conclusion: null, branch: "wip", sha: SHA)));
+    assert\equal(refusal(fun () > void !> any { deleteOne("42", exec: exec(live)); }), want: true, message: "unfinished");
+    assert\equal(live.calls.len(), want: 1, message: "nothing deleted");
+}
+
+test "--delete deletes a completed run, and the branch only when it was pushed for the run" {
+    final scratch = stub();
+    on(scratch, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "run-0123456789ab", sha: SHA)));
+    on(scratch, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    final lines = deleteOne("42", exec: exec(scratch));
+    assert\equal(scratch.calls, want: [
+        "gh api repos/\{owner\}/\{repo\}/actions/runs/42",
+        "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42",
+        "gh api --method DELETE repos/\{owner\}/\{repo\}/git/refs/heads/run-0123456789ab",
+    ], message: "pushed branch");
+    assert\equal(lines[1], want: "on-actions: deleted branch run-0123456789ab", message: "says so");
+    final named = stub();
+    on(named, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "run-fedcba987654", sha: SHA)));
+    on(named, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    deleteOne("42", exec: exec(named));
+    assert\equal(named.calls.len(), want: 2, message: "a branch not named for the run's commit is kept");
+    final orphan = stub();
+    on(orphan, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
+    deleteOne("run-0123456789ab", exec: exec(orphan));
+    assert\equal(orphan.calls, want: ["gh api --method DELETE repos/\{owner\}/\{repo\}/git/refs/heads/run-0123456789ab"], message: "a branch no run holds");
+}
+
+test "--ls lists every run and every pushed branch no run holds" {
+    final s = stub();
+    on(s, words: ["gh", "api", "--paginate", "repos/\{owner\}/\{repo\}/actions"], reply: ok("42\tcompleted\tfailure\trun-0123456789ab\t{SHA}\t{RUNS}\n7\tin_progress\t\twip\t{SHA}\thttps://github.com/o/r/actions/runs/7\n"));
+    on(s, words: ["gh", "api", "--paginate", "repos/\{owner\}/\{repo\}/git"], reply: ok("refs/heads/run-0123456789ab\nrefs/heads/run-fedcba987654\nrefs/heads/run-fix\n"));
+    assert\equal(ls(exec(s)), want: [
+        "run 42: failure, run-0123456789ab at 0123456789ab, {RUNS}; {SCRIPT} --delete 42",
+        "run 7: in_progress, wip at 0123456789ab, https://github.com/o/r/actions/runs/7; {SCRIPT} --delete 7",
+        "branch run-fedcba987654: no run; {SCRIPT} --delete run-fedcba987654",
+    ], message: "a person's run-fix is not ours");
+}
+
+test "runURL reads the URL gh prints and runID its id" {
+    assert\equal(runURL("Created\n\nhttps://github.com/o/r/actions/runs/42\n"), want: "https://github.com/o/r/actions/runs/42", message: "own line");
+    assert\equal(runURL("see https://github.com/o/r/actions/runs/7/job/9 now"), want: "https://github.com/o/r/actions/runs/7/job/9", message: "in a sentence");
+    assert\equal(runURL("https://github.com/o/r/pull/3"), want: null, message: "not a run");
+    assert\equal([runID("https://github.com/o/r/actions/runs/42"), runID("https://github.com/o/r/actions/runs/7/job/9")], want: ["42", "7"], message: "ids");
+}

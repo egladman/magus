@@ -160,3 +160,26 @@ laptop.
 3. The secrets rule above, as a guard rule over `gh workflow run` and `gh api .../dispatches`.
 4. A laptop-side `spells/github/workflows` speaking HTTP, beside `review`, if the
    measurement says the loop earns it. No engine verb is proposed.
+
+## Amendment, 2026-09-29
+
+The script is `hack/on-actions.buzz`, a prefix in front of the command you would run
+here, like `sudo` or `nice`:
+
+```sh
+magus buzz hack/on-actions.buzz -- magus affected ci
+```
+
+Its own options come first; the first word that is not one starts the command, which must
+be `magus` and passes through untouched. By default it pushes HEAD to `run-<sha12>`,
+dispatches `run.yaml`, waits, prints the command's output, exits with its exit code, and
+then deletes the run and the branch unless `--keep`. Its first line says where the command
+runs, that it spends CI minutes, and the run URL. That replaces decision 4 for the default;
+`--detach` prints the run id and returns without waiting, as `dispatch` did. `--ref`,
+`--head` and `--sandbox` keep their meaning, and `--push` is the default. `--result <run>`
+replaces `result`, `--delete <run>` replaces `forget`, whose name hid a remote deletion, and
+`--ls` lists every run and pushed branch left behind. Every refusal above still holds.
+
+`run.yaml` runs `queue gate` itself instead of through `.github/actions/magus`, which
+returns neither the output nor the exit code, and uploads both as the `command-output`
+artifact the script reads.

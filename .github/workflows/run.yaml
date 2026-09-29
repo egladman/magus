@@ -2,7 +2,7 @@ name: Run
 
 # One magus invocation on a pushed commit, with no pull request, started by hand:
 #
-#   magus buzz hack/gha-run.buzz -- dispatch --ref <branch> -- <magus argv>
+#   magus buzz hack/on-actions.buzz -- magus <argv>
 #
 # It runs in the box the merge queue gates in, so green here and green in the queue are
 # one claim. Read-only, no secret beyond the job's token, and no write to any shared
@@ -86,16 +86,37 @@ jobs:
               core.exportVariable(name, value)
             }
 
-      # ci.yaml's shard gate without the shard and the signing key. The magus action
-      # passes the command through its environment, so argv is word-split, never
-      # interpreted by a shell; gha-run.buzz refuses words that would not survive it.
+      # ci.yaml's shard gate without the shard and the signing key. The argv arrives
+      # through the environment, so it is word-split, never interpreted by a shell;
+      # on-actions.buzz refuses words that would not survive it. The output and the exit
+      # code go into the command-output artifact, which on-actions.buzz prints and exits
+      # with; .github/actions/magus hands back neither, so this step runs magus itself.
       - name: Run magus ${{ inputs.argv }}
-        uses: ./.github/actions/magus
+        shell: bash
         env:
           TMPDIR: ${{ runner.temp }}
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          ARGV: ${{ inputs.argv }}
+          SANDBOX: ${{ inputs.sandbox }}
+        run: |
+          out="$RUNNER_TEMP/command-output"
+          mkdir -p "$out"
+          set +e
+          # Word-split is intentional: ARGV is a space-separated argv.
+          # shellcheck disable=SC2086
+          magus queue gate --sandbox="$SANDBOX" --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_HISTORY_PATH,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus $ARGV 2>&1 | tee "$out/output"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$out/exit-code"
+          exit "$code"
+
+      - name: Upload the command's output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          command: queue gate --sandbox=${{ inputs.sandbox }} --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_HISTORY_PATH,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus ${{ inputs.argv }}
+          name: command-output
+          path: ${{ runner.temp }}/command-output/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload magus run logs
         if: always()
