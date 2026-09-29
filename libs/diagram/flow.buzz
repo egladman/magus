@@ -265,12 +265,50 @@ fun observedEdgeKey(o: ObservedEdge, renames: {str: str}) > str {
     return edgeKey(renames[o.src] ?? o.src, dst: renames[o.dst] ?? o.dst);
 }
 
+// dropOmitted removes every observed box anchored at an omitted path, and every observed
+// connector touching one, so the observation cannot put back what the author left out.
+fun dropOmitted(f: Flow) > Flow {
+    final dropped: mut {str: bool} = mut {<str: bool>};
+    final nodes: mut [ObservedNode] = mut [<ObservedNode>];
+    foreach (o in f.observedNodes) {
+        if (o.anchor != "" and f.omitted[o.anchor] != null) {
+            dropped[o.id] = true;
+        } else {
+            nodes.append(o);
+        }
+    }
+    final edges: mut [ObservedEdge] = mut [<ObservedEdge>];
+    foreach (e in f.observedEdges) {
+        if (dropped[e.src] == null and dropped[e.dst] == null) { edges.append(e); }
+    }
+    return Flow{
+        id = f.id,
+        titleText = f.titleText,
+        eyebrowText = f.eyebrowText,
+        descText = f.descText,
+        topDown = f.topDown,
+        isGenerated = f.isGenerated,
+        nodes = f.nodes,
+        edges = f.edges,
+        zones = f.zones,
+        legendItems = f.legendItems,
+        scopeGlobs = f.scopeGlobs,
+        omitted = f.omitted,
+        observedNodes = nodes,
+        observedEdges = edges,
+        observedSets = f.observedSets,
+        stamp = f.stamp,
+        hidden = f.hidden,
+    };
+}
+
 // compose applies the merge rule and returns the flow the layout places: observed boxes and
 // connectors in observation order, each overridden in place by a declaration sharing its id,
 // its anchor or its ends, then the declarations nothing observed, in declaration order.
 // Overriding in place keeps a regenerated figure from reshuffling when a human adds one
-// override.
-fun compose(f: Flow) > Flow {
+// override. Omitted observations are dropped before any of it.
+fun compose(declared: Flow) > Flow {
+    final f = dropOmitted(declared);
     final renames = anchorRenames(f);
     final declaredAt: mut {str: int} = mut {<str: int>};
     final nodeTaken: mut [bool] = mut [<bool>];
@@ -362,12 +400,25 @@ fun compose(f: Flow) > Flow {
 
 // compositionFindings reports what the merge rule cannot settle on its own: an override that
 // no longer overrides anything, one without a reason, and two sides disagreeing on where
-// a box lives in the code.
-fun compositionFindings(f: Flow) > mut [str] {
+// a box lives in the code, and a declared box drawing a path the figure omits.
+fun compositionFindings(declared: Flow) > mut [str] {
     final errs: mut [str] = mut [<str>];
-    if (f.observedSets > 1) {
-        errs.append("observed() called {f.observedSets} times; a figure composes one observed set");
+    if (declared.observedSets > 1) {
+        errs.append("observed() called {declared.observedSets} times; a figure composes one observed set");
     }
+    // Read before the drop: a declaration overriding an omitted observation by id inherits
+    // its anchor.
+    final observedAnchor: mut {str: str} = mut {<str: str>};
+    foreach (o in declared.observedNodes) { observedAnchor[o.id] = o.anchor; }
+    foreach (n in declared.nodes) {
+        var anchor = n.anchor;
+        if (anchor == "") { anchor = observedAnchor[n.id] ?? ""; }
+        final why = declared.omitted[anchor];
+        if (anchor != "" and why != null) {
+            errs.append("node {n.id} anchors {anchor}, which the figure omits ({why!}); draw it or drop the omit");
+        }
+    }
+    final f = dropOmitted(declared);
     final declaredAnchor: mut {str: str} = mut {<str: str>};
     foreach (n in f.nodes) {
         if (declaredAnchor[n.id] == null) { declaredAnchor[n.id] = n.anchor; }
@@ -1624,4 +1675,112 @@ test "the server-http twin composed from an observation lays out clean" {
     std\assert(nodeOf(d, id: "pkg-internal-httpx").anchor == "internal/httpx", message: "anchored by observation");
     std\assert(d.stamp == "sha256:0929", message: "stamped");
     std\assert(properCrossings(d) == 0, message: "no crossings");
+}
+
+test "an omit drops the observed box it names and every connector touching it" {
+    final o = Observed{
+        nodes = [ObservedNode{ id = "a", anchor = "pkg/a" }, ObservedNode{ id = "b", anchor = "pkg/b" }, ObservedNode{ id = "c", anchor = "pkg/c" }],
+        edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }, ObservedEdge{ src = "a", dst = "c" }],
+    };
+    final d = flow("t").observed(o).omit("pkg/b", why: "folded into a").diagram() catch Diagram{};
+    std\assert(d.nodes.len() == 2 and nodeOf(d, id: "b").id == "", message: "b is gone: {d.nodes.len()}");
+    std\assert(d.edges.len() == 1 and edgeOf(d, src: "a", dst: "c") != null, message: "only a -> c remains: {d.edges.len()}");
+    std\assert(d.omits["pkg/b"] == "folded into a", message: "the omit reaches the Diagram");
+}
+
+test "a declared node anchored at an omitted path is a finding" {
+    final byAnchor = thrown(flow("t").observed(pair()).node("x", anchor: "pkg/b").omit("pkg/b", why: "folded into a"));
+    std\assert(byAnchor == "flow \"t\": node x anchors pkg/b, which the figure omits (folded into a); draw it or drop the omit",
+        message: "named: {byAnchor}");
+    final byId = thrown(flow("t").observed(pair()).node("b", label: "B").omit("pkg/b", why: "folded into a"));
+    std\assert(byId.indexOf("node b anchors pkg/b, which the figure omits") != null, message: "an override inherits the anchor: {byId}");
+}
+
+// serverHttpObserved is docs/site/diagrams/gen/server-http.buzz: the whole scope, every
+// handler package included.
+fun serverHttpObserved() > Observed {
+    return Observed{
+        nodes = [
+            ObservedNode{ id = "pkg-internal-handler-activity", label = "internal/handler/activity", anchor = "internal/handler/activity" },
+            ObservedNode{ id = "pkg-internal-handler-attention", label = "internal/handler/attention", anchor = "internal/handler/attention" },
+            ObservedNode{ id = "pkg-internal-handler-diff", label = "internal/handler/diff", anchor = "internal/handler/diff" },
+            ObservedNode{ id = "pkg-internal-handler-graph", label = "internal/handler/graph", anchor = "internal/handler/graph" },
+            ObservedNode{ id = "pkg-internal-handler-insight", label = "internal/handler/insight", anchor = "internal/handler/insight" },
+            ObservedNode{ id = "pkg-internal-handler-job", label = "internal/handler/job", anchor = "internal/handler/job" },
+            ObservedNode{ id = "pkg-internal-handler-mcp", label = "internal/handler/mcp", anchor = "internal/handler/mcp" },
+            ObservedNode{ id = "pkg-internal-handler-memory", label = "internal/handler/memory", anchor = "internal/handler/memory" },
+            ObservedNode{ id = "pkg-internal-handler-metrics", label = "internal/handler/metrics", anchor = "internal/handler/metrics" },
+            ObservedNode{ id = "pkg-internal-handler-notes", label = "internal/handler/notes", anchor = "internal/handler/notes" },
+            ObservedNode{ id = "pkg-internal-handler-plan", label = "internal/handler/plan", anchor = "internal/handler/plan" },
+            ObservedNode{ id = "pkg-internal-handler-status", label = "internal/handler/status", anchor = "internal/handler/status" },
+            ObservedNode{ id = "pkg-internal-handler-token", label = "internal/handler/token", anchor = "internal/handler/token" },
+            ObservedNode{ id = "pkg-internal-handler-tool", label = "internal/handler/tool", anchor = "internal/handler/tool" },
+            ObservedNode{ id = "pkg-internal-handler-trailrpc", label = "internal/handler/trailrpc", anchor = "internal/handler/trailrpc" },
+            ObservedNode{ id = "pkg-internal-handler-viewer", label = "internal/handler/viewer", anchor = "internal/handler/viewer" },
+            ObservedNode{ id = "pkg-internal-httpx", label = "internal/httpx", anchor = "internal/httpx" },
+            ObservedNode{ id = "pkg-internal-server", label = "internal/server", anchor = "internal/server" },
+        ],
+        edges = [
+            ObservedEdge{ src = "pkg-internal-handler-graph", dst = "pkg-internal-httpx" },
+            ObservedEdge{ src = "pkg-internal-handler-viewer", dst = "pkg-internal-httpx" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-activity" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-attention" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-diff" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-graph" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-insight" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-job" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-mcp" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-memory" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-metrics" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-notes" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-plan" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-status" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-token" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-tool" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-trailrpc" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-viewer" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-httpx" },
+        ],
+        stamp = "sha256:fba5dc6827b390920e2c4d48626fe632f9a948d82c20d047136b11dba3d7a072",
+    };
+}
+
+// serverHttpOmitting is the twin over the whole scope, leaving out the twelve handler
+// packages with the reasons docs/site/diagrams/server-http.buzz gives. The six imports left
+// run against the request path the figure claims, so each is hidden with its reason.
+fun serverHttpOmitting() > mut Flow {
+    final connect = "a Connect service, inside the Connect RPC box";
+    final mounts = "the server mounts every handler; the figure draws the request path";
+    return serverHttpTwin()
+        .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
+        .without("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
+        .without("health", dst: "reads", why: mounts)
+        .without("health", dst: "mcp", why: mounts)
+        .without("health", dst: "connect", why: mounts)
+        .without("health", dst: "review", why: mounts)
+        .observed(serverHttpObserved())
+        .scope(["internal/handler/*", "internal/httpx", "internal/server"])
+        .omit("internal/handler/activity", why: connect)
+        .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
+        .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
+        .omit("internal/handler/insight", why: "a read route and Connect service, inside the read views box")
+        .omit("internal/handler/job", why: connect)
+        .omit("internal/handler/memory", why: connect)
+        .omit("internal/handler/notes", why: connect)
+        .omit("internal/handler/plan", why: "the plan route, inside the review + plans box")
+        .omit("internal/handler/token", why: connect)
+        .omit("internal/handler/tool", why: connect)
+        .omit("internal/handler/trailrpc", why: "the audit interceptor around Connect services, not a route")
+        .omit("internal/handler/viewer", why: "read routes and a Connect service, inside the read views box");
+}
+
+test "the server-http twin over its whole scope lays out clean once it omits the handlers it folds" {
+    final msg = thrown(serverHttpOmitting());
+    std\assert(msg == "", message: "composed: {msg}");
+    final d = serverHttpOmitting().diagram() catch Diagram{};
+    std\assert(d.generated == false, message: "authored budgets apply");
+    std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "nine boxes, seven connectors: {d.nodes.len()}, {d.edges.len()}");
+    std\assert(nodeOf(d, id: "guard").anchor == "internal/httpx", message: "the declared id kept");
+    std\assert(d.omits.size() == 12, message: "every omit kept");
+    std\assert(validate(d).len() == 0 and properCrossings(d) == 0, message: "clean");
 }

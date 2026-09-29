@@ -748,15 +748,24 @@ test "a figure composed from a stale observation is a finding only when verifyin
     fs\removeAll(root);
 }
 
-test "server-http composed over its observation" {
+test "server-http composed over its observation lays out clean" {
+    // composeOver carries the figure's twelve omits; the six imports left run against the
+    // request path the figure draws.
+    final mounts = "the server mounts every handler; the figure draws the request path";
     var refusal = "";
+    var d = Diagram{};
     try {
-        _ = composeOver("server-http-composed", d: serverHttpDiagram(), o: observedFor("server-http")!).diagram();
+        d = composeOver("server-http-composed", d: serverHttpDiagram(), o: serverHttpGen\serverHttpObserved())
+            .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
+            .without("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
+            .without("health", dst: "reads", why: mounts)
+            .without("health", dst: "mcp", why: mounts)
+            .without("health", dst: "connect", why: mounts)
+            .without("health", dst: "review", why: mounts)
+            .diagram();
     } catch (e) {
         refusal = "{e}";
     }
-    // TODO: omit does not drop the observed boxes it names, so the twelve omitted handler
-    // packages still arrive and break the budget. Once flow honours omits against the
-    // observed set, this lays out clean and should assert so.
-    assert\isTrue(refusal.indexOf("nodes exceeds the budget of 9") != null, message: "composed: {refusal}");
+    assert\equal(refusal, want: "", message: "composed");
+    assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 12], message: "nodes, edges, omits");
 }
