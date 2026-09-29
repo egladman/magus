@@ -365,3 +365,8 @@ reference/rules/cd/
 # MGS5004 was deleted with the server-queued detach, leaving one page tagged detach. A
 # tag page needs two, so the tag retires.
 tags/detach/
+
+# libs/pricing moved into the agent benchmark and stopped being a project (#482). A
+# /development/ page is derived from a project, so there is nothing to alias to.
+development/libs-pricing/
+development/projects/libs-pricing/
