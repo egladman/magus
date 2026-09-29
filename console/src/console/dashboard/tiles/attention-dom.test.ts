@@ -31,6 +31,7 @@ function request(openedMs: number): AttentionRequest {
     source: "harness/Notification",
     where: "/repo",
     lease: "",
+    files: [],
     message: "needs the deploy key",
   };
 }

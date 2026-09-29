@@ -1594,7 +1594,18 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* The dispose control sits at the far end of the row, away from the id it closes: it is the one
    write on this board, and it should not be a mis-click away from reading. */
 .console-dashboard-attention__dispose { margin-left: auto; display: inline-flex; align-items: center; }
-.console-dashboard-attention__disposebtn { font-size: 0.72rem; }
+.console-dashboard-attention__disposebtn,
+.console-dashboard-attention__openbtn { font-size: 0.72rem; }
+.console-dashboard-attention__subject {
+  margin: 0.2rem 0 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.76rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-dashboard-attention__row[data-open] .console-dashboard-attention__subject,
+.console-dashboard-attention__row[data-open] .console-dashboard-attention__message {
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
 /* The reason composer replaces the button in place, so the row does not reflow under the reader
    as they start typing. */
 .console-dashboard-attention__composer { display: inline-flex; min-width: 14rem; }

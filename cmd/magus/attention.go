@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -122,15 +123,16 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 
 	now := time.Now()
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tLEASE\tWHERE\tMESSAGE")
+	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tLEASE\tWHERE\tFILES\tMESSAGE")
 	for _, req := range requests {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			req.ID,
 			orDash(formatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
 			orDash(req.Outcome),
 			orDash(req.Source),
 			orDash(req.Lease),
 			orDash(req.Where),
+			orDash(attentionFileList(req.Files)),
 			attentionOneLine(req.Message))
 	}
 	if err := tw.Flush(); err != nil {
@@ -145,6 +147,25 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 // queue scannable; -o json carries the message verbatim.
 func attentionOneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// attentionFileList is the paths a row leads with. Empty when the event named
+// none, and the message stays the only line. Paths stay comma-separated inside
+// one cell so a tabwriter does not split them into columns. [attentionFiles]
+// already dropped empty values before the row was stored.
+func attentionFileList(files []types.FileRef) string {
+	if len(files) == 0 {
+		return ""
+	}
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		path := f.Value
+		if f.IsDir && !strings.HasSuffix(path, "/") {
+			path += "/"
+		}
+		paths = append(paths, path)
+	}
+	return strings.Join(paths, ", ")
 }
 
 func attentionDispose(root string, args []string) error {
@@ -245,7 +266,7 @@ func disposeError(err error, ref, dir string) error {
 
 // ---- producer ----
 
-// recordAttentionOpen normalizes an event into an [sessions.AttentionOpen] and files it.
+// fileAttention normalizes an event into an [sessions.AttentionOpen] and files it.
 // The write lifecycle (dedupe, id derivation, the record itself) belongs to
 // [sessions.OpenRequest]; what stays here is the two gates that decide whether an event
 // is a request at all, and the flattening of the event onto the store's string fields.
@@ -253,9 +274,13 @@ func disposeError(err error, ref, dir string) error {
 // Only waiting and permission open one. Those two outcomes mean the work has STOPPED
 // until a person acts; a failure or a finished run is news, and news that queued up
 // for disposal would teach people to clear the queue without reading it.
-func recordAttentionOpen(root string, ev types.Event) error {
+//
+// held reports that the queue already held this block before the call, so a person
+// has been told once. It is false for a new row, for news, for a block that has
+// no row to live in (no source id, no repository), and on error.
+func fileAttention(root string, ev types.Event) (held bool, err error) {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
-		return nil
+		return false, nil
 	}
 	if ev.Source.ID == "" {
 		// An empty agent session is not an id, it is the absence of one, and
@@ -264,25 +289,24 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		// nobody had read. No id, no durable request: the same graceful path as no
 		// repository, because the notification itself still fires.
 		noteMissingAttentionSource()
-		return nil
+		return false, nil
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		// No repository, so no queue to join. A notification raised outside a workspace
-		// still notifies; it just has nowhere durable to live.
-		return nil
+		// No repository, so no queue to join.
+		return false, nil
 	}
 	dir, err := sessions.Dir(root)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so the
-	// queue can say WHOSE work is blocked without the row's identity moving when a fleet
-	// re-partitions.
+	// Lease and files are not inputs to the id, on purpose; see sessions.RequestID.
+	// They ride the payload so the queue can say whose work is blocked, and which
+	// paths the event named, without the row's identity moving when either changes.
 	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
 	if err != nil {
-		return err
+		return false, err
 	}
 	open := sessions.AttentionOpen{
 		Outcome:   string(ev.Outcome),
@@ -291,14 +315,28 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		Where:     attentionWhere(ev.Where),
 		Lease:     lease,
 		LeaseFrom: leaseFrom,
+		Files:     attentionFiles(ev.Where),
 		Message:   ev.Message,
 	}
-	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
+	_, opened, err := sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointHook),
 		Workspace: root,
 		Version:   version,
 	})
-	return err
+	if err != nil {
+		return false, err
+	}
+	return !opened, nil
+}
+
+// attentionFiles is the paths the event named, dropped by [attentionWhere] because
+// where is the checkout and the paths are the subject. Empty values are omitted.
+// A nil where, the ordinary case for a prose notification, names none.
+func attentionFiles(where *types.EventLocation) []types.FileRef {
+	if where == nil {
+		return nil
+	}
+	return slices.DeleteFunc(slices.Clone(where.Files), func(f types.FileRef) bool { return f.Value == "" })
 }
 
 // resolveRootOrEmpty resolves the repository a per-repository store belongs to,

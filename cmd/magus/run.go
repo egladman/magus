@@ -671,6 +671,9 @@ func emitSavedPlanDryRun(p planOutput, target string, shards []planShard) error 
 	case outputName:
 		return emitNames(planProjects(shards))
 	default:
+		if opts.Format == outputTemplate {
+			p.Summary = planSummaryMarkdown(p)
+		}
 		return emitFormatted(opts, p)
 	}
 }

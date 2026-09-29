@@ -628,7 +628,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 
 	got, err := decodeSavedPlan([]byte(`{"target":"ci","count":2,"max_parallel":2,"future_key":true,
 		"matrix":[{"shard":"1","projects":". docs","label":". docs"},{"shard":"2","projects":"console","label":"console"}],
-		"outputs":[{"name":"count","value":"2"}],"summary":"s"}`))
+		"outputs":[{"name":"count","value":"2"}]}`))
 	require.NoError(t, err)
 	assert.Equal(t, planOutput{
 		Target:      "ci",
@@ -639,7 +639,6 @@ func TestDecodeSavedPlan(t *testing.T) {
 			{Shard: "2", Projects: "console", Label: "console"},
 		},
 		Outputs: []planPublish{{Name: "count", Value: "2"}},
-		Summary: "s",
 	}, got)
 
 	refused := []struct {

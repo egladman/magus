@@ -138,7 +138,8 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 
 	var out strings.Builder
 	printJobTree(&out, types.NewJobList(nil))
-	assert.Contains(t, out.String(), "magus_job")
+	assert.Contains(t, out.String(), "`"+hint.JobFork.With("<job>")+"`")
+	assert.Contains(t, out.String(), "`"+hint.ToolClient.String()+"` MCP tool")
 }
 
 // TestPrintJobStatusFailedGateNamesHowToReadIt pins the completion-gates plan's

@@ -59,7 +59,7 @@ function at(ms: number): Timestamp {
 test("groups agent events by session, keeping page order and original indices", () => {
   const events = [
     cmd("s1", { action: "Bash" }),
-    ev({ kind: Kind.MCP_TOOL_CALL, session: "s1", action: "magus_query" }),
+    ev({ kind: Kind.MCP_TOOL_CALL, session: "s1", action: "client" }),
     cmd("s2", { action: "Read" }),
     cmd("s1", { action: "Edit" }),
   ];

@@ -42,7 +42,7 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 	require.NoError(t, err)
 	cred, ok := auth.Verify(secret)
 	require.True(t, ok)
-	assert.Equal(t, types.ClassStored, cred.Class)
+	assert.Equal(t, types.KindStored, cred.Kind)
 	assert.Equal(t, types.GrantConsole, cred.Grant)
 	assert.WithinDuration(t, time.Now().Add(console.LinkTokenLifetime), tok.Expires, time.Minute)
 	_, _, err = store.Redeem(code)
@@ -80,7 +80,7 @@ func TestCLIMintsAreAudited(t *testing.T) {
 			assert.NotContains(t, string(blob), s)
 			assert.NotContains(t, e.Preview, s)
 		}
-		assert.Contains(t, string(blob), `"class":"`+string(minted.Class)+`"`)
+		assert.Contains(t, string(blob), `"class":"`+string(minted.Kind)+`"`)
 		assert.Contains(t, string(blob), `"class":"operator"`, "the minter is named")
 	}
 }

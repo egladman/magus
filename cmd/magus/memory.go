@@ -55,7 +55,7 @@ func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "  verify   check malformed, stale, and broken-linked entries")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Use `magus memory <subcommand> -h` for flags. The same entries are available")
-	fmt.Fprintln(os.Stderr, "through the "+hint.ToolMemory.String()+" MCP tool and the console.")
+	fmt.Fprintln(os.Stderr, "through the "+hint.ToolClient.String()+" MCP tool (magus\\memory) and the console.")
 }
 
 type memoryListOutput struct {

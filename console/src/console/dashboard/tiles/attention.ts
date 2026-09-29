@@ -26,8 +26,10 @@ import { showToast } from "../../../lib/refresh-toast";
 import {
   ageLabel,
   disposeAttention,
+  disposeStartsHidden,
   firstLine,
   loadAttention,
+  subjectLine,
   type AttentionRead,
   type AttentionRequest,
 } from "./attentionQueue";
@@ -533,14 +535,21 @@ export function attentionTile(): Tile {
   let visible = true;
 
   // requestRow draws one open request: what to close, how long it has waited, what kind of block
-  // it is, and the first line of what the agent said.
+  // it is, the paths the event named, and the first line of what the agent said.
   //
   // The id is shown in full and in mono, because it is the handle for the OTHER surface: a
   // person reading this tile on a shared screen closes the request from their terminal with
   // `magus session dispose <id>`, and a truncated id cannot be typed.
-  function requestRow(req: AttentionRequest, nowMs: number): HTMLElement {
+  //
+  // A permission's close control stays off the row until it is opened. The paths are the
+  // subject and the agent's message is the caption; opening shows the full text before
+  // offering Dispose. Waiting is a bookmark the person just answered in the host,
+  // so its control is there from the start.
+  function requestRow(req: AttentionRequest, nowMs: number, opened = false): HTMLElement {
     const li = h("li", "console-dashboard-attention__row");
     li.dataset.outcome = req.outcome;
+    li.dataset.requestId = req.id;
+    if (opened) li.dataset.open = "true";
 
     const head = h("div", "console-dashboard-attention__head");
     const id = h("code", "console-dashboard-attention__id", req.id);
@@ -559,15 +568,48 @@ export function attentionTile(): Tile {
     if (req.lease) {
       head.append(h("span", "console-dashboard-attention__lease", req.lease));
     }
-    head.append(disposeControl(req));
+    if (disposeStartsHidden(req.outcome) && !opened) {
+      head.append(openControl(li, req));
+    } else {
+      head.append(disposeControl(req));
+    }
 
-    const message = h("p", "console-dashboard-attention__message", firstLine(req.message));
+    li.append(head);
+
+    const subject = subjectLine(req.files);
+    if (subject) {
+      const line = h("p", "console-dashboard-attention__subject", subject);
+      line.title = subject;
+      li.append(line);
+    }
+
+    const message = h("p", "console-dashboard-attention__message", opened ? req.message : firstLine(req.message));
     // The full text, unflattened, for the reader who needs more than the summary line. The row
     // stays one line tall either way; `magus session attention -o json` is the unabridged copy.
     if (req.message) message.title = req.message;
-
-    li.append(head, message);
+    li.append(message);
     return li;
+  }
+
+  // openControl is the look a permission asks for before it can be closed. Opening
+  // expands the subject and message and replaces this button with the dispose composer.
+  function openControl(li: HTMLElement, req: AttentionRequest): HTMLElement {
+    const wrap = h("span", "console-dashboard-attention__dispose");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__openbtn";
+    btn.append(h("span", "pf-v6-c-button__text", "Open"));
+    btn.title = "Show what this permission names. Closing it waits until then.";
+    btn.addEventListener("click", () => {
+      li.dataset.open = "true";
+      const message = li.querySelector(".console-dashboard-attention__message");
+      if (message instanceof HTMLElement) message.textContent = req.message;
+      const dispose = disposeControl(req);
+      wrap.replaceWith(dispose);
+      dispose.querySelector<HTMLButtonElement>(".console-dashboard-attention__disposebtn")?.focus();
+    });
+    wrap.append(btn);
+    return wrap;
   }
 
   // disposeControl is the button and the one-line reason composer behind it.
@@ -653,6 +695,11 @@ export function attentionTile(): Tile {
   // renderQueue paints the headline and the rows from one read. Every non-ok read gets its own
   // words - see verdictFor - so an unknown queue never renders as a calm one.
   function renderQueue(read: AttentionRead): void {
+    const openedIDs = new Set(
+      Array.from(queueList.querySelectorAll<HTMLElement>(".console-dashboard-attention__row[data-open]"))
+        .map((row) => row.dataset.requestId)
+        .filter((id): id is string => id !== undefined),
+    );
     const v = verdictFor(read);
     root.dataset.state = v.state;
     verdict.textContent = v.line;
@@ -672,7 +719,7 @@ export function attentionTile(): Tile {
 
     const now = Date.now();
     const shown = read.requests.slice(0, QUEUE_LIST_MAX);
-    const rows = shown.map((req) => requestRow(req, now));
+    const rows = shown.map((req) => requestRow(req, now, openedIDs.has(req.id)));
     if (read.requests.length > shown.length) {
       rows.push(
         h(
@@ -701,9 +748,8 @@ export function attentionTile(): Tile {
     }, REQUEST_TIMEOUT_MS);
     void loadAttention(host, controller.signal)
       .then((read) => {
-        // A composer the reader is typing into must survive a poll landing under them. The
-        // repaint is skipped rather than deferred: the next tick is 4s away, and the read it
-        // brings will be fresher than this one.
+        // A composer the reader is typing into must survive a poll. Open permissions
+        // are carried into the new rows by id, so a disposed row can still disappear.
         if (torndown || current !== request) return;
         if (queueList.querySelector(".console-dashboard-attention__composer")) return;
         renderQueue(read);

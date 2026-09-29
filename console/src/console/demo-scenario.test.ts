@@ -72,7 +72,10 @@ test("each run-driving MCP call ties to its run by ref, timing, and duration", (
   const runs = scenarioRuns(NOW);
   const byInv = (inv: string) => must(runs.find((r) => r.inv === inv));
   const events = scenarioActivity(NOW);
-  const runCalls = events.filter((e) => e.kind === "mcp" && e.action === "magus_run_target");
+  // Every call is the client tool; a run's result is the one whose preview opens with a verdict glyph.
+  const runCalls = events.filter(
+    (e) => e.kind === "mcp" && e.action === "client" && e.preview?.startsWith("[") === true,
+  );
   assert.equal(runCalls.length, 3, "fresh build, the fix, and the break");
 
   for (const [inv, ok] of [
@@ -94,7 +97,7 @@ test("each run-driving MCP call ties to its run by ref, timing, and duration", (
 test("the failed output lookup names the pruned ref; the sandbox denial mirrors the failed run", () => {
   const runs = scenarioRuns(NOW);
   const events = scenarioActivity(NOW);
-  const lookup = events.find((e) => e.action === "magus_output");
+  const lookup = events.find((e) => e.action === "client" && e.error?.includes(PRUNED_REF));
   assert.ok(lookup && !lookup.ok, "the lookup failed");
   assert.match(must(lookup.error), new RegExp(PRUNED_REF), "it names the pruned ref");
 

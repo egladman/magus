@@ -91,12 +91,12 @@ test("clockTime formats HH:MM:SS and empties a null instant", () => {
 
 test("an ok mcp call accents pass and heads with action+actor", () => {
   const sec = eventSection(
-    ev({ action: "magus_query", actor: "agent:claude", outcome: Outcome.OK }),
+    ev({ action: "client", actor: "agent:claude", outcome: Outcome.OK }),
   );
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);
-  assert.match(must(sec.title), /magus_query {2}agent:claude/);
+  assert.match(must(sec.title), /client {2}agent:claude/);
   assert.match(must(sec.title), /mcp, ok/);
 });
 
@@ -119,7 +119,7 @@ test("an agent command observation renders as an agent event, not an execution r
 
 test("an errored call accents fail and leads its body with the error text", () => {
   const sec = eventSection(
-    ev({ action: "magus_run", outcome: Outcome.ERROR, error: "target not found" }),
+    ev({ action: "client", outcome: Outcome.ERROR, error: "target not found" }),
   );
   assert.equal(sec.meta?.status, "fail");
   assert.match(must(sec.title), /, error/);
@@ -129,7 +129,7 @@ test("an errored call accents fail and leads its body with the error text", () =
 test("payload sizes, refs, preview lines, and workspace populate the body", () => {
   const sec = eventSection(
     ev({
-      action: "magus_output",
+      action: "client",
       kind: Kind.MCP_TOOL_CALL,
       requestBytes: 40n,
       requestRef: "mcpaaaa",

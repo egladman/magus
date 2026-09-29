@@ -10,7 +10,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ageLabel, firstLine, parseRequests, parseStore } from "./attentionQueue";
+import {
+  ageLabel,
+  disposeStartsHidden,
+  firstLine,
+  parseRequests,
+  parseStore,
+  subjectLine,
+} from "./attentionQueue";
 
 test("parseRequests reads the documented shape", () => {
   const rows = parseRequests({
@@ -24,6 +31,11 @@ test("parseRequests reads the documented shape", () => {
         source: "harness/Notification",
         where: "/repo [apps/web]",
         lease: "lease-a",
+        files: [
+          { value: "cmd/magus/notify.go" },
+          { value: "", is_dir: true },
+          { value: "internal/sessions", is_dir: true },
+        ],
         message: "may I push?",
       },
     ],
@@ -39,6 +51,10 @@ test("parseRequests reads the documented shape", () => {
     source: "harness/Notification",
     where: "/repo [apps/web]",
     lease: "lease-a",
+    files: [
+      { value: "cmd/magus/notify.go", is_dir: false },
+      { value: "internal/sessions", is_dir: true },
+    ],
     message: "may I push?",
   });
   assert.equal(parseStore({ store: "/s" }), "/s");
@@ -67,6 +83,23 @@ test("parseRequests keeps opened_ms a number and never coerces one", () => {
   assert.equal(row.opened_ms, 0, "a string stamp is no stamp, not a stamp of zero characters");
   const [ok] = parseRequests({ requests: [{ id: "att-a", opened_ms: 5 }] });
   assert.equal(ok.opened_ms, 5);
+});
+
+test("subjectLine joins the paths the event named", () => {
+  assert.equal(
+    subjectLine([
+      { value: "cmd/magus/notify.go", is_dir: false },
+      { value: "internal/sessions", is_dir: true },
+    ]),
+    "cmd/magus/notify.go, internal/sessions/",
+  );
+  assert.equal(subjectLine([]), "");
+});
+
+test("a permission hides dispose until the row is opened; waiting does not", () => {
+  assert.equal(disposeStartsHidden("permission"), true);
+  assert.equal(disposeStartsHidden("waiting"), false);
+  assert.equal(disposeStartsHidden(""), false);
 });
 
 test("ageLabel climbs from seconds to days", () => {

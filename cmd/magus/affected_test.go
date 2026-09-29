@@ -215,10 +215,24 @@ func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs","label":". docs"}]}`, byName["matrix"])
 	assert.Equal(t, "false", byName["inherit"])
 
-	out.Inherit = &planInherit{Run: "42", Commit: "abc123", Summary: "## Verdict inherited\n"}
+	out.Inherit = &planInherit{Run: "42", Commit: "abc123"}
 	got, err = planOutputs(out)
 	require.NoError(t, err)
 	assert.Contains(t, got, planPublish{Name: "inherit", Value: "true"})
+}
+
+func TestEmitPlanRendersTheSummaryForATemplate(t *testing.T) {
+	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: "."}}}
+	got := captureStdout(t, func() {
+		require.NoError(t, emitPlan(OutputOptions{Format: outputTemplate, Template: "{{.summary}}"}, out))
+	})
+	assert.NotContains(t, got, "<no value>")
+	assert.Contains(t, got, planSummaryMarkdown(out))
+
+	asJSON := captureStdout(t, func() {
+		require.NoError(t, emitPlan(OutputOptions{Format: outputJSON}, out))
+	})
+	assert.NotContains(t, asJSON, "summary", "the JSON plan carries the typed inputs, not Markdown")
 }
 
 func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
@@ -233,9 +247,10 @@ func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
 	assert.Contains(t, table, "| 1 | magus |")
 	assert.Contains(t, table, "| 2 | magus console |")
 
-	out.Inherit = &planInherit{Run: "42", Commit: "abc123", Summary: "## Verdict inherited from run 42\n"}
+	out.Inherit = &planInherit{Run: "42", Commit: "abc123"}
 	inherited := planSummaryMarkdown(out)
-	assert.Equal(t, "## Verdict inherited from run 42\n", inherited)
+	assert.Contains(t, inherited, "### Inherited verdict")
+	assert.Contains(t, inherited, "Inherited run: 42 at commit `abc123`.")
 	assert.NotContains(t, inherited, "Affected CI plan")
 }
 
@@ -247,18 +262,34 @@ func TestPlanRiskOnATrivialChange(t *testing.T) {
 	rep := types.RiskReport{Base: "0123456789abcdef", Tier: types.RiskTrivial, Gate: []types.RiskGateStep{},
 		Evidence: []types.RiskEvidence{{Path: "notes/v1.md", Class: "prose", Tier: types.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
 	risk := newPlanRisk(rep)
-	assert.Equal(t, &planRisk{Tier: types.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence, Summary: "### Gate sized trivial\n\n" +
+	assert.Equal(t, &planRisk{Tier: types.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence}, risk)
+	summary := "### Gate sized trivial\n\n" +
 		"No shard runs: the change against `01234567` tiers trivial, so no step of the gate can observe it.\n\n" +
 		"| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n" +
 		"| `notes/v1.md` | trivial | prose | nothing in ci's chain reads it |\n\n" +
-		"To run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n"}, risk)
+		"To run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n"
 
 	out := planOutput{Matrix: []planShard{}, Risk: risk}
-	assert.Equal(t, risk.Summary, planSummaryMarkdown(out))
+	assert.Equal(t, summary, planSummaryMarkdown(out))
 	got, err := planOutputs(out)
 	require.NoError(t, err)
 	assert.Contains(t, got, planPublish{Name: "count", Value: "0"}, "the workflow's count guard skips every shard")
 	assert.Contains(t, got, planPublish{Name: "inherit", Value: "false"})
+}
+
+func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
+	t.Parallel()
+
+	for _, out := range []planOutput{
+		{Target: "ci", Matrix: []planShard{{Shard: "1", Projects: "."}}},
+		{Target: "ci", Inherit: &planInherit{Run: "42", Commit: "abc123"}},
+		{Target: "ci", Risk: &planRisk{Tier: types.RiskTrivial, Paths: []types.RiskEvidence{{Path: "notes/v1.md", Tier: types.RiskTrivial, Why: "no gate step reads it"}}}},
+	} {
+		body, err := json.Marshal(out)
+		require.NoError(t, err)
+		assert.NotContains(t, string(body), "summary")
+		assert.NotContains(t, string(body), "# Affected CI plan")
+	}
 }
 
 // TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected: the run-path report is

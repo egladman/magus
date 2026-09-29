@@ -41,8 +41,8 @@ import (
 // `magus describe job`, because enumerating and defining are those verbs' work everywhere
 // else in this CLI.
 //
-// BOTH CHANNELS WRITE, and the store is what keeps the book honest. The magus_job MCP
-// tool is the agent's channel and this verb is the person's; they reach the same store and
+// BOTH CHANNELS WRITE, and the store is what keeps the book honest. The client MCP
+// tool (magus\job) is the agent's channel and this verb is the person's; they reach the same store and
 // the same rules, so a job still has one author (internal/job.authorizeRow enforces it)
 // without a capability existing for agents that a person does not have.
 func jobCmd(ctx context.Context, root string, args []string) error {
@@ -97,7 +97,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One author per job, enforced by the store: a session holding a lease may release")
-	fmt.Fprintln(os.Stderr, "paths and end its own job, and nothing else. "+hint.ToolJob.String()+" is the")
+	fmt.Fprintln(os.Stderr, "paths and end its own job, and nothing else. "+hint.ToolClient.String()+" (magus\\job) is the")
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
 
@@ -247,7 +247,7 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	// The list, not the bare rows: the overlaps are derived by the same constructor
-	// the magus_job list op and the console's route use, so the three doors cannot
+	// magus\job.list and the console's route use, so the three doors cannot
 	// disagree about whether two jobs claim one path.
 	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	ctx := context.Background()
@@ -504,7 +504,7 @@ func clipTitle(s string, n int) string {
 func printJobTree(out io.Writer, report types.JobList) {
 	if len(report.Jobs) == 0 {
 		fmt.Fprintln(out, "No jobs. Declare one with `"+hint.JobFork.With("<job>")+"`, or with the `"+
-			hint.ToolJob.String()+"` MCP tool (op=fork), and every worktree of this repository reads it here.")
+			hint.ToolClient.String()+"` MCP tool (magus\\job\\put), and every worktree of this repository reads it here.")
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -835,7 +835,7 @@ func (f forkFlags) declaredCheck() *types.LeaseCheck {
 
 // jobFork declares one job, from flags or from a JSON record on stdin.
 //
-// THE PERSON'S WRITE. An orchestrating agent forks through the magus_job tool; this is the
+// THE PERSON'S WRITE. An orchestrating agent forks through the client tool (magus\job); this is the
 // same store and the same rules for somebody at a terminal, which is what keeps the job
 // store from being a thing only agents can write. The flags cover the one-job case so that
 // declaring work does not require composing a JSON document, and --stdin takes the record
@@ -2003,7 +2003,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Remove ONE job from the plan. The rows it leaves alone are the difference from")
-			fmt.Fprintln(os.Stderr, "`"+hint.ToolJob.String()+"` op=clear, which drops every row in the repository.")
+			fmt.Fprintln(os.Stderr, "`"+hint.ToolClient.String()+"` (magus\\job.clear), which drops every row in the repository.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "This is not how a job ENDS. `"+hint.JobExit.String()+"` records what happened and")
 			fmt.Fprintln(os.Stderr, "leaves the row as the account of it; rm is for a row that should never have been")

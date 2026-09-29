@@ -107,7 +107,6 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 var commandsWithoutOutput = map[string]bool{
 	"affected --bisect":        true,
 	"buzz":                     true,
-	"clean":                    true,
 	"graph build":              true,
 	"mcp":                      true,
 	"notes capture":            true,

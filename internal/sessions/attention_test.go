@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,8 +69,23 @@ func TestRequestIDDigestsTheSameBytesAsTheFourArgumentForm(t *testing.T) {
 			Lease:    "fleet/f9",
 			Source:   "agent/claude",
 			Where:    "/repo",
+			Files:    []types.FileRef{{Value: "cmd/magus/notify.go"}},
 			Message:  "needs a decision",
 		}))
+}
+
+func TestAttentionOpenKeepsTheFilesItWasRaisedWith(t *testing.T) {
+	t.Parallel()
+
+	payload := openPayload("att-1", "needs approval")
+	payload.Files = []types.FileRef{{Value: "cmd/magus/notify.go"}, {Value: "internal/sessions", IsDir: true}}
+	fold := Fold{Records: []Record{
+		attRecord(t, "agent1", 1, 100, KindAttentionOpen, payload),
+	}}
+
+	open := AttentionQueue(fold)
+	require.Len(t, open, 1)
+	assert.Equal(t, payload.Files, open[0].Files)
 }
 
 func TestAttentionOpenAppearsInTheQueue(t *testing.T) {

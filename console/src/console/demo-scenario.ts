@@ -346,7 +346,7 @@ export function scenarioRuns(now: number): ScenarioRun[] {
 }
 
 // A ref shaped like the CI sweep's outputs but deliberately absent from scenarioRuns: it aged out
-// of the retained store, so the agent's later magus_output lookup for it fails. This is the join
+// of the retained store, so the agent's later magus\output lookup for it fails. This is the join
 // key for the "failed lookup for a pruned ref" beat in the trail.
 // ScenarioInvocation is one COMMAND in the scenario - the unit the run browser lists and the log
 // viewer opens. scenarioRuns records what each TARGET did; this records what was asked for, which no
@@ -439,7 +439,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: true,
       timeMs: fresh.startMs,
       durationMs: fresh.durationMs,
@@ -453,7 +453,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_output",
+      action: "client",
       ok: false,
       timeMs: at(18),
       durationMs: 6,
@@ -475,7 +475,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: true,
       timeMs: fix.startMs,
       durationMs: fix.durationMs,
@@ -491,7 +491,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: false,
       timeMs: broke.startMs,
       durationMs: broke.durationMs,
@@ -520,7 +520,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_query",
+      action: "client",
       ok: true,
       timeMs: at(100),
       durationMs: 34,

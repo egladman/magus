@@ -1,5 +1,5 @@
 // memory.ts - the Settings "Agent memory" section: a dense, console-admin view over the
-// durable agent-memory RECORDS the magus_memory MCP tool writes, spoken to over
+// durable agent-memory RECORDS the client MCP tool's magus\memory writes, spoken to over
 // magus.memory.v1alpha1.MemoryService.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (the refs
