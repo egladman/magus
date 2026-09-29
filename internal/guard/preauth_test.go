@@ -202,15 +202,16 @@ func servedNextTemplates(t *testing.T) map[string]string {
 
 // denyRemedyFixture is one refused line whose rule serves a remedy. ident is the constant
 // the rule hands hint.NextForDenyRemedy, which is how the sweep below finds a rule with no
-// fixture; setup builds whatever tree the rule reads and returns the line and its remedy.
+// fixture; setup builds whatever the rule reads, in the judged workspace root when it reads
+// a tree, and returns the line and its remedy.
 type denyRemedyFixture struct {
 	ident string
 	rule  denyRuleName
-	setup func(t *testing.T) (command, want string)
+	setup func(t *testing.T, root string) (command, want string)
 }
 
-func fixed(command, want string) func(*testing.T) (string, string) {
-	return func(*testing.T) (string, string) { return command, want }
+func fixed(command, want string) func(*testing.T, string) (string, string) {
+	return func(*testing.T, string) (string, string) { return command, want }
 }
 
 func denyRemedyFixtures() []denyRemedyFixture {
@@ -226,7 +227,15 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs")},
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test .")},
 		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
-		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T) (string, string) {
+		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 600 magus run lint .", "magus run --timeout 10m lint .")},
+		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 60 magus ls jobs", "magus ls jobs")},
+		{"denyRuleGrepReader", denyRuleGrepReader, func(t *testing.T, root string) (string, string) {
+			src := "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n"
+			require.NoError(t, os.WriteFile(filepath.Join(root, "handler.go"), []byte(src), 0o644))
+			t.Chdir(root)
+			return "grep -n 'func HandleRequest' -A20 handler.go", "sed -n 3,4p handler.go"
+		}},
+		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T, _ string) (string, string) {
 			const spellName = "guard-remedy-test"
 			project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 				spellName,
@@ -238,7 +247,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 			t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 			return "remedy-tool check", "magus run " + spellName + "::check"
 		}},
-		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T) (string, string) {
+		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ string) (string, string) {
 			main, wt := twoCheckouts(t)
 			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
@@ -287,7 +296,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,
 	}
-	ctx, _ := fleetFixture(t, worker, reviewer)
+	ctx, root := fleetFixture(t, worker, reviewer)
 	templates := servedNextTemplates(t)
 
 	grade := func(t *testing.T, id, run, role, lease string) {
@@ -330,7 +339,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		// was never served, and whatever it keeps must pass.
 		for _, f := range denyRemedyFixtures() {
 			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
-				command, want := f.setup(t)
+				command, want := f.setup(t, root)
 				v := Judge(ctx, testDependencies(), Request{Input: command, Lease: role.lease})
 				require.Equal(t, "deny", v.Decision, command)
 				require.Equal(t, string(f.rule), v.Rule, command)
