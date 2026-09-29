@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -124,4 +126,82 @@ func TestExecRunnerUsesStopCommand(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Stop did not return")
 	}
+}
+
+// machineService is a start service over a marker file: "up" means the file exists.
+// start and stop each append a line to a log, so a test reads which ran.
+func machineService(t *testing.T, marker, log string) spells.Service {
+	t.Helper()
+	if !hasBin("sh") {
+		t.Skip("needs sh")
+	}
+	return spells.Service{
+		Start:     spells.Command{Bin: "sh", Args: []string{"-c", "touch " + marker + "; echo start >> " + log}},
+		Readiness: spells.Command{Bin: "test", Args: []string{"-e", marker}},
+		Stop:      spells.Command{Bin: "sh", Args: []string{"-c", "rm -f " + marker + "; echo stop >> " + log}},
+		Idle:      "10ms",
+	}
+}
+
+func readLog(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	require.NoError(t, err)
+	return string(b)
+}
+
+// TestStartServiceAdoptedIsNeverStopped pins adoption: a start service already passing
+// its readiness probe is shared, its start never runs, and reaping it at idle never
+// runs its stop, since magus did not start it.
+func TestStartServiceAdoptedIsNeverStopped(t *testing.T) {
+	dir := t.TempDir()
+	marker, log := filepath.Join(dir, "up"), filepath.Join(dir, "log")
+	s := machineService(t, marker, log)
+	require.NoError(t, os.WriteFile(marker, nil, 0o600))
+
+	r := New(ExecRunner{ReadyInterval: 10 * time.Millisecond}, 0)
+	h, err := r.Acquire(context.Background(), "machine", s)
+	require.NoError(t, err)
+	assert.Equal(t, Adopted, h)
+
+	r.Release("machine")
+	r.Shutdown(context.Background())
+	assert.Empty(t, readLog(t, log), "neither start nor stop ran")
+	assert.FileExists(t, marker, "the adopted service is still up")
+}
+
+// TestStartServiceStartedIsOwnedAndStoppedAtReap pins ownership: a start service not
+// yet ready is started, waited on, and stopped once its idle window passes.
+func TestStartServiceStartedIsOwnedAndStoppedAtReap(t *testing.T) {
+	dir := t.TempDir()
+	marker, log := filepath.Join(dir, "up"), filepath.Join(dir, "log")
+	s := machineService(t, marker, log)
+
+	r := New(ExecRunner{ReadyInterval: 10 * time.Millisecond}, time.Hour)
+	h, err := r.Acquire(context.Background(), "machine", s)
+	require.NoError(t, err)
+	assert.NotEqual(t, Adopted, h)
+	assert.Equal(t, "start\n", readLog(t, log))
+	assert.FileExists(t, marker)
+
+	r.Release("machine")
+	// The reap drops the entry before it runs stop, so wait on stop's own effect.
+	require.Eventually(t, func() bool { return readLog(t, log) == "start\nstop\n" }, 5*time.Second, 10*time.Millisecond, "stopped after its 10ms idle")
+	assert.NoFileExists(t, marker)
+	assert.Equal(t, 0, r.Held())
+}
+
+// TestStartServiceFailingStartIsAnError pins that a start command exiting non-zero
+// fails the acquire, rather than polling readiness for something that never began.
+func TestStartServiceFailingStartIsAnError(t *testing.T) {
+	if !hasBin("false") {
+		t.Skip("needs false")
+	}
+	s := machineService(t, filepath.Join(t.TempDir(), "up"), filepath.Join(t.TempDir(), "log"))
+	s.Start = spells.Command{Bin: "false"}
+	_, err := ExecRunner{ReadyInterval: 10 * time.Millisecond}.Start(context.Background(), s)
+	require.ErrorContains(t, err, `service: start "false"`)
 }

@@ -26,7 +26,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`docker`](spells/docker.md)         | Docker         | 6   | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.                       |
 | [`go`](spells/go.md)                 | Go             | 14  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |
 | [`markdown`](spells/markdown.md)     | Markdown       | 4   | Markdown docs spell: markdownlint and prettier for linting and formatting prose.                       |
-| [`podman`](spells/podman.md)         | OCI containers | 4   | Podman spell: image build, push, manifest assembly, and run for the podman runtime.                    |
+| [`podman`](spells/podman.md)         | OCI containers | 5   | Podman spell: image build, push, manifest assembly, and run for the podman runtime.                    |
 | [`python`](spells/python.md)         | Python         | 7   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                    |
 | [`rust`](spells/rust.md)             | Rust           | 7   | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.                          |
 | [`typescript`](spells/typescript.md) | TypeScript     | 12  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |

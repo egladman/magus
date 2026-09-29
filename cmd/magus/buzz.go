@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -218,6 +219,14 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The script's magus\service leases end with it. WithoutCancel: a Ctrl-C'd script
+	// still has to release what it holds.
+	ctx, services := service.WithScope(ctx)
+	defer func() {
+		relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+		defer cancel()
+		services.ReleaseAll(relCtx)
+	}()
 	// A script is a pipe stage: it reads the records a magus stage upstream writes and
 	// emits records downstream. While a magus reads its stdout, stdout carries records
 	// alone and what the script prints goes to stderr, as a run's prose does.

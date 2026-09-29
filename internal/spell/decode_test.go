@@ -148,6 +148,83 @@ func TestDecode_CommandOp(t *testing.T) {
 	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
 }
 
+// TestDecode_StartService pins a start service's decode: Start, Readiness and Stop land
+// on the Service, and the op's embedded Command mirrors Start, which is what a direct
+// run executes.
+func TestDecode_StartService(t *testing.T) {
+	src := mapObj{
+		"name": "vm",
+		"ops": map[string]any{
+			"machine": map[string]any{
+				"command":   map[string]any{},
+				"start":     map[string]any{"bin": "podman", "args": []string{"machine", "start"}},
+				"readiness": map[string]any{"bin": "podman", "args": []string{"info"}},
+				"stop":      map[string]any{"bin": "podman", "args": []string{"machine", "stop"}},
+				"idle":      "30m",
+			},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	op := m.Ops["machine"]
+	assert.Equal(t, spells.OpKindService, op.Kind)
+	assert.Equal(t, &spells.Service{
+		Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},
+		Readiness: spells.Command{Bin: "podman", Args: []string{"info"}},
+		Stop:      spells.Command{Bin: "podman", Args: []string{"machine", "stop"}},
+		Idle:      "30m",
+	}, op.Service)
+	assert.Equal(t, op.Service.Start, op.Command)
+}
+
+// TestDecode_PodmanMachine pins the built-in podman spell's machine op, which
+// hack/on-linux.buzz acquires through magus\service.
+func TestDecode_PodmanMachine(t *testing.T) {
+	op, ok := Builtins()["podman"].Ops["machine"]
+	require.True(t, ok, "podman declares a machine op")
+	assert.Equal(t, spells.OpKindService, op.Kind)
+	require.NotNil(t, op.Service)
+	argv := func(c spells.Command) []string { return append([]string{c.Bin}, c.Args...) }
+	svc := *op.Service
+	assert.Equal(t, map[string]any{
+		"command":   []string{""},
+		"start":     []string{"podman", "machine", "start"},
+		"readiness": []string{"podman", "info"},
+		"stop":      []string{"podman", "machine", "stop"},
+		"idle":      "30m",
+		"runs":      []string{"podman", "machine", "start"},
+	}, map[string]any{
+		"command":   argv(svc.Command),
+		"start":     argv(svc.Start),
+		"readiness": argv(svc.Readiness),
+		"stop":      argv(svc.Stop),
+		"idle":      svc.Idle,
+		"runs":      argv(op.Command),
+	})
+}
+
+// TestDecode_ServiceShapeRefused pins that a service the supervisor cannot run is a
+// load error naming the op, not a failure at the first acquire.
+func TestDecode_ServiceShapeRefused(t *testing.T) {
+	start := map[string]any{"bin": "podman", "args": []string{"machine", "start"}}
+	tests := []struct {
+		name    string
+		op      map[string]any
+		wantErr string
+	}{
+		{"neither", map[string]any{"command": map[string]any{}}, "service declares neither command nor start"},
+		{"both", map[string]any{"command": map[string]any{"bin": "qemu"}, "start": start, "readiness": start, "stop": start}, "service declares both command and start"},
+		{"start without readiness", map[string]any{"start": start, "stop": start}, "a start service needs readiness"},
+		{"start without stop", map[string]any{"start": start, "readiness": start}, "a start service needs stop"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Decode(mapObj{"name": "vm", "ops": map[string]any{"machine": tt.op}})
+			require.ErrorContains(t, err, `spell "vm" op "machine": `+tt.wantErr)
+		})
+	}
+}
+
 // TestDecode_SymbolIndexer verifies mgs_getSymbolIndexer decodes onto the descriptor
 // AND synthesizes the op the run path dispatches, tagged with the kind the runner
 // matches on rather than recognized by its name.

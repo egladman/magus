@@ -169,15 +169,21 @@ func (c *Client) Release(ctx context.Context, id string) {
 }
 
 // AcquireService starts, or reuses, the shared service spec under key and returns once
-// it is ready. The reference rides this connection: ReleaseService drops it, and so
-// does the connection closing. An *Error with CodeNoServices means the broker hosts
-// none and the caller runs the service itself; CodeMalformed means spec has no command.
-func (c *Client) AcquireService(ctx context.Context, key string, spec ServiceSpec) error {
+// it is ready, reporting whether the broker started it and so stops it at idle (false:
+// it was already running and the broker leaves it alone). The reference rides this
+// connection: ReleaseService drops it, and so does the connection closing. An *Error
+// with CodeNoServices means the broker hosts none and the caller runs the service
+// itself; CodeMalformed means spec has neither a command nor a start.
+func (c *Client) AcquireService(ctx context.Context, key string, spec ServiceSpec) (owned bool, err error) {
 	cn, err := c.open(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceAcquireRequest{Key: key, Service: spec.wire()}, typeServiceReply, nil, nil)
+	var reply serviceReply
+	if err := cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceAcquireRequest{Key: key, Service: spec.wire()}, typeServiceReply, &reply, nil); err != nil {
+		return false, err
+	}
+	return reply.Owned, nil
 }
 
 // ReleaseService drops one reference AcquireService took. The broker keeps the service

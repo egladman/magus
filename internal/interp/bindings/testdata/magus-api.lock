@@ -67,6 +67,9 @@ secret
 secret.endpoint
 secret.provider
 secret.read
+service
+service.acquire
+service.release
 skills
 stats
 targets

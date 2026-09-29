@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"time"
@@ -44,7 +46,12 @@ func NewJournal(dir string) (*Journal, error) {
 	return &Journal{dir: dir}, nil
 }
 
-func (j *Journal) path(key string) string { return filepath.Join(j.dir, key+".json") }
+// path names key's record by its hash: a key carries a workspace path and a NUL, and
+// Sweep reads the key back from the record, never the name.
+func (j *Journal) path(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(j.dir, hex.EncodeToString(sum[:])+".json")
+}
 
 // record notes that the service for key is running, with the command that stops it.
 // A nil Journal (the in-process Registry) is a no-op.

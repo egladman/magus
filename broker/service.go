@@ -10,8 +10,12 @@ import (
 // spell's schema adds for other readers (charms, sources, the near-duplicate audit).
 // It is what crosses the wire, so a spell schema change never changes the protocol.
 type ServiceSpec struct {
-	// Command is the service's argv; Command[0] is the program.
+	// Command is the service's argv; Command[0] is the program. Empty for a start
+	// service.
 	Command []string
+	// Start brings up a service that outlives it; empty for a Command service. See
+	// spells.Service.
+	Start []string
 	// Readiness is a probe run until it exits zero; empty means ready once started.
 	Readiness []string
 	// Stop stops the service gracefully; empty means SIGTERM to its process group.
@@ -26,6 +30,7 @@ type ServiceSpec struct {
 func NewServiceSpec(svc spells.Service) ServiceSpec {
 	spec := ServiceSpec{
 		Command:   argv(svc.Command),
+		Start:     argv(svc.Start),
 		Readiness: argv(svc.Readiness),
 		Stop:      argv(svc.Stop),
 	}
@@ -39,6 +44,7 @@ func NewServiceSpec(svc spells.Service) ServiceSpec {
 func (s ServiceSpec) Service() spells.Service {
 	svc := spells.Service{
 		Command:   command(s.Command),
+		Start:     command(s.Start),
 		Readiness: command(s.Readiness),
 		Stop:      command(s.Stop),
 	}
@@ -63,9 +69,9 @@ func command(argv []string) spells.Command {
 }
 
 func (s ServiceSpec) wire() serviceWire {
-	return serviceWire{Command: s.Command, Readiness: s.Readiness, Stop: s.Stop, IdleMS: s.Idle.Milliseconds()}
+	return serviceWire{Command: s.Command, Start: s.Start, Readiness: s.Readiness, Stop: s.Stop, IdleMS: s.Idle.Milliseconds()}
 }
 
 func (w serviceWire) spec() ServiceSpec {
-	return ServiceSpec{Command: w.Command, Readiness: w.Readiness, Stop: w.Stop, Idle: time.Duration(w.IdleMS) * time.Millisecond}
+	return ServiceSpec{Command: w.Command, Start: w.Start, Readiness: w.Readiness, Stop: w.Stop, Idle: time.Duration(w.IdleMS) * time.Millisecond}
 }

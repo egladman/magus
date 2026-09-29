@@ -60,3 +60,35 @@ func TestCommandSecretsOmittedWhenEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "secrets", "an op with no declared secrets must not carry the key at all")
 }
+
+// TestServiceValidate pins the shape rules a Service is resolved against: exactly one
+// of Command or Start, and a Start service declares both how to tell it is up and how
+// to stop it, since the supervisor holds none of its processes.
+func TestServiceValidate(t *testing.T) {
+	cmd := Command{Bin: "postgres"}
+	start := Command{Bin: "podman", Args: []string{"machine", "start"}}
+	probe := Command{Bin: "podman", Args: []string{"info"}}
+	stop := Command{Bin: "podman", Args: []string{"machine", "stop"}}
+	tests := []struct {
+		name    string
+		svc     Service
+		wantErr string
+	}{
+		{"command alone", Service{Command: cmd}, ""},
+		{"start with readiness and stop", Service{Start: start, Readiness: probe, Stop: stop}, ""},
+		{"neither", Service{Readiness: probe}, "service declares neither command nor start; set exactly one"},
+		{"both", Service{Command: cmd, Start: start, Readiness: probe, Stop: stop}, "service declares both command and start; set exactly one"},
+		{"start without readiness", Service{Start: start, Stop: stop}, "a start service needs readiness: it is how magus learns the service is up without holding its process"},
+		{"start without stop", Service{Start: start, Readiness: probe}, "a start service needs stop: magus holds no process to signal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.svc.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}

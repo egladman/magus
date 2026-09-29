@@ -226,6 +226,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 	{Name: "GuardBinary", Type: reflect.TypeFor[types.GuardBinary](), RuntimeObject: true},
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
+	// magus\service.acquire returns it and magus\service.release takes it back.
+	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

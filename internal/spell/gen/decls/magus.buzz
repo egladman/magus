@@ -1010,6 +1010,13 @@ export object JobStatus {
     entries: [JobEntry] = [],
 }
 
+export object ServiceLease {
+    key: str = "",
+    owned: bool = false,
+    brokered: bool = false,
+    idle: str = "",
+}
+
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
@@ -1104,6 +1111,12 @@ export object job {
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
+}
+
+// Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.
+export object service {
+    static extern fun acquire(spell: str, op: str) > ServiceLease !> any;
+    static extern fun release(lease: ServiceLease) > void !> any;
 }
 
 // The per-repository memory: named decisions, plans, pointers and ruled-out hypotheses, kept outside the checkout so every worktree of one repository reads the same entries. The same store `magus memory`, the client MCP tool (magus\memory) and the console read. Records are the snake_case JSON `magus memory -o json` prints. Read straight off the workspace on the context; raises MGS1022 outside one. Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\job is.

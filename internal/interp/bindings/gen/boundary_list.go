@@ -127,6 +127,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "SandboxEnv", Zero: spells.SandboxEnv{}, Encode: func(v any) vm.Value { return ObjectSandboxEnv(v.(spells.SandboxEnv)) }},
 	{Name: "SemverNext", Zero: types.SemverNext{}, Encode: func(v any) vm.Value { return ObjectSemverNext(v.(types.SemverNext)) }},
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},
+	{Name: "ServiceLease", Zero: types.ServiceLease{}, Encode: func(v any) vm.Value { return ObjectServiceLease(v.(types.ServiceLease)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest)) }},

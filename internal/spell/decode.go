@@ -300,15 +300,21 @@ func Decode(src obj) (spells.Descriptor, error) {
 			if spec.Bool("handler") {
 				docOps = append(docOps, op)
 			}
-			// A service op is recognized by its `command` field: a Service whose
-			// `command` is the long-running process, with optional `readiness` and
-			// `stop` commands. The op's embedded Command mirrors `command` so the
+			// A service op is recognized by its `command` or `start` field: a Service
+			// whose `command` is the long-running process, or whose `start` brings up
+			// one that outlives it, with `readiness` and `stop` commands. The op's
+			// embedded Command mirrors whichever of the two is set, so the
 			// fork/render/cache paths read every op uniformly. A command op (the
 			// default) decodes its Command directly.
-			if cmdObj, ok := spec.Obj("command"); ok {
-				cmd, err := decodeCommand(name, op, cmdObj)
-				if err != nil {
-					return spells.Descriptor{}, err
+			cmdObj, isService := spec.Obj("command")
+			startObj, hasStart := spec.Obj("start")
+			if isService || hasStart {
+				var cmd spells.Command
+				if isService {
+					var err error
+					if cmd, err = decodeCommand(name, op, cmdObj); err != nil {
+						return spells.Descriptor{}, err
+					}
 				}
 				// Secrets on a service op are rejected here, not silently dropped
 				// later: the supervised path rebuilds the command without its env,
@@ -330,6 +336,21 @@ func Decode(src obj) (spells.Descriptor, error) {
 					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service op (a supervised service never reaches the classifier, and a foregrounded one ends by being stopped)", name, op)
 				}
 				svc := &spells.Service{Command: cmd}
+				if hasStart {
+					start, err := decodeCommand(name, op, startObj)
+					if err != nil {
+						return spells.Descriptor{}, err
+					}
+					// Refused for the reasons command refuses them: the supervisor runs
+					// start directly, without the env or the classifier.
+					if len(start.Secrets) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service start command", name, op)
+					}
+					if len(start.Hints) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service start command (the supervisor runs it directly, so they could never fire)", name, op)
+					}
+					svc.Start = start
+				}
 				if readinessObj, ok := spec.Obj("readiness"); ok {
 					readiness, err := decodeCommand(name, op, readinessObj)
 					if err != nil {
@@ -366,9 +387,15 @@ func Decode(src obj) (spells.Descriptor, error) {
 				if idle, ok := spec.Str("idle"); ok {
 					svc.Idle = idle
 				}
+				if err := svc.Validate(); err != nil {
+					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
+				}
 				t.Kind = spells.OpKindService
 				t.Service = svc
 				t.Command = cmd
+				if svc.Start.Bin != "" {
+					t.Command = svc.Start
+				}
 			} else {
 				cmd, err := decodeCommand(name, op, spec)
 				if err != nil {

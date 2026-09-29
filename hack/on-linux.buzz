@@ -28,11 +28,15 @@
 //     71 when the relay failed before it started (podman's 125 to 127, the build, a command
 //     the image lacks); 2 for a refusal decided before podman is asked anything;
 //   - a first line on stderr naming the platform, emulation, podman and the kernel, the
-//     image and its digest, and the tree magus is built from;
+//     image and its digest, the tree magus is built from, and off Linux whether the podman
+//     machine was already running or the broker started it;
 //   - the host uid through --userns=keep-id under rootless podman, and --init so the
 //     command is never PID 1;
 //   - the Go image mise.toml pins, and a kernel of 5.13 or later (landlock) checked before
-//     start; a missing podman, a stopped machine or an older kernel prints its fix.
+//     start; a missing podman, a machine never initialized or an older kernel prints its
+//     fix. A stopped machine is started instead: the script holds podman's `machine`
+//     service, so the broker starts it when needed and stops it after 30m idle, and never
+//     stops a machine it found running.
 //
 // It cannot keep: a digest pin (mise.toml pins a tag; line one prints the digest it got);
 // no implicit pull (a missing image is pulled, and line one says so); a TTY (never
@@ -49,6 +53,7 @@ import "encoding/toml";
 import "env";
 import "fs";
 import "log";
+import "magus";
 import "os";
 import "path";
 import "proc";
@@ -364,11 +369,13 @@ export fun hasLandlock(kernel: str) > bool {
 }
 
 // effect is the first line a run prints. digest is "" when the image is absent and about
-// to be pulled.
-export fun effect(p: Plan, hostArch: str, podman: str, kernel: str, digest: str, tree: str) > str {
+// to be pulled; machine is hold's note, "" on Linux.
+export fun effect(p: Plan, hostArch: str, podman: str, kernel: str, digest: str, tree: str, machine: str) > str {
     final how = if (p.arch == hostArch) "native" else "emulated on {hostArch}; landlock under emulation is unmeasured";
     final img = if (digest == "") "{p.image} (absent: pulling it over the network)" else "{p.image}@{digest}";
-    return "on-linux: `{p.command.join(" ")}` in linux/{p.arch} ({how}), podman {podman}, kernel {kernel}, image {img}, magus built from {tree}, checkout read-only at {p.root}";
+    final line = "on-linux: `{p.command.join(" ")}` in linux/{p.arch} ({how}), podman {podman}, kernel {kernel}, image {img}, magus built from {tree}, checkout read-only at {p.root}";
+    if (machine == "") { return line; }
+    return "{line}; {machine}";
 }
 
 fun refuse(code: int, message: str) > int {
@@ -380,7 +387,8 @@ fun podman(args: [str]) > ExecResult !> any {
     return proc\exec("podman", args: args, opts: {"quiet": true, "allow_failure": true});
 }
 
-// reach returns "" when podman answers, else the refusal carrying the command that fixes it.
+// reach returns "" when podman can be asked to run containers, else the refusal carrying the
+// command that fixes it. A stopped machine is not a refusal: hold starts it.
 fun reach(hostOS: str) > str !> any {
     try {
         proc\which("podman");
@@ -388,16 +396,31 @@ fun reach(hostOS: str) > str !> any {
         if (hostOS == "darwin") { return "podman is not installed; run `brew install podman`"; }
         return "podman is not installed; install it from your distribution (https://podman.io/docs/installation)";
     }
-    final info = podman(["info", "--format", "json"]);
-    if (info.ok) { return ""; }
     if (hostOS != "linux") {
         final machines = podman(["machine", "list", "--format", "json"]);
         if (machines.ok and serialize\jsonDecode(machines.stdout).listValue().len() == 0) {
             return "podman has no machine to run Linux in; run `podman machine init --now`";
         }
-        return "the podman machine is not running; run `podman machine start`";
+        return "";
     }
+    final info = podman(["info", "--format", "json"]);
+    if (info.ok) { return ""; }
     return "podman cannot run containers: {info.stderr}";
+}
+
+// hold takes the podman machine as a broker service for as long as this script runs, and
+// returns the note the first line carries. Linux runs containers without a machine, so
+// there is nothing to hold and the note is "".
+fun hold(hostOS: str) > str !> any {
+    if (hostOS == "linux") { return ""; }
+    final lease: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+    return machineNote(lease.owned, brokered: lease.brokered, idle: lease.idle);
+}
+
+export fun machineNote(owned: bool, brokered: bool, idle: str) > str {
+    if (!owned) { return "podman machine: already running, left alone"; }
+    if (brokered) { return "podman machine: started by the broker, stops after {idle} idle"; }
+    return "podman machine: started for this script, stops when it ends";
 }
 
 export fun lsArgv() > [str] {
@@ -452,6 +475,12 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
 
     final unreachable = reach(hostOS);
     if (unreachable != "") { return refuse(RELAY_FAILED, message: unreachable); }
+    var machine = "";
+    try {
+        machine = hold(hostOS);
+    } catch (e: {str: str}) {
+        return refuse(RELAY_FAILED, message: "the podman machine did not come up: {e["message"] ?? ""}");
+    }
     final info = serialize\jsonDecode(podman(["info", "--format", "json"]).stdout);
     final kernel = info.q(["host", "kernel"]).stringValue();
     if (!hasLandlock(kernel)) {
@@ -479,7 +508,7 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
 
     final head = vcs\commit().short;
     final tree = if (vcs\isDirty()) "{head}-dirty" else head;
-    log\info(effect(p, hostArch: hostArch, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree));
+    log\info(effect(p, hostArch: hostArch, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree, machine: machine));
     final left = leftBehind(p, hostNames: host.keys());
     if (left.len() > 0) {
         log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
@@ -514,7 +543,14 @@ export fun main(args: [str]) > void !> any {
     final host = os\platform();
     var code = 0;
     if (o.ls or o.delete != "") {
-        final unreachable = reach(host[0]);
+        var unreachable = reach(host[0]);
+        if (unreachable == "") {
+            try {
+                hold(host[0]);
+            } catch (e: {str: str}) {
+                unreachable = "the podman machine did not come up: {e["message"] ?? ""}";
+            }
+        }
         if (unreachable != "") {
             code = refuse(RELAY_FAILED, message: unreachable);
         } else if (o.ls) {
@@ -685,13 +721,22 @@ test "hasLandlock needs 5.13 or later" {
 
 test "the first line states what runs, where, and with which image" {
     final p = fixture();
-    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "sha256:abc", tree: "92b8265-dirty"),
+    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "sha256:abc", tree: "92b8265-dirty", machine: ""),
         want: "on-linux: `magus run test . --keep` in linux/arm64 (native), podman 5.6.1, kernel 6.12.5, image docker.io/library/golang:1.26.6@sha256:abc, magus built from 92b8265-dirty, checkout read-only at /src/magus",
         message: "native");
     p.arch = "amd64";
-    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "", tree: "92b8265"),
-        want: "on-linux: `magus run test . --keep` in linux/amd64 (emulated on arm64; landlock under emulation is unmeasured), podman 5.6.1, kernel 6.12.5, image docker.io/library/golang:1.26.6 (absent: pulling it over the network), magus built from 92b8265, checkout read-only at /src/magus",
-        message: "emulated and pulling");
+    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "", tree: "92b8265", machine: "podman machine: already running, left alone"),
+        want: "on-linux: `magus run test . --keep` in linux/amd64 (emulated on arm64; landlock under emulation is unmeasured), podman 5.6.1, kernel 6.12.5, image docker.io/library/golang:1.26.6 (absent: pulling it over the network), magus built from 92b8265, checkout read-only at /src/magus; podman machine: already running, left alone",
+        message: "emulated and pulling, on a machine");
+}
+
+test "the machine note says whether magus started the machine and when it stops" {
+    assert\equal(machineNote(false, brokered: true, idle: "30m"),
+        want: "podman machine: already running, left alone", message: "adopted");
+    assert\equal(machineNote(true, brokered: true, idle: "30m"),
+        want: "podman machine: started by the broker, stops after 30m idle", message: "broker-owned");
+    assert\equal(machineNote(true, brokered: false, idle: "30m"),
+        want: "podman machine: started for this script, stops when it ends", message: "in-process");
 }
 
 test "live: a command's exit status crosses unchanged" {

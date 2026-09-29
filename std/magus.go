@@ -786,6 +786,42 @@ var Magus = Module{
 			},
 		},
 		{
+			Name: "service",
+			Doc: "Shared services a `magus buzz` script holds, the way a target holds one through " +
+				"ctx.needs: routed to the broker when one is up, so the service stays warm past the " +
+				"script, and hosted in-process otherwise. Every lease a script still holds is released " +
+				"when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, " +
+				"where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings " +
+				"(buildService), for the reason magus\\job is.",
+			Methods: []Method{
+				{
+					Name: "acquire",
+					Doc: "Start, or reuse, the service a built-in spell's service op declares, and hold it " +
+						"until release or the script's end. Returns once it is ready. A start service " +
+						"already running is adopted: owned is false and magus never stops it. Raises " +
+						"when the spell or op is unknown, the op is not a service, or the service never " +
+						"becomes ready.",
+					Args: []Arg{
+						{Name: "spell", Type: TypeString},
+						{Name: "op", Type: TypeString},
+					},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "ServiceLease"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "release",
+					Doc: "Drop a lease acquire returned, before the script ends. The service stays up " +
+						"while another lease holds it; the broker keeps an owned one warm for its idle " +
+						"window, and an in-process one stops. Each call drops one reference to the " +
+						"lease's service, so release a lease once.",
+					Args:   []Arg{{Name: "lease", Type: TypeAnyMap, Object: "ServiceLease"}},
+					Raises: true,
+					Extern: true,
+				},
+			},
+		},
+		{
 			Name: "memory",
 			Doc: "The per-repository memory: named decisions, plans, pointers and ruled-out " +
 				"hypotheses, kept outside the checkout so every worktree of one repository reads " +

@@ -17,7 +17,6 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -132,12 +131,18 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// would block the run forever. A directly-run service (no supervisor active) falls
 	// through and foregrounds, blocking as intended (Ctrl-C stops it).
 	if tgt.IsService() && tgt.Service != nil {
+		// bin/args are the op's embedded command, charm-patched: a start service's
+		// Start, else its Command.
 		svc := spells.Service{
-			Command:   spells.Command{Bin: bin, Args: args},
 			Readiness: tgt.Service.Readiness,
 			Stop:      tgt.Service.Stop,
 			Idle:      tgt.Service.Idle,
 			Distinct:  tgt.Service.Distinct,
+		}
+		if tgt.Service.Start.Bin != "" {
+			svc.Start = spells.Command{Bin: bin, Args: args}
+		} else {
+			svc.Command = spells.Command{Bin: bin, Args: args}
 		}
 		// Scoped to the workspace: the broker hosts services for every workspace on
 		// the machine, so a bare fingerprint would share one instance across them.
@@ -145,7 +150,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		if ws := types.WorkspaceFromContext(ctx); ws != nil {
 			root = ws.Root()
 		}
-		if handled, serr := service.TrySupervise(ctx, identity.InstanceKey(root, svc), svc); handled {
+		if handled, serr := service.TrySupervise(ctx, service.Key(root, svc), svc); handled {
 			return run.ExecResult{}, serr
 		}
 	}

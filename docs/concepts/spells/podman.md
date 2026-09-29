@@ -27,6 +27,12 @@ Working directory and environment are NOT options: they ride the context, as `po
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## machine
+
+The machine is the Linux VM podman runs containers in on macOS and Windows. It outlives `podman machine start`, so it is a start service: already running, magus adopts it and never stops it; started by magus, it is stopped after 30 minutes with no holder. On Linux `podman info` passes at once, so the machine is adopted and never touched.
+
+**Command:** `podman machine start`
+
 ## podman-build
 
 **Command:** `podman build`

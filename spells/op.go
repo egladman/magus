@@ -1,6 +1,9 @@
 package spells
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // PatchOp is one RFC 6902 operation over a target's argv array. Path/From are
 // single-token JSON Pointers (RFC 6901) into the array — "/N" for an index, or
@@ -216,18 +219,27 @@ type InstallSpec struct {
 }
 
 // Service is the declarative description of a long-running process a service op
-// manages. Command (required) is the process. Run directly (`magus run <target>`) it
-// is forked in the foreground and blocked on (Ctrl-C signals the child); reached as a
-// dependency it is supervised in the background (see internal/service). Readiness and
-// Stop are optional: Readiness is a probe polled until it exits 0 (how the supervisor
-// learns the process is up and gates dependents on it), and Stop is a graceful-shutdown
+// manages. It declares exactly one of Command or Start (see [Service.Validate]).
+//
+// Command is a foreground process. Run directly (`magus run <target>`) it is forked
+// in the foreground and blocked on (Ctrl-C signals the child); reached as a dependency
+// it is supervised in the background (see internal/service). Readiness and Stop are
+// optional: Readiness is a probe polled until it exits 0 (how the supervisor learns
+// the process is up and gates dependents on it), and Stop is a graceful-shutdown
 // command run instead of signaling the process (also replayed by the broker's crash
 // reaper).
+//
+// Start is for a service that outlives the command that starts it, such as a VM or a
+// system unit: Start must exit 0, and Readiness and Stop are required, because magus
+// holds no process to watch or signal. A Start service already passing Readiness is
+// adopted and never stopped by magus; one magus started is stopped with Stop.
+//
 // Like [Command] each is static data: inspectable, cache-keyable, charm-patchable. It
 // is a distinct return type (vs [Command]) so an op's kind is inferred from what it
 // returns. magus-utils types mirrors it to the Buzz `object Service` a service op returns.
 type Service struct {
 	Command   Command `json:"command,omitempty"`
+	Start     Command `json:"start,omitempty"`
 	Readiness Command `json:"readiness,omitempty"`
 	Stop      Command `json:"stop,omitempty"`
 	// Distinct, when non-empty, opts this service out of shared-instance dedup and
@@ -243,6 +255,24 @@ type Service struct {
 	Idle string `json:"idle,omitempty"`
 }
 
+// Validate reports a Service whose shape the supervisor cannot run: neither or both of
+// Command and Start, or a Start service missing Readiness or Stop.
+func (s Service) Validate() error {
+	switch {
+	case s.Command.Bin == "" && s.Start.Bin == "":
+		return errors.New("service declares neither command nor start; set exactly one")
+	case s.Command.Bin != "" && s.Start.Bin != "":
+		return errors.New("service declares both command and start; set exactly one")
+	case s.Start.Bin == "":
+		return nil
+	case s.Readiness.Bin == "":
+		return errors.New("a start service needs readiness: it is how magus learns the service is up without holding its process")
+	case s.Stop.Bin == "":
+		return errors.New("a start service needs stop: magus holds no process to signal")
+	}
+	return nil
+}
+
 // Op is a single dispatchable surface of a spell — one tool-native Operation
 // (see docs/operations.md). An op is one of two declarative shapes, tagged by Kind:
 // a command op (OpKindCommand, the default) whose embedded [Command] Bin/Args run
@@ -250,8 +280,8 @@ type Service struct {
 // describes a long-running process `magus run` blocks on. Either way the form is declarative,
 // so the argv is charm-patched and rendered by `magus describe` without executing.
 //
-// For a service op the embedded Command mirrors Service.Command, so every
-// fork/render/cache path reads the op uniformly. Command.Bin may be empty, for a no-op
+// For a service op the embedded Command mirrors Service.Command, or Service.Start for
+// a start service, so every fork/render/cache path reads the op uniformly. Command.Bin may be empty, for a no-op
 // marker op.
 //
 // In-VM spell logic is not an op kind: a remote cache provider is a separate contract

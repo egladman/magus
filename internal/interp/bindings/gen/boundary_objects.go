@@ -2421,3 +2421,12 @@ func ObjectSkill(v types.Skill) vm.Value {
 	out.MapSet("current", vm.BoolValue(v.Current))
 	return out
 }
+
+func ObjectServiceLease(v types.ServiceLease) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", vm.StrValue(v.Key))
+	out.MapSet("owned", vm.BoolValue(v.Owned))
+	out.MapSet("brokered", vm.BoolValue(v.Brokered))
+	out.MapSet("idle", vm.StrValue(v.Idle))
+	return out
+}
