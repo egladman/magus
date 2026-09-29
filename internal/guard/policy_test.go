@@ -2,6 +2,9 @@ package guard
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
@@ -9,6 +12,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// The recorded rule set is the guard's own state, private to its owner.
+func TestPolicyMarkerIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	writePolicyMarker(path, policyMarker{})
+
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
 
 // sourcesAt builds the lazy approved-id callback a hook hands RecordPolicy, counting how
 // often it runs: it costs a process per file, so steady state must not call it.

@@ -1,6 +1,7 @@
 package file
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"os"
@@ -20,8 +21,10 @@ var SkipWrite = errors.New("skip this write")
 // Version policy is not Doc's: a state file embeds types.Schema so a rewrite keeps the
 // members it does not declare; a cache folds its version into its key and misses.
 type Doc[T any] struct {
-	// Path is the document, written with mode 0644.
+	// Path is the document.
 	Path string
+	// Perm is the document's mode; zero means 0644.
+	Perm os.FileMode
 	// Decode parses the file's bytes into v; nil means JSON. It is where a store
 	// refuses a document it cannot act on.
 	Decode func(b []byte, v *T) error
@@ -76,6 +79,6 @@ func (d Doc[T]) Update(ctx context.Context, fn func(v *T) error) error {
 		if err != nil {
 			return err
 		}
-		return WriteFileAtomic(d.Path, b, 0o644)
+		return WriteFileAtomic(d.Path, b, cmp.Or(d.Perm, 0o644))
 	})
 }

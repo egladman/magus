@@ -2,6 +2,8 @@
 package file
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -15,17 +17,24 @@ import (
 // The file ends up with mode perm. The temp file is a dotfile, so a glob over the
 // directory never picks it up, and it is removed on every failure, the rename included.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
-	return writeFileAtomic(path, data, perm, true)
+	return writeAtomic(path, bytes.NewReader(data), perm, true)
+}
+
+// WriteFrom is [WriteFileAtomic] for a stream: it copies r into the temp file, so a
+// payload never has to be held in memory to be written whole. A read error from r fails
+// the write and leaves path as it was.
+func WriteFrom(path string, r io.Reader, perm os.FileMode) error {
+	return writeAtomic(path, r, perm, true)
 }
 
 // ReplaceFile is WriteFileAtomic without the fsync. Readers still never see a partial
 // file, but a crash can lose the write or leave path empty. It is for records that are
 // cheaper to lose than to flush: on macOS the fsync is F_FULLFSYNC, about 5ms a file.
 func ReplaceFile(path string, data []byte, perm os.FileMode) error {
-	return writeFileAtomic(path, data, perm, false)
+	return writeAtomic(path, bytes.NewReader(data), perm, false)
 }
 
-func writeFileAtomic(path string, data []byte, perm os.FileMode, sync bool) (err error) {
+func writeAtomic(path string, r io.Reader, perm os.FileMode, sync bool) (err error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -42,7 +51,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode, sync bool) (err
 			_ = os.Remove(tmp.Name())
 		}
 	}()
-	if _, err := tmp.Write(data); err != nil {
+	if _, err := io.Copy(tmp, r); err != nil {
 		return err
 	}
 	if sync {

@@ -1,9 +1,12 @@
 package review
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -73,6 +76,39 @@ func TestRecordMerges(t *testing.T) {
 	// several sittings is the normal case.
 	assert.True(t, s.Covers("a.go", "aaa"))
 	assert.True(t, s.Covers("b.go", "bbb"))
+}
+
+// The server and the CLI both record receipts; overlapping writers must not drop each
+// other's.
+func TestRecordConcurrentWritersKeepEveryReceipt(t *testing.T) {
+	dir := t.TempDir()
+	const writers, each = 8, 10
+	var wg sync.WaitGroup
+	for w := range writers {
+		wg.Go(func() {
+			for i := range each {
+				assert.NoError(t, Record(dir, []Receipt{{Path: fmt.Sprintf("%d-%d.go", w, i), Digest: "d", At: time.Now()}}))
+			}
+		})
+	}
+	wg.Wait()
+
+	s, err := Load(dir)
+	require.NoError(t, err)
+	assert.Len(t, s, writers*each)
+}
+
+// What a reader has reviewed is theirs alone; see the package doc.
+func TestRecordStoreIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	dir := t.TempDir()
+	require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: "d", At: time.Now()}}))
+
+	fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(receiptFile)))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
 func TestRecordReplacesTheSamePath(t *testing.T) {

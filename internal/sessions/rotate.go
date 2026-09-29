@@ -1,13 +1,13 @@
 package sessions
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/gofrs/flock"
-
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 )
 
@@ -32,26 +32,23 @@ const (
 // exclusive, non-blocking file lock, re-checks under it, and if still stale, prunes dir
 // and refreshes stamp. That plain Stat-then-write pair on stamp is what let every
 // concurrent Open in the same window see the same stale stamp and each independently
-// decide to prune; TryLock is what makes the decision atomic instead of the staleness
+// decide to prune; the lock is what makes the decision atomic instead of the staleness
 // READ that led to it. A caller that loses the race returns immediately, having never
 // blocked: the common "nothing to do" path never touches the lock at all, and a caller
 // that does contend skips pruning this round rather than waiting to prune again a
 // moment later, which "at most once per interval" already tolerates.
 func claimStalePruneStamp(dir, stamp, keep string) {
-	fl := flock.New(stamp + ".lock")
-	got, err := fl.TryLock()
-	if err != nil || !got {
-		return
-	}
-	defer func() { _ = fl.Unlock() }()
-	if fi, err := os.Stat(stamp); err == nil && time.Since(fi.ModTime()) < pruneInterval {
-		return // another caller already pruned and refreshed the stamp while this one waited
-	}
-	prune(dir, DefaultRetention, keep)
-	now := time.Now()
-	if os.Chtimes(stamp, now, now) != nil {
-		_ = os.WriteFile(stamp, nil, 0o644)
-	}
+	_ = file.WithLock(context.Background(), stamp+".lock", 0, func() error {
+		if fi, err := os.Stat(stamp); err == nil && time.Since(fi.ModTime()) < pruneInterval {
+			return nil // another caller already pruned and refreshed the stamp while this one waited
+		}
+		prune(dir, DefaultRetention, keep)
+		now := time.Now()
+		if os.Chtimes(stamp, now, now) != nil {
+			_ = os.WriteFile(stamp, nil, 0o644)
+		}
+		return nil
+	})
 }
 
 // Prune deletes whole invocation files whose newest fact is older than retain.

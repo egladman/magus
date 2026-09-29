@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -630,26 +631,13 @@ func writeSpawnedAgent(facts hint.Gate, agentID string, rec spawnedAgent) {
 	writeAgentMarker(facts, spawnedAgentKind(agentID), body)
 }
 
-// writeAgentMarker writes one agent record, best effort. Through a temporary file, since
-// a subagent's own calls read the record while its parent's hooks may be writing it.
+// writeAgentMarker writes one agent record, best effort. Replaced whole, since a
+// subagent's own calls read the record while its parent's hooks may be writing it.
 func writeAgentMarker(facts hint.Gate, kind hint.MarkerKind, body []byte) {
 	if facts.CacheDir() == "" {
 		return
 	}
-	path := hint.MarkerPath(facts.CacheDir(), facts.Session(), kind)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return
-	}
-	_, werr := tmp.Write(body)
-	_ = tmp.Chmod(0o644)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil || os.Rename(tmp.Name(), path) != nil {
-		_ = os.Remove(tmp.Name())
-	}
+	_ = file.ReplaceFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind), body, 0o644)
 }
 
 // decidedBy names which side produced a command verdict. A workspace shell rule is the

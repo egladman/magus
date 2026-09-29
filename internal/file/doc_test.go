@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -104,6 +105,24 @@ func TestDocUpdateWritesNothingOnSkipOrFailure(t *testing.T) {
 	}), boom)
 	_, err = os.Stat(path)
 	require.ErrorIs(t, err, os.ErrNotExist, "a failing fn writes nothing")
+}
+
+func TestDocUpdatePerm(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	for _, c := range []struct {
+		perm, want os.FileMode
+	}{{0, 0o644}, {0o600, 0o600}} {
+		path := filepath.Join(t.TempDir(), "doc.json")
+		require.NoError(t, Doc[counter]{Path: path, Perm: c.perm}.Update(t.Context(), func(n *counter) error {
+			n.N = 1
+			return nil
+		}))
+		fi, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, c.want, fi.Mode().Perm(), "Perm %#o", c.perm)
+	}
 }
 
 // A Decode refusal stops the update before fn runs, so a store can refuse a document it

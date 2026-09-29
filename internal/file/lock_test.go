@@ -66,6 +66,21 @@ func TestWithLockHonorsCancel(t *testing.T) {
 	assert.Less(t, time.Since(start), 10*time.Second)
 }
 
+// A zero wait is one try: a held lock fails at once instead of polling.
+func TestWithLockZeroWaitTriesOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.lock")
+	release := hold(t, path)
+	defer release()
+
+	start := time.Now()
+	err := WithLock(t.Context(), path, 0, func() error {
+		t.Error("fn ran while another holder had the lock")
+		return nil
+	})
+	require.ErrorContains(t, err, "another process has held the lock")
+	assert.Less(t, time.Since(start), time.Second)
+}
+
 func TestWithLockReturnsFnError(t *testing.T) {
 	boom := errors.New("boom")
 	err := WithLock(t.Context(), filepath.Join(t.TempDir(), "x.lock"), time.Second, func() error { return boom })

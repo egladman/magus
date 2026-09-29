@@ -34,16 +34,17 @@
 package review
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -103,15 +104,8 @@ type Store map[string]Receipt
 // Load reads the store. A missing file is an empty store, not an error: nobody having
 // acknowledged anything yet is the starting state.
 func Load(cacheDir string) (Store, error) {
-	b, err := os.ReadFile(filepath.Join(cacheDir, filepath.FromSlash(receiptFile)))
-	if errors.Is(err, fs.ErrNotExist) {
-		return Store{}, nil
-	}
+	list, err := receiptDoc(cacheDir).Load()
 	if err != nil {
-		return nil, err
-	}
-	var list []Receipt
-	if err := json.Unmarshal(b, &list); err != nil {
 		return nil, err
 	}
 	out := make(Store, len(list))
@@ -119,6 +113,21 @@ func Load(cacheDir string) (Store, error) {
 		out[r.Path] = r
 	}
 	return out, nil
+}
+
+// receiptDoc is the store's file. It has two writers by design: the server records from a
+// console keypress while the CLI records from `--ack` or a closing viewer, in another
+// process. A torn write would matter, because Load refuses a corrupt store, and so would a
+// lost update, since a dropped receipt reads as a file nobody read.
+func receiptDoc(cacheDir string) file.Doc[[]Receipt] {
+	return file.Doc[[]Receipt]{
+		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
+		Perm: 0o600,
+		Encode: func(list []Receipt) ([]byte, error) {
+			b, err := json.MarshalIndent(list, "", "  ")
+			return append(b, '\n'), err
+		},
+	}
 }
 
 // Covers reports whether the store holds a receipt for this path AT this content.
@@ -136,60 +145,26 @@ func (s Store) Covers(path, digest string) bool {
 // acknowledged yesterday, and a reviewer working through a large change in several sittings
 // is the normal case rather than the exception.
 func Record(cacheDir string, add []Receipt) error {
-	cur, err := Load(cacheDir)
-	if err != nil {
-		return err
-	}
-	for _, r := range add {
-		// A re-ack with no reason keeps the one already on the record. Overwriting it
-		// would let the note explaining why forty files were covered in one keystroke
-		// vanish on the next plain `--ack`, silently, leaving a receipt that reads as
-		// though somebody sat down with the file.
-		if r.Reason == "" {
-			r.Reason = cur[r.Path].Reason
+	return receiptDoc(cacheDir).Update(context.Background(), func(list *[]Receipt) error {
+		cur := make(Store, len(*list))
+		for _, r := range *list {
+			cur[r.Path] = r
 		}
-		cur[r.Path] = r
-	}
-	list := make([]Receipt, 0, len(cur))
-	for _, r := range cur {
-		list = append(list, r)
-	}
-	// Sorted so the file is stable across writes; an unordered map would rewrite the whole
-	// thing on every ack and make the store's own history unreadable.
-	slices.SortFunc(list, func(a, b Receipt) int { return strings.Compare(a.Path, b.Path) })
-
-	b, err := json.MarshalIndent(list, "", "  ")
-	if err != nil {
-		return err
-	}
-	dst := filepath.Join(cacheDir, filepath.FromSlash(receiptFile))
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	// Written to a temp file and renamed, because this store has two writers by design: the
-	// server mints from a console keypress while the CLI mints from `--ack` or a closing
-	// viewer, in another process. A truncating write interrupted between those leaves a
-	// half-written JSON array, and Load treats a corrupt store as an EMPTY one, so a crash
-	// would silently discard every receipt rather than failing loudly.
-	//
-	// Rename is atomic within a directory, so a reader sees the old file or the new one. It
-	// does not make the read-modify-write atomic: two writers can still interleave and the
-	// later one wins, losing the other's receipts. That is a known and accepted limit:
-	// losing a receipt costs a re-read, and the alternative is a lock file in a path this
-	// package would then have to reap.
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".receipts-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name()) // no-op once the rename below succeeds
-	if _, err := tmp.Write(append(b, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dst)
+		for _, r := range add {
+			// A re-ack with no reason keeps the one already on the record. Overwriting it
+			// would let the note explaining why forty files were covered in one keystroke
+			// vanish on the next plain `--ack`, silently, leaving a receipt that reads as
+			// though somebody sat down with the file.
+			if r.Reason == "" {
+				r.Reason = cur[r.Path].Reason
+			}
+			cur[r.Path] = r
+		}
+		// Sorted so the file is stable across writes; an unordered map would rewrite the
+		// whole thing on every ack and make the store's own history unreadable.
+		*list = slices.SortedFunc(maps.Values(cur), func(a, b Receipt) int { return strings.Compare(a.Path, b.Path) })
+		return nil
+	})
 }
 
 // ReadStates reports each path as one of types.DiffReadUnread, DiffReadRead or

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/types"
@@ -373,12 +374,9 @@ func runCut(args []string) error {
 	}
 
 	// The manifest lands before any fragment is deleted, so no failure destroys notes
-	// a manifest never got, and a rerun finishes an interrupted deletion (above).
-	tmpPath := outPath + ".tmp"
-	if err := os.WriteFile(tmpPath, out, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", tmpPath, err)
-	}
-	if err := os.Rename(tmpPath, outPath); err != nil {
+	// a manifest never got, and a rerun finishes an interrupted deletion (above). The
+	// fsync is what makes that ordering hold across a crash.
+	if err := file.WriteFileAtomic(outPath, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
 	if candidate {

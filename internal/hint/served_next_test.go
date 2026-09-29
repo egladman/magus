@@ -2,6 +2,7 @@ package hint
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -30,6 +31,12 @@ func TestServedNextJournalAppendsAndRotates(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
 	assert.Equal(t, ServedNextEntry{AtMs: got.AtMs, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}}, got)
 	assert.NotZero(t, got.AtMs)
+
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(ServedNextPath(base))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm(), "a rotate keeps the mode the append created")
+	}
 }
 
 // One journal per CHECKOUT: every door writes the file the guard reads, and nothing

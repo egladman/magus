@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -457,6 +458,11 @@ func TestRunCut_HappyPath(t *testing.T) {
 	// Read and unmarshal the written manifest.
 	data, err := os.ReadFile(filepath.Join(outDir, "v0.2.0.yaml"))
 	require.NoError(t, err)
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(filepath.Join(outDir, "v0.2.0.yaml"))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm(), "a committed manifest is an ordinary tracked file")
+	}
 	var got ReleaseManifest
 	require.NoError(t, yaml.Unmarshal(data, &got))
 
@@ -657,6 +663,29 @@ func TestRunCut_FailedFragmentDeleteIsRetryable(t *testing.T) {
 	require.NoError(t, os.Chmod(unreleasedDir, 0o755))
 	require.NoError(t, runCut(args), "the retry must not be wedged on an immutable manifest")
 	require.NoFileExists(t, filepath.Join(unreleasedDir, "x.md"))
+}
+
+// A manifest that cannot land keeps the fragments and leaves no temp file in the
+// releases directory, where the next commit would pick it up.
+func TestRunCut_FailedManifestWriteLeavesNoTemp(t *testing.T) {
+	artifactsDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
+	outDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(outDir, "v0.2.0.yaml", "occupied"), 0o755))
+
+	require.Error(t, runCut([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
+		"-unreleased", unreleasedDir, "-out", outDir}))
+
+	entries, err := os.ReadDir(outDir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Equal(t, []string{"v0.2.0.yaml"}, names)
+	require.FileExists(t, filepath.Join(unreleasedDir, "x.md"))
 }
 
 // TestRunCut_RefusesNoFragments: a release with no notes is a mistake, not an

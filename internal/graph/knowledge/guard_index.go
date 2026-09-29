@@ -3,7 +3,6 @@ package knowledge
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io/fs"
@@ -17,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -171,7 +171,7 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 			fmt.Fprintf(&b, "i %s %s\n", kind, id)
 		}
 	}
-	return writeAtomic(GuardIndexPath(cacheDir), b.String())
+	return file.ReplaceFile(GuardIndexPath(cacheDir), []byte(b.String()), 0o600)
 }
 
 // writeGuardRefs writes every file that defines or references a symbol, keyed by the
@@ -216,28 +216,7 @@ func writeGuardRefs(dst string, g *Graph, symbols map[string]types.KnowledgeNode
 	}
 	slices.Sort(lines)
 	lines = slices.Compact(lines)
-	return writeAtomic(dst, strings.Join(lines, "\n")+"\n")
-}
-
-func writeAtomic(dst, content string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+"-*")
-	if err != nil {
-		return err
-	}
-	_, err = tmp.WriteString(content)
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Rename(tmp.Name(), dst)
-	}
-	if err != nil {
-		return errors.Join(err, os.Remove(tmp.Name()))
-	}
-	return nil
+	return file.ReplaceFile(dst, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }
 
 // guardSourceFiles lists the workspace-relative files any indexed kind is derived from,

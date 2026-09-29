@@ -1103,30 +1103,14 @@ func TestVendoredHostSchemasMatchTheirRecordedDigest(t *testing.T) {
 // temp-file rename or takes an flock itself instead of calling internal/file. It only
 // shrinks: TestStoreMechanicsLiveInInternalFile fails on an entry whose site is gone.
 var storeMechanicsAllowed = map[string]string{
-	"internal/cache/artifact.go:copyBlob":                     "streams a blob into the CAS, hashing as it copies",
-	"internal/cache/snapshot.go:Cache.snapshotOne":            "streams a blob into the CAS, hashing as it copies",
-	"internal/queue/verdicts.go:VerdictDir.WritePlan":         "publishes a directory, not a file",
-	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle":  "publishes a directory, not a file",
-	"lock.go:projectLocker.acquire":                           "a project lock waits unbounded with a heartbeat: its holder is a build",
-	"lock.go:lockIsHeld":                                      "probes a project lock without holding it",
-	"pipe.go:GatePipe":                                        "a project lock waits unbounded with a heartbeat: its holder is a build",
-	"pipe.go:projectLocker.publishHolds":                      "a project lock waits unbounded with a heartbeat: its holder is a build",
-	"cmd/magus-utils/release.go:runCut":                       "pending migration onto internal/file",
-	"guard.go:writePending":                                   "pending migration onto internal/file",
-	"internal/auth/token.go:atomicWriteSecret":                "pending migration onto internal/file",
-	"internal/cache/inflight.go:inflight.flushLocked":         "pending migration onto internal/file",
-	"internal/cache/remote_fs.go:FSRemoteBackend.PutArtifact": "pending migration onto internal/file",
-	"internal/graph/knowledge/guard_index.go:writeAtomic":     "pending migration onto internal/file",
-	"internal/guard/policy.go:writePolicyMarker":              "pending migration onto internal/file",
-	"internal/guard/spawn_rule.go:writeAgentMarker":           "pending migration onto internal/file",
-	"internal/hint/served_next.go:AppendServedNext":           "pending migration onto internal/file",
-	"internal/hint/served_next.go:rotateServedNext":           "pending migration onto internal/file",
-	"internal/job/checkout.go:Store.Bind":                     "pending migration onto internal/file",
-	"internal/review/receipt.go:Record":                       "pending migration onto internal/file",
-	"internal/sessions/rotate.go:claimStalePruneStamp":        "pending migration onto internal/file",
-	"internal/trail/trail.go:rotate":                          "pending migration onto internal/file",
-	"internal/trail/trail.go:WriteBlob":                       "pending migration onto internal/file",
-	"std/pipe.go:exportArtifact":                              "pending migration onto internal/file",
+	"internal/cache/artifact.go:copyBlob":                    "streams a blob into the CAS, hashing as it copies",
+	"internal/cache/snapshot.go:Cache.snapshotOne":           "streams a blob into the CAS, hashing as it copies",
+	"internal/queue/verdicts.go:VerdictDir.WritePlan":        "publishes a directory, not a file",
+	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
+	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"lock.go:lockIsHeld":                                     "probes a project lock without holding it",
+	"pipe.go:GatePipe":                                       "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 
 // storeMechanicsSkipDirs are trees the rule does not govern. libs/ holds modules of their

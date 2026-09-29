@@ -12,8 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 )
 
@@ -38,12 +37,12 @@ const (
 	// servedNextLockWait bounds how long a writer waits for the journal. Past it the
 	// holder is stuck rather than busy, and a command answering a reader must not
 	// block on its own accounting.
-	servedNextLockWait  = 2 * time.Second
-	servedNextLockRetry = 5 * time.Millisecond
+	servedNextLockWait = 2 * time.Second
 )
 
-// servedNextMu serializes this process's writers. The OS lock below serializes
-// processes and the server serves several tools at once, so both are needed.
+// servedNextMu queues this process's writers ahead of the OS lock. The server serves
+// several tools at once, and without it they would spend servedNextLockWait, which is
+// sized for a holder in another process, polling for each other.
 var servedNextMu sync.Mutex
 
 // ServedNextEntry is one journal line: when a breadcrumb was served, which id, and
@@ -96,42 +95,31 @@ func AppendServedNext(cacheDir string, next []Next) {
 
 	servedNextMu.Lock()
 	defer servedNextMu.Unlock()
-	lock := flock.New(journal + ".lock")
-	got, err := lock.TryLock()
-	if err != nil {
-		return
-	}
-	if !got {
-		// A bounded wait rather than a drop: a lost line is a command magus served and
-		// then refuses, and the holder is only ever appending a few hundred bytes.
-		wait, cancel := context.WithTimeout(context.Background(), servedNextLockWait)
-		defer cancel()
-		if got, err = lock.TryLockContext(wait, servedNextLockRetry); err != nil || !got {
-			return
+	// A bounded wait rather than a drop: a lost line is a command magus served and then
+	// refuses, and the holder is only ever appending a few hundred bytes.
+	_ = file.WithLock(context.Background(), journal+".lock", servedNextLockWait, func() error {
+		f, err := os.OpenFile(journal, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
 		}
-	}
-	defer func() { _ = lock.Unlock() }()
-
-	f, err := os.OpenFile(journal, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	for _, line := range lines {
-		// One line per Write, so a short write cannot leave half of the NEXT entry
-		// behind the tail of this one.
-		if _, err := f.Write(append(line, '\n')); err != nil {
-			break
+		for _, line := range lines {
+			// One line per Write, so a short write cannot leave half of the NEXT entry
+			// behind the tail of this one.
+			if _, err := f.Write(append(line, '\n')); err != nil {
+				break
+			}
 		}
-	}
-	if err := f.Close(); err != nil {
-		return
-	}
-	rotateServedNext(journal)
+		if err := f.Close(); err != nil {
+			return err
+		}
+		rotateServedNext(journal)
+		return nil
+	})
 }
 
 // rotateServedNext trims the journal to its newest servedNextKept lines. The caller
-// holds the lock; the rewrite goes through a sibling and a rename so a reader never
-// meets a truncated file.
+// holds the lock; the rewrite replaces the file whole so a reader never meets a
+// truncated one.
 func rotateServedNext(journal string) {
 	raw, err := os.ReadFile(journal)
 	if err != nil {
@@ -142,13 +130,7 @@ func rotateServedNext(journal string) {
 		return
 	}
 	kept := append(bytes.Join(lines[len(lines)-servedNextKept:], []byte("\n")), '\n')
-	tmp := journal + ".tmp"
-	if err := os.WriteFile(tmp, kept, 0o644); err != nil {
-		return
-	}
-	if err := os.Rename(tmp, journal); err != nil {
-		_ = os.Remove(tmp)
-	}
+	_ = file.ReplaceFile(journal, kept, 0o644)
 }
 
 // ReadServedNext returns every journal entry under cacheDir, oldest first. A line

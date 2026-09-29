@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -321,6 +322,24 @@ func TestApprovedReaderReadsCleanFilesFromDiskWithoutABatch(t *testing.T) {
 	got, err = approvedReader(t.Context(), h, nil)(edited)
 	require.NoError(t, err)
 	assert.Equal(t, "committed\n", string(got), "a batched authority does not trust disk")
+}
+
+// The recorded answer is the guard's own state, private to its owner.
+func TestWritePendingIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	ws := t.TempDir()
+	writePending(ws, []string{"hack"}, "fp", []string{"hack/a.buzz"})
+
+	got, ok := readPending(ws, []string{"hack"}, "fp")
+	require.True(t, ok)
+	assert.Equal(t, []string{"hack/a.buzz"}, got)
+	path, ok := pendingCacheFile(ws, []string{"hack"})
+	require.True(t, ok)
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
 func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {

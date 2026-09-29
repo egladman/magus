@@ -15,6 +15,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -176,18 +177,8 @@ func (s *Store) Bind(c Caller, id string) error {
 	if path == "" {
 		return fmt.Errorf("job: bind: %w", cmp.Or(s.err, errors.New("no state dir or cache dir to key the binding by")))
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("job: bind: %w", err)
-	}
-	// Through a rename: the caller's own hooks may be reading it already.
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("job: bind: %w", err)
-	}
-	_, werr := tmp.WriteString(id + "\n")
-	cerr := tmp.Close()
-	if err := cmp.Or(werr, cerr, os.Rename(tmp.Name(), path)); err != nil {
-		_ = os.Remove(tmp.Name())
+	// Replaced whole: the caller's own hooks may be reading it already.
+	if err := file.ReplaceFile(path, []byte(id+"\n"), 0o600); err != nil {
 		return fmt.Errorf("job: bind: %w", err)
 	}
 	return nil

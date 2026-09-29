@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -311,6 +312,21 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	lease, from := ActingLease(cacheDir, "")
 	assert.Equal(t, "wave/worker", lease, "a marker-shaped file in the cache dir binds nothing")
 	assert.Equal(t, types.LeaseSourceMarker, from)
+}
+
+// A binding is state private to its owner.
+func TestBindRecordIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("BAGGAGE", "")
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+
+	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
+	fi, err := os.Stat(MarkerPath(cacheDir))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
 // An identified caller's binding is the repository's, not a checkout's: a worktree of the

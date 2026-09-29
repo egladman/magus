@@ -31,7 +31,8 @@ const lockRetryDelay = 20 * time.Millisecond
 // The wait is bounded by wait and by ctx, whichever ends first; ctx shortens the wait
 // and never lengthens it. The error says which ended it, because a caller cancelled by
 // its own deadline and a caller blocked by a stuck holder have different problems.
-// fn does not run when the lock is not acquired.
+// A zero wait tries once, for a caller that skips its work rather than repeat what the
+// holder is doing. fn does not run when the lock is not acquired.
 func WithLock(ctx context.Context, path string, wait time.Duration, fn func() error) (err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("file: lock %s: %w", path, err)

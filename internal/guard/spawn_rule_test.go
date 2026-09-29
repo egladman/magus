@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -607,6 +608,19 @@ func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
 			assert.Equal(t, tc.want, *got)
 		})
 	}
+}
+
+// An agent record is published 0644, not with its temp file's 0600.
+func TestAgentMarkerMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	facts := hint.NewGate(t.TempDir(), FactsKey("claude-code", "8f2c6a1e"))
+	writeSpawnedAgent(facts, "a1b2c3", spawnedAgent{})
+
+	fi, err := os.Stat(hint.MarkerPath(facts.CacheDir(), facts.Session(), spawnedAgentKind("a1b2c3")))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
 }
 
 // A stop for an agent magus never saw spawned still records its size, and a transcript

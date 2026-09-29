@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -218,24 +219,11 @@ func writePending(workspace string, scope []string, fp string, pending []string)
 	if !ok {
 		return
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return
-	}
 	body := fp + "\n" + strings.Join(pending, "\n")
 	if len(pending) > 0 {
 		body += "\n"
 	}
-	f, err := os.CreateTemp(dir, ".partial-")
-	if err != nil {
-		return
-	}
-	tmp := f.Name()
-	_, werr := f.WriteString(body)
-	cerr := f.Close()
-	if werr != nil || cerr != nil || os.Rename(tmp, path) != nil {
-		_ = os.Remove(tmp)
-	}
+	_ = file.ReplaceFile(path, []byte(body), 0o600)
 }
 
 // pendingFingerprint identifies the worktree state Pending would ask the tool

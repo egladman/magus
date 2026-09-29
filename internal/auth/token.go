@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -55,41 +56,17 @@ func SaveOperator(token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := atomicWriteSecret(path, []byte(token+"\n")); err != nil {
-		return "", err
+	dir := filepath.Dir(path)
+	// 0700 here, since WriteFileAtomic would create a missing directory 0755.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("auth: create %s: %w", dir, err)
+	}
+	// Synced: a crash that left the file empty would stop the server starting until the
+	// token is reissued.
+	if err := file.WriteFileAtomic(path, []byte(token+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("auth: install token: %w", err)
 	}
 	return path, nil
-}
-
-// atomicWriteSecret writes data to path at 0600 via a temp file and rename, so a concurrent
-// reader never observes a half-written secret. It creates the parent dir at 0700.
-func atomicWriteSecret(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("auth: create %s: %w", dir, err)
-	}
-	tmp, err := os.CreateTemp(dir, ".secret-*")
-	if err != nil {
-		return fmt.Errorf("auth: create temp: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }()
-
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("auth: chmod temp: %w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("auth: write temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("auth: close temp: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("auth: install secret: %w", err)
-	}
-	return nil
 }
 
 // SaveNewOperator writes token only if no operator token file exists yet. The O_EXCL create is

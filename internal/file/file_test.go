@@ -1,10 +1,14 @@
 package file
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,4 +72,25 @@ func TestWriteFileAtomic_FailedRenameRemovesTemp(t *testing.T) {
 		names = append(names, e.Name())
 	}
 	assert.Equal(t, []string{"occupied"}, names)
+}
+
+// A stream that fails partway leaves the previous file whole and no temp beside it.
+func TestWriteFromFailedReadKeepsTheOldFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "artifact")
+	require.NoError(t, WriteFrom(path, strings.NewReader("old"), 0o755))
+
+	boom := errors.New("boom")
+	err := WriteFrom(path, io.MultiReader(strings.NewReader("half"), iotest.ErrReader(boom)), 0o644)
+	require.ErrorIs(t, err, boom)
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(got))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "no temp file left beside the target")
+	if fi, err := os.Stat(path); assert.NoError(t, err) && runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o755), fi.Mode().Perm())
+	}
 }

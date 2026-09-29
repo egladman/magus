@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -545,6 +546,38 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
 	require.Equal(t, Event{Ts: int64(maxEvents + 5), Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK}, got[0])
 	require.Equal(t, Event{Ts: 6, Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK}, got[len(got)-1])
+}
+
+// A blob is a whole tool payload, so it stays private to its owner.
+func TestWriteBlob_IsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	dir := t.TempDir()
+	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("payload"))
+	require.NotEmpty(t, ref)
+
+	fi, err := os.Stat(filepath.Join(blobsPath(dir), ref))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
+
+// A rotate keeps the mode Append creates the trail with, rather than its temp file's 0600.
+func TestRotate_KeepsTheTrailMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	dir := t.TempDir()
+	seedEvents(t, dir, maxEvents+5)
+	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
+
+	Rotate(dir)
+	got, err := ReadRecent(dir, maxEvents+100)
+	require.NoError(t, err)
+	require.Len(t, got, maxEvents, "the rotate ran")
+	fi, err := os.Stat(eventsPath(dir))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
 }
 
 // TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an
