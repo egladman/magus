@@ -32,6 +32,7 @@ import "site/diagrams/buzz-engine" as _;
 import "site/diagrams/merge-queue-risk" as _;
 import "site/diagrams/workspace-load" as _;
 import "site/diagrams/inputs-outputs" as _;
+import "site/diagrams/bootstrap" as _;
 // The observed halves diagrams-observe writes, one per figure with a scope. Aliased, never
 // flat: a flat import is skipped when its basename is already bound, and each shares its
 // basename with the declared figure imported above.
@@ -51,6 +52,7 @@ import "site/diagrams/gen/buzz-engine" as buzzEngineGen;
 import "site/diagrams/gen/merge-queue-risk" as mergeQueueRiskGen;
 import "site/diagrams/gen/workspace-load" as workspaceLoadGen;
 import "site/diagrams/gen/inputs-outputs" as inputsOutputsGen;
+import "site/diagrams/gen/bootstrap" as bootstrapGen;
 
 // allDiagrams lays out every registered figure. Throws the first figure's layout findings,
 // so a figure that cannot be drawn cleanly fails every consumer rather than shipping.
@@ -77,6 +79,7 @@ export fun allDiagrams() > [Diagram] !> str {
         mergeQueueRiskDiagram(),
         workspaceLoadDiagram(),
         inputsOutputsDiagram(),
+        bootstrapDiagram(),
     ];
 }
 
@@ -99,6 +102,7 @@ export fun observedFor(id: str) > Observed? {
     if (id == "merge-queue-risk") { return mergeQueueRiskGen\mergeQueueRiskObserved(); }
     if (id == "workspace-load") { return workspaceLoadGen\workspaceLoadObserved(); }
     if (id == "inputs-outputs") { return inputsOutputsGen\inputsOutputsObserved(); }
+    if (id == "bootstrap") { return bootstrapGen\bootstrapObserved(); }
     return null;
 }
 

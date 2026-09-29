@@ -1,0 +1,81 @@
+// site/diagrams/bootstrap.buzz: how a checkout gets its first ./magus, and why it only ever needs one bare go build.
+//
+// The figure has one claim: a bare go build is a primitive magus allows exactly once, when
+// there is no magus to run; everything after is magus building magus. The accent is that
+// one build and the escape that returns to it.
+//
+// The rules it draws, as the code states them:
+//   internal/guard/catalog.go:171   "One build is exempt, in a checkout of magus itself:
+//                                    `go build -o magus ./cmd/magus`, alone on its line, into a
+//                                    checkout root that has no `magus` binary yet"
+//   internal/guard/catalog.go:172   "Once the binary exists the deny applies again and names
+//                                    `./magus run go-build .`"
+//   internal/guard/bootstrap.go:133 "Not a bootstrap: <root> already has a magus binary."
+//   internal/guard/bootstrap.go:135 "The bootstrap build is exempt only alone on its line."
+//   magusfile.buzz:478              "The stamp is read AFTER spells_generate, so it records the
+//                                    bytecode this link embeds."
+//   tools/policy/stale.buzz:140     "./magus carries no go-build stamp: it was linked by a bare
+//                                    `go build` (the bootstrap)"
+//   cmd/magus/bootstrap_exec.go:62  "magus: using this workspace's own binary at %s instead of %s"
+//   tools/policy/stale.buzz:291     "a binary that cannot load the tree cannot rebuild itself",
+//                                    then `mv magus magus.old`, `go build -o magus ./cmd/magus`,
+//                                    then `./magus run go-build .`
+//   stale_build.go:59               MGS1021: "This binary was built from this checkout's own
+//                                    sources and predates them, so it cannot rebuild itself"
+//
+// The escape is the one edge against the flow: moving the stale binary aside puts the
+// checkout back in the state the exemption names, so the bare link is again the first
+// build rather than a second primitive. The hook runs magus as a process, so that
+// connector claims calls, and the CLI's hop into the guard is an import. go-build, the
+// stale policy and the spell bytecode are Buzz and embedded files no import graph
+// records, and the rule and its exemption share a package, so the rest claim flow.
+namespace bootstrap;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/bootstrap" as bootstrapGen;
+
+export fun bootstrapDiagram() > Diagram !> str {
+    return flow("bootstrap", observed: bootstrapGen\bootstrapObserved())
+        .down()
+        .eyebrow("bootstrap")
+        .title("One bare go build, then magus builds magus")
+        .desc("In a checkout with no ./magus, the guard's raw-tool rule lets exactly one "
+            + "go build -o magus ./cmd/magus through, alone on its line. From then on the "
+            + "rule denies it and names ./magus run go-build ., which regenerates the "
+            + "spell bytecode first and links a stamp of the sources the binary was built "
+            + "from. The magus on PATH re-execs that ./magus; the stale policy compares its "
+            + "stamp with the checkout, and when a binary can no longer load the tree the "
+            + "escape moves it aside, which is the one way back to the bare build.")
+        .node("person", label: "Person or hook", sub: "shell or PreToolUse", role: Role.external)
+        .node("cli", label: "magus on PATH", sub: "re-execs ./magus", anchor: "cmd/magus")
+        .node("rule", label: "Raw-tool rule", sub: "denies go build", anchor: "internal/guard")
+        .node("exempt", label: "Bootstrap link", sub: "go build, alone", role: Role.focal, anchor: "internal/guard/bootstrap.go")
+        .node("target", label: "go-build", sub: "link, then stamp", tag: "target", anchor: "magusfile.buzz")
+        .node("spells", label: "Spell bytecode", sub: "spells-generate", role: Role.store, anchor: "internal/spell/gen")
+        .node("stamp", label: "Build stamp", sub: "linked into ./magus", anchor: "internal/interp/bindings")
+        .node("stale", label: "Stale policy", sub: "stamp vs sources", role: Role.input, anchor: "tools/policy/stale.buzz")
+        .node("escape", label: "Relink escape", sub: "stale_build.go", anchor: ".")
+        .edge("person", dst: "cli", label: "runs magus", claim: Claim.calls)
+        .edge("cli", dst: "rule", label: "judges", claim: Claim.imports)
+        .edge("rule", dst: "exempt", label: "no ./magus")
+        .edge("exempt", dst: "target", label: "then stamp")
+        .edge("target", dst: "spells", label: "first")
+        .edge("target", dst: "stale", label: "buildStamp")
+        .edge("target", dst: "stamp", label: "-X link")
+        .edge("stale", dst: "stamp", label: "reads")
+        .edge("stale", dst: "escape", label: "decls moved")
+        .edge("escape", dst: "exempt", label: "mv magus.old", role: EdgeRole.focal)
+        .zone("go build, once", members: ["rule", "exempt"])
+        .zone("magus builds magus", members: ["target", "spells", "stamp"])
+        .zone("kept fresh", members: ["stale", "escape"])
+        .legend(Role.focal, label: "the one bare go build")
+        .legend(Role.external, label: "outside magus")
+        .legend(Role.store, label: "embedded in the binary")
+        .legend(Role.input, label: "this repo's rules")
+        .scope(["cmd/magus", "internal/guard", "internal/interp/bindings", "."])
+        .omitEdge("cli", dst: "stamp", why: "the CLI imports the bindings to run any magusfile; the stamp reaches them by go-build's -X flag, drawn from go-build")
+        .omitEdge("cli", dst: "escape", why: "the CLI loads the tree through the root package, which appends the relink to MGS1021; drawn from the stale policy, whose advisory names it before the load fails")
+        .omitEdge("rule", dst: "escape", why: "the guard reads its own module path off magus.Magus (bootstrap.go:20) to know a checkout of magus; it raises no escape")
+        .diagram();
+}

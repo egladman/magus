@@ -426,6 +426,13 @@ GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build .   # bootstrap only
 
 `GOEXPERIMENT=jsonv2` is not optional: [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml) sets it for this repository, so a build without it differs from every other build here and shows up later as generated-file drift that is not yours.
 
+Under an agent hook the guard holds that order: it lets `go build -o magus ./cmd/magus` through once, alone on its line, in a checkout with no `./magus`, and denies every raw build after that in favor of `./magus run go-build .`.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-bootstrap-light.svg">
+  <img alt="A bare go build is allowed once, in a checkout with no ./magus; go-build then links and stamps every later binary, and the relink escape is the only way back to the bare build" src="docs/assets/gen/diagram-bootstrap.svg">
+</picture>
+
 ### Running the tests
 
 Run the tests through magus itself, since the whole point is that magus builds and tests magus:
