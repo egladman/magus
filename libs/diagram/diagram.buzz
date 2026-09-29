@@ -7,6 +7,9 @@
 // tokens, type ramp, node treatments, orthogonal connectors - plus a validator that turns
 // the skill's non-negotiable rules into a build failure.
 //
+// flow.buzz beside it is the opt-in exception: it places a declared graph and hands this
+// module the same Diagram.
+//
 // Two palettes, one geometry. cssVarPalette() emits `var(--magus-diagram-*)` so an SVG
 // inlined into a docs page follows the site's manual theme toggle; lightPalette() and
 // darkPalette() resolve to hex for the standalone files GitHub loads through <img>, which
@@ -21,7 +24,7 @@ import "assert";
 // reached through the magusfile's graph rather than run directly, and a renderer with no
 // cross-module dependency is worth more here than three deduplicated lines.
 fun escapeSvg(s: str) > str {
-    return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+    return s.replace("&", with: "&amp;").replace("\"", with: "&quot;").replace("<", with: "&lt;").replace(">", with: "&gt;");
 }
 
 // Grid is the hard rule from the design system: every authored coordinate, size and gap is
@@ -201,6 +204,12 @@ export object Edge {
     dstSlot: int = 1,
     dstSlots: int = 1,
     bend: int = 0,
+    // Interior corners x1,y1,x2,y2,... of an orthogonal polyline on the grid. Non-empty
+    // replaces the single bend, which cannot route around a column in the way.
+    via: [int] = [<int>],
+    // What the connector asserts about the code: "flow" (narrative, unchecked),
+    // "imports" or "calls". Only a drift check reads it; the painters ignore it.
+    claim: str = "flow",
 }
 
 // Zone is a labeled container drawn behind the nodes it groups. Zones are painted first,
@@ -239,6 +248,10 @@ export object Diagram {
     nodes: [Node] = [<Node>],
     edges: [Edge] = [<Edge>],
     legend: [LegendItem] = [<LegendItem>],
+    // Globs of the tree this figure claims to depict, and the paths under them it leaves
+    // out on purpose, each with its reason. Read by a drift check, never by the painters.
+    scope: [str] = [<str>],
+    omits: {str: str} = {<str: str>},
 }
 
 fun iabs(n: int) > int {
@@ -286,10 +299,22 @@ fun isDecision(d: Diagram, id: str) > bool {
 }
 
 // edgeSegments returns an edge's route as axis-aligned segments, each [x1, y1, x2, y2].
-// It mirrors connectorPath's branching exactly; the two must agree, or the overlap check
+// It mirrors connectorPath's and routePath's branching exactly; they must agree, or the overlap check
 // below is validating a route nobody draws.
 fun edgeSegments(d: Diagram, e: Edge) > [[int]] {
     final geo = edgeGeometry(d, e);
+    if (e.via.len() > 0) {
+        final pts = edgePoints(geo, e);
+        final segs: mut [[int]] = mut [<[int]>];
+        var i = 2;
+        while (i + 1 < pts.len()) {
+            if (pts[i - 2] != pts[i] or pts[i - 1] != pts[i + 1]) {
+                segs.append([pts[i - 2], pts[i - 1], pts[i], pts[i + 1]]);
+            }
+            i = i + 2;
+        }
+        return segs;
+    }
     final x1 = geo[0];
     final y1 = geo[1];
     final x2 = geo[2];
@@ -305,6 +330,16 @@ fun edgeSegments(d: Diagram, e: Edge) > [[int]] {
     var by = e.bend;
     if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
     return [[x1, y1, x1, by], [x1, by, x2, by], [x2, by, x2, y2]];
+}
+
+// edgePoints flattens a via route to x,y pairs from the source attach point to the
+// destination's, given the edge's resolved geometry.
+fun edgePoints(geo: [int], e: Edge) > [int] {
+    final pts: mut [int] = mut [geo[0], geo[1]];
+    foreach (v in e.via) { pts.append(v); }
+    pts.append(geo[2]);
+    pts.append(geo[3]);
+    return pts;
 }
 
 // segmentsOverlap reports whether two axis-aligned segments run along the SAME line and
@@ -444,10 +479,37 @@ export fun validate(d: Diagram) > [str] {
         if (isDecision(d, e.dst) and e.dstSlots > 1) {
             errs.append("edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond");
         }
+        foreach (msg in viaFindings(d, e)) { errs.append(msg); }
     }
 
     foreach (msg in sharedAttachPoints(d)) { errs.append(msg); }
     foreach (msg in overlappingConnectors(d)) { errs.append(msg); }
+    return errs;
+}
+
+// viaFindings holds a polyline to the rules connectorPath enforces by construction: every
+// corner on the grid, and every leg axis-aligned, so a via cannot smuggle in a diagonal.
+fun viaFindings(d: Diagram, e: Edge) > [str] {
+    final errs: mut [str] = mut [<str>];
+    if (e.via.len() == 0) { return errs; }
+    if (e.via.len() % 2 != 0) {
+        errs.append("edge {e.src}->{e.dst}: via carries {e.via.len()} coordinates; it takes x,y pairs");
+        return errs;
+    }
+    foreach (v in e.via) {
+        if (onGrid(v) == false) {
+            errs.append("edge {e.src}->{e.dst}: via coordinate {v} is off the {Grid}px grid");
+        }
+    }
+    if (findNode(d, e.src) == null or findNode(d, e.dst) == null) { return errs; }
+    final pts = edgePoints(edgeGeometry(d, e), e);
+    var i = 2;
+    while (i + 1 < pts.len()) {
+        if (pts[i - 2] != pts[i] and pts[i - 1] != pts[i + 1]) {
+            errs.append("edge {e.src}->{e.dst}: via runs diagonally from {pts[i - 2]},{pts[i - 1]} to {pts[i]},{pts[i + 1]}");
+        }
+        i = i + 2;
+    }
     return errs;
 }
 
@@ -571,6 +633,41 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
         + " L {x2 - sx * r} {by}"
         + " Q {x2} {by} {x2} {by + sy2 * r}"
         + " L {x2} {y2}";
+}
+
+// routePath is connectorPath for a polyline of x,y pairs: one rounded bend per interior
+// corner. A corner may take all of an end leg but only half of an inner one, which the
+// corner at its other end shares.
+fun routePath(pts: [int], radius: int) > str {
+    final n = pts.len() / 2;
+    final parts: mut [str] = mut ["M {pts[0]} {pts[1]}"];
+    var i = 1;
+    while (i < n - 1) {
+        final px = pts[2 * i - 2];
+        final py = pts[2 * i - 1];
+        final cx = pts[2 * i];
+        final cy = pts[2 * i + 1];
+        final nx = pts[2 * i + 2];
+        final ny = pts[2 * i + 3];
+        var inLen = iabs(cx - px) + iabs(cy - py);
+        var outLen = iabs(nx - cx) + iabs(ny - cy);
+        if (i > 1) { inLen = inLen / 2; }
+        if (i < n - 2) { outLen = outLen / 2; }
+        final r = imin(radius, imin(inLen, outLen));
+        if (r <= 0) {
+            parts.append("L {cx} {cy}");
+        } else {
+            final ix = isign(cx - px);
+            final iy = isign(cy - py);
+            final ox = isign(nx - cx);
+            final oy = isign(ny - cy);
+            parts.append("L {cx - ix * r} {cy - iy * r}");
+            parts.append("Q {cx} {cy} {cx + ox * r} {cy + oy * r}");
+        }
+        i = i + 1;
+    }
+    parts.append("L {pts[2 * n - 2]} {pts[2 * n - 1]}");
+    return parts.join(" ");
 }
 
 // nodeFill and nodeStroke implement the role-to-treatment table. Roles the table does not
@@ -743,7 +840,13 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     final geo = edgeGeometry(d, e);
     var dash = "";
     if (e.dashed) { dash = " stroke-dasharray=\"{s.edgeDash}\""; }
-    return "<path d=\"" + connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: s.bendRadius) + "\""
+    var route = "";
+    if (e.via.len() > 0) {
+        route = routePath(edgePoints(geo, e), radius: s.bendRadius);
+    } else {
+        route = connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: s.bendRadius);
+    }
+    return "<path d=\"" + route + "\""
         + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
 }
@@ -776,16 +879,29 @@ fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     final y2 = geo[3];
     final w = snap(e.label.len() * 5 + 12);
 
+    // A polyline has no single crossing segment, so the label rides its longest leg, the
+    // one with the most open canvas beside it.
+    if (e.via.len() > 0) {
+        var best: [int] = [x1, y1, x2, y2];
+        var bestLen = 0 - 1;
+        foreach (seg in edgeSegments(d, e)) {
+            final len = iabs(seg[2] - seg[0]) + iabs(seg[3] - seg[1]);
+            if (len > bestLen) {
+                best = seg;
+                bestLen = len;
+            }
+        }
+        if (best[0] == best[2]) {
+            return edgeLabelChip(best[0] + 12 + w / 2, snap(best[1] + (best[3] - best[1]) / 2), w, e, p, s);
+        }
+        return edgeLabelChip(snap(best[0] + (best[2] - best[0]) / 2), best[1] - 14, w, e, p, s);
+    }
+
     // A straight vertical run has no horizontal segment to sit above, and the usual
     // placement would center the opaque mask on the stroke, hiding the connector the label
     // names. Put it beside the line instead, with the same 10px gap.
     if (x1 == x2) {
-        final lx = x1 + 12 + w / 2;
-        final vy = snap(y1 + (y2 - y1) / 2);
-        return "<rect x=\"{lx - w / 2}\" y=\"{vy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-            + "<text x=\"{lx}\" y=\"{vy + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
-            + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
+        return edgeLabelChip(x1 + 12 + w / 2, snap(y1 + (y2 - y1) / 2), w, e, p, s);
     }
 
     // Center on the crossing segment: its midpoint is open canvas by construction, whereas
@@ -801,10 +917,14 @@ fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
         if (e.bend != 0) { my = e.bend; }
         mx = snap(x1 + (x2 - x1) / 2);
     }
-    final ly = my - 14;
+    return edgeLabelChip(mx, my - 14, w, e, p, s);
+}
 
-    return "<rect x=\"{mx - w / 2}\" y=\"{ly - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-        + "<text x=\"{mx}\" y=\"{ly + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
+// edgeLabelChip paints the label centered on cx with its baseline just under cy, over an
+// opaque mask w wide.
+fun edgeLabelChip(cx: int, cy: int, w: int, e: Edge, p: Palette, s: Style) > str {
+    return "<rect x=\"{cx - w / 2}\" y=\"{cy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
+        + "<text x=\"{cx}\" y=\"{cy + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
         + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
         + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
 }
@@ -1083,6 +1203,32 @@ test "a shared axis with no bend still routes straight" {
     assert\equal(connectorPath(0, 40, 200, 40, true, 0, radius: defaultStyle().bendRadius), "M 0 40 L 200 40", "unchanged");
 }
 
+test "a via route rounds every corner" {
+    assert\equal(routePath([0, 0, 40, 0, 40, 80, 120, 80, 120, 120], radius: 8),
+        "M 0 0 L 32 0 Q 40 0 40 8 L 40 72 Q 40 80 48 80 L 112 80 Q 120 80 120 88 L 120 120",
+        "three corners, three quarter-rounds");
+}
+
+// The via legs feed the same overlap check a single-bend route does, and a diagonal leg
+// is a finding rather than something the painter quietly draws.
+test "a via route is validated leg by leg" {
+    final base = twoBox();
+    final routed = Diagram{
+        id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left", via = [240, 140] },
+            Edge{ src = "a", dst = "b", srcSide = "bottom", dstSide = "bottom",
+                  via = [112, 200, 368, 200] },
+        ],
+    };
+    assert\equal(validate(routed).len(), 0, "a straight via and a return leg are sound");
+    final diagonal = Diagram{
+        id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+        edges = [ Edge{ src = "a", dst = "b", srcSide = "bottom", dstSide = "left", via = [112, 200, 240, 200] } ],
+    };
+    assert\equal(validate(diagonal).len(), 1, "the leg into b's left side runs diagonally");
+}
+
 // LayeredItem is one node handed to layered(): an id, its display label, and the ids it
 // depends on. Edges are declared by the dependent, matching how a dependency graph is
 // usually held.
@@ -1094,11 +1240,12 @@ export object LayeredItem {
 
 // Layout constants for the generated form. Wider columns than an authored figure uses,
 // because a generated label is a project or target name nobody shortened for the picture.
-final LayerNodeW = 216;
-final LayerNodeH = 56;
-final LayerColGap = 72;
-final LayerRowGap = 24;
-final LayerTop = 64;
+// Exported for flow.buzz, the other automatic placement, so the two share one geometry.
+export final LayerNodeW = 216;
+export final LayerNodeH = 56;
+export final LayerColGap = 72;
+export final LayerRowGap = 24;
+export final LayerTop = 64;
 
 // LayerMaxChars is what fits across a generated node at the 12px body size. A project
 // path longer than that is truncated from the FRONT: the tail (the project's own name) is
@@ -1113,8 +1260,8 @@ fun fitLabel(label: str) > str {
 // layered turns a dependency DAG into a Diagram: rank by longest path from the roots, one
 // column per rank, and the ranks left to right so every edge points forward.
 //
-// This is the ONLY automatic placement in the module, and it is deliberately the dumbest
-// thing that works: no crossing minimization, no barycentre passes. It exists because the
+// It is deliberately the dumbest placement that works: no crossing minimization, no
+// barycentre passes. flow.buzz is the one that has them, for authored figures. It exists because the
 // workspace's own dependency graph has no author to place it, and it stays honest by
 // staying small - callers cap the node count and fall back to the table above the figure.
 
@@ -1133,7 +1280,7 @@ fun fitLabel(label: str) > str {
 // falls back to. Six values used to be the whole search, and the docs run-order figure
 // needed more than that - it went unrendered for months while the graph had ample room
 // (its busiest column gap wants 10 channels of the 18 a gap provides).
-final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
+export final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
 
 export fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
     var best = layoutWithStagger(id, title, desc, items, LayerStaggers[0]);
