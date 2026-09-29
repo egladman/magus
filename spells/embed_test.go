@@ -15,7 +15,8 @@ import (
 // go:embed takes the files on disk, less any whose name starts with . or _, while a
 // release packs the files git tracks. The two must be one set, or the digest a binary
 // computes for a shipped spell names an artifact no release published. Every
-// spells/<dir> holding a spell.buzz ships, so a new spell is added to the go:embed line.
+// directory under spells/ holding a spell.buzz ships, experimental/ aside, so a new
+// top-level spell or nesting directory is added to the go:embed line.
 func TestShippedMatchesTrackedFiles(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed, so the tracked files cannot be listed")
@@ -25,35 +26,44 @@ func TestShippedMatchesTrackedFiles(t *testing.T) {
 	}
 	out, err := exec.Command("git", "ls-files", "-z", "--", ".").Output()
 	require.NoError(t, err)
-	tracked := map[string][]string{}
+	var tracked []string
 	for _, p := range strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00") {
-		if dir, rest, ok := strings.Cut(filepath.ToSlash(p), "/"); ok {
-			tracked[dir] = append(tracked[dir], rest)
+		if p = filepath.ToSlash(p); strings.Contains(p, "/") && !strings.HasPrefix(p, "experimental/") {
+			tracked = append(tracked, p)
 		}
 	}
+	trackedDirs := spellDirs(tracked)
 
-	var spellDirs []string
-	for dir, files := range tracked {
-		if slices.Contains(files, "spell.buzz") {
-			spellDirs = append(spellDirs, dir)
+	var embedded []string
+	require.NoError(t, fs.WalkDir(Shipped(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			embedded = append(embedded, p)
 		}
-	}
-	entries, err := fs.ReadDir(Shipped(), ".")
-	require.NoError(t, err)
-	var shippedDirs []string
-	for _, e := range entries {
-		shippedDirs = append(shippedDirs, e.Name())
-	}
-	assert.ElementsMatch(t, spellDirs, shippedDirs, "every spells/<dir> with a tracked spell.buzz ships, and nothing else")
+		return err
+	}))
+	shippedDirs := spellDirs(embedded)
+	require.NotEmpty(t, shippedDirs)
+	assert.ElementsMatch(t, trackedDirs, shippedDirs, "every spells/ directory with a tracked spell.buzz ships, and nothing else")
 
 	for _, dir := range shippedDirs {
-		var embedded []string
-		require.NoError(t, fs.WalkDir(Shipped(), dir, func(p string, d fs.DirEntry, err error) error {
-			if err == nil && !d.IsDir() {
-				embedded = append(embedded, strings.TrimPrefix(p, dir+"/"))
-			}
-			return err
-		}))
-		assert.ElementsMatch(t, tracked[dir], embedded, "spells/%s: embedded files vs git ls-files", dir)
+		inDir := func(files []string) []string {
+			return slices.DeleteFunc(slices.Clone(files), func(p string) bool { return !strings.HasPrefix(p, dir+"/") })
+		}
+		assert.ElementsMatch(t, inDir(tracked), inDir(embedded), "spells/%s: embedded files vs git ls-files", dir)
 	}
+	for _, p := range embedded {
+		assert.True(t, slices.ContainsFunc(shippedDirs, func(dir string) bool { return strings.HasPrefix(p, dir+"/") }),
+			"%s is embedded but belongs to no spell, so no artifact publishes it", p)
+	}
+}
+
+// spellDirs is the directory of every spell.buzz among files.
+func spellDirs(files []string) []string {
+	var dirs []string
+	for _, p := range files {
+		if dir, ok := strings.CutSuffix(p, "/spell.buzz"); ok {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }

@@ -514,11 +514,15 @@ func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
 // with ShippedProvenance: the digest a binary computes from its embedded copy is the
 // digest a release publishes.
 func TestShippedMatchesBuild(t *testing.T) {
-	entries, err := fs.ReadDir(spells.Shipped(), ".")
-	require.NoError(t, err)
-	require.NotEmpty(t, entries)
-	for _, e := range entries {
-		dir := e.Name()
+	var dirs []string
+	require.NoError(t, fs.WalkDir(spells.Shipped(), ".", func(p string, d fs.DirEntry, err error) error {
+		if dir, ok := strings.CutSuffix(p, "/spell.buzz"); ok && err == nil {
+			dirs = append(dirs, dir)
+		}
+		return err
+	}))
+	require.Contains(t, dirs, "harness/cursor", "a nested spell publishes through the same path")
+	for _, dir := range dirs {
 		ref, shipped, err := Shipped(dir, dir)
 		require.NoError(t, err, dir)
 		built, err := Build(t.Context(), filepath.Join("..", "..", "..", "spells", dir), allTracked{}, ShippedProvenance(dir))

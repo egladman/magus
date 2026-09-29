@@ -450,6 +450,38 @@ jobs:
           REASON: the ${{ github.ref_name }} release
         run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"
 
+  # Every spell the binary ships, one GHCR repository each, tagged with the release version.
+  # After publish, so a spell never names a release that failed to go out. The artifacts are
+  # packed from the binary setup-magus builds at this tag, the same bytes `magus spell pull
+  # magus/spell/<name>` stamps a copy with. A new GHCR package is private until someone
+  # makes it public in the package settings; magus cannot do that for you.
+  spells:
+    name: Publish spells
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # push to GHCR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags, so spell-publish reads the release version off the tag HEAD sits on.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+
+      # The credentials image-login uses, under the names GHCR_SPELLS declares. Each token
+      # reaches `magus spell push` on stdin, never an argv.
+      - name: Publish spells
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: magus run spell-publish:cd --no-default-charms
+
   image:
     name: Publish container images
     needs: publish

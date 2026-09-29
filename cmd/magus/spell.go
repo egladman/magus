@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"maps"
 	"net/http"
 	"os"
@@ -51,9 +52,9 @@ func spellUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  build    pack a spell directory and print the manifest digest a push would produce")
-	fmt.Fprintln(os.Stderr, "  push     publish a spell directory as an OCI artifact and print its pinned reference")
+	fmt.Fprintln(os.Stderr, "  push     publish a spell directory, or one magus ships, as an OCI artifact and print its pinned reference")
 	fmt.Fprintln(os.Stderr, "  pull     fetch and verify a published spell into the cache or a directory, or copy out one magus ships")
-	fmt.Fprintln(os.Stderr, "  ls       list a spell repository's tags")
+	fmt.Fprintln(os.Stderr, "  ls       list a spell repository's tags, or the spells magus ships")
 	fmt.Fprintln(os.Stderr, "  lock     verify magus.lock against magus.yaml, or rewrite it with --update")
 }
 
@@ -135,18 +136,50 @@ func buildSpell(ctx context.Context, root, dir, source string) (oci.Content, spe
 	if err != nil {
 		return oci.Content{}, spellBuildResult{}, err
 	}
-	_, d, err := content.Manifest()
+	res, err := describeSpellContent(content)
+	return content, res, err
+}
+
+// buildShippedSpell is the artifact a release publishes for the spell magus ships as
+// name, exactly as remotespell.Shipped packs it, so a push writes the digest eject stamps.
+func buildShippedSpell(name string) (oci.Content, spellBuildResult, error) {
+	dir, err := shippedSpellDir(name)
 	if err != nil {
 		return oci.Content{}, spellBuildResult{}, err
 	}
+	_, content, err := remotespell.Shipped(name, dir)
+	if err != nil {
+		return oci.Content{}, spellBuildResult{}, err
+	}
+	res, err := describeSpellContent(content)
+	return content, res, err
+}
+
+func describeSpellContent(content oci.Content) (spellBuildResult, error) {
+	_, d, err := content.Manifest()
+	if err != nil {
+		return spellBuildResult{}, err
+	}
 	layer := content.Layers[0].Payload
-	return content, spellBuildResult{
+	return spellBuildResult{
 		Digest:      d,
 		Layer:       digest.FromBytes(layer),
 		Size:        int64(len(layer)),
 		Annotations: content.Annotations,
 	}, nil
 }
+
+func shippedSpellDir(name string) (string, error) {
+	dir, ok := spell.ShippedDir(name)
+	if !ok {
+		return "", fmt.Errorf("magus ships no spell %q; `magus spell ls %s` lists them", name, shippedSpellsPath)
+	}
+	return dir, nil
+}
+
+// shippedSpellsPath is what `spell ls` takes to list the spells magus ships: the
+// magus/spell/<name> import form with no name.
+var shippedSpellsPath = strings.TrimSuffix(spells.ModulePrefix, "/")
 
 func spellPush(ctx context.Context, root string, args []string) error {
 	var user, source string
@@ -163,6 +196,11 @@ func spellPush(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "so one commit publishes to one digest on every machine. Each --tag is one more")
 			fmt.Fprintln(os.Stderr, "manifest PUT; no blob is uploaded twice.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "       magus spell push magus/spell/<name> <registry>/<repository>:<tag>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Publish a spell magus ships, packed from this binary: the artifact whose digest")
+			fmt.Fprintln(os.Stderr, "`magus spell pull magus/spell/<name>` stamps on a copy.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Credentials come from the spells.registries entry for the host, resolved")
 			fmt.Fprintln(os.Stderr, "through the workspace's secret provider, unless --username is given, in which")
 			fmt.Fprintln(os.Stderr, "case the password is read from STDIN.")
@@ -175,7 +213,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 2 {
-		return usagef("magus spell push: want <dir> <registry>/<repository>:<tag>, got %d argument(s)", len(pos))
+		return usagef("magus spell push: want <dir>|magus/spell/<name> <registry>/<repository>:<tag>, got %d argument(s)", len(pos))
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
@@ -188,7 +226,16 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	if dest.Tag == "" || dest.Digest != "" {
 		return usagef("magus spell push: %s must name a tag and no digest", pos[1])
 	}
-	content, res, err := buildSpell(ctx, root, pos[0], source)
+	var content oci.Content
+	var res spellBuildResult
+	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
+		if source != "" {
+			return usagef("magus spell push %s: --source does not apply; a spell magus ships records %s", pos[0], remotespell.ShippedProvenance(name).Source)
+		}
+		content, res, err = buildShippedSpell(name)
+	} else {
+		content, res, err = buildSpell(ctx, root, pos[0], source)
+	}
 	if err != nil {
 		return fmt.Errorf("spell push: %w", err)
 	}
@@ -302,9 +349,9 @@ func spellPull(ctx context.Context, root string, args []string) error {
 // ejectSpell copies the spell magus ships as name into dst for the workspace at root to
 // own. next says how the workspace puts the copy to use.
 func ejectSpell(root, name, dst string) (res spellPullResult, next string, err error) {
-	dir, ok := spell.ShippedDir(name)
-	if !ok {
-		return spellPullResult{}, "", fmt.Errorf("magus ships no spell %q; `magus describe spells` lists the built-ins", name)
+	dir, err := shippedSpellDir(name)
+	if err != nil {
+		return spellPullResult{}, "", err
 	}
 	abs, err := filepath.Abs(dst)
 	if err != nil {
@@ -547,6 +594,11 @@ func spellLs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "List a spell repository's tags, one per line, following the registry's")
 			fmt.Fprintln(os.Stderr, "pagination to the end.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "       magus spell ls magus/spell")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "List every spell magus ships, one pinned reference per line: the artifact a")
+			fmt.Fprintln(os.Stderr, "release publishes for it, computed from this binary with no network.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -555,11 +607,21 @@ func spellLs(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usagef("magus spell ls: want <registry>/<repository>, got %d argument(s)", len(pos))
+		return usagef("magus spell ls: want <registry>/<repository> or %s, got %d argument(s)", shippedSpellsPath, len(pos))
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSuffix(pos[0], "/") == shippedSpellsPath {
+		shipped, err := shippedSpells()
+		if err != nil {
+			return fmt.Errorf("spell ls: %w", err)
+		}
+		if opts.Format == FormatText || opts.Format == FormatName {
+			return emitNamesOf(shipped, func(s shippedSpell) string { return s.Reference })
+		}
+		return emitFormatted(opts, shippedSpellsResult{Spells: shipped})
 	}
 	repo, err := oci.ParseRepository(pos[0])
 	if err != nil {
@@ -581,6 +643,52 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, spellLsResult{Repository: repo.String(), Tags: tags})
 	}
+}
+
+// shippedSpellsResult is the -o json shape of `spell ls magus/spell`.
+type shippedSpellsResult struct {
+	Spells []shippedSpell `json:"spells" jsonl:"primary"`
+}
+
+// shippedSpell is one spell magus ships. Name is what magus/spell/<name> takes: a
+// built-in's registered name, else its directory. Reference pins the artifact a release
+// publishes for it.
+type shippedSpell struct {
+	Name      string        `json:"name"`
+	Dir       string        `json:"dir"`
+	BuiltIn   bool          `json:"built_in"`
+	Reference string        `json:"reference"`
+	Digest    digest.Digest `json:"digest"`
+}
+
+// shippedSpells lists every directory of spells.Shipped() holding a spell.buzz, sorted
+// by name.
+func shippedSpells() ([]shippedSpell, error) {
+	builtins := map[string]string{} // dir -> registered name
+	for name := range spell.Builtins() {
+		if dir, ok := spell.ShippedDir(name); ok {
+			builtins[dir] = name
+		}
+	}
+	var out []shippedSpell
+	err := fs.WalkDir(spells.Shipped(), ".", func(p string, d fs.DirEntry, err error) error {
+		dir, ok := strings.CutSuffix(p, "/spell.buzz")
+		if err != nil || d.IsDir() || !ok {
+			return err
+		}
+		name, builtIn := builtins[dir]
+		if !builtIn {
+			name = dir
+		}
+		ref, _, err := remotespell.Shipped(name, dir)
+		if err != nil {
+			return err
+		}
+		out = append(out, shippedSpell{Name: name, Dir: dir, BuiltIn: builtIn, Reference: ref.String(), Digest: ref.Digest})
+		return nil
+	})
+	slices.SortFunc(out, func(a, b shippedSpell) int { return strings.Compare(a.Name, b.Name) })
+	return out, err
 }
 
 // registryClient builds the client for one registry host. --username wins, with the

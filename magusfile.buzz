@@ -80,10 +80,11 @@ import "project/libs/testlayout";
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
-// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/cursor";`,
-// declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
-// the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
-// would leave magus.lock with nothing to pin and every load of this magusfile failing.
+// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/harness/cursor";`,
+// declared in magus.yaml and pinned by spell-lock:update) once a release's spell-publish
+// has published them and the GHCR packages are public (docs/reference/remote-spells.md).
+// Until then a switch would leave magus.lock with nothing to pin and every load of this
+// magusfile failing.
 import "spells/harness/cursor";
 import "spells/harness/codex";
 import "spells/harness/claude-code" as claude;
@@ -1517,36 +1518,49 @@ fun publish_graph(ctx: magus\Context) > void !> any {
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
-// Publishes each spell below as an OCI artifact, so a workspace imports it by registry
-// path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml
-// and pinned in its magus.lock) and it versions apart from the binary. It packs only
-// tracked files, so an unchanged spell republishes to the digest it already had. The
-// key is the repository name under GHCR_SPELLS.
+// Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged
+// with the release version, so a workspace imports it by registry path
+// (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml and
+// pinned in its magus.lock) and `spell pull magus/spell/<name>`'s origin stamp names a
+// digest that exists. The list and each artifact come from the binary (`spell ls
+// magus/spell`), never from a map kept here, and an artifact's digest follows its files
+// alone, so an unchanged spell republishes to the digest it already had.
 //
-// cd is the deliver switch: without it each spell is built and its digest printed, and
-// nothing leaves the machine. The spell sources are declared inputs, so a change under
-// spells/harness selects this target through the graph and no workflow names it.
+// cd is the deliver switch: without it each spell's pinned reference is printed and
+// nothing leaves the machine. release.yaml runs it with cd on a release tag; nothing
+// else selects it.
 export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
-    final dirs = {
-        "claude-code": "spells/harness/claude-code",
-        "codex": "spells/harness/codex",
-        "cursor": "spells/harness/cursor",
-        "opencode": "spells/harness/opencode",
-    };
-    ctx.readsFiles("spells/harness/**/*");
+    final listed = json\parse(magus\cmd("spell", args: ["ls", "magus/spell", "-o", "json"],
+        opts: {"quiet": true}).stdout);
+    final reg = GHCR_SPELLS;
+    var shipped = mut {<str: str>};
+    foreach (s in listed["spells"]) {
+        final name = "{s["name"]}";
+        final ref = "{s["reference"]}";
+        // The binary stamps ejected copies with its own repository; publishing anywhere
+        // else would leave every stamp naming an artifact nobody pushed.
+        if (!ref.startsWith(reg.repository + "/" + name + "@")) {
+            throw "spell-publish: magus ships " + name + " as " + ref + ", outside GHCR_SPELLS ("
+                + reg.repository + "); the two must name one repository";
+        }
+        shipped[name] = ref;
+    }
     if (!ctx.hasCharm("cd")) {
-        foreach (_, dir in dirs) {
-            magus\cmd("spell", args: ["build", dir]);
+        foreach (_, ref in shipped) {
+            magus\log.info(ref);
         }
         return;
     }
-    final reg = GHCR_SPELLS;
-    final tag = commit();
+    final tag = exact_release_tag();
+    if (tag == "") {
+        throw "spell-publish: HEAD is not on a release tag, and each spell is published under "
+            + "the release version. Tag the release first; without cd this prints what would publish.";
+    }
     final user = magus\secret.read(reg.user_ref);
     final token = magus\secret.read(reg.token_ref);
-    foreach (name, dir in dirs) {
-        magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
-            opts: {"stdin": token});
+    foreach (name, _ in shipped) {
+        magus\cmd("spell", args: ["push", "magus/spell/" + name, reg.repository + "/" + name + ":" + tag,
+            "--username", user], opts: {"stdin": token});
     }
 }
 

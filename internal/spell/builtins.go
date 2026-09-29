@@ -53,8 +53,7 @@ func Builtins() map[string]spells.Descriptor { return shipped().builtins }
 
 // ShippedDir returns the directory of spells.Shipped() that holds the spell name. A
 // built-in is found by its registered name (go is golang); a spell that ships only as
-// source is found by its directory name, the name it registers under once copied into
-// a workspace.
+// source is found by its directory path under spells/ (endoflife-date, harness/cursor).
 func ShippedDir(name string) (string, bool) {
 	dirs := shipped().dirs
 	if dir, ok := dirs[name]; ok {
@@ -111,6 +110,10 @@ var shipped = sync.OnceValue(loadShipped)
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
 // loads it with the host surface. Nothing lists which spell is which.
 //
+// Only a top-level directory is a candidate. A top-level directory with no spell.buzz
+// holds nested spells (harness/cursor), which are providers a workspace wires by import
+// path, so they ship as source only even when they would compile here.
+//
 // It panics on any other failure: the sources are compiled into the binary, so a spell
 // that does not load is a broken build, the same severity as a missing embedded asset.
 func loadShipped() shippedSpells {
@@ -128,6 +131,9 @@ func loadShipped() shippedSpells {
 	for _, e := range entries {
 		dir := e.Name()
 		src, err := fs.ReadFile(spells.Shipped(), dir+"/spell.buzz")
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			panic("magus/spell: read shipped spell " + dir + ": " + err.Error())
 		}

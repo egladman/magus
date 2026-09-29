@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,7 +23,9 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -325,4 +328,75 @@ func TestSpellPullShippedRefuses(t *testing.T) {
 		err := spellCmd(t.Context(), repo, c.args)
 		require.ErrorContains(t, err, c.want, "%v", c.args)
 	}
+}
+
+// A push of magus/spell/<name> writes the artifact the binary ships, byte for byte, so
+// the registry holds the digest `spell pull magus/spell/<name>` stamps on a copy, for a
+// built-in and a nested provider alike.
+func TestSpellPushShipped(t *testing.T) {
+	reg := newSpellRegistry(t)
+	repo := t.TempDir()
+	for name, dir := range map[string]string{"go": "golang", "harness/cursor": "harness/cursor"} {
+		want, content, err := remotespell.Shipped(name, dir)
+		require.NoError(t, err)
+		manifest, _, err := content.Manifest()
+		require.NoError(t, err)
+
+		dest := reg.host() + "/team/spells/" + name
+		pushed := runSpell(t, repo, "push", "magus/spell/"+name, dest+":v1.2.3")
+		assert.Equal(t, dest+"@"+want.Digest.String()+"\n", pushed, name)
+		reg.mu.Lock()
+		assert.Equal(t, manifest, reg.manifests["v1.2.3"], name)
+		reg.mu.Unlock()
+	}
+
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"push", "magus/spell/golang", reg.host() + "/team/spells/go:v1"}, `magus ships no spell "golang"`},
+		{[]string{"push", "magus/spell/harness", reg.host() + "/team/spells/harness:v1"}, `magus ships no spell "harness"`},
+		{[]string{"push", "magus/spell/go", reg.host() + "/team/spells/go:v1", "--source", "https://example.com/fork"}, "--source does not apply"},
+	} {
+		resetStartupSingletons()
+		require.ErrorContains(t, spellCmd(t.Context(), repo, c.args), c.want, "%v", c.args)
+	}
+}
+
+// `spell ls magus/spell` is the list spell-publish reads: every directory of the
+// embedded spells holding a spell.buzz, under the name magus/spell/<name> takes, pinned
+// to the digest a push of it writes.
+func TestSpellLsShipped(t *testing.T) {
+	var dirs []string
+	require.NoError(t, fs.WalkDir(spells.Shipped(), ".", func(p string, _ fs.DirEntry, err error) error {
+		if dir, ok := strings.CutSuffix(p, "/spell.buzz"); ok && err == nil {
+			dirs = append(dirs, dir)
+		}
+		return err
+	}))
+
+	var res shippedSpellsResult
+	require.NoError(t, json.Unmarshal([]byte(runSpell(t, t.TempDir(), "ls", "magus/spell", "-o", "json")), &res))
+	var listed, names, refs []string
+	for _, s := range res.Spells {
+		listed = append(listed, s.Dir)
+		names = append(names, s.Name)
+		refs = append(refs, s.Reference)
+		_, builtIn := spell.Builtins()[s.Name]
+		assert.Equal(t, builtIn, s.BuiltIn, s.Name)
+		if !builtIn {
+			assert.Equal(t, s.Dir, s.Name, "a source-only spell is named by its directory")
+		}
+		ref, _, err := remotespell.Shipped(s.Name, s.Dir)
+		require.NoError(t, err)
+		assert.Equal(t, ref.String(), s.Reference, s.Name)
+		assert.Equal(t, ref.Digest, s.Digest, s.Name)
+	}
+	assert.ElementsMatch(t, dirs, listed, "every shipped spell, once")
+	assert.True(t, slices.IsSorted(names), "sorted by name: %v", names)
+	assert.Subset(t, names, []string{"go", "endoflife-date", "harness/claude-code", "harness/codex", "harness/cursor",
+		"harness/opencode", "aws/s3-cache", "github/actions", "github/review", "gitlab/ci"})
+	assert.NotContains(t, names, "golang")
+
+	assert.Equal(t, strings.Join(refs, "\n")+"\n", runSpell(t, t.TempDir(), "ls", "magus/spell"))
 }

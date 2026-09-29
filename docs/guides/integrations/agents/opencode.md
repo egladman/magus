@@ -33,7 +33,7 @@ Prefer wiring the OpenCode harness from the root magusfile so skills install
 and multi-host apply see it beside the other hosts:
 
 ```buzz
-import "ghcr.io/egladman/magus/spells/opencode";
+import "ghcr.io/egladman/magus/spells/harness/opencode";
 magus\harness.provider(opencode);
 ```
 

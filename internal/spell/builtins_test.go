@@ -39,15 +39,21 @@ func TestBuiltins_KeyedByName(t *testing.T) {
 	assert.NotContains(t, m, "golang", `Builtins()["golang"] present — registry is keyed by name, not source dir`)
 }
 
-// Every shipped spell loads in the built-in session or is refused there for a host
-// import; nothing else. The two sets are pinned because a built-in that grows a host
-// import leaves the registry without an error, and this is where that shows.
+// Every top-level shipped spell loads in the built-in session or is refused there for a
+// host import; nothing else. A top-level directory with no spell.buzz holds nested
+// spells, which never register. The sets are pinned because a built-in that grows a
+// host import leaves the registry without an error, and because embedding the nested
+// providers must not change the registry, BuiltinsHash, or the cache keys it feeds.
 func TestShippedSpellsLoad(t *testing.T) {
 	entries, err := fs.ReadDir(spells.Shipped(), ".")
 	require.NoError(t, err)
-	var sourceOnly []string
+	var sourceOnly, nesting []string
 	for _, e := range entries {
 		src, err := fs.ReadFile(spells.Shipped(), e.Name()+"/spell.buzz")
+		if errors.Is(err, fs.ErrNotExist) {
+			nesting = append(nesting, e.Name())
+			continue
+		}
 		require.NoError(t, err)
 		spec, err := compileBuiltin(t.Context(), string(src))
 		if errors.As(err, new(hostImportError)) {
@@ -61,6 +67,7 @@ func TestShippedSpellsLoad(t *testing.T) {
 		"bash", "buf", "buzz", "cosign", "docker", "go", "markdown", "podman", "python", "rust", "typescript",
 	}, slices.Collect(maps.Keys(Builtins())))
 	assert.Equal(t, []string{"endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
+	assert.Equal(t, []string{"aws", "github", "gitlab", "harness"}, nesting)
 }
 
 // The built-in session offers the spell type modules and nothing else, so its own
@@ -102,6 +109,8 @@ func TestShippedDir(t *testing.T) {
 		"go":             "golang",
 		"bash":           "bash",
 		"endoflife-date": "endoflife-date", // ships as source only, found by its directory
+		"harness/cursor": "harness/cursor", // nested, so source only
+		"harness":        "",               // holds spells, is not one
 		"golang":         "",               // the go built-in's directory, not a spell name
 		"nope":           "",
 	} {
