@@ -39,15 +39,15 @@ This workspace has a knowledge graph (schema v15). Query it instead of grepping:
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
-magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
-magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
+magus graph stats           # god nodes, orphans, doc coverage (MCP: client, magus\stats)
+magus graph export -o json  # the whole graph (MCP: client, magus\query, magus\explain, magus\path)
 ```
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `lint-files`, `site-generate`                                                                |
-| spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                       |
+| spell      | built in | `magus query kind=spell`      | `go`, `buzz`, `markdown`                                                                                         |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                             |
@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                   |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                              |
-| function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `main`                                                                                    |
+| function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `records`                                                                                 |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
 | rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |

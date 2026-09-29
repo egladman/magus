@@ -447,6 +447,21 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_TOKEN**
 : Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
 
+**MAGUS_MCP_BUZZ_PURE**
+: Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
+
+**MAGUS_MCP_CLIENT**
+: Set internally by the client MCP tool for its forked worker; never set it by hand
+
+**MAGUS_MCP_CLIENT_HOST**
+: Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
+
+**MAGUS_MCP_CLIENT_LEASE**
+: Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
+
+**MAGUS_STAMPED_LEASE**
+: Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand
+
 **MAGUS_S3_BUCKET**
 : Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in
 

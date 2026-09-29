@@ -221,9 +221,10 @@ surgically instead of loading the whole file.
 **Where does risk concentrate?**
 
 ```sh
-magus_insight lens=hotspots   # churn x complexity per project, with blast radius (MCP)
-magus_insight lens=affinity   # projects that change together: hidden coupling
-magus_insight lens=ownership  # author concentration and bus factor
+# client tool, one field of magus\insight():
+#   hotspots    churn x complexity per project, with blast radius
+#   affinity    projects that change together: hidden coupling
+#   ownership   author concentration and bus factor
 magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
 magus path <a> <b>        # the shortest edge chain between two nodes
 ```
@@ -244,7 +245,7 @@ or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 **What may be unused?** The graph offers scoped candidates, not a generic
 "dead code" verdict. `magus graph stats` reports structural orphans such as a
 declared spell no target uses. Where the symbol index is available,
-`magus_insight lens=unreferenced` reports code symbols with no indexed
+`magus\insight().unreferenced`, through the `client` tool, reports code symbols with no indexed
 cross-file reference.
 
 Neither result proves that something is safe to delete. Entry points, external
@@ -547,7 +548,7 @@ Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the def
 `magus query`/`magus graph stats`/`magus graph export --open`/warm graph never touch them. They load only when a query is
 symbol-seeded - `kind:symbol`, a `symbol:` ID,
 `relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
-referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
+referencing file (`client` calling `magus\refs`). At very large scale a derived
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
 the shards) lets an exact-ID lookup load only the shards that mention the symbol
 rather than all of them; a missing routing file just falls back to loading all.
@@ -898,17 +899,16 @@ and [MGS7002](../reference/codes/knowledge/MGS7002.md) (a doc citing an unregist
 
 ## For agents
 
-The MCP server exposes the verbs as tools: `magus_query`, `magus_explain`,
-`magus_path`, `magus_stats`, and `magus_refs` (plus `magus_output`, which retrieves a
-target's captured output by ref). See [MCP](../guides/integrations/mcp.md) for wiring. Prefer
-these over grep to find and relate magus-domain entities; start from the `MAGUS.md`
-routing table, which is already in context in a fresh clone.
+The MCP server exposes those verbs through the `client` tool, which runs
+`magus\query`, `magus\explain`, `magus\path`, `magus\stats`, `magus\refs`, and
+`magus\output` (a target's captured output by ref). See
+[MCP](../guides/integrations/mcp.md) for wiring. Prefer these over grep to find
+and relate magus-domain entities; start from the `MAGUS.md` routing table, which
+is already in context in a fresh clone.
 
-For a large result set, `magus_query` and `magus_refs` page: pass `limit` to cap the
-rows per response and echo the returned `next_cursor` to fetch the next page. The
-cursor is stateless and self-validating - it carries the query and a graph
-fingerprint, so a cursor reused against a different query or a graph that changed
-between pages is rejected rather than returning an incoherent slice.
+For a large result set, `magus\query` and `magus\refs` take `limit` and `offset`
+and still report the full count. Filter in the script before returning: the
+client tool does not page a result for you.
 
 `magus agent install .agents/skills` equips Codex with Agent Skills, and prints
 the always-on `AGENTS.md` block for you to paste - magus never writes that file.

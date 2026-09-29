@@ -20,7 +20,7 @@ is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: \`magus run\` executes a target with no job involved,
 while a job's check and the server's maintenance each cause runs.
 
-Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+Two channels write the job store. The client MCP tool (magus\\job) is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own

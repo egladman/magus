@@ -183,8 +183,7 @@ builder never linked up.
 The insight lenses (hotspots, change affinity, ownership, trend, volatility)
 answer the same questions from VCS history instead of structure. They are not
 a `magus` subcommand: the console's Insight page renders all five together,
-and an agent reaches individual lenses (plus unreferenced-symbol detection)
-through the `magus_insight` MCP tool.
+and an agent reads the same report through the `client` tool (`magus\insight`).
 
 ## Is my setup sane?
 

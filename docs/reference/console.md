@@ -79,7 +79,7 @@ console reads it there.
 
 **Who may write to a review session.** `POST /api/v1/diff/session` is reachable
 only from the console and the CLI, so every write on it is stamped as the
-person's. An agent reaches the same session through the `magus_diff` MCP tool on
+person's. An agent reaches the same session through the `diff` MCP tool on
 `/mcp` - whose `comment`, `suggest` and `resolve` ops are writes too - and those
 are stamped as the agent's. Authorship is decided by which route the write
 arrived on and never by the payload, which is what makes it unforgeable: an

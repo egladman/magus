@@ -39,8 +39,8 @@ This workspace has a knowledge graph. Query it instead of grepping:
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
-magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
-magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
+magus graph stats           # god nodes, orphans, doc coverage (MCP: client, magus\stats)
+magus graph export -o json  # the whole graph (MCP: client, magus\query, magus\explain, magus\path)
 ```
 
 Scope a query to this index: `magus query project=libs/textsearch`. `magus graph stats` sizes up the whole workspace.

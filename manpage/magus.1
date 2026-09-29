@@ -436,6 +436,21 @@ Env\-only, no magus.yaml equivalent: write Go profiles for one invocation, as ki
 \fBMAGUS_MCP_TOKEN\fR
 Env\-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
 .TP
+\fBMAGUS_MCP_BUZZ_PURE\fR
+Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT\fR
+Set internally by the client MCP tool for its forked worker; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT_HOST\fR
+Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT_LEASE\fR
+Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
+.TP
+\fBMAGUS_STAMPED_LEASE\fR
+Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand
+.TP
 \fBMAGUS_S3_BUCKET\fR
 Env\-only: the bucket the aws/s3\-cache spell stores remote\-cache artifacts in
 .TP

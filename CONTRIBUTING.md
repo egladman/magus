@@ -63,6 +63,21 @@ magus promises that a magusfile which works today keeps working, and there is no
 plan for a 2.0. [docs/concepts/compatibility.md](https://github.com/egladman/magus/blob/main/docs/concepts/compatibility.md)
 is the promise itself; this is how to work inside it.
 
+### MCP is an adapter, not another Magus API
+
+The [MCP tool inventory and boundary](docs/guides/integrations/mcp.md#the-boundary-and-the-fallback)
+lists the currently exposed tools and their CLI fallbacks. Before adding one,
+identify the existing domain operation it adapts and explain why an agent cannot
+use an existing MCP tool for the same job. Put the declaration on `std.Magus`;
+`internal/handler/mcp` translates the request and result, and the registry is
+generated. Do not implement a second graph query, VCS search, build runner or
+permission model in a handler.
+
+`buzz` is for JSON-to-JSON transforms of data the caller supplies. Its
+worker does not register the `magus` module. Workspace reads and actions belong
+to the Magus MCP tools; full-host Buzz scripting belongs to the CLI. A new host
+module in the CLI does not automatically become an MCP transform capability.
+
 **Add, never substitute.** A new `magus\project` key goes beside the existing
 ones, a new protobuf field takes a new number, a new flag joins the current set.
 If you find yourself changing what an existing name means, that is the thing the

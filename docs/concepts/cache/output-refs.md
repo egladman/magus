@@ -404,11 +404,11 @@ equivalent).
 
 ## For agents and MCP
 
-The [MCP](../../guides/integrations/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
+The [MCP](../../guides/integrations/mcp.md) `client` tool (`magus\output`) is the agent analog of `magus query output`:
 pass a `ref` (`out1a2b3c`, or a unique prefix) and it returns that execution's exact
 bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
-directly, instead of re-reading a wall of text or asking you to paste it. It is a
-dedicated tool, not a mode of `magus_query`, so a free-text graph query never
+directly, instead of re-reading a wall of text or asking you to paste it. It is
+`magus\output`, not a mode of `magus\query`, so a free-text graph query never
 collides with a ref id.
 
 ## How refs are stored

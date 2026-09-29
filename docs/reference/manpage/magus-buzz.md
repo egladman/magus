@@ -70,6 +70,9 @@ nothing loads.
 **--no-autoload**
 : Start the REPL without executing the magusfile
 
+**--profile**
+: Print where compile and import time went, after the script runs
+
 **-t**
 : Run the file's test "..." {} blocks and report pass/fail
 
@@ -123,6 +126,12 @@ magus buzz --embedded scripts/target.buzz
 
 ```sh
 magus buzz -t --coverprofile=out.lcov scripts/report.buzz
+```
+
+*See which imports a script spends its time on*
+
+```sh
+magus buzz --profile scripts/report.buzz
 ```
 
 ## See Also

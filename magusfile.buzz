@@ -1198,12 +1198,20 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
+//
+// The gen/ package also holds the hand-maintained VM runtime and its tests, and
+// types_generate's boundary files; the exclusions keep all of those out of this
+// target's outputs, so they read as sources and replay never touches them.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("internal/interp/bindings/gen/*.go");
+    ctx.writesFiles("internal/interp/bindings/gen/*.go",
+        "!internal/interp/bindings/gen/*_test.go",
+        "!internal/interp/bindings/gen/runtime.go",
+        "!internal/interp/bindings/gen/modules_types.go",
+        "!internal/interp/bindings/gen/boundary_*.go");
     proc\exec("go", ["generate", "./std/..."]);
 }
 
@@ -1595,7 +1603,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // longer hides the answer.
     var dirtyBefore: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
-    final before = drift\hashes(dirtyBefore);
+    // VCS deliberately collapses a pre-existing untracked directory to one path. Keep
+    // that boundary: recursive drift hashing belongs to declared generated directories,
+    // not to arbitrary user trees such as evals/node_modules.
+    final before = drift\vcsHashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.hasCharm("rw")) { return; }
@@ -1608,7 +1619,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // compare it always lands on the dev-build verdict.
     var dirtyNow: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
-    final changed = drift\changedSince(before, dirtyNow);
+    final changed = drift\vcsChangedSince(before, dirtyNow);
     if (changed.len() > 0) {
         final detail = ": " + changed.join(", ");
         // Print the diff, not just the names. This gate fires where its reader has a
@@ -2815,7 +2826,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
     // The hook templates a reader installs and the site stylesheet: conventions_test and
     // internal/agent's tests read them as code (coverage lines, wiring, the landing palette), never as prose.
-    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.json",
+    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.buzz",
+                   "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so

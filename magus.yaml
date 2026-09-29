@@ -116,4 +116,4 @@ knowledge:
   sessions:
     adapters:
       - host: claude-code
-        command: ["sh", "docs/guides/integrations/agents/magus-session-load-claude-code.sh"]
+        command: ["magus", "buzz", "-s", "docs/guides/integrations/agents/magus-session-load-claude-code.buzz"]

@@ -3,10 +3,8 @@
 //
 // A leading assignment is shell syntax, and a hook command is not a shell line: the host
 // splits it into argv itself, so the prefix only works where something later re-joins and
-// re-parses it. The sh copies genuinely need their environment knobs, because `sh` is
-// what runs them and `sh` is what reads the variable; the Buzz ports take the same two
-// knobs from the event they already read and from their own argv, which `magus buzz`
-// forwards after `--`.
+// re-parses it. The Buzz glue takes its per-entry knobs from the event it already reads
+// and from its own argv, which `magus buzz` forwards after `--`.
 namespace buzzglue;
 
 import "assert";
@@ -82,10 +80,10 @@ fun configs(command: str) > [Path] !> any {
     return support\fixture({HOSTS["claude-code"]!: body, HOSTS["codex"]!: "\{\"hooks\": \{}}"});
 }
 
-test "plain argv and the sh copies' prefixes pass" {
+test "plain argv and a prefix on a command that runs no Buzz glue pass" {
     foreach (command in [
         "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --advise",
-        "MAGUS_GUARD_ADVISE=1 sh docs/guides/integrations/agents/magus-command.sh",
+        "MAGUS_GUARD_ADVISE=1 ./my-own-guard",
     ]) {
         assert\equal(check(configs(command)).len(), want: 0, message: command);
     }

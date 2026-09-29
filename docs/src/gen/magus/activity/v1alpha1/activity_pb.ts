@@ -510,7 +510,7 @@ export enum Kind {
   SANDBOX_DENIAL = 5,
 
   /**
-   * a console MemoryService action on the durable magus_memory files (reads audited too)
+   * a console MemoryService action on the durable magus memory files (reads audited too)
    *
    * @generated from enum value: KIND_MEMORY = 6;
    */

@@ -503,12 +503,12 @@ helpful that nobody using the tool learns anything from it.
 
 magus could automate each row below, and does not.
 
-| stays manual                | because                                                                                                                                               |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| disposing an agent request  | an event that means "blocked on input" or "blocked on approval" exists to reach a person; answering it for them removes the person it exists to reach |
-| applying suggested changes  | a suggestion lands only when a person accepts it                                                                                                      |
-| writing the knowledge store | notes are human-authored by construction: there is no author field to spoof, because authorship rides version control                                 |
-| sending a review            | a remark reaches a colleague under your name; an agent drafts into the session and a person sends the batch                                           |
+| stays manual                | because                                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| disposing an agent request  | the request stays open until a person has seen what it names; a repeat does not ask again, and nothing here answers it for them |
+| applying suggested changes  | a suggestion lands only when a person accepts it                                                                                |
+| writing the knowledge store | notes are human-authored by construction: there is no author field to spoof, because authorship rides version control           |
+| sending a review            | a remark reaches a colleague under your name; an agent drafts into the session and a person sends the batch                     |
 
 All four would be cheap to build, and cheap is not the test. The test for any
 future row: does automating the step remove a repetition, or remove a rep? A
@@ -526,6 +526,32 @@ than an approval, and authorship is stamped from the transport a write arrived
 on rather than from what the writer claims. A batch waits for a person because
 publishing is one outward-facing act; splitting it into a call per remark would
 turn the act that needs confirming into a series of small ones nobody confirms.
+
+### The loop keeps you able to notice
+
+Reaching a person is not the safeguard. A person asked to approve what the machine
+has already handled stops evaluating and starts confirming. Mitchell, Ghosh, and
+Passi call that approval fatigue. Bainbridge named the other half forty years
+earlier: the more a system handles, the less practiced its supervisor, and the
+moment that needs a person is the moment that person is least
+ready.[^mitchell-2026][^bainbridge-1983]
+
+Corrective competence is what remains when the agent is gone. This is what has
+to be present while the agent is running. A run of approvals can pass while the
+skill the exception needs has already left.
+
+The test is the one above. Does this prompt ask the person to notice something
+they would not otherwise have seen, or to confirm a pattern they have already
+learned to trust? The first is a rep. The second is a toll, the same test
+[friction](#friction-that-carries-meaning) uses.
+
+What reaches a person is the deviation, the batch, and the absence. A waiting
+or permission event the queue already holds does not raise another desktop
+notification: the open row is the block, and a second toast asks for a yes on
+it. The console shows a permission's close control only after that row is
+opened, so the paths the event named, and the message, have been on screen.
+`session dispose` stays a typed id. A failure still notifies, because it is
+news and news does not enter the queue.
 
 ### Corrective competence
 
@@ -618,6 +644,8 @@ removed, with what decided each and where to check it.
 | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | an advisory when an agent edits a file it never looked up                                                                     | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                                                                                                                                                                                                                                                                                                                                                                   | transcript measurement, 2026-09-02                                                                                   |
 | denying a recursive grep of a bare identifier, to force `refs`                                                                | measured and partly reversed: the original count (45 such greps, denominator unstated) undercounted the sample - a 2026-09-15 remeasurement over 1,116 transcripts found 699 matching the guard's own shape (about 2,700 individual greps), the same roughly-60%-answered-by-`refs` ratio holding on the larger sample; an advisory still ships for raw text the graph cannot vouch for, but since `a05b4c414` a recursive grep of a DEFINITIVELY-indexed symbol is DENIED outright (`denyRuleSymbolSearch`), not merely advised | `f963a9f1b`, measured with `9519797b3`, remeasured 2026-09-15; denied since `a05b4c414` (`internal/guard/search.go`) |
+| sending every recursive literal grep to `magus refs --text`                                                                   | not built: measured 2026-09-29 over the read/discovery audit's Claude, Codex and Cursor transcripts, 3,498 recursive greps of literal text ran. `refs --text` is the same substring scan with no graph behind it, so a deny would cost a turn and return what grep returns, and a regex search has no equivalent at all. A search the graph answers better is already refused where it can be proven: symbol-search, search-translation and grep-reader                                                                          | the read/discovery audit, 2026-09-29; `internal/guard/search.go`                                                     |
+| wiring Claude Code's Grep and Glob tools to the guard                                                                         | not built: measured 2026-09-29, the same transcripts held 2 Grep or Glob tool calls against thousands of shell searches, so a restatement like Cursor's would judge almost nothing. Cursor keeps its restatement, where those tools are how it searches. Revisit if a host's own search tool becomes the common path                                                                                                                                                                                                             | the read/discovery audit, 2026-09-29; `docs/guides/integrations/agents/cursor-hook.buzz`                             |
 | an `ask` verdict, so a denial could be waved through in the moment                                                            | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                                                                                                                                                                                                                                                                                                                                                                             | `internal/agent/guard.go:25`, still three decisions                                                                  |
 | 47 half-built features found in an audit before the project was shared                                                        | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                                                                                                                                                                                                                                                                                                                                                                              | `4f8cc295a`                                                                                                          |
 | machine-wide memory admission control                                                                                         | deleted; `memory_mb` kept as a slot weight                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `b6abdfe43`                                                                                                          |
@@ -658,6 +686,13 @@ removed, with what decided each and where to check it.
 The rows that record a measurement killing an idea somebody wanted are the only
 reason the rest of the list is worth anything. A ledger of
 things nobody was going to build proves nothing.
+
+[^mitchell-2026]: Margaret Mitchell, Avijit Ghosh, and Samir Passi, "AI Agents Push Humans
+    Out of the Loop", arXiv:2608.23642, 2026, <https://arxiv.org/abs/2608.23642>.
+    Checked 2026-09-28.
+
+[^bainbridge-1983]: Lisanne Bainbridge, "Ironies of Automation", Automatica 19(6),
+    775–779, 1983, <https://doi.org/10.1016/0005-1098(83)90046-8>. Checked 2026-09-28.
 
 [^bastani-2025]: Hamsa Bastani, Osbert Bastani, Alp Sungu, Haosen Ge, Ozge Kabakci, Rei Mariman,
     "Generative AI without guardrails can harm learning: Evidence from high school

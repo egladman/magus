@@ -205,7 +205,8 @@ The plan's `outputs` array is the full set of job outputs, each a `name` and a `
 the template writes the array rather than naming its members. Keep that loop rather than
 listing the outputs you use today: a magus release that adds one reaches your workflow
 without an edit, and no output can go missing because a translator forgot to mention it.
-`summary` is the job summary as markdown, rendered by the plan for the same reason.
+`summary` is the job summary as markdown, rendered from the saved plan's typed fields by
+`magus run --stdin --dry-run -o template=...` for the same reason.
 
 `count` guards the matrix: when nothing is affected, or the plan inherited a green run's
 verdict, there is no job to run, and a matrix of zero shards is an error rather than a skip.

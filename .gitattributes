@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-212-g08566ec81 (commit 08566ec81, 2026-09-27T14:27:50-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-243-g21ad73dae-dirty (commit 21ad73dae, 2026-09-27T20:48:00-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -6,6 +6,10 @@
 *.ts diff=typescript
 *.tsx diff=typescript
 *.buzz diff=buzz
+internal/interp/bindings/gen/*_test.go -merge -linguist-generated
+internal/interp/bindings/gen/boundary_*.go -merge -linguist-generated
+internal/interp/bindings/gen/modules_types.go -merge -linguist-generated
+internal/interp/bindings/gen/runtime.go -merge -linguist-generated
 **/gen/mocks/*.go merge=magus linguist-generated
 .agents/skills/magus-architecture-review*/** merge=magus linguist-generated
 .agents/skills/magus-buzz-review*/** merge=magus linguist-generated
