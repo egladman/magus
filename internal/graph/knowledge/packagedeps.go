@@ -25,11 +25,11 @@ type packageGraph map[string]map[string]bool
 // can move.
 func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
 
-// PackageDeps maps each workspace package directory ("." for the root) to the package
+// ImportGraph maps each workspace package directory ("." for the root) to the package
 // directories it imports, sorted. Test files, packages outside the workspace, and a
-// package importing itself are left out. The map is empty, never nil, when no SCIP index
-// was ingested; HasSymbols tells that apart from a workspace whose packages import nothing.
-func (g *Graph) PackageDeps() map[string][]string {
+// package importing itself are left out. Packages is empty, never nil, when no SCIP index
+// was ingested, and Indexed is false then.
+func (g *Graph) ImportGraph() types.ImportGraph {
 	// A namespace's directory is the lowest one holding a non-test file that defines it,
 	// the same placement Precedents reads, so both name a package by one directory.
 	dir := map[string]string{}
@@ -62,7 +62,7 @@ func (g *Graph) PackageDeps() map[string][]string {
 		slices.Sort(tos)
 		out[d] = slices.Compact(tos)
 	}
-	return out
+	return types.ImportGraph{Indexed: g.HasSymbols(), Packages: out}
 }
 
 // packageDepsExcept is packageDeps without the imports and calls made from the files skip

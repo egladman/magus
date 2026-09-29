@@ -667,19 +667,19 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 	assert.Equal(t, types.VerdictAbsent, absent.Answer.Verdict)
 }
 
-func TestPackageDepsHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
+func TestImportGraphHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
 	t.Parallel()
 
-	noPackages, err := MagusPackageDeps(graphContext(t))
+	noPackages, err := MagusImportGraph(graphContext(t))
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"indexed": true, "deps": map[string]any{}}, noPackages,
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}}, noPackages,
 		"graphContext holds a symbol but no file defines a namespace")
 
 	g := knowledge.NewGraph()
 	ctx := types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
-	empty, err := MagusPackageDeps(ctx)
+	empty, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"indexed": false, "deps": map[string]any{}}, empty)
+	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}}, empty)
 
 	a, b := "symbol:gomod example.com/m `example.com/m/pkg/a`/", "symbol:gomod example.com/m `example.com/m/pkg/b`/"
 	for dir, ns := range map[string]string{"pkg/a": a, "pkg/b": b} {
@@ -688,9 +688,9 @@ func TestPackageDepsHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
 		g.AddEdge(types.KnowledgeEdge{Source: "file:" + dir + "/f.go", Target: ns, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
 	}
 	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/a/f.go", Target: b, Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1})
-	got, err := MagusPackageDeps(ctx)
+	got, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"indexed": true, "deps": map[string]any{"pkg/a": []any{"pkg/b"}}}, got)
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{"pkg/a": {"pkg/b"}}}, got)
 }
 
 // A mistyped option would otherwise answer a different question than the one asked.
@@ -716,7 +716,7 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 		"path":           func() error { _, err := MagusPath(ctx, "x", "y"); return err },
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
-		"packageDeps":    func() error { _, err := MagusPackageDeps(ctx); return err },
+		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
 		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
 	}

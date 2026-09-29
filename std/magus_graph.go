@@ -184,21 +184,18 @@ func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) 
 	return kg.Stats(kind), nil
 }
 
-// MagusPackageDeps backs magus\packageDeps: which workspace package imports which, by
-// directory, with indexed saying whether a symbol index was there to read at all.
-func MagusPackageDeps(ctx context.Context) (map[string]any, error) {
-	g, err := graphsFromContext(ctx, "packageDeps")
+// MagusImportGraph backs magus\importGraph: which workspace package imports which, by
+// directory, with Indexed saying whether a symbol index was there to read at all.
+func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
+	g, err := graphsFromContext(ctx, "importGraph")
 	if err != nil {
-		return nil, err
+		return types.ImportGraph{}, err
 	}
 	kg, err := g.KnowledgeGraphWithSymbols(ctx)
 	if err != nil {
-		return nil, err
+		return types.ImportGraph{}, err
 	}
-	return recordMap(struct {
-		Indexed bool                `json:"indexed"`
-		Deps    map[string][]string `json:"deps"`
-	}{kg.HasSymbols(), kg.PackageDeps()})
+	return kg.ImportGraph(), nil
 }
 
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes

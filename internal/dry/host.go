@@ -512,8 +512,8 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		"gods": empty, "orphans": empty, "coverage": empty,
 	}))
 	// indexed stays false: the dry run read no index, and a drift check has to refuse on that.
-	m.MapSet("packageDeps", shaped("magus.packageDeps", map[string]vm.Value{
-		"indexed": vm.BoolValue(false), "deps": vm.NewMap(),
+	m.MapSet("importGraph", shaped("magus.importGraph", map[string]vm.Value{
+		"indexed": vm.BoolValue(false), "packages": vm.NewMap(),
 	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),

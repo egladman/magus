@@ -48,7 +48,7 @@ func TestPackageDepsFileNamespacesAreSorted(t *testing.T) {
 	}
 }
 
-func TestPackageDepsKeysByDirectoryAndSorts(t *testing.T) {
+func TestImportGraphKeysByDirectoryAndSorts(t *testing.T) {
 	t.Parallel()
 
 	f := newPrecedentFixture()
@@ -72,24 +72,22 @@ func TestPackageDepsKeysByDirectoryAndSorts(t *testing.T) {
 	f.file("internal/httpx/httpx_test.go", precedentNamespace("internal/httpx", "go"), "httpx", "go")
 	f.edge("file:internal/httpx/httpx_test.go", precedentNamespace("cmd/app", "go"), types.RelationReferences)
 
-	assert.True(t, f.g.HasSymbols())
-	assert.Equal(t, map[string][]string{
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{
 		"cmd/app":         {".", "internal/server"},
 		"internal/server": {"internal/handler/mcp", "internal/httpx"},
-	}, f.g.PackageDeps())
+	}}, f.g.ImportGraph())
 }
 
-func TestPackageDepsUnindexedIsEmptyNotNil(t *testing.T) {
+func TestImportGraphUnindexedIsEmptyNotNil(t *testing.T) {
 	t.Parallel()
 
 	g := NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "file:internal/a/a.go", Kind: types.KindFile, Label: "internal/a/a.go", Source: "internal/a/a.go"})
 
-	assert.False(t, g.HasSymbols())
-	assert.Equal(t, map[string][]string{}, g.PackageDeps())
+	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}}, g.ImportGraph())
 }
 
-func TestPackageDepsDropsSelfImports(t *testing.T) {
+func TestImportGraphDropsSelfImports(t *testing.T) {
 	t.Parallel()
 
 	f := newPrecedentFixture()
@@ -99,5 +97,5 @@ func TestPackageDepsDropsSelfImports(t *testing.T) {
 	f.file("internal/a/a.ts", ts, "a", "typescript")
 	f.edge("file:internal/a/a.ts", precedentNamespace("internal/a", "go"), types.RelationReferences)
 
-	assert.Equal(t, map[string][]string{}, f.g.PackageDeps())
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}}, f.g.ImportGraph())
 }
