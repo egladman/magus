@@ -38,8 +38,10 @@
      forwards a Pico variable rather than restating a color, so one block covers light,
      dark and the manual theme toggle: Pico has already resolved which it is by the time
      these are read. An <img>-loaded copy of the same SVG cannot see any of this and falls
-     back to the hardcoded palette baked into the file - that is the whole reason the
-     standalone pair exists. */
+     back to the hardcoded palette baked into the file, which is why the standalone pair
+     exists. Paper follows the page so an inlined figure blends in; the standalone files
+     paint diagram-design's own paper (#f5f5f5, #2d3142) on purpose, being documents of
+     their own. */
   --magus-diagram-paper: var(--pico-background-color);
   --magus-diagram-surface: var(--pico-code-background-color);
   --magus-diagram-ink: var(--pico-color);

@@ -1,10 +1,15 @@
 // lib/diagram.buzz - declarative architecture diagrams rendered to SVG at build time.
 //
+// The design system these figures follow is cathrynlavery/diagram-design (MIT),
+// https://github.com/cathrynlavery/diagram-design: its palette, role treatments, zones,
+// legend strip, connector and label rules. The title face, the Pico font variables, HeaderPad
+// and the budgets for generated figures are this renderer's own.
+//
 // Diagrams are authored as data (nodes with explicit coordinates, edges with explicit
 // attach points) and emitted as SVG. There is no layout engine: placement is the author's
-// job, which is the same bargain the diagram-design skill makes and the reason its output
-// reads better than an auto-packed graph. What this module supplies is the design system -
-// tokens, type ramp, node treatments, orthogonal connectors - plus a validator that turns
+// job, which is the same bargain diagram-design makes and the reason its output reads
+// better than an auto-packed graph. What this module supplies is the design system:
+// tokens, type ramp, node treatments, orthogonal connectors, plus a validator that turns
 // the skill's non-negotiable rules into a build failure.
 //
 // flow.buzz beside it is the opt-in exception: it places a declared graph and hands this
@@ -42,8 +47,26 @@ final MaxAccent = 2;
 // pixels under the title, and every other diagram was guessing at the clearance.
 final HeaderPad = 40;
 
+// The bottom LegendStrip px of a figure with a legend belong to the strip; a node there is
+// a finding, since the design system forbids a legend inside the diagram area.
+final LegendStrip = 60;
+// More zones than this and the figure is a swimlane.
+final MaxZones = 3;
+// Four exits from one diamond is a nested decision drawn flat.
+final MaxDecisionExits = 3;
+// The tightest corner the design system allows. In an authored figure a leg too short to
+// seat it is a finding, never a sharper corner.
+final BendFloor = 6;
+// Space between an edge label's mask and the stroke it names.
+final LabelGap = 10;
+
 // Palette carries the nine semantic roles every diagram draws from. Values are whatever the
 // SVG `fill`/`stroke` attributes accept, so a palette is either resolved hex or CSS vars.
+//
+// Treatments the skill writes as a role at an opacity (zones at ink 2%, input at muted 10%,
+// security at accent 5%) are painted with fill-opacity and stroke-opacity over these same
+// roles rather than stored as extra fields: an rgba literal cannot be derived from a var(),
+// and the attribute keeps both palettes and the site's theme toggle in step for free.
 export object Palette {
     paper: str = "",        // page ground, and the opaque mask under every node
     surface: str = "",      // default node fill
@@ -74,30 +97,30 @@ export fun cssVarPalette() > Palette {
     };
 }
 
-// lightPalette and darkPalette mirror the site's Pico theme resolved to hex, for the
-// standalone .svg pair. Keep these in step with the --magus-diagram-* block in site.css:
-// a reader toggling the site theme sees the CSS vars, a reader on GitHub sees these.
+// lightPalette and darkPalette are diagram-design's own skin, for the standalone .svg pair
+// GitHub loads. They deliberately do not mirror the site: an inlined figure blends into the
+// page through the CSS vars, while a standalone file is a document of its own and paints the
+// skill's paper. surface is the skill's backend fill (light) and paper-2 (dark).
 export fun lightPalette() > Palette {
     return Palette{
-        paper = "#ffffff", surface = "#f3f4f6", ink = "#373c44", muted = "#646b79",
-        soft = "#7b8495", rule = "#dce3eb", accent = "#bc4c00",
-        accentTint = "rgba(188,76,0,0.08)", link = "#2e5aa8",
+        paper = "#f5f5f5", surface = "#ffffff", ink = "#2d3142", muted = "#4f5d75",
+        soft = "#7a8399", rule = "rgba(45,49,66,0.12)", accent = "#eb6c36",
+        accentTint = "rgba(235,108,54,0.08)", link = "#2e5aa8",
     };
 }
 
 export fun darkPalette() > Palette {
     return Palette{
-        paper = "#13171f", surface = "#1b1f29", ink = "#c2c7d0", muted = "#7b8495",
-        soft = "#6b7383", rule = "#202632", accent = "#f08a59",
+        paper = "#2d3142", surface = "#393e53", ink = "#f5f5f5", muted = "#bfc0c0",
+        soft = "#8e98ac", rule = "rgba(245,245,245,0.12)", accent = "#f08a59",
         accentTint = "rgba(240,138,89,0.10)", link = "#6a95d8",
     };
 }
 
 // Style carries the presentation literals the painters write into SVG attributes: the two
 // font families, the type ramp, stroke widths, corner radii, dash patterns and the gutter
-// the frame keeps. Every field defaults to the value the renderer hardcoded before this
-// object existed, so Style{} is not merely a sensible baseline: it is the bytes the
-// renderer already ships.
+// the frame keeps. Style{} is the design system as shipped; a caller names only what
+// differs.
 //
 // The omissions are deliberate. Grid, the budgets and layered()'s column geometry are
 // structural rather than painted: validate() reasons about them, so a per-render override
@@ -119,7 +142,7 @@ export object Style {
     labelWeight: int = 600,
     subSize: int = 9,
     tagSize: int = 7,
-    zoneLabelSize: int = 8,
+    zoneLabelSize: int = 7,
     edgeLabelSize: int = 8,
     legendSize: int = 8,
 
@@ -131,17 +154,20 @@ export object Style {
     edgeLabelTracking: str = "0.06em",
     legendTracking: str = "0.06em",
 
-    strokeWidth: double = 1.0,      // node, zone, decision and connector outlines
-    hairlineWidth: double = 0.8,    // tag chip, legend rule and legend swatch
+    strokeWidth: double = 1.2,      // node, decision and connector outlines
+    hairlineWidth: double = 0.8,    // zone, tag chip, legend rule and legend swatch
 
-    zoneDash: str = "4,4",
     optionalDash: str = "4,3",
+    securityDash: str = "4,4",
     edgeDash: str = "5,4",
 
     nodeRadius: int = 6,
     zoneRadius: int = 8,
     chipRadius: int = 2,            // tag chip, edge-label mask, legend swatch
-    bendRadius: int = 8,            // connector bends; clamped down when a segment is too short to seat it
+    bendRadius: int = 8,            // raised to 6 when set lower; a leg too short for 6 is a validate finding
+
+    // A URL template with `{path}`; when set, every anchored node links to its path.
+    anchorHref: str = "",
 
     // The arrowhead is drawn in marker units. refX and the polygon derive from these, so
     // widening the head keeps its tip on the attach point rather than past it.
@@ -165,8 +191,11 @@ export fun defaultStyle() > Style {
 // render in mono, since they carry technical content (ports, packages, protocols).
 //
 // Roles: "default", "focal" (accent, 2 max per diagram), "store" (a persistent thing),
-// "external" (outside the boundary), "optional" (dashed), "decision" (a diamond; its
-// vertices are the only points on the shape, so it takes one connector per side).
+// "external" (outside the boundary), "input" (data arriving from outside), "optional"
+// (dashed), "decision" (a diamond with at most 3 exits; its vertices are the only points on
+// the shape, so it takes one connector per side), "security" (a trust boundary: dashed,
+// painted under the connectors, its label masked on the top border, and free to contain
+// other nodes).
 export object Node {
     id: str = "",
     label: str = "",
@@ -434,6 +463,21 @@ export fun validate(d: Diagram) > [str] {
         if (n.role == "decision" and (n.tag != "" or n.sub != "")) {
             errs.append("decision \"{n.id}\" carries a tag or sublabel; a diamond has room for neither");
         }
+        if (n.role == "security" and (n.tag != "" or n.sub != "")) {
+            errs.append("security boundary \"{n.id}\" carries a tag or sublabel; only its border label is painted");
+        }
+        if (d.legend.len() > 0 and n.y + n.h > d.height - LegendStrip) {
+            errs.append("node \"{n.id}\" enters the legend strip; keep the bottom {LegendStrip}px clear");
+        }
+        if (n.role == "decision") {
+            var exits = 0;
+            foreach (e in d.edges) {
+                if (e.src == n.id) { exits = exits + 1; }
+            }
+            if (exits > MaxDecisionExits) {
+                errs.append("decision \"{n.id}\" has {exits} exits; past {MaxDecisionExits}, nest a second decision");
+            }
+        }
     }
     foreach (e in d.edges) {
         if (e.kind == "accent") { accent = accent + 1; }
@@ -447,6 +491,9 @@ export fun validate(d: Diagram) > [str] {
             errs.append("zone \"{z.label}\" is off the {Grid}px grid");
         }
     }
+    if (d.generated == false and d.zones.len() > MaxZones) {
+        errs.append("{d.zones.len()} zones exceeds the budget of {MaxZones}; a figure banded that finely is a swimlane");
+    }
 
     var i = 0;
     while (i < d.nodes.len()) {
@@ -455,7 +502,7 @@ export fun validate(d: Diagram) > [str] {
             final a = d.nodes[i];
             final b = d.nodes[j];
             if (a.id == b.id) { errs.append("duplicate node id \"{a.id}\""); }
-            if (a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h) {
+            if (boxesOverlap([a.x, a.y, a.w, a.h], b) and bounds(a, inner: b) == false and bounds(b, inner: a) == false) {
                 errs.append("nodes \"{a.id}\" and \"{b.id}\" overlap");
             }
             j = j + 1;
@@ -483,6 +530,14 @@ export fun validate(d: Diagram) > [str] {
             errs.append("edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond");
         }
         foreach (msg in viaFindings(d, e)) { errs.append(msg); }
+        // A generated layout packs its channels one grid step apart and has no author to
+        // move a bend, so there the painter clamps the radius down instead.
+        if (d.generated == false and findNode(d, e.src) != null and findNode(d, e.dst) != null) {
+            final tight = tightestBend(d, e);
+            if (tight < BendFloor) {
+                errs.append("edge {e.src}->{e.dst}: a leg leaves {tight}px for a bend that needs {BendFloor}; move the bend or the boxes");
+            }
+        }
     }
 
     foreach (msg in sharedAttachPoints(d)) { errs.append(msg); }
@@ -514,6 +569,67 @@ fun viaFindings(d: Diagram, e: Edge) > [str] {
         i = i + 2;
     }
     return errs;
+}
+
+// boxesOverlap reports whether the rectangle [x, y, w, h] shares area with n; touching
+// edges do not count.
+fun boxesOverlap(box: [int], n: Node) > bool {
+    return box[0] < n.x + n.w and n.x < box[0] + box[2] and box[1] < n.y + n.h and n.y < box[1] + box[3];
+}
+
+// bounds reports whether outer is a security boundary wholly containing inner, the one
+// overlap that is the point of the role rather than a collision.
+fun bounds(outer: Node, inner: Node) > bool {
+    return outer.role == "security"
+        and inner.x >= outer.x and inner.y >= outer.y
+        and inner.x + inner.w <= outer.x + outer.w and inner.y + inner.h <= outer.y + outer.h;
+}
+
+// tightestBend returns the largest radius the painters could seat at the edge's tightest
+// turning corner, or BendFloor when nothing turns. It repeats connectorPath's and routePath's
+// clamps, so a finding here is exactly a corner they would have drawn sharper.
+fun tightestBend(d: Diagram, e: Edge) > int {
+    final geo = edgeGeometry(d, e);
+    if (e.via.len() > 0) {
+        if (e.via.len() % 2 != 0) { return BendFloor; }
+        final pts = edgePoints(geo, e);
+        final n = pts.len() / 2;
+        var tight = BendFloor;
+        var i = 1;
+        while (i < n - 1) {
+            final px = pts[2 * i - 2];
+            final py = pts[2 * i - 1];
+            final cx = pts[2 * i];
+            final cy = pts[2 * i + 1];
+            final nx = pts[2 * i + 2];
+            final ny = pts[2 * i + 3];
+            final turns = (px == cx and cx == nx) == false and (py == cy and cy == ny) == false;
+            if (turns) {
+                var inLen = iabs(cx - px) + iabs(cy - py);
+                var outLen = iabs(nx - cx) + iabs(ny - cy);
+                if (i > 1) { inLen = inLen / 2; }
+                if (i < n - 2) { outLen = outLen / 2; }
+                tight = imin(tight, imin(inLen, outLen));
+            }
+            i = i + 1;
+        }
+        return tight;
+    }
+    final x1 = geo[0];
+    final y1 = geo[1];
+    final x2 = geo[2];
+    final y2 = geo[3];
+    if (e.bend == 0 and (x1 == x2 or y1 == y2)) { return BendFloor; }
+    if (geo[4] == 1) {
+        if (y1 == y2) { return BendFloor; }
+        var bx = e.bend;
+        if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
+        return imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2));
+    }
+    if (x1 == x2) { return BendFloor; }
+    var by = e.bend;
+    if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
+    return imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2));
 }
 
 // sharedAttachPoints reports connectors that land on the same point of the same box. Two
@@ -673,18 +789,23 @@ fun routePath(pts: [int], radius: int) > str {
     return parts.join(" ");
 }
 
-// nodeFill and nodeStroke implement the role-to-treatment table. Roles the table does not
+// nodePaint and nodeStroke implement the role-to-treatment table. Roles the table does not
 // name fall back to the default treatment rather than failing: validate is where an
 // unknown role should be caught, not the painter.
-fun nodeFill(role: str, p: Palette) > str {
-    if (role == "focal") { return p.accentTint; }
-    if (role == "store" or role == "external") { return p.paper; }
-    return p.surface;
+fun nodePaint(role: str, p: Palette) > str {
+    if (role == "input") { return " fill=\"{p.muted}\" fill-opacity=\"0.1\" stroke=\"{p.soft}\""; }
+    if (role == "security") {
+        return " fill=\"{p.accent}\" fill-opacity=\"0.05\" stroke=\"{p.accent}\" stroke-opacity=\"0.5\"";
+    }
+    var fill = p.surface;
+    if (role == "focal") { fill = p.accentTint; }
+    if (role == "store" or role == "external") { fill = p.paper; }
+    return " fill=\"{fill}\" stroke=\"" + nodeStroke(role, p) + "\"";
 }
 
 fun nodeStroke(role: str, p: Palette) > str {
-    if (role == "focal") { return p.accent; }
-    if (role == "external" or role == "optional") { return p.soft; }
+    if (role == "focal" or role == "security") { return p.accent; }
+    if (role == "external" or role == "optional" or role == "input") { return p.soft; }
     return p.rule;
 }
 
@@ -697,9 +818,9 @@ fun edgeStroke(kind: str, p: Palette) > str {
 // renderSvg paints the diagram and throws a joined validation report when any rule is
 // broken, so a malformed diagram fails the docs build instead of shipping crooked.
 //
-// Paint order is load-bearing: zones, then connectors and their labels, then nodes, then
-// the legend. Connectors go under nodes so a stroke cannot cross a box face, and nodes go
-// over labels so a mask that strays onto a box is hidden rather than clipped mid-glyph.
+// Paint order is load-bearing: zones and security boundaries, then connectors and their
+// labels, then nodes, then the legend. Connectors go under nodes so a stroke cannot cross a
+// box face; a boundary goes under them because crossing it is what a connector is for.
 //
 // Style is defaulted rather than overloaded: a caller that only wants the design system as
 // shipped keeps writing renderSvg(d, palette), and one that wants a knob names it.
@@ -729,9 +850,14 @@ export fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     parts.append(renderHeader(d, p, s));
     parts.append("<g transform=\"translate(0,{pad})\">");
     foreach (z in d.zones) { parts.append(renderZone(z, p, s)); }
+    foreach (n in d.nodes) {
+        if (n.role == "security") { parts.append(renderNode(n, p, s)); }
+    }
     foreach (e in d.edges) { parts.append(renderEdge(d, e, p, s)); }
     foreach (e in d.edges) { parts.append(renderEdgeLabel(d, e, p, s)); }
-    foreach (n in d.nodes) { parts.append(renderNode(n, p, s)); }
+    foreach (n in d.nodes) {
+        if (n.role != "security") { parts.append(renderNode(n, p, s)); }
+    }
     parts.append(renderLegend(d, p, s));
     parts.append("</g>");
     parts.append("</svg>");
@@ -742,15 +868,15 @@ export fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
 // an arrowhead referencing a marker that was not defined renders as a bare line, and which
 // kinds a diagram uses is not worth tracking to save 200 bytes.
 fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
-    var svg = "<defs>";
-    final kinds = ["default", "accent", "link"];
+    final parts: mut [str] = mut ["<defs>"];
     final half = s.arrowHeight / 2;
-    foreach (k in kinds) {
-        svg = svg + "<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"{s.arrowWidth}\" markerHeight=\"{s.arrowHeight}\""
+    foreach (k in ["default", "accent", "link"]) {
+        parts.append("<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"{s.arrowWidth}\" markerHeight=\"{s.arrowHeight}\""
             + " refX=\"{s.arrowWidth - 1}\" refY=\"{half}\" orient=\"auto\">"
-            + "<polygon points=\"0 0, {s.arrowWidth} {half}, 0 {s.arrowHeight}\" fill=\"" + edgeStroke(k, p) + "\"/></marker>";
+            + "<polygon points=\"0 0, {s.arrowWidth} {half}, 0 {s.arrowHeight}\" fill=\"" + edgeStroke(k, p) + "\"/></marker>");
     }
-    return svg + "</defs>";
+    parts.append("</defs>");
+    return parts.join("");
 }
 
 fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
@@ -768,15 +894,18 @@ fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
     return svg;
 }
 
+// renderZone paints a band as an ink wash with an ink hairline, the label centred in the
+// band's top margin on a paper mask.
 fun renderZone(z: Zone, p: Palette, s: Style) > str {
-    var svg = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"{s.zoneRadius}\""
-        + " fill=\"none\" stroke=\"{p.rule}\" stroke-width=\"{s.strokeWidth}\" stroke-dasharray=\"{s.zoneDash}\"/>";
-    if (z.label != "") {
-        svg = svg + "<text x=\"{z.x + 12}\" y=\"{z.y + 20}\" fill=\"{p.soft}\" font-size=\"{s.zoneLabelSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
-            + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(z.label.upper()) + "</text>";
-    }
-    return svg;
+    final rect = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"{s.zoneRadius}\""
+        + " fill=\"{p.ink}\" fill-opacity=\"0.02\" stroke=\"{p.ink}\" stroke-opacity=\"0.1\" stroke-width=\"{s.hairlineWidth}\"/>";
+    if (z.label == "") { return rect; }
+    final cx = z.x + z.w / 2;
+    final w = snap(z.label.len() * 6 + 12);
+    return rect + "<rect x=\"{cx - w / 2}\" y=\"{z.y + 4}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
+        + "<text x=\"{cx}\" y=\"{z.y + 13}\" fill=\"{p.ink}\" fill-opacity=\"0.4\" font-size=\"{s.zoneLabelSize}\""
+        + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+        + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(z.label.upper()) + "</text>";
 }
 
 // renderDecision paints the diamond. The label sits on the center line rather than the
@@ -786,29 +915,58 @@ fun renderDecision(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     final cy = n.y + n.h / 2;
     final pts = "{cx},{n.y} {n.x + n.w},{cy} {cx},{n.y + n.h} {n.x},{cy}";
-    var svg = "<polygon points=\"" + pts + "\" fill=\"{p.paper}\"/>";
-    svg = svg + "<polygon points=\"" + pts + "\" fill=\"" + nodeFill("default", p) + "\""
-        + " stroke=\"" + nodeStroke("default", p) + "\" stroke-width=\"{s.strokeWidth}\"/>";
-    svg = svg + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
+    return "<polygon points=\"" + pts + "\" fill=\"{p.paper}\"/>"
+        + "<polygon points=\"" + pts + "\"" + nodePaint("default", p) + " stroke-width=\"{s.strokeWidth}\"/>"
+        + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
         + " font-family=\"{s.fontFamily}\" text-anchor=\"middle\">"
         + escapeSvg(n.label) + "</text>";
+}
+
+// renderSecurity paints a trust boundary. There is no opaque under-layer: connectors are
+// meant to show through the wash, and the label sits on a paper mask over the top border
+// the way the design system labels every boundary.
+fun renderSecurity(n: Node, p: Palette, s: Style) > str {
+    final cx = n.x + n.w / 2;
+    final w = snap(n.label.len() * 6 + 12);
+    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.zoneRadius}\""
+        + nodePaint("security", p) + " stroke-width=\"{s.strokeWidth}\" stroke-dasharray=\"{s.securityDash}\"/>";
+    if (n.label != "") {
+        svg = svg + "<rect x=\"{cx - w / 2}\" y=\"{n.y - 6}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
+            + "<text x=\"{cx}\" y=\"{n.y + 3}\" fill=\"{p.accent}\" font-size=\"{s.zoneLabelSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(n.label.upper()) + "</text>";
+    }
     return svg;
 }
 
+// renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
+// Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
+// followable before any script loads.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
+    var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
+    if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
+    final body = renderNodeBody(n, p, s);
+    if (s.anchorHref != "" and n.anchor != "") {
+        final href = s.anchorHref.replace("\{path\}", with: escapeSvg(n.anchor));
+        return "<a href=\"" + href + "\"" + attrs + "><g>" + body + "</g></a>";
+    }
+    return "<g" + attrs + ">" + body + "</g>";
+}
+
+fun renderNodeBody(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     // A decision is a diamond inscribed in the node box, so its vertices land exactly on
     // the box edge midpoints attachPoint already returns. Same mask-then-shape order as a
     // box: the opaque under-layer stops a connector routed behind it showing through.
     if (n.role == "decision") { return renderDecision(n, p, s); }
+    if (n.role == "security") { return renderSecurity(n, p, s); }
     // An opaque mask under the styled box stops a connector routed behind the node from
     // showing through a translucent fill such as accentTint.
     var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\" fill=\"{p.paper}\"/>";
     var dash = "";
     if (n.role == "optional") { dash = " stroke-dasharray=\"{s.optionalDash}\""; }
     svg = svg + "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\""
-        + " fill=\"" + nodeFill(n.role, p) + "\" stroke=\"" + nodeStroke(n.role, p) + "\""
-        + " stroke-width=\"{s.strokeWidth}\"" + dash + "/>";
+        + nodePaint(n.role, p) + " stroke-width=\"{s.strokeWidth}\"" + dash + "/>";
 
     if (n.tag != "") {
         final tw = snap(n.tag.len() * 6 + 12);
@@ -843,13 +1001,15 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     final geo = edgeGeometry(d, e);
     var dash = "";
     if (e.dashed) { dash = " stroke-dasharray=\"{s.edgeDash}\""; }
+    var radius = s.bendRadius;
+    if (radius < BendFloor) { radius = BendFloor; }
     var route = "";
     if (e.via.len() > 0) {
-        route = routePath(edgePoints(geo, e), radius: s.bendRadius);
+        route = routePath(edgePoints(geo, e), radius: radius);
     } else {
-        route = connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: s.bendRadius);
+        route = connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: radius);
     }
-    return "<path d=\"" + route + "\""
+    return "<path data-edge=\"" + escapeSvg(e.src) + "->" + escapeSvg(e.dst) + "\" d=\"" + route + "\""
         + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
 }
@@ -870,86 +1030,98 @@ fun edgeGeometry(d: Diagram, e: Edge) > [int] {
     return [s[0], s[1], t[0], t[1], h];
 }
 
-// renderEdgeLabel places the label off the crossing segment with a 6px gap, never on the
-// stroke. Labels are painted before nodes, so one that strays onto a box is covered rather
-// than left sitting on the border as a fragment.
 fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     if (e.label == "") { return ""; }
-    final geo = edgeGeometry(d, e);
-    final x1 = geo[0];
-    final y1 = geo[1];
-    final x2 = geo[2];
-    final y2 = geo[3];
-    final w = snap(e.label.len() * 5 + 12);
-
-    // A polyline has no single crossing segment, so the label rides its longest leg, the
-    // one with the most open canvas beside it.
-    if (e.via.len() > 0) {
-        var best: [int] = [x1, y1, x2, y2];
-        var bestLen = 0 - 1;
-        foreach (seg in edgeSegments(d, e)) {
-            final len = iabs(seg[2] - seg[0]) + iabs(seg[3] - seg[1]);
-            if (len > bestLen) {
-                best = seg;
-                bestLen = len;
-            }
-        }
-        if (best[0] == best[2]) {
-            return edgeLabelChip(best[0] + 12 + w / 2, snap(best[1] + (best[3] - best[1]) / 2), w, e, p, s);
-        }
-        return edgeLabelChip(snap(best[0] + (best[2] - best[0]) / 2), best[1] - 14, w, e, p, s);
-    }
-
-    // A straight vertical run has no horizontal segment to sit above, and the usual
-    // placement would center the opaque mask on the stroke, hiding the connector the label
-    // names. Put it beside the line instead, with the same 10px gap.
-    if (x1 == x2) {
-        return edgeLabelChip(x1 + 12 + w / 2, snap(y1 + (y2 - y1) / 2), w, e, p, s);
-    }
-
-    // Center on the crossing segment: its midpoint is open canvas by construction, whereas
-    // the midpoint of the whole route can land inside either endpoint box.
-    var mx = 0;
-    var my = 0;
-    if (geo[4] == 1) {
-        mx = snap(x1 + (x2 - x1) / 2);
-        if (e.bend != 0) { mx = e.bend; }
-        my = snap(y1 + (y2 - y1) / 2);
-    } else {
-        my = snap(y1 + (y2 - y1) / 2);
-        if (e.bend != 0) { my = e.bend; }
-        mx = snap(x1 + (x2 - x1) / 2);
-    }
-    return edgeLabelChip(mx, my - 14, w, e, p, s);
-}
-
-// edgeLabelChip paints the label centered on cx with its baseline just under cy, over an
-// opaque mask w wide.
-fun edgeLabelChip(cx: int, cy: int, w: int, e: Edge, p: Palette, s: Style) > str {
+    final at = labelPlacement(d, e);
+    final cx = at[0];
+    final cy = at[1];
+    final w = at[2];
     return "<rect x=\"{cx - w / 2}\" y=\"{cy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
         + "<text x=\"{cx}\" y=\"{cy + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
         + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
         + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
 }
 
-// renderLegend draws the strip below the figure. The design system puts it outside the
-// diagram area, so callers size the viewBox with 60px of room at the bottom.
+// labelPlacement returns [cx, cy, w] for an edge label: centred on cx, baseline just under
+// cy, over a mask w wide spanning cy-8 to cy+4.
+//
+// Horizontal legs come first, longest first, the label above the stroke; then beside each
+// vertical leg, right before left. The first spot whose mask stays on the canvas and clears
+// every box wins. The centre of a bend's vertical crossing is not a candidate: on a route
+// between neighbours that segment runs through the corridor between the two boxes, and a
+// mask there lands on both.
+fun labelPlacement(d: Diagram, e: Edge) > [int] {
+    final w = snap(e.label.len() * 5 + 12);
+    final flat: mut [[int]] = mut [<[int]>];
+    final upright: mut [[int]] = mut [<[int]>];
+    foreach (seg in edgeSegments(d, e)) {
+        if (seg[1] == seg[3] and seg[0] != seg[2]) { insertByLength(flat, seg: seg); }
+        if (seg[0] == seg[2] and seg[1] != seg[3]) { insertByLength(upright, seg: seg); }
+    }
+    final spots: mut [[int]] = mut [<[int]>];
+    foreach (seg in flat) {
+        spots.append([snap(seg[0] + (seg[2] - seg[0]) / 2), seg[1] - LabelGap - 4, w]);
+    }
+    foreach (seg in upright) {
+        final my = snap(seg[1] + (seg[3] - seg[1]) / 2);
+        spots.append([seg[0] + LabelGap + w / 2, my, w]);
+        spots.append([seg[0] - LabelGap - w / 2, my, w]);
+    }
+    if (spots.len() == 0) {
+        final geo = edgeGeometry(d, e);
+        return [geo[0], geo[1] - LabelGap - 4, w];
+    }
+    foreach (at in spots) {
+        if (labelClear(d, at: at)) { return at; }
+    }
+    return spots[0];
+}
+
+fun insertByLength(segs: mut [[int]], seg: [int]) > void {
+    final len = iabs(seg[2] - seg[0]) + iabs(seg[3] - seg[1]);
+    var i = 0;
+    while (i < segs.len() and iabs(segs[i][2] - segs[i][0]) + iabs(segs[i][3] - segs[i][1]) >= len) {
+        i = i + 1;
+    }
+    segs.insert(i, value: seg);
+}
+
+// labelClear reports whether a label mask at [cx, cy, w] sits on the canvas and off every
+// box. A security boundary is exempt: a label inside one reads as inside the boundary.
+fun labelClear(d: Diagram, at: [int]) > bool {
+    final mask = [at[0] - at[2] / 2, at[1] - 8, at[2], 12];
+    if (mask[0] < 0 or mask[1] < 0 or mask[0] + mask[2] > d.width or mask[1] + mask[3] > d.height) {
+        return false;
+    }
+    foreach (n in d.nodes) {
+        if (n.role != "security" and boxesOverlap(mask, n: n)) { return false; }
+    }
+    return true;
+}
+
+// renderLegend draws the strip in the figure's bottom LegendStrip px, which validate keeps
+// free of nodes: a hairline, the LEGEND word, then one swatch per entry.
 fun renderLegend(d: Diagram, p: Palette, s: Style) > str {
     if (d.legend.len() == 0) { return ""; }
+    final top = d.height - LegendStrip;
     final y = d.height - s.margin;
-    var svg = "<line x1=\"{s.margin}\" y1=\"{y - 16}\" x2=\"{d.width - s.margin}\" y2=\"{y - 16}\""
-        + " stroke=\"{p.rule}\" stroke-width=\"{s.hairlineWidth}\"/>";
+    final parts: mut [str] = mut [
+        "<line x1=\"{s.margin}\" y1=\"{top}\" x2=\"{d.width - s.margin}\" y2=\"{top}\""
+            + " stroke=\"{p.rule}\" stroke-width=\"{s.hairlineWidth}\"/>",
+        "<text x=\"{s.margin}\" y=\"{top + 14}\" fill=\"{p.muted}\" font-size=\"{s.legendSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"{s.legendTracking}\">LEGEND</text>",
+    ];
     var x = s.margin;
     foreach (item in d.legend) {
-        svg = svg + "<rect x=\"{x}\" y=\"{y - 8}\" width=\"{s.legendSwatch}\" height=\"{s.legendSwatch}\" rx=\"{s.chipRadius}\""
-            + " fill=\"" + nodeFill(item.role, p) + "\" stroke=\"" + nodeStroke(item.role, p)
-            + "\" stroke-width=\"{s.hairlineWidth}\"/>"
+        parts.append("<rect x=\"{x}\" y=\"{y - 8}\" width=\"{s.legendSwatch}\" height=\"{s.legendSwatch}\" rx=\"{s.chipRadius}\""
+            + nodePaint(item.role, p) + " stroke-width=\"{s.hairlineWidth}\"/>"
             + "<text x=\"{x + 18}\" y=\"{y + 1}\" fill=\"{p.soft}\" font-size=\"{s.legendSize}\""
             + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
-            + " letter-spacing=\"{s.legendTracking}\">" + escapeSvg(item.label.upper()) + "</text>";
+            + " letter-spacing=\"{s.legendTracking}\">" + escapeSvg(item.label.upper()) + "</text>");
         x = x + s.legendPitch;
     }
-    return svg;
+    return parts.join("");
 }
 
 // twoBox is the smallest sound diagram: two boxes on one row, one connector between them.
@@ -1075,29 +1247,28 @@ test "an invalid diagram fails the render rather than shipping crooked" {
     assert\equal(svg, "threw", "renderSvg throws on a validation finding");
 }
 
-// The bytes pinned here are the ones Style was extracted FROM. Every field defaults to the
-// literal the painters carried before the object existed, so a default render has to come
-// out byte-identical to the renderer that had no Style at all. A diff nobody intended is a
-// default that drifted; a deliberate change to the design system regenerates this.
+// A diff nobody intended here is a default that drifted; a deliberate change to the design
+// system regenerates it. Last regenerated for diagram-design parity: the skill's palette and
+// paper, stroke 1.2, and the data-node / data-edge hooks a viewer reads.
 test "the default Style renders the pre-Style bytes" {
     final want = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" width="480" height="280" role="img" aria-labelledby="t-title t-desc" class="magus-diagram">`
         + `<title id="t-title">Two boxes</title><desc id="t-desc">a and b</desc><defs>`
         + `<marker id="t-arrow-default" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
-        + `<polygon points="0 0, 8 3, 0 6" fill="#646b79"/></marker>`
+        + `<polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>`
         + `<marker id="t-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
-        + `<polygon points="0 0, 8 3, 0 6" fill="#bc4c00"/></marker>`
+        + `<polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>`
         + `<marker id="t-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
         + `<polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>`
-        + `<rect width="100%" height="100%" fill="#ffffff"/>`
-        + `<text x="32" y="60" fill="#373c44" font-size="20" font-weight="600" font-family="var(--pico-font-family, sans-serif)">Two boxes</text>`
+        + `<rect width="100%" height="100%" fill="#f5f5f5"/>`
+        + `<text x="32" y="60" fill="#2d3142" font-size="20" font-weight="600" font-family="var(--pico-font-family, sans-serif)">Two boxes</text>`
         + `<g transform="translate(0,40)">`
-        + `<path d="M 192 140 L 288 140" fill="none" stroke="#646b79" stroke-width="1" marker-end="url(#t-arrow-default)"/>`
-        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff"/>`
-        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#f3f4f6" stroke="#dce3eb" stroke-width="1"/>`
-        + `<text x="112" y="144" fill="#373c44" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text>`
-        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff"/>`
-        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#f3f4f6" stroke="#dce3eb" stroke-width="1"/>`
-        + `<text x="368" y="144" fill="#373c44" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text>`
+        + `<path data-edge="a->b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#t-arrow-default)"/>`
+        + `<g data-node="a"><rect x="32" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
+        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
+        + `<text x="112" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text></g>`
+        + `<g data-node="b"><rect x="288" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
+        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
+        + `<text x="368" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text></g>`
         + `</g></svg>`;
     assert\equal(renderSvg(twoBox(), lightPalette()) catch "threw", want, "twoBox at the shipped defaults");
     assert\equal(renderSvg(twoBox(), lightPalette(), defaultStyle()) catch "threw", want,
@@ -1115,6 +1286,155 @@ test "a customized Style field reaches the attribute" {
     std\assert(styled.indexOf("stroke-width=\"1\"") == null, message: "and the default is gone from it");
     final plain = renderSvg(twoBox(), lightPalette()) catch "threw";
     std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
+}
+
+// The docs lease-loop figure, bend moved to the corridor's centre so both legs seat the
+// bend floor. Its RELEASE label once sat on the vertical crossing between decl and work,
+// its mask across both boxes.
+fun leaseLoopGeometry() > Diagram {
+    return Diagram{
+        id = "lease-loop", width = 960, height = 600,
+        nodes = [
+            Node{ id = "cp", label = "cp", x = 32, y = 88, w = 200, h = 64 },
+            Node{ id = "part", label = "part", x = 280, y = 88, w = 200, h = 64 },
+            Node{ id = "decl", label = "decl", anchor = "internal/job", x = 528, y = 88, w = 200, h = 64 },
+            Node{ id = "work", label = "work", role = "external", x = 744, y = 192, w = 200, h = 64 },
+            Node{ id = "verify", label = "verify", x = 744, y = 440, w = 200, h = 64 },
+            Node{ id = "integrate", label = "integrate", x = 280, y = 440, w = 200, h = 64 },
+            Node{ id = "plan", label = "plan", x = 32, y = 232, w = 224, h = 64 },
+            Node{ id = "human", label = "human", role = "external", x = 32, y = 344, w = 224, h = 64 },
+            Node{ id = "doctrine", label = "doctrine", role = "focal", x = 376, y = 272, w = 280, h = 72 },
+        ],
+        edges = [
+            Edge{ src = "cp", dst = "part" },
+            Edge{ src = "part", dst = "decl" },
+            Edge{ src = "decl", dst = "work", srcSide = "bottom", srcSlot = 1, srcSlots = 2, dstSide = "top", bend = 168 },
+            Edge{ src = "work", dst = "verify", label = "reports done" },
+            Edge{ src = "verify", dst = "integrate" },
+            Edge{ src = "integrate", dst = "cp", srcSide = "left", dstSide = "left", bend = 16 },
+            Edge{ src = "work", dst = "decl", label = "release", kind = "accent", srcSide = "left", dstSide = "right", bend = 736 },
+            Edge{ src = "decl", dst = "plan", label = "job rows", srcSide = "bottom", srcSlot = 2, srcSlots = 2, dstSide = "top", bend = 196 },
+            Edge{ src = "human", dst = "plan", label = "watches", srcSide = "top", dstSide = "bottom" },
+        ],
+        legend = [ LegendItem{ role = "focal", label = "the whole guarantee" } ],
+    };
+}
+
+test "an edge label on a bent route clears every box" {
+    final d = leaseLoopGeometry();
+    assert\equal(validate(d).len(), 0, "the lease-loop geometry is sound");
+    foreach (e in d.edges) {
+        if (e.label != "") {
+            final at = labelPlacement(d, e);
+            final mask = [at[0] - at[2] / 2, at[1] - 8, at[2], 12];
+            foreach (n in d.nodes) {
+                std\assert(boxesOverlap(mask, n: n) == false, message: "{e.label} mask {mask} overlaps {n.id}");
+            }
+        }
+    }
+    final release = labelPlacement(d, d.edges[6]);
+    assert\equal(release[0] - release[2] / 2, 736 + LabelGap, "release sits beside its vertical run, a 10px gap off it");
+}
+
+test "a horizontal leg long enough for the label carries it above the stroke" {
+    final base = twoBox();
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+        edges = [ Edge{ src = "a", dst = "b", label = "calls" } ] };
+    assert\equal(labelPlacement(d, d.edges[0]), [240, 126, 36], "centred on the leg, mask bottom 10px above y=140");
+}
+
+test "the legend strip carries its word and keeps nodes out" {
+    final base = twoBox();
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+        edges = base.edges, legend = [ LegendItem{ role = "focal", label = "focal" } ] };
+    final svg = renderSvg(d, lightPalette()) catch "threw";
+    std\assert(svg.indexOf(">LEGEND</text>") != null, message: "the strip is labelled");
+    final low = Diagram{ id = base.id, width = base.width, height = base.height, legend = d.legend,
+        nodes = [ Node{ id = "a", label = "A", x = 32, y = 176, w = 160, h = 56 } ] };
+    final errs = validate(low);
+    assert\equal(errs.len(), 1, "a box reaching y=232 sits in the strip below y=180");
+    std\assert(errs[0].indexOf("legend strip") != null, message: "named: {errs[0]}");
+}
+
+test "input and security paint the skill's treatments" {
+    final d = Diagram{
+        id = "t", width = 640, height = 320,
+        nodes = [
+            Node{ id = "trust", label = "trusted", role = "security", x = 16, y = 32, w = 400, h = 160 },
+            Node{ id = "a", label = "A", role = "input", x = 32, y = 64, w = 160, h = 56 },
+            Node{ id = "b", label = "B", x = 448, y = 64, w = 160, h = 56 },
+        ],
+        edges = [ Edge{ src = "a", dst = "b" } ],
+    };
+    assert\equal(validate(d).len(), 0, "a node wholly inside a boundary is not an overlap");
+    final svg = renderSvg(d, lightPalette()) catch "threw";
+    std\assert(svg.indexOf("fill=\"#4f5d75\" fill-opacity=\"0.1\" stroke=\"#7a8399\"") != null, message: "input is muted at 10%");
+    std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
+    std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
+    std\assert((svg.indexOf("data-node=\"trust\"") ?? 0) < (svg.indexOf("data-edge=") ?? 0), message: "the boundary paints under the connector");
+    final straddle = Diagram{ id = "t", width = 640, height = 320,
+        nodes = [ d.nodes[0], Node{ id = "b", label = "B", x = 320, y = 64, w = 160, h = 56 } ] };
+    assert\equal(validate(straddle).len(), 1, "a box straddling the boundary still overlaps it");
+}
+
+test "a decision takes at most three exits" {
+    final nodes = [
+        Node{ id = "q", label = "?", role = "decision", x = 256, y = 128, w = 96, h = 96 },
+        Node{ id = "n", label = "N", x = 224, y = 16, w = 160, h = 56 },
+        Node{ id = "e", label = "E", x = 448, y = 148, w = 160, h = 56 },
+        Node{ id = "s", label = "S", x = 224, y = 280, w = 160, h = 56 },
+        Node{ id = "w", label = "W", x = 32, y = 148, w = 160, h = 56 },
+    ];
+    final three = [
+        Edge{ src = "q", dst = "n", srcSide = "top", dstSide = "bottom" },
+        Edge{ src = "q", dst = "e", srcSide = "right", dstSide = "left" },
+        Edge{ src = "q", dst = "s", srcSide = "bottom", dstSide = "top" },
+    ];
+    assert\equal(validate(Diagram{ id = "t", width = 640, height = 360, nodes = nodes, edges = three }).len(), 0, "three exits");
+    final four = Diagram{ id = "t", width = 640, height = 360, nodes = nodes,
+        edges = [ three[0], three[1], three[2], Edge{ src = "q", dst = "w", srcSide = "left", dstSide = "right" } ] };
+    final errs = validate(four);
+    assert\equal(errs.len(), 1, "a fourth exit is a finding");
+    std\assert(errs[0].indexOf("4 exits") != null, message: "named: {errs[0]}");
+}
+
+test "zones paint a solid hairline wash and stop at three" {
+    final base = twoBox();
+    final z = Zone{ label = "core", x = 16, y = 80, w = 448, h = 120 };
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
+    final svg = renderSvg(d, lightPalette()) catch "threw";
+    std\assert(svg.indexOf("fill=\"#2d3142\" fill-opacity=\"0.02\" stroke=\"#2d3142\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
+        message: "ink wash, ink hairline, no dash");
+    std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#2d3142\" fill-opacity=\"0.4\" font-size=\"7\"") != null, message: "label centred, 7px");
+    final four = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
+    assert\equal(validate(four).len(), 1, "a fourth zone is a finding");
+}
+
+test "a bend too tight for the floor is a finding, not a sharper corner" {
+    final base = twoBox();
+    final nodes = [ base.nodes[0], Node{ id = "b", label = "B", x = 288, y = 176, w = 160, h = 56 } ];
+    final tight = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
+        edges = [ Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left", bend = 196 } ] };
+    final errs = validate(tight);
+    assert\equal(errs.len(), 1, "a 4px leg cannot seat a 6px bend");
+    std\assert(errs[0].indexOf("leaves 4px") != null, message: "named: {errs[0]}");
+    final roomy = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
+        edges = [ Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left" } ] };
+    final svg = renderSvg(roomy, lightPalette(), Style{ bendRadius = 2 }) catch "threw";
+    std\assert(svg.indexOf("L 234 140 Q 240 140 240 146") != null, message: "a radius under the floor is raised to 6");
+}
+
+test "anchorHref links an anchored node and leaves the rest alone" {
+    final base = twoBox();
+    final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
+        nodes = [ Node{ id = "a", label = "A", anchor = "internal/job", x = 32, y = 112 }, base.nodes[1] ] };
+    final linked = renderSvg(d, lightPalette(), Style{ anchorHref = "/code/\{path\}" }) catch "threw";
+    std\assert(linked.indexOf("<a href=\"/code/internal/job\" data-node=\"a\" data-anchor=\"internal/job\"><g>") != null,
+        message: "the anchored node is wrapped in a link");
+    std\assert(linked.indexOf("<g data-node=\"b\">") != null, message: "the unanchored node is a plain group");
+    final plain = renderSvg(d, lightPalette()) catch "threw";
+    std\assert(plain.indexOf("<a ") == null, message: "no template, no link");
+    std\assert(plain.indexOf("<g data-node=\"a\" data-anchor=\"internal/job\">") != null, message: "the anchor still reaches the group");
 }
 
 // inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
