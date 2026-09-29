@@ -15,7 +15,7 @@ import (
 // RegisterMagus builds the "magus" module map and returns it.
 // Magus core primitives.
 //
-// Provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it, `magus\harness.provider(<spell>)` an agent-host harness (many hosts; like workspace.provider, unlike cache.remote's one), and `magus\guard.shell(<rule>)` an additive shell-guard rule (strengthen-only; `magus\guard.bash` is a deprecated alias), and `magus\guard.spawn(<fun>)` the one function the agent guard calls on every spawn and continuation (see [magus\guard.spawn](../guard-spawn.md)), and `magus\guard.command(<fun>)` the one function it calls on every agent shell command (see [magus\guard.command](../guard-command.md)), and `magus\guard.write(<fun>)` the one function it calls on every agent file write. Each provider takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
+// Provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it, `magus\harness.provider(<spell>)` an agent-host harness (many hosts; like workspace.provider, unlike cache.remote's one), and `magus\guard.shell(<rule>)` an additive shell-guard rule (strengthen-only), and `magus\guard.spawn(<fun>)` the one function the agent guard calls on every spawn and continuation (see [magus\guard.spawn](../guard-spawn.md)), and `magus\guard.command(<fun>)` the one function it calls on every agent shell command (see [magus\guard.command](../guard-command.md)), and `magus\guard.write(<fun>)` the one function it calls on every agent file write. Each provider takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
 // `import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
@@ -112,16 +112,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectKnowledgeQueryOutput(ret0), nil
 	}))
 	m.MapSet("explain", vm.DirectValue("magus.explain", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		node := Str(bzArgs, 0)
-		to := Str(bzArgs, 1)
-		ret0, err := std.MagusExplain(ctx, node, to)
+		ret0, err := std.MagusExplain(ctx, node)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectKnowledgeExplainOutput(ret0), nil
 	}))
 	m.MapSet("path", vm.DirectValue("magus.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		node := Str(bzArgs, 0)
@@ -130,7 +129,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectKnowledgePathOutput(ret0), nil
 	}))
 	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		symbol := Str(bzArgs, 0)
@@ -139,7 +138,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectKnowledgeRefsOutput(ret0), nil
 	}))
 	m.MapSet("stats", vm.DirectValue("magus.stats", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		kind := Str(bzArgs, 0)
@@ -147,7 +146,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectKnowledgeStats(ret0), nil
 	}))
 	m.MapSet("output", vm.DirectValue("magus.output", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ref := Str(bzArgs, 0)
@@ -155,12 +154,12 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ObjectOutputRecord(ret0), nil
 	}))
-	m.MapSet("affectedImpact", vm.DirectValue("magus.affectedImpact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("impact", vm.DirectValue("magus.impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := Str(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
-		ret0, err := std.MagusAffectedImpact(ctx, base, opts)
+		ret0, err := std.MagusImpact(ctx, base, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -191,6 +190,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return ObjectDoctorReport(ret0), nil
+	}))
+	m.MapSet("clean", vm.DirectValue("magus.clean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := StrSlice(bzArgs, 0)
+		opts := AnyMap(bzArgs, 1)
+		ret0, err := std.MagusClean(ctx, args, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return ObjectCleanReport(ret0), nil
 	}))
 	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)

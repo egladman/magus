@@ -53,6 +53,9 @@ func Inspect(n Node, fn func(Node) bool) {
 			Inspect(s.Body, fn)
 		}
 	case *FunDecl:
+		for _, d := range s.ParamDefaults {
+			Inspect(d, fn)
+		}
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}
@@ -69,6 +72,18 @@ func Inspect(n Node, fn func(Node) bool) {
 		}
 		for _, m := range s.Methods {
 			Inspect(m, fn)
+		}
+	case *EnumDecl:
+		for _, v := range s.Values {
+			Inspect(v, fn)
+		}
+	case *MatchExpr:
+		Inspect(s.Subject, fn)
+		for i := range s.Branches {
+			for _, c := range s.Branches[i].Conds {
+				Inspect(c, fn)
+			}
+			Inspect(s.Branches[i].Body, fn)
 		}
 	case *BinaryExpr:
 		Inspect(s.Left, fn)
@@ -92,6 +107,9 @@ func Inspect(n Node, fn func(Node) bool) {
 	case *ForceExpr:
 		Inspect(s.Operand, fn)
 	case *FunExpr:
+		for _, d := range s.ParamDefaults {
+			Inspect(d, fn)
+		}
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}

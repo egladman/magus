@@ -152,7 +152,6 @@ func TestScriptWithholdsDeclaringMembers(t *testing.T) {
 		`magus\cache.remote({"name": "s3"})`,
 		`magus\ci.provider({"name": "actions"})`,
 		`magus\guard.shell({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
-		`magus\guard.bash({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
 		`magus\harness.provider({"name": "cursor"})`,
 	} {
 		t.Run(call, func(t *testing.T) {

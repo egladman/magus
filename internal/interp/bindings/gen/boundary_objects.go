@@ -401,7 +401,7 @@ func ObjectNode(v types.Node) vm.Value {
 	if v.LastCommit != nil {
 		formattedLastCommit := ""
 		if !(*v.LastCommit).IsZero() {
-			formattedLastCommit = (*v.LastCommit).Format(time.RFC3339)
+			formattedLastCommit = (*v.LastCommit).Format(time.RFC3339Nano)
 		}
 		optLastCommit = vm.StrValue(formattedLastCommit)
 	}
@@ -418,7 +418,7 @@ func ObjectFileHotspot(v types.FileHotspot) vm.Value {
 	out.MapSet("authors", vm.IntValue(int64(v.Authors)))
 	formattedLastCommit := ""
 	if !v.LastCommit.IsZero() {
-		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
+		formattedLastCommit = v.LastCommit.Format(time.RFC3339Nano)
 	}
 	out.MapSet("lastCommit", vm.StrValue(formattedLastCommit))
 	out.MapSet("moves", vm.IntValue(int64(v.Moves)))
@@ -479,7 +479,7 @@ func ObjectOwnershipEntry(v types.OwnershipEntry) vm.Value {
 	out.MapSet("stale", vm.BoolValue(v.Stale))
 	formattedLastCommit := ""
 	if !v.LastCommit.IsZero() {
-		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
+		formattedLastCommit = v.LastCommit.Format(time.RFC3339Nano)
 	}
 	out.MapSet("lastCommit", vm.StrValue(formattedLastCommit))
 	return out
@@ -533,7 +533,7 @@ func ObjectVolatilityTarget(v types.VolatilityTarget) vm.Value {
 	out.MapSet("samples", vm.IntValue(int64(v.Samples)))
 	formattedLastPass := ""
 	if !v.LastPass.IsZero() {
-		formattedLastPass = v.LastPass.Format(time.RFC3339)
+		formattedLastPass = v.LastPass.Format(time.RFC3339Nano)
 	}
 	out.MapSet("lastPass", vm.StrValue(formattedLastPass))
 	return out
@@ -694,6 +694,230 @@ func ObjectInsightReport(v types.InsightReport) vm.Value {
 	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
 	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced))
 	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication))
+	return out
+}
+
+func ObjectKnowledgeMatch(v types.KnowledgeMatch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("score", vm.IntValue(int64(v.Score)))
+	out.MapSet("staleness", vm.StrValue(v.Staleness))
+	out.MapSet("outrunDays", vm.IntValue(int64(v.OutrunDays)))
+	return out
+}
+
+func ObjectKnowledgeNode(v types.KnowledgeNode) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("doc", vm.StrValue(v.Doc))
+	out.MapSet("source", vm.StrValue(v.Source))
+	mappedAttrs := vm.NewMap()
+	for keyAttrs, itemAttrs := range v.Attrs {
+		mappedAttrs.MapSet(keyAttrs, vm.StrValue(itemAttrs))
+	}
+	out.MapSet("attrs", mappedAttrs)
+	return out
+}
+
+func ObjectKnowledgeEdge(v types.KnowledgeEdge) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("relation", vm.StrValue(string(v.Relation)))
+	out.MapSet("confidence", vm.StrValue(v.Confidence))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	out.MapSet("provenance", vm.StrValue(v.Provenance))
+	return out
+}
+
+func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("query", vm.StrValue(v.Query))
+	out.MapSet("budget", vm.IntValue(int64(v.Budget)))
+	out.MapSet("matchCount", vm.IntValue(int64(v.MatchCount)))
+	out.MapSet("offset", vm.IntValue(int64(v.Offset)))
+	itemsMatches := make([]vm.Value, len(v.Matches))
+	for indexMatches := range v.Matches {
+		itemsMatches[indexMatches] = ObjectKnowledgeMatch(v.Matches[indexMatches])
+	}
+	out.MapSet("matches", vm.ListValue(itemsMatches))
+	itemsNodes := make([]vm.Value, len(v.Nodes))
+	for indexNodes := range v.Nodes {
+		itemsNodes[indexNodes] = ObjectKnowledgeNode(v.Nodes[indexNodes])
+	}
+	out.MapSet("nodes", vm.ListValue(itemsNodes))
+	itemsLinks := make([]vm.Value, len(v.Links))
+	for indexLinks := range v.Links {
+		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks])
+	}
+	out.MapSet("links", vm.ListValue(itemsLinks))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	return out
+}
+
+func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("relation", vm.StrValue(string(v.Relation)))
+	out.MapSet("direction", vm.StrValue(string(v.Direction)))
+	out.MapSet("other", vm.StrValue(v.Other))
+	out.MapSet("otherKind", vm.StrValue(v.OtherKind))
+	out.MapSet("otherLabel", vm.StrValue(v.OtherLabel))
+	out.MapSet("provenance", vm.StrValue(v.Provenance))
+	return out
+}
+
+func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("node", ObjectKnowledgeNode(v.Node))
+	out.MapSet("blastRadius", vm.IntValue(int64(v.BlastRadius)))
+	itemsOut := make([]vm.Value, len(v.Out))
+	for indexOut := range v.Out {
+		itemsOut[indexOut] = ObjectKnowledgeEdgeRef(v.Out[indexOut])
+	}
+	out.MapSet("out", vm.ListValue(itemsOut))
+	itemsIn := make([]vm.Value, len(v.In))
+	for indexIn := range v.In {
+		itemsIn[indexIn] = ObjectKnowledgeEdgeRef(v.In[indexIn])
+	}
+	out.MapSet("in", vm.ListValue(itemsIn))
+	out.MapSet("docsURL", vm.StrValue(v.DocsURL))
+	return out
+}
+
+func ObjectKnowledgePathStep(v types.KnowledgePathStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("from", vm.StrValue(v.From))
+	out.MapSet("to", vm.StrValue(v.To))
+	out.MapSet("relation", vm.StrValue(string(v.Relation)))
+	out.MapSet("forward", vm.BoolValue(v.Forward))
+	return out
+}
+
+func ObjectKnowledgePathOutput(v types.KnowledgePathOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("from", vm.StrValue(v.From))
+	out.MapSet("to", vm.StrValue(v.To))
+	out.MapSet("found", vm.BoolValue(v.Found))
+	itemsSteps := make([]vm.Value, len(v.Steps))
+	for indexSteps := range v.Steps {
+		itemsSteps[indexSteps] = ObjectKnowledgePathStep(v.Steps[indexSteps])
+	}
+	out.MapSet("steps", vm.ListValue(itemsSteps))
+	return out
+}
+
+func ObjectKnowledgeRefSite(v types.KnowledgeRefSite) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", vm.StrValue(v.File))
+	out.MapSet("count", vm.IntValue(int64(v.Count)))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	return out
+}
+
+func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("symbol", vm.StrValue(v.Symbol))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
+	out.MapSet("refCount", vm.IntValue(int64(v.RefCount)))
+	itemsDefs := make([]vm.Value, len(v.Defs))
+	for indexDefs := range v.Defs {
+		itemsDefs[indexDefs] = ObjectKnowledgeRefSite(v.Defs[indexDefs])
+	}
+	out.MapSet("defs", vm.ListValue(itemsDefs))
+	itemsRefs := make([]vm.Value, len(v.Refs))
+	for indexRefs := range v.Refs {
+		itemsRefs[indexRefs] = ObjectKnowledgeRefSite(v.Refs[indexRefs])
+	}
+	out.MapSet("refs", vm.ListValue(itemsRefs))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	return out
+}
+
+func ObjectKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("degree", vm.IntValue(int64(v.Degree)))
+	out.MapSet("in", vm.IntValue(int64(v.In)))
+	out.MapSet("out", vm.IntValue(int64(v.Out)))
+	return out
+}
+
+func ObjectKnowledgeOrphan(v types.KnowledgeOrphan) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
+func ObjectKnowledgeDocCoverage(v types.KnowledgeDocCoverage) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("total", vm.IntValue(int64(v.Total)))
+	out.MapSet("documented", vm.IntValue(int64(v.Documented)))
+	out.MapSet("percent", vm.IntValue(int64(v.Percent)))
+	itemsUndocumented := make([]vm.Value, len(v.Undocumented))
+	for indexUndocumented := range v.Undocumented {
+		itemsUndocumented[indexUndocumented] = vm.StrValue(v.Undocumented[indexUndocumented])
+	}
+	out.MapSet("undocumented", vm.ListValue(itemsUndocumented))
+	return out
+}
+
+func ObjectKnowledgeStats(v types.KnowledgeStats) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("nodeCount", vm.IntValue(int64(v.NodeCount)))
+	out.MapSet("edgeCount", vm.IntValue(int64(v.EdgeCount)))
+	itemsGods := make([]vm.Value, len(v.Gods))
+	for indexGods := range v.Gods {
+		itemsGods[indexGods] = ObjectKnowledgeGodNode(v.Gods[indexGods])
+	}
+	out.MapSet("gods", vm.ListValue(itemsGods))
+	itemsOrphans := make([]vm.Value, len(v.Orphans))
+	for indexOrphans := range v.Orphans {
+		itemsOrphans[indexOrphans] = ObjectKnowledgeOrphan(v.Orphans[indexOrphans])
+	}
+	out.MapSet("orphans", vm.ListValue(itemsOrphans))
+	itemsCoverage := make([]vm.Value, len(v.Coverage))
+	for indexCoverage := range v.Coverage {
+		itemsCoverage[indexCoverage] = ObjectKnowledgeDocCoverage(v.Coverage[indexCoverage])
+	}
+	out.MapSet("coverage", vm.ListValue(itemsCoverage))
+	out.MapSet("isolatedCount", vm.IntValue(int64(v.IsolatedCount)))
+	out.MapSet("componentCount", vm.IntValue(int64(v.ComponentCount)))
+	out.MapSet("largestComponentSize", vm.IntValue(int64(v.LargestComponentSize)))
+	return out
+}
+
+func ObjectOutputRecord(v types.OutputRecord) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("failed", vm.BoolValue(v.Failed))
+	out.MapSet("durationMs", vm.IntValue(int64(v.DurationMs)))
+	out.MapSet("output", vm.StrValue(v.Output))
 	return out
 }
 
@@ -1072,6 +1296,22 @@ func ObjectDoctorReport(v types.DoctorReport) vm.Value {
 	return out
 }
 
+func ObjectCleanReport(v types.CleanReport) vm.Value {
+	out := vm.NewMap()
+	itemsRemoved := make([]vm.Value, len(v.Removed))
+	for indexRemoved := range v.Removed {
+		itemsRemoved[indexRemoved] = vm.StrValue(v.Removed[indexRemoved])
+	}
+	out.MapSet("removed", vm.ListValue(itemsRemoved))
+	itemsTracked := make([]vm.Value, len(v.Tracked))
+	for indexTracked := range v.Tracked {
+		itemsTracked[indexTracked] = vm.StrValue(v.Tracked[indexTracked])
+	}
+	out.MapSet("tracked", vm.ListValue(itemsTracked))
+	out.MapSet("dryRun", vm.BoolValue(v.DryRun))
+	return out
+}
+
 func ObjectDriftResult(v types.DriftResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("drifted", vm.BoolValue(v.Drifted))
@@ -1196,7 +1436,7 @@ func ObjectCommit(v types.Commit) vm.Value {
 	out.MapSet("author", ObjectPerson(v.Author))
 	formattedDate := ""
 	if !v.Date.IsZero() {
-		formattedDate = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339Nano)
 	}
 	out.MapSet("date", vm.StrValue(formattedDate))
 	out.MapSet("subject", vm.StrValue(v.Subject))
@@ -1221,7 +1461,7 @@ func ObjectVCSTag(v types.VCSTag) vm.Value {
 	out.MapSet("version", ObjectSemverVersion(v.Version))
 	formattedDate := ""
 	if !v.Date.IsZero() {
-		formattedDate = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339Nano)
 	}
 	out.MapSet("date", vm.StrValue(formattedDate))
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -1370,7 +1610,7 @@ func ObjectCommitRecord(v types.CommitRecord) vm.Value {
 	out.MapSet("author", ObjectCommitAuthor(v.Author))
 	formattedDate := ""
 	if !v.Date.IsZero() {
-		formattedDate = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339Nano)
 	}
 	out.MapSet("date", vm.StrValue(formattedDate))
 	out.MapSet("subject", vm.StrValue(v.Subject))
@@ -1454,12 +1694,12 @@ func ObjectStatusTargetRun(v types.StatusTargetRun) vm.Value {
 	out.MapSet("state", vm.StrValue(string(v.State)))
 	formattedStartedAt := ""
 	if !v.StartedAt.IsZero() {
-		formattedStartedAt = v.StartedAt.Format(time.RFC3339)
+		formattedStartedAt = v.StartedAt.Format(time.RFC3339Nano)
 	}
 	out.MapSet("startedAt", vm.StrValue(formattedStartedAt))
 	formattedEndedAt := ""
 	if !v.EndedAt.IsZero() {
-		formattedEndedAt = v.EndedAt.Format(time.RFC3339)
+		formattedEndedAt = v.EndedAt.Format(time.RFC3339Nano)
 	}
 	out.MapSet("endedAt", vm.StrValue(formattedEndedAt))
 	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
@@ -1473,7 +1713,7 @@ func ObjectStatusRun(v types.StatusRun) vm.Value {
 	out.MapSet("trigger", vm.StrValue(v.Trigger))
 	formattedStartedAt := ""
 	if !v.StartedAt.IsZero() {
-		formattedStartedAt = v.StartedAt.Format(time.RFC3339)
+		formattedStartedAt = v.StartedAt.Format(time.RFC3339Nano)
 	}
 	out.MapSet("startedAt", vm.StrValue(formattedStartedAt))
 	itemsTargets := make([]vm.Value, len(v.Targets))
@@ -1510,7 +1750,7 @@ func ObjectGrant(v types.Grant) vm.Value {
 
 func ObjectCredential(v types.Credential) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("class", vm.StrValue(string(v.Class)))
+	out.MapSet("class", vm.StrValue(string(v.Kind)))
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("grant", ObjectGrant(v.Grant))

@@ -126,6 +126,34 @@ var x = d\answer;`)
 	assert.Empty(t, got, "using the alias must count as use")
 }
 
+// An interpolation is sub-parsed, and a reference there is still a use. A brace run
+// in a backtick string that does not parse stays literal text and is not one.
+func TestSession_Diagnostics_ImportUsedInInterpolation(t *testing.T) {
+	mod := vm.NewMap()
+	mod.MapSet("answer", vm.IntValue(42))
+	for _, tc := range []struct {
+		name, code string
+		unused     bool
+	}{
+		{name: "double quoted", code: "import \"example/demo\";\nvar x = \"{demo\\answer}\";"},
+		{name: "backtick", code: "import \"example/demo\";\nvar x = `{demo\\answer}`;"},
+		{name: "nested", code: "import \"example/demo\";\nvar x = \"{\"{demo\\answer}\"}\";"},
+		{name: "raw literal braces", code: "import \"example/demo\";\nvar x = `{{demo}}`;", unused: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSession(context.Background(), WithEmbedded())
+			s.SetNativeModule("example/demo", mod)
+			got := s.Diagnostics(tc.code)
+			if !tc.unused {
+				assert.Empty(t, got)
+				return
+			}
+			require.Len(t, got, 1)
+			assert.Equal(t, diagnostics.Code("BZZ3001"), got[0].Code)
+		})
+	}
+}
+
 func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("example/demo", vm.NewMap())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
@@ -117,9 +118,9 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	})
 }
 
-// magusSurface names the two places the magus.* namespace is installed. They share
-// every member: a member reachable from a magusfile is reachable from a `magus buzz`
-// script, and only the ones listed in buildMagus's withhold block differ.
+// magusSurface names where the magus.* namespace is installed. A magusfile and a
+// `magus buzz` script share every member; only the withhold block differs. The
+// MCP client is a script surface with the clientWithheld members dropped.
 type magusSurface int
 
 const (
@@ -147,8 +148,15 @@ func RegisterMagusNamespace(ctx context.Context, sess *buzz.Session) {
 
 // buildMagus assembles the magus.* namespace object for one surface. The
 // magusfile engine and `magus buzz` share it so the surfaces stay in lock-step, the
-// same reason RegisterModuleSurface is shared for the host modules.
+// same reason RegisterModuleSurface is shared for the host modules. Both carry
+// every member; the MCP client goes through assembleMagus with some withheld.
 func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface) vm.Value {
+	return assembleMagus(ctx, sess, obs, parseMode, surface)
+}
+
+// assembleMagus is buildMagus without the withheld top-level members, which are
+// also dropped from what magus\describeModule lists.
+func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface, withheld ...string) vm.Value {
 	magus := vm.NewMap()
 	cache := buildCache(ctx, obs)
 	ci := buildCI(ctx, obs)
@@ -194,7 +202,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := hostmodules.Describe(name)
+		out := dropMagusMethods(hostmodules.Describe(name), withheld)
 		if name != "" && len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
 		}
@@ -249,23 +257,55 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 
 	// The members that DECLARE into the workspace magus is loading: each records onto
 	// the per-Open registry (or the CI provider selection) that only a magusfile
-	// evaluation has. On the script surface the real member would find no registry and
-	// return null (a silent no-op the caller reads as success), so it is replaced by
-	// an MGS1022 guard that names the constraint. The rest of the namespace stays,
-	// which is the point: withholding the whole `import "magus"` for these three read
-	// as "the module does not exist".
-	if surface == scriptSurface {
+	// evaluation has. Elsewhere the real member would find no registry and return
+	// null (a silent no-op the caller reads as success), so it is replaced by an
+	// MGS1022 guard that names the constraint.
+	if surface != magusfileSurface {
 		magus.MapSet("project", magusfileOnly(obs, `magus\project`))
 		cache.MapSet("remote", magusfileOnly(obs, `magus\cache.remote`))
 		ci.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
 		guard.MapSet("shell", magusfileOnly(obs, `magus\guard.shell`))
-		guard.MapSet("bash", magusfileOnly(obs, `magus\guard.bash`))
 		guard.MapSet("spawn", magusfileOnly(obs, `magus\guard.spawn`))
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 	}
+	if len(withheld) > 0 {
+		magus = dropMembers(magus, withheld)
+	}
 	return magus
+}
+
+// dropMembers returns mod without the named top-level keys.
+func dropMembers(mod vm.Value, names []string) vm.Value {
+	out := vm.NewMap()
+	for _, key := range mod.MapKeys() {
+		if slices.Contains(names, key) {
+			continue
+		}
+		if v, ok := mod.MapGet(key); ok {
+			out.MapSet(key, v)
+		}
+	}
+	return out
+}
+
+// dropMagusMethods removes the named methods from a describeModule("magus")
+// listing. The registry still declares them; a surface that withholds them does
+// not offer them.
+func dropMagusMethods(entries []types.ModuleEntry, names []string) []types.ModuleEntry {
+	if len(names) == 0 {
+		return entries
+	}
+	for i := range entries {
+		if entries[i].Name != "magus" {
+			continue
+		}
+		entries[i].Methods = slices.DeleteFunc(slices.Clone(entries[i].Methods), func(m types.ModuleMethodEntry) bool {
+			return slices.Contains(names, m.Name)
+		})
+	}
+	return entries
 }
 
 // magusfileOnly returns a stand-in for a magus.* member that only a magusfile can

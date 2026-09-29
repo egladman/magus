@@ -726,18 +726,15 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 	return nil
 }
 
-// buzzDispatchViaPool fans names out via the Buzz pool, yielding the RunAll
+// buzzDispatchViaPool fans names out via the Buzz pool, which yields the caller's
 // limiter slot (if held) for the duration so pool workers can acquire it.
+//
+// The slot is handed back and the isolation lease deliberately is not: the children
+// run inside the caller's region and take no lease of their own, so there is nothing
+// for the dispatcher to release and nothing to re-acquire behind a queued peer (see
+// cache.runIsolation).
 func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) error {
-	lim := cache.LimiterFromContext(ctx)
-	ancestors := buzz.AncestorsFromContext(ctx)
-	return proc.RunChildSync(ctx, lim, func() error {
-		// The slot is handed back here and the isolation lease deliberately is not: the
-		// children run inside the caller's region and take no lease of their own, so
-		// there is nothing for the dispatcher to release and nothing to re-acquire
-		// behind a queued peer (see cache.runIsolation).
-		return p.Dispatch(cache.WithoutSlotHeld(ctx), names, ancestors)
-	})
+	return p.Dispatch(ctx, names, buzz.AncestorsFromContext(ctx))
 }
 
 // matchBuzzTargets matches registered Buzz target names against ctx.glob's patterns

@@ -246,17 +246,22 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
 		return vm.Null, fmt.Errorf("serialize.jsonEncode: requires a Boxed argument")
 	}
-	src := args[0]
-	// A Boxed value (from makeBoxed) stores its raw data under boxedRawKey.
-	// Extract it so we serialize the data, not the Go method wrappers.
-	if raw, ok := src.MapGet(boxedRawKey); ok {
-		src = raw
-	}
-	var buf bytes.Buffer
-	if err := encodeJSON(src, &buf, nil); err != nil {
+	encoded, err := JSONEncode(args[0])
+	if err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
 	}
-	return vm.StrValue(buf.String()), nil
+	return vm.StrValue(encoded), nil
+}
+
+// JSONEncode serializes a Buzz value with the same cycle checks and ordered-map
+// behavior as serialize.jsonEncode. Embedders can return a value as JSON without
+// round-tripping it through an unsafe generic Go conversion.
+func JSONEncode(v vm.Value) (string, error) {
+	var buf bytes.Buffer
+	if err := encodeJSON(v, &buf, nil); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // encodeJSON writes v as JSON with map keys in INSERTION order. path is every
@@ -289,6 +294,11 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 		buf.WriteByte(']')
 		return nil
 	case v.IsMap():
+		// A Boxed value (from makeBoxed) is its raw data plus Go method values, and
+		// only the data is JSON, at any depth.
+		if raw, ok := v.MapGet(boxedRawKey); ok {
+			return encodeJSON(raw, buf, path)
+		}
 		if identityPathHas(path, v) {
 			return errCircularReference
 		}
@@ -334,6 +344,16 @@ func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("serialize.jsonDecode: %w", err)
 	}
 	return makeBoxed(goToBoxedBuzz(raw)), nil
+}
+
+// JSONDecodeValue decodes data the way serialize.jsonDecode does, integral
+// numbers to int included, but returns the plain value rather than a Boxed one.
+func JSONDecodeValue(data []byte) (vm.Value, error) {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return vm.Null, err
+	}
+	return goToBoxedBuzz(raw), nil
 }
 
 // buzzToGo converts a Buzz value to a Go-native value suitable for JSON

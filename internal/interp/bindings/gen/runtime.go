@@ -454,11 +454,10 @@ func valToAny(v vm.Value) any {
 		}
 		return out
 	case v.IsMap():
-		out := map[string]any{}
-		for _, k := range v.MapKeys() {
-			if mv, ok := v.MapGet(k); ok {
-				out[k] = valToAny(mv)
-			}
+		keys, vals := v.MapKeys(), v.MapValues()
+		out := make(map[string]any, len(keys))
+		for i, k := range keys {
+			out[k] = valToAny(vals[i])
 		}
 		return out
 	case v.IsObject():

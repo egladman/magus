@@ -37,6 +37,7 @@ const (
 	// Session / runtime errors (session.go).
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
 	FiberMisuse      diagnostics.Code = "BZZ2002" // resume/resolve called wrong: not a fiber, missing argument, or a running fiber
+	FFIDisabled      diagnostics.Code = "BZZ2003" // zdef was called in a session whose host disabled native FFI
 
 	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile;
 	// see Severity.
@@ -51,7 +52,7 @@ const (
 var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
 	RedundantImportAlias,
-	UnresolvedImport, FiberMisuse,
+	UnresolvedImport, FiberMisuse, FFIDisabled,
 	UnusedImport, StringAccumulation,
 }
 

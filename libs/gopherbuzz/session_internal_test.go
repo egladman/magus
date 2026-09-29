@@ -2,9 +2,13 @@ package buzz
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,4 +92,65 @@ func TestSession_Warnings_ReplSuppressed(t *testing.T) {
 
 	require.NoError(t, s.Exec(context.Background(), `import "unused/mod";`))
 	assert.Empty(t, s.Warnings(), "a REPL session must not warn on an import unused so far")
+}
+
+func TestWithoutFileImports(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded(), WithoutFileImports())
+	defer func() { _ = sess.Close() }()
+	err := sess.Exec(ctx, `import "./helper.buzz";`)
+	require.ErrorIs(t, err, UnresolvedImport)
+	assert.ErrorContains(t, err, "file imports are unavailable")
+}
+
+func TestWithoutFFI(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded(), WithoutFFI())
+	defer func() { _ = sess.Close() }()
+	_, err := sess.CallValue(ctx, sess.GetGlobal("zdef"), nil)
+	require.ErrorIs(t, err, FFIDisabled)
+	assert.ErrorContains(t, err, "run the script through the Buzz CLI")
+}
+
+// The filter sees the entry alone: a module keeps what the entry's kept code
+// calls into.
+func TestEntryFilterSkipsImportedModules(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte("fun helper() > int { return 2; }\nexport fun two() > int { return helper(); }\n"), 0o644))
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded(), WithSearchPaths(filepath.Join(dir, "?.buzz")))
+	defer func() { _ = sess.Close() }()
+	var seen int
+	sess.SetEntryFilter("test", func(prog *ast.Program, _ ImportLookup) {
+		seen++
+		kept := prog.Stmts[:0]
+		for _, stmt := range prog.Stmts {
+			if _, isFun := stmt.(*ast.FunDecl); !isFun {
+				kept = append(kept, stmt)
+			}
+		}
+		prog.Stmts = kept
+	})
+	require.NoError(t, sess.Exec(ctx, "import \"lib\";\nfun dropped() > void {}\nvar n = two();\n"))
+	assert.Equal(t, 1, seen)
+	assert.True(t, sess.GetGlobal("dropped").IsNull())
+	assert.Equal(t, int64(2), sess.GetGlobal("n").AsInt())
+}
+
+func TestRejectImportMatchesEitherSpelling(t *testing.T) {
+	rejected := errors.New("not offered here")
+	for _, tc := range []struct{ rejected, imported string }{
+		{"os", `import "os";`},
+		{"os", `import "buzz:os";`},
+		{"buzz:os", `import "os";`},
+		{"buzz:os", `import "buzz:os";`},
+	} {
+		t.Run(tc.rejected+" "+tc.imported, func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer func() { _ = sess.Close() }()
+			sess.RejectImport(tc.rejected, rejected)
+			require.ErrorIs(t, sess.Exec(ctx, tc.imported), rejected)
+		})
+	}
 }

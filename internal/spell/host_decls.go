@@ -10,7 +10,7 @@ import (
 // parameter and return types.
 //
 // It is the half that makes a host call CHECKED. A native module alone is untyped to
-// the checker, so `magus\affectedImpact(base)` produced an Unknown and a magusfile
+// the checker, so `magus\impact(base)` produced an Unknown and a magusfile
 // could read a field the return does not carry, failing only at run time. An extern
 // declaration is exactly the fix the language provides for this: it states the
 // signature and emits no code, so it types the call without shadowing the host

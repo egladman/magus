@@ -97,7 +97,7 @@ func AttachSessionObservers(ctx context.Context, sess *buzz.Session, mode string
 	if p == nil {
 		return
 	}
-	sess.SetCompileObserver(compileObserver{ctx: ctx, p: p, mode: mode})
+	sess.AddCompileObserver(compileObserver{ctx: ctx, p: p, mode: mode})
 	sess.SetFaultHook(func(k vm.FaultKind) { p.RecordBuzzVMFault(ctx, k.String()) })
 }
 

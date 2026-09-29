@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"maps"
@@ -68,6 +69,24 @@ type Session struct {
 	// per-phase fire is guarded by a nil check, so an unobserved session compiles
 	// unchanged. See SetCompileObserver.
 	compileObserver CompileObserver
+	// entryFilter edits the entry program before its imports resolve, and
+	// entryFilterID names it in bytecode keys. Cleared while an import loads, so
+	// a module is never filtered. See SetEntryFilter.
+	entryFilter   func(*ast.Program, ImportLookup)
+	entryFilterID string
+	// bytecodeStore, when set, keeps a compiled chunk for source this session
+	// has already compiled. A later exec of the same source runs the chunk
+	// instead of parsing and compiling it again. Nil compiles every time.
+	bytecodeStore BytecodeStore
+	// importFrames is a stack of what the compiles currently in progress
+	// depend on, innermost last. Empty unless a bytecode store is recording.
+	importFrames []bytecodeFrame
+	// lastClosure is the files the most recent exec imported, including the
+	// files those imports imported. The caller folds it into its own record.
+	lastClosure []bytecodeFile
+	// replaying is set while a cached chunk's imports are bound, so they are
+	// not noted a second time onto the frame of whatever is compiling.
+	replaying bool
 	// faultHook, if set, is applied to each VM this session runs (via enter), so a
 	// recovered VM panic or a host-callable error raised as a throw is reported.
 	// nil in normal runs; gated exactly like stepHook. See SetFaultHook.
@@ -78,6 +97,10 @@ type Session struct {
 	// (e.g. $BUZZ_PATH). NewSession seeds it from DefaultSearchPaths; the host may
 	// override it at construction via WithSearchPaths. See findIncludeFile.
 	searchPaths []string
+	// fileImportsDisabled prevents unresolved imports from searching the filesystem.
+	fileImportsDisabled bool
+	// ffiDisabled makes zdef unavailable to this session.
+	ffiDisabled bool
 	// includeDirs is an additional ordered list of plain directories searched
 	// after searchPaths, for the `-L` CLI flag and BUZZ_INCLUDE_PATH. NewSession
 	// populates it from BUZZ_INCLUDE_PATH; the host may override via SetIncludeDirs.
@@ -97,6 +120,9 @@ type Session struct {
 	// (or alias) without touching the filesystem; see loadFileImports. The host
 	// registers these via SetNativeModule.
 	nativeModules map[string]vmpackage.Value
+	// rejectedImports lets an embedding host give a specific error for an
+	// import it does not offer, before the ordinary module/file lookup.
+	rejectedImports map[string]error
 	// moduleResolver, if set, is consulted for an import path that is neither
 	// already bound nor a native module, before the includeDirs file search.
 	// It lets the host resolve a path-style import to a prebuilt module value
@@ -182,6 +208,15 @@ func (s *Session) SetNativeModule(importPath string, v vmpackage.Value) {
 		s.nativeModules = map[string]vmpackage.Value{}
 	}
 	s.nativeModules[importPath] = v
+}
+
+// RejectImport gives importPath a host-specific error instead of resolving it.
+// The name is matched with or without the optional buzz: prefix.
+func (s *Session) RejectImport(importPath string, err error) {
+	if s.rejectedImports == nil {
+		s.rejectedImports = make(map[string]error)
+	}
+	s.rejectedImports[strings.TrimPrefix(importPath, "buzz:")] = err
 }
 
 // NativeModule returns the value registered for importPath via
@@ -467,6 +502,17 @@ func WithEmbedded() Option {
 	return func(s *Session) { s.embedded = true }
 }
 
+// WithoutFileImports prevents imports from falling back to .buzz files on disk.
+// Registered native and declaration modules remain importable.
+func WithoutFileImports() Option {
+	return func(s *Session) { s.fileImportsDisabled = true }
+}
+
+// WithoutFFI disables the zdef native-function loader.
+func WithoutFFI() Option {
+	return func(s *Session) { s.ffiDisabled = true }
+}
+
 // WithREPL marks this session as an interactive REPL, suppressing the BZZ3001
 // unused-import warning (see Session.repl). A REPL host should pass this alongside
 // WithEmbedded.
@@ -501,7 +547,16 @@ func NewSession(ctx context.Context, opts ...Option) *Session {
 	for _, opt := range opts {
 		opt(s)
 	}
+	if s.ffiDisabled {
+		s.disableFFI()
+	}
 	return s
+}
+
+func (s *Session) disableFFI() {
+	s.SetGlobal("zdef", vmpackage.DirectValue("zdef", func(context.Context, []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.Null, bzz.Errorf(FFIDisabled, "zdef is disabled in this session; remove the zdef call or run the script through the Buzz CLI")
+	}))
 }
 
 // NewChild creates an isolated session that inherits this session's import
@@ -515,9 +570,15 @@ func (s *Session) NewChild() *Session {
 	c.searchPaths = s.searchPaths
 	c.includeDirs = s.includeDirs
 	c.nativeModules = s.nativeModules
+	c.rejectedImports = s.rejectedImports
 	c.moduleResolver = s.moduleResolver
 	c.sourceReader = s.sourceReader
 	c.parseCache = s.parseCache
+	c.fileImportsDisabled = s.fileImportsDisabled
+	c.ffiDisabled = s.ffiDisabled
+	if c.ffiDisabled {
+		c.disableFFI()
+	}
 	return c
 }
 
@@ -558,13 +619,55 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 // tell that a module re-exported a name another module already exported, which
 // would silently drop the later module's export from its namespace object.
 func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
+	if s.bytecodeStore != nil {
+		return s.execCached(ctx, code)
+	}
 	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
 		return nil, err
 	}
+	return s.runChunk(ctx, chunk)
+}
+
+// execCached is exec through the bytecode store: it runs a saved chunk when
+// one is still fresh, and otherwise compiles while recording what the chunk
+// depends on, then saves it.
+func (s *Session) execCached(ctx context.Context, code string) ([]string, error) {
+	chunk, replayed, hit, err := s.loadCachedChunk(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if hit {
+		exports, err := s.runChunk(ctx, chunk)
+		if err != nil {
+			return nil, err
+		}
+		s.lastClosure = importClosure(replayed)
+		return exports, nil
+	}
+	s.importFrames = append(s.importFrames, bytecodeFrame{})
+	chunk, err = s.compileShared(ctx, code)
+	frame := s.importFrames[len(s.importFrames)-1]
+	s.importFrames = s.importFrames[:len(s.importFrames)-1]
+	if err != nil {
+		return nil, err
+	}
+	exports, err := s.runChunk(ctx, chunk)
+	if err != nil {
+		return nil, err
+	}
+	s.lastClosure = importClosure(frame.imports)
+	s.saveCachedChunk(code, frame, chunk)
+	return exports, nil
+}
+
+// runChunk executes chunk and records what it exported, which is the second
+// half of exec. A cached chunk and a chunk just compiled share it, so a hit
+// still registers the closures the source defines.
+func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]string, error) {
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
-	if _, err = vm.Run(chunk, s.env); err != nil {
+	if _, err := vm.Run(chunk, s.env); err != nil {
 		return nil, err
 	}
 	for _, name := range chunk.Exports {
@@ -601,6 +704,16 @@ func (s *Session) execImport(ctx context.Context, code string) ([]string, error)
 	prevSF := s.sourceFile
 	s.sourceFile = ""
 	defer func() { s.sourceFile = prevSF }()
+	// The entry filter is for the entry alone. Filtering a module would drop
+	// the functions the entry kept a call to.
+	prevFilter, prevFilterID := s.entryFilter, s.entryFilterID
+	s.entryFilter, s.entryFilterID = nil, ""
+	defer func() { s.entryFilter, s.entryFilterID = prevFilter, prevFilterID }()
+	// replaying means the importer is binding a cached chunk's imports. This
+	// module is a real exec, and its own imports are noted on its own frame.
+	prevReplay := s.replaying
+	s.replaying = false
+	defer func() { s.replaying = prevReplay }()
 	return s.exec(ctx, code)
 }
 
@@ -623,6 +736,87 @@ func (s *Session) enter(vm *vmpackage.VM) func() {
 // (parse/check/compile phase timings) and resolves imports. Pass nil to detach.
 // With none set the session compiles unchanged, adding no cost.
 func (s *Session) SetCompileObserver(obs CompileObserver) { s.compileObserver = obs }
+
+// AddCompileObserver adds obs beside any observer already set. A profile and a
+// telemetry recorder can both watch one session; neither replaces the other.
+// Nil is ignored, including a nil *Profile, so a caller can pass
+// ProfileFromContext unconditionally.
+func (s *Session) AddCompileObserver(obs CompileObserver) {
+	if p, isProfile := obs.(*Profile); obs == nil || isProfile && p == nil {
+		return
+	}
+	switch cur := s.compileObserver.(type) {
+	case nil:
+		s.compileObserver = obs
+	case compileObservers:
+		s.compileObserver = append(cur, obs)
+	default:
+		s.compileObserver = compileObservers{cur, obs}
+	}
+}
+
+// SetBytecodeStore keeps compiled chunks so a later exec of the same source
+// runs the saved chunk instead of compiling it again. The chunk is the .bo
+// bytecode Chunk.Marshal already writes. Pass nil to compile every time.
+//
+// A hit skips parse, check and compile, not execution: the chunk's top level
+// runs as it would after a compile. A saved chunk is trusted as the store
+// hands it back, so the store must be one only this session's user can write.
+func (s *Session) SetBytecodeStore(store BytecodeStore) { s.bytecodeStore = store }
+
+// ImportLookup finds the .buzz file an import names the way this session's
+// file search would, and returns its path and bytes. via names the files the
+// import is nested in, outermost first; an import the entry makes passes none.
+// ok is false when no file matches or it cannot be read. It searches files
+// only: a native module, declaration module or module resolver that serves
+// the path ahead of the file search is invisible to it.
+type ImportLookup func(importPath string, via ...string) (path string, src []byte, ok bool)
+
+// SetEntryFilter passes every entry program this session compiles through
+// filter after it parses and before its imports resolve, so a statement the
+// filter removes is neither loaded nor compiled. A module the entry imports
+// is never filtered. A nil filter compiles the entry as parsed.
+//
+// id names the filter in the bytecode store's keys, so a chunk compiled
+// through one filter is never served to a session using another or none; it
+// must be non-empty with a filter. Each file the filter reads through lookup
+// joins the saved chunk's closure, so the chunk goes stale when a file its
+// decisions rested on changes.
+func (s *Session) SetEntryFilter(id string, filter func(prog *ast.Program, lookup ImportLookup)) {
+	if filter != nil && id == "" {
+		panic("gopherbuzz: SetEntryFilter: a filter needs a non-empty id")
+	}
+	if filter == nil {
+		id = ""
+	}
+	s.entryFilter, s.entryFilterID = filter, id
+}
+
+// lookupImport is the ImportLookup an entry filter receives. What it finds,
+// including that nothing matched, is noted on the compile's frame.
+func (s *Session) lookupImport(importPath string, via ...string) (string, []byte, bool) {
+	f := bytecodeFile{importPath: strings.TrimPrefix(importPath, "buzz:")}
+	for _, file := range via {
+		abs, err := filepath.Abs(file)
+		if err != nil {
+			return "", nil, false
+		}
+		f.via = append(f.via, filepath.Dir(abs))
+	}
+	f.path = s.resolveRecorded(f)
+	var data []byte
+	if f.path != "" {
+		var err error
+		if data, err = s.readImportSource(f.path); err != nil {
+			return f.path, nil, false
+		}
+		f.sum = sha256.Sum256(data)
+	}
+	if n := len(s.importFrames); n > 0 {
+		s.importFrames[n-1].filterReads = append(s.importFrames[n-1].filterReads, f)
+	}
+	return f.path, data, f.path != ""
+}
 
 // SetSourceFile stamps path onto Chunk.SourceFile for subsequent compiles.
 // Pass "" to clear. magus buzz -t --coverprofile sets this to the entry file
@@ -768,6 +962,9 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	}
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if s.entryFilter != nil {
+		s.entryFilter(prog, s.lookupImport)
 	}
 	// Resolve file-based imports before type-checking so the globals they
 	// introduce are visible to the checker. Also tells us how each import actually
@@ -1067,13 +1264,26 @@ func importUsageIsReliable(outcome ImportOutcome, alias string) bool {
 // resolver, and finally a .buzz file on the search path. Every `continue` in the
 // old loop is a `return <outcome>, nil` here; every error return carries the
 // outcome it failed under.
-func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (ImportOutcome, error) {
+func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outcome ImportOutcome, err error) {
+	noted := bytecodeImport{path: imp.Path, alias: imp.Alias, only: append([]string(nil), imp.Only...)}
+	defer func() {
+		// replaying is a cached chunk binding imports it already recorded. Noting
+		// them again would write the imported module's imports onto the importer.
+		if err != nil || s.replaying || len(s.importFrames) == 0 {
+			return
+		}
+		top := len(s.importFrames) - 1
+		s.importFrames[top].imports = append(s.importFrames[top].imports, noted)
+	}()
 	// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
 	// stdlib module (`import "buzz:os"`), disambiguating it from a package or
 	// file import. gopherbuzz registers the stdlib under bare names, so strip
 	// the scheme and resolve/bind as if the bare name was imported; the
 	// original spelling is kept for diagnostics.
 	resolvePath := strings.TrimPrefix(imp.Path, "buzz:")
+	if err := s.rejectedImports[resolvePath]; err != nil {
+		return ImportNotFound, err
+	}
 	parts := strings.Split(resolvePath, "/")
 	basename := parts[len(parts)-1]
 
@@ -1088,6 +1298,15 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	// `import "buzz:std"` followed by `import print from "buzz:std"` would bind nothing
 	// the second time.
 	if _, bound := s.env.Get(boundName); bound && len(imp.Only) == 0 {
+		// A chunk compiled here was checked against the types that file declared,
+		// so it depends on the file as much as the import that first loaded it.
+		if len(s.importFrames) > 0 && !s.fileImportsDisabled {
+			if path := s.findIncludeFile(resolvePath); path != "" {
+				if abs, err := filepath.Abs(path); err == nil {
+					noted.files = s.importCache[abs].closureAs(resolvePath)
+				}
+			}
+		}
 		return ImportBound, nil
 	}
 
@@ -1200,6 +1419,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		}
 	}
 
+	if s.fileImportsDisabled {
+		return ImportNotFound, bzz.Errorf(UnresolvedImport, "buzz: import %q: file imports are unavailable in this session", imp.Path)
+	}
 	path := s.findIncludeFile(resolvePath)
 	if path == "" {
 		// Nothing resolved this import: not an already-bound name, a synthetic
@@ -1217,6 +1439,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		// No cache entry means abs is still loading: this import closes a cycle, and
 		// binding nothing is what breaks it.
 		cached := s.importCache[abs]
+		if len(s.importFrames) > 0 {
+			noted.files = cached.closureAs(resolvePath)
+		}
 		switch {
 		case cached == nil:
 		case imp.Alias != "" && imp.Alias != "_":
@@ -1240,9 +1465,14 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
+	// Hash the bytes the load below executes; only while a record is being written.
+	if len(s.importFrames) > 0 {
+		noted.files = []bytecodeFile{{importPath: resolvePath, path: path, sum: sha256.Sum256(data)}}
+	}
 	// Everything this file imports resolves relative to IT, not to whoever imported
 	// it. Popped on the way out so a sibling import of the parent is unaffected.
-	s.importingDirs = append(s.importingDirs, filepath.Dir(abs))
+	moduleDir := filepath.Dir(abs)
+	s.importingDirs = append(s.importingDirs, moduleDir)
 	defer func() { s.importingDirs = s.importingDirs[:len(s.importingDirs)-1] }()
 
 	if imp.Alias != "" && imp.Alias != "_" {
@@ -1258,11 +1488,14 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		// literal was built with no field defaults because the compiler seeds those
 		// from the same collection (see CompileOptions.ImportedTypes).
 		s.collectImportedModule(imp.Alias, string(data))
-		if err := s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
+		if err = s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, err
 		}
+		if len(s.importFrames) > 0 {
+			noted.files = append(noted.files, isolatedClosure(s.lastClosure)...)
+		}
 		if m, ok := s.env.Get(imp.Alias); ok {
-			s.importCache[abs] = &cachedImport{src: string(data), names: m.MapKeys(), values: m}
+			s.importCache[abs] = &cachedImport{src: string(data), names: m.MapKeys(), values: m, files: noted.files}
 		}
 		return ImportFile, nil
 	}
@@ -1274,7 +1507,11 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
+	if len(s.importFrames) > 0 {
+		noted.files = append(noted.files, nestedClosure(s.lastClosure, moduleDir)...)
+	}
 	s.importCache[abs] = s.cacheBindings(string(data), exports)
+	s.importCache[abs].files = noted.files
 	// Also bind a namespace object under the basename so upstream-Buzz
 	// qualified access (`regex\reCompile`) resolves the same export the
 	// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
@@ -1297,6 +1534,10 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 // functions go into importedModuleFuncs[boundName] (so the checker can build a
 // typed namespace object for the import instead of using `any`). Parse errors
 // are ignored: the subsequent Exec re-parses the same source authoritatively.
+//
+// A cached chunk's replay collects too: nothing checks that chunk again, but a
+// later compile in this session binds the same import as ImportBound and has
+// only this collection to name the module's types from.
 func (s *Session) collectImportedModule(boundName, src string) {
 	prog, err := s.parse(src)
 	if err != nil {
@@ -1458,6 +1699,20 @@ type cachedImport struct {
 	src    string
 	names  []string
 	values vmpackage.Value // map of name to value
+	// files is the module file and its closure, as the import that loaded it
+	// recorded them for a bytecode store. Nil when nothing was recording.
+	files []bytecodeFile
+}
+
+// closureAs is c's closure as an import spelled importPath, resolved from the
+// current directory stack, records it. Nil when c recorded none.
+func (c *cachedImport) closureAs(importPath string) []bytecodeFile {
+	if c == nil || len(c.files) == 0 {
+		return nil
+	}
+	out := slices.Clone(c.files)
+	out[0].importPath, out[0].via, out[0].isolated = importPath, nil, false
+	return out
 }
 
 // cacheBindings records the values names are bound to now, just after a flat import
@@ -1689,8 +1944,16 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.nativeModules = s.nativeModules
 	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
+	sub.rejectedImports = s.rejectedImports
+	sub.fileImportsDisabled = s.fileImportsDisabled
+	sub.ffiDisabled = s.ffiDisabled
+	if sub.ffiDisabled {
+		sub.disableFFI()
+	}
 	sub.sourceReader = s.sourceReader
 	sub.parseCache = s.parseCache
+	sub.compileObserver = s.compileObserver
+	sub.bytecodeStore = s.bytecodeStore
 
 	// Inherit what the parent has already collected from its own flat imports.
 	// loadedPaths is shared (just above), so a module the parent imported returns
@@ -1722,6 +1985,9 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	// Execute the imported file.
 	if err := sub.Exec(ctx, src); err != nil {
 		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
+	}
+	if s.bytecodeStore != nil {
+		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)
 	}
 
 	// Collect new globals: anything in sub-session not in the host snapshot.

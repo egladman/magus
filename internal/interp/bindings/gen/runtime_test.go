@@ -74,6 +74,19 @@ func TestAnyMapReadsAnObjectInstance(t *testing.T) {
 	assert.Nil(t, AnyMap(nil, 0))
 }
 
+func TestAnyMapKeepsEntriesUnderNonStrKeys(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+
+	require.NoError(t, sess.Exec(ctx, `
+		final ints = {1: "a", 2: "b"};
+		final nested = {"k": {2: "z"}};
+	`))
+	assert.Equal(t, map[string]any{"1": "a", "2": "b"}, AnyMap([]vm.Value{sess.GetGlobal("ints")}, 0))
+	assert.Equal(t, map[string]any{"k": map[string]any{"2": "z"}}, AnyMap([]vm.Value{sess.GetGlobal("nested")}, 0))
+}
+
 // TestStrUnwrapsAnEnumCase covers the second of two breaks that made an inferred
 // enum case reach a host method empty.
 //

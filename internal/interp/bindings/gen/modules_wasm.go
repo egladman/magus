@@ -26,6 +26,7 @@ var Modules = Set{
 	"log":      {Register: RegisterLog, Capabilities: Capabilities(WASM)},
 	"markdown": {Register: RegisterMarkdown, Capabilities: Capabilities(WASM)},
 	"math":     {Register: RegisterMath, Capabilities: Capabilities(WASM)},
+	"merge":    {Register: RegisterMerge, Capabilities: Capabilities(WASM)},
 	"path":     {Register: RegisterPath, Capabilities: Capabilities(WASM)},
 	"platform": {Register: RegisterPlatform, Capabilities: Capabilities(WASM)},
 	"semver":   {Register: RegisterSemver, Capabilities: Capabilities(WASM)},

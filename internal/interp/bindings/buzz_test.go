@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -244,6 +245,38 @@ func benchSource(b *testing.B, eng engine.Engine, prog src) {
 		if err := sess.Call(engine.CallParams{Fn: fn}); err != nil {
 			b.Fatalf("call: %v", err)
 		}
+	}
+}
+
+func TestInstallClientWithholdsCmdAndPry(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+
+	require.NoError(t, InstallClient(ctx, sess, io.Discard))
+	mod, ok := sess.NativeModule("magus")
+	require.True(t, ok)
+	for _, name := range []string{"cmd", "pry"} {
+		_, ok = mod.MapGet(name)
+		assert.False(t, ok, "magus\\%s is on the client surface", name)
+	}
+	_, ok = mod.MapGet("describeFile")
+	assert.True(t, ok, "the typed members stay")
+}
+
+// The client refuses every stdlib module it does not provide by name, so a script
+// importing one hears why instead of reading a missing-file error.
+func TestClientDeniedImportPathsCoverTheWithheldStdlib(t *testing.T) {
+	denied := ClientDeniedImportPaths()
+	provide, withheld := PureStdlib()
+	for _, name := range withheld {
+		assert.Contains(t, denied, name)
+	}
+	for _, module := range provide {
+		assert.NotContains(t, denied, module.Name)
+	}
+	for _, name := range []string{"debug", "gc", "assert", "test", "fs", "ffi"} {
+		assert.Contains(t, denied, name)
 	}
 }
 

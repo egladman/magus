@@ -615,7 +615,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		formatted := e.name("formatted", path)
 		fmt.Fprintf(w, "%s%s := \"\"\n", indent, formatted)
 		fmt.Fprintf(w, "%sif !%s.IsZero() {\n", indent, value)
-		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339)\n", indent, formatted, value)
+		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339Nano)\n", indent, formatted, value)
 		fmt.Fprintf(w, "%s}\n", indent)
 		return "vm.StrValue(" + formatted + ")", nil
 	}

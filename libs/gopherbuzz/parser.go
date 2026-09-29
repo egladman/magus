@@ -2689,7 +2689,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		}
 		// Sub-parse the interpolation expression in the same mode as the enclosing
 		// parser so strictness is consistent across the program.
-		sub, err := parseModed(nil, part.Text+";", p.strict)
+		sub, used, err := p.parseInterpPart(part.Text)
 		if err != nil {
 			if raw {
 				literal(part.Text)
@@ -2712,9 +2712,41 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 			}
 			return nil, fmt.Errorf("buzz: line %d:%d: interpolation must be an expression: %q", t.Line, t.Col, part.Text)
 		}
+		for _, name := range used {
+			p.markImportUsed(name)
+		}
 		expr.Parts = append(expr.Parts, ast.InterpPart{Expr: es.Expr})
 	}
 	return expr, nil
+}
+
+// parseInterpPart parses one interpolation expression and returns the tracked import
+// bindings it references. They are returned rather than marked so that a backtick brace
+// run that falls back to literal text marks nothing.
+func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
+	toks, err := (*ParseCache)(nil).tokenize(text + ";")
+	if err != nil {
+		return nil, nil, err
+	}
+	sub := newParser(toks)
+	sub.strict = p.strict
+	if len(p.importUsage) > 0 {
+		sub.importUsage = make(map[string]*importBinding, len(p.importUsage))
+		for name := range p.importUsage {
+			sub.importUsage[name] = &importBinding{}
+		}
+	}
+	prog, err := sub.parseProgram()
+	if err != nil {
+		return nil, nil, err
+	}
+	var used []string
+	for name, b := range sub.importUsage {
+		if b.referenced {
+			used = append(used, name)
+		}
+	}
+	return prog, used, nil
 }
 
 // parseFunExpr parses `fun(params) rettype { body }` as an expression.

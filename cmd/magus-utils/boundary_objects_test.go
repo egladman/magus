@@ -17,6 +17,10 @@ func TestRunBoundaryObjects(t *testing.T) {
 	// A type no DECLARED method returns: magus\job is bound by hand, so the registry
 	// is the only route to its encoder. This is the case the whole generator exists for.
 	assert.Contains(t, got, "func ObjectJob(")
+	assert.NotContains(t, got, "func Wire", "a -o json spelling nothing calls is not emitted")
+	// Sub-second order survives: two stamps in one second must not read as equal.
+	assert.Contains(t, got, ".Format(time.RFC3339Nano)")
+	assert.NotContains(t, got, ".Format(time.RFC3339)")
 
 	assertDeterministic(t, runBoundaryObjects, args)
 

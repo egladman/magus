@@ -2,9 +2,16 @@ package interp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -264,4 +271,103 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	assert.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
 	assert.Error(t, rec.policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
 	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
+}
+
+// storedChunks lists every file under dir, which holds nothing but the stores.
+func storedChunks(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	require.NoError(t, filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			out[path] = true
+		}
+		return err
+	}))
+	return out
+}
+
+// guardLoad loads root's magusfile as a guard hook does and returns what it exported.
+func guardLoad(t *testing.T, ctx context.Context, root string) []string {
+	t.Helper()
+	src, err := Find(root)
+	require.NoError(t, err)
+	load, err := execBuzzSrc(WithGuardRules(ctx), src, true)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = load.Session.Close() })
+	return slices.Sorted(maps.Keys(load.Session.Exports()))
+}
+
+// A guard load of the working tree keeps its chunks in the user's cache, never
+// the workspace, where the agents it judges can write.
+func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export final marker = 1;\n"), 0o644))
+
+	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
+	assert.Equal(t, map[string]bool{filepath.Join(root, "magusfile.buzz"): true}, storedChunks(t, root),
+		"nothing is written under the workspace")
+	chunks := storedChunks(t, filepath.Join(cache, "magus", "buzz-bytecode"))
+	require.Len(t, chunks, 1)
+	for path := range chunks {
+		rel, err := filepath.Rel(filepath.Join(cache, "magus", "buzz-bytecode"), path)
+		require.NoError(t, err)
+		sum := sha256.Sum256([]byte(root))
+		assert.Equal(t, []string{compilerStamp(), hex.EncodeToString(sum[:])}, strings.Split(filepath.Dir(rel), string(filepath.Separator)))
+	}
+}
+
+// A load of approved sources trusts only the bytes its reader returns. A chunk
+// stored under the approved source's key, whoever wrote it, is not one of them.
+func TestGuardLoadOfApprovedSourcesIgnoresTheStore(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(cache, "workspace"))
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	const approved = "export final approved = 1;\n"
+	write := func(src string) string {
+		t.Helper()
+		before := storedChunks(t, cache)
+		require.NoError(t, os.WriteFile(magusfile, []byte(src), 0o644))
+		guardLoad(t, t.Context(), root)
+		for path := range storedChunks(t, cache) {
+			if !before[path] {
+				return path
+			}
+		}
+		t.Fatalf("no chunk stored for %q", src)
+		return ""
+	}
+	approvedChunk := write(approved)
+	planted, err := os.ReadFile(write("export final planted = 1;\n"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(approvedChunk, planted, 0o600))
+
+	read := func(string) ([]byte, error) { return []byte(approved), nil }
+	assert.Equal(t, []string{"approved"}, guardLoad(t, WithSourceReader(t.Context(), read), root))
+}
+
+// A new build's directory replaces the ones no build has used for a day.
+func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	stamps := filepath.Join(cache, "magus", "buzz-bytecode")
+	old, recent := filepath.Join(stamps, "old"), filepath.Join(stamps, "recent")
+	for _, dir := range []string{old, recent} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "root"), 0o700))
+	}
+	long := time.Now().Add(-2 * staleStampAge)
+	require.NoError(t, os.Chtimes(old, long, long))
+
+	require.NotNil(t, guardBytecodeStore(t.TempDir()))
+	assert.NoDirExists(t, old)
+	assert.DirExists(t, recent)
+	assert.DirExists(t, filepath.Join(stamps, compilerStamp()))
+}
+
+func TestCompilerStampIsStable(t *testing.T) {
+	stamp := compilerStamp()
+	assert.Len(t, stamp, 16)
+	assert.Equal(t, stamp, compilerStamp())
 }

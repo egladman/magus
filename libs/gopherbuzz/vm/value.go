@@ -1122,6 +1122,11 @@ func (v Value) ListItems() []Value { return v.asList().Items }
 // and MapGet distinguishes them. Iterate a non-str-keyed map from Buzz instead.
 func (v Value) MapKeys() []string { return v.asMap().Keys }
 
+// MapValues returns the values parallel to MapKeys, whatever each key's type, so
+// a host can read `{1: x}` without a MapGet that only str keys satisfy. Only
+// valid when IsMap() is true; the slice is the map's own, so do not modify it.
+func (v Value) MapValues() []Value { return v.asMap().Vals }
+
 // EnumValue returns an enum case's backing value (what `Enum.case.value` yields)
 // and whether v is an enum case at all.
 //

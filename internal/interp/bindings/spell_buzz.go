@@ -153,6 +153,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(spellSearchPaths(roots...)...))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
+	sess.AddCompileObserver(buzz.ProfileFromContext(ctx))
 	registerMagusModules(ctx, sess)
 	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this

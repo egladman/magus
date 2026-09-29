@@ -3,17 +3,21 @@ package interp
 import (
 	"context"
 	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
@@ -305,6 +309,104 @@ func readSource(ctx context.Context, path string) ([]byte, error) {
 		return read(path)
 	}
 	return os.ReadFile(path)
+}
+
+type guardRulesKey struct{}
+
+// WithGuardRules marks a magusfile load that collects guard rules. The session
+// then limits the entry file to the magus\guard registrations and what they
+// reference; see guardRulesFilter.
+func WithGuardRules(ctx context.Context) context.Context {
+	return context.WithValue(ctx, guardRulesKey{}, true)
+}
+
+func guardRules(ctx context.Context) bool {
+	v, _ := ctx.Value(guardRulesKey{}).(bool)
+	return v
+}
+
+// staleStampAge is how long a compiler stamp's directory may go unused before
+// a new build removes it. Two builds used side by side (a checkout's ./magus
+// and the one on PATH) each keep their own.
+const staleStampAge = 24 * time.Hour
+
+// guardBytecodeStore is where a guard-rules load keeps compiled chunks for the
+// workspace at root: <user cache>/magus/buzz-bytecode/<compiler stamp>/<root
+// hash>. It is outside the workspace because a stored chunk runs as it is
+// read back, and the working tree is writable by the agents the guard judges.
+//
+// Nil when the compiler cannot be identified or the cache is unavailable, and
+// the load compiles every time.
+func guardBytecodeStore(root string) buzz.BytecodeStore {
+	stamp := compilerStamp()
+	if root == "" || stamp == "" {
+		return nil
+	}
+	base, err := config.UserCacheDir()
+	if err != nil {
+		return nil
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil
+	}
+	stamps := filepath.Join(base, "magus", "buzz-bytecode")
+	dir := filepath.Join(stamps, stamp)
+	now := time.Now()
+	if err := os.Chtimes(dir, now, now); errors.Is(err, fs.ErrNotExist) {
+		if os.MkdirAll(dir, 0o700) != nil {
+			return nil
+		}
+		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
+	}
+	sum := sha256.Sum256([]byte(abs))
+	return buzz.NewDiskBytecodeStore(filepath.Join(dir, hex.EncodeToString(sum[:])))
+}
+
+// pruneStamps removes the chunk directories of other compilers last used
+// before cutoff. Best effort: a directory that cannot be removed now is tried
+// again by the next new build.
+func pruneStamps(stamps, keep string, cutoff time.Time) {
+	entries, err := os.ReadDir(stamps)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.Name() == keep || !e.IsDir() {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(stamps, e.Name()))
+		}
+	}
+}
+
+// compilerStamp identifies the build that compiles a chunk, so a chunk is only
+// ever run by the compiler that wrote it. The version and VCS settings name a
+// clean build; the executable's mtime and size tell apart two builds of one
+// dirty tree, which carry the same settings. Empty when the executable cannot
+// be read.
+func compilerStamp() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(exe)
+	if err != nil {
+		return ""
+	}
+	h := sha256.New()
+	fmt.Fprintf(h, "%d-%d", info.ModTime().UnixNano(), info.Size())
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		fmt.Fprintf(h, "\x00%s", bi.Main.Version)
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision", "vcs.modified":
+				fmt.Fprintf(h, "\x00%s=%s", s.Key, s.Value)
+			}
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // WithProjectPath stores the workspace-relative path of the project whose
@@ -710,7 +812,21 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	buzzSess.SetPromoteTopLevel(true)
 	// Feed this session's compile phases, imports, and VM faults to the spine. A
 	// no-op (session left unobserved) when telemetry is disabled on ctx.
+	// A profile on ctx records the same events for a human reading a trace.
 	AttachSessionObservers(ctx, buzzSess, ModeMagusfile)
+	buzzSess.AddCompileObserver(buzz.ProfileFromContext(ctx))
+	if guardRules(ctx) {
+		buzzSess.SetEntryFilter(guardRulesFilterID, guardRulesFilter)
+		// A hook loads these rules in a fresh process, and compiling them is the
+		// part of that load the source bytes do not have to repeat. Ordinary
+		// magusfile loads are left alone, and so is a load of approved sources:
+		// it exists to trust nothing but the bytes its reader returns.
+		if sourceReaderFrom(ctx) == nil {
+			if store := guardBytecodeStore(src.Dir); store != nil {
+				buzzSess.SetBytecodeStore(store)
+			}
+		}
+	}
 
 	targetMap := buzzSess.Targets()
 	// exportVals is filled by the export-discovery loop below, after the files
