@@ -301,6 +301,76 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	assert.Equal(t, workerRow().Criteria, rows[0].Criteria)
 }
 
+// A process a shared server forks for a remote caller acts as that caller or as nobody, and
+// the marker saying so can only take rights away: a worker that sets it on itself to claim
+// another lease is outranked by its own checkout's record.
+func TestStampedLeaseOnlyDowngrades(t *testing.T) {
+	for name, tc := range map[string]struct {
+		record, claim, stamped string
+		want                   Actor
+	}{
+		"unstamped, nothing claimed":         {"", "", "", Actor{}},
+		"unstamped, the record wins":         {"adj/store", "adj/other", "", Actor{Lease: "adj/store"}},
+		"stamped lease":                      {"", "adj/other", "1", Actor{Lease: "adj/other"}},
+		"stamped absence":                    {"", "", "1", Actor{Unstamped: true}},
+		"stamped absence under a record":     {"adj/store", "", "1", Actor{Unstamped: true}},
+		"stamped lease against a record":     {"adj/store", "adj/other", "1", Actor{Unstamped: true}},
+		"stamped lease the record agrees on": {"adj/store", "adj/store", "1", Actor{Lease: "adj/store"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir()}
+			if tc.record != "" {
+				require.NoError(t, NewStore(loc).Bind(Caller{}, tc.record))
+			}
+			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			t.Setenv(EnvStampedLease, tc.stamped)
+			assert.Equal(t, tc.want, ActingActor(loc.CacheDir))
+		})
+	}
+}
+
+// An unstamped caller reads the book and writes nothing in it: every row may be some other
+// caller's, and a new one would be a plan nobody can be held to.
+func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(EnvStampedLease, "1")
+	loc := declared(t, workerRow())
+	loc.Actor = nil
+	s := NewStore(loc)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	for name, write := range map[string]func() error{
+		"its row": func() error {
+			_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.WritePaths = u.WritePaths[:1] })
+			return err
+		},
+		"a new row": func() error {
+			_, err := s.Update(t.Context(), "stray", func(u *types.Job) { u.Criteria = "a plan of its own" })
+			return err
+		},
+		"an ending": func() error {
+			_, err := Exit(t.Context(), s, "adj/store", nil, nil)
+			return err
+		},
+		"exec":   func() error { _, err := s.Exec(t.Context(), "adj/store", "abc123"); return err },
+		"clear":  func() error { _, err := s.Clear(t.Context()); return err },
+		"delete": func() error { _, err := s.Delete(t.Context(), "adj/store", true); return err },
+	} {
+		err := write()
+		var refused *RefusedError
+		require.ErrorAs(t, err, &refused, name)
+		assert.True(t, strings.HasPrefix(err.Error(), "job: this call arrived with no lease stamped on it"), "%s: %v", name, err)
+		assert.Contains(t, err.Error(), "Send the lease you act under", name)
+	}
+
+	after, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []types.Job{rows[0]}, after, "a refused write changes nothing")
+}
+
 // The row records who declared it: what the door the write came through put on its
 // context (entry point, verified credential, the MCP client as host), plus the OS account.
 // Before, registered_by came from an actor origin no door filled, so it held the account alone.

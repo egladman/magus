@@ -54,4 +54,4 @@ Scope a query to this index: `magus query project=libs/textsearch`. `magus graph
 | `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.                                                                                    |
 | `ci`             | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.                                                                                     |
 | `install`        | install installs node_modules through the typescript spell's pnpm-install op.                                                                                          |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                                  |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                       |

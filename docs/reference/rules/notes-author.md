@@ -14,7 +14,7 @@ An agent authoring a human's note, whose only provenance is who wrote it.
 
 ## Why
 
-A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled: `capture` files a review transcript as a note and `promote` writes a memory record into the SHARED store, where the commit puts a person's name on prose they never read. `magus memory put <name>` is the agent-writable store, where every entry cites a ref a later reader can re-run.
+A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled: `capture` files a review transcript as a note, where the commit puts a person's name on prose they never read. Read the store instead, and say what belongs in it so the person can write it.
 
 ## Seeing it
 

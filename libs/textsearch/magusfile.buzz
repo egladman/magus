@@ -19,8 +19,9 @@
 
 import "magus";
 import "../../tools/drift" as drift;
-// fs writes MAGUS.md and reads the sources it indexes; os shells out to pnpm
-// (typecheck/biome/test); tools/drift.buzz gates the generated MAGUS.md on drift.
+import "../../tools/index" as index;
+// fs globs the test sources; os shells out to pnpm (typecheck/biome/test);
+// tools/drift.buzz gates the generated MAGUS.md on drift.
 import "fs";
 import "os";
 
@@ -72,15 +73,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(index_generate);
 }
 
-// Renders MAGUS.md, this project's target catalog, from this magusfile.
+// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
+// body and the reasons for them are in tools/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared so `magus vcs resolve` can find the target that settles a conflict here.
     ctx.writesFiles("MAGUS.md");
-    // Scoped to this project; see libs/coldread for why these are its inputs.
     ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
                    "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
-    final doc = magus\describe(["graph", "-o", "markdown", "libs/textsearch"], {"quiet": true}).stdout;
-    fs\writeFile("MAGUS.md", doc + "\n");
+    index\render("libs/textsearch");
 }
 
 // lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)

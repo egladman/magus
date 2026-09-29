@@ -27,6 +27,7 @@ import (
 
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -46,6 +47,42 @@ func withUserAgent(ctx context.Context, ua string) context.Context {
 func userAgentFromContext(ctx context.Context) string {
 	ua, _ := ctx.Value(uaCtxKey{}).(string)
 	return ua
+}
+
+// baggageHeader is the W3C Baggage header, the HTTP form of the BAGGAGE variable a
+// process reads its lease from, so a remote caller states its lease in the same grammar.
+const baggageHeader = "Baggage"
+
+// callerKey keys the lease an HTTP request stamped for its caller, "" when it sent none.
+type callerKey struct{}
+
+// withCallerLease returns ctx carrying the lease the request's baggage header named.
+// Stamped on every request rather than at initialize: the header is the call's own claim,
+// and a session outlives any one caller's lease.
+func withCallerLease(ctx context.Context, lease string) context.Context {
+	return context.WithValue(ctx, callerKey{}, lease)
+}
+
+// callerActor is who a tool call is made by, as the transport it arrived on says.
+//
+// Over stdio the caller is the process the host launched in its own checkout, with its own
+// environment, so it is this process: ok is false and the door acts as the CLI does, through
+// job.ActingActor. Over HTTP the server is shared and its own lease is nobody's caller: the
+// actor is the lease the request stamped, or job.Actor.Unstamped when it stamped none. A
+// credential that is neither stdio nor absent means HTTP even if the stamp is missing, so a
+// route that skipped the context func fails closed rather than lending the server's lease.
+func callerActor(ctx context.Context) (actor job.Actor, ok bool) {
+	if lease, stamped := ctx.Value(callerKey{}).(string); stamped {
+		if lease == "" {
+			return job.Actor{Unstamped: true}, true
+		}
+		return job.Actor{Lease: lease}, true
+	}
+	switch trail.CredentialFromContext(ctx).Class {
+	case "", types.ClassStdio:
+		return job.Actor{}, false
+	}
+	return job.Actor{Unstamped: true}, true
 }
 
 // unknownOrigin is the fallback identity for a tool call whose session was never
@@ -216,6 +253,8 @@ func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) 
 // need not depend on the httpx server core, the dashboard bridge, or the file
 // watcher. The returned handler is a path-agnostic http.Handler; the server
 // mounts it at /mcp, matching the path StreamableHTTPServer's own Start() would use.
+//
+// Each request's baggage header names the lease its caller acts under; see callerActor.
 func HTTPHandler(opts Options) (http.Handler, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
@@ -267,7 +306,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		// context so the initialize hook can capture it. stdio has no equivalent
 		// (it carries no request headers), so this signal is HTTP-only by nature.
 		mcpserver.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-			return withUserAgent(ctx, r.Header.Get("User-Agent"))
+			return withCallerLease(withUserAgent(ctx, r.Header.Get("User-Agent")), trail.LeaseFromBaggage(r.Header.Get(baggageHeader)))
 		}),
 	), nil
 }

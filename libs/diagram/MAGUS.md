@@ -43,16 +43,13 @@ magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
-Scope a query to this index: `magus query project=libs/diagnostics`. `magus graph stats` sizes up the whole workspace.
+Scope a query to this index: `magus query project=libs/diagram`. `magus graph stats` sizes up the whole workspace.
 
-## Project: libs/diagnostics
+## Project: libs/diagram
 
-| Target           | What it does                                                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                                                                                      |
-| `format`         |                                                                                                                                                            |
-| `lint`           |                                                                                                                                                            |
-| `build`          |                                                                                                                                                            |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                           |
+| Target           | What it does                                     |
+| ---------------- | ------------------------------------------------ |
+| `generate`       | Regenerates MAGUS.md and fails on drift.         |
+| `ci`             |                                                  |
+| `index-generate` | Renders MAGUS.md, this project's target catalog. |
+| `test`           | test runs the in-file test blocks.               |

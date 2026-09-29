@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
+| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `console`                                                                                       |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `lint-files`, `site-generate`                                                                |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                       |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
@@ -66,17 +66,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
 | .                               |      54 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
-| console                         |       8 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
+| console                         |      10 | `magus query project=console`                         | `install`, `ci`, `build`                                 |
 | docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
+| docs/guides/integrations/agents |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
 | libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
 | libs/conventions                |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
-| libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
+| libs/diagram                    |       4 | `magus query project=libs/diagram`                    | `test`, `ci`, `generate`                                 |
 | libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
-| proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
+| proto                           |       4 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 
 ## Project: magus
 
@@ -141,6 +141,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target              | What it does                                                                                                                                                                                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`          | Regenerates MAGUS.md and fails on drift.                                                                                                                                                                                                                      |
 | `test`              | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and holds the merged line coverage above a floor.                                                                                                          |
 | `build`             |                                                                                                                                                                                                                                                               |
 | `lint`              | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.                                                                                                                                                                          |
@@ -148,6 +149,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `security`          | security audits the dependency tree against the npm advisory database.                                                                                                                                                                                        |
 | `ci`                | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.                                                                                            |
 | `install`           | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                 |
+| `index-generate`    | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                              |
 | `diffdemo-generate` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 
 ## Project: docs
@@ -186,6 +188,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
 | `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
 | `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                        |
+| `index-generate`          | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                     |
 
 ## Project: libs/coldread
 
@@ -197,7 +200,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
 
 ## Project: libs/conventions
 
@@ -209,7 +212,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          | Compiles every analyzer package; ./...                                                                                                                       |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
 
 ## Project: libs/diagnostics
 
@@ -221,14 +224,16 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                            |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                      |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                           |
 
 ## Project: libs/diagram
 
-| Target | What it does                       |
-| ------ | ---------------------------------- |
-| `ci`   |                                    |
-| `test` | test runs the in-file test blocks. |
+| Target           | What it does                                     |
+| ---------------- | ------------------------------------------------ |
+| `generate`       | Regenerates MAGUS.md and fails on drift.         |
+| `ci`             |                                                  |
+| `index-generate` | Renders MAGUS.md, this project's target catalog. |
+| `test`           | test runs the in-file test blocks.               |
 
 ## Project: libs/gopherbuzz
 
@@ -242,7 +247,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-build`     | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.                                                                                                                                                       |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
 | `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                                                                                                                                       |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                            |
 
 ## Project: libs/testlayout
 
@@ -254,7 +259,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
 
 ## Project: libs/textsearch
 
@@ -265,12 +270,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.                                                                                    |
 | `ci`             | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.                                                                                     |
 | `install`        | install installs node_modules through the typescript spell's pnpm-install op.                                                                                          |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                                  |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                       |
 
 ## Project: proto
 
-| Target     | What it does                                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`       |                                                                                                                                 |
-| `generate` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
-| `lint`     |                                                                                                                                 |
+| Target           | What it does                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`       | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
+| `ci`             |                                                                                                                                 |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                |
+| `lint`           |                                                                                                                                 |

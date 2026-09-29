@@ -55,4 +55,4 @@ Scope a query to this index: `magus query project=libs/conventions`. `magus grap
 | `build`          | Compiles every analyzer package; ./...                                                                                                                       |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |

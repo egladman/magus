@@ -68,7 +68,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		}
 		projects = append(projects, s.ProjectPaths...)
 	}
-	return spells.InvokeResponse{Data: dataWithNext(out, t.next.served(hint.NextForAffected(target, projects)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(out, t.next.served(ctx, hint.NextForAffected(target, projects)))}, nil
 }
 
 var _ spells.Driver = (*affectedPlanTool)(nil)

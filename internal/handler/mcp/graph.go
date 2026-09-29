@@ -107,7 +107,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: dataWithNext(resp, t.next.served(hint.NextForQuery(resp.KnowledgeQueryOutput)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(resp, t.next.served(ctx, hint.NextForQuery(resp.KnowledgeQueryOutput)))}, nil
 }
 
 type refsTool struct{ graph graphResolver }
@@ -276,7 +276,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 	// for a result an agent reads and reasons about, aligned text with full IDs is
 	// more token-efficient and less error-prone than repeated-key JSON. The
 	// breadcrumbs ride the same text.
-	return spells.InvokeResponse{Text: render.ExplainText(out) + renderNext(t.next.served(hint.NextForExplain(out)))}, nil
+	return spells.InvokeResponse{Text: render.ExplainText(out) + renderNext(t.next.served(ctx, hint.NextForExplain(out)))}, nil
 }
 
 type pathTool struct{ graph graphResolver }

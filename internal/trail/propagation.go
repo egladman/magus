@@ -96,6 +96,15 @@ func SpawnFromEnv() Spawn {
 	return spawn
 }
 
+// LeaseFromBaggage returns the magus.lease member of a W3C baggage list, read by the grammar
+// [SpawnFromEnv] reads BAGGAGE with: the value of an HTTP baggage header, which is how a
+// caller with no environment to hand magus states the lease it acts under. It is "" when
+// the list names no lease or one that is not a lease id.
+func LeaseFromBaggage(v string) string {
+	lease, _ := parseBaggage(strings.TrimSpace(v))
+	return lease
+}
+
 // NewSpanID mints this process's own span id: 16 lowercase hex characters, 8 bytes of
 // crypto/rand. It is the one identity here magus asserts rather than records, which is why it is
 // minted and never read from the environment.
