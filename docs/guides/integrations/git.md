@@ -144,11 +144,11 @@ Wire it to two targets:
 import "spells/git/hooks" as githooks;
 
 export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\install(ctx, dir: "tools/git-hooks");
+    githooks\install(ctx, dir: "hack/git-hooks");
 }
 
 export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\remove(ctx, dir: "tools/git-hooks");
+    githooks\remove(ctx, dir: "hack/git-hooks");
 }
 ```
 
@@ -163,7 +163,7 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-Save it as `tools/git-hooks/commit-msg.buzz` and run `magus run git-hooks-install:rw .`.
+Save it as `hack/git-hooks/commit-msg.buzz` and run `magus run git-hooks-install:rw .`.
 Adding another hook later is the same two steps: the file, then the target.
 
 Both targets follow the [`rw` charm](../../concepts/charms.md#the-rw-charm): without it they
@@ -181,7 +181,7 @@ nothing. The rules they enforce:
   Buzz by its project-relative path.
 
 The magus repository's own
-[`commit-msg.buzz`](https://github.com/egladman/magus/blob/main/tools/git-hooks/commit-msg.buzz)
+[`commit-msg.buzz`](https://github.com/egladman/magus/blob/main/hack/git-hooks/commit-msg.buzz)
 is the worked example: it refuses a commit made directly on the base branch whose subject
 is not a conventional commit, by the rule CI applies to pull request titles.
 

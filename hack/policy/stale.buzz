@@ -1,0 +1,474 @@
+// The stale-binary rule, and the build stamp go-build links into ./magus for it.
+namespace agentpolicy\stale;
+
+import "std";
+import "magus";
+import "fs";
+import "path";
+import "crypto";
+import "vcs";
+import "./hack/policy/helpers" as helpers;
+import "./hack/policy/binaries" as binaries;
+
+// The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
+// the skills it serves, and the host declarations and spell bytecode it embeds, which are
+// what a magusfile loads against. go-build links a digest of each into the binary.
+final stampGlobs = [
+    "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
+    "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
+    "internal/spell/gen/decls/*.buzz", "internal/spell/gen/*.bo",
+];
+
+// stampFiles are the stamped files under root, root-relative, tests left out: a test is
+// not linked into the binary. fs\glob answers relative to the working directory, so both
+// sides are made absolute before one is cut from the other.
+fun stampFiles(root: str) > [str] !> any {
+    final base = path\abs(root);
+    final files = mut [<str>];
+    foreach (pattern in stampGlobs) {
+        foreach (found in fs\glob("{base}/{pattern}")) {
+            final rel = path\abs(found.value).sub(base.len() + 1);
+            if (!rel.endsWith("_test.go")) {
+                files.append(rel);
+            }
+        }
+    }
+    return files;
+}
+
+fun digestOf(file: str) > str !> any {
+    return crypto\sha256File(file).sub(0, len: 12);
+}
+
+// commitKey names the stamp entry holding the commit the build came from. No source path
+// starts with @, so movedSince never reads it as one.
+final commitKey = "@commit";
+
+// buildStamp is what go-build links into ./magus: `<path>=<digest>` for every stamped file
+// under root, then `@commit=<id>` for the checkout's commit, comma-separated.
+export fun buildStamp(root: str) > str !> any {
+    final entries = mut [<str>];
+    foreach (rel in stampFiles(root)) {
+        final digest = digestOf("{root}/{rel}");
+        entries.append("{rel}={digest}");
+    }
+    final head = vcs\commit() catch null;
+    if (head != null) {
+        entries.append("{commitKey}={head!.id}");
+    }
+    return entries.join(",");
+}
+
+// stampedCommit is the commit a stamp records, "" for a stamp from before commits were.
+export fun stampedCommit(stamp: str) > str {
+    foreach (entry in stamp.split(",")) {
+        if (entry.startsWith(commitKey + "=")) {
+            return entry.sub(commitKey.len() + 1);
+        }
+    }
+    return "";
+}
+
+// movedSince lists the stamped files under root whose content is not what stamp recorded:
+// changed, added, or removed. A file no newer than builtAt, the binary's mtime, is the one
+// the build read, so only newer files are hashed.
+export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
+    final recorded = mut {<str: str>};
+    final order = mut [<str>];
+    foreach (entry in stamp.split(",")) {
+        final at = entry.indexOf("=");
+        if (at != null and !entry.startsWith("@")) {
+            final rel = entry.sub(0, len: at!);
+            recorded[rel] = entry.sub(at! + 1);
+            order.append(rel);
+        }
+    }
+    final moved = mut [<str>];
+    final present = mut {<str: bool>};
+    foreach (rel in stampFiles(root)) {
+        present[rel] = true;
+        final was = recorded[rel];
+        if (was == null) {
+            moved.append(rel);
+        } else if (fs\stat("{root}/{rel}").mtime > builtAt and digestOf("{root}/{rel}") != was!) {
+            moved.append(rel);
+        }
+    }
+    foreach (rel in order) {
+        if (!(present[rel] ?? false)) {
+            moved.append(rel);
+        }
+    }
+    return moved;
+}
+
+// HookBinary is what the stale-binary rule knows about the magus answering the hook:
+// whether it is this workspace's own ./magus, whether go-build stamped it, which stamped
+// sources moved since, and the commit it was built from ("" when the stamp names none).
+export object HookBinary {
+    ours: bool,
+    stamped: bool,
+    moved: [str],
+    commit: str = "",
+}
+
+// isStale is the stale-binary rule's verdict on bin: this workspace's ./magus, and either
+// unstamped, so nothing can say which sources it came from, or built before some of them
+// moved.
+export fun isStale(bin: HookBinary) > bool {
+    return bin.ours and (!bin.stamped or bin.moved.len() > 0);
+}
+
+// hookBinary reads HookBinary off the filesystem. A binary that is not this workspace's
+// own ./magus (one on PATH, another checkout's) has no sources here to be stale against.
+export fun hookBinary(workspace: str) > HookBinary {
+    final none = HookBinary{ ours = false, stamped = false, moved = [<str>] };
+    if (workspace == "") { return none; }
+    final bin = magus\guard.binary();
+    final own = "{workspace}/magus";
+    final sameFile = binaries\onDisk().sameFile;
+    if (bin.path == "" or (bin.path != own and !sameFile(own, bin.path))) { return none; }
+    if (bin.stamp == "") {
+        return HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    }
+    final built = fs\stat(bin.path) catch null;
+    if (built == null) { return none; }
+    final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime) catch [<str>];
+    return HookBinary{ ours = true, stamped = true, moved = moved, commit = stampedCommit(bin.stamp) };
+}
+
+final unstampedAdvice = "./magus carries no go-build stamp: it was linked by a bare `go build` "
+    + "or before stamps existed, so its embedded spell bytecode and host "
+    + "declarations are whatever the link found, and nothing can say which sources its verdicts "
+    + "come from. Stamp it: `./magus run go-build .`.";
+
+// decideStale advises once per moved set that the ./magus answering this hook was built
+// from other sources than the checkout holds now: proven by content, not by mtimes. It
+// never denies: running a stale binary is how it gets rebuilt.
+export fun decideStale(bin: HookBinary, once: fun (key: str) > bool) > GuardVerdict {
+    if (!isStale(bin)) {
+        return magus\guard.allow();
+    }
+    if (!bin.stamped) {
+        if (once("stale-binary:unstamped")) { return magus\guard.advise(unstampedAdvice); }
+        return magus\guard.allow();
+    }
+    if (!once("stale-binary:" + bin.moved.join(","))) {
+        return magus\guard.allow();
+    }
+    final text = "./magus was built before {movedList(bin)}. "
+        + "This verdict, and the workspace it loads, come from the PREVIOUS sources. "
+        + "Rebuild: `./magus run go-build .`.";
+    var declsMoved = false;
+    foreach (rel in bin.moved) {
+        if (rel.startsWith("internal/spell/gen/decls/")) { declsMoved = true; }
+    }
+    if (!declsMoved) {
+        return magus\guard.advise(text);
+    }
+    return magus\guard.advise(text + " " + deadlockEscape);
+}
+
+// movedList names how many of a stale binary's sources moved, and the first five.
+fun movedList(bin: HookBinary) > str {
+    var named = bin.moved;
+    var more = "";
+    if (named.len() > 5) {
+        more = " and {named.len() - 5} more";
+        named = named.sub(0, len: 5);
+    }
+    return "{bin.moved.len()} of its sources moved: {named.join(", ")}{more}";
+}
+
+// StateWrite is a magus verb on the line that writes state other checkouts or other magus
+// versions read. shared is true when that state is outside the checkout: the hooks dir
+// every worktree shares, or the user config.
+export object StateWrite {
+    verb: str,
+    shared: bool,
+}
+
+// stateWrite is the first state-writing magus verb on the line, null when there is none.
+// A dry run, a streamed install and `init spell` write no shared state.
+export fun stateWrite(programs: [helpers\Program]) > StateWrite? {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = helpers\magusOperands(p.args);
+            final dry = helpers\hasFlag(p.args, long: "--dry-run") or helpers\hasFlag(p.args, long: "-dry-run");
+            final global = helpers\hasFlag(p.args, long: "--global") or helpers\hasFlag(p.args, long: "-global");
+            if (ops.len() > 0 and !dry) {
+                final sub = if (ops.len() > 1) ops[1] else "";
+                if (ops[0] == "init" and sub != "spell") {
+                    return StateWrite{ verb = "init", shared = true };
+                }
+                if (ops[0] == "server" and sub == "start") {
+                    return StateWrite{ verb = "server start", shared = true };
+                }
+                if (ops[0] == "config" and sub == "set") {
+                    return StateWrite{ verb = "config set", shared = global };
+                }
+                final tar = helpers\hasFlag(p.args, long: "--tar") or helpers\hasFlag(p.args, long: "-tar");
+                if (ops[0] == "agent" and sub == "install" and !tar) {
+                    return StateWrite{ verb = "agent install", shared = global };
+                }
+                if (ops[0] == "agent" and sub == "harness" and ops.len() > 2 and (ops[2] == "install" or ops[2] == "apply" or ops[2] == "remove")) {
+                    return StateWrite{ verb = "agent harness " + ops[2], shared = false };
+                }
+            }
+        }
+    }
+    return null;
+}
+
+// BaseCheck is whether a commit is on the base branch: known is false when the repository
+// could not say (no such ref, or a commit it lacks).
+export object BaseCheck {
+    base: str,
+    known: bool,
+    contained: bool,
+}
+
+// onBase asks the workspace's repository whether commit is an ancestor of, or equal to,
+// the base ref. Offline: it reads the local ref and never fetches.
+export fun onBase(workspace: str) > fun (commit: str) > BaseCheck {
+    return fun (commit: str) > BaseCheck {
+        final base = vcs\base();
+        final res = vcs\cmd(["merge-base", "--is-ancestor", commit, base],
+            opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+        if (res == null or (res!.code != 0 and res!.code != 1)) {
+            return BaseCheck{ base = base, known = false, contained = false };
+        }
+        return BaseCheck{ base = base, known = true, contained = res!.code == 0 };
+    };
+}
+
+// decideStateWrite denies a state-writing magus verb that a stale ./magus would run
+// (stale-write), and one writing shared state that a binary built off the base branch
+// would run (off-base-write). Both facts are asked for only when the line writes state.
+//
+// Off the base branch is a problem for shared state alone. What a branch's build writes
+// is stamped with a commit no build from the base descends from, and a build behind the
+// base may undo what a newer one wrote; state inside the checkout is the branch's own, and
+// `agent install` of a skill edited on it is how that edit is checked.
+export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinary, onBase: fun (commit: str) > BaseCheck) > GuardVerdict {
+    final w = stateWrite(programs);
+    if (w == null) {
+        return magus\guard.allow();
+    }
+    final hook = bin();
+    final verb = w!.verb;
+    if (isStale(hook)) {
+        var why = "it carries no go-build stamp, so nothing can say which sources it was built from";
+        if (hook.stamped) {
+            why = "it was built before {movedList(hook)}";
+        }
+        return magus\guard.deny("`magus {verb}` writes state other checkouts and other magus versions read, "
+            + "and the ./magus that would run it is stale: {why}. It would stamp that state with a build "
+            + "its own checkout has moved past, and can undo what a newer magus wrote. "
+            + "Rebuild first with `./magus run go-build .`, then rerun.");
+    }
+    if (!w!.shared or !hook.ours) {
+        return magus\guard.allow();
+    }
+    if (hook.commit == "") {
+        return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and "
+            + "./magus names no commit to check against the base branch: it was built before go-build "
+            + "stamped one. Rebuild it with `./magus run go-build .`, then rerun.");
+    }
+    final check = onBase(hook.commit);
+    if (!check.known or check.contained) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and ./magus "
+        + "was built from {hook.commit}, which is not on {check.base}. A branch's build stamps that state "
+        + "newer than every build from {check.base}, which then refuse it, and one behind {check.base} can "
+        + "undo what a newer magus wrote. Run it from a checkout at {check.base} with that checkout's own "
+        + "./magus, rebuilt with `./magus run go-build .`.");
+}
+
+// deadlockEscape is the way out for a binary that cannot load the tree and so cannot
+// rebuild itself.
+final deadlockEscape = "The host declarations moved, so the next load may fail with MGS1021, and a "
+    + "binary that cannot load the tree cannot rebuild itself. The escape, one command at a time: "
+    + "`mv magus magus.old`, then `go run -trimpath ./cmd/magus run go-build --no-cache .`, which runs "
+    + "the real go-build target past a magus cache that cannot key it (if that fails with `undefined:` in a "
+    + "gen/ package, the merge kept one side's generated code: restore those gen/ directories from "
+    + "the side that produced them, or three-way merge them with `git merge-file`, then run it again).";
+
+// rebuilds: the line is itself the rebuild, which a staleness advisory would only delay.
+export fun rebuilds(programs: [helpers\Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = helpers\magusOperands(p.args);
+            if (ops.len() > 1 and ops[0] == "run") {
+                final target = ops[1].split(":")[0];
+                if (target == "go-build" or target == "spells-generate" or target == "generate") {
+                    return true;
+                }
+            }
+        }
+        final goArgs = helpers\goCall(p.args).args;
+        if (p.name == "go" and goArgs.len() > 0 and goArgs[0] == "build") {
+            return true;
+        }
+        if (p.name == "go" and goArgs.len() > 2 and goArgs[0] == "run" and goArgs.indexOf("go-build") != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun stale(moved: [str]) > HookBinary {
+    return HookBinary{ ours = true, stamped = true, moved = moved };
+}
+
+test "a ./magus whose sources moved is advised once per moved set, naming them" {
+    final once = helpers\counter();
+    final v = decideStale(stale(["internal/guard/shell.go"]), once: once);
+    std\assert(v.decision == "advise", message: "moved");
+    std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names the file");
+    std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
+    std\assert(v.reason.indexOf("magus.old") == null, message: "no deadlock talk for a Go source");
+    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == "allow", message: "once per set");
+    std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == "advise", message: "a new set speaks again");
+
+    final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: helpers\counter());
+    std\assert(decls.reason.indexOf("mv magus magus.old") != null, message: "host declarations name the escape");
+    std\assert(decls.reason.indexOf("git merge-file") != null, message: "and the gen/ repair");
+
+    final many = decideStale(stale(["a", "b", "c", "d", "e", "f", "g"]), once: helpers\counter());
+    std\assert(many.reason.indexOf("and 2 more") != null, message: "caps the list");
+}
+
+test "an unstamped ./magus is advised once; another binary and an unmoved one stay silent" {
+    final once = helpers\counter();
+    final unstamped = HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    std\assert(decideStale(unstamped, once: once).decision == "advise", message: "unstamped");
+    std\assert(decideStale(unstamped, once: once).decision == "allow", message: "once");
+    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == "allow", message: "not ours");
+    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == "allow", message: "nothing moved");
+}
+
+test "the rebuild itself is not held up by the staleness it cures" {
+    foreach (argv in [
+        ["./magus", "run", "go-build", ".", "-s"],
+        ["./magus", "run", "spells-generate:rw", "."],
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+    ]) {
+        std\assert(rebuilds(helpers\request([argv])), message: argv.join(" "));
+    }
+    std\assert(!rebuilds(helpers\request([["./magus", "run", "lint", "."]])), message: "any other run");
+}
+
+test "the stamp records every stamped source, and movedSince names what changed" {
+    final root = fs\tempDir("stamp") catch "";
+    std\assert(root != "", message: "a temp dir");
+    fs\mkdirAll("{root}/internal/guard") catch void;
+    fs\mkdirAll("{root}/internal/spell/gen/decls") catch void;
+    fs\writeFile("{root}/internal/guard/shell.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/guard/shell_test.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 1;\n") catch void;
+
+    final stamp = buildStamp(root) catch "";
+    std\assert(stamp.indexOf("internal/guard/shell.go=") != null, message: "a rule source");
+    std\assert(stamp.indexOf("internal/spell/gen/decls/magus.buzz=") != null, message: "a host declaration");
+    std\assert(stamp.indexOf("shell_test.go") == null, message: "a test is not linked in");
+    std\assert((movedSince(root, stamp: stamp, builtAt: 0.0) catch ["error"]).len() == 0, message: "nothing moved");
+
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 2;\n") catch void;
+    fs\writeFile("{root}/internal/guard/policy.go", content: "package guard\n") catch void;
+    fs\remove("{root}/internal/guard/shell.go") catch void;
+    final moved = movedSince(root, stamp: stamp, builtAt: 0.0) catch [<str>];
+    std\assert(moved.join(",") == "internal/guard/policy.go,internal/spell/gen/decls/magus.buzz,internal/guard/shell.go", message: moved.join(","));
+    fs\removeAll(root) catch void;
+}
+
+test "the stamp names its commit, which movedSince never reads as a source" {
+    final stamp = "internal/guard/shell.go=abc,@commit=0123456789abcdef";
+    std\assert(stampedCommit(stamp) == "0123456789abcdef", message: "the commit");
+    std\assert(stampedCommit("internal/guard/shell.go=abc") == "", message: "a stamp from before commits were");
+    final root = fs\tempDir("stampcommit") catch "";
+    std\assert((movedSince(root, stamp: "@commit=0123456789abcdef", builtAt: 0.0) catch ["error"]).len() == 0, message: "not a moved source");
+    fs\removeAll(root) catch void;
+}
+
+// A fresh ./magus built from commit, and a base ref that holds only the commits in onMain.
+fun built(commit: str) > fun () > HookBinary {
+    return fun () > HookBinary {
+        return HookBinary{ ours = true, stamped = true, moved = [<str>], commit = commit };
+    };
+}
+
+fun mainHolds(onMain: [str]) > fun (commit: str) > BaseCheck {
+    return fun (commit: str) > BaseCheck {
+        return BaseCheck{ base = "origin/main", known = true, contained = onMain.indexOf(commit) != null };
+    };
+}
+
+fun writeVerdict(argv: [str], bin: fun () > HookBinary, onBase: fun (commit: str) > BaseCheck) > GuardVerdict {
+    return decideStateWrite(helpers\request([argv]), bin: bin, onBase: onBase);
+}
+
+final stateWriters = [
+    ["./magus", "init", "--vcs", "git"],
+    ["magus", "-s", "init"],
+    ["./magus", "server", "start"],
+    ["./magus", "config", "set", "--global", "key=log.format,value=json"],
+    ["./magus", "agent", "install", "--global", "/home/me/.claude/skills"],
+];
+
+test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
+    final staleBin = fun () > HookBinary { return stale(["internal/guard/shell.go"]); };
+    foreach (argv in stateWriters + [
+        ["./magus", "agent", "install", ".claude/skills", "--force"],
+        ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
+        ["./magus", "agent", "harness", "install"],
+    ]) {
+        final v = writeVerdict(argv, bin: staleBin, onBase: mainHolds(["c1"]));
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names what moved");
+        std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
+    }
+    final unstamped = fun () > HookBinary { return HookBinary{ ours = true, stamped = false, moved = [<str>] }; };
+    final v = writeVerdict(["./magus", "init"], bin: unstamped, onBase: mainHolds([<str>]));
+    std\assert(v.decision == "deny" and v.reason.indexOf("no go-build stamp") != null, message: "unstamped");
+}
+
+test "a build off the base branch is denied shared writes and allowed its own checkout's" {
+    foreach (argv in stateWriters) {
+        final v = writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"]));
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("built from f00d, which is not on origin/main") != null, message: v.reason);
+        std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == "allow", message: "on the base: " + argv.join(" "));
+    }
+    foreach (argv in [
+        ["./magus", "agent", "install", ".claude/skills", "--force"],
+        ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
+        ["./magus", "agent", "harness", "install"],
+    ]) {
+        std\assert(writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"])).decision == "allow", message: argv.join(" "));
+    }
+    final unknownBase = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = false, contained = false }; };
+    std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == "allow", message: "a base the repository cannot answer for");
+    final noCommit = writeVerdict(["./magus", "init"], bin: built(""), onBase: mainHolds([<str>]));
+    std\assert(noCommit.decision == "deny" and noCommit.reason.indexOf("names no commit") != null, message: "a stamp with no commit");
+}
+
+test "read-only verbs, dry runs and another binary stay with the advisory" {
+    final staleBin = fun () > HookBinary { return stale(["internal/guard/shell.go"]); };
+    foreach (argv in [
+        ["./magus", "init", "--dry-run"],
+        ["./magus", "init", "spell", "acme"],
+        ["./magus", "agent", "install", "--tar"],
+        ["./magus", "agent", "harness", "verify"],
+        ["./magus", "config", "view"],
+        ["./magus", "server", "status"],
+        ["./magus", "run", "lint", "."],
+        ["./magus", "doctor"],
+    ]) {
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == "allow", message: argv.join(" "));
+    }
+    final other = fun () > HookBinary { return HookBinary{ ours = false, stamped = false, moved = [<str>] }; };
+    std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == "allow", message: "not this workspace's binary");
+}

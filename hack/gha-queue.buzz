@@ -1,0 +1,725 @@
+// This repository's GitHub Actions steps for the merge queue, here so
+// .github/workflows/queue.yaml and queue-apply.yaml carry no shell of their own. It is
+// this repository's glue, not part of magus. Each step is one invocation of `magus
+// queue`, the magus the workflow built from main:
+//
+//	magus buzz hack/gha-queue.buzz -- plan --depth <n>         plan the queue; write the validation matrix
+//	magus buzz hack/gha-queue.buzz -- validate --change <id>   validate one change of the plan
+//	magus buzz hack/gha-queue.buzz -- planned --run <id>       write whether validation run <id> plans at all
+//	magus buzz hack/gha-queue.buzz -- apply --run <id> --base <branch> --app <slug> --committer <who>
+//	                                                            merge what the run uploads onto the base,
+//	                                                            as the queue app
+//	magus buzz hack/gha-queue.buzz -- dispatch --run <id> --base <branch> --intent-at <time>
+//	                                                            start a validation run on the base once
+//	                                                            pull-request run <id> saw merge intent,
+//	                                                            unless an unfinished run covers it
+//	magus buzz hack/gha-queue.buzz -- ci-queued --run <id> --base <branch>
+//	                                                            write whether CI run <id> finished on the
+//	                                                            head of a queued pull request
+//	magus buzz hack/gha-queue.buzz -- start --base <branch> --intent-at <time>
+//	                                                            start a validation run on the base for
+//	                                                            what became ready at <time>, unless an
+//	                                                            unfinished run covers it
+//
+// The `--` hands the rest to the script; without it magus would parse the flags itself.
+// What the runner provides (GITHUB_REPOSITORY, RUNNER_TEMP, GITHUB_OUTPUT, the token) is
+// read from its environment; everything the workflow decides is an argument. The decisions (which changes the matrix holds,
+// each command's argv, whether anything merged) are pure functions tested at the
+// bottom; the process calls are not, since exercising them means running the queue.
+//
+// Applying never runs pull-request code: the apply step runs magus, git and gh from main's
+// checkout, and main's own regeneration on a merge the workspace proved runs none of the
+// change's code; any other regeneration it takes from validation's bundle, checked.
+namespace queue;
+
+import "flags";
+import "fs";
+import "os";
+import "proc";
+import "serialize";
+import "std";
+import "time";
+
+import "assert";
+
+// WORKFLOW is the validation workflow apply follows. Apply refuses a run of any other
+// file, and one that file ran for a pull request's event, since that run executed the
+// pull request's own copy of it.
+final WORKFLOW = ".github/workflows/queue.yaml";
+
+fun encode(doc: {str: any}) > str {
+    return serialize\jsonEncode(serialize\Boxed.init(doc));
+}
+
+// need reads what the runner provides; it is never how a workflow passes an input.
+fun need(name: str) > str !> any {
+    final v = os\env(name) ?? "";
+    if (v == "") {
+        throw "queue: {name} is not set; the runner provides it";
+    }
+    return v;
+}
+
+// validatedIDs lists the changes the plan gives a validation job: the first `depth` of
+// each partition. The rest wait for the run the next merge starts.
+export fun validatedIDs(plan: str) > [str] !> any {
+    final doc = serialize\jsonDecode(plan);
+    final depth = doc.q("depth").integerValue();
+    final ids = mut [<str>];
+    foreach (partition in doc.q("partitions").listValue()) {
+        final changes = partition.listValue();
+        var i = 0;
+        while (i < changes.len() and i < depth) {
+            ids.append(changes[i].q("id").stringValue());
+            i = i + 1;
+        }
+    }
+    return ids;
+}
+
+// outputs renders the plan job's $GITHUB_OUTPUT lines: the validation matrix and its size.
+export fun outputs(ids: [str]) > str {
+    final include = mut [<{str: str}>];
+    foreach (id in ids) {
+        include.append({"change": id});
+    }
+    return "matrix=" + encode({"include": include}) + "\ncount={ids.len()}\n";
+}
+
+// planArgs passes no --facts: the queue asks this checkout's magus workspace itself.
+export fun planArgs(dir: str, depth: str) > [str] {
+    return ["queue", "plan", "--changes", dir + "/changes.json", "--provider", "github", "--depth", depth,
+        "--out", dir + "/plan.json"];
+}
+
+// candidateMagus is a magus command run by the candidate's own magus. The job's magus is
+// main's, and a change that adds host surface its own magusfile uses cannot even be
+// loaded by it. Validation runs the change's code anyway; apply never does, and keeps
+// main's binary. `go run` builds it as one argv, since a hook gets no shell, into the
+// GOCACHE of the candidate's own home, which the queue gives every hook. The spell
+// bytecode that build embeds is committed output the gate's drift check holds to its
+// sources.
+export fun candidateMagus(args: str) > str {
+    return "go run ./cmd/magus " + args;
+}
+
+// SANDBOX is the mode every hook runs in: a hook runs a change's code, so where the
+// kernel cannot confine it the queue refuses to run it rather than run it unconfined.
+// A magus a hook runs inherits the mode and may not ask for a weaker one.
+final SANDBOX = "--sandbox=required";
+
+// GATE and REGENERATE are validation's hook lines. Apply shows them on a kick-back from
+// its own flags: a verdict is written by a job that ran the change's code. The gate
+// takes ci.yaml's charms, since charms key every step and only a step keyed as main's
+// shards keyed it replays what they stored.
+// A candidate's head becomes main's base, so a finding it inherits must fail it too.
+final GATE = candidateMagus("run ci:gha --no-default-charms -- --inherited=fatal");
+final REGENERATE = candidateMagus("run generate:rw");
+
+// validateArgs names no project: the queue appends the change's affected projects to
+// each hook line, or "/" when that set is no proof. Hooks read main's signed cache
+// through the queue's read-only proxy; the runner's cache token stays with the queue.
+// The plan arrives on stdin; validate() feeds it.
+export fun validateArgs(dir: str, change: str) > [str] {
+    return ["queue", "validate", SANDBOX, "--stdin", "--only", change, "--verdicts", dir + "/verdicts",
+        "--gate", GATE, "--regenerate", REGENERATE, "--remote-cache-read"];
+}
+
+// applyArgs polls every 15s: each poll is two API requests on the queue app's token,
+// which shares its hourly limit with every other request the app makes. The regeneration
+// is main's own, run in magus's sandbox on exactly the projects that generate the files a
+// merge needs regenerated; the queue runs it only once the workspace proves the change
+// touches none of their code, and otherwise checks the bundle validation uploaded beside
+// the verdict. committer and app are the queue app's bot and slug, from the workflow.
+export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
+    final args = mut ["queue", "apply", SANDBOX, "--provider", "github", "--base", base, "--workflow", WORKFLOW,
+        "--status-context", "merge-queue", "--interval", "15s",
+        "--regenerate", "magus run generate:rw",
+        "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
+    args.append("--committer");
+    args.append(committer);
+    args.append("--app");
+    args.append(app);
+    args.append("run:{repo}/runs/{run}");
+    return args;
+}
+
+// APPLY_FLAGS are apply's flags, all required: the queue writes only as its own GitHub
+// App, since a run or a merge the job's Actions token makes starts no workflow, and a
+// queue on it validates changes it never merges.
+final APPLY_FLAGS = ["--run", "--base", "--app", "--committer"];
+
+// jobRan reads `gh run view --json status,jobs` of a queue.yaml run: whether its job
+// named job runs, or null while the run has not said. A run cancelled while it waited
+// for the one ahead of it ends with no such job at all.
+export fun jobRan(view: str, job: str) > bool? !> any {
+    final run = serialize\jsonDecode(view);
+    foreach (j in run.q("jobs").listValue()) {
+        if (j.q("name").stringValue() == job) {
+            return j.q("conclusion").stringValue() != "skipped";
+        }
+    }
+    if (run.q("status").stringValue() == "completed") {
+        return false;
+    }
+    return null;
+}
+
+// capture runs cmd without echoing its stdout, and raises with its stderr on failure.
+fun capture(cmd: str, args: [str]) > str !> any {
+    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) {
+        throw "queue: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+    }
+    return res.stdout;
+}
+
+fun queueDir() > str !> any {
+    final dir = need("RUNNER_TEMP") + "/queue";
+    fs\mkdirAll(dir);
+    return dir;
+}
+
+fun plan(depth: str) > void !> any {
+    final dir = queueDir();
+    final changes = capture("magus", args: ["queue", "ls", "--provider", "github", "--base", "main"]);
+    fs\writeFile(dir + "/changes.json", content: changes + "\n");
+    proc\exec("magus", args: planArgs(dir, depth: depth), opts: {});
+    final ids = validatedIDs(fs\readFile(dir + "/plan.json"));
+    fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
+}
+
+fun validate(change: str) > void !> any {
+    final dir = queueDir();
+    proc\exec("magus", args: validateArgs(dir, change: change), opts: {"stdin": fs\readFile(dir + "/plan.json")});
+}
+
+// awaitJob polls every 10s, one API request each, until run says whether job runs; a
+// validation run waits on the run ahead of it for as long as that one validates.
+fun awaitJob(run: str, job: str) > bool !> any {
+    final args = ["run", "view", run, "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
+    while (true) {
+        final ran = jobRan(capture("gh", args: args), job: job);
+        if (ran != null) {
+            return ran!;
+        }
+        os\sleep(10000.0);
+    }
+}
+
+fun planned(run: str) > void !> any {
+    fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={awaitJob(run, job: PLAN_JOB)}\n");
+}
+
+// PLAN_JOB and PLAN_STEP name queue.yaml's plan job and the step in it that reads the
+// queue. A run plans an intent only when that step starts after it.
+final PLAN_JOB = "queue plan";
+final PLAN_STEP = "Plan the queue";
+
+// TIMESTAMP is the layout of every time the GitHub API reports.
+final TIMESTAMP = "2006-01-02T15:04:05Z";
+
+// Validation is an unfinished queue.yaml run on the base. readAt is when its plan step
+// started reading the queue, or null while it has not; planFailed is set once the plan
+// job ended without success, since such a run validates nothing.
+export object Validation {
+    id: str,
+    readAt: str?,
+    planFailed: bool,
+}
+
+// Decision is start's verdict: whether to start a run, and the notice that says why.
+export object Decision {
+    start: bool,
+    notice: str,
+    message: str,
+}
+
+// unfinishedIDs reads `gh api repos/<repo>/actions/workflows/queue.yaml/runs` on the
+// base: the runs a push or a dispatch in this repository started that have not finished.
+// A body without its run list is an error, never an empty queue.
+export fun unfinishedIDs(runs: str, repo: str) > [str] !> any {
+    final list = serialize\jsonDecode(runs).q("workflow_runs").list();
+    if (list == null) {
+        throw "queue: start: the run listing names no workflow_runs: {runs}";
+    }
+    final ids = mut [<str>];
+    foreach (r in list!) {
+        final event = r.q("event").stringValue();
+        if (r.q("status").stringValue() != "completed" and (event == "push" or event == "workflow_dispatch")
+            and r.q("head_repository").q("full_name").stringValue() == repo) {
+            ids.append("{r.q("id").integerValue()}");
+        }
+    }
+    return ids;
+}
+
+// validation reads `gh api repos/<repo>/actions/runs/<id>/jobs` of an unfinished run. A
+// run waiting its turn in the concurrency group lists no jobs, so it has read nothing.
+export fun validation(id: str, jobs: str) > Validation !> any {
+    final list = serialize\jsonDecode(jobs).q("jobs").list();
+    if (list == null) {
+        throw "queue: start: run {id}'s job listing names no jobs: {jobs}";
+    }
+    foreach (j in list!) {
+        if (j.q("name").stringValue() != PLAN_JOB) {
+            continue;
+        }
+        final failed = j.q("status").stringValue() == "completed" and j.q("conclusion").stringValue() != "success";
+        foreach (step in j.q("steps").listValue()) {
+            final started = step.q("started_at").stringValue();
+            if (step.q("name").stringValue() == PLAN_STEP and started != "") {
+                return Validation{ id = id, readAt = started, planFailed = failed };
+            }
+        }
+        return Validation{ id = id, readAt = null, planFailed = failed };
+    }
+    return Validation{ id = id, readAt = null, planFailed = false };
+}
+
+// decide says whether merge intent seen at intentAt needs a run started on the base,
+// given the unfinished ones. A run covers it until its plan reads the queue, or when that
+// read began after it; a read in the same second counts as before. GitHub keeps one run
+// pending behind the running one and cancels the older pending run, and a pending run
+// always covers, so this starts a follow-up only when none is pending and never replaces
+// one.
+export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
+    final at = time\parse(TIMESTAMP, value: intentAt);
+    final before = mut [<str>];
+    foreach (r in runs) {
+        if (r.planFailed) {
+            before.append("{r.id} (its plan failed)");
+        } else if (r.readAt == null) {
+            return Decision{ start = false, notice = "queue-dispatch-pending",
+                message = "run {r.id} has not read the queue yet, so it plans this intent" };
+        } else if (time\parse(TIMESTAMP, value: r.readAt!) > at) {
+            return Decision{ start = false, notice = "queue-dispatch-covered",
+                message = "run {r.id} read the queue at {r.readAt!}, after this intent at {intentAt}" };
+        } else {
+            before.append("{r.id} (read the queue at {r.readAt!})");
+        }
+    }
+    if (before.len() == 0) {
+        return Decision{ start = true, notice = "queue-dispatch-idle",
+            message = "no validation run is running or pending; starting one for this intent at {intentAt}" };
+    }
+    return Decision{ start = true, notice = "queue-dispatch-follow-up",
+        message = "run {before.join(", ")} planned before this intent at {intentAt}; starting one follow-up" };
+}
+
+// dispatch starts a validation run on base once pull-request run run saw merge intent at
+// intentAt, unless an unfinished run covers it. That run's jobs are the pull request's
+// own file, so its intent job is a hint and never a verdict: the worst a forged one does
+// is start one more run on base, which validates only what the base's own queue.yaml
+// plans.
+fun dispatch(run: str, base: str, intentAt: str) > void !> any {
+    if (!awaitJob(run, job: "queue intent")) {
+        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent");
+        return;
+    }
+    start(base, intentAt: intentAt);
+}
+
+// START_FLAGS are start's flags and DISPATCH_FLAGS dispatch's, all required: neither
+// step starts a run without the moment the change became ready to weigh it against.
+final START_FLAGS = ["--base", "--intent-at"];
+final DISPATCH_FLAGS = ["--run", "--base", "--intent-at"];
+
+// start starts a validation run of queue.yaml on base for what became ready at intentAt,
+// unless an unfinished run covers it. Any API error fails the step: skipping on one could
+// strand the change.
+fun start(base: str, intentAt: str) > void !> any {
+    final repo = need("GITHUB_REPOSITORY");
+    final began = os\time();
+    final ids = unfinishedIDs(capture("gh", args: ["api", "repos/{repo}/actions/workflows/queue.yaml/runs?branch={base}&exclude_pull_requests=true&per_page=100"]), repo: repo);
+    final runs = mut [<Validation>];
+    foreach (id in ids) {
+        runs.append(validation(id, jobs: capture("gh", args: ["api", "repos/{repo}/actions/runs/{id}/jobs"])));
+    }
+    std\print("queue: read {ids.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
+    final d = decide(runs, intentAt: intentAt);
+    std\print("::notice title={d.notice}::{d.message}");
+    if (d.start) {
+        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: {});
+    }
+}
+
+// QUEUE_LABELS are the labels that queue a pull request, one per merge method.
+final QUEUE_LABELS = ["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"];
+
+// ciPulls reads `gh api repos/<repo>/actions/runs/<id>` of a CI run: the head it ran on
+// and the pull requests it ran for, which GitHub lists only for this repository's own
+// branches.
+export fun ciPulls(run: str) > CIRun !> any {
+    final r = serialize\jsonDecode(run);
+    final pulls = mut [<str>];
+    foreach (p in r.q("pull_requests").listValue()) {
+        pulls.append("{p.q("number").integerValue()}");
+    }
+    return CIRun{ head = r.q("head_sha").stringValue(), pulls = pulls };
+}
+
+object CIRun {
+    head: str,
+    pulls: [str],
+}
+
+// queuedAt reads `gh api repos/<repo>/pulls/<n>`: whether the pull request is open
+// against base with its head still at head, and carries merge intent (auto-merge, or a
+// queue label on it). A stack member's intent is its stack top's label, whose own CI run
+// starts the queue for the stack.
+export fun queuedAt(pull: str, head: str, base: str) > bool !> any {
+    final pr = serialize\jsonDecode(pull);
+    if (pr.q("state").stringValue() != "open" or pr.q("head").q("sha").stringValue() != head or pr.q("base").q("ref").stringValue() != base) {
+        return false;
+    }
+    if (pr.q("auto_merge").q("merge_method").stringValue() != "") {
+        return true;
+    }
+    foreach (l in pr.q("labels").listValue()) {
+        if (QUEUE_LABELS.indexOf(l.q("name").stringValue()) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ciQueued writes whether CI run run finished on the current head of a pull request the
+// queue holds: a change waiting on its required checks waits for exactly that, and
+// nothing else starts a validation run once they report.
+fun ciQueued(run: str, base: str) > void !> any {
+    final repo = need("GITHUB_REPOSITORY");
+    final r = ciPulls(capture("gh", args: ["api", "repos/{repo}/actions/runs/{run}"]));
+    var queued = false;
+    foreach (n in r.pulls) {
+        if (queuedAt(capture("gh", args: ["api", "repos/{repo}/pulls/{n}"]), head: r.head, base: base)) {
+            queued = true;
+            break;
+        }
+    }
+    fs\appendFile(need("GITHUB_OUTPUT"), content: "queued={queued}\n");
+}
+
+fun apply(run: str, base: str, app: str, committer: str) > void !> any {
+    final args = applyArgs(run, repo: need("GITHUB_REPOSITORY"), base: base, committer: committer, app: app);
+    proc\exec("magus", args: args, opts: {});
+}
+
+final usage = "usage: magus buzz hack/gha-queue.buzz -- <step> <flags>\n"
+    + "  plan --depth <n>\n"
+    + "  validate --change <id>\n"
+    + "  planned --run <id>\n"
+    + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
+    + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
+    + "  ci-queued --run <id> --base <branch>\n"
+    + "  start --base <branch> --intent-at <time>";
+
+// options parses one step's flags, all valued. Each name in required must be given a
+// value; optional ones may be empty. Anything the step does not declare is refused.
+export fun options(step: str, argv: [str], required: [str], optional: [str]) > {str: str} !> any {
+    final valued = mut [<str>];
+    foreach (name in required) { valued.append(name); }
+    foreach (name in optional) { valued.append(name); }
+    final parsed = flags\parse(argv, switches: [<str>], valued: valued);
+    if (parsed.unknown.len() > 0) {
+        throw "queue: {step} does not take {parsed.unknown.join(" ")}\n{usage}";
+    }
+    foreach (name in required) {
+        if ((parsed.values[name] ?? "") == "") {
+            throw "queue: {step} needs {name}\n{usage}";
+        }
+    }
+    return parsed.values;
+}
+
+export fun main(args: [str]) > void !> any {
+    if (args.len() == 0) {
+        throw "queue: no step given\n{usage}";
+    }
+    final step = args[0];
+    final argv = args.sub(1);
+    if (step == "plan") {
+        plan(options(step, argv: argv, required: ["--depth"], optional: [<str>])["--depth"]!);
+    } else if (step == "validate") {
+        validate(options(step, argv: argv, required: ["--change"], optional: [<str>])["--change"]!);
+    } else if (step == "planned") {
+        planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
+    } else if (step == "apply") {
+        final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
+        apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
+    } else if (step == "dispatch") {
+        final o = options(step, argv: argv, required: DISPATCH_FLAGS, optional: [<str>]);
+        dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
+    } else if (step == "ci-queued") {
+        final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
+        ciQueued(o["--run"]!, base: o["--base"]!);
+    } else if (step == "start") {
+        final o = options(step, argv: argv, required: START_FLAGS, optional: [<str>]);
+        start(o["--base"]!, intentAt: o["--intent-at"]!);
+    } else {
+        throw "queue: unknown step \"{step}\"\n{usage}";
+    }
+}
+
+fun planDoc(depth: int, partitions: [[str]]) > str {
+    final groups = mut [<[{str: str}]>];
+    foreach (ids in partitions) {
+        final group = mut [<{str: str}>];
+        foreach (id in ids) {
+            group.append({"id": id, "head": "abc"});
+        }
+        groups.append(group);
+    }
+    return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
+}
+
+test "apply runs once the plan job runs, and not when it was skipped or never made" {
+    final view = fun (status: str, conclusion: str?) > str {
+        final jobs = mut [<{str: any}>];
+        if (conclusion != null) {
+            jobs.append({"name": "queue plan", "conclusion": conclusion!});
+        }
+        return encode({"status": status, "jobs": jobs});
+    };
+    assert\equal(jobRan(view("in_progress", conclusion: "skipped"), job: "queue plan"), want: false, message: "no merge intent");
+    assert\equal(jobRan(view("in_progress", conclusion: "success"), job: "queue plan"), want: true, message: "planned");
+    assert\equal(jobRan(view("completed", conclusion: "failure"), job: "queue plan"), want: true, message: "apply resets stale statuses whatever the plan did");
+    assert\equal(jobRan(view("in_progress", conclusion: ""), job: "queue plan"), want: true, message: "running");
+    assert\equal(jobRan(view("completed", conclusion: null), job: "queue plan"), want: false, message: "cancelled before it started");
+    assert\equal(jobRan(view("queued", conclusion: null), job: "queue plan"), want: null, message: "still waiting");
+    assert\equal(jobRan(view("completed", conclusion: "success"), job: "queue intent"), want: false, message: "another job's conclusion says nothing");
+}
+
+test "each partition gives its first depth changes a validation job" {
+    final ids = validatedIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
+    assert\equal(ids, want: ["1", "2", "4"], message: "depth 2 over partitions of three and one");
+}
+
+test "a plan with no partitions validates nothing" {
+    assert\equal(validatedIDs(`{"depth": 3, "partitions": null}`).len(), want: 0, message: "null partitions");
+    assert\equal(validatedIDs(`{"depth": 3}`).len(), want: 0, message: "absent partitions");
+}
+
+test "outputs render a compact matrix and its count" {
+    assert\equal(outputs(["1", "4"]), want: `matrix={"include":[{"change":"1"},{"change":"4"}]}` + "\ncount=2\n", message: "two jobs");
+    assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no jobs");
+}
+
+test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
+    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--sandbox=required", "--stdin", "--only", "482",
+        "--verdicts", "/t/queue/verdicts",
+        "--gate", "go run ./cmd/magus run ci:gha --no-default-charms -- --inherited=fatal",
+        "--regenerate", "go run ./cmd/magus run generate:rw",
+        "--remote-cache-read"], message: "argv");
+}
+
+test "validation runs the candidate's own magus; apply keeps main's" {
+    assert\equal(candidateMagus("version"), want: "go run ./cmd/magus version", message: "one argv, no shell");
+    // The reproduce lines are shown on a kick-back, never run; the regeneration is what apply runs.
+    final args = applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q");
+    final regenerate = args[args.indexOf("--regenerate")! + 1];
+    assert\equal(regenerate.indexOf("go run"), want: null, message: "apply builds nothing: " + regenerate);
+}
+
+test "apply follows the validation run as its source, pinned to the base and queue.yaml, as the queue app's bot, regenerating in the sandbox" {
+    assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply", "--sandbox=required",
+        "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
+        "--regenerate", "magus run generate:rw",
+        "--reproduce-gate", "go run ./cmd/magus run ci:gha --no-default-charms -- --inherited=fatal", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
+        "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");
+}
+
+test "a CI run starts the queue only when it finished on the current head of a queued pull request" {
+    final r = ciPulls(`{"head_sha": "h1", "pull_requests": [{"number": 7}, {"number": 9}]}`);
+    assert\equal([r.head, r.pulls.join(",")], want: ["h1", "7,9"], message: "the head and the pull requests it ran for");
+    assert\equal(ciPulls(`{"head_sha": "h1", "pull_requests": []}`).pulls.len(), want: 0, message: "a fork's run lists none");
+    final pull = fun (state: str, head: str, base: str, auto: str, labels: [str]) > str {
+        final named = mut [<{str: str}>];
+        foreach (l in labels) {
+            named.append({"name": l});
+        }
+        var automerge: any = null;
+        if (auto != "") {
+            automerge = {"merge_method": auto};
+        }
+        return serialize\jsonEncode(serialize\Boxed.init({"state": state, "head": {"sha": head}, "base": {"ref": base}, "auto_merge": automerge, "labels": named}));
+    };
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: true, message: "auto-merge");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: rebase"]), head: "h1", base: "main"), want: true, message: "a queue label");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["queue: queued", "queue: kicked back"]), head: "h1", base: "main"),
+        want: false, message: "a mark is no intent");
+    assert\equal(queuedAt(pull("open", head: "h2", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "CI on a head since replaced");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "release", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "another base");
+    assert\equal(queuedAt(pull("closed", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "closed");
+}
+
+test "apply refuses to run without the queue app's slug and committer" {
+    final all = ["--run", "7", "--base", "main", "--app", "q", "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>"];
+    assert\equal(options("apply", argv: all, required: APPLY_FLAGS, optional: [<str>])["--app"], want: "q", message: "every flag given");
+    foreach (argv in [["--run", "7", "--base", "main"], ["--run", "7", "--base", "main", "--app", "q"],
+        ["--run", "7", "--base", "main", "--committer", "c"], ["--run", "7", "--base", "main", "--app", "", "--committer", ""]]) {
+        var refused = false;
+        try {
+            options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: argv.join(" "));
+    }
+}
+
+test "each step takes the flags it declares and refuses the rest" {
+    final o = options("planned", argv: ["--run", "7", "--base=main", "--note", ""], required: ["--run"], optional: ["--base", "--note"]);
+    assert\equal(o["--run"], want: "7", message: "a valued flag");
+    assert\equal(o["--base"], want: "main", message: "the =value form");
+    assert\equal(o["--note"], want: "", message: "an optional flag may be empty");
+    foreach (argv in [["--depth"], ["--depth", ""], ["3"], ["--depth", "3", "--extra", "x"]]) {
+        var refused = false;
+        try {
+            options("plan", argv: argv, required: ["--depth"], optional: [<str>]);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: argv.join(" "));
+    }
+}
+
+fun queueRuns(runs: [{str: any}]) > str {
+    return encode({"total_count": runs.len(), "workflow_runs": runs});
+}
+
+fun queueRun(id: int, status: str, event: str, repo: str) > {str: any} {
+    return {"id": id, "status": status, "event": event, "head_repository": {"full_name": repo}};
+}
+
+// planJobs renders a run's job listing: no plan job when status is "", else the plan job
+// with its plan step, started at readAt unless that is "".
+fun planJobs(status: str, conclusion: str, readAt: str) > str {
+    final jobs = mut [<{str: any}>];
+    if (status != "") {
+        var started: any = null;
+        if (readAt != "") {
+            started = readAt;
+        }
+        jobs.append({"name": "queue plan", "status": status, "conclusion": conclusion, "steps": [
+            {"name": "Set up job", "started_at": "2026-09-26T17:00:00Z"},
+            {"name": "Plan the queue", "started_at": started},
+        ]});
+    }
+    return encode({"total_count": jobs.len(), "jobs": jobs});
+}
+
+test "dispatch weighs only unfinished runs a push or a dispatch in this repository started" {
+    final runs = queueRuns([
+        queueRun(1, status: "in_progress", event: "workflow_dispatch", repo: "o/r"),
+        queueRun(2, status: "pending", event: "push", repo: "o/r"),
+        queueRun(3, status: "completed", event: "workflow_dispatch", repo: "o/r"),
+        queueRun(4, status: "queued", event: "pull_request", repo: "o/r"),
+        queueRun(5, status: "queued", event: "push", repo: "fork/r"),
+    ]);
+    assert\equal(unfinishedIDs(runs, repo: "o/r"), want: ["1", "2"], message: "unfinished base runs");
+}
+
+test "dispatch fails on an API error rather than reading it as no runs" {
+    foreach (body in [`{"message": "Bad credentials", "status": "401"}`, `{"workflow_runs": null}`]) {
+        var failed = false;
+        try {
+            unfinishedIDs(body, repo: "o/r");
+        } catch (e) {
+            failed = true;
+        }
+        assert\equal(failed, want: true, message: "run listing " + body);
+    }
+    var failed = false;
+    try {
+        validation("1", jobs: `{"message": "Not Found"}`);
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "job listing");
+}
+
+test "a run has read the queue once its plan step started" {
+    final pending = validation("1", jobs: planJobs("", conclusion: "", readAt: ""));
+    assert\equal([pending.readAt, pending.planFailed], want: [null, false], message: "waiting in the concurrency group");
+    final setup = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
+    assert\equal([setup.readAt, setup.planFailed], want: [null, false], message: "plan job still setting up");
+    final read = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T17:02:00Z"));
+    assert\equal([read.readAt, read.planFailed], want: ["2026-09-26T17:02:00Z", false], message: "plan step started");
+    final failed = validation("1", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T17:02:00Z"));
+    assert\equal(failed.planFailed, want: true, message: "plan failed");
+}
+
+test "dispatch starts a run only when no unfinished run plans the intent" {
+    final intent = "2026-09-26T17:10:00Z";
+    final early = Validation{ id = "7", readAt = "2026-09-26T17:02:00Z", planFailed = false };
+    final pending = Validation{ id = "8", readAt = null, planFailed = false };
+    final verdict = fun (runs: [Validation]) > [any] {
+        final d = decide(runs, intentAt: intent);
+        return [d.start, d.notice];
+    };
+    assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
+    assert\equal(verdict([pending]), want: [false, "queue-dispatch-pending"], message: "a pending run plans it");
+    assert\equal(verdict([early]), want: [true, "queue-dispatch-follow-up"], message: "the running run planned before it");
+    assert\equal(verdict([pending, early]), want: [false, "queue-dispatch-pending"], message: "running and pending, newest first");
+    assert\equal(verdict([early, pending]), want: [false, "queue-dispatch-pending"], message: "running and pending, oldest first");
+    assert\equal(verdict([Validation{ id = "7", readAt = "2026-09-26T17:10:01Z", planFailed = false }]),
+        want: [false, "queue-dispatch-covered"], message: "the running run read the queue after it");
+    assert\equal(verdict([Validation{ id = "7", readAt = intent, planFailed = false }]),
+        want: [true, "queue-dispatch-follow-up"], message: "a read in the same second may have missed it");
+    assert\equal(verdict([Validation{ id = "7", readAt = "2026-09-26T17:12:00Z", planFailed = true }]),
+        want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
+    assert\equal(decide([early], intentAt: intent).message,
+        want: "run 7 (read the queue at 2026-09-26T17:02:00Z) planned before this intent at 2026-09-26T17:10:00Z; starting one follow-up",
+        message: "the notice names the run and both times");
+}
+
+test "start and dispatch refuse to run without the moment the change became ready" {
+    assert\equal(options("start", argv: ["--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: START_FLAGS, optional: [<str>])["--intent-at"],
+        want: "2026-09-26T17:10:00Z", message: "start with every flag");
+    assert\equal(options("dispatch", argv: ["--run", "7", "--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: DISPATCH_FLAGS, optional: [<str>])["--run"],
+        want: "7", message: "dispatch with every flag");
+    foreach (c in [["start", "--base", "main"], ["start", "--base", "main", "--intent-at", ""], ["dispatch", "--run", "7", "--base", "main"]]) {
+        var refused = false;
+        try {
+            if (c[0] == "start") {
+                options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]);
+            } else {
+                options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]);
+            }
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: c.join(" "));
+    }
+}
+
+test "CI finishing on a queued head starts a run only when no unfinished run plans after it" {
+    // A validation run already running when CI finished planned the change as not yet
+    // ready, so it needs a follow-up; one that has yet to read the queue sees CI green.
+    final finished = "2026-09-26T18:40:00Z";
+    final verdict = fun (runs: [Validation]) > [any] {
+        final d = decide(runs, intentAt: finished);
+        return [d.start, d.notice];
+    };
+    final queued = validation("9", jobs: planJobs("", conclusion: "", readAt: ""));
+    final setup = validation("9", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
+    final before = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:20:00Z"));
+    final after = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:41:00Z"));
+    final failed = validation("8", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T18:41:00Z"));
+    assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
+    assert\equal(verdict([queued]), want: [false, "queue-dispatch-pending"], message: "a run waiting its turn");
+    assert\equal(verdict([setup]), want: [false, "queue-dispatch-pending"], message: "a run still setting up its plan");
+    assert\equal(verdict([before]), want: [true, "queue-dispatch-follow-up"], message: "the running run planned while CI ran");
+    assert\equal(verdict([after]), want: [false, "queue-dispatch-covered"], message: "the running run planned after CI finished");
+    assert\equal(verdict([before, queued]), want: [false, "queue-dispatch-pending"], message: "running and pending");
+    assert\equal(verdict([failed]), want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
+}
+
+test "plan args carry the depth and leave the affected sets to the workspace" {
+    final args = planArgs("/t/queue", depth: "3");
+    assert\equal(args[0], want: "queue", message: "magus queue");
+    assert\equal(args[7], want: "3", message: "depth");
+    assert\equal(args[8], want: "--out", message: "no facts command");
+    assert\equal(args.len(), want: 10, message: "argv length");
+}

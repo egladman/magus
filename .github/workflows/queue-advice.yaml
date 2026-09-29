@@ -106,4 +106,4 @@ jobs:
           MAIN: ${{ github.event.repository.default_branch }}
           ISSUE: ${{ vars.MAGUS_QUEUE_DASHBOARD_ISSUE }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: magus buzz tools/pull-requests.buzz -- dashboard --all --base "$MAIN" --out "$GITHUB_STEP_SUMMARY" --issue "$ISSUE" --run-url "$RUN_URL"
+        run: magus buzz hack/pull-requests.buzz -- dashboard --all --base "$MAIN" --out "$GITHUB_STEP_SUMMARY" --issue "$ISSUE" --run-url "$RUN_URL"

@@ -432,7 +432,7 @@ jobs:
           queue-app-client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
         env:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
-      - run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
+      - run: magus buzz hack/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}

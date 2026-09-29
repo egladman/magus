@@ -17,7 +17,7 @@ import (
 
 // errStaleLoad is what a ./magus older than the tree reports: it cannot load the working tree,
 // and parsing the approved copy with the same binary fails the same way.
-var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
+var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./hack/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
 
 // unloadedDeps is a workspace whose working tree and approved copy both fail to load.
 func unloadedDeps() Dependencies {

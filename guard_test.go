@@ -23,7 +23,7 @@ func TestPendingTouchesLoad(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
 	sources := []interp.SourceFile{
 		{Path: filepath.Join(root, "magusfile.buzz")},
-		{Path: filepath.Join(root, "tools", "policy", "guard.buzz")},
+		{Path: filepath.Join(root, "hack", "policy", "guard.buzz")},
 	}
 	sep := string(filepath.Separator)
 	cases := []struct {
@@ -31,11 +31,11 @@ func TestPendingTouchesLoad(t *testing.T) {
 		pending []string
 		want    bool
 	}{
-		{"a file the load read", []string{filepath.Join(root, "tools", "policy", "guard.buzz")}, true},
+		{"a file the load read", []string{filepath.Join(root, "hack", "policy", "guard.buzz")}, true},
 		{"the root magusfile", []string{filepath.Join(root, "magusfile.buzz")}, true},
 		{"the config that shapes the load", []string{filepath.Join(root, "magus.yaml")}, true},
 		{"a new magusfiles source", []string{filepath.Join(root, "magusfiles", "a.buzz")}, true},
-		{"an untracked directory holding a source", []string{filepath.Join(root, "tools") + sep}, true},
+		{"an untracked directory holding a source", []string{filepath.Join(root, "hack") + sep}, true},
 		{"an untracked magusfiles directory", []string{filepath.Join(root, "magusfiles") + sep}, true},
 		{"a spell no load read", []string{filepath.Join(root, "spells", "go", "spell.buzz")}, false},
 		{"an untracked directory elsewhere", []string{filepath.Join(root, "scratch") + sep}, false},

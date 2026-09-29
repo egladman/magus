@@ -99,7 +99,7 @@ then a table per section (in flight, queued, needs the author, needs a manual me
 could join, drafts and forks) with each one's reason and a person's command. It is
 rewritten whole after every apply run and on every label, review or auto-merge event,
 and the same page goes to the run's summary. To render it locally:
-`magus buzz tools/pull-requests.buzz -- dashboard --all`.
+`magus buzz hack/pull-requests.buzz -- dashboard --all`.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label
@@ -236,7 +236,7 @@ generated file, a candidate tree or a review proof from a verdict.
     sandbox.
   - With `--sandbox=required`, or `sandbox.mode: required` on the base, the queue
     refuses ([MGS2012](../reference/codes/sandbox/MGS2012.md)) to run a hook the kernel
-    cannot confine, and stops. `tools/gha-queue.buzz` passes it to `validate` and
+    cannot confine, and stops. `hack/gha-queue.buzz` passes it to `validate` and
     `apply`. Without it, on a host without landlock (macOS, Windows, an older Linux), a
     hook runs under the environment allowlist and the program check alone: `magus queue
     validate` runs on a laptop, and confines nothing on its filesystem there.

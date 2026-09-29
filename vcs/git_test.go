@@ -3623,14 +3623,14 @@ func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
 func TestGitObjectBatchReadsCommittedFiles(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{
-		"magusfile.buzz":          "one\n",
-		"tools/policy/guard.buzz": "two\n",
+		"magusfile.buzz":         "one\n",
+		"hack/policy/guard.buzz": "two\n",
 	})
 	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, batch.Close()) }()
 
-	for _, rel := range []string{"magusfile.buzz", "tools/policy/guard.buzz"} {
+	for _, rel := range []string{"magusfile.buzz", "hack/policy/guard.buzz"} {
 		want, err := gitVCS{}.ReadFileAt(t.Context(), dir, "HEAD", rel)
 		require.NoError(t, err)
 		got, err := batch.Read(rel)

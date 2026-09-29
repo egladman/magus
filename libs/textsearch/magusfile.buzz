@@ -18,9 +18,9 @@
 // the target graph - affected tracking is glob-based (sources), not import-graph-based.
 
 import "magus";
-import "../../tools/drift" as drift;
+import "../../hack/drift" as drift;
 // fs writes MAGUS.md and reads the sources it indexes; os shells out to pnpm
-// (typecheck/biome/test); tools/drift.buzz gates the generated MAGUS.md on drift.
+// (typecheck/biome/test); hack/drift.buzz gates the generated MAGUS.md on drift.
 import "fs";
 import "os";
 
@@ -31,10 +31,10 @@ import "proc";
 // informational) and does not run in ci, which uses the custom targets below.
 import "magus/spell/typescript";
 
-import "../../tools/toolchain-policy" as policy;
+import "../../hack/toolchain-policy" as policy;
 
 magus\project({
-    // The shared node window, by explicit import (tools/toolchain-policy.buzz).
+    // The shared node window, by explicit import (hack/toolchain-policy.buzz).
     // This project drives node; it declares no go window because it drives no Go.
     "tools": {"node": policy\node},
     "spells": [typescript],
@@ -64,7 +64,7 @@ magus\project({
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
-// measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
+// measured by hashing MAGUS.md before and after (hack/drift.buzz), not by asking whether
 // it was clean, so the gate still fires when you already have it uncommitted. A
 // locally-regenerated MAGUS.md passes either way: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {

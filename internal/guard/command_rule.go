@@ -127,7 +127,7 @@ func gatedVerb(command string, d Dialect) string {
 }
 
 // magusStateWrite is the state-writing verb a magus argv runs, "" for any other. The set
-// is tools/policy/stale.buzz's stateWrite: a dry run, a streamed install and `init spell`
+// is hack/policy/stale.buzz's stateWrite: a dry run, a streamed install and `init spell`
 // write nothing shared.
 func magusStateWrite(args []string) string {
 	if magusFlag(args, "dry-run") {

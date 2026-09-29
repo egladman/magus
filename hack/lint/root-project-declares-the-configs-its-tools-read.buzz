@@ -1,0 +1,83 @@
+// root-project-declares-the-configs-its-tools-read is this repository declining to be
+// the example in its own diagnostic. An undeclared config produces a cache HIT on an
+// edit to it (golangci-lint re-run under a new rule set, replaying the verdict computed
+// under the old one) while still seeding the root project through directory containment
+// and rerunning everything for nothing (MGS1028, and doctor's undeclared-seeding advice).
+namespace rootconfigs;
+
+import "assert";
+import "path";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// CONFIGS are the paths that change what a root target DOES while matching no spell
+// source glob, each with the tool that reads it. The runner reports one the tree no
+// longer has.
+//
+// Deliberately absent: LICENSE is read only by release-build, which is skip_cache, so
+// declaring it would invalidate build/test/lint to key nothing; .gitignore is read by no
+// target at all. Both keep seeding by containment.
+export final CONFIGS = {
+    ".golangci.yml": "golangci-lint, through the go spell's lint op",
+    ".mockery.yaml": "`go tool mockery`, in the generate target",
+    ".markdownlintignore": "markdownlint, through the markdown spell's lint op",
+    "dprint-base.json": "dprint (dprint.json extends it; the spell declares only dprint.json)",
+    "mise.toml": "every op in this project, through the toolchain it pins",
+    "magus.yaml": "every run, through the charm/cache/sandbox policy it resolves",
+    "Dockerfile": "image-build's amd64 variant",
+    "Dockerfile.static": "image-build's static multi-arch variant",
+};
+
+export fun reads() > [str] {
+    final globs = mut [<str>];
+    globs.append("magusfile.buzz");
+    foreach (p in support\sorted(CONFIGS.keys())) {
+        globs.append(p);
+    }
+    return globs;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    var sources = [<str>];
+    foreach (p in support\projects().projects) {
+        if (p.path == ".") {
+            sources = p.sources;
+        }
+    }
+    final magusfile = support\named(files, p: "magusfile.buzz");
+    if (magusfile == null) {
+        return [support\missing("magusfile.buzz")];
+    }
+    return findings(sources, magusfile: support\read(magusfile!));
+}
+
+// findings grades the root project's resolved source globs against CONFIGS.
+export fun findings(sources: [str], magusfile: str) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final line = support\lineOf(magusfile, needle: "\"sources\":");
+    foreach (p in support\sorted(CONFIGS.keys())) {
+        if (path\matchesAny(sources, path: p)) {
+            continue;
+        }
+        found.append(Finding{ path = "magusfile.buzz", line = line,
+            message = p + " is read by " + CONFIGS[p]! + " but no root source glob names it",
+            fix = "Editing it reruns every root target while keying none of them. Declare it in the project's sources." });
+    }
+    return found;
+}
+
+test "every config under a source glob passes" {
+    assert\equal(findings(["**/*.go"] + CONFIGS.keys(), magusfile: "").len(), want: 0, message: "clean");
+}
+
+test "an undeclared config is reported at the sources block" {
+    final sources = mut [<str>];
+    foreach (p in CONFIGS.keys()) {
+        if (p != "mise.toml") {
+            sources.append(p);
+        }
+    }
+    final got = findings(sources, magusfile: "x\n  \"sources\": [\n");
+    assert\equal(support\messages(got), want: ["mise.toml is read by every op in this project, through the toolchain it pins but no root source glob names it"], message: "message");
+    assert\equal(got[0].line, want: 2, message: "line");
+}

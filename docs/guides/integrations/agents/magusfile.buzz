@@ -26,7 +26,7 @@ import "magus";
 import "./lib/embed" as embed;
 // The workspace's shared drift helper, so this project's generated files are gated the
 // same way the root's are rather than by a second implementation of the same idea.
-import "../../../../tools/drift" as drift;
+import "../../../../hack/drift" as drift;
 // os shells out to pnpm for the install and the two gates.
 import "os";
 

@@ -30,7 +30,7 @@ queue gates a candidate in, and `ci.yaml`'s shards run inside it. `setup-magus` 
 magus from the checked-out tree. `.github/actions/magus` passes an argv through its
 environment, so a word-split argv never reaches a shell as code. GitHub's dispatch API
 returns the run it created (changelog 2026-02-19), and `gh workflow run` prints its URL
-since v2.87.0. `tools/gha-queue.buzz` already dispatches `queue.yaml` with `gh`.
+since v2.87.0. `hack/gha-queue.buzz` already dispatches `queue.yaml` with `gh`.
 
 ## Options
 
@@ -56,10 +56,10 @@ remote.
 ### D. One workflow and one repository script (decided)
 
 ```sh
-magus buzz tools/gha-run.buzz -- dispatch --ref <branch> -- run test .
-magus buzz tools/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
-magus buzz tools/gha-run.buzz -- result --run <id>
-magus buzz tools/gha-run.buzz -- forget --run <id>
+magus buzz hack/gha-run.buzz -- dispatch --ref <branch> -- run test .
+magus buzz hack/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
+magus buzz hack/gha-run.buzz -- result --run <id>
+magus buzz hack/gha-run.buzz -- forget --run <id>
 ```
 
 ## Decision
@@ -72,7 +72,7 @@ magus buzz tools/gha-run.buzz -- forget --run <id>
    and runs `queue gate --sandbox=<mode> --cache .magus -- magus <argv>` through
    `.github/actions/magus`. It reads main's signed remote tier and writes no shared tier.
    It uploads `.magus/logs/` as `magus-logs` on every outcome, kept 7 days.
-2. **`tools/gha-run.buzz`**, three steps, none of which waits:
+2. **`hack/gha-run.buzz`**, three steps, none of which waits:
    - `dispatch` needs exactly one of `--ref <branch>` and `--push`. With `--ref` it asks
      GitHub for the branch tip and refuses unless it is HEAD. With `--push` it pushes
      HEAD to `run-<sha12>`, a branch named for the commit. It refuses a dirty tree unless
@@ -114,7 +114,7 @@ published.
 
 Anyone with write access can read every repository secret, and a dispatch at any branch
 runs that branch's copy of the file with those secrets in reach. `run.yaml` names no
-`secrets.*` beyond the job's token, and `tools/gha-run.buzz` dispatches `run.yaml` alone.
+`secrets.*` beyond the job's token, and `hack/gha-run.buzz` dispatches `run.yaml` alone.
 The guard should prove the rest: deny a dispatch of any workflow whose file at the ref
 reads a secret beyond `GITHUB_TOKEN` (`release.yaml` and `release-index.yaml` carry
 `workflow_dispatch` and read `MAGUS_SIGNING_KEY`).

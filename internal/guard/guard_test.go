@@ -226,7 +226,7 @@ func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	assert.Empty(t, hookAttribution{Host: "test-host"}.factsKey(), "neither leaves the gate its anonymous window")
 }
 
-// policyRule matches a rule's line in tools/policy/guard.buzz's header: `//   name (`.
+// policyRule matches a rule's line in hack/policy/guard.buzz's header: `//   name (`.
 var policyRule = regexp.MustCompile(`(?m)^//   ([a-z][a-z-]+) \(`)
 
 // policyCase is one real hook input and the verdict this repository's policy owes it.
@@ -255,7 +255,7 @@ func bash(command string) map[string]any {
 	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}}
 }
 
-// The Buzz tests in tools/policy/*.buzz pin each rule against argvs they build by hand.
+// The Buzz tests in hack/policy/*.buzz pin each rule against argvs they build by hand.
 // This pins the other half: the policy the root magusfile actually registers, reached
 // through the Go guard from the shell line or tool call a host sends, so a parse the Go
 // side changes, or a request field it stops filling, fails here and not in a session.
@@ -523,7 +523,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
 
-	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))
+	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))
 	require.NoError(t, err)
 	listed := policyRule.FindAllStringSubmatch(string(source), -1)
 	require.NotEmpty(t, listed, "the header still lists its rules as `//   name (`")

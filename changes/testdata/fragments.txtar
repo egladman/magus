@@ -1,4 +1,4 @@
-The fragment grammar, read by tools/changelog.buzz's tests and cmd/magus-utils's, so the
+The fragment grammar, read by hack/changelog.buzz's tests and cmd/magus-utils's, so the
 two parsers cannot drift. A valid/ file parses. An invalid/ file fails, and one of its
 problems contains the text of the .want file beside it.
 

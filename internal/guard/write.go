@@ -938,7 +938,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
 // guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
 // with none resolved there is no HEAD to compare a policy edit against, so from that
-// write on every tools/policy/*.buzz rule stops being checked against an approved copy
+// write on every hack/policy/*.buzz rule stops being checked against an approved copy
 // before it takes effect. That is the guard's own foundational safety, so it is judged
 // here whether or not a job store is running to grade ordinary path boundaries.
 //

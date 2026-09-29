@@ -747,10 +747,10 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	require.Positive(t, sep, "the gate command follows --: %v", argv)
 	flags, gate := argv[2:sep], argv[sep+1:]
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "tools", "gha-queue.buzz"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "hack", "gha-queue.buzz"))
 	require.NoError(t, err)
 	m := regexp.MustCompile(`final SANDBOX = "([^"]+)";`).FindSubmatch(raw)
-	require.NotNil(t, m, "tools/gha-queue.buzz declares no SANDBOX")
+	require.NotNil(t, m, "hack/gha-queue.buzz declares no SANDBOX")
 	assert.Contains(t, flags, string(m[1]), "the shards gate in the queue's sandbox mode")
 
 	require.GreaterOrEqual(t, len(gate), 2)

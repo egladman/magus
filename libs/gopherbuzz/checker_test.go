@@ -597,7 +597,7 @@ func TestCheck_RedundantImportAliasIsMagusDialectOnly(t *testing.T) {
 // magusfile.buzz's own "badge"/"releaser"/"drift" imports.
 func TestCheck_FileImportSameNameAliasIsNotRedundant(t *testing.T) {
 	checkOK(t, `import "badge" as badge;`)
-	checkOK(t, `import "./tools/drift" as drift;`)
+	checkOK(t, `import "./hack/drift" as drift;`)
 }
 
 // TestCheck_ImportAliasRenameIsNotRedundant verifies a real rename (the alias

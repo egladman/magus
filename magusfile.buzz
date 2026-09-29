@@ -1,23 +1,23 @@
 import "magus";
-// The shared toolchain windows; see tools/toolchain-policy.buzz for why they are a
+// The shared toolchain windows; see hack/toolchain-policy.buzz for why they are a
 // module rather than an export on this file.
-import "./tools/toolchain-policy" as policy;
-import "./tools/drift" as drift;
+import "./hack/toolchain-policy" as policy;
+import "./hack/drift" as drift;
 // The optional half of toolchain observation: the `tools` window above is the gate
 // that can fail a build and makes no network calls; this reports when a declared
 // window has gone stale. Aliased `toolchains` because a module and a target function
 // cannot share a name - the alias would shadow and the call fails with "null is not
 // callable" at run time.
-import "./tools/toolchain" as toolchains;
+import "./hack/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
-import "./tools/commits" as commits;
-import "./tools/changelog" as changelog;
+import "./hack/commits" as commits;
+import "./hack/changelog" as changelog;
 // The advisory verdict `security` reaches; console/ and docs/ share it.
-import "./tools/advisories" as advisories;
-// This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
+import "./hack/advisories" as advisories;
+// This repository's own git hooks, hack/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
-// This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
-import "./tools/policy/guard" as agentpolicy;
+// This repository's rules for the agents that work on it; see hack/policy/guard.buzz.
+import "./hack/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
@@ -157,7 +157,7 @@ magus\project({
     //     agent-bench-report, both skip_cache, so the LICENSE argument holds for all of
     //     them at once. The one exception is declared above: the bench package's own
     //     testdata, which `go test ./...` reads.
-    //   - tools/testdata-upstream/*.json, which arrived with the registry and which
+    //   - hack/testdata-upstream/*.json, which arrived with the registry and which
     //     nothing in the tree references today.
     //
     // The root .gitattributes is a fifth case and never appears: magus writes it FROM
@@ -1046,7 +1046,7 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // On a change it fails only on what the change introduced, unless args carry
-    // `--inherited=fatal` (tools/advisories.buzz). Read first so a bad argument fails
+    // `--inherited=fatal` (hack/advisories.buzz). Read first so a bad argument fails
     // before generate runs.
     final inheritedFatal = advisories\inheritedFatal(args);
     // govulncheck loads PACKAGES, so it parses every .go file this target's sources
@@ -1134,7 +1134,7 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
 
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
-// tools/commits.buzz. Pass a title after `--` to check one by hand.
+// hack/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problem = commits\problem(title);
@@ -1146,7 +1146,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 
 // Fails a feat, fix, perf or breaking pull request that changes shipped code without adding
 // a changelog fragment under changes/unreleased/, and any pull request whose fragment is
-// malformed. tools/changelog.buzz holds the rule and decides which paths ship. The title
+// malformed. hack/changelog.buzz holds the rule and decides which paths ship. The title
 // comes from the event under gha; to check a branch by hand, pass the title after `--`.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-changelog");
@@ -1174,17 +1174,17 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
 }
 
-// Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the
+// Installs a shim in git's hooks directory for every hack/git-hooks/<hook>.buzz, so the
 // hooks are reviewed and versioned like any other source. Without rw it only reports what
 // it would change. To add a hook, add the Buzz file and rerun this; spells/git/hooks.buzz
 // has the contract.
 export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\install(ctx, dir: "tools/git-hooks");
+    githooks\install(ctx, dir: "hack/git-hooks");
 }
 
 // Deletes the shims git_hooks_install wrote, and no hook anything else wrote.
 export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\remove(ctx, dir: "tools/git-hooks");
+    githooks\remove(ctx, dir: "hack/git-hooks");
 }
 
 // Regenerates everything derived from the boundary registry: the runtime boundary list
@@ -1363,7 +1363,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // pattern built at run time - from a loop, or even from string interpolation - is
 // invisible to it, flagged as a computed footprint argument rather than silently
 // accepted. So the name list is written out per destination, and lint-files
-// (tools/lint/skills-generate-declares-every-shipped-skill.buzz) keeps it in step with
+// (hack/lint/skills-generate-declares-every-shipped-skill.buzz) keeps it in step with
 // internal/agent/skills: adding a skill without touching this fails there rather than
 // shipping an installed file magus calls hand-editable.
 //
@@ -3046,8 +3046,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz",
-        "tools/lint/*.buzz", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/*.buzz", "hack/policy/*.buzz",
+        "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
@@ -3073,7 +3073,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // releaser.buzz carries the version and release-name rules `release` decides on, and no
     // target ran its test blocks: the two hand-named modules above were the whole root list,
     // so those tests passed for as long as they existed without being run. --embedded
-    // because it is a magusfile import, the same reason tools/advisories.buzz is.
+    // because it is a magusfile import, the same reason hack/advisories.buzz is.
     cover_for("releaser.buzz", ["--embedded"], {});
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
@@ -3083,34 +3083,33 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   `import "assert";`, so they failed the moment anything ran them.
     //                   An embedded stdlib module, so --embedded like the spells.
     //
-    //   tools/*.buzz    registry.buzz did not PARSE. Three steps of
+    //   hack/*.buzz     registry.buzz did not PARSE. Three steps of
     //                   .github/workflows/registry.yaml invoke it as
-    //                   `magus buzz tools/registry.buzz`, so the registry workflow was
+    //                   `magus buzz hack/registry.buzz`, so the registry workflow was
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
-    // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz and gha-queue.buzz are invoked bare by workflows, gha-run.buzz by a
-    // person, pull-requests.buzz and labels.buzz the same way (workflows and the shepherd
-    // skill run them directly), and lint.buzz by lint-files, so those are the ones that
-    // have to survive strict (lint.buzz imports every tools/lint rule, so its run is
-    // theirs); advisories, drift and toolchain-policy are magusfile imports and therefore
-    // always embedded, and running THEM strict would fail a top-level `if` or an unlabeled
+    // The MODE is per file, not per directory, because hack/ is not uniform. A script
+    // there is run bare, by a workflow, a person or lint-files, so strict is the default
+    // and a new script is gated the way it runs (lint.buzz imports every hack/lint rule,
+    // so its run is theirs). The named exceptions are magusfile imports and therefore
+    // always embedded; running THEM strict would fail a top-level `if` or an unlabeled
     // second argument that is legal everywhere they actually load - a red for a defect
     // that does not exist. (toolchain.buzz has no importer and no invoker at all; it is
     // gated embedded on the assumption it is meant to be one.)
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
-    foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz" or mod.value == "tools/gha-run.buzz" or mod.value == "tools/lint.buzz"
-            or mod.value == "tools/pull-requests.buzz" or mod.value == "tools/labels.buzz") {
-            cover_for(mod.value, [], {});
-        } else {
+    final embedded = ["hack/advisories.buzz", "hack/changelog.buzz", "hack/commits.buzz",
+        "hack/drift.buzz", "hack/toolchain-policy.buzz", "hack/toolchain.buzz"];
+    foreach (mod in fs\glob("hack/*.buzz")) {
+        if (embedded.indexOf(mod.value) != null) {
             cover_for(mod.value, ["--embedded"], {});
+        } else {
+            cover_for(mod.value, [], {});
         }
     }
-    // The agent policy is a magusfile import like the tools above it.
-    foreach (mod in fs\glob("tools/policy/*.buzz")) {
+    // The agent policy is a magusfile import like the embedded scripts above it.
+    foreach (mod in fs\glob("hack/policy/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
@@ -3220,19 +3219,19 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // Holds the repository's non-Go files to the conventions no off-the-shelf linter
 // checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the
 // installed-skill declarations and the landing page's headline rotator. Each rule and
-// its exemptions live in tools/lint/<rule>.buzz, and tools/lint.buzz runs them.
+// its exemptions live in hack/lint/<rule>.buzz, and hack/lint.buzz runs them.
 //
 // The footprint is exactly what the rules read plus the linter's own source, and
-// tools/lint.buzz reports any drift between the two. Nested-project files are named by
+// hack/lint.buzz reports any drift between the two. Nested-project files are named by
 // path, because a tree glob here stops at a nested project's directory; the magusfile
 // rules read every project's magusfile through magus\targets().
 export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    ctx.readsFiles("tools/lint.buzz", "tools/lint/*.buzz",
+    ctx.readsFiles("hack/lint.buzz", "hack/lint/*.buzz",
                    // provider-io-is-buzz's own reads(): the Buzz files the boundary's
                    // table names or this project owns near them, not "**/*.buzz",
                    // which would reach into every nested project's own magusfile.
-                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "tools/**/*.buzz",
+                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
@@ -3252,7 +3251,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
                    "docs/site/landing.buzz", "docs/src/styles/site.css");
-    magus\cmd("buzz", args: ["tools/lint.buzz"]);
+    magus\cmd("buzz", args: ["hack/lint.buzz"]);
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,

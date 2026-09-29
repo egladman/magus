@@ -1,0 +1,168 @@
+// landing-rotator-slots-match-headline-count: the landing page's headlines live in
+// landing.buzz and the slot arithmetic in site.css, so nothing but agreement between two
+// files keeps them in step, and that agreement broke once: a thirteenth line was added
+// while site.css still had delays for twelve.
+//
+// A span with no delay rule does not lose its animation, it inherits delay 0 and rides
+// the FIRST span's timeline, so two headlines fade in stacked on each other and the <h1>
+// renders as interleaved glyphs.
+namespace landing;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+export final MARKUP = "docs/site/landing.buzz";
+export final STYLES = "docs/src/styles/site.css";
+
+final delayRule = std\pattern(`\.landing-rotate:nth-child\((\d+)\) \{ animation-delay: -(\d+)s; \}`);
+final duration = std\pattern(`animation: landing-rotate (\d+)s`);
+
+export fun reads() > [str] {
+    return [MARKUP, STYLES];
+}
+
+fun count(s: str, needle: str) > int {
+    var n = 0;
+    var at = s.indexOf(needle);
+    while (at != null) {
+        n = n + 1;
+        at = s.indexOf(needle, from: at! + needle.len());
+    }
+    return n;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final markupFile = support\named(files, p: MARKUP);
+    final stylesFile = support\named(files, p: STYLES);
+    if (markupFile == null) {
+        return [support\missing(MARKUP)];
+    }
+    final headlines = count(support\read(markupFile!), needle: "class=\"landing-rotate\"");
+    if (headlines == 0) {
+        return [Finding{ path = MARKUP, message = "no rotating headlines found",
+            fix = "If the markup changed, update this rule's class anchor." }];
+    }
+    if (stylesFile == null) {
+        return [support\missing(STYLES)];
+    }
+    final styles = support\read(stylesFile!);
+
+    // The first span needs no rule: its slot is delay 0. So the delays cover 2..N, and
+    // the highest selector must be exactly N.
+    final delay = mut {<int: int>};
+    delay[1] = 0;
+    final lineOf = mut {<int: int>};
+    var highest = 1;
+    var durationSeconds: int? = null;
+    var durationLine = 0;
+    var n = 0;
+    foreach (line in styles.split("\n")) {
+        n = n + 1;
+        final m = delayRule.match(line);
+        if (m != null) {
+            final span = std\parseInt(m![1]) ?? 0;
+            delay[span] = std\parseInt(m![2]) ?? 0;
+            lineOf[span] = n;
+            if (span > highest) {
+                highest = span;
+            }
+        }
+        final d = duration.match(line);
+        if (d != null and durationSeconds == null) {
+            durationSeconds = std\parseInt(d![1]);
+            durationLine = n;
+        }
+    }
+    final firstRule = support\lineOf(styles, needle: ".landing-rotate:nth-child(");
+
+    final found = mut [<Finding>];
+    final uncovered = mut [<str>];
+    foreach (i in 1..headlines + 1) {
+        if (delay[i] == null) {
+            uncovered.append("{i}");
+        }
+    }
+    if (uncovered.len() > 0) {
+        found.append(Finding{ path = STYLES, line = firstRule,
+            message = "{MARKUP} has {headlines} headlines but no animation-delay covers span(s) [{uncovered.join(" ")}]",
+            fix = "Each falls back to delay 0 and renders on top of the first headline; add a rule per span." });
+    }
+    if (highest != headlines) {
+        found.append(Finding{ path = STYLES, line = lineOf[highest] ?? 0,
+            message = "the highest .landing-rotate:nth-child({highest}) does not match {MARKUP}'s {headlines} headlines",
+            fix = "Keep one delay rule per headline, 2..N." });
+    }
+
+    // The slot length is a design choice, so read it from the CSS (span 2's offset IS
+    // one slot). What must hold is the arithmetic around it: every span sits one slot
+    // further along, and the cycle is exactly one slot per headline.
+    final slot = delay[2] ?? 0;
+    if (slot == 0) {
+        found.append(Finding{ path = STYLES, line = firstRule,
+            message = "span 2 has no animation-delay; cannot derive the slot length" });
+        return found;
+    }
+    foreach (i in 2..headlines + 1) {
+        final d = delay[i];
+        if (d != null and d! != (i - 1) * slot) {
+            found.append(Finding{ path = STYLES, line = lineOf[i] ?? 0,
+                message = "span {i} is offset -{d!}s; one slot is {slot}s",
+                fix = "Offset it -{(i - 1) * slot}s." });
+        }
+    }
+    if (durationSeconds == null) {
+        found.append(Finding{ path = STYLES, message = "no landing-rotate animation duration" });
+    } else if (durationSeconds! != headlines * slot) {
+        found.append(Finding{ path = STYLES, line = durationLine,
+            message = "landing-rotate runs {durationSeconds!}s for {headlines} headlines at {slot}s a slot",
+            fix = "Make it {headlines * slot}s." });
+    }
+    return found;
+}
+
+// rotator is a landing page with headlines spans and a stylesheet of the given rules.
+fun rotator(headlines: int, rules: [str]) > [Path] !> any {
+    final spans = mut [<str>];
+    foreach (i in 0..headlines) {
+        spans.append("<span class=\"landing-rotate\">x</span>\n");
+    }
+    return support\fixture({MARKUP: spans.join(""), STYLES: rules.join("\n") + "\n"});
+}
+
+final threeSlots = [
+    ".landing-rotate \{ animation: landing-rotate 21s linear infinite; }",
+    ".landing-rotate:nth-child(2) \{ animation-delay: -7s; }",
+    ".landing-rotate:nth-child(3) \{ animation-delay: -14s; }",
+];
+
+test "one delay per headline, a slot apart, passes" {
+    assert\equal(check(rotator(3, rules: threeSlots)).len(), want: 0, message: "clean");
+}
+
+test "a headline added without its slot is reported" {
+    assert\equal(support\messages(check(rotator(4, rules: threeSlots))), want: [
+        "docs/site/landing.buzz has 4 headlines but no animation-delay covers span(s) [4]",
+        "the highest .landing-rotate:nth-child(3) does not match docs/site/landing.buzz's 4 headlines",
+        "landing-rotate runs 21s for 4 headlines at 7s a slot",
+    ], message: "missing slot");
+}
+
+test "a span off its slot is reported at its line" {
+    final got = check(rotator(3, rules: [
+        ".landing-rotate \{ animation: landing-rotate 21s linear infinite; }",
+        ".landing-rotate:nth-child(2) \{ animation-delay: -7s; }",
+        ".landing-rotate:nth-child(3) \{ animation-delay: -12s; }",
+    ]));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].line, want: 3, message: "line");
+    assert\equal(got[0].message, want: "span 3 is offset -12s; one slot is 7s", message: "message");
+    assert\equal(got[0].fix, want: "Offset it -14s.", message: "fix");
+}
+
+test "no headlines, or no second slot, is reported" {
+    assert\equal(support\messages(check(rotator(0, rules: [<str>]))), want: ["no rotating headlines found"], message: "none");
+    assert\equal(support\messages(check(rotator(1, rules: [".landing-rotate \{ animation: landing-rotate 7s; }"]))),
+        want: ["span 2 has no animation-delay; cannot derive the slot length"], message: "no slot");
+}

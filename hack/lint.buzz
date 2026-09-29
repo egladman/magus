@@ -1,0 +1,328 @@
+// This repository's file linter: the conventions on its non-Go files that no compiler or
+// off-the-shelf linter checks. The root lint-files target runs it:
+//
+//	magus buzz hack/lint.buzz
+//
+// Each rule is a file hack/lint/<rule>.buzz exporting reads(), the globs it reads, and
+// check(files), which returns a Finding per violation. The runner walks the tree once,
+// hands each rule the files its globs match, prints every finding as
+// `path:line:col: message [rule]` with the fix indented under it, and exits 1 when there
+// is any. A glob that matches nothing is itself a finding: a rule reading a file the tree
+// no longer has is misconfigured, not clean.
+namespace lint;
+
+import "assert";
+import "fs";
+import "os";
+import "path";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
+import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
+import "hack/lint/lockfiles-are-sorted" as lockfiles;
+import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
+import "hack/lint/package-install-targets-never-replay" as installs;
+import "hack/lint/provider-io-is-buzz" as providerio;
+import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
+import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
+import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
+import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
+import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
+import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
+
+export object Rule {
+    name: str,
+    reads: [str],
+    check: fun (files: [Path]) > [Finding] !> any,
+}
+
+// rules is every rule that runs. A rule file nothing names here never runs.
+export fun rules() > [Rule] {
+    return [
+        Rule{ name = "lockfiles-are-sorted", reads = lockfiles\reads(), check = lockfiles\check },
+        Rule{ name = "trusted-jobs-restore-no-actions-cache", reads = trustedcache\reads(), check = trustedcache\check },
+        Rule{ name = "setup-magus-mints-the-queue-app-token-only-as-an-output", reads = queuetoken\reads(), check = queuetoken\check },
+        Rule{ name = "published-magus-is-built-first-and-verified-by-digest", reads = publishedmagus\reads(), check = publishedmagus\check },
+        Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },
+        Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
+        Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
+        Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
+        Rule{ name = "generate-drift-throw-names-the-engine-drift-code", reads = generatedrift\reads(), check = generatedrift\check },
+        Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
+        Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
+        Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
+        Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
+    ];
+}
+
+// PRUNED are the directories the walk never enters: VCS metadata, local state, installed
+// dependencies and generated output hold nothing this repository authors.
+final PRUNED = {".git": true, ".magus": true, "node_modules": true, "gen": true};
+
+// PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
+// files would each be reported twice.
+final PRUNED_PATHS = {".claude/worktrees": true};
+
+// walk returns every file under root outside the pruned trees, as root-relative paths.
+export fun walk(root: str) > [str] !> any {
+    final acc = mut [<str>];
+    walkInto(root, rel: "", acc: acc);
+    return acc;
+}
+
+fun walkInto(root: str, rel: str, acc: mut [str]) > void !> any {
+    final dir = if (rel == "") root else root + "/" + rel;
+    foreach (name in fs\listDir(dir)) {
+        final p = if (rel == "") name else rel + "/" + name;
+        if (!fs\isDir(root + "/" + p)) {
+            acc.append(p);
+        } else if (PRUNED[name] == null and PRUNED_PATHS[p] == null) {
+            walkInto(root, rel: p, acc: acc);
+        }
+    }
+}
+
+// select returns the files each of reads matches, and the globs matching none.
+export fun select(files: [str], reads: [str]) > obj{ matched: [Path], unmatched: [str] } !> any {
+    final matched = mut [<Path>];
+    final unmatched = mut [<str>];
+    foreach (glob in reads) {
+        var hit = false;
+        foreach (f in files) {
+            if (path\matches(glob, path: f)) {
+                hit = true;
+                break;
+            }
+        }
+        if (!hit) {
+            unmatched.append(glob);
+        }
+    }
+    foreach (f in files) {
+        if (path\matchesAny(reads, path: f)) {
+            matched.append(Path{ value = f });
+        }
+    }
+    return .{ matched = matched, unmatched = unmatched };
+}
+
+// run applies each rule to the files it reads and returns every finding, stamped with
+// its rule.
+export fun run(rules: [Rule], files: [str]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (r in rules) {
+        final sel = select(files, reads: r.reads);
+        foreach (glob in sel.unmatched) {
+            found.append(Finding{ path = "hack/lint/" + r.name + ".buzz", rule = r.name,
+                message = "reads " + glob + ", which matches no file in the tree",
+                fix = "Restore the file, or update the rule's reads() to what it reads now." });
+        }
+        if (sel.unmatched.len() > 0) {
+            continue;
+        }
+        foreach (f in r.check(sel.matched)) {
+            found.append(Finding{ path = f.path, line = f.line, col = f.col, rule = r.name,
+                message = f.message, fix = f.fix, url = f.url });
+        }
+    }
+    return found;
+}
+
+// FOOTPRINT names the runner's own check: lint-files keys on exactly what the rules read.
+export final FOOTPRINT = "lint-files-keys-on-what-the-rules-read";
+
+// SOURCES are the linter's own files, which lint-files keys on beside what the rules read.
+export final SOURCES = ["hack/lint.buzz", "hack/lint/*.buzz"];
+
+// claims reports whether a readsFiles glob of the root project keys rel. It mirrors
+// types.GlobClaims: a file inside a nested project is that project's, so only a glob
+// rooted at or inside that project reaches it, and `**/*.lock` stops at docs/.
+export fun claims(glob: str, rel: str, nested: [str]) > bool !> any {
+    if (!path\matches(glob, path: rel)) {
+        return false;
+    }
+    var owner = "";
+    foreach (d in nested) {
+        if (d.len() > owner.len() and rel.startsWith(d + "/")) {
+            owner = d;
+        }
+    }
+    if (owner == "") {
+        return true;
+    }
+    var base = glob;
+    final wild = std\pattern(`[*?\[\{]`).match(glob);
+    if (wild != null) {
+        final head = glob.sub(0, len: glob.indexOf(wild![0])!);
+        final slash = head.split("/");
+        base = slash.sub(0, len: slash.len() - 1).join("/");
+    }
+    return base == owner or base.startsWith(owner + "/");
+}
+
+// footprintFindings holds lint-files's declared readsFiles to read, every file a rule
+// was handed plus the linter's own sources: each is keyed, and each glob keys one.
+// nested are the workspace's projects other than the root.
+export fun footprintFindings(read: [str], declared: [str], nested: [str], line: int) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (rel in read) {
+        var keyed = false;
+        foreach (glob in declared) {
+            keyed = keyed or claims(glob, rel: rel, nested: nested);
+        }
+        if (!keyed) {
+            found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
+                message = "lint-files reads " + rel + " but its ctx.readsFiles does not key it",
+                fix = "Declare it in lint_files, or an edit to it replays a verdict computed without it.\n"
+                    + "A glob rooted above a nested project does not reach into it: name the project's path." });
+        }
+    }
+    foreach (glob in declared) {
+        var keys = false;
+        foreach (rel in read) {
+            keys = keys or claims(glob, rel: rel, nested: nested);
+        }
+        if (!keys) {
+            found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
+                message = "lint-files declares " + glob + ", which keys no file a rule reads",
+                fix = "Drop it from lint_files's ctx.readsFiles, or point it at what a rule reads now." });
+        }
+    }
+    return found;
+}
+
+// footprint runs footprintFindings against the tree: the files rules reads, the root's
+// lint-files declaration and the workspace's nested projects.
+fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
+    final seen = mut {<str: bool>};
+    final read = mut [<str>];
+    final globs = mut [<str>];
+    foreach (glob in SOURCES) {
+        globs.append(glob);
+    }
+    foreach (r in rules) {
+        foreach (glob in r.reads) {
+            globs.append(glob);
+        }
+    }
+    foreach (f in files) {
+        if (seen[f] == null and path\matchesAny(globs, path: f)) {
+            seen[f] = true;
+            read.append(f);
+        }
+    }
+    final nested = mut [<str>];
+    foreach (p in support\projects().projects) {
+        if (p.path != ".") {
+            nested.append(p.path);
+        }
+    }
+    var declared: [str]? = null;
+    foreach (p in support\targets().projects) {
+        foreach (n in p.nodes) {
+            if (p.path == "." and n.name == "lint-files") {
+                final acc = mut [<str>];
+                foreach (ref in n.readsFiles) {
+                    acc.append(ref.glob);
+                }
+                declared = acc;
+            }
+        }
+    }
+    if (declared == null) {
+        return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no lint-files target",
+            fix = "hack/lint.buzz is what lint-files runs; update this check if the target was renamed." }];
+    }
+    final line = support\lineOf(fs\readFile("magusfile.buzz"), needle: "export fun lint_files(");
+    return footprintFindings(read, declared: declared!, nested: nested, line: line);
+}
+
+// render is a finding as the runner prints it.
+export fun render(f: Finding) > str {
+    var pos = f.path;
+    if (f.line > 0) {
+        pos = pos + ":{f.line}";
+        if (f.col > 0) {
+            pos = pos + ":{f.col}";
+        }
+    }
+    var s = pos + ": " + f.message + " [" + f.rule + "]";
+    if (f.fix != "") {
+        s = s + "\n    " + f.fix.replace("\n", with: "\n    ");
+    }
+    if (f.url != "") {
+        s = s + "\n    see: " + f.url;
+    }
+    return s;
+}
+
+export fun main(args: [str]) > void !> any {
+    final all = rules();
+    final files = walk(".");
+    final found = run(all, files: files) + footprint(all, files: files);
+    foreach (f in found) {
+        std\print(render(f));
+    }
+    if (found.len() > 0) {
+        std\print("lint: {found.len()} finding(s)");
+        os\exit(1);
+    }
+    std\print("lint: {all.len()} rules, no findings");
+}
+
+test "render names the position, message, rule and indented fix" {
+    assert\equal(render(Finding{ path = "a.lock", line = 3, rule = "r", message = "b follows c", fix = "Move it.\nSecond line." }),
+        want: "a.lock:3: b follows c [r]\n    Move it.\n    Second line.", message: "full");
+    assert\equal(render(Finding{ path = "a.lock", line = 3, col = 7, rule = "r", message = "m" }), want: "a.lock:3:7: m [r]", message: "column");
+    assert\equal(render(Finding{ path = "a.lock", rule = "r", message = "gone" }), want: "a.lock: gone [r]", message: "no line");
+}
+
+test "every finding is stamped with the rule that found it" {
+    final rule = Rule{ name = "always", reads = ["*.lock"],
+        check = fun (files: [Path]) > [Finding] !> any => [Finding{ path = files[0].value, message = "m" }] };
+    final got = run([rule], files: ["x.lock", "y.txt"]);
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].rule, want: "always", message: "stamped");
+    assert\equal(got[0].path, want: "x.lock", message: "the matched file");
+}
+
+test "a glob that matches nothing is a finding, and its rule does not run" {
+    final rule = Rule{ name = "absent", reads = ["x.lock", "gone.json"],
+        check = fun (files: [Path]) > [Finding] !> any => [Finding{ message = "ran" }] };
+    assert\equal(run([rule], files: ["x.lock"]).len(), want: 1, message: "only the unmatched glob");
+    assert\equal(run([rule], files: ["x.lock"])[0].message, want: "reads gone.json, which matches no file in the tree", message: "message");
+}
+
+test "a glob keys a nested project's file only when rooted inside it" {
+    final nested = ["docs", "docs/agents", "libs/gopherbuzz"];
+    assert\equal(claims("**/*.lock", rel: "benchmarks/v.lock", nested: nested), want: true, message: "root file");
+    assert\equal(claims("**/*.lock", rel: "docs/a.lock", nested: nested), want: false, message: "tree glob stops at docs");
+    assert\equal(claims("docs/**/*.lock", rel: "docs/a.lock", nested: nested), want: true, message: "rooted in docs");
+    assert\equal(claims("docs/**/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested), want: false, message: "stops at a grandchild");
+    assert\equal(claims("docs/agents/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested), want: true, message: "literal");
+    assert\equal(claims("libs/*/magusfile.buzz", rel: "libs/gopherbuzz/magusfile.buzz", nested: nested), want: false, message: "wildcard above the project");
+}
+
+test "lint-files keys exactly what the rules read" {
+    final nested = ["docs"];
+    assert\equal(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "docs/**/*.lock"], nested: nested, line: 1).len(),
+        want: 0, message: "exact");
+    assert\equal(support\messages(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "console/*.lock"], nested: nested, line: 1)), want: [
+        "lint-files reads docs/b.lock but its ctx.readsFiles does not key it",
+        "lint-files declares console/*.lock, which keys no file a rule reads",
+    ], message: "unkeyed and stale");
+}
+
+test "the walk prunes what no rule reads" {
+    final root = fs\tempDir("lint-walk-");
+    foreach (p in ["a.lock", "gen/b.lock", "x/node_modules/c.lock", ".claude/worktrees/w/d.lock", ".claude/settings.json"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: "");
+    }
+    final got = walk(root);
+    assert\equal(got.len(), want: 2, message: "two files survive");
+    assert\contains(got, item: "a.lock", message: "top level");
+    assert\contains(got, item: ".claude/settings.json", message: ".claude outside worktrees");
+}

@@ -371,7 +371,7 @@ linters:
             broker, and bind a pool beside their server
 
       # A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
-      # invokes - a provider spell, a queue provider script, a tools/*.buzz driver -
+      # invokes - a provider spell, a queue provider script, a hack/*.buzz driver -
       # which names the act and reports host and elapsed on the line. Go opens no
       # provider socket; it invokes the Buzz op through bindings instead (see
       # internal/interp/bindings/review_spell.go for the shape). This governs the

@@ -193,7 +193,7 @@ func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hin
 //
 // A -C outside the workspace passes the pure rule, since a foreign tree is not its to
 // funnel; a -C into another checkout of magus is this repository's policy to judge
-// (tools/policy/guard.buzz), bootstrap included.
+// (hack/policy/guard.buzz), bootstrap included.
 //
 // It reads the filesystem, so it lives beside Judge rather than inside Evaluate.
 func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuildOutcome {

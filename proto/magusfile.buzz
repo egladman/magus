@@ -16,8 +16,8 @@ import "magus/spell/go";
 // their trees as its own outputs (see below).
 import "project/../docs";
 import "project/../console";
-// The shared generated-file gate (tools/drift.buzz) and the fs helpers it takes paths from.
-import "../tools/drift" as drift;
+// The shared generated-file gate (hack/drift.buzz) and the fs helpers it takes paths from.
+import "../hack/drift" as drift;
 import "fs";
 import "vcs";
 

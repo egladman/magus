@@ -16,7 +16,7 @@
 // carries every in-repo plugin, so that file names this module too.
 
 import "magus";
-import "../../tools/drift" as drift;
+import "../../hack/drift" as drift;
 
 // go spell claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration: magus binds the magusfile driver to every project.

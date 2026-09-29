@@ -17,7 +17,7 @@ func writeFragment(t *testing.T, dir, name, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 }
 
-// TestParseFragment runs the cases tools/changelog.buzz's tests run, so cut's
+// TestParseFragment runs the cases hack/changelog.buzz's tests run, so cut's
 // parser and every other reader's agree on what a fragment is.
 func TestParseFragment(t *testing.T) {
 	archive, err := txtar.ParseFile(filepath.Join("..", "..", "changes", "testdata", "fragments.txtar"))

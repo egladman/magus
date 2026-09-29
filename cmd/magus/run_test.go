@@ -777,10 +777,10 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NotEmpty(t, shard, "ci.yaml's shards run no `run ci` command")
 
 	// candidateMagus puts `go run ./cmd/magus` in front of the literal.
-	raw, err = os.ReadFile(filepath.Join(root, "tools", "gha-queue.buzz"))
+	raw, err = os.ReadFile(filepath.Join(root, "hack", "gha-queue.buzz"))
 	require.NoError(t, err)
 	m := regexp.MustCompile(`final GATE = candidateMagus\("([^"]+)"\);`).FindSubmatch(raw)
-	require.NotNil(t, m, "tools/gha-queue.buzz declares no GATE")
+	require.NotNil(t, m, "hack/gha-queue.buzz declares no GATE")
 	gate := string(m[1])
 
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)

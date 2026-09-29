@@ -12,7 +12,7 @@ import (
 // fragment is one unreleased changelog entry, kept in its own file under
 // changes/unreleased/ so concurrent changes never edit a shared file. The file is
 // the entry exactly as it reads under [Unreleased]: one Keep a Changelog section
-// heading and one entry in lintUnreleased's shape. tools/changelog.buzz parses the
+// heading and one entry in lintUnreleased's shape. hack/changelog.buzz parses the
 // same grammar for every reader but cut; changes/testdata/fragments.txtar holds
 // both to it. A breaking change says so in its headline, as every released entry
 // does:

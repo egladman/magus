@@ -34,7 +34,7 @@ func TestBuzzWriteRequiresTheBuzzSkill(t *testing.T) {
 	t.Run("the multi-agent brief does not clear it", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-c")
 		recordSkillLoad(g, multiAgentSkill.String())
-		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "", "tools/host-schemas.buzz"),
+		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "", "hack/host-schemas.buzz"),
 			"the two rules gate different skills and must not satisfy each other")
 	})
 
@@ -118,7 +118,7 @@ func TestOnlyBuzzSourceIsGated(t *testing.T) {
 	gated := []string{
 		"magusfile.buzz",
 		"spells/go/spell.buzz",
-		"/abs/path/tools/host-schemas.buzz",
+		"/abs/path/hack/host-schemas.buzz",
 		"docs/render.BUZZ",
 	}
 	for _, p := range gated {
@@ -151,7 +151,7 @@ func TestBuzzAuthoringOnACommandLineRequiresTheSkill(t *testing.T) {
 		"inline eval via ./magus":   `./magus buzz -e 'fun main() > void {}'`,
 		"heredoc into a spell":      "cat > spells/ts/spell.buzz <<'EOF'\nfun main() > void {}\nEOF",
 		"append to a magusfile":     "echo 'x' >> magusfile.buzz",
-		"heredoc inside a subshell": "sh -c \"cat > tools/x.buzz <<'EOF'\nfun main() > void {}\nEOF\"",
+		"heredoc inside a subshell": "sh -c \"cat > hack/x.buzz <<'EOF'\nfun main() > void {}\nEOF\"",
 		"uppercase extension":       "cat > Tools/X.BUZZ <<'EOF'\nEOF",
 	}
 	for name, command := range authors {

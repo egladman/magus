@@ -941,7 +941,7 @@ var envNamesNeverInEnvironment = map[string]string{
 // repoToolingPrefixes are the paths this repository builds and releases itself with,
 // which ship to nobody. A MAGUS_* name only they read is theirs, not magus's.
 var repoToolingPrefixes = []string{
-	"cmd/magus-utils/", "tools/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
+	"cmd/magus-utils/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
 }
 
 // shipsWithMagus reports whether slash (a slash-separated repo path) is code that ships:
