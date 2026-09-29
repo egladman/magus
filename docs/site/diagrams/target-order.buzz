@@ -1,0 +1,66 @@
+// site/diagrams/target-order.buzz: the order a project's targets compose in. The one claim:
+// magus requires only that ci exists, and everything else here is the order this workspace
+// recommends and its root project runs. Only ci takes the accent.
+//
+// What is enforced, and where:
+//   ci      run.go:283-298 refuses `magus run ci` / `magus affected ci` with MGS1001 when no
+//           project in the selected scope declares ci; internal/doctor/checks.go:138
+//           (checkCITarget, registry.go:145 "ci-target") fails doctor when no project in the
+//           workspace does. A project without ci is skipped, not refused.
+//   cd      nothing requires it. types/charm.go:25-32 reserves the name, so the typo guard
+//           accepts it, and run.go:256-260 strips only rw and update from a ci run, so cd
+//           survives into one. This repository never runs ci:cd; cd.yaml delivers with
+//           image-build:cd and graph-generate:cd.
+// MGS1003 (checks.go:683) flags fragment names such as vet or audit, as advice only.
+//
+// Why a recommendation at all: when each project names its own lint, format, security or
+// test target, or folds lint into format, nobody can rely on `magus run <verb> <project>`
+// meaning the same thing across projects. Lint reports and format rewrites, so they stay
+// two targets; security reads advisory data outside the tree, so it is its own step.
+//
+// Edges are the root magusfile's ctx.needs calls, except install -> generate, which is
+// docs/magusfile.buzz:386: the root is Go and declares no install. Other projects deviate,
+// per `magus describe target ci <project>`:
+//   .                 lint -> build -> test -> security -> generate
+//   console           install -> lint -> test -> build -> security (lint skips format)
+//   docs              generate -> lint -> test -> build (security declared, not in ci)
+//   libs/diagnostics  lint -> build -> test (no security)
+namespace targetOrder;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+
+export fun targetOrderDiagram() > Diagram !> str {
+    return flow("target-order")
+        .down()
+        .eyebrow("targets")
+        .title("Only ci is required; the rest is an order")
+        .desc("magus refuses a ci run when no project in scope declares ci. Every other "
+            + "step, and the order between them, is the convention this workspace follows "
+            + "so each verb means the same thing in every project.")
+        .node("install", sub: "fetch dependencies", anchor: "docs/magusfile.buzz")
+        .node("generate", sub: "committed output", anchor: "magusfile.buzz")
+        .node("format", sub: "rewrites source", anchor: "magusfile.buzz")
+        .node("lint", sub: "reports, never writes", anchor: "magusfile.buzz")
+        .node("build", sub: "uncommitted artifacts", anchor: "magusfile.buzz")
+        .node("test", anchor: "magusfile.buzz")
+        .node("security", sub: "advisory data, uncached", anchor: "magusfile.buzz")
+        .node("ci", sub: "MGS1001 when absent", role: Role.focal, anchor: "internal/doctor/checks.go")
+        .node("cd", label: "cd charm", sub: "ci:cd delivers", role: Role.optional, anchor: "types/charm.go")
+        .edge("install", dst: "generate")
+        .edge("generate", dst: "format")
+        .edge("generate", dst: "security")
+        .edge("format", dst: "lint")
+        .edge("format", dst: "build")
+        .edge("format", dst: "test")
+        .edge("lint", dst: "ci")
+        .edge("build", dst: "ci")
+        .edge("test", dst: "ci")
+        .edge("security", dst: "ci")
+        .edge("ci", dst: "cd", role: EdgeRole.optional)
+        .legend(Role.focal, label: "enforced")
+        .legend(Role.default, label: "recommended")
+        .legend(Role.optional, label: "opt-in, required by nothing")
+        .unscoped("targets are conventions declared in a magusfile, not packages; nothing in the tree holds a scope")
+        .diagram();
+}

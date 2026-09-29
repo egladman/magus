@@ -33,6 +33,7 @@ import "site/diagrams/merge-queue-risk" as _;
 import "site/diagrams/workspace-load" as _;
 import "site/diagrams/inputs-outputs" as _;
 import "site/diagrams/bootstrap" as _;
+import "site/diagrams/target-order" as _;
 // The observed halves diagrams-observe writes, one per figure with a scope. Aliased, never
 // flat: a flat import is skipped when its basename is already bound, and each shares its
 // basename with the declared figure imported above.
@@ -80,6 +81,7 @@ export fun allDiagrams() > [Diagram] !> str {
         workspaceLoadDiagram(),
         inputsOutputsDiagram(),
         bootstrapDiagram(),
+        targetOrderDiagram(),
     ];
 }
 
