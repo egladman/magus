@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40450
-skill_short_bytes: 30655
+skill_full_bytes: 41004
+skill_short_bytes: 31209
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `98` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `d779605157cd` |
+| `skill-content` | `cd084f71a455` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -378,6 +378,14 @@ That write records each dropped path with the digest it carried at that moment.
 Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
+
+Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
+widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
+the row and keep its state, where a re-fork hands a taken job out again as declared,
+and both preview until `--apply`. A revoked path is recorded as a release with its
+digest, and the worker's next write there is refused, naming the revocation. Ending
+a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
+`magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
@@ -1044,6 +1052,14 @@ That write records each dropped path with the digest it carried at that moment.
 Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
+
+Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
+widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
+the row and keep its state, where a re-fork hands a taken job out again as declared,
+and both preview until `--apply`. A revoked path is recorded as a release with its
+digest, and the worker's next write there is refused, naming the revocation. Ending
+a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
+`magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting

@@ -317,6 +317,27 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	assert.Equal(t, "opus", updated.Model)
 }
 
+// MGS3018 does not depend on which call wrote the path: a put that adds a directory to a
+// row that exists is refused as a fork naming it would be, and writes nothing.
+func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.WritePaths = append(u.WritePaths, "internal/**")
+	}, config.Jobs{}, nil)
+	require.ErrorIs(t, err, types.WritePathIsDirectory)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].WritePaths)
+}
+
 // A job that writes is held to something wait can grade; one that writes nothing is not.
 func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()

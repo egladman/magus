@@ -328,6 +328,27 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
+			name:       "a declared job waiting on a live dependency is queued, not stale",
+			staleAfter: 2 * time.Hour,
+			rows: []types.Job{
+				{ID: "first", State: types.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "handed-back", State: types.StateExited, Registered: fresh, Updated: old},
+				{ID: "queued", State: types.StateDeclared, DependsOn: []string{"first"}, Updated: old},
+				{ID: "queued-on-exited", State: types.StateDeclared, DependsOn: []string{"handed-back"}, Updated: old},
+			},
+		},
+		{
+			name:       "a waiter's clock starts when its last dependency ended",
+			staleAfter: 2 * time.Hour,
+			rows: []types.Job{
+				{ID: "just-done", State: types.StatePass, Updated: fresh},
+				{ID: "long-done", State: types.StatePass, Updated: old},
+				{ID: "unblocked", State: types.StateDeclared, DependsOn: []string{"just-done", "long-done"}, Updated: old},
+				{ID: "forgotten", State: types.StateDeclared, DependsOn: []string{"long-done"}, Updated: old - 60},
+			},
+			ended: map[string]string{"forgotten": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+		},
+		{
 			name:       "a checkout_root with no registration is not a holder",
 			staleAfter: 2 * time.Hour,
 			rows: []types.Job{
@@ -851,6 +872,21 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJobPruneKeepsAJobQueuedOnALiveDependency(t *testing.T) {
+	const now = int64(100_000)
+	old := now - int64((3 * time.Hour).Seconds())
+	s, _ := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s,
+		types.Job{ID: "first", State: types.StateRunning, Registered: now - 60, Updated: now - 60},
+		types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"first"}, Updated: old},
+	)
+
+	got, err := s.Prune(t.Context(), PruneOptions{All: true})
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 func TestJobPruneDryRunEndsNothing(t *testing.T) {

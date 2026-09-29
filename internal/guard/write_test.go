@@ -42,6 +42,14 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 	local := write(".claude/skills/"+agent.LocalSkillName+"/SKILL.md", "---\nname: "+agent.LocalSkillName+"\nmetadata:\n  source: workspace\n---\n\n# Our rules\n")
 	assert.Empty(t, adviseInstalledSkillWrite(local))
 
+	// The embedded SOURCE an installed copy is generated from carries no frontmatter, and
+	// its prose may quote the stamp; only the frontmatter is the stamp.
+	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
+		"# Adapting the agent surface\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(source))
+	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
+
 	// Not a skill file, not in a skill directory, and not there at all.
 	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
 	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
@@ -805,41 +813,67 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }
 
-// TestGradeLeasedWriteHandsBackTheWideningCall pins what this denial should cost its
-// reader: one paste. The measured cost of a narrow boundary was never the rule, it was the
-// negotiation, and a worker that has to describe its own row in prose makes the
-// orchestrator reconstruct what the ledger already knows.
-//
-// The call carries the paths the row already had, because a put's write_paths REPLACES the
-// row's: a call naming only the blocked path hands back a narrower boundary than the worker
-// started with. It is a client tool script, and the guard reads that script back as the
-// widening it is.
-func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
+// wideningForms are the spellings of a command that widens a job's write paths. A
+// refusal served to the worker it refused is a command that worker runs, so one naming a
+// widening hands the worker the escalation the boundary exists to withhold. An entry
+// (`enter`) admits one write into another job's paths and widens nothing, so it may stay.
+var wideningForms = []string{"--add-write-path", "job edit", `"write_paths"`, "write_paths="}
+
+// A write outside the lease names the read-only view of what the job holds and who to
+// ask, and no command that would widen it.
+func TestGradeLeasedWriteServesNoWidening(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
+
+	for name, rel := range map[string]string{
+		"a path outside the write paths":     "internal/thing/new.go",
+		"a path another live lease owns":     "internal/ledger/store.go",
+		"a path the row's deny list refuses": "cmd/magus/gen/cli_flags.go",
+	} {
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, rel))
+		require.Equal(t, "deny", got.Decision, name)
+		for _, form := range wideningForms {
+			assert.NotContains(t, got.Reason, form, name)
+		}
+	}
+
+	outside := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
+	assert.Contains(t, outside.Reason, "`"+hint.DescribeJob.With("lease-b")+"`")
+	assert.Contains(t, outside.Reason, "ask the job's owner")
+}
+
+// The sweep over every refusal this package can serve: no source file spells the CLI's
+// widening flag or renders a put of write_paths, so a new refusal cannot start serving
+// one either. The guard still PARSES write_paths (mcp.go), which serves nothing.
+func TestNoRefusalNamesAWideningCommand(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(f)
+		require.NoError(t, err)
+		assert.NotRegexp(t, `add-write-path|hint\.JobEdit|clientJobPut\([^)]*(write_paths|writePathsParam)`, string(raw),
+			"%s spells a widening command", f)
+	}
+}
+
+// A path the orchestrator revoked is refused by name, with when it was taken, so the
+// worker reads why a write that passed before is refused now.
+func TestGradeLeasedWriteNamesARevokedPath(t *testing.T) {
+	leases := fleetLeases()
+	leases[1].WritePaths = append(leases[1].WritePaths, "internal/thing/new.go")
+	ctx, root := fleetFixture(t, leases...)
+	store := storeAt(ctx)
+	revoked, err := store.Edit(ctx, "lease-b", job.EditOptions{RemoveWritePaths: []string{"internal/thing/new.go"}})
+	require.NoError(t, err)
+	require.Len(t, revoked.Releases, 1)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
 	require.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, `magus\job\put("lease-b", opts: {"write_paths": [`)
-	script := widenCall(types.Job{ID: "lease-b", WritePaths: []string{"cmd/magus/**"}}, "internal/thing/new.go")
-	assert.Equal(t, `client op=put id=lease-b write_paths=cmd/magus/**,internal/thing/new.go`,
-		buildCall(hint.ToolClient.String(), map[string]any{"script": script}, ""))
-	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
-	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
-	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
-
-	// The two denials that must NOT offer a widening. Handing back the undo for a
-	// deliberate refusal teaches that a boundary is a formality.
-	t.Run("a path another live lease owns wants re-partitioning", func(t *testing.T) {
-		owned := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
-		require.Equal(t, "deny", owned.Decision)
-		assert.NotContains(t, owned.Reason, "write_paths=")
-	})
-
-	t.Run("a path the row's own deny list names was refused on purpose", func(t *testing.T) {
-		refused := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
-		require.Equal(t, "deny", refused.Decision)
-		assert.NotContains(t, refused.Reason, "write_paths=")
-	})
+	assert.Contains(t, got.Reason, `The orchestrator revoked "internal/thing/new.go" from lease lease-b at `+
+		time.Unix(revoked.Releases[0].ReleasedAt, 0).UTC().Format(time.RFC3339))
 }
 
 // dependentFleet is a plan where "waiter" is queued behind "dep" and declares the paths dep

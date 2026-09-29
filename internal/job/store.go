@@ -31,6 +31,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -374,6 +375,97 @@ func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
 	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 }
 
+// EditOptions is the change [Store.Edit] makes to a live job's write paths.
+type EditOptions struct {
+	// AddWritePaths widens the job. A path it already holds is left where it is.
+	AddWritePaths []string
+	// RemoveWritePaths revokes paths the job holds.
+	RemoveWritePaths []string
+	// DryRun returns the row the edit would write, releases included, and writes nothing.
+	DryRun bool
+}
+
+// Edit merges opts into live job id's write paths in one write, and keeps everything else
+// the row carries, its state and registration included, where a re-fork hands a taken job
+// out again as declared. A removed path is released as a worker's own shrink releases one,
+// with the digest of what it left, and marked revoked when someone other than the holder of
+// a taken job removed it, so the holder's next write there is refused naming that.
+//
+// Who may do what is [authorizeRow]'s: an unbound writer widens, and a bound worker only
+// removes its own paths. An added path is held to the rules a fork's write paths are (see
+// [RefuseAddedWritePaths]). Naming no path, one path both ways, a path the job does not
+// hold, a job nobody declared or one that ended is an error, and nothing is written.
+func (s *Store) Edit(ctx context.Context, id string, opts EditOptions) (types.Job, error) {
+	if len(opts.AddWritePaths)+len(opts.RemoveWritePaths) == 0 {
+		return types.Job{}, fmt.Errorf("job: an edit of %s names no write path to add or remove", id)
+	}
+	for _, p := range opts.AddWritePaths {
+		if slices.Contains(opts.RemoveWritePaths, p) {
+			return types.Job{}, fmt.Errorf("job: %q is both added and removed", p)
+		}
+	}
+	if err := RefuseAddedWritePaths(ctx, s, id, opts.AddWritePaths); err != nil {
+		return types.Job{}, err
+	}
+	if !opts.DryRun {
+		return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, exists bool, _ int64) error {
+			return editWritePaths(cur, id, exists, opts)
+		})
+	}
+	rows, err := s.List()
+	if err != nil {
+		return types.Job{}, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	var prev types.Job
+	if i >= 0 {
+		prev = rows[i]
+		if err := readOnly(prev); err != nil {
+			return types.Job{}, err
+		}
+	}
+	next := prev.Clone()
+	if err := editWritePaths(&next, id, i >= 0, opts); err != nil {
+		return types.Job{}, err
+	}
+	actor := s.Actor()
+	if err := authorizeRow(actor, id, prev, next, true, rows); err != nil {
+		return types.Job{}, err
+	}
+	next.Releases = s.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != id)
+	return next, nil
+}
+
+// editWritePaths applies opts to cur, the stored row id, or says why it cannot.
+func editWritePaths(cur *types.Job, id string, exists bool, opts EditOptions) error {
+	switch {
+	case !exists:
+		return fmt.Errorf("job: there is no job %q to edit", id)
+	case cur.State.Terminal():
+		return fmt.Errorf("job: %s already ended %s, and an edit changes a live job", id, cur.State)
+	}
+	for _, p := range opts.RemoveWritePaths {
+		if !slices.Contains(cur.WritePaths, p) {
+			return fmt.Errorf("job: %s does not hold %q, so there is nothing to revoke; its write paths are %s",
+				id, p, strings.Join(cur.WritePaths, ", "))
+		}
+	}
+	paths := slices.DeleteFunc(slices.Clone(cur.WritePaths), func(p string) bool { return slices.Contains(opts.RemoveWritePaths, p) })
+	for _, p := range opts.AddWritePaths {
+		if !slices.Contains(paths, p) {
+			paths = append(paths, p)
+		}
+	}
+	// An empty write set is no boundary at all (the guard scopes nothing by it), so taking
+	// the last path would free the job rather than stop it.
+	if len(paths) == 0 {
+		return fmt.Errorf("job: that revokes every write path %s holds, which leaves it bounded by nothing;"+
+			" end the job with `%s` instead", id, hint.JobExit.With(id))
+	}
+	cur.WritePaths = paths
+	return nil
+}
+
 // entryPath cleans the path an entry names, refusing one that is not workspace-relative.
 func entryPath(rel string) (string, error) {
 	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
@@ -593,7 +685,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
-		row.Releases = s.releases(ctx, prev, row, now)
+		row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		if i >= 0 {
 			row.Created = prev.Created
 			row.RegisteredBy = prev.RegisteredBy
@@ -695,8 +787,9 @@ func (s *Store) archive(f jobsFile) error {
 // A path that is owned again drops OUT of the list: a row saying it both owns and has
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
-// inherits is the one left behind last.
-func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) []types.JobRelease {
+// inherits is the one left behind last. revoked marks what this write gave up as taken from
+// its holder rather than given up by it.
+func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
 		return slices.Contains(next.WritePaths, r.Path)
 	})
@@ -704,7 +797,7 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) [
 		if slices.Contains(next.WritePaths, p) {
 			continue
 		}
-		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
+		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
 		if at := slices.IndexFunc(out, func(r types.JobRelease) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue

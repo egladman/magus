@@ -48,7 +48,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run, rm or prune)")
+		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run, edit, rm or prune)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -68,15 +68,17 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
+	case "edit":
+		return jobEdit(ctx, root, args[1:])
 	case "prune":
 		return jobPrune(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run, edit, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run|rm|prune> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run|edit|rm|prune> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -91,6 +93,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
+	fmt.Fprintln(os.Stderr, "  edit  add write paths to a live job or revoke them, keeping its state; --apply writes")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
 	fmt.Fprintln(os.Stderr, "")
@@ -2051,6 +2054,98 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, dropped)
 	}
+}
+
+// jobEdit is `magus job edit`: add write paths to a live job and revoke others, in one
+// write that keeps its state. It previews by default, since a widened boundary is handed to
+// a worker already running, and writes only under --apply.
+func jobEdit(ctx context.Context, root string, args []string) error {
+	var (
+		edit  job.EditOptions
+		add   listFlag
+		drop  listFlag
+		apply bool
+	)
+	pos, err := cmdParse("job edit", args, func(fs *flag.FlagSet) {
+		fs.Var(&add, "add-write-path", "A path to add to the job's write paths; repeatable or comma-separated")
+		fs.Var(&drop, "remove-write-path", "A path to revoke from the job's write paths; repeatable or comma-separated")
+		fs.BoolVar(&apply, "apply", false, "Write the edit; without it the edit is previewed and nothing is written")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Add write paths to a live job and revoke others, in one write. The job keeps its")
+			fmt.Fprintln(os.Stderr, "state and its holder, where a re-fork would hand it out again as "+string(types.StateDeclared)+".")
+			fmt.Fprintln(os.Stderr, "A revoked path is recorded as a release with the digest of what the job left, and")
+			fmt.Fprintln(os.Stderr, "the holder's next write there is refused, naming the revocation.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "It previews what it would write and writes nothing until --apply.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Widening is the orchestrator's: a session holding a lease may only revoke its own")
+			fmt.Fprintln(os.Stderr, "paths. Ending a whole job is `"+hint.JobExit.String()+"`, not an edit that revokes every path.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return usagef("magus job edit: requires exactly one job")
+	}
+	if len(add)+len(drop) == 0 {
+		return usagef("magus job edit: name a path with --add-write-path or --remove-write-path")
+	}
+	edit.AddWritePaths, edit.RemoveWritePaths, edit.DryRun = add, drop, !apply || globalCfg.DryRun
+	store, err := openJobs(resolveRootOrEmpty(root))
+	if err != nil {
+		return err
+	}
+	edited, err := store.Edit(ctx, pos[0], edit)
+	if err != nil {
+		return usagef("magus job edit: %s", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames([]string{edited.ID})
+	case outputText:
+		printJobEdit(os.Stdout, edited, edit)
+		return nil
+	default:
+		return emitFormatted(opts, editReport{Job: edited, DryRun: edit.DryRun})
+	}
+}
+
+// editReport is `job edit`'s structured output: the row as written, or as it would be.
+type editReport struct {
+	Job    types.Job `json:"job"     yaml:"job"`
+	DryRun bool      `json:"dry_run" yaml:"dry_run"`
+}
+
+func printJobEdit(out io.Writer, row types.Job, edit job.EditOptions) {
+	var changes []string
+	if len(edit.AddWritePaths) > 0 {
+		changes = append(changes, "add "+strings.Join(edit.AddWritePaths, ", "))
+	}
+	if len(edit.RemoveWritePaths) > 0 {
+		changes = append(changes, "revoke "+strings.Join(edit.RemoveWritePaths, ", "))
+	}
+	verb, be := "edited", "are"
+	if edit.DryRun {
+		verb, be = "would edit", "would be"
+	}
+	fmt.Fprintf(out, "%s %s: %s\n", verb, row.ID, strings.Join(changes, "; "))
+	fmt.Fprintf(out, "write paths %s %s\n", be, strings.Join(row.WritePaths, ", "))
+	if edit.DryRun {
+		fmt.Fprintln(out, "dry run: nothing written; rerun with --apply to write it")
+		return
+	}
+	printConsoleJobLine(out, row.ID)
 }
 
 // jobPrune is `magus job prune`: end every job nobody is working, the way `job exit`

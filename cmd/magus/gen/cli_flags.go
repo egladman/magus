@@ -283,6 +283,12 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// job edit: --add-write-path
+	FlagJobEditAddWritePath = "add-write-path"
+	// job edit: --apply
+	FlagJobEditApply = "apply"
+	// job edit: --remove-write-path
+	FlagJobEditRemoveWritePath = "remove-write-path"
 	// job exec: --base
 	FlagJobExecBase = "base"
 	// job exit: --schema
@@ -1752,6 +1758,21 @@ func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	var f JobWaitFlags
 	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
 	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
+	return &f
+}
+
+// JobEditFlags are the flags declared for `magus job edit`.
+//
+// It does NOT carry --add-write-path, --remove-write-path: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type JobEditFlags struct {
+	Apply bool // --apply
+}
+
+// BindJobEdit registers `magus job edit`'s flags on fs and returns the destination.
+func BindJobEdit(fs *flag.FlagSet) *JobEditFlags {
+	var f JobEditFlags
+	fs.BoolVar(&f.Apply, FlagJobEditApply, false, "Write the edit; without it the edit is previewed and nothing is written")
 	return &f
 }
 

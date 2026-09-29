@@ -468,6 +468,32 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 	assert.Equal(t, []types.JobState{types.StateNoReturn, types.StateRunning}, []types.JobState{rows[0].State, rows[1].State})
 }
 
+// Edit previews by default and writes only under --apply, keeping the job's state either way.
+func TestJobEditDryRunsUntilApply(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	row := leaseRow("w", "")
+	row.State, row.WritePaths = types.StateRunning, []string{"a.go", "b.go"}
+	root, cacheDir := execFixture(t, row)
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	args := []string{"w", "--add-write-path", "c.go", "--remove-write-path", "a.go"}
+
+	out := captureStdout(t, func() { require.NoError(t, jobEdit(t.Context(), root, args)) })
+	assert.Equal(t, "would edit w: add c.go; revoke a.go\n"+
+		"write paths would be b.go, c.go\n"+
+		"dry run: nothing written; rerun with --apply to write it\n", out)
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.go", "b.go"}, rows[0].WritePaths)
+
+	out = captureStdout(t, func() { require.NoError(t, jobEdit(t.Context(), root, append(args, "--apply"))) })
+	assert.True(t, strings.HasPrefix(out, "edited w: add c.go; revoke a.go\nwrite paths are b.go, c.go\n"), out)
+	rows, err = store.List()
+	require.NoError(t, err)
+	assert.Equal(t, []any{[]string{"b.go", "c.go"}, types.StateRunning}, []any{rows[0].WritePaths, rows[0].State})
+
+	require.Error(t, jobEdit(t.Context(), root, []string{"w"}), "an edit naming no path is a usage error")
+}
+
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
 // host names no session takes a job there.
 func bindCheckout(t *testing.T, cacheDir, id string) {

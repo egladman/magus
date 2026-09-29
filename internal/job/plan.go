@@ -41,15 +41,22 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // doors that fork by merge (magus\job\put, from the client tool or a magusfile). A merge that creates
 // the row is held to the jobs limits and to unambiguous symbol gates, and takes
 // default_timeout when it named no timeout. A merge onto a row that already exists is an
-// update of that job, so it passes as it always did. read may be nil where no graph is at
-// hand, which skips only the ambiguity check.
+// update of that job, held only to [RefuseAddedWritePaths] for the write paths it adds.
+// read may be nil where no graph is at hand, which skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
 	rows, err := store.List()
 	if err != nil {
 		return types.Job{}, err
 	}
 	proof := types.JobWriteProof("")
-	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+		merged := rows[i].Clone()
+		merge(&merged)
+		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool { return slices.Contains(rows[i].WritePaths, p) })
+		if err := RefuseAddedWritePaths(ctx, store, id, added); err != nil {
+			return types.Job{}, err
+		}
+	} else {
 		candidate := types.Job{ID: id}
 		merge(&candidate)
 		if err := RefuseUngraded(candidate); err != nil {
@@ -85,6 +92,21 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 			u.WriteProof = proof
 		}
 	})
+}
+
+// RefuseAddedWritePaths holds the write paths a write adds to job id to the rules a fork's
+// are held to: no directory (MGS3018) and no claim a footprint cannot grade (MGS3031). A
+// rule that held only at creation would depend on which call wrote the path. Only the added
+// paths are judged, so a path the row already carried never blocks an unrelated write.
+func RefuseAddedWritePaths(ctx context.Context, store *Store, id string, added []string) error {
+	if len(added) == 0 {
+		return nil
+	}
+	candidate := types.Job{ID: id, WritePaths: added}
+	if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+		return err
+	}
+	return RefuseUngradableClaims(ctx, store, id, candidate)
 }
 
 // RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`

@@ -734,6 +734,7 @@ export object JobRelease {
     path: str = "",
     digest: str = "",
     releasedAt: int = 0,
+    revoked: bool = false,
 }
 
 export object JobUnattributedWrite {

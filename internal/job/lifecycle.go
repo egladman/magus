@@ -310,6 +310,8 @@ type landing struct {
 //  2. a holder took it with `magus job exec` and that checkout's directory is gone;
 //  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
 //     and no live child hangs under it, so a root outlives the children still working;
+//     a row queued on a live dependency is waiting, and its clock starts when the last
+//     one ends (see [types.JobIdleSince]);
 //  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it.
 //
@@ -376,11 +378,12 @@ func (w *sweeper) reason(rows []types.Job, row types.Job) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !row.StaleAt(w.now, window) {
+	if !types.JobStaleAt(rows, row, w.now, window) {
 		return "", nil
 	}
+	since, _ := types.JobIdleSince(rows, row)
 	return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)",
-		time.Duration(w.now-row.Updated)*time.Second, window), nil
+		time.Duration(w.now-since)*time.Second, window), nil
 }
 
 // checkoutGone reports whether root names a directory that provably does not exist.
@@ -462,7 +465,7 @@ type PruneOptions struct {
 //   - a reason the read sweep ends rows for (see [sweeper.dead]);
 //   - its holder exited and nobody collected the result with `magus job wait`;
 //   - it is overdue ([types.Job.Overdue]);
-//   - it is stale ([types.Job.StaleAt] against jobs.stale_after) and nobody took it, or
+//   - it is stale ([types.JobStaleAt] against jobs.stale_after) and nobody took it, or
 //     opts.All is set.
 //
 // A declared or running row a holder took and touched within jobs.stale_after is never
@@ -583,7 +586,8 @@ func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.
 	case !slices.Contains(flagged.Stale, row.ID):
 		return ""
 	case row.Registered == 0:
-		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", idle, window)
+		since, _ := types.JobIdleSince(flagged.Jobs, row)
+		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", time.Duration(w.now-since)*time.Second, window)
 	default:
 		return fmt.Sprintf("taken, then untouched for %s (jobs.stale_after is %s)", idle, window)
 	}

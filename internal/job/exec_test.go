@@ -160,6 +160,38 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	assert.Equal(t, diverged.Created, settled.Created)
 }
 
+// A checkpoint handed as an abbreviated revision names the same commit as the full one a
+// worker reports, so the verdict is read from the revisions the VCS resolves, not from
+// the two spellings.
+func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
+	t.Parallel()
+
+	root := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	rev := commitRepo(t, root)
+	short := rev[:9]
+	const digest = "+00112233445566778899aabbccddeeff"
+
+	for _, tt := range []struct {
+		name, checkpoint, reported string
+		want                       types.JobBaseVerdict
+	}{
+		{name: "an abbreviated checkpoint", checkpoint: short, reported: rev, want: types.BaseMatch},
+		{name: "an abbreviated report", checkpoint: rev, reported: short, want: types.BaseMatch},
+		{name: "an abbreviated checkpoint against a dirty tree", checkpoint: short, reported: rev + digest, want: types.BaseRevisionMatch},
+		{name: "a revision the VCS cannot place still diverges", checkpoint: short, reported: baseB, want: types.BaseDiverged},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := tmpStore(t, root)
+			seed(t, s, types.Job{ID: "u1", Checkpoint: tt.checkpoint})
+			got, err := s.Exec(t.Context(), "u1", tt.reported)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.BaseVerdict)
+		})
+	}
+}
+
 // A job that already ended has nothing left to take, and recording a base on it would
 // read as work resumed on a closed row.
 func TestStoreExecRefusesAnEndedJob(t *testing.T) {

@@ -1791,6 +1791,7 @@ func ObjectJobRelease(v types.JobRelease) vm.Value {
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("digest", vm.StrValue(v.Digest))
 	out.MapSet("releasedAt", vm.IntValue(int64(v.ReleasedAt)))
+	out.MapSet("revoked", vm.BoolValue(v.Revoked))
 	return out
 }
 

@@ -2342,12 +2342,16 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
+edit adds write paths to a live job and revokes others in one write that keeps
+its state, where a re-fork would hand a taken job out again. It previews until
+--apply, and only the orchestrator widens.
+
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run|rm|prune> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run|edit|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2422,6 +2426,22 @@ shows what it is doing.`,
 		},
 		{Name: "run", Short: "Submit one of the server's own jobs and return"},
 		{
+			Name:  "edit",
+			Short: "Add write paths to a live job or revoke them, keeping its state",
+			Description: "Merge write paths into a live job in one write: --add-write-path widens it and --remove-write-path " +
+				"revokes a path it holds. The job keeps its state and its holder, where a re-fork hands it out again as " +
+				"declared. A revoked path is recorded as a release carrying the digest of what the job left, and the " +
+				"holder's next write there is refused, naming the revocation and when it happened. Widening is the " +
+				"orchestrator's; a session holding a lease may only revoke its own paths. It previews and writes " +
+				"nothing until --apply. Ending a whole job is `magus job exit`, not an edit that revokes every path.",
+			Flags: []Flag{
+				{Name: "add-write-path", Kind: FlagCustom, Doc: "A path to add to the job's write paths; repeatable or comma-separated"},
+				{Name: "remove-write-path", Kind: FlagCustom, Doc: "A path to revoke from the job's write paths; repeatable or comma-separated"},
+				{Name: "apply", Kind: FlagBool, Doc: "Write the edit; without it the edit is previewed and nothing is written"},
+			},
+			Usage: "magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]",
+		},
+		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",
 			Description: "Remove ONE job from the plan, leaving every other row alone. This is not how a job ends: " +
@@ -2455,6 +2475,7 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
+		{"Widen a live job and write it", "magus job edit session-load/core --add-write-path internal/sessions/load.go --apply"},
 		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }

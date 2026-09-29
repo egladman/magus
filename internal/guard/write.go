@@ -453,32 +453,32 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
+	// It names what the job holds and who to ask, and no command that widens it: a
+	// refusal is read as the next thing to run, so a served widening is an escalation.
+	revoked := ""
+	if r, ok := revokedCovering(me, rel); ok {
+		revoked = fmt.Sprintf("The orchestrator revoked %q from lease %s at %s; it is no longer yours to write. ",
+			r.Path, me.ID, time.Unix(r.ReleasedAt, 0).UTC().Format(time.RFC3339))
+	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen these write paths")+"\n"+
-			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
-			"Report it as this client tool script, which is the whole widening:\n  %s",
-		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, criteriaLine(me), widenCall(me, rel))}
+			"%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.",
+		me.ID, strings.Join(me.WritePaths, ", "), revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel)}
 }
 
-// widenCall renders the job-store call that adds rel to the row's declared paths, so a
-// blocked worker reports a paste rather than a paragraph and whoever owns the plan acts
-// without reconstructing the row from a denial.
-//
-// It carries every path the row already declared alongside the new one, because a put's
-// write_paths REPLACES the row's: a call naming only the blocked path would hand back a
-// narrower set of paths than the worker started with.
-//
-// Only this denial offers it. A path another live row owns wants the plan re-partitioned
-// rather than a second owner, and a path the row's own deny list names was refused on
-// purpose; printing the undo for either would teach the reader that a boundary is a
-// formality.
-func widenCall(me types.Job, rel string) string {
-	paths := append(slices.Clone(me.WritePaths), rel)
-	quoted := make([]string, len(paths))
-	for i, p := range paths {
-		quoted[i] = strconv.Quote(p)
+// revokedCovering is the newest revoked release on me that covers rel.
+func revokedCovering(me types.Job, rel string) (types.JobRelease, bool) {
+	var found types.JobRelease
+	for _, r := range me.Releases {
+		if !r.Revoked || r.ReleasedAt < found.ReleasedAt {
+			continue
+		}
+		if _, covered, err := declarationCovering([]string{r.Path}, rel); err == nil && covered {
+			found = r
+		}
 	}
-	return clientJobPut(me.ID, "write_paths", "["+strings.Join(quoted, ", ")+"]")
+	return found, found.Path != ""
 }
 
 // enterCall renders the job-store call that enters rel on lease id. The CLI has no
@@ -752,7 +752,7 @@ func adviseMemoryWrite(path string) string {
 //
 // The STAMP is the discriminator, not the path: a workspace's own skill sits in
 // the same directory, and telling an author their file is generated would be
-// worse than saying nothing.
+// worse than saying nothing. See [stampedByMagus] for where the stamp is read.
 //
 // Unreachable in magus's own tree, which is worth knowing before hunting a bug:
 // this repo declares its installed skills as outputs, so adviseGeneratedWrite
@@ -767,12 +767,32 @@ func adviseInstalledSkillWrite(filePath string) string {
 		return ""
 	}
 	body, err := os.ReadFile(filePath)
-	if err != nil || !strings.Contains(string(body), "source: magus") {
+	if err != nil || !stampedByMagus(string(body)) {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones, in a directory magus does not ship (conventionally magus-local-development), which install and verify both leave alone.\n" +
 		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `" + hint.Doctor.String() + "` reports your edit as stale rather than reading it, and the next `" + hint.AgentInstall.With("<dir>", "--force") + "` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
+}
+
+// stampedByMagus reports whether body's frontmatter carries the install stamp. The
+// frontmatter alone: the embedded source an installed copy is rendered from has none, and
+// its prose quotes the stamp (magus-workspace-rules does).
+func stampedByMagus(body string) bool {
+	rest, ok := strings.CutPrefix(body, "---\n")
+	if !ok {
+		return false
+	}
+	front, _, ok := strings.Cut(rest, "\n---")
+	if !ok {
+		return false
+	}
+	for line := range strings.SplitSeq(front, "\n") {
+		if strings.TrimSpace(line) == "source: magus" {
+			return true
+		}
+	}
+	return false
 }
 
 // The two rules below name paths, a skill, and a target that belong to magus's OWN

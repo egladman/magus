@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|exec|exit|wait|watch|run|rm|prune\> [flags]
+**magus** job \<fork|exec|exit|wait|watch|run|edit|rm|prune\> [flags]
 
 ## Description
 
@@ -69,6 +69,10 @@ write. Whether the work is GOOD stays the reading of whoever forked it.
 run submits one of the server's own jobs, the housekeeping magus does for itself,
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
+
+edit adds write paths to a live job and revokes others in one write that keeps
+its state, where a re-fork would hand a taken job out again. It previews until
+--apply, and only the orchestrator widens.
 
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
@@ -138,6 +142,17 @@ them and magus describe job prints one job's terms.
 **--stdin**
 : Read the result from stdin instead of from the job, for one that was never filed
 
+### job edit options
+
+**--add-write-path** *string*
+: A path to add to the job's write paths; repeatable or comma-separated
+
+**--apply**
+: Write the edit; without it the edit is previewed and nothing is written
+
+**--remove-write-path** *string*
+: A path to revoke from the job's write paths; repeatable or comma-separated
+
 ### job rm options
 
 **--force**
@@ -167,6 +182,9 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the server's own jobs and return
+
+**edit**
+: Add write paths to a live job or revoke them, keeping its state
 
 **rm**
 : Remove one job from the plan
@@ -216,6 +234,12 @@ magus job exit --schema
 
 ```sh
 magus job run sync-graph
+```
+
+*Widen a live job and write it*
+
+```sh
+magus job edit session-load/core --add-write-path internal/sessions/load.go --apply
 ```
 
 *See which jobs a prune would end*

@@ -179,6 +179,28 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	}
 }
 
+// A re-fork that replaces a declared row is judged by the depends_on it declares, not by
+// the stored row it replaces: adding the dependency the refusal asked for is the fix.
+func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"magusfile.buzz": "target a {}\n"}
+	bRoot := gitRepo(t, files)
+	aRoot := gitRepo(t, files)
+	aRev := commitRepo(t, aRoot)
+
+	s := NewStore(tmpLoc(t, bRoot))
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
+	seed(t, s, types.Job{ID: "B", State: types.StateDeclared, WritePaths: []string{"notes.txt"}})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	replacement := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"A"}}
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement))
+	replacement.DependsOn = nil
+	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement), types.WritePathFileShared)
+}
+
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
 // apart from "given as empty".
 func strPtr(s string) *string { return &s }
