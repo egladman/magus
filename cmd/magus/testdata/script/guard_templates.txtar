@@ -78,6 +78,41 @@ stdin pass-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
+# case: command/advise
+# A PreToolUse shell command comes back rewritten to run with stdin at end-of-file: the
+# whole tool_input returns (updatedInput replaces it), with the command prefixed
+# `exec </dev/null; ` and every other field kept. No permissionDecision rides with it, so
+# the host's own permission rules still judge the call. The first rewrite of a session
+# says so, once.
+stdin rewrite-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"updatedInput":'
+stdout '"command":"exec \\u003c/dev/null; ls -la"'
+stdout '"description":"list it"'
+stdout '"timeout":60000'
+stdout '"additionalContext":"magus runs your shell commands with stdin at end-of-file'
+! stdout 'permissionDecision'
+
+# case: command/pass
+# A command that already closes stdin is never prefixed twice, so a pass is nothing again.
+stdin rewrite-wrapped.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+
+# case: command/deny
+# A refused call is never rewritten.
+stdin rewrite-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+! stdout 'updatedInput'
+
+# case: command/pass
+# Codex applies updatedInput only beside permissionDecision "allow", which would turn a
+# pass into an approval, so it is never handed one.
+stdin rewrite-command-codex.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
+! stdout .
+
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
 # The Read tool never reaches a shell, so the glue restates it: a whole Read as a whole-file
@@ -988,6 +1023,14 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- rewrite-command.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "ls -la", "description": "list it", "timeout": 60000}}
+-- rewrite-wrapped.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "exec </dev/null; ls -la"}}
+-- rewrite-deny.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
+-- rewrite-command-codex.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite-codex", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
 -- exec-mcp-worker.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --

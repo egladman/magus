@@ -597,6 +597,8 @@ const (
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
+	// shell: --rewrites-input
+	FlagShellRewritesInput = "rewrites-input"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --transcript
@@ -1217,6 +1219,7 @@ type ShellFlags struct {
 	Event              string // --event
 	ObservesSkillLoads bool   // --observes-skill-loads
 	RendersAsk         bool   // --renders-ask
+	RewritesInput      bool   // --rewrites-input
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1233,6 +1236,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
+	fs.BoolVar(&f.RewritesInput, FlagShellRewritesInput, false, "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed")
 	return &f
 }
 
@@ -1363,8 +1367,8 @@ type QueueValidateFlags struct {
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
 	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
-	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green")
-	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin")
+	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green")
+	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin")
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
@@ -1424,7 +1428,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
-	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it")
+	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `--` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it")
 	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
 	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")

@@ -238,11 +238,13 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
-	// Rule is the guard's stable denial identifier. It is empty for a pass,
-	// advisory, or a deny whose producer cannot identify a single rule.
-	Rule      string
-	Lease     string
-	LeaseFrom types.LeaseSource
+	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
+	Rule string
+	// StdinClosed records that the guard handed the host the command rewritten to run
+	// with stdin at end-of-file.
+	StdinClosed bool
+	Lease       string
+	LeaseFrom   types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -280,6 +282,7 @@ type agentCommandResponse struct {
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
+	StdinClosed     bool          `json:"stdin_closed,omitempty"`
 }
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may
@@ -333,6 +336,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
 		RuleFailures:    redactFailures(ctx, command.RuleFailures),
+		StdinClosed:     command.StdinClosed,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)

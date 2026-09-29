@@ -264,6 +264,17 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. " +
 			"Measured 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable. " +
 			"Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect."},
+	{Name: string(denyRuleFocusRead), Decision: "deny", Catches: "a read outside the paths a focus lease was given"},
+	{Name: string(denyRuleHookWiringWrite), Decision: "deny", Catches: "a leased or agent-attributed write to the hook wiring the guard is installed by"},
+	{Name: string(denyRuleLeaseGate), Decision: "deny", Catches: "a leased worker running the gate instead of the check it was assigned"},
+	{Name: string(denyRuleLeaseHarness), Decision: "deny", Catches: "a leased worker rewriting the harness skill trees that steer it"},
+	{Name: string(denyRuleLeaseRebind), Decision: "deny", Catches: "a leased worker rewriting who it is or what its own job row says"},
+	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a well-formed lease id the job store has no row for"},
+	{Name: string(denyRuleLeaseVCS), Decision: "deny", Catches: "a worker lease committing, pushing, stashing or reverting the tree it is landed from"},
+	{Name: string(denyRuleLeaseWrite), Decision: "deny",
+		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
+		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back on both surfaces, a file write and a shell line, in the same words. " +
+			"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to."},
 	{Name: string(denyRuleWholeTree), Decision: "deny",
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
 		Why: "These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. " +
@@ -297,6 +308,17 @@ var advisoryDocs = []RuleDoc{
 			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(advisoryDependencyInstall), Decision: "advise", Catches: "a raw package install that the cached install target already runs"},
+	{Name: string(advisoryDependencyUpdate), Decision: "advise", Catches: "a raw dependency update outside a target's update charm"},
+	{Name: string(advisoryEchoOnSuccess), Decision: "advise", Catches: "an `&& echo` that restates what the exit status already says"},
+	{Name: string(advisoryLeaseState), Decision: "advise", Catches: "a leased write while its row reports a diverged base, a re-entered path, or a bad pattern"},
+	{Name: string(advisoryStdinClosed), Decision: "advise",
+		Catches: "shell commands run with stdin at end-of-file, said once per session",
+		Why: "An agent's shell command inherits an open stdin nobody writes to, so anything that reads it (grep or cat with no operand, read, a prompt, ssh, a pager) waits forever, and a host that times the call out backgrounds it rather than killing it. " +
+			"Measured 2026-09-29: a grep whose file operands expanded to nothing read that stdin for 3.5 hours. " +
+			"Where the host lets a hook rewrite the call, the guard prefixes the command with `exec </dev/null; `, never on a refused call and never twice. A heredoc, a pipe or a `<` still give a command its input, since each sets stdin for its own command. " +
+			"A prefix rather than a `{ <command>` ... `} </dev/null` group: Claude Code's isolation check for worktree agents judges the rewritten line, and measured 2026-09-29 it refused the group as too complex even around `stat` or `git status`, where it refuses the prefix only on a line it already found borderline (runtime-computed values beside a redirect)."},
+	{Name: string(advisoryTimedMagus), Decision: "advise", Catches: "`time` around a silent magus run, which already reports its own durations"},
 	{Name: string(denyRuleReadNavigation), Decision: "deny",
 		Catches: "a whole read of a Go, Buzz or Markdown file over 120 lines",
 		Why: "The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. " +
@@ -393,7 +415,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
-	advisoryGraphPipe,
+	advisoryGraphPipe, advisoryStdinClosed,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the
@@ -402,8 +424,19 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
-	advisoryReadSymbol,
+	advisoryReadSymbol, advisoryLeaseState, advisoryDependencyUpdate, advisoryDependencyInstall,
+	advisoryEchoOnSuccess, advisoryTimedMagus,
 }
+
+// Advisories that spoke on every match with no name, so their verdicts recorded none.
+// Named without enrolling: a kind would hold each to one firing, which none asked for.
+const (
+	advisoryLeaseState        denyRuleName = "lease-state"
+	advisoryDependencyUpdate  denyRuleName = "dependency-update"
+	advisoryDependencyInstall denyRuleName = "dependency-install"
+	advisoryEchoOnSuccess     denyRuleName = "echo-on-success"
+	advisoryTimedMagus        denyRuleName = "timed-magus"
+)
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.
 func advisoryNames() []string {

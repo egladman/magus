@@ -194,6 +194,8 @@ test "a spawn with no lineage title is denied, naming the fork" {
     std\assert(v.decision == "deny", message: "no title grammar");
     std\assert(v.reason.indexOf("magus job fork <job> --model <model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
+    std\assert(v.reason.indexOf("magus\\job\\put(\"<job>\"") != null, message: "names the client tool write");
+    std\assert(v.reason.indexOf("magus_job") == null, message: "names no retired MCP tool");
 }
 
 test "a title naming a missing row is denied with the real command" {

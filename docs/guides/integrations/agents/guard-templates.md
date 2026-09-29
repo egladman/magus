@@ -275,6 +275,23 @@ final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToo
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
+// The stdin rewrite. magus sets updated_command on a pass or an advise when it closed the
+// command's stdin, and the reply hands the host its whole tool input back with that
+// command in place: Claude Code's updatedInput REPLACES the input, so a field left out
+// (description, timeout, run_in_background) would be dropped. No permissionDecision rides
+// with it, so the rewritten call still meets the host's own permission rules.
+//
+// Read through `index`: magus renders with missingkey=error, and the key is absent from
+// every verdict that carries no rewrite.
+//
+// Codex is never handed one. Its PreToolUse applies updatedInput only beside
+// permissionDecision "allow", which would turn every guard pass into an approval that
+// skips Codex's own prompt.
+final UPDATED_INPUT_SLOT = "__MAGUS_UPDATED_INPUT__";
+final UPDATED_COMMAND = `{{toJson .}}`;
+final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
+final REWRITE_ONLY = `{{with index . "updated_command"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":__MAGUS_UPDATED_INPUT__}}{{end}}`;
+
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
 final PERMISSION_DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}`;
@@ -532,10 +549,23 @@ fun askBranch(event: any?, codex: bool, pushRule: str?) > str {
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
 }
 
-fun adviseBranch() > str {
+// adviseBranch is the advise arm; updatedInput is the host's tool input with the command's
+// template action in place, "" when this reply carries no rewrite.
+fun adviseBranch(updatedInput: str) > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
-    return hook\envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
+    final declared = env\get("HOST_ADVISE_BRANCH") catch "";
+    if (declared != "") { return declared; }
+    if (updatedInput == "") { return ADVISE_DEFAULT; }
+    return ADVISE_REWRITE.replace(UPDATED_INPUT_SLOT, with: updatedInput);
+}
+
+// passAndAdviseTail renders a pass as nothing, and as the rewrite alone when it carries
+// one. The advise arm here is reached only when adviseBranch rendered none.
+fun passAndAdviseTail(updatedInput: str) > str {
+    if (updatedInput == "") { return PASS_AND_ADVISE_TAIL; }
+    final only = REWRITE_ONLY.replace(UPDATED_INPUT_SLOT, with: updatedInput);
+    return `{{else if eq .decision "advise"}}` + only + `{{else if eq .decision "pass"}}` + only;
 }
 
 // permissionResponse answers the approval request Codex raises just before its own
@@ -591,16 +621,25 @@ fun main(args: [str]) > void {
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
     // is assembled here.
     final codex = agentName == "codex";
+    final read = readCommand(event, tool: toolName);
 
     var response = env\get("HOST_RESPONSE") catch "";
-    var rendersAsk = [<str>];
+    var capabilities = mut [<str>];
+    var rewrites = false;
     if (response == "" and eventName == "PermissionRequest") {
         response = permissionResponse(pushRule);
-        rendersAsk = ["--renders-ask"];
+        capabilities.append("--renders-ask");
     } else if (response == "") {
+        // Only a shell command the host itself will run can come back rewritten: a Read
+        // restated as `cat` is not what the host runs, and a whole event is not a command.
+        var updatedInput = "";
+        if (!codex and !rawEvent and read == "" and eventName == "PreToolUse") {
+            updatedInput = hook\objectWith(event, dotPath: "tool_input", key: "command", raw: UPDATED_COMMAND) ?? "";
+        }
         response = DENY_HEAD + askBranch(event, codex: codex, pushRule: pushRule)
-            + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
-        rendersAsk = ["--renders-ask"];
+            + adviseBranch(updatedInput) + passAndAdviseTail(updatedInput) + UNKNOWN_DECISION;
+        capabilities.append("--renders-ask");
+        rewrites = updatedInput != "";
     }
 
     final bin = hook\resolveBin();
@@ -613,7 +652,6 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    final read = readCommand(event, tool: toolName);
     if (read != "") {
         payload = read + "\n";
     } else if (!rawEvent) {
@@ -639,6 +677,10 @@ fun main(args: [str]) > void {
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
     //
+    // --rewrites-input is newer than the rest, so a binary that rejects it is asked again
+    // with everything else before it is asked with nothing: dropping the rewrite must not
+    // also drop the attribution and the ask.
+    //
     // --transport buzz names this glue as the caller. magus keeps a deny's full text and
     // its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
@@ -646,8 +688,17 @@ fun main(args: [str]) > void {
     foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
-    foreach (flag in rendersAsk) { attributed.append(flag); }
-    var result = judge(guard, extra: attributed) catch null;
+    foreach (flag in capabilities) { attributed.append(flag); }
+    var result: proc\ExecResult? = null;
+    if (rewrites) {
+        final rewriting = mut [<str>];
+        foreach (word in attributed) { rewriting.append(word); }
+        rewriting.append("--rewrites-input");
+        result = judge(guard, extra: rewriting) catch null;
+    }
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+        result = judge(guard, extra: attributed) catch null;
+    }
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         result = judge(guard, extra: [<str>]) catch null;
     }

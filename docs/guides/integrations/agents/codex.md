@@ -310,6 +310,12 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do - 
   through `/hooks`, so a config committed to a repository guards nobody who has
   not accepted it. That is the one way this host differs from the others in kind
   rather than degree.
+- **Shell commands keep their stdin.** On Claude Code the guard hands the command
+  back with stdin closed, so a stray stdin reader cannot hang the call. Codex
+  applies `updatedInput` only beside `permissionDecision: "allow"` and reports any
+  other shape as a hook error, so a rewrite here would turn every guard pass into
+  an approval that skips Codex's own prompt. The glue never sends one; give a
+  reader its input explicitly.
 - Codex documents `PreToolUse` for `Bash`, `apply_patch`, `Edit`, and `Write`.
   `apply_patch` carries a patch in `tool_input.command`, rather than a file path,
   so the declared-output guard intentionally matches `Edit|Write`.

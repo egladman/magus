@@ -102,6 +102,9 @@ not block every tool call.
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
+**--rewrites-input**
+: The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed
+
 **--session** *string*
 : The host's own session id for this invocation
 

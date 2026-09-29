@@ -645,6 +645,12 @@ when nothing has been lost yet.
 **A tool failure carries no hint.** `postToolUseFailure` has no response fields at
 all, so the one place a host could explain a failing command is closed here.
 
+**Shell commands keep their stdin.** On Claude Code the guard hands the command
+back with stdin closed, so a stray stdin reader cannot hang the call. Cursor
+takes a rewrite (`updated_input`) only at `preToolUse`; `beforeShellExecution`,
+where this script gates a shell command, answers `permission` and messages only.
+So no rewrite is sent here; give a reader its input explicitly.
+
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
 `failClosed`. The script above matches that stance instead of pretending to be
 stricter than the surrounding contract. For strict behavior, set `failClosed` on

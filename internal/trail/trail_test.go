@@ -185,6 +185,22 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	}, gotResponse)
 }
 
+// The command blob keeps what the host was asked to run; the response says the guard
+// rewrote it to run with stdin closed.
+func TestAppendAgentCommand_RecordsAClosedStdin(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", StdinClosed: true})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	response, err := ReadBlob(dir, events[0].ResponseRef)
+	require.NoError(t, err)
+	var gotResponse agentCommandResponse
+	require.NoError(t, json.Unmarshal(response, &gotResponse))
+	require.Equal(t, agentCommandResponse{SchemaVersion: agentCommandSchemaVersion, Decision: "pass", StdinClosed: true}, gotResponse)
+}
+
 // TestAppendAgentSpawn_RecordsHandedContext is the lease-audit round trip: the event line
 // says who handed work to whom and which lease it belongs to, and the context itself is reachable
 // only through the blob, never inlined, because a lease prompt is routinely kilobytes.

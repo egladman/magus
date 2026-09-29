@@ -382,6 +382,11 @@ func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	// literal like `"note: lives under .magus/ during a run"` is prose the same way an
 	// echo'd sentence is, and the plain branch below already draws that line.
 	if scriptedRewriteInterpreters[name] || name == "awk" {
+		// A path a program only reads is data, like one it prints. The broad offer
+		// below is kept for a write this cannot follow to its destination.
+		if targets, ok := interpreterWriteTargets(name, interpreterScript(c.Args, heredoc), c.Args); ok {
+			return targets
+		}
 		var out []string
 		for _, w := range append(slices.Clone(words), heredoc) {
 			if w == "" {

@@ -449,6 +449,25 @@ MCP surface is transport-complete but rule-empty today - the wiring passes
 every call because nothing yet judges an MCP tool name, not because the
 channel cannot carry a verdict.
 
+**Shell commands run with stdin at end-of-file.** An agent's command inherits a
+stdin nobody writes to, so a stray reader (grep with no file operand, `read`, a
+prompt, ssh, a pager) waits forever, and Claude Code backgrounds a timed-out
+command rather than killing it. On a pass or an advise, the reply hands the
+command back as `updatedInput`, prefixed `exec </dev/null; `, with every other
+`tool_input` field kept, since `updatedInput` replaces the whole input. It sets no
+`permissionDecision`, so the rewritten call still meets your permission rules. A
+heredoc, a pipe or a `<` still feed their command. A denied or asked call is never
+rewritten, a command that already starts with the prefix is left alone, the
+session is told once, and the activity trail records `stdin_closed` on the
+verdict.
+
+A worktree-isolated subagent meets one side effect: Claude Code's isolation check
+judges the rewritten line, and refuses the prefix on a line it already finds
+borderline (runtime-computed values beside a redirect) as "exec inside a construct
+too complex to verify". Split such a line, as that refusal says. A
+`{ <command>` ... `} </dev/null` group avoids the word but was refused far more
+often, even around `stat` or `git status`.
+
 That is not the same as using everything this host offers. `SessionStart` with
 matcher `startup`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`,
 `PermissionRequest` and `PreCompact` are all available and all unused, on the test

@@ -32,6 +32,47 @@ var scriptWriteCalls = []string{
 	"writeFileSync", "writeFile(", "File.write", "IO.write", "fputs",
 }
 
+// scriptMutateRe finds the calls that change a file without writing its content: deleting,
+// moving, copying over, linking, or handing the job to a shell. None of them names its
+// destination in a way scriptWriteTargets reads, and perl's `open(F, '>', p)` is a write
+// openWriteRe does not see.
+var scriptMutateRe = regexp.MustCompile(
+	`\bos\.(?:remove|unlink|rmdir|removedirs|rename|renames|replace|makedirs|mkdir|symlink|link|chmod|chown|truncate|system|popen|exec\w*|spawn\w*)\b` +
+		`|\b(?:shutil|subprocess|child_process|FileUtils)\b` +
+		`|\b(?:rm|unlink|rename|copyFile|cp|mkdir|rmdir|symlink|symlink_to|truncate|chmod|touch|appendFile|createWriteStream)(?:Sync)?\s*\(` +
+		`|\bFile\.(?:delete|unlink|rename|symlink|chmod|truncate)\b|\bDir\.(?:mkdir|rmdir|delete|unlink)\b` +
+		`|\b(?:system|exec)\s*\(` +
+		`|\bopen\s*\([^)]*['"]\s*\+?[>|]`)
+
+// shellOutRe is perl's and ruby's paren-free spellings of the same acts, and their
+// backtick shell-out. JavaScript's backtick is a template string, so it is not read here.
+var shellOutRe = regexp.MustCompile("`|\\b(?:unlink|rename|rmdir|mkdir|system|exec)\\b")
+
+// interpreterWriteTargets is what an inline interpreter program could be aimed at: nothing
+// for a program that only reads, the literal destinations of its writes when every one of
+// them can be read, and ok false when some write or mutation names its destination in a
+// way this cannot follow. The last is the caller's cue to keep every path the program
+// carries, since reading one as data would let the write through unjudged.
+func interpreterWriteTargets(name, script string, args []string) (out []string, ok bool) {
+	if scriptMutateRe.MatchString(script) || ((name == "perl" || name == "ruby") && shellOutRe.MatchString(script)) {
+		return nil, false
+	}
+	targets, unknown := scriptWriteTargets(name, script, args)
+	if unknown {
+		return nil, false
+	}
+	if len(targets) == 0 && scriptWrites(name, script, args) {
+		return nil, false
+	}
+	for _, literals := range targets {
+		if len(literals) == 0 {
+			return nil, false
+		}
+		out = append(out, literals...)
+	}
+	return out, true
+}
+
 // openWriteRe matches an open() whose mode asks to write, so the read that merely names a
 // file is left alone.
 var openWriteRe = regexp.MustCompile(`open\s*\([^)]*['"][rbt+]*[wa][rbt+]*['"]`)

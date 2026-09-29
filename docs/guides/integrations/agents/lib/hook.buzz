@@ -71,6 +71,25 @@ export fun rawField(event: any?, dotPath: str) > str {
     return render(value);
 }
 
+// The stand-in objectWith writes where the raw text goes, as a JSON string, before
+// replacing it.
+final RAW_SLOT = "__MAGUS_RAW__";
+
+// objectWith is the object at a dot-path as JSON, with key set to raw spliced in as it is
+// rather than encoded, or null where no object sits at the path. It is how a reply carries
+// the host's whole tool input back with one field replaced by a template action: the host
+// reads the input it gets back as the entire input, so every other field must survive.
+export fun objectWith(event: any?, dotPath: str, key: str, raw: str) > str? {
+    final found = dig(event, dotPath: dotPath) as? {str: any};
+    if (found == null) { return null; }
+    final copy = mut {<str: any>};
+    foreach (name, value in found!) { copy[name] = value; }
+    copy[key] = RAW_SLOT;
+    final encoded = json\stringify(copy) catch null;
+    if (encoded == null) { return null; }
+    return encoded!.replace("\"{RAW_SLOT}\"", with: raw);
+}
+
 // wholeEvent decides which of the two payloads magus shell gets: the whole
 // envelope, or the one string a dot-path selects out of it.
 //

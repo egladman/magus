@@ -160,6 +160,17 @@ const (
 	// Both surfaces, like cache-dir-write: a file write and a shell line; see
 	// internal/guard/credential.go.
 	denyRuleTokenState denyRuleName = "token-state"
+	// The acting lease's boundaries, as the job store declares them; see
+	// internal/guard/lease.go and internal/guard/write.go.
+	denyRuleLeaseUndeclared denyRuleName = "lease-undeclared"
+	denyRuleLeaseWrite      denyRuleName = "lease-write"
+	denyRuleLeaseGate       denyRuleName = "lease-gate"
+	denyRuleLeaseVCS        denyRuleName = "lease-vcs"
+	denyRuleLeaseRebind     denyRuleName = "lease-rebind"
+	denyRuleLeaseHarness    denyRuleName = "lease-harness"
+	denyRuleFocusRead       denyRuleName = "focus-read"
+	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
+	denyRuleHookWiringWrite denyRuleName = "hook-wiring-write"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
@@ -2659,9 +2670,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):
-		return ShellVerdict{Context: updateGuardContext}
+		return ShellVerdict{Context: updateGuardContext, Rule: denyRule{Name: advisoryDependencyUpdate}}
 	case parsed && slices.ContainsFunc(work, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
-		return ShellVerdict{Context: installGuardContext}
+		return ShellVerdict{Context: installGuardContext, Rule: denyRule{Name: advisoryDependencyInstall}}
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
@@ -2673,9 +2684,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	switch {
 	case echoOnSuccessRe.MatchString(command):
-		return ShellVerdict{Context: echoOnSuccessAdvice}
+		return ShellVerdict{Context: echoOnSuccessAdvice, Rule: denyRule{Name: advisoryEchoOnSuccess}}
 	case timedMagusRe.MatchString(command):
-		return ShellVerdict{Context: timedMagusAdvice}
+		return ShellVerdict{Context: timedMagusAdvice, Rule: denyRule{Name: advisoryTimedMagus}}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

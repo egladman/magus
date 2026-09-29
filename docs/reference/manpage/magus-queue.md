@@ -110,7 +110,7 @@ apply report what would merge and call nothing on the provider.
 : \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--gate** *command*
-: \`command\` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green
+: \`command\` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first \`--\`; exit 0 is green
 
 **--only** *change*
 : Validate this one \`change\`; the changes beneath it in its partition are merged under it but not gated
@@ -119,7 +119,7 @@ apply report what would merge and call nothing on the provider.
 : Candidates built or gated at once across every partition; 0 is one per CPU
 
 **--regenerate** *command*
-: \`command\` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin
+: \`command\` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first \`--\` and the generated files to rewrite listed on stdin
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
@@ -177,7 +177,7 @@ apply report what would merge and call nothing on the provider.
 : \`provider\`: a built-in name (github) or a .buzz file
 
 **--regenerate** *command*
-: The base's own regeneration \`command\` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
+: The base's own regeneration \`command\` and its arguments, run with no shell and the projects that regenerate them added ahead of its first \`--\` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from

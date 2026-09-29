@@ -215,6 +215,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		// Declared by the wiring for the same reason: only a glue that renders the host's
 		// approval prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,
+		// And again: only a glue that renders updated_command into the host's reply can
+		// say the host will run it.
+		RewritesInput: sf.RewritesInput,
 	})
 	stopJudge()
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
