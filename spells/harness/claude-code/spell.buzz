@@ -235,21 +235,19 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 }
 
 fun claude_mcp() > {str: any} {
-    // User owns Claude Code MCP registration. Magus prints the host CLI sketch.
-    final hint = "Resolve secret ref __TOKEN_REF__, then register Magus MCP (user scope):\n"
-        + "  claude mcp add --transport http --scope user magus __URL__ --header \"Authorization: Bearer <token>\"\n"
-        + "Restart the Claude Code session afterward.";
+    // User owns Claude Code MCP registration. Magus prints the host CLI sketch. Project
+    // scope lands in .mcp.json, which every worktree carries, so each checkout's session
+    // starts its own __COMMAND__.
+    final hint = "Register Magus MCP for this project (writes .mcp.json):\n"
+        + "  claude mcp add --scope project magus -- __COMMAND__\n"
+        + "A project entry named magus takes precedence over a user-scope one. Restart the Claude Code session afterward.";
     return {
-        "token_ref": "MAGUS_MCP_TOKEN",
-        "url": "http://127.0.0.1:7391/mcp",
         "hint": hint,
         "docs": "docs/guides/integrations/mcp.md",
         "register": [
             "claude", "mcp", "add",
-            "--transport", "http",
-            "--scope", "user",
-            "magus", "__URL__",
-            "--header", "Authorization: Bearer <resolve:__TOKEN_REF__>",
+            "--scope", "project",
+            "magus", "--", "./magus", "mcp",
         ],
     };
 }
@@ -432,10 +430,10 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and Subage
     assert\equal("{subagent_hooks[0]["command"]}", claude_guard_command(), "the guard glue reads the stop whole");
 }
 
-test "harness_mcp prints Claude Code host CLI guidance" {
+test "harness_mcp registers a per-checkout stdio server" {
     final mcp = claude_mcp();
-    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
-    assert\isTrue("{mcp["hint"]}".indexOf("claude mcp add") != null, "names the host CLI");
+    assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
+    assert\isTrue("{mcp["hint"]}".indexOf("claude mcp add --scope project magus -- __COMMAND__") != null, "names the host CLI");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
 }
 

@@ -16,10 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/types"
 )
 
 // buzzStandInEnv marks the test binary re-executed as a stand-in for `magus buzz`.
@@ -259,6 +262,42 @@ func TestBuzzToolRefusesWithoutWrite(t *testing.T) {
 		assert.Contains(t, allText(res), "has no read-only mode", name)
 	}
 	assert.NoFileExists(t, filepath.Join(root, "written.txt"))
+}
+
+// A script's magus\job calls resolve their actor from the child's environment, so the child
+// carries the caller's lease: over stdio the one this process inherited, over HTTP the one
+// the request stamped, or the marker that makes a missing one unstamped rather than the
+// server's. job.TestStampedLeaseOnlyDowngrades pins what the child's store makes of it.
+//
+// The child is a shell script rather than the stand-in, whose TestMain scrubs the
+// environment this test is about.
+func TestBuzzToolRunsAsTheCaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the child is a POSIX sh script")
+	}
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=server-own")
+	t.Setenv(job.EnvStampedLease, "")
+	child := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.WriteFile(child, []byte("#!/bin/sh\nprintf '%s|%s\\n' \"${BAGGAGE-unset}\" \"${MAGUS_STAMPED_LEASE-unset}\"\n"), 0o755))
+	prev := magusExecutable
+	magusExecutable = func() (string, error) { return child, nil }
+	t.Cleanup(func() { magusExecutable = prev })
+	tool := &buzzTool{root: t.TempDir(), timeout: time.Minute}
+	script := `fun main(args: [str]) > void {}`
+	connector := types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}
+
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		want string
+	}{
+		"stdio inherits the host's lease": {trail.ContextWithCredential(t.Context(), types.CredentialStdio), "magus.lease=server-own|\n"},
+		"HTTP carries the stamped lease":  {withCallerLease(trail.ContextWithCredential(t.Context(), connector), "root/worker"), "magus.lease=root/worker|1\n"},
+		"HTTP with none is unstamped":     {withCallerLease(trail.ContextWithCredential(t.Context(), connector), ""), "|1\n"},
+	} {
+		res, err := adapt(tool)(tc.ctx, callRequest("magus_buzz", map[string]any{"script": script, "write": true}))
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, decodeBuzzResult(t, res).Stdout, name)
+	}
 }
 
 func TestBuzzToolArgv(t *testing.T) {

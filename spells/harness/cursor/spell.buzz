@@ -122,9 +122,7 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 fun cursor_mcp() > {str: any} {
     // User owns Cursor MCP client config. Magus only prints setup guidance.
     return {
-        "token_ref": "MAGUS_MCP_TOKEN",
-        "url": "http://127.0.0.1:7391/mcp",
-        "hint": "Wire Magus MCP yourself in Cursor (Settings -> Tools & MCP, or .cursor/mcp.json / ~/.cursor/mcp.json). Endpoint __URL__; export secret ref __TOKEN_REF__ (built-in env provider). Magus does not write mcp.json.",
+        "hint": "Wire Magus MCP yourself in the project's .cursor/mcp.json as a stdio server: command ./magus, args [\"mcp\"], so each workspace folder starts its own. Magus does not write mcp.json.",
         "docs": "docs/guides/integrations/mcp.md",
     };
 }
@@ -210,8 +208,8 @@ test "postToolUse matcher covers shell and search tools for advise" {
 
 test "harness_mcp prints Cursor setup guidance only" {
     final mcp = cursor_mcp();
-    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref / env var");
-    assert\isTrue("{mcp["hint"]}".indexOf("Tools & MCP") != null, "points at Cursor UI");
+    assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
+    assert\isTrue("{mcp["hint"]}".indexOf(".cursor/mcp.json") != null, "points at the project config");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus mcp.json write");
 }

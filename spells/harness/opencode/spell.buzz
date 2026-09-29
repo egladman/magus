@@ -54,9 +54,7 @@ fun opencode_mcp() > {str: any} {
     // User owns OpenCode MCP client settings. Magus points at docs only.
     // Guard remains the TypeScript plugin.
     return {
-        "token_ref": "MAGUS_MCP_TOKEN",
-        "url": "http://127.0.0.1:7391/mcp",
-        "hint": "Configure Magus MCP in OpenCode's host client at __URL__ with Authorization from secret ref __TOKEN_REF__. Magus does not write OpenCode MCP config.",
+        "hint": "Configure Magus MCP in the project's opencode.json under mcp.magus as a local server: type local, command [\"./magus\", \"mcp\"]. Magus does not write OpenCode MCP config.",
         "docs": "docs/guides/integrations/mcp.md",
     };
 }
@@ -130,7 +128,7 @@ test "harness_entries is empty because no hook config is merged" {
 
 test "harness_mcp points OpenCode at docs only" {
     final mcp = opencode_mcp();
-    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
+    assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus write");
 }

@@ -182,7 +182,7 @@ func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: dataWithNext(types.NewFileReport(files), t.next.served(hint.NextForFiles(files)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(types.NewFileReport(files), t.next.served(ctx, hint.NextForFiles(files)))}, nil
 }
 
 var _ spells.Driver = (*describeFileTool)(nil)

@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 )
 
@@ -69,6 +71,7 @@ func (t *buzzTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	// under ServeStdio.
 	res, err := run.Exec(ctx, exe, argv, run.ExecOptions{
 		Dir:     t.root,
+		Env:     callerEnv(ctx),
 		Stdin:   paramString(req.Params, "stdin", ""),
 		Capture: true,
 		Quiet:   true,
@@ -86,6 +89,24 @@ func (t *buzzTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		out.JSON = json.RawMessage(trimmed)
 	}
 	return spells.InvokeResponse{Data: out}, nil
+}
+
+// callerEnv is the environment a script's magus\job calls act as the caller under.
+//
+// Over stdio this process is the caller and the child inherits its environment, so it adds
+// nothing. Over HTTP the server's own BAGGAGE belongs to nobody calling it: the child gets the
+// lease the request stamped, or none, and job.EnvStampedLease so that none reads as
+// job.Actor.Unstamped rather than unbound. Reads pass either way; only graded writes differ.
+func callerEnv(ctx context.Context) []string {
+	actor, ok := callerActor(ctx)
+	if !ok {
+		return nil
+	}
+	baggage := ""
+	if actor.Lease != "" {
+		baggage = trail.BaggageLease + "=" + actor.Lease
+	}
+	return []string{trail.EnvBaggage + "=" + baggage, job.EnvStampedLease + "=1"}
 }
 
 // argv builds the `magus buzz` command line, always ending in `--` so an argument that

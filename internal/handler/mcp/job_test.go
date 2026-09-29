@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -505,4 +506,113 @@ func TestJobDoorsAgreeOnAnEmptyStore(t *testing.T) {
 	require.NotNil(t, listed.Msg.Jobs)
 	assert.Len(t, listed.Msg.Jobs, len(job.All()), "an unwritten store handed the listing a row")
 	assert.Empty(t, listed.Msg.Overlaps)
+}
+
+// TestJobToolActsAsTheCaller pins that the job door grades a write as whoever called it,
+// never as the process serving it. The server's own store is pinned unbound here, which is
+// the orchestrator's right a shared server used to lend every caller.
+func TestJobToolActsAsTheCaller(t *testing.T) {
+	loc := job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{}}
+	server := job.NewStore(loc)
+	for _, row := range []types.Job{
+		{ID: "root", Criteria: "the plan", WritePaths: []string{"internal"}, State: types.StateRunning},
+		{ID: "root/worker", Parent: "root", Criteria: "the worker's", WritePaths: []string{"internal/job", "internal/trail"}, State: types.StateRunning},
+		{ID: "root/other", Parent: "root", Criteria: "the other's", WritePaths: []string{"internal/guard"}, State: types.StateRunning},
+	} {
+		_, err := server.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	connector := types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}
+	overHTTP := func(lease string) context.Context {
+		return withCallerLease(trail.ContextWithCredential(t.Context(), connector), lease)
+	}
+	overStdio := trail.ContextWithCredential(t.Context(), types.CredentialStdio)
+	call := func(ctx context.Context, tool *jobTool, params map[string]any) (spells.InvokeResponse, error) {
+		return tool.Invoke(ctx, spells.InvokeRequest{Params: params})
+	}
+	criteriaOf := func(t *testing.T, id string) string {
+		t.Helper()
+		rows, err := server.List()
+		require.NoError(t, err)
+		for _, row := range rows {
+			if row.ID == id {
+				return row.Criteria
+			}
+		}
+		t.Fatalf("no row %s", id)
+		return ""
+	}
+	tool := &jobTool{store: server, resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "test", Spell: "go", TimestampMs: 9_999_999_999_999}, nil
+	}}
+
+	t.Run("a worker over HTTP cannot write another job's row", func(t *testing.T) {
+		_, err := call(overHTTP("root/worker"), tool, map[string]any{"op": "fork", "id": "root/other", "criteria": "rewritten"})
+		var refused *job.RefusedError
+		require.ErrorAs(t, err, &refused)
+		assert.Equal(t, job.Actor{Lease: "root/worker"}, refused.Actor)
+		assert.Equal(t, "the other's", criteriaOf(t, "root/other"))
+
+		resp, err := call(overHTTP("root/worker"), tool, map[string]any{"op": "fork", "id": "root/worker", "write_paths": "internal/job"})
+		require.NoError(t, err, "its own row it may still shrink")
+		assert.Equal(t, []string{"internal/job"}, resp.Data.(types.Job).WritePaths)
+	})
+
+	t.Run("an HTTP caller with no stamped lease is refused on a holder-row write", func(t *testing.T) {
+		ctx := overHTTP("")
+		result := map[string]any{
+			"schema_version": types.JobResultSchemaVersion, "job": "root/worker",
+			"changed_paths": []any{"internal/job/x.go"}, "unresolved_risks": []any{},
+			"validation": map[string]any{"command": "magus run test .", "output_ref": "out-1"},
+		}
+		for name, params := range map[string]map[string]any{
+			"fork":      {"op": "fork", "id": "root/worker", "criteria": "rewritten"},
+			"fork anew": {"op": "fork", "id": "stray", "criteria": "a plan of its own"},
+			"exec":      {"op": "exec", "id": "root/worker", "reported_base": "abc123"},
+			"exit":      {"op": "exit", "id": "root/worker", "result": result},
+			"wait":      {"op": "wait", "id": "root/worker", "result": result},
+			"clear":     {"op": "clear"},
+		} {
+			_, err := call(ctx, tool, params)
+			var refused *job.RefusedError
+			require.ErrorAs(t, err, &refused, name)
+			assert.True(t, refused.Actor.Unstamped, name)
+			assert.Contains(t, err.Error(), "no lease stamped on it", name)
+		}
+		assert.Equal(t, "the worker's", criteriaOf(t, "root/worker"))
+
+		resp, err := call(ctx, tool, map[string]any{"op": "list"})
+		require.NoError(t, err, "reads need no lease")
+		assert.Len(t, resp.Data.(types.JobList).Jobs, 3, "no refused write landed")
+	})
+
+	t.Run("a bearer no stamp reached fails closed", func(t *testing.T) {
+		_, err := call(trail.ContextWithCredential(t.Context(), connector), tool, map[string]any{"op": "fork", "id": "root/other", "criteria": "rewritten"})
+		var refused *job.RefusedError
+		require.ErrorAs(t, err, &refused)
+		assert.True(t, refused.Actor.Unstamped)
+	})
+
+	// Over stdio the host launched this process in its own checkout, so the lease is the one
+	// that process inherited, resolved as the CLI resolves it.
+	unpinned := loc
+	unpinned.Actor = nil
+	stdio := &jobTool{store: job.NewStore(unpinned)}
+
+	t.Run("a worker over stdio acts under the lease its host process inherited", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=root/worker")
+		_, err := call(overStdio, stdio, map[string]any{"op": "fork", "id": "root/other", "criteria": "rewritten"})
+		var refused *job.RefusedError
+		require.ErrorAs(t, err, &refused)
+		assert.Equal(t, "the other's", criteriaOf(t, "root/other"))
+	})
+
+	t.Run("an orchestrator over stdio in its own checkout keeps its rights", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "")
+		_, err := call(overStdio, stdio, map[string]any{"op": "fork", "id": "root/other", "criteria": "rewritten"})
+		require.NoError(t, err)
+		assert.Equal(t, "rewritten", criteriaOf(t, "root/other"))
+		_, err = call(overStdio, stdio, map[string]any{"op": "fork", "id": "second", "criteria": "a new plan"})
+		require.NoError(t, err)
+	})
 }
