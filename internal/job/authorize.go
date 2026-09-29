@@ -157,7 +157,7 @@ func refuse(actor Actor, id, rule string) error {
 // standing for the rest of the book (a child row's boundary is read from the parent's).
 //
 // THE ENFORCEMENT POINT, and it is here rather than in a shell rule because the three
-// write doors (the CLI, the magus_job MCP tool, magus\job) all reach the store and
+// write doors (the CLI, the client MCP tool, magus\job) all reach the store and
 // only one of them can be graded by a command pattern. The guard's denial text sends a
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //

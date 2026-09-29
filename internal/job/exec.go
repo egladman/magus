@@ -43,8 +43,8 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to exec against."+
-				" Check the declared ids with `magus_job list` and exec under the id the"+
-				" orchestrator handed you", ErrUnknownJob, id)
+				" Check the declared ids with `%s` and exec under the id the"+
+				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
 		}
 		if cur.State.Terminal() {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take;"+

@@ -472,6 +472,17 @@ func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int
 // in the exported tree that no commit contains, which a graph diff would read as a change.
 const saplingArchivalMeta = ".sl_archival.txt"
 
+// CheckoutID is the dirstate's parent nodes. See dirstateCheckoutID.
+func (saplingVCS) CheckoutID(dir string) (string, bool) {
+	return dirstateCheckoutID(filepath.Join(dir, ".sl"))
+}
+
+// OpenObjectBatch starts one command server for every approved source a guard
+// load reads. See hgFamilyOpenObjectBatch.
+func (saplingVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
+	return hgFamilyOpenObjectBatch(ctx, "sl", root, rev)
+}
+
 // ReadFileAt implements types.RevisionFileReader via `sl cat -r <rev>`. "" is `.`, the
 // committed revision, matching hg's spelling rather than git's.
 func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {

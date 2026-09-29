@@ -39,12 +39,18 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	// Each required glob is checked on its own, not folded into the all-or-nothing test
 	// above: a target declaring its own outputs alongside a cross-project one passes that
 	// test on its own outputs alone, and the missing foreign file goes unnoticed.
+	//
+	// Found among matches, which exclusions have already narrowed: a required glob whose
+	// every file is excluded produced nothing the snapshot keeps.
 	for _, g := range s.RequiredOutputs {
 		found, err := expandOutputGlobs([]string{g}, root, s.NestedDirs)
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(found) == 0 {
+		if !slices.ContainsFunc(found, func(f relAbs) bool {
+			_, kept := slices.BinarySearchFunc(matches, f.rel, func(m relAbs, rel string) int { return cmp.Compare(m.rel, rel) })
+			return kept
+		}) {
 			return nil, nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
 				"target %q declared an output into another project (%q) but produced no file matching it; check the path the target actually writes",
 				s.Target, g)
@@ -156,85 +162,85 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 }
 
 // expandOutputGlobs expands output globs relative to root; rejects absolute paths and "..".
-// A match inside one of nested is dropped unless its glob is rooted inside that project.
+// A match inside one of nested is dropped unless its glob is rooted inside that project,
+// and one an exclusion of its glob's run matches is dropped too (types.GlobRuns), so an
+// excluded file is never stored.
 func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, error) {
+	for _, g := range globs {
+		if pattern, _ := types.CutExclusion(g); filepath.IsAbs(pattern) || strings.Contains(pattern, "..") {
+			return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", g)
+		}
+	}
 	rootFS := os.DirFS(root)
 	seen := map[string]struct{}{}
 	var out []relAbs
-	for _, g := range globs {
-		if filepath.IsAbs(g) || strings.Contains(g, "..") {
-			return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", g)
+	for run := range types.GlobRuns(globs) {
+		keep := func(g, rel string) bool {
+			if !types.GlobClaims(g, rel, nested) || run.Excludes(rel) {
+				return false
+			}
+			_, dup := seen[rel]
+			seen[rel] = struct{}{}
+			return !dup
 		}
-		g = filepath.ToSlash(g)
-		matches, err := doublestar.Glob(rootFS, g)
-		if err != nil {
-			return nil, fmt.Errorf("glob %q: %w", g, err)
-		}
-		for _, m := range matches {
-			abs := filepath.Join(root, m)
-			info, err := os.Lstat(abs)
+		for _, g := range run.Globs {
+			g = filepath.ToSlash(g)
+			matches, err := doublestar.Glob(rootFS, g)
 			if err != nil {
-				continue
+				return nil, fmt.Errorf("glob %q: %w", g, err)
 			}
-			if info.IsDir() {
-				err := filepath.WalkDir(abs, func(p string, d os.DirEntry, err error) error {
-					if err != nil {
-						return err
-					}
-					if d.IsDir() {
-						return nil
-					}
-					rel, _ := filepath.Rel(root, p)
-					rel = filepath.ToSlash(rel)
-					if !types.GlobClaims(g, rel, nested) {
-						return nil
-					}
-					if _, ok := seen[rel]; ok {
-						return nil
-					}
-					seen[rel] = struct{}{}
-					out = append(out, relAbs{rel: rel, abs: p})
-					return nil
-				})
+			for _, m := range matches {
+				abs := filepath.Join(root, m)
+				info, err := os.Lstat(abs)
 				if err != nil {
-					return nil, err
+					continue
 				}
-				continue
+				if info.IsDir() {
+					err := filepath.WalkDir(abs, func(p string, d os.DirEntry, err error) error {
+						if err != nil {
+							return err
+						}
+						if d.IsDir() {
+							return nil
+						}
+						rel, _ := filepath.Rel(root, p)
+						rel = filepath.ToSlash(rel)
+						if keep(g, rel) {
+							out = append(out, relAbs{rel: rel, abs: p})
+						}
+						return nil
+					})
+					if err != nil {
+						return nil, err
+					}
+					continue
+				}
+				if keep(g, m) {
+					out = append(out, relAbs{rel: m, abs: abs})
+				}
 			}
-			if !types.GlobClaims(g, m, nested) {
-				continue
-			}
-			if _, ok := seen[m]; ok {
-				continue
-			}
-			seen[m] = struct{}{}
-			out = append(out, relAbs{rel: m, abs: abs})
 		}
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
 	return out, nil
 }
 
-// ownedOutputs drops the records inside a nested project that no glob of s rooted there
-// claims. A manifest is not trusted to have been snapshotted under this rule (a remote
-// tier, an older binary), so a hit enforces it again. It returns m itself when nothing
-// drops.
+// ownedOutputs drops the records s's outputs do not own: one inside a nested project that
+// no glob of s rooted there claims, and one every claiming glob's run excludes. A manifest
+// is not trusted to have been snapshotted under these rules (a remote tier, an older
+// binary, a declaration that gained an exclusion), so a hit enforces them again: replay
+// must never write over a file the declaration carves out. It returns m itself when
+// nothing drops.
 func ownedOutputs(m *Manifest, s Step) *Manifest {
-	if len(s.NestedDirs) == 0 {
+	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g string) bool {
+		_, ok := types.CutExclusion(g)
+		return ok
+	}) {
 		return m
 	}
 	kept := make([]OutputRecord, 0, len(m.Outputs))
 	for _, rec := range m.Outputs {
-		if types.NestedOwner(rec.Path, s.NestedDirs) == "" || slices.ContainsFunc(s.Outputs, func(g string) bool {
-			g = filepath.ToSlash(g)
-			// A literal glob that names a directory claims every file beneath it, as
-			// expandOutputGlobs walks it.
-			ok := rec.Path == g || strings.HasPrefix(rec.Path, g+"/")
-			if !ok {
-				ok, _ = doublestar.Match(g, rec.Path)
-			}
-			return ok && types.GlobClaims(g, rec.Path, s.NestedDirs)
-		}) {
+		if ownsRecord(s, rec.Path) {
 			kept = append(kept, rec)
 		}
 	}
@@ -244,6 +250,32 @@ func ownedOutputs(m *Manifest, s Step) *Manifest {
 	narrowed := *m
 	narrowed.Outputs = kept
 	return &narrowed
+}
+
+// ownsRecord reports whether s's outputs own the recorded path rel. A record no glob
+// claims is kept outside a nested project, as a hit always has been.
+func ownsRecord(s Step, rel string) bool {
+	nested := types.NestedOwner(rel, s.NestedDirs) != ""
+	claimed := false
+	for run := range types.GlobRuns(s.Outputs) {
+		for _, g := range run.Globs {
+			g = filepath.ToSlash(g)
+			// A literal glob that names a directory claims every file beneath it, as
+			// expandOutputGlobs walks it.
+			ok := rel == g || strings.HasPrefix(rel, g+"/")
+			if !ok {
+				ok, _ = doublestar.Match(g, rel)
+			}
+			if !ok || !types.GlobClaims(g, rel, s.NestedDirs) {
+				continue
+			}
+			if !run.Excludes(rel) {
+				return true
+			}
+			claimed = true
+		}
+	}
+	return !claimed && !nested
 }
 
 // replay restores a manifest's outputs from the local store.

@@ -61,20 +61,20 @@ var (
 type Token struct {
 	// ID is the first 8 hex of SHA256. It is what a record names the token by, because Name
 	// can be reused after a revoke and ID cannot.
-	ID      string                `json:"id"`
-	Name    string                `json:"name"`
-	Class   types.CredentialClass `json:"class"`
-	SHA256  string                `json:"sha256"`
-	Grant   types.Grant           `json:"grant"`
-	Created time.Time             `json:"created"`
-	Expires time.Time             `json:"expires"`
+	ID      string               `json:"id"`
+	Name    string               `json:"name"`
+	Kind    types.CredentialKind `json:"class"`
+	SHA256  string               `json:"sha256"`
+	Grant   types.Grant          `json:"grant"`
+	Created time.Time            `json:"created"`
+	Expires time.Time            `json:"expires"`
 	// TokenTTL is, on an exchange code, the lifetime of the stored token it is traded for.
 	TokenTTL time.Duration `json:"token_ttl,omitzero"`
 }
 
 // Credential is the credential this record verifies as.
 func (t Token) Credential() types.Credential {
-	return types.Credential{Class: t.Class, ID: t.ID, Name: t.Name, Grant: t.Grant}
+	return types.Credential{Kind: t.Kind, ID: t.ID, Name: t.Name, Grant: t.Grant}
 }
 
 // Expired reports whether now is past the record's expiry.
@@ -240,7 +240,7 @@ func (s *Store) read(st *dirState) error {
 }
 
 // parseTokenRecord reads one record and refuses anything Mint could not have written: a
-// stored token holding tokens=write, an expiry past its class's bound or before its creation,
+// stored token holding tokens=write, an expiry past its kind's bound or before its creation,
 // a creation in the future, a name that is not its file's, a malformed hash or id, or a file
 // looser than 0600. A load holds every record to the rules a mint does, so a record planted in
 // tokens.d cannot grant more than one minted there.
@@ -270,16 +270,16 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 	}
 	t := rec.Token
 	var bound time.Duration
-	switch t.Class {
-	case types.ClassStored:
+	switch t.Kind {
+	case types.KindStored:
 		bound = MaxTokenTTL
-	case types.ClassExchange:
+	case types.KindExchange:
 		bound = ExchangeCodeTTL
 		if t.TokenTTL <= 0 || t.TokenTTL > MaxTokenTTL {
 			return Token{}, invalidRecord(path, "its code stands for a token living %s", t.TokenTTL)
 		}
 	default:
-		return Token{}, invalidRecord(path, "class %q is not a stored class", t.Class)
+		return Token{}, invalidRecord(path, "kind %q is not a stored kind", t.Kind)
 	}
 	switch {
 	case t.Name != name:
@@ -400,7 +400,7 @@ func (s *Store) Mint(minter types.Grant, req MintRequest) (secret string, rec To
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return s.mint(st, minter, req, types.ClassStored, req.TTL, 0)
+	return s.mint(st, minter, req, types.KindStored, req.TTL, 0)
 }
 
 // MintCode stores a one-time exchange code for the token req describes, and returns the code.
@@ -413,7 +413,7 @@ func (s *Store) MintCode(minter types.Grant, req MintRequest) (code string, rec 
 	if err := checkTTL(req.TTL); err != nil {
 		return "", Token{}, err
 	}
-	return s.mint(st, minter, req, types.ClassExchange, ExchangeCodeTTL, req.TTL)
+	return s.mint(st, minter, req, types.KindExchange, ExchangeCodeTTL, req.TTL)
 }
 
 func checkTTL(ttl time.Duration) error {
@@ -425,7 +425,7 @@ func checkTTL(ttl time.Duration) error {
 }
 
 // mint writes one record. The caller holds st.mu.
-func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, class types.CredentialClass, life, tokenTTL time.Duration) (string, Token, error) {
+func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind types.CredentialKind, life, tokenTTL time.Duration) (string, Token, error) {
 	switch {
 	case req.Grant.Validate() != nil:
 		return "", Token{}, invalidRequest("%v", req.Grant.Validate())
@@ -437,7 +437,7 @@ func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, class ty
 	case req.Grant == types.Grant{}:
 		return "", Token{}, invalidRequest("a token must grant something")
 	}
-	if class == types.ClassStored {
+	if kind == types.KindStored {
 		if err := checkTTL(life); err != nil {
 			return "", Token{}, err
 		}
@@ -457,13 +457,13 @@ func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, class ty
 	now := time.Now()
 	s.prune(st, now)
 
-	secret, err := mintSecret(class)
+	secret, err := mintSecret(kind)
 	if err != nil {
 		return "", Token{}, err
 	}
 	sum := digest(secret)
 	rec := Token{
-		ID: sum[:8], Class: class, SHA256: sum, Grant: req.Grant,
+		ID: sum[:8], Kind: kind, SHA256: sum, Grant: req.Grant,
 		Created: now.UTC(), Expires: now.Add(life).UTC(), TokenTTL: tokenTTL,
 	}
 	for i := 1; ; i++ {
@@ -527,7 +527,7 @@ func writeTokenRecord(dir string, t Token) error {
 // BearerRejected). The token takes the code's name when it is still free.
 func (s *Store) Redeem(code string) (secret string, rec Token, err error) {
 	notFound := types.WrapDiagnostic(types.BearerRejected, ErrTokenNotFound, "auth: the link code is wrong, expired, or already used; open a fresh link")
-	if class, ok := classOf(code); !ok || class != types.ClassExchange {
+	if kind, ok := kindOf(code); !ok || kind != types.KindExchange {
 		return "", Token{}, notFound
 	}
 	st := s.state()
@@ -536,7 +536,7 @@ func (s *Store) Redeem(code string) (secret string, rec Token, err error) {
 	if err := s.read(st); err != nil {
 		return "", Token{}, err
 	}
-	match, ok := lookup(st.tokens, code, types.ClassExchange, time.Now())
+	match, ok := lookup(st.tokens, code, types.KindExchange, time.Now())
 	if !ok {
 		return "", Token{}, notFound
 	}
@@ -554,7 +554,7 @@ func (s *Store) Redeem(code string) (secret string, rec Token, err error) {
 	if slices.ContainsFunc(st.tokens, func(t Token) bool { return t.Name == match.Name }) {
 		match.Name = "" // taken since; the token gets the next free name
 	}
-	return s.mint(st, match.Grant, MintRequest{Name: match.Name, Grant: match.Grant, TTL: match.TokenTTL}, types.ClassStored, match.TokenTTL, 0)
+	return s.mint(st, match.Grant, MintRequest{Name: match.Name, Grant: match.Grant, TTL: match.TokenTTL}, types.KindStored, match.TokenTTL, 0)
 }
 
 // Revoke deletes the token q names: by exact id when q is 8 hex digits, by exact name
@@ -599,7 +599,7 @@ func (s *Store) Revoke(revoker types.Grant, q string) (Token, error) {
 // mgs_ token is refused before any hashing, so an operator, share or exchange secret never
 // matches here even if a record carried its hash.
 func (s *Store) Lookup(presented string) (Token, bool) {
-	if class, ok := classOf(presented); !ok || class != types.ClassStored {
+	if kind, ok := kindOf(presented); !ok || kind != types.KindStored {
 		return Token{}, false
 	}
 	st := s.state()
@@ -608,17 +608,17 @@ func (s *Store) Lookup(presented string) (Token, bool) {
 	if err := s.read(st); err != nil {
 		return Token{}, false
 	}
-	return lookup(st.tokens, presented, types.ClassStored, time.Now())
+	return lookup(st.tokens, presented, types.KindStored, time.Now())
 }
 
-// lookup compares presented against every record of class in constant time, and does not
+// lookup compares presented against every record of kind in constant time, and does not
 // stop at a match.
-func lookup(tokens []Token, presented string, class types.CredentialClass, now time.Time) (Token, bool) {
+func lookup(tokens []Token, presented string, kind types.CredentialKind, now time.Time) (Token, bool) {
 	got := []byte(digest(presented))
 	var match Token
 	found := false
 	for _, t := range tokens {
-		if subtle.ConstantTimeCompare([]byte(t.SHA256), got) == 1 && t.Class == class && !t.Expired(now) {
+		if subtle.ConstantTimeCompare([]byte(t.SHA256), got) == 1 && t.Kind == kind && !t.Expired(now) {
 			match, found = t, true
 		}
 	}

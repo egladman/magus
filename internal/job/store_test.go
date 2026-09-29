@@ -483,7 +483,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
-		{name: "the magus_job fork op and magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
+		{name: "magus\\job\\put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
 			merge, err := ParseMerge(map[string]any{
 				"criteria": "goal", "checkpoint": "abc123", "write_paths": []any{"a.go"}, "check": "go-test .",
 			})

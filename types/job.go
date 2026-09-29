@@ -771,7 +771,7 @@ type Job struct {
 // the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. The magus_job tool's fork deliberately does the opposite,
+// is cleared rather than kept. magus\job\put deliberately does the opposite,
 // since an agent advancing one field of a live row must not erase the rest (see
 // job.ParseMerge).
 //
@@ -1495,7 +1495,7 @@ func JobDescendants(rows []Job, id string) []Job {
 // The registration facts take the opposite route and are NOT derived here. ReportedBase,
 // BaseVerdict and Registered describe one row against the checkpoint that row was handed,
 // so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus_job's list op, JobService's ListJobs) by riding
+// reader of this list (magus\job\list, JobService's ListJobs) by riding
 // the leases. Deriving a second copy at read time would be a duplicate to keep true, which
 // is exactly what the overlap rule above avoids in the other direction.
 //

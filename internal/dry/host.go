@@ -133,7 +133,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// at magusfile top level. Stubbed no-ops like cache.remote.
 	guard := vm.NewMap()
 	guard.MapSet("shell", fn("magus.guard.shell", retNull))
-	guard.MapSet("bash", fn("magus.guard.bash", retNull))
 	guard.MapSet("spawn", fn("magus.guard.spawn", retNull))
 	guard.MapSet("command", fn("magus.guard.command", retNull))
 	guard.MapSet("write", fn("magus.guard.write", retNull))
@@ -278,10 +277,17 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	// The reports magus returns as domain types (doctor, describeFile, insight,
-	// affectedImpact) fork a real magus in the live host. Same rule as
+	// impact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spell/gen/types.
+	m.MapSet("clean", fn("magus.clean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("removed", vm.ListValue(nil))
+		res.MapSet("tracked", vm.ListValue(nil))
+		res.MapSet("dryRun", vm.BoolValue(false))
+		return res, nil
+	}))
 	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("workspace", vm.StrValue(""))
@@ -315,7 +321,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("notes", vm.ListValue(nil))
 		return res, nil
 	}))
-	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("impact", fn("magus.impact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
 		res.MapSet("changedFileCount", vm.IntValue(0))

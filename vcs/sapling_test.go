@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,4 +381,44 @@ func TestSaplingStartMergeRefusesWhenOneIsUnderway(t *testing.T) {
 
 func TestSaplingHistoryFollowsPathsAndFirstParent(t *testing.T) {
 	assertHistoryScenario(t, saplingVCS{}, hgFamilyHistoryRepo(t, "sl"))
+}
+
+func TestSlCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {
+	dir := slRepo(t, map[string]string{"a.buzz": "one\n"})
+	node, err := vcsOutput(t.Context(), dir, "sl", "log", "-r", ".", "-T", "{node}")
+	require.NoError(t, err)
+	id, ok := saplingVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.Equal(t, node+strings.Repeat("0", 40), id)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.buzz"), []byte("two\n"), 0o644))
+	vcsTestRun(t, dir, "sl", "status", "--root-relative")
+	again, ok := saplingVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.Equal(t, id, again, "status rewrites the dirstate stat cache and must leave the parent")
+
+	vcsTestRun(t, dir, "sl", "commit", "-m", "edit")
+	committed, ok := saplingVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.NotEqual(t, id, committed)
+}
+
+func TestSlObjectBatchReadsCommittedFiles(t *testing.T) {
+	dir := slRepo(t, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
+	batch, err := saplingVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	for _, rel := range []string{"a.buzz", "dir/b.buzz"} {
+		want, err := saplingVCS{}.ReadFileAt(t.Context(), dir, ".", rel)
+		require.NoError(t, err)
+		got, err := batch.Read(rel)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, rel)
+	}
+	_, err = batch.Read("no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("a.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
 }

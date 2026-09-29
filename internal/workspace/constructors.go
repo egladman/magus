@@ -38,9 +38,14 @@ func WithDependsOn(paths ...string) ProjectOption {
 	}
 }
 
-// WithOutputs declares the file globs this project produces (project-relative).
+// WithOutputs declares the file globs this project produces (project-relative). A
+// "!pattern" entry excludes what the globs before it matched (types.GlobRuns); an
+// exclusion with no glob before it is refused (types.CheckExclusions).
 func WithOutputs(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
+		if err := types.CheckExclusions(paths); err != nil {
+			return fmt.Errorf("magus: project %q: outputs: %w", p.Path, err)
+		}
 		p.Outputs = append(p.Outputs, paths...)
 		return nil
 	}
@@ -67,15 +72,25 @@ func WithOutputs(paths ...string) ProjectOption {
 // workspace-relative paths, so a glob outside it can never match a file, never move a
 // cache key, and never mark this project affected; accepting one would record a
 // declaration magus has no way to honor.
+//
+// A "!pattern" entry excludes what the globs before it matched (types.GlobRuns); an
+// exclusion with no glob before it is refused (types.CheckExclusions).
 func WithSources(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
+		if err := types.CheckExclusions(paths); err != nil {
+			return fmt.Errorf("magus: project %q: sources: %w", p.Path, err)
+		}
 		cleaned := make([]string, 0, len(paths))
 		for _, raw := range paths {
-			glob := path.Clean(raw)
+			pattern, exclusion := types.CutExclusion(raw)
+			glob := path.Clean(pattern)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
 				return fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q); "+
 					"a path outside the workspace can never key a cache entry", p.Path, raw, rooted)
+			}
+			if exclusion {
+				glob = "!" + glob
 			}
 			cleaned = append(cleaned, glob)
 		}

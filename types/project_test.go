@@ -2,9 +2,12 @@ package types
 
 import (
 	"fmt"
+	"slices"
+	"testing"
+
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
-	"testing"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAttachSpellSkipsInternalForThePrimarySlot pins the rule that keeps
@@ -109,6 +112,95 @@ func TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate(t *testing.T)
 	}
 
 	assert.Equal(t, []string{"api/**/*.go", "proto/**"}, p.DeclaredGlobs())
+}
+
+func TestMatchesAnyGlobExclusions(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		globs []string
+		path  string
+		want  bool
+	}{
+		{"an exclusion narrows the glob before it", []string{"gen/*.go", "!gen/runtime.go"}, "gen/runtime.go", false},
+		{"the rest of the glob still matches", []string{"gen/*.go", "!gen/runtime.go"}, "gen/fs.go", true},
+		{"an exclusion is a glob too", []string{"gen/*.go", "!gen/*_test.go"}, "gen/fs_test.go", false},
+		{"one exclusion run narrows every glob before it", []string{"a/*", "b/*", "!*/x", "!*/y"}, "a/y", false},
+		{"a glob after an exclusion starts a fresh run", []string{"gen/*.go", "!gen/runtime.go", "gen/runtime.go"}, "gen/runtime.go", true},
+		{"an exclusion never reaches back past an earlier one", []string{"a/*", "!a/x", "b/*", "!a/*"}, "a/y", true},
+		{"a leading exclusion narrows nothing", []string{"!gen/fs.go", "gen/*.go"}, "gen/fs.go", true},
+		{"only exclusions match nothing", []string{"!gen/fs.go"}, "gen/fs.go", false},
+		{"an escaped bang is a literal leading bang", []string{`\!gen.go`}, "!gen.go", true},
+		{"the escaped form is not an exclusion", []string{"*.go", `\!x.go`}, "x.go", true},
+	} {
+		assert.Equal(t, tc.want, MatchesAnyGlob(tc.globs, tc.path), tc.name)
+	}
+}
+
+func TestCheckExclusions(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, CheckExclusions([]string{"gen/*.go", "!gen/runtime.go"}))
+	require.NoError(t, CheckExclusions([]string{`\!literal`}), "an escaped bang is an ordinary glob")
+	require.NoError(t, CheckExclusions(nil))
+
+	err := CheckExclusions([]string{"!gen/runtime.go", "!gen/*_test.go"})
+	require.ErrorContains(t, err, "every glob in")
+	err = CheckExclusions([]string{"!gen/runtime.go", "gen/*.go"})
+	require.ErrorContains(t, err, `exclusion "!gen/runtime.go" comes before any glob it could narrow`)
+	err = CheckExclusions([]string{"gen/*.go", "!"})
+	require.ErrorContains(t, err, "names no pattern")
+}
+
+func TestRootGlobKeepsTheExclusion(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "!api/gen/runtime.go", RootGlob("api", "!gen/runtime.go"))
+	assert.Equal(t, "!proto/x", RootGlob("docs", "!../proto/x"))
+	assert.Equal(t, "!gen/x", RootGlob(".", "!./gen/x"))
+}
+
+func TestInvalidGlobsJudgesAnExclusionByItsPattern(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []string{"![bad"}, InvalidGlobs([]string{"gen/*", "!gen/x", "![bad"}))
+}
+
+// TestUnionGlobsKeepsEachDeclarationsExclusions pins why a flattened union cannot be a
+// plain concatenation: the second declaration's exclusion would join the first one's
+// run and carve its file out of a declaration that never excluded it.
+func TestUnionGlobsKeepsEachDeclarationsExclusions(t *testing.T) {
+	t.Parallel()
+	sources := []string{"**/*.go"}
+	outputs := []string{"gen/*.go", "!gen/runtime.go"}
+
+	require.False(t, MatchesAnyGlob(slices.Concat(sources, outputs), "gen/runtime.go"), "the concatenation loses the path")
+
+	union := UnionGlobs(sources, outputs)
+	assert.Equal(t, []string{"gen/*.go", "!gen/runtime.go", "**/*.go"}, union)
+	assert.True(t, MatchesAnyGlob(union, "gen/runtime.go"))
+	assert.False(t, MatchesAnyGlob(UnionGlobs(outputs), "gen/runtime.go"))
+	assert.Equal(t, []string{"a", "b"}, UnionGlobs([]string{"a", "b"}, []string{"b", "a"}), "plain globs dedup")
+	assert.Equal(t, []string{"a", "!b", "c", "!d"}, UnionGlobs([]string{"!x", "a", "!b"}, []string{"c", "!d"}),
+		"a leading exclusion is dropped rather than joining the run before it")
+}
+
+func TestDeclaredGlobsAndAllOutputsKeepAnExclusionWithItsDeclaration(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:    "api",
+		Sources: []string{"**/*.go"},
+		Outputs: []string{"dist/**"},
+		TargetOutputs: map[string][]OutputRef{
+			"bindings": {{Glob: "gen/*.go"}, {Glob: "!gen/runtime.go"}},
+			"docs":     {{Glob: "MAGUS.md"}},
+		},
+	}
+
+	assert.Equal(t, []string{"gen/*.go", "!gen/runtime.go", "dist/**", "MAGUS.md"}, p.AllOutputs())
+	declared := p.DeclaredGlobs()
+	assert.Equal(t, []string{
+		"api/gen/*.go", "!api/gen/runtime.go", "api/**/*.go", "api/MAGUS.md", "api/dist/**",
+	}, declared, "the declaration AllOutputs and TargetOutputs both carry appears once")
+	assert.True(t, MatchesAnyGlob(declared, "api/gen/runtime.go"), "the project's sources still declare it")
+	assert.False(t, MatchesAnyGlob(UnionGlobs(p.AllOutputs()), "gen/runtime.go"), "but no output does")
 }
 
 func TestProject_AttachSpell(t *testing.T) {

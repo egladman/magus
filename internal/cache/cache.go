@@ -115,6 +115,10 @@ type Stats struct {
 }
 
 // Step is the hashable description of a cached build step.
+//
+// Every glob list here is a declared list: a "!pattern" entry excludes, scoped as
+// types.GlobRuns scopes it, and a list assembled from several declarations is joined
+// with types.UnionGlobs.
 type Step struct {
 	ProjectPath string   // repo-relative project directory
 	Sources     []string // doublestar globs (relative to WorkspaceRoot) for the cache key

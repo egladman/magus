@@ -43,9 +43,9 @@ func (s *TokenSuite) TestRoundTrip() {
 
 	tok, err := GenerateOperator()
 	require.NoError(t, err)
-	class, ok := classOf(tok)
+	kind, ok := kindOf(tok)
 	require.True(t, ok, "GenerateOperator must mint a well-formed token")
-	assert.Equal(t, types.ClassOperator, class)
+	assert.Equal(t, types.KindOperator, kind)
 
 	path, err := SaveOperator(tok)
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func (s *TokenSuite) TestLoadRejectsInsecurePerms() {
 	assert.ErrorIs(t, err, types.InsecureTokenPermissions)
 }
 
-// An operator file written before the class prefix, or edited into anything else, is refused
+// An operator file written before the kind prefix, or edited into anything else, is refused
 // with MGS9016 naming the command that re-issues it, from LoadOperator and from
 // EnsureOperator: the server does not start on it and no command runs on it.
 func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
@@ -91,8 +91,8 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 		_, err = EnsureOperator(t.Context(), slog.New(slog.DiscardHandler))
 		require.ErrorIs(t, err, types.OperatorTokenFormat, "the server must not start on %q", old)
 	}
-	// A valid store token copied into the operator file is refused too: its class is wrong.
-	stored, err := mintSecret(types.ClassStored)
+	// A valid store token copied into the operator file is refused too: its kind is wrong.
+	stored, err := mintSecret(types.KindStored)
 	require.NoError(t, err)
 	_, err = SaveOperator(stored)
 	require.NoError(t, err)

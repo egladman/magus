@@ -170,7 +170,7 @@ func TestGrantGuardHoldsTheCredentialOnTheContextToThePathsNeed(t *testing.T) {
 		g.ServeHTTP(rec, req.WithContext(trail.ContextWithCredential(req.Context(), cred)))
 		return rec
 	}
-	viewer := types.Credential{Class: types.ClassStored, Grant: types.GrantViewer}
+	viewer := types.Credential{Kind: types.KindStored, Grant: types.GrantViewer}
 
 	assert.Equal(t, http.StatusOK, serve("/mcp", types.CredentialSocketPeer).Code)
 	assert.Equal(t, http.StatusOK, serve("/status", viewer).Code)

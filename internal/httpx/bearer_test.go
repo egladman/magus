@@ -144,7 +144,7 @@ func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 			for _, con := range levels {
 				grant := types.Grant{Tokens: tok, MCP: mcp, Console: con}
 				verify := func(string) (types.Credential, bool) {
-					return types.Credential{Class: types.ClassStored, Grant: grant}, true
+					return types.Credential{Kind: types.KindStored, Grant: grant}, true
 				}
 				for _, s := range surfaces {
 					for _, l := range levels[1:] {
@@ -177,7 +177,7 @@ func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 // every record made under the request is stamped from there and no handler copies either.
 func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	t.Parallel()
-	cred := types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
 	named := func(presented string) (types.Credential, bool) { return cred, presented == "good" }
 	var seen types.Origin
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +214,7 @@ func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 	read := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	write := types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
 	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (types.Credential, bool) {
-		return types.Credential{Class: types.ClassStored, Grant: types.GrantViewer}, true
+		return types.Credential{Kind: types.KindStored, Grant: types.GrantViewer}, true
 	}, map[string]types.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
 	for path, want := range map[string]int{"/s.S/List": http.StatusOK, "/s.S/Run": http.StatusForbidden, "/s.S/Unlisted": http.StatusForbidden} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
@@ -232,9 +232,9 @@ func TestOperatorTokenIsRefusedFromANonLoopbackPeer(t *testing.T) {
 	t.Parallel()
 	verify := func(presented string) (types.Credential, bool) {
 		if presented == "op" {
-			return types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}, true
+			return types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}, true
 		}
-		return types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, true
+		return types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, true
 	}
 	h := built(BearerGuard(rpcerr.FormatJSON, verify, anyNeed, okHandler))
 	serve := func(token, peer string, header map[string]string) int {
@@ -265,7 +265,7 @@ func TestRevokedTokenCutsAnOpenStream(t *testing.T) {
 
 	var revoked atomic.Bool
 	verify := func(string) (types.Credential, bool) {
-		return types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, !revoked.Load()
+		return types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, !revoked.Load()
 	}
 	started, ended := make(chan struct{}), make(chan struct{})
 	stream := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {

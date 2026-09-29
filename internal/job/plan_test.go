@@ -289,8 +289,8 @@ func TestVerifyHoldsTheClaimToTheObservedDiff(t *testing.T) {
 	})
 }
 
-// TestForkMergeHoldsANewRowToTheLimits pins that the merge doors (the magus_job tool and
-// magus\job.put) fork under the same limits and default timeout `magus job fork` applies,
+// TestForkMergeHoldsANewRowToTheLimits pins that magus\job.put forks under the same
+// limits and default timeout `magus job fork` applies,
 // while a merge onto an existing row stays an update nothing refuses.
 func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()

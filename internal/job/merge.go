@@ -11,7 +11,7 @@ import (
 )
 
 // ParseMerge builds the field merge one put applies to a row, from a param map shaped like
-// the magus_job MCP tool's request and magus\job.put's opts: only the keys the
+// magus\job.put's opts: only the keys the
 // caller named, so the second put in a job's lifecycle (state=running) advances the
 // state without erasing the row an earlier put declared, and a key present with an
 // empty value is an explicit clear.
@@ -201,7 +201,7 @@ func mergeString(params map[string]any, key string) (string, bool, error) {
 }
 
 // mergeList accepts the natural JSON/Buzz array shape as well as the space-separated
-// string the MCP descriptor schema forces on typed clients (magus_describe_file's paths
+// string the MCP descriptor schema forces on typed clients (magus\describeFile's paths
 // set the precedent). A caller sending a real array must not silently record nothing,
 // nor may one element of the wrong type quietly shorten the list, so both are reported.
 func mergeList(params map[string]any, key string) ([]string, bool, error) {

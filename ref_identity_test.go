@@ -207,7 +207,7 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 }
 
 // TestRefMatchCommand covers the renderings cmd/magus/query.go's ref-lookup
-// suggestion and internal/handler/mcp's magus_output not-found fallback both rely
+// suggestion and internal/handler/mcp's magus\output not-found fallback both rely
 // on: root-project omission, a charm suffix on a match that required explicit
 // charms, and --no-default-charms on a bare match in a workspace with configured
 // defaults, read from m.cfg.DefaultCharms rather than passed in.

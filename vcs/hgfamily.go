@@ -1,10 +1,15 @@
 package vcs
 
 import (
+	"bufio"
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,6 +51,10 @@ func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs, 
 	body.WriteString("[merge-patterns]\n")
 	all := slices.Concat(globs.Outputs, globs.AutoResolve)
 	for i, glob := range all {
+		// merge-patterns has no exclusion; an excluded file keeps the default merge.
+		if _, excluded := types.CutExclusion(glob); excluded {
+			continue
+		}
 		if !slices.Contains(all[:i], glob) {
 			fmt.Fprintf(&body, "glob:%s = magus\n", glob)
 		}
@@ -425,4 +434,189 @@ func hgFamilyCommitPushed(ctx context.Context, prog, dir, id string) (pushed, ok
 	default:
 		return false, false, fmt.Errorf("%s log -T {phase}: unknown phase %q for %s", prog, phase, id)
 	}
+}
+
+// dirstateCheckoutID is the working parent's node ids, read from the dirstate
+// Mercurial and Sapling both keep. Status rewrites the rest of that file to
+// refresh its stat cache and leaves these bytes, which is why the id is the
+// nodes and not the file's mtime: a mtime would change on the status itself.
+//
+// The classic file starts with two 20-byte parents. dirstate-v2 is a docket
+// whose first bytes are the marker "dirstate-v2\n" and whose parents are 32
+// bytes each at offsets 12 and 44, zero-padded when the node is shorter.
+// Anything else is unreadable, and the caller asks the tool.
+func dirstateCheckoutID(dot string) (string, bool) {
+	b, err := os.ReadFile(filepath.Join(dot, "dirstate"))
+	if err != nil {
+		return "", false
+	}
+	const marker = "dirstate-v2\n"
+	var p1, p2 []byte
+	if bytes.HasPrefix(b, []byte(marker)) {
+		if len(b) < len(marker)+64 {
+			return "", false
+		}
+		p1 = b[len(marker) : len(marker)+32]
+		p2 = b[len(marker)+32 : len(marker)+64]
+	} else if len(b) >= 40 {
+		p1 = b[:20]
+		p2 = b[20:40]
+	} else {
+		return "", false
+	}
+	return hex.EncodeToString(p1) + hex.EncodeToString(p2), true
+}
+
+// hgFamilyOpenObjectBatch starts one `serve --cmdserver pipe`. Each Read is a
+// `cat` on that process. A cat per path is a process per file, which is the
+// cost git's cat-file batch already avoids.
+func hgFamilyOpenObjectBatch(ctx context.Context, prog, root, rev string) (ObjectBatch, error) {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	cmd := vcsExec(ctx, prog, "serve", "--cmdserver", "pipe")
+	cmd.Dir = root
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return nil, err
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("%s cmdserver: %w", prog, err)
+	}
+	b := &cmdBatch{prog: prog, rev: rev, cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr}
+	ch, hello, err := b.message()
+	if err != nil || ch != 'o' || !bytes.Contains(hello, []byte("runcommand")) {
+		_ = b.Close()
+		if err == nil {
+			err = fmt.Errorf("hello %q", hello)
+		}
+		return nil, fmt.Errorf("%s cmdserver: %w", prog, err)
+	}
+	return b, nil
+}
+
+// cmdBatch speaks the Mercurial command-server protocol: a channel byte, a
+// big-endian length, then that many bytes. 'o' is stdout, 'e' is stderr, and
+// 'r' ends the command with a big-endian int32 exit code.
+type cmdBatch struct {
+	prog   string
+	rev    string
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Reader
+	stderr *bytes.Buffer
+	// err is the failure that left the stream out of step with its commands.
+	// Every later Read returns it: the next reply would answer an earlier command.
+	err error
+}
+
+func (b *cmdBatch) Read(rel string) (string, error) {
+	if b.err != nil {
+		return "", b.err
+	}
+	if strings.ContainsRune(rel, 0) {
+		return "", fmt.Errorf("%s cat: path contains a NUL", b.prog)
+	}
+	code, out, errText, err := b.run("cat", "-r", b.rev, "--", rel)
+	if err != nil {
+		b.err = fmt.Errorf("%s cat: %w", b.prog, err)
+		return "", b.err
+	}
+	if code != 0 {
+		if strings.Contains(errText, "no such file") {
+			return "", fmt.Errorf("%s cat: %s: %w", b.prog, rel, ErrObjectMissing)
+		}
+		msg := strings.TrimSpace(errText)
+		if msg == "" {
+			msg = strings.TrimSpace(out)
+		}
+		return "", fmt.Errorf("%s cat: %s", b.prog, msg)
+	}
+	return out, nil
+}
+
+func (b *cmdBatch) run(args ...string) (int, string, string, error) {
+	var payload []byte
+	for i, a := range args {
+		if i > 0 {
+			payload = append(payload, 0)
+		}
+		payload = append(payload, a...)
+	}
+	if _, err := io.WriteString(b.stdin, "runcommand\n"); err != nil {
+		return 0, "", "", err
+	}
+	var n [4]byte
+	binary.BigEndian.PutUint32(n[:], uint32(len(payload)))
+	if _, err := b.stdin.Write(n[:]); err != nil {
+		return 0, "", "", err
+	}
+	if _, err := b.stdin.Write(payload); err != nil {
+		return 0, "", "", err
+	}
+	var stdout, stderr bytes.Buffer
+	for {
+		ch, data, err := b.message()
+		if err != nil {
+			return 0, "", "", err
+		}
+		switch ch {
+		case 'o':
+			_, _ = stdout.Write(data)
+		case 'e':
+			_, _ = stderr.Write(data)
+		case 'r':
+			if len(data) != 4 {
+				return 0, "", "", fmt.Errorf("exit %q", data)
+			}
+			code := int(int32(binary.BigEndian.Uint32(data)))
+			return code, stdout.String(), stderr.String(), nil
+		default:
+			// The protocol lets a client skip an unknown lowercase channel; an
+			// uppercase one asks for input, and there is none to give.
+			if ch >= 'a' && ch <= 'z' {
+				continue
+			}
+			return 0, "", "", fmt.Errorf("channel %q", ch)
+		}
+	}
+}
+
+func (b *cmdBatch) message() (byte, []byte, error) {
+	var hdr [5]byte
+	if _, err := io.ReadFull(b.stdout, hdr[:]); err != nil {
+		return 0, nil, err
+	}
+	n := binary.BigEndian.Uint32(hdr[1:])
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(b.stdout, buf); err != nil {
+		return 0, nil, err
+	}
+	return hdr[0], buf, nil
+}
+
+func (b *cmdBatch) Close() error {
+	err := b.stdin.Close()
+	_, _ = io.Copy(io.Discard, b.stdout)
+	waitErr := b.cmd.Wait()
+	if err != nil {
+		return err
+	}
+	if waitErr != nil {
+		if msg := strings.TrimSpace(b.stderr.String()); msg != "" {
+			return fmt.Errorf("%s cmdserver: %w: %s", b.prog, waitErr, msg)
+		}
+		return fmt.Errorf("%s cmdserver: %w", b.prog, waitErr)
+	}
+	return nil
 }

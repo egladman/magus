@@ -39,24 +39,26 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 		if ctx.Err() != nil {
 			return found, ctx.Err()
 		}
-		for _, glob := range m.buildStep(p, target).Outputs {
-			matches, err := doublestar.Glob(fsys, glob)
-			if err != nil {
-				return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob, err)
-			}
-			for _, rel := range matches {
-				abs := filepath.Join(m.Root(), rel)
-				// A glob can match a directory (dist/** matches dist itself); an
-				// artifact list is about files, and a directory entry would make
-				// the count disagree with what a consumer can open.
-				if fi, statErr := os.Stat(abs); statErr != nil || fi.IsDir() {
-					continue
-				}
-				wsRel, err := filepath.Rel(m.Root(), abs)
+		for run := range types.GlobRuns(m.buildStep(p, target).Outputs) {
+			for _, glob := range run.Globs {
+				matches, err := doublestar.Glob(fsys, glob)
 				if err != nil {
-					continue
+					return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob, err)
 				}
-				found = append(found, types.TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
+				for _, rel := range matches {
+					abs := filepath.Join(m.Root(), rel)
+					// A glob can match a directory (dist/** matches dist itself); an
+					// artifact list is about files, and a directory entry would make
+					// the count disagree with what a consumer can open.
+					if fi, statErr := os.Stat(abs); statErr != nil || fi.IsDir() {
+						continue
+					}
+					wsRel, err := filepath.Rel(m.Root(), abs)
+					if err != nil || run.Excludes(filepath.ToSlash(wsRel)) {
+						continue
+					}
+					found = append(found, types.TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
+				}
 			}
 		}
 	}
@@ -101,27 +103,33 @@ func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dry
 			return CleanedOutputs{}, ctx.Err()
 		}
 		fsys := os.DirFS(p.Dir)
-		for _, glob := range p.AllOutputs() {
-			if ctx.Err() != nil {
-				return CleanedOutputs{}, ctx.Err()
-			}
-			found, err := doublestar.Glob(fsys, glob)
-			if err != nil {
-				return CleanedOutputs{}, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob, err)
-			}
-			for _, rel := range found {
-				abs := filepath.Join(p.Dir, rel)
-				info, err := os.Lstat(abs)
+		for run := range types.GlobRuns(p.AllOutputs()) {
+			for _, glob := range run.Globs {
+				if ctx.Err() != nil {
+					return CleanedOutputs{}, ctx.Err()
+				}
+				found, err := doublestar.Glob(fsys, glob)
 				if err != nil {
-					if os.IsNotExist(err) {
+					return CleanedOutputs{}, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob, err)
+				}
+				for _, rel := range found {
+					// An excluded file is hand-maintained, never a build product.
+					if run.Excludes(rel) {
 						continue
 					}
-					return CleanedOutputs{}, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
+					abs := filepath.Join(p.Dir, rel)
+					info, err := os.Lstat(abs)
+					if err != nil {
+						if os.IsNotExist(err) {
+							continue
+						}
+						return CleanedOutputs{}, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
+					}
+					if info.IsDir() {
+						continue // globs may match containing dirs; only remove files
+					}
+					matched = append(matched, match{project: p.Path, rel: rel, abs: abs})
 				}
-				if info.IsDir() {
-					continue // globs may match containing dirs; only remove files
-				}
-				matched = append(matched, match{project: p.Path, rel: rel, abs: abs})
 			}
 		}
 	}
@@ -224,28 +232,20 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 // handed the owner, it would run a target that touches nothing, then copy the
 // unregenerated file over the conflict and report a clean merge.
 func (m *Magus) FindOutputProducer(absPath string) *types.Project {
-	matches := func(p *types.Project, glob string) bool {
+	matches := func(p *types.Project, globs []string) bool {
 		rel, err := filepath.Rel(p.Dir, absPath)
-		if err != nil {
-			return false
-		}
-		ok, err := doublestar.Match(glob, filepath.ToSlash(rel))
-		return err == nil && ok
+		return err == nil && types.MatchesAnyGlob(globs, filepath.ToSlash(rel))
 	}
 	for _, p := range m.ws.All() {
 		// Sorted, so a path claimed by more than one writer resolves to the same
 		// project every run rather than following map iteration order.
 		for _, writer := range slices.Sorted(maps.Keys(p.InboundOutputs)) {
-			for _, glob := range p.InboundOutputs[writer] {
-				if matches(p, glob) {
-					return m.ws.Get(writer)
-				}
+			if matches(p, p.InboundOutputs[writer]) {
+				return m.ws.Get(writer)
 			}
 		}
-		for _, glob := range p.AllOutputs() {
-			if matches(p, glob) {
-				return p
-			}
+		if matches(p, p.AllOutputs()) {
+			return p
 		}
 	}
 	return nil

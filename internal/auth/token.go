@@ -4,7 +4,7 @@
 // (internal/httpx's bearer guard). It does decide what may be minted: a token never holds more
 // than its minter's grant.
 //
-// Four classes, told apart by the token's prefix (see format.go):
+// Four kinds, told apart by the token's prefix (see format.go):
 //
 //	mgo_ operator  one retrievable file per user, every surface on loopback, never expires
 //	mgs_ stored    stored hashed in tokens.d, a grant within its minter's, always expires
@@ -46,7 +46,7 @@ func OperatorPath() (string, error) {
 
 // GenerateOperator returns a fresh mgo_ operator token without persisting it; pass it to
 // SaveOperator or SaveNewOperator.
-func GenerateOperator() (string, error) { return mintSecret(types.ClassOperator) }
+func GenerateOperator() (string, error) { return mintSecret(types.KindOperator) }
 
 // SaveOperator writes token as the operator token, replacing any existing one atomically, at
 // 0600. It returns the path written.
@@ -122,7 +122,7 @@ func SaveNewOperator(token string) (string, error) {
 // LoadOperator reads the operator token. It returns ErrNoToken when the file does not exist,
 // an InsecureTokenPermissions error for a file looser than 0600, and an OperatorTokenFormat
 // error for a file that does not hold a well-formed mgo_ token, which is what a file written
-// before the class prefix holds. There is no migration: the error names the command that
+// before the kind prefix holds. There is no migration: the error names the command that
 // re-issues it.
 func LoadOperator() (string, error) {
 	path, err := OperatorPath()
@@ -144,9 +144,9 @@ func LoadOperator() (string, error) {
 		return "", fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
-	if class, ok := classOf(tok); !ok || class != types.ClassOperator {
+	if kind, ok := kindOf(tok); !ok || kind != types.KindOperator {
 		return "", types.DiagnosticErrorf(types.OperatorTokenFormat,
-			"auth: the operator token at %s is not an mgo_ token (it predates the class prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
+			"auth: the operator token at %s is not an mgo_ token (it predates the kind prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
 	}
 	return tok, nil
 }
@@ -164,7 +164,7 @@ func RevokeOperator() error {
 }
 
 func operatorCredential(token string) types.Credential {
-	return types.Credential{Class: types.ClassOperator, ID: TokenID(token), Grant: types.GrantOperator}
+	return types.Credential{Kind: types.KindOperator, ID: TokenID(token), Grant: types.GrantOperator}
 }
 
 // EnsureOperator loads the operator token, minting and persisting one when none exists. The

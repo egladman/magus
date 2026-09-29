@@ -1328,7 +1328,7 @@ func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Gr
 }
 
 // KnowledgeGraphWithSymbols returns a graph that INCLUDES the lazily-loaded @symbols
-// shards, for a symbol-seeded MCP query (magus_query on symbols, magus_refs). It
+// shards, for a symbol-seeded MCP query (magus\query on symbols, magus\refs). It
 // builds cache-first into a FRESH graph (not the shared warm graph) and merges
 // symbols into it, so the warm graph the other MCP tools answer from is never
 // polluted with a workspace's (potentially huge) symbol set.
@@ -1358,7 +1358,7 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh)
 }
 
-// KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus_refs: it
+// KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus\refs: it
 // merges only the symbol shards that mention ref (targeted reverse lookup) when ref
 // is an exact symbol ID, or all of them for a fuzzy name. Also fresh-not-warm, so the
 // shared warm graph stays symbol-free.

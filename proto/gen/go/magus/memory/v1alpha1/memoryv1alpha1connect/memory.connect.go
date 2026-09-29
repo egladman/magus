@@ -3,7 +3,7 @@
 // Source: magus/memory/v1alpha1/memory.proto
 
 // Package magus.memory.v1alpha1 is the console-facing MemoryService: an observable, editable
-// view over the durable agent-memory RECORDS the magus_memory MCP tool writes. It is a
+// view over the durable agent-memory RECORDS magus\memory writes through the client MCP tool. It is a
 // SECOND door onto the exact on-disk store that tool maintains - the per-repository
 // records under the user's XDG state directory - never a second store of its own.
 //

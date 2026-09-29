@@ -219,18 +219,36 @@ func (d *DerivedOrder) TopoNodes() []int {
 // recomputing the pair in the message would be a second answer to the same question.
 // For a fallback reader, writes confined to the reader's pruned dirs are invisible to
 // it and derive nothing.
+//
+// Exclusions are never a side of the pair. They rule a pair out only where that is
+// decidable: a literal side one of the two runs excludes.
 func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
-	for _, wg := range n.Writes {
-		if !r.DeclaredReads && underIgnoredDir(wg, r.IgnoreDirs) {
-			continue
-		}
-		for _, rg := range r.Reads {
-			if globsOverlap(wg, rg) {
-				return wg, rg, true
+	for wrun := range types.GlobRuns(n.Writes) {
+		for _, wg := range wrun.Globs {
+			if !r.DeclaredReads && underIgnoredDir(wg, r.IgnoreDirs) {
+				continue
+			}
+			for rrun := range types.GlobRuns(r.Reads) {
+				for _, rg := range rrun.Globs {
+					if globsOverlap(wg, rg) && !excludedLiteral(wg, rg, wrun, rrun) {
+						return wg, rg, true
+					}
+				}
 			}
 		}
 	}
 	return "", "", false
+}
+
+// excludedLiteral reports whether a literal side of an overlapping pair is excluded by
+// either run, so the one path the pair can share is declared by neither.
+func excludedLiteral(wg, rg string, wrun, rrun types.GlobRun) bool {
+	for _, lit := range []string{wg, rg} {
+		if !isMetaSegment(lit) && (wrun.Excludes(lit) || rrun.Excludes(lit)) {
+			return true
+		}
+	}
+	return false
 }
 
 // sharedStep returns the first step key (in n's order) that runs both nodes.
@@ -924,13 +942,13 @@ func DeclaredNode(proj *types.Project, target, step string, lookup func(path str
 		for _, ref := range proj.TargetInputs[target] {
 			reads = append(reads, types.RootGlob(ref.Project, ref.Glob))
 		}
-		reads = append(reads, updates...)
+		reads = types.UnionGlobs(reads, updates)
 	}
-	writes := make([]string, 0, len(proj.TargetOutputs[target])+len(updates))
+	writes := make([]string, 0, len(proj.TargetOutputs[target]))
 	for _, ref := range proj.TargetOutputs[target] {
 		writes = append(writes, types.RootGlob(ref.Project, ref.Glob))
 	}
-	writes = append(writes, updates...)
+	writes = types.UnionGlobs(writes, updates)
 	return TargetNode{
 		Project: proj.Path, Target: target, Steps: []string{step},
 		Reads: reads, Writes: writes,

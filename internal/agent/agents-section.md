@@ -63,11 +63,14 @@ source change; source = the diff worth reading; maintained = magus wrote it
 itself, commit it and never ignore it; unclaimed = keys nothing, but still seeds
 its containing project, so touching it reruns work for no answer).
 
-At session start, or after an MCP tool fails, check `magus status --probe=mcp`.
-When it is serving, prefer the MCP tools (magus_query, magus_run_target,
-magus_output, ...) over shelling out; `magus describe mcp-tools` lists them all.
-When it is unavailable, continue with the CLI fallback. The host manages its
-own MCP connection; do not manually start a server for an agent or block work on it.
+Prefer MCP tools when this host exposes them (`client` for magus\query,
+magus\run, magus\output, and the rest of that module); `magus describe
+mcp-tools` lists them all. If a tool is missing or its call fails, use the CLI
+fallback. `magus status --probe=mcp` checks only the loopback HTTP listener, so
+it cannot judge a host connected through stdio or the server's Unix socket.
+For server-socket diagnosis, `magus status --probe=readiness` checks whether this
+workspace is loaded, not whether the host registered MCP. The host manages its
+own connection; do not manually start a server for an agent or block work on it.
 
 The installed magus-* skills are generated and stamped: an edit to one reads as
 drift to `magus doctor` and is erased by the next `magus agent install
@@ -76,7 +79,7 @@ beside them, which install and verify both leave alone. If one exists, read it
 alongside the shipped skills; it overrides nothing, so report a conflict rather
 than picking a side. The magus-workspace-rules skill carries the method.
 
-The optional repository memory (`magus memory` / `magus_memory`) is user-owned,
+The optional repository memory (`magus memory` / `client` calling magus\memory) is user-owned,
 outside the repo, and shared across worktrees. It is not automatic model memory:
 read it when picking work up, and add only named decisions or plans that a
 later person must reopen. Use `magus memory verify` to repair stale or broken

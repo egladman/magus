@@ -3,6 +3,7 @@ package magus
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -329,6 +330,32 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // ONE exception: a ctx.readsFiles/writesFiles/modifiesExistingFiles call with a
 // non-literal argument is a hard load error, because a computed footprint is invisible
 // to this static read and under-declaring it risks a stale cache hit.
+// checkFootprintExclusions refuses a target whose ctx.readsFiles, ctx.writesFiles or
+// ctx.modifiesExistingFiles declaration carries an exclusion that narrows nothing. Each
+// kind is one declaration however many calls spell it, which is the list every consumer
+// reads.
+func checkFootprintExclusions(n types.TargetGraphNode) error {
+	check := func(call string, globs []string) error {
+		if err := types.CheckExclusions(globs); err != nil {
+			return fmt.Errorf("ctx.%s: %w", call, err)
+		}
+		return nil
+	}
+	reads := make([]string, len(n.ReadsFiles))
+	for i, ref := range n.ReadsFiles {
+		reads[i] = ref.Glob
+	}
+	writes := make([]string, len(n.WritesFiles))
+	for i, ref := range n.WritesFiles {
+		writes[i] = ref.Glob
+	}
+	updates := make([]string, len(n.ModifiesExistingFiles))
+	for i, ref := range n.ModifiesExistingFiles {
+		updates[i] = ref.Glob
+	}
+	return errors.Join(check("readsFiles", reads), check("writesFiles", writes), check("modifiesExistingFiles", updates))
+}
+
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// Cross-project OUTPUT declarations, collected across the whole walk and applied
 	// after it. Deferred because the owner may not be walked yet when the writer declares
@@ -391,6 +418,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// DynamicExec instead.
 				if n.DynamicIO {
 					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+				}
+				if err := checkFootprintExclusions(n); err != nil {
+					return fmt.Errorf("%s: target %q: %w", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, err)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -1249,17 +1279,20 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		// Cross-project refs are KEPT here, unlike AllOutputs which drops them: the
 		// ownership rule inverts, because writing into another tree makes that project
 		// the owner, while READING one is a fact about THIS project's footprint.
-		inputs := make([]string, 0, len(p.TargetInputs))
+		inputs := make([][]string, 0, len(p.TargetInputs)+1)
+		inputs = append(inputs, step.Sources)
 		for _, refs := range p.TargetInputs {
+			list := make([]string, 0, len(refs))
 			for _, ref := range refs {
 				owner := ref.Project
 				if owner == "" {
 					owner = p.Path
 				}
-				inputs = append(inputs, joinGlob(owner, ref.Glob))
+				list = append(list, joinGlob(owner, ref.Glob))
 			}
+			inputs = append(inputs, list)
 		}
-		if types.MatchesAnyGlob(step.Sources, path) || types.MatchesAnyGlob(inputs, path) {
+		if slices.ContainsFunc(inputs, func(globs []string) bool { return types.MatchesAnyGlob(globs, path) }) {
 			entry.SourceOf = append(entry.SourceOf, p.Path)
 		}
 	}
@@ -1310,44 +1343,57 @@ func matchedClaims(p *types.Project, sources []string, path string) []types.File
 	type claimKey struct{ target, role, glob string }
 	seen := make(map[claimKey]bool)
 	var out []types.FileClaim
-	add := func(target, role, glob string) {
-		k := claimKey{target, role, glob}
-		if seen[k] {
-			return
-		}
-		seen[k] = true
-		if ok, _ := doublestar.Match(glob, path); ok {
-			out = append(out, types.FileClaim{Project: p.Path, Target: target, Role: role, Glob: glob})
+	// One declaration at a time, so a glob claims the path only when its own run's
+	// exclusions leave it in.
+	add := func(target, role string, globs []string) {
+		for run := range types.GlobRuns(globs) {
+			for _, glob := range run.Globs {
+				k := claimKey{target, role, glob}
+				if seen[k] {
+					continue
+				}
+				if ok, _ := doublestar.Match(glob, path); ok && !run.Excludes(path) {
+					seen[k] = true
+					out = append(out, types.FileClaim{Project: p.Path, Target: target, Role: role, Glob: glob})
+				}
+			}
 		}
 	}
 	// A same-project ref carries no project of its own; a cross-project one is
 	// relative to the tree it names.
-	owner := func(refProject string) string {
-		if refProject == "" {
-			return p.Path
+	rooted := func(refs []types.InputRef) []string {
+		globs := make([]string, len(refs))
+		for i, ref := range refs {
+			owner := ref.Project
+			if owner == "" {
+				owner = p.Path
+			}
+			globs[i] = joinGlob(owner, ref.Glob)
 		}
-		return refProject
+		return globs
 	}
-	for _, glob := range p.Outputs {
-		add("", "output", joinGlob(p.Path, glob))
+	outputs := make([]string, len(p.Outputs))
+	for i, glob := range p.Outputs {
+		outputs[i] = joinGlob(p.Path, glob)
 	}
+	add("", "output", outputs)
 	for _, t := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
-		for _, ref := range p.TargetOutputs[t] {
-			add(t, "output", joinGlob(owner(ref.Project), ref.Glob))
+		refs := make([]types.InputRef, len(p.TargetOutputs[t]))
+		for i, ref := range p.TargetOutputs[t] {
+			refs[i] = types.InputRef(ref)
 		}
+		add(t, "output", rooted(refs))
 	}
-	for _, glob := range sources {
-		add("", "source", glob)
-	}
+	add("", "source", sources)
 	for _, t := range slices.Sorted(maps.Keys(p.TargetInputs)) {
-		for _, ref := range p.TargetInputs[t] {
-			add(t, "source", joinGlob(owner(ref.Project), ref.Glob))
-		}
+		add(t, "source", rooted(p.TargetInputs[t]))
 	}
 	for _, t := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
-		for _, ref := range p.TargetUpdates[t] {
-			add(t, "update", joinGlob(owner(ref.Project), ref.Glob))
+		refs := make([]types.InputRef, len(p.TargetUpdates[t]))
+		for i, ref := range p.TargetUpdates[t] {
+			refs[i] = types.InputRef(ref)
 		}
+		add(t, "update", rooted(refs))
 	}
 	return out
 }

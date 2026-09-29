@@ -388,6 +388,10 @@ func (c Chain) String() string {
 // project (dot-/repo-relative as written in the magusfile until resolved to
 // workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
 // affected-tracking depends_on edge, and the consumes edge all read this one shape.
+//
+// A Glob starting with "!" is an exclusion, here and in OutputRef and UpdateRef: it
+// narrows globs the target declared before it in the same kind of call, as GlobRuns
+// scopes it. Order within a target's refs is therefore meaningful and preserved.
 type InputRef struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Glob    string `json:"glob" yaml:"glob"`

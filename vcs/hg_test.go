@@ -1,6 +1,10 @@
 package vcs
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -246,6 +250,128 @@ func TestParseHgHistoryRefusesABadCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"a"}, got[0].Files)
+}
+
+func TestDirstateCheckoutIDReadsBothFormats(t *testing.T) {
+	dir := t.TempDir()
+	dot := filepath.Join(dir, ".hg")
+	require.NoError(t, os.MkdirAll(dot, 0o755))
+	p1 := bytes.Repeat([]byte{0xab}, 20)
+	p2 := bytes.Repeat([]byte{0xcd}, 20)
+	require.NoError(t, os.WriteFile(filepath.Join(dot, "dirstate"), append(append([]byte{}, p1...), p2...), 0o644))
+	id, ok := dirstateCheckoutID(dot)
+	require.True(t, ok)
+	assert.Equal(t, hex.EncodeToString(p1)+hex.EncodeToString(p2), id)
+
+	var v2 []byte
+	v2 = append(v2, []byte("dirstate-v2\n")...)
+	v2 = append(v2, p1...)
+	v2 = append(v2, bytes.Repeat([]byte{0}, 12)...)
+	v2 = append(v2, p2...)
+	v2 = append(v2, bytes.Repeat([]byte{0}, 12)...)
+	require.NoError(t, os.WriteFile(filepath.Join(dot, "dirstate"), v2, 0o644))
+	id, ok = dirstateCheckoutID(dot)
+	require.True(t, ok)
+	assert.Equal(t, hex.EncodeToString(append(p1, bytes.Repeat([]byte{0}, 12)...))+hex.EncodeToString(append(p2, bytes.Repeat([]byte{0}, 12)...)), id)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dot, "dirstate"), []byte("short"), 0o644))
+	_, ok = dirstateCheckoutID(dot)
+	assert.False(t, ok)
+}
+
+func TestHgCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.buzz": "one\n"})
+	node, err := vcsOutput(t.Context(), dir, "hg", "log", "-r", ".", "-T", "{node}")
+	require.NoError(t, err)
+	id, ok := hgVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.Equal(t, node+strings.Repeat("0", 40), id)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.buzz"), []byte("two\n"), 0o644))
+	vcsTestRun(t, dir, "hg", "status")
+	again, ok := hgVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.Equal(t, id, again, "status rewrites the dirstate stat cache and must leave the parent")
+
+	vcsTestRun(t, dir, "hg", "commit", "-m", "edit", "-u", "test")
+	committed, ok := hgVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.NotEqual(t, id, committed)
+}
+
+func TestHgObjectBatchReadsCommittedFiles(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
+	batch, err := hgVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	for _, rel := range []string{"a.buzz", "dir/b.buzz"} {
+		want, err := hgVCS{}.ReadFileAt(t.Context(), dir, ".", rel)
+		require.NoError(t, err)
+		got, err := batch.Read(rel)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, rel)
+	}
+	_, err = batch.Read("no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("a.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+}
+
+// cmdFrames encodes command-server messages: a channel byte, a big-endian
+// length, then the data.
+func cmdFrames(msgs ...string) string {
+	var buf bytes.Buffer
+	for _, m := range msgs {
+		var n [4]byte
+		binary.BigEndian.PutUint32(n[:], uint32(len(m)-1))
+		buf.WriteByte(m[0])
+		buf.Write(n[:])
+		buf.WriteString(m[1:])
+	}
+	return buf.String()
+}
+
+func fakeCmdBatch(stdout string) *cmdBatch {
+	return &cmdBatch{
+		prog:   "hg",
+		rev:    ".",
+		stdin:  nopWriteCloser{&bytes.Buffer{}},
+		stdout: bufio.NewReader(strings.NewReader(stdout)),
+		stderr: &bytes.Buffer{},
+	}
+}
+
+// The command-server protocol makes an unknown lowercase channel optional, so
+// a server that adds a debug channel still answers.
+func TestCmdBatchSkipsAnUnknownLowercaseChannel(t *testing.T) {
+	b := fakeCmdBatch(cmdFrames("ddebug", "oone\n", "r\x00\x00\x00\x00"))
+	got, err := b.Read("a.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+
+	b = fakeCmdBatch(cmdFrames("I\x00\x00\x10\x00"))
+	_, err = b.Read("a.buzz")
+	require.ErrorContains(t, err, "channel 'I'")
+}
+
+// A malformed reply leaves the stream out of step with its commands, so every
+// later read returns that failure instead of a reply meant for another path.
+func TestCmdBatchFailureIsSticky(t *testing.T) {
+	b := fakeCmdBatch(cmdFrames("r\x00\x00", "otwo\n", "r\x00\x00\x00\x00"))
+	_, first := b.Read("a.buzz")
+	require.Error(t, first)
+	_, err := b.Read("b.buzz")
+	assert.Equal(t, first, err)
 }
 
 func TestKeepUnder(t *testing.T) {

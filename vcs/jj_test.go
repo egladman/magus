@@ -1,7 +1,9 @@
 package vcs
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -130,4 +132,44 @@ func TestParseJJHistory(t *testing.T) {
 	assert.Equal(t, []string{"docs/a.md", "Fnamed"}, got[0].Files)
 	assert.Equal(t, "ef01", got[1].ID)
 	assert.Nil(t, got[1].Files)
+}
+
+func TestJJCheckoutIDReadsTheSharedOperationHead(t *testing.T) {
+	dir := t.TempDir()
+	primary := filepath.Join(dir, "primary")
+	require.NoError(t, os.MkdirAll(filepath.Join(primary, "op_heads", "heads"), 0o755))
+	for _, name := range []string{"b", "a"} {
+		require.NoError(t, os.WriteFile(filepath.Join(primary, "op_heads", "heads", name), nil, 0o644))
+	}
+	secondary := filepath.Join(dir, "secondary")
+	require.NoError(t, os.MkdirAll(filepath.Join(secondary, ".jj"), 0o755))
+	rel, err := filepath.Rel(filepath.Join(secondary, ".jj"), primary)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(secondary, ".jj", "repo"), []byte(rel+"\n"), 0o644))
+
+	id, ok := jjVCS{}.CheckoutID(secondary)
+	require.True(t, ok)
+	assert.Equal(t, "a,b", id)
+}
+
+func TestJJCheckoutIDSurvivesACleanDiff(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	jjInitRepo(t, dir, map[string]string{"a.buzz": "one\n"})
+	id, ok := jjVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	require.NotEmpty(t, id)
+
+	vcsTestRun(t, dir, "jj", "diff", "--name-only")
+	again, ok := jjVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.Equal(t, id, again, "a clean diff writes no operation")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.buzz"), []byte("two\n"), 0o644))
+	vcsTestRun(t, dir, "jj", "commit", "-m", "edit")
+	committed, ok := jjVCS{}.CheckoutID(dir)
+	require.True(t, ok)
+	assert.NotEqual(t, id, committed)
 }

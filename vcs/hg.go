@@ -926,6 +926,17 @@ func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // contains, which a graph diff reads as a change.
 const hgArchivalMeta = ".hg_archival.txt"
 
+// CheckoutID is the dirstate's parent nodes. See dirstateCheckoutID.
+func (hgVCS) CheckoutID(dir string) (string, bool) {
+	return dirstateCheckoutID(filepath.Join(dir, ".hg"))
+}
+
+// OpenObjectBatch starts one command server for every approved source a guard
+// load reads. See hgFamilyOpenObjectBatch.
+func (hgVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
+	return hgFamilyOpenObjectBatch(ctx, "hg", root, rev)
+}
+
 // ReadFileAt implements types.RevisionFileReader via `hg cat -r <rev>`. "" is `.`, hg's
 // spelling of the working directory's parent: the committed revision, as HEAD is for git.
 func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {

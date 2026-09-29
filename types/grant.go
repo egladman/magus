@@ -173,51 +173,53 @@ func (n Need) Validate() error {
 	return nil
 }
 
-// CredentialClass is which kind of bearer a credential is. A bearer's class is carried in the
+// CredentialKind is which kind of bearer a credential is. The kind is carried in the
 // token string itself, as the prefix, so a verifier knows which store to consult before it
-// hashes anything. [ClassStdio] and [ClassSocketPeer] are not bearers and have no token.
-type CredentialClass string
+// hashes anything. [KindStdio] and [KindSocketPeer] are not bearers and have no token.
+type CredentialKind string
 
 const (
-	// ClassOperator is the retrievable operator token (mgo_), one per user.
-	ClassOperator CredentialClass = "operator"
-	// ClassStored is a stored, hashed, expiring token (mgs_): a connector, console or viewer.
-	ClassStored CredentialClass = "stored"
-	// ClassShare is a share link's token (mgl_), held in server memory only.
-	ClassShare CredentialClass = "share"
-	// ClassExchange is a one-time code (mgx_) a console link carries in place of a token. It is
+	// KindOperator is the retrievable operator token (mgo_), one per user.
+	KindOperator CredentialKind = "operator"
+	// KindStored is a stored, hashed, expiring token (mgs_): a connector, console or viewer.
+	KindStored CredentialKind = "stored"
+	// KindShare is a share link's token (mgl_), held in server memory only.
+	KindShare CredentialKind = "share"
+	// KindExchange is a one-time code (mgx_) a console link carries in place of a token. It is
 	// never a bearer: the console trades it once, within a minute, for the stored token it
 	// stands for.
-	ClassExchange CredentialClass = "exchange"
-	// ClassStdio is the caller of `magus mcp`: the process an agent host launched with pipes
+	KindExchange CredentialKind = "exchange"
+	// KindStdio is the caller of `magus mcp`: the process an agent host launched with pipes
 	// on its stdin and stdout. It presents no token and has no prefix, so no verifier can
 	// return it. The host started the process as the local user, the trust the CLI itself
 	// runs on.
-	ClassStdio CredentialClass = "stdio"
-	// ClassSocketPeer is a process connected to a magus unix socket whose uid, as the kernel
+	KindStdio CredentialKind = "stdio"
+	// KindSocketPeer is a process connected to a magus unix socket whose uid, as the kernel
 	// reports it for the connection, is the server's own. It presents no token, so no bearer
 	// verifier can return it.
-	ClassSocketPeer CredentialClass = "socket-peer"
+	KindSocketPeer CredentialKind = "socket-peer"
 )
 
 // CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP surface and nothing
 // past it, the grant a connector token holds. It has no ID because it has no secret, and one
 // process serves one caller.
-var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
+var CredentialStdio = Credential{Kind: KindStdio, Grant: GrantConnector}
 
 // CredentialSocketPeer is what a request on a magus unix socket is admitted as once its peer's
 // uid matches the server's: MCP and the console surfaces, never token management. A build step
 // runs as the same user and can reach the socket, and minting a token would let it keep access
 // past the run, which is also why landlock keeps it from the operator file. It has no ID
 // because it has no secret.
-var CredentialSocketPeer = Credential{Class: ClassSocketPeer, Grant: GrantSocketPeer}
+var CredentialSocketPeer = Credential{Kind: KindSocketPeer, Grant: GrantSocketPeer}
 
 // Credential is what a request was admitted as, a bearer the server verified, [CredentialStdio]
 // or [CredentialSocketPeer]: what it is, which one, what its owner called it, and what it may
 // do. The Grant is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
-	Class CredentialClass `json:"class,omitempty" yaml:"class,omitempty"`
+	// Kind is which bearer this is. The stored key stays "class": trail records,
+	// token files, and the Buzz field already use that spelling.
+	Kind CredentialKind `json:"class,omitempty" yaml:"class,omitempty" buzz:"class"`
 	// ID is the first 8 hex of the secret's SHA-256: stable for the token's life and never
 	// reused by a new token that takes the same Name.
 	ID string `json:"id,omitempty" yaml:"id,omitempty"`
@@ -232,15 +234,15 @@ func (c Credential) Phrase() string {
 	switch {
 	case c == Credential{}:
 		return ""
-	case c.Class == ClassOperator:
+	case c.Kind == KindOperator:
 		return "the operator token"
-	case c.Class == ClassShare:
+	case c.Kind == KindShare:
 		return strings.TrimSpace("share link " + c.ID)
-	case c.Class == ClassExchange:
+	case c.Kind == KindExchange:
 		return strings.TrimSpace("link code " + c.ID)
-	case c.Class == ClassStdio:
+	case c.Kind == KindStdio:
 		return "stdio"
-	case c.Class == ClassSocketPeer:
+	case c.Kind == KindSocketPeer:
 		return "the socket's owner"
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"

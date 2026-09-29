@@ -2,11 +2,13 @@ package vcs
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/zlib"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -256,7 +258,7 @@ func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
 	dir := t.TempDir()
 	installed, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
 	require.NoError(t, err)
-	assert.Nil(t, installed)
+	assert.Equal(t, []string{}, installed)
 	assert.NoDirExists(t, filepath.Join(dir, ".git"))
 
 	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
@@ -3576,3 +3578,67 @@ func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a.md", "b.md"}, renamed[0].Files)
 }
+
+func TestGitObjectBatchReadsCommittedFiles(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{
+		"magusfile.buzz":          "one\n",
+		"tools/policy/guard.buzz": "two\n",
+	})
+	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	for _, rel := range []string{"magusfile.buzz", "tools/policy/guard.buzz"} {
+		want, err := gitVCS{}.ReadFileAt(t.Context(), dir, "HEAD", rel)
+		require.NoError(t, err)
+		got, err := batch.Read(rel)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, rel)
+	}
+	_, err = batch.Read("no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("magusfile.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+}
+
+// A newline in a path would be two requests to cat-file, and every later reply
+// would answer the request before it: an approved read of one file would return
+// another's bytes.
+func TestGitObjectBatchRefusesAPathWithANewline(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{
+		"magusfile.buzz": "one\n",
+		"other.buzz":     "two\n",
+	})
+	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	_, err = batch.Read("x\nHEAD:other.buzz")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("magusfile.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+}
+
+// Once a reply fails to parse, the stream is out of step with the requests, so
+// the batch answers every later read with that failure instead of a reply that
+// belongs to another path.
+func TestGitObjectBatchFailureIsSticky(t *testing.T) {
+	b := &objectBatch{
+		rev:    "HEAD",
+		stdin:  nopWriteCloser{&bytes.Buffer{}},
+		stdout: bufio.NewReader(strings.NewReader("garbage\nHEAD:b.buzz missing\n")),
+	}
+	_, first := b.Read("a.buzz")
+	require.ErrorContains(t, first, "malformed header")
+	_, err := b.Read("b.buzz")
+	assert.Equal(t, first, err)
+}
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }

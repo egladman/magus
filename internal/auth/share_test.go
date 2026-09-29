@@ -14,9 +14,9 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
 	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)
 	require.NoError(t, err)
-	class, ok := classOf(secret)
+	kind, ok := kindOf(secret)
 	require.True(t, ok)
-	assert.Equal(t, types.ClassShare, class)
+	assert.Equal(t, types.KindShare, kind)
 
 	now := time.Now()
 	assert.True(t, tok.Verify(secret, now))
@@ -25,7 +25,7 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	assert.False(t, tok.Verify(other, now), "another link's secret")
 	assert.False(t, tok.Verify(secret, tok.Expires.Add(time.Second)), "after expiry")
 	assert.False(t, ShareToken{}.Verify(secret, now), "the zero token verifies nothing")
-	assert.Equal(t, types.Credential{Class: types.ClassShare, ID: tok.ID(), Grant: types.GrantViewer}, tok.Credential())
+	assert.Equal(t, types.Credential{Kind: types.KindShare, ID: tok.ID(), Grant: types.GrantViewer}, tok.Credential())
 }
 
 // The share door follows the minting rule: a minter below the share's grant is refused, and

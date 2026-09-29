@@ -96,6 +96,36 @@ func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "per-target output should be deleted")
 }
 
+// TestCleanOutputsKeepsAnExcludedFile: a hand-maintained file inside a generated tree is
+// carved out of the declaration, so clean leaves it and the merge driver finds no target
+// to regenerate it from, while the generated file beside it goes.
+func TestCleanOutputsKeepsAnExcludedFile(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	generated := filepath.Join(root, "gen", "fs.go")
+	hand := filepath.Join(root, "gen", "runtime.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(generated), 0o755))
+	for _, f := range []string{generated, hand} {
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0o644))
+	}
+
+	assert.Equal(t, ".", findProducer(t, m, "gen/fs.go"))
+	assert.Empty(t, findProducer(t, m, "gen/runtime.go"), "an excluded file has no producer")
+
+	cleaned, err := m.CleanOutputs(context.Background(), m.All(), false)
+	require.NoError(t, err, "CleanOutputs")
+	require.Len(t, cleaned.Removed, 1)
+	assert.NoFileExists(t, generated)
+	assert.FileExists(t, hand)
+}
+
 // TestCleanOutputsDryRunDoesNotDelete verifies that --dry-run lists matched
 // files without deleting them.
 func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {

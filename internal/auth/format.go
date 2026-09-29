@@ -12,12 +12,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Every magus token, whatever its class, has one layout (GitHub's newer token format):
+// Every magus token, whatever its kind, has one layout (GitHub's newer token format):
 //
-//	<class prefix><43 base62: 256-bit crypto/rand><6 base62: CRC32 of the body>
+//	<kind prefix><43 base62: 256-bit crypto/rand><6 base62: CRC32 of the body>
 //
-// The prefix names the class, so a verifier routes a token to the one store that can hold
-// it before hashing anything, and a secret scanner recognizes every class with
+// The prefix names the kind, so a verifier routes a token to the one store that can hold
+// it before hashing anything, and a secret scanner recognizes every kind with
 // `mg[oslx]_[0-9A-Za-z]{49}`. The checksum rejects a typo or a truncated paste offline. The
 // body has a ~10^77 keyspace, so one fast SHA-256 at rest is the right hash: there is
 // nothing to brute-force, and a slow hash would only add latency to every request.
@@ -35,20 +35,20 @@ const (
 	base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
 
-var classPrefixes = map[types.CredentialClass]string{
-	types.ClassOperator: prefixOperator,
-	types.ClassStored:   prefixStored,
-	types.ClassShare:    prefixShare,
-	types.ClassExchange: prefixExchange,
+var kindPrefixes = map[types.CredentialKind]string{
+	types.KindOperator: prefixOperator,
+	types.KindStored:   prefixStored,
+	types.KindShare:    prefixShare,
+	types.KindExchange: prefixExchange,
 }
 
-// classOf reads a token's class from its prefix and checks its length, alphabet and
+// kindOf reads a token's kind from its prefix and checks its length, alphabet and
 // checksum. It touches no store: a string that fails here is refused before any work is done
 // on it, and one that passes is only well-formed, not valid.
-func classOf(token string) (types.CredentialClass, bool) {
-	for class, prefix := range classPrefixes {
+func kindOf(token string) (types.CredentialKind, bool) {
+	for kind, prefix := range kindPrefixes {
 		if rest, ok := strings.CutPrefix(token, prefix); ok {
-			return class, validBody(rest)
+			return kind, validBody(rest)
 		}
 	}
 	return "", false
@@ -66,11 +66,11 @@ func validBody(rest string) bool {
 	return err == nil && check == want
 }
 
-// mintSecret returns a fresh token of class.
-func mintSecret(class types.CredentialClass) (string, error) {
-	prefix, ok := classPrefixes[class]
+// mintSecret returns a fresh token of kind.
+func mintSecret(kind types.CredentialKind) (string, error) {
+	prefix, ok := kindPrefixes[kind]
 	if !ok {
-		return "", fmt.Errorf("auth: no token format for class %q", class)
+		return "", fmt.Errorf("auth: no token format for kind %q", kind)
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {

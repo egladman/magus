@@ -3,6 +3,7 @@ package job
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,7 +114,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 
 	_, err := s.Exec(ctx, "typo", baseA)
 	require.ErrorIs(t, err, ErrUnknownJob)
-	assert.Contains(t, err.Error(), "magus_job list", "the message names where the declared ids are")
+	assert.Contains(t, err.Error(), hint.LsJobs.String(), "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 
 	got, err := s.List()

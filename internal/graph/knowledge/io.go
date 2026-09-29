@@ -1,7 +1,6 @@
 package knowledge
 
 import (
-	"path"
 	"slices"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -40,21 +39,24 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 	// pattern matches. provenance attributes the edge to the consuming/producing
 	// project. Shared by outputs (project-relative globs joined to the project path
 	// first) and inputs (each already workspace-relative via its owning project).
+	// pats is one declaration, so a pattern links only what its run's exclusions leave.
 	linkPat := func(targetNode, provenance string, relation types.RelationID, pats []string) {
-		for _, pat := range pats {
-			var matched []string
-			for _, p := range paths {
-				if ok, _ := doublestar.Match(pat, p); ok {
-					matched = append(matched, p)
+		for run := range types.GlobRuns(pats) {
+			for _, pat := range run.Globs {
+				var matched []string
+				for _, p := range paths {
+					if ok, _ := doublestar.Match(pat, p); ok && !run.Excludes(p) {
+						matched = append(matched, p)
+					}
 				}
-			}
-			// No match, or too broad to be informative: contribute nothing rather than
-			// a phantom edge or a god-node fan-out.
-			if len(matched) == 0 || len(matched) > maxIOFanout {
-				continue
-			}
-			for _, p := range matched {
-				s.Edges = append(s.Edges, extractedEdge(targetNode, pathToNode[p], relation, provenance))
+				// No match, or too broad to be informative: contribute nothing rather than
+				// a phantom edge or a god-node fan-out.
+				if len(matched) == 0 || len(matched) > maxIOFanout {
+					continue
+				}
+				for _, p := range matched {
+					s.Edges = append(s.Edges, extractedEdge(targetNode, pathToNode[p], relation, provenance))
+				}
 			}
 		}
 	}
@@ -70,18 +72,18 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 				if owner == "" {
 					owner = p.Path
 				}
-				outPats[i] = path.Join(owner, ref.Glob)
+				outPats[i] = types.RootGlob(owner, ref.Glob)
 			}
 			linkPat(tID, p.Path, types.RelationProduces, outPats)
 			// Every input carries its OWNING project's workspace-relative path (resolved
 			// in TargetGraph): a same-project input's owner is this project, a
-			// cross-project input's is the other one. path.Join(Project, Glob) yields the
+			// cross-project input's is the other one. RootGlob(Project, Glob) yields the
 			// workspace-relative file path uniformly, matched against the file node in the
 			// owning project directly, never re-anchored to the consumer's path.
 			if len(n.ReadsFiles) > 0 {
 				pats := make([]string, len(n.ReadsFiles))
 				for i, ref := range n.ReadsFiles {
-					pats[i] = path.Join(ref.Project, ref.Glob)
+					pats[i] = types.RootGlob(ref.Project, ref.Glob)
 				}
 				linkPat(tID, p.Path, types.RelationConsumes, pats)
 			}

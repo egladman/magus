@@ -1054,6 +1054,55 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 		"a per-target ctx.writesFiles glob belongs in that target's own description")
 }
 
+// TestClassifyFiles_ExcludedOutputIsASource is the gen/ package that mixes generated
+// files with a hand-maintained runtime: the generator's declaration carves the runtime
+// out, so describe calls it the source another target reads rather than an output to
+// regenerate, and names no output claim for it.
+func TestClassifyFiles_ExcludedOutputIsASource(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+}
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("gen/*.go");
+}
+`,
+	})
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	out, err := m.ClassifyFiles(context.Background(), []string{"gen/runtime.go", "gen/fs.go"})
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, out, 2)
+
+	hand, generated := out[0], out[1]
+	assert.Equal(t, "source", hand.Role)
+	assert.Empty(t, hand.OutputOf)
+	assert.Equal(t, []types.FileClaim{{Project: ".", Target: "test", Role: "source", Glob: "gen/*.go"}}, hand.Claims)
+	assert.Equal(t, "output", generated.Role)
+	assert.Equal(t, []string{"."}, generated.OutputOf)
+	assert.Contains(t, generated.Claims, types.FileClaim{Project: ".", Target: "generate", Role: "output", Glob: "gen/*.go"})
+}
+
+// TestOpen_RefusesAnExclusionThatNarrowsNothing: a declaration of nothing but exclusions
+// would be kept and silently match nothing while its author believes a file is carved
+// out, so the load refuses it.
+func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("!gen/runtime.go");
+}
+`,
+	})
+
+	_, err := Open(context.Background(), root)
+
+	require.ErrorContains(t, err, `target "generate": ctx.writesFiles: every glob in`)
+}
+
 // TestEvaluateTarget_ReportsTheChainInOrder walks the composition the whole way: the
 // magusfile's ctx.needs arguments, through resolution onto the project, out as the
 // evaluated target's chain. The hop that matters is the last one (the extractor has

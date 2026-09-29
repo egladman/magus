@@ -38,7 +38,7 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 }
 
 // ForkMerge applies a field merge the way `magus job fork` applies a declaration, for the
-// doors that fork by merge (the magus_job tool and magus\job.put). A merge that creates
+// doors that fork by merge (magus\job\put, from the client tool or a magusfile). A merge that creates
 // the row is held to the jobs limits and to unambiguous symbol gates, and takes
 // default_timeout when it named no timeout. A merge onto a row that already exists is an
 // update of that job, so it passes as it always did. read may be nil where no graph is at

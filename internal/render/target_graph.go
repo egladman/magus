@@ -259,9 +259,8 @@ func writeRouting(b *md.Builder, r *types.KnowledgeRouting, projects []types.Tar
 		{Code: canon(hint.Query, `"<terms>"`), Note: "kind=spell, project=pkg/foo, relation=uses, free text, kind!=op"},
 		{Code: canon(hint.Explain, "<node>"), Note: "one node: its edges, provenance, blast radius"},
 		{Code: canon(hint.Path, "<a>", "<b>"), Note: "how two nodes connect"},
-		{Code: canon(hint.GraphStats), Note: "god nodes, orphans, doc coverage (MCP: " + hint.ToolStats.String() + ")"},
-		{Code: canon(hint.GraphExport, "-o", "json"), Note: "the whole graph (MCP: " + hint.ToolQuery.String() + ", " +
-			hint.ToolExplain.String() + ", " + hint.ToolPath.String() + ")"},
+		{Code: canon(hint.GraphStats), Note: "god nodes, orphans, doc coverage (MCP: " + hint.ToolClient.String() + ", magus\\stats)"},
+		{Code: canon(hint.GraphExport, "-o", "json"), Note: "the whole graph (MCP: " + hint.ToolClient.String() + ", magus\\query, magus\\explain, magus\\path)"},
 	})
 
 	if r == nil {

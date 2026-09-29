@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
-
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
@@ -225,24 +223,20 @@ func (m *Magus) edgeInputs() func(string) bool {
 			}
 		}
 	}
-	var globs []string
+	var declared [][]string
 	if m.wsReg != nil {
 		for _, name := range m.wsReg.Providers() {
 			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok {
-				globs = append(globs, sp.Sources()...)
+				declared = append(declared, sp.Sources())
 			}
 		}
 	}
+	globs := types.UnionGlobs(declared...)
 	return func(p string) bool {
 		if names[path.Base(p)] || strings.HasSuffix(p, ".buzz") || types.LooksLikeBuildInput(p) {
 			return true
 		}
-		for _, g := range globs {
-			if ok, _ := doublestar.Match(g, p); ok {
-				return true
-			}
-		}
-		return false
+		return types.MatchesAnyGlob(globs, p)
 	}
 }
 

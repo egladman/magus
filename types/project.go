@@ -1,6 +1,9 @@
 package types
 
 import (
+	"fmt"
+	"iter"
+	"maps"
 	"path"
 	"path/filepath"
 	"slices"
@@ -344,32 +347,37 @@ type Project struct {
 // spare capacity from AttachSpell, so handing the live backing array out of an exported
 // method lets one append reach into the project record.
 //
-// Contributions are sorted so the result is deterministic despite the maps.
+// Contributions are sorted so the result is deterministic despite the maps. A
+// declaration carrying exclusions stays whole, joined by [UnionGlobs], so its
+// exclusions narrow only its own globs.
 func (p *Project) AllOutputs() []string {
 	if len(p.TargetOutputs) == 0 && len(p.InboundOutputs) == 0 {
 		return slices.Clone(p.Outputs)
 	}
+	lists := [][]string{p.Outputs}
 	var extra []string
-	add := func(glob string) {
-		if !slices.Contains(p.Outputs, glob) && !slices.Contains(extra, glob) {
-			extra = append(extra, glob)
+	add := func(globs []string) {
+		if slices.ContainsFunc(globs, isExclusion) {
+			lists = append(lists, globs)
+			return
 		}
+		extra = append(extra, globs...)
 	}
-	for _, refs := range p.TargetOutputs {
-		for _, ref := range refs {
+	for _, target := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
+		var own []string
+		for _, ref := range p.TargetOutputs[target] {
 			if ref.Project != "" && ref.Project != p.Path {
 				continue // written into another tree; that project counts it
 			}
-			add(ref.Glob)
+			own = append(own, ref.Glob)
 		}
+		add(own)
 	}
-	for _, globs := range p.InboundOutputs {
-		for _, glob := range globs {
-			add(glob)
-		}
+	for _, writer := range slices.Sorted(maps.Keys(p.InboundOutputs)) {
+		add(p.InboundOutputs[writer])
 	}
 	slices.Sort(extra)
-	return append(slices.Clone(p.Outputs), extra...)
+	return UnionGlobs(append(lists, extra)...)
 }
 
 // RootGlob roots a glob declared against projectPath at the WORKSPACE, which is the
@@ -389,7 +397,12 @@ func (p *Project) AllOutputs() []string {
 // A glob reaching PAST the workspace root is rejected where it is declared
 // (workspace.WithSources), not here: this is a pure path operation with one answer, and
 // only the declaration site can name the option that wrote it.
+//
+// An exclusion stays one: its pattern is rooted and the "!" goes back in front.
 func RootGlob(projectPath, glob string) string {
+	if pattern, ok := CutExclusion(glob); ok {
+		return "!" + RootGlob(projectPath, pattern)
+	}
 	if projectPath == "" || projectPath == "." {
 		return path.Clean(glob)
 	}
@@ -406,27 +419,159 @@ func RootGlob(projectPath, glob string) string {
 // cache walk does with one. Tolerance is the right default (a bad glob must not fail a
 // build that never depended on it) but it is silent, so the pattern is worth reporting
 // where the glob set is assembled: see [InvalidGlobs].
+//
+// Exclusions apply as [GlobRuns] scopes them, so a path matches when some run's glob
+// matches it and none of that run's exclusions do.
 func MatchesAnyGlob(globs []string, path string) bool {
-	for _, g := range globs {
-		if ok, _ := doublestar.Match(g, path); ok {
+	for run := range GlobRuns(globs) {
+		if run.Matches(path) {
 			return true
 		}
 	}
 	return false
 }
 
+// CutExclusion reports whether a declared glob is an exclusion ("!pattern") and returns
+// the pattern after the bang. A literal leading bang is written `\!`, doublestar's own
+// escape, so that entry stays an ordinary glob matching a name that starts with "!".
+func CutExclusion(glob string) (pattern string, ok bool) {
+	return strings.CutPrefix(glob, "!")
+}
+
+func isExclusion(glob string) bool { return strings.HasPrefix(glob, "!") }
+
+// GlobRun is one run of a declared glob list: its globs, then the exclusions that
+// follow them, each still carrying its "!".
+type GlobRun struct {
+	Globs      []string
+	Exclusions []string
+}
+
+// Excludes reports whether one of the run's exclusions matches path.
+func (r GlobRun) Excludes(path string) bool {
+	for _, g := range r.Exclusions {
+		pattern, _ := CutExclusion(g)
+		if ok, _ := doublestar.Match(pattern, path); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Matches reports whether one of the run's globs matches path and no exclusion does.
+func (r GlobRun) Matches(path string) bool {
+	for _, g := range r.Globs {
+		if ok, _ := doublestar.Match(g, path); ok {
+			return !r.Excludes(path)
+		}
+	}
+	return false
+}
+
+// GlobRuns splits a declared glob list into runs, each some globs followed by the
+// exclusions that narrow them. An exclusion reaches back only to the previous
+// exclusion, so a glob listed after one starts a fresh run that no earlier exclusion
+// narrows. That is where this departs from gitignore, deliberately: a target's separate
+// ctx.writesFiles calls reach magus as one list, and a list [UnionGlobs] flattens from
+// several declarations must match their union, so no declaration's exclusions may leak
+// into the globs of another. Leading exclusions narrow nothing and are skipped; see
+// [CheckExclusions] for where a declaration is refused over one.
+//
+// The runs share globs' backing array.
+func GlobRuns(globs []string) iter.Seq[GlobRun] {
+	return func(yield func(GlobRun) bool) {
+		for start := 0; start < len(globs); {
+			mid := start
+			for mid < len(globs) && !isExclusion(globs[mid]) {
+				mid++
+			}
+			end := mid
+			for end < len(globs) && isExclusion(globs[end]) {
+				end++
+			}
+			if mid > start && !yield(GlobRun{Globs: globs[start:mid], Exclusions: globs[mid:end]}) {
+				return
+			}
+			start = end
+		}
+	}
+}
+
+// UnionGlobs flattens several declared glob lists into one that [MatchesAnyGlob]
+// answers as their union. Plain concatenation cannot: a list ending in a glob, followed
+// by one opening with a glob and closing with an exclusion, fuses into one run, and the
+// second list's exclusion then narrows the first's globs. So every list's runs up to its
+// last exclusion come first, in the order given and each distinct run once, and the
+// trailing plain globs of every list follow, deduplicated. A list's leading exclusions
+// are dropped, since they narrow nothing and would otherwise join the run before them.
+//
+// The result never aliases an argument.
+func UnionGlobs(lists ...[]string) []string {
+	var runs, plain []string
+	var seen []GlobRun
+	for _, list := range lists {
+		cut := 0
+		for i, g := range list {
+			if isExclusion(g) {
+				cut = i + 1
+			}
+		}
+		for run := range GlobRuns(list[:cut]) {
+			if slices.ContainsFunc(seen, func(r GlobRun) bool {
+				return slices.Equal(r.Globs, run.Globs) && slices.Equal(r.Exclusions, run.Exclusions)
+			}) {
+				continue
+			}
+			seen = append(seen, run)
+			runs = append(append(runs, run.Globs...), run.Exclusions...)
+		}
+		for _, g := range list[cut:] {
+			if !slices.Contains(plain, g) {
+				plain = append(plain, g)
+			}
+		}
+	}
+	return append(runs, plain...)
+}
+
+// CheckExclusions refuses a declaration whose exclusions cannot narrow anything: one
+// that opens with an exclusion, which includes one made of nothing else, and an
+// exclusion naming no pattern. Each would otherwise be kept and silently match nothing,
+// leaving the author believing a file is carved out while every consumer disagrees.
+func CheckExclusions(globs []string) error {
+	for i, g := range globs {
+		pattern, ok := CutExclusion(g)
+		if !ok {
+			continue
+		}
+		switch {
+		case pattern == "":
+			return fmt.Errorf("exclusion %q names no pattern", g)
+		case i == 0 && !slices.ContainsFunc(globs, func(other string) bool { return !isExclusion(other) }):
+			return fmt.Errorf("every glob in %q is an exclusion, so it declares nothing; "+
+				"list the globs to declare first, then the exclusions that narrow them (a literal leading ! is written \\!)", globs)
+		case i == 0:
+			return fmt.Errorf("exclusion %q comes before any glob it could narrow; "+
+				"list the globs to declare first, then the exclusions that narrow them (a literal leading ! is written \\!)", g)
+		}
+	}
+	return nil
+}
+
 // InvalidGlobs returns the globs doublestar cannot parse, deduplicated and in the order
 // given. It is what lets a caller SAY that a declaration matches nothing before it
 // silently matches nothing for the rest of the run: an unparsable glob declares an input
 // that can never key, and MGS1028 would then advise declaring a path that is already
-// declared, by a pattern that never matches it.
+// declared, by a pattern that never matches it. An exclusion is judged by its pattern
+// and reported as written.
 //
 // The error is not returned with it because doublestar has only one (ErrBadPattern, with
 // no position), so the pattern itself is the whole of the information.
 func InvalidGlobs(globs []string) []string {
 	var bad []string
 	for _, g := range globs {
-		if !doublestar.ValidatePattern(g) && !slices.Contains(bad, g) {
+		pattern, _ := CutExclusion(g)
+		if !doublestar.ValidatePattern(pattern) && !slices.Contains(bad, g) {
 			bad = append(bad, g)
 		}
 	}
@@ -448,45 +593,56 @@ func InvalidGlobs(globs []string) []string {
 //
 // Dedup here is string equality on the ROOTED form, so two spellings that resolve to
 // one path collapse to one entry: a project-wide "../proto/**" and a per-target
-// ctx.readsFiles of proto's "**" are the same declaration and count once.
+// ctx.readsFiles of proto's "**" are the same declaration and count once. A declaration
+// carrying exclusions is kept whole instead, ahead of the sorted plain globs, as
+// [UnionGlobs] joins it.
 //
 // Deliberately NOT the magusfile globs the cache step layers on top. Every project's
 // key carries the ROOT magusfile, so counting those here would make one magusfile
 // edit read as a declaration by every project in the workspace, and attribution
 // would then seed all of them where directory containment seeds exactly one.
 func (p *Project) DeclaredGlobs() []string {
-	var out []string
-	add := func(owner, glob string) {
+	rooted := func(owner string, globs []string) []string {
+		out := make([]string, len(globs))
+		for i, glob := range globs {
+			out[i] = RootGlob(owner, glob)
+		}
+		return out
+	}
+	lists := [][]string{rooted(p.Path, p.Sources), rooted(p.Path, p.AllOutputs())}
+	addRef := func(list []string, owner, glob string) []string {
 		if owner == "" {
 			owner = p.Path
 		}
-		glob = RootGlob(owner, glob)
-		if !slices.Contains(out, glob) {
-			out = append(out, glob)
+		return append(list, RootGlob(owner, glob))
+	}
+	for _, target := range slices.Sorted(maps.Keys(p.TargetInputs)) {
+		var list []string
+		for _, ref := range p.TargetInputs[target] {
+			list = addRef(list, ref.Project, ref.Glob)
 		}
+		lists = append(lists, list)
 	}
-	for _, glob := range p.Sources {
-		add(p.Path, glob)
-	}
-	for _, glob := range p.AllOutputs() {
-		add(p.Path, glob)
-	}
-	for _, refs := range p.TargetInputs {
-		for _, ref := range refs {
-			add(ref.Project, ref.Glob)
+	for _, target := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
+		var list []string
+		for _, ref := range p.TargetOutputs[target] {
+			list = addRef(list, ref.Project, ref.Glob)
 		}
+		lists = append(lists, list)
 	}
-	for _, refs := range p.TargetOutputs {
-		for _, ref := range refs {
-			add(ref.Project, ref.Glob)
+	for _, target := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
+		var list []string
+		for _, ref := range p.TargetUpdates[target] {
+			list = addRef(list, ref.Project, ref.Glob)
 		}
+		lists = append(lists, list)
 	}
-	for _, refs := range p.TargetUpdates {
-		for _, ref := range refs {
-			add(ref.Project, ref.Glob)
-		}
+	out := UnionGlobs(lists...)
+	plain := len(out)
+	for plain > 0 && !isExclusion(out[plain-1]) {
+		plain--
 	}
-	slices.Sort(out)
+	slices.Sort(out[plain:])
 	return out
 }
 

@@ -7,8 +7,8 @@ import (
 )
 
 // Verify authenticates presented on the server's LOOPBACK listener and returns the credential
-// it is, grant included. It routes by class, so each store is consulted only for its own
-// class: mgo_ against the operator file, mgs_ against the token store, and mgl_ and mgx_
+// it is, grant included. It routes by kind, so each store is consulted only for its own
+// kind: mgo_ against the operator file, mgs_ against the token store, and mgl_ and mgx_
 // refused outright, because a share token authenticates only on its own listener and an
 // exchange code is never a bearer. It does no authorization; the caller compares the Grant
 // with its route's Need.
@@ -18,12 +18,12 @@ import (
 // store that fails to load (a retired connectors.d, say) refuses stored tokens only: the
 // operator token never opens it.
 func Verify(presented string) (types.Credential, bool) {
-	class, ok := classOf(presented)
+	kind, ok := kindOf(presented)
 	if !ok {
 		return types.Credential{}, false
 	}
-	switch class {
-	case types.ClassOperator:
+	switch kind {
+	case types.KindOperator:
 		tok, err := LoadOperator()
 		if err != nil {
 			return types.Credential{}, false
@@ -32,7 +32,7 @@ func Verify(presented string) (types.Credential, bool) {
 			return types.Credential{}, false
 		}
 		return operatorCredential(tok), true
-	case types.ClassStored:
+	case types.KindStored:
 		dir, err := StoreDir()
 		if err != nil {
 			return types.Credential{}, false
