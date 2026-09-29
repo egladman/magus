@@ -36,7 +36,9 @@ import "site/diagrams/gen/volatility" as volatilityGen;
 import "site/diagrams/gen/lease-loop" as leaseLoopGen;
 import "site/diagrams/gen/cache-trust" as cacheTrustGen;
 
-export fun allDiagrams() > [Diagram] {
+// allDiagrams lays out every registered figure. Throws the first figure's layout findings,
+// so a figure that cannot be drawn cleanly fails every consumer rather than shipping.
+export fun allDiagrams() > [Diagram] !> str {
     return [
         serverHttpDiagram(),
         serverSocketDiagram(),
@@ -66,27 +68,6 @@ export fun observedFor(id: str) > Observed? {
     if (id == "lease-loop") { return leaseLoopGen\leaseLoopObserved(); }
     if (id == "cache-trust") { return cacheTrustGen\cacheTrustObserved(); }
     return null;
-}
-
-// composeOver rebuilds a hand-placed figure as flow id over an observed set: its nodes, edges,
-// legend, scope and omits become declarations, and every coordinate is dropped. Zones are
-// dropped too; a hand-placed Zone is a rectangle, and flow needs its members.
-export fun composeOver(id: str, d: Diagram, o: Observed) > mut Flow {
-    final f = flow(id);
-    f.observed(o);
-    f.title(d.title);
-    f.eyebrow(d.eyebrow);
-    f.desc(d.desc);
-    foreach (n in d.nodes) {
-        f.node(n.id, label: n.label, sub: n.sub, tag: n.tag, role: n.role, anchor: n.anchor);
-    }
-    foreach (e in d.edges) {
-        f.edge(e.src, dst: e.dst, label: e.label, kind: e.kind, dashed: e.dashed, claim: e.claim);
-    }
-    foreach (item in d.legend) { f.legend(item.role, label: item.label); }
-    f.scope(d.scope);
-    foreach (path, why in d.omits) { f.omit(path, why: why); }
-    return f;
 }
 
 // rendered caches the one result renderAll can ever produce. Not a speed tweak: on the
@@ -749,23 +730,14 @@ test "a figure composed from a stale observation is a finding only when verifyin
 }
 
 test "server-http composed over its observation lays out clean" {
-    // composeOver carries the figure's twelve omits; the six imports left run against the
-    // request path the figure draws.
-    final mounts = "the server mounts every handler; the figure draws the request path";
     var refusal = "";
     var d = Diagram{};
     try {
-        d = composeOver("server-http-composed", d: serverHttpDiagram(), o: serverHttpGen\serverHttpObserved())
-            .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
-            .without("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
-            .without("health", dst: "reads", why: mounts)
-            .without("health", dst: "mcp", why: mounts)
-            .without("health", dst: "connect", why: mounts)
-            .without("health", dst: "review", why: mounts)
-            .diagram();
+        d = serverHttpDiagram();
     } catch (e) {
         refusal = "{e}";
     }
     assert\equal(refusal, want: "", message: "composed");
     assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 12], message: "nodes, edges, omits");
+    assert\equal(d.stamp, want: serverHttpGen\serverHttpObserved().stamp, message: "stamped by its observation");
 }

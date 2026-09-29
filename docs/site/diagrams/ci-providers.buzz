@@ -4,52 +4,31 @@
 namespace ciProviders;
 
 import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/ci-providers" as ciProvidersGen;
 
-export fun ciProvidersDiagram() > Diagram {
-    return Diagram{
-        id = "ci-providers",
-        eyebrow = "ci providers",
-        title = "Vendor syntax lives in the spell, never in the binary",
-        desc = "A failing project reaches the annotator contract, which speaks generic "
+export fun ciProvidersDiagram() > Diagram !> str {
+    return flow("ci-providers")
+        .observed(ciProvidersGen\ciProvidersObserved())
+        .eyebrow("ci providers")
+        .title("Vendor syntax lives in the spell, never in the binary")
+        .desc("A failing project reaches the annotator contract, which speaks generic "
             + "verbs to a provider spell; the spell translates them into the CI system's "
-            + "own syntax. Quote prefixes are declared once and applied per line in Go.",
-        width = 960,
-        height = 520,
-        zones = [
-            Zone{ label = "magus binary, names no ci system", x = 32, y = 88, w = 280, h = 320 },
-            Zone{ label = "provider spell, in buzz", x = 376, y = 88, w = 280, h = 320 },
-        ],
-        nodes = [
-            Node{ id = "run", label = "run and cache", sub = "a project failed",
-                  x = 56, y = 128, w = 232, h = 64 },
-            Node{ id = "contract", anchor = "internal/ci", label = "Annotator contract", sub = "internal/ci/annotate",
-                  x = 56, y = 224, w = 232, h = 64 },
-            Node{ id = "quote", anchor = "internal/ci", label = "QuoteWith", sub = "per line, in Go",
-                  x = 56, y = 320, w = 232, h = 64 },
-
-            Node{ id = "ops", label = "Provider ops", sub = "group start, end, annotate",
-                  x = 400, y = 128, w = 232, h = 64 },
-            Node{ id = "prefixes", label = "quote_prefixes", sub = "declared once",
-                  x = 400, y = 320, w = 232, h = 64 },
-
-            Node{ id = "vendor", label = "CI system", sub = "job log, pull request",
-                  role = "external", x = 720, y = 224, w = 200, h = 64 },
-        ],
-        // The replayed-output run leaves from the bottom and travels under both zones. Sent
-        // straight across it would pass behind the spell zone's nodes, which the design
-        // system only permits when rerouting is geometrically impossible.
-        edges = [
-            Edge{ src = "run", dst = "contract" },
-            Edge{ src = "contract", dst = "ops", label = "generic verbs", bend = 344 },
-            Edge{ src = "ops", dst = "vendor", label = "vendor syntax", bend = 676 },
-            Edge{ src = "prefixes", dst = "quote", label = "read once", dashed = true,
-                  dstSlot = 1, dstSlots = 2 },
-            Edge{ src = "quote", dst = "vendor", label = "de-fanged",
-                  srcSide = "bottom", dstSide = "bottom", bend = 440 },
-        ],
-        legend = [
-            LegendItem{ role = "external", label = "outside magus" },
-        ],
-        scope = ["internal/ci"],
-    };
+            + "own syntax. Quote prefixes are declared once and applied per line in Go.")
+        .node("run", label: "run and cache", sub: "a project failed")
+        .node("contract", label: "Annotator contract", sub: "internal/ci/annotate", anchor: "internal/ci")
+        .node("quote", label: "QuoteWith", sub: "per line, in Go", anchor: "internal/ci")
+        .node("ops", label: "Provider ops", sub: "group start, end, annotate")
+        .node("prefixes", label: "quote_prefixes", sub: "declared once")
+        .node("vendor", label: "CI system", sub: "job log, pull request", role: "external")
+        .edge("run", dst: "contract")
+        .edge("contract", dst: "ops", label: "generic verbs")
+        .edge("ops", dst: "vendor", label: "vendor syntax")
+        .edge("prefixes", dst: "quote", label: "read once", dashed: true)
+        .edge("quote", dst: "vendor", label: "de-fanged")
+        .zone("magus binary, names no ci system", members: ["run", "contract", "quote"])
+        .zone("provider spell, in buzz", members: ["ops", "prefixes"])
+        .legend("external", label: "outside magus")
+        .scope(["internal/ci"])
+        .diagram();
 }

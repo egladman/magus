@@ -829,25 +829,41 @@ export fun observeDiagrams(dir: str, graph: ImportGraph) > [str] !> any {
 // Markdown. Goldmark passes block-level HTML through untouched, so the figure lands in the
 // flow without a fenced block or a client-side renderer.
 //
-// Capped: past CapGeneratedNodes the layered placement produces a wall of boxes nobody can
-// read, and the table immediately above already carries the same relationships. Returning
-// "" there is a deliberate omission, not a failure.
+// Capped: past CapGeneratedNodes the placement produces a wall of boxes nobody can read, and
+// the table immediately above already carries the same relationships. Returning "" there is
+// a deliberate omission, not a failure.
+//
+// Drawn through flow as generated(): the workspace's own graph has no author to hold to the
+// hand-authored budgets. An item carries a name, never a path, so no box is anchored.
 final CapGeneratedNodes = 24;
 
 export fun dependencyFigure(id: str, title: str, items: [LayeredItem]) > str {
     if (items.len() == 0 or items.len() > CapGeneratedNodes) { return ""; }
-    final d = layered(id, title, title, items);
-    // A validation failure here means the layout produced something unreadable (crossing
-    // channels, overlapping runs). Dropping the figure is the right outcome, but SAY so:
-    // swallowing it silently is how eight run-order figures once vanished unnoticed.
-    final findings = validate(d);
-    if (findings.len() > 0) {
-        foreach (msg in findings) { magus\log.warn("skipped diagram {id}: " + msg); }
-        return "";
+    final f = flow(id).generated();
+    f.title(title);
+    f.desc(title);
+    final known: mut {str: bool} = mut {<str: bool>};
+    foreach (it in items) {
+        f.node(it.id, label: it.label);
+        known[it.id] = true;
     }
-    final svg = renderSvg(d, cssVarPalette()) catch "";
-    if (svg == "") { return ""; }
-    return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
+    // Edges run from a dependency to what waits on it; a dependency outside the items has no
+    // box to leave from.
+    foreach (it in items) {
+        foreach (dep in it.deps) {
+            if (known[dep] != null) { f.edge(dep, dst: it.id); }
+        }
+    }
+    // A layout failure means the figure would be unreadable. Dropping it is the right
+    // outcome, but SAY so: swallowing it silently is how eight run-order figures once
+    // vanished unnoticed.
+    try {
+        final svg = f.svg(cssVarPalette());
+        return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
+    } catch (e) {
+        magus\log.warn("skipped diagram {id}: {e}");
+    }
+    return "";
 }
 
 // importFigure draws the Go packages under scope and the imports between them, as the

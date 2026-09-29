@@ -13,78 +13,59 @@
 namespace serverHttp;
 
 import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/server-http" as serverHttpGen;
 
-export fun serverHttpDiagram() > Diagram {
-    return Diagram{
-        id = "server-http",
-        eyebrow = "magus server",
-        title = "The HTTP surface, and the one route without a guard",
-        desc = "Agents and the console reach /mcp, the /api/v1 read views, the review and "
+export fun serverHttpDiagram() > Diagram !> str {
+    final connect = "a Connect service, inside the Connect RPC box";
+    final mounts = "the server mounts every handler; the figure draws the request path";
+    return flow("server-http")
+        .observed(serverHttpGen\serverHttpObserved())
+        .eyebrow("magus server")
+        .title("The HTTP surface, and the one route without a guard")
+        .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
             + "plan routes and eleven typed Connect services through the DNS-rebind, "
             + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
             + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
             + "are loopback only. The health endpoints answer probes directly, with no "
-            + "authentication.",
-        width = 960,
-        height = 600,
-        nodes = [
-            Node{ id = "agent", label = "AI agents", sub = "Claude Code, IDE",
-                  tag = "client", x = 32, y = 112, w = 160, h = 64 },
-            Node{ id = "console", label = "Console PWA", sub = "dashboard, review",
-                  tag = "client", x = 32, y = 200, w = 160, h = 64 },
-            Node{ id = "probe", label = "kubelet", sub = "scripts, probes",
-                  tag = "client", role = "external", x = 32, y = 440, w = 160, h = 64 },
-
-            Node{ id = "guard", anchor = "internal/httpx", label = "Guard", sub = "rebind + token + CORS",
-                  tag = "gate", role = "focal", x = 320, y = 200, w = 180, h = 88 },
-
-            Node{ id = "mcp", anchor = "internal/handler/mcp", label = "/mcp", sub = "agent tools, SSE",
-                  x = 600, y = 88, w = 280, h = 64 },
-            Node{ id = "reads", anchor = "internal/handler/graph", label = "/api/v1 read views",
-                  sub = "graph, events, insight, outputs",
-                  x = 600, y = 176, w = 280, h = 64 },
-            Node{ id = "review", anchor = "internal/handler/status", label = "/api/v1 review + plans",
-                  sub = "diff, session, plan, review",
-                  x = 600, y = 264, w = 280, h = 64 },
-            Node{ id = "connect", anchor = "internal/handler/metrics", label = "Connect RPC",
-                  sub = "eleven typed services",
-                  x = 600, y = 352, w = 280, h = 64 },
-            Node{ id = "health", anchor = "internal/server", label = "/livez /readyz", sub = "no authentication",
-                  role = "external", x = 600, y = 440, w = 280, h = 64 },
-        ],
-        // Bends are declared rather than defaulted so no two crossing segments share an x:
-        // the fan order out of the guard has to mirror the bend order, or the runs to /mcp
-        // and the read views cross each other on the way up. The connector traveling
-        // furthest turns closest to the guard.
-        edges = [
-            Edge{ src = "agent", dst = "guard", dstSlot = 1, dstSlots = 2, bend = 240 },
-            Edge{ src = "console", dst = "guard", dstSlot = 2, dstSlots = 2, bend = 272 },
-
-            Edge{ src = "guard", dst = "mcp", srcSlot = 1, srcSlots = 4, bend = 520 },
-            Edge{ src = "guard", dst = "reads", srcSlot = 2, srcSlots = 4, bend = 536 },
-            Edge{ src = "guard", dst = "review", srcSlot = 3, srcSlots = 4, bend = 528 },
-            Edge{ src = "guard", dst = "connect", srcSlot = 4, srcSlots = 4, bend = 512 },
-
-            Edge{ src = "probe", dst = "health", label = "unguarded", kind = "accent" },
-        ],
-        legend = [
-            LegendItem{ role = "focal", label = "authenticated" },
-            LegendItem{ role = "external", label = "open to any caller" },
-        ],
-        scope = ["internal/handler/*", "internal/httpx", "internal/server"],
-        omits = {
-            "internal/handler/activity": "a Connect service, inside the Connect RPC box",
-            "internal/handler/attention": "a read route, inside the /api/v1 read views box",
-            "internal/handler/diff": "the diff and session routes, inside the review + plans box",
-            "internal/handler/insight": "a read route and Connect service, inside the read views box",
-            "internal/handler/job": "a Connect service, inside the Connect RPC box",
-            "internal/handler/memory": "a Connect service, inside the Connect RPC box",
-            "internal/handler/notes": "a Connect service, inside the Connect RPC box",
-            "internal/handler/plan": "the plan route, inside the review + plans box",
-            "internal/handler/token": "a Connect service, inside the Connect RPC box",
-            "internal/handler/tool": "a Connect service, inside the Connect RPC box",
-            "internal/handler/trailrpc": "the audit interceptor around Connect services, not a route",
-            "internal/handler/viewer": "read routes and a Connect service, inside the read views box",
-        },
-    };
+            + "authentication.")
+        .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
+        .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
+        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: "external")
+        .node("guard", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: "focal", anchor: "internal/httpx")
+        .node("mcp", label: "/mcp", sub: "agent tools, SSE", anchor: "internal/handler/mcp")
+        .node("reads", label: "/api/v1 read views", sub: "graph, events, insight, outputs", anchor: "internal/handler/graph")
+        .node("review", label: "/api/v1 review + plans", sub: "diff, session, plan, review", anchor: "internal/handler/status")
+        .node("connect", label: "Connect RPC", sub: "eleven typed services", anchor: "internal/handler/metrics")
+        .node("health", label: "/livez /readyz", sub: "no authentication", role: "external", anchor: "internal/server")
+        .edge("agent", dst: "guard")
+        .edge("console", dst: "guard")
+        .edge("guard", dst: "mcp")
+        .edge("guard", dst: "reads")
+        .edge("guard", dst: "review")
+        .edge("guard", dst: "connect")
+        .edge("probe", dst: "health", label: "unguarded", kind: "accent")
+        .zone("through the guard", members: ["agent", "console", "guard", "mcp", "reads", "review", "connect"])
+        .without("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
+        .without("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
+        .without("health", dst: "reads", why: mounts)
+        .without("health", dst: "mcp", why: mounts)
+        .without("health", dst: "connect", why: mounts)
+        .without("health", dst: "review", why: mounts)
+        .legend("focal", label: "authenticated")
+        .legend("external", label: "open to any caller")
+        .scope(["internal/handler/*", "internal/httpx", "internal/server"])
+        .omit("internal/handler/activity", why: connect)
+        .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
+        .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
+        .omit("internal/handler/insight", why: "a read route and Connect service, inside the read views box")
+        .omit("internal/handler/job", why: connect)
+        .omit("internal/handler/memory", why: connect)
+        .omit("internal/handler/notes", why: connect)
+        .omit("internal/handler/plan", why: "the plan route, inside the review + plans box")
+        .omit("internal/handler/token", why: connect)
+        .omit("internal/handler/tool", why: connect)
+        .omit("internal/handler/trailrpc", why: "the audit interceptor around Connect services, not a route")
+        .omit("internal/handler/viewer", why: "read routes and a Connect service, inside the read views box")
+        .diagram();
 }
