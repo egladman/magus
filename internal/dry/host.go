@@ -511,6 +511,10 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		"definition": vm.StrValue(""), "node_count": vm.IntValue(0), "edge_count": vm.IntValue(0),
 		"gods": empty, "orphans": empty, "coverage": empty,
 	}))
+	// indexed stays false: the dry run read no index, and a drift check has to refuse on that.
+	m.MapSet("packageDeps", shaped("magus.packageDeps", map[string]vm.Value{
+		"indexed": vm.BoolValue(false), "deps": vm.NewMap(),
+	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
 		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StrValue(""),

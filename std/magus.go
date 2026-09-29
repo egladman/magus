@@ -64,7 +64,7 @@ var Magus = Module{
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
-		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`) " +
+		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `packageDeps`) " +
 		"and `output` all answer in-process, and so does `magus\\job` (list, put, " +
 		"register, exit, wait, clear): the job store an orchestrating agent declares about work it handed " +
 		"out (see types.Job). The `magus job` CLI subcommand is a third write door onto " +
@@ -244,6 +244,14 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "KnowledgeStats"}},
 			Raises:  true,
 			Impl:    MagusStats,
+		},
+		{
+			Name: "package_deps",
+			Doc:  "Which workspace package imports which: {indexed, deps}, deps mapping each package directory (\".\" for the root) to the sorted package directories it imports, read off the workspace's declared SCIP indexes. Test files, packages outside the workspace, and self-imports are left out. indexed is false when no symbol index was ingested, and deps is then empty because nobody looked, not because nothing imports anything: a caller checking drift refuses on it rather than reporting none. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusPackageDeps,
 		},
 		{
 			Name: "output",

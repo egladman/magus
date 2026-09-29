@@ -184,6 +184,23 @@ func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) 
 	return kg.Stats(kind), nil
 }
 
+// MagusPackageDeps backs magus\packageDeps: which workspace package imports which, by
+// directory, with indexed saying whether a symbol index was there to read at all.
+func MagusPackageDeps(ctx context.Context) (map[string]any, error) {
+	g, err := graphsFromContext(ctx, "packageDeps")
+	if err != nil {
+		return nil, err
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return recordMap(struct {
+		Indexed bool                `json:"indexed"`
+		Deps    map[string][]string `json:"deps"`
+	}{kg.HasSymbols(), kg.PackageDeps()})
+}
+
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
 // `magus query output <ref>` prints, with the run's identity beside them. It reads this
 // checkout's output store, so a ref minted in another worktree does not resolve here.

@@ -667,6 +667,32 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 	assert.Equal(t, types.VerdictAbsent, absent.Answer.Verdict)
 }
 
+func TestPackageDepsHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
+	t.Parallel()
+
+	noPackages, err := MagusPackageDeps(graphContext(t))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"indexed": true, "deps": map[string]any{}}, noPackages,
+		"graphContext holds a symbol but no file defines a namespace")
+
+	g := knowledge.NewGraph()
+	ctx := types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	empty, err := MagusPackageDeps(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"indexed": false, "deps": map[string]any{}}, empty)
+
+	a, b := "symbol:gomod example.com/m `example.com/m/pkg/a`/", "symbol:gomod example.com/m `example.com/m/pkg/b`/"
+	for dir, ns := range map[string]string{"pkg/a": a, "pkg/b": b} {
+		g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: dir, Attrs: map[string]string{"namespace": ns}})
+		g.AddNode(types.KnowledgeNode{ID: "file:" + dir + "/f.go", Kind: types.KindFile, Label: dir + "/f.go", Source: dir + "/f.go"})
+		g.AddEdge(types.KnowledgeEdge{Source: "file:" + dir + "/f.go", Target: ns, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+	}
+	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/a/f.go", Target: b, Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1})
+	got, err := MagusPackageDeps(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"indexed": true, "deps": map[string]any{"pkg/a": []any{"pkg/b"}}}, got)
+}
+
 // A mistyped option would otherwise answer a different question than the one asked.
 func TestGraphOptionsAreStrict(t *testing.T) {
 	t.Parallel()
@@ -690,6 +716,7 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 		"path":           func() error { _, err := MagusPath(ctx, "x", "y"); return err },
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
+		"packageDeps":    func() error { _, err := MagusPackageDeps(ctx); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
 		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
 	}
