@@ -375,7 +375,7 @@ func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	assert.Contains(t, m.buildStep(p, "build").Sources, "magusfile.buzz",
+	assert.Contains(t, m.buildStep(p, "build").Sources, types.Glob{Pattern: "magusfile.buzz"},
 		"a target that declares its inputs must still key on the magusfile defining it, "+
 			"or editing the target body cannot invalidate its cache")
 }
@@ -408,11 +408,12 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	// The chain and the writesFiles footprint are static, and come from the magusfile.
 	p.TargetPolicies = map[string]types.Target{"index-generate": {SkipCache: true}}
 
-	assert.Contains(t, m.buildStep(p, "lint").Sources, "MAGUS.md",
+	magusMD := types.Glob{Pattern: "MAGUS.md"}
+	assert.Contains(t, m.buildStep(p, "lint").Sources, magusMD,
 		"lint composes index-generate two hops down; a stale MAGUS.md must move its key")
-	assert.NotContains(t, m.buildStep(p, "index-generate").Sources, "MAGUS.md",
+	assert.NotContains(t, m.buildStep(p, "index-generate").Sources, magusMD,
 		"the skip_cache target's own step never replays, so keying it on its own output says nothing")
-	assert.NotContains(t, m.buildStep(p, "test").Sources, "MAGUS.md",
+	assert.NotContains(t, m.buildStep(p, "test").Sources, magusMD,
 		"a target composing nothing must not inherit another target's artifact")
 }
 
