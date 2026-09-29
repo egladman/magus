@@ -1,0 +1,102 @@
+// The endoflife.date lifecycle provider: answers when each release cycle of a tool reaches
+// its end of life, read from https://endoflife.date. Selected with magus\lifecycle.provider():
+//
+//   import "spells/endoflife-date" as eol;
+//   magus\lifecycle.provider(eol);
+//
+// A spell's tool names its product (Tool{lifecycle = "go"}); magus asks this spell for every
+// product the workspace's spells name, in one call, and `magus describe tools` shows the
+// installed cycle, its end-of-life date, and whether it is still supported. Nothing here can
+// fail a build.
+//
+// ONE GET per product, to https://endoflife.date/api/v1/products/<product>, with no
+// credential. `magus describe tools` names every URL it read in its header, so the network
+// use is never silent; MAGUS_OFFLINE stops magus from calling this spell at all.
+//
+// Shipped as source, never compiled into the binary: it imports http, and the binary carries
+// no release feed (docs/scope.md). Another workspace uses it by copying this directory to its
+// own spells/endoflife-date/ and wiring it as above (docs/concepts/providers.md).
+
+import "magus/spell";
+
+import "encoding/json";
+import "http";
+import "assert";
+
+export fun mgs_getName() > str { return "endoflife-date"; }
+
+final API = "https://endoflife.date/api/v1/products/";
+
+// list_lifecycles is the lifecycle contract. A product endoflife.date does not know (404) is
+// left out of the answer, which magus reads as unknown; any other failure throws, which magus
+// reads as unreached, never as a build failure.
+export fun list_lifecycles(target: Target, cb: fun(any)) > [Lifecycle] !> any {
+    final io = {<str: any>};
+    cb(io);
+    final answers = mut [<Lifecycle>];
+    foreach (key in (io["keys"] as? [any]) ?? [<any>]) {
+        final product = (key as? str) ?? "";
+        if (product == "") {
+            continue;
+        }
+        final url = API + product;
+        final res = http\get(url, headers: {"Accept": "application/json"});
+        if (res["status"] == 404) {
+            continue;
+        }
+        if (res["status"] != 200) {
+            throw "endoflife-date: GET {url}: HTTP {res["status"]}";
+        }
+        answers.append(lifecycleOf(product, url: url, body: "{res["body"]}"));
+    }
+    return answers;
+}
+
+// lifecycleOf reads one v1 product response. Upstream's last_modified is the as-of time,
+// never the clock: a fetch of stale data is still stale.
+fun lifecycleOf(product: str, url: str, body: str) > Lifecycle !> any {
+    final doc = (json\parse(body) as? {str: any}) ?? {<str: any>};
+    final result = (doc["result"] as? {str: any}) ?? {<str: any>};
+    final cycles = mut [<ReleaseCycle>];
+    foreach (row in (result["releases"] as? [any]) ?? [<any>]) {
+        final r = (row as? {str: any}) ?? {<str: any>};
+        final latest = (r["latest"] as? {str: any}) ?? {<str: any>};
+        cycles.append(ReleaseCycle{
+            cycle = (r["name"] as? str) ?? "",
+            released = (r["releaseDate"] as? str) ?? "",
+            // eolFrom is null until upstream announces an end date.
+            eol = (r["eolFrom"] as? str) ?? "",
+            lts = (r["isLts"] as? bool) ?? false,
+            latest = (latest["name"] as? str) ?? "",
+        });
+    }
+    return Lifecycle{
+        key = product,
+        source = url,
+        asOf = (doc["last_modified"] as? str) ?? "",
+        cycles = cycles,
+    };
+}
+
+test "a v1 product response reads into cycles, keeping a null end date empty" {
+    final body = `{"last_modified":"2026-09-24T07:44:41+00:00","result":{"releases":[
+        {"name":"1.27","releaseDate":"2026-08-19","isLts":false,"eolFrom":null,"latest":{"name":"1.27.1"}},
+        {"name":"1.25","releaseDate":"2025-08-12","isLts":false,"eolFrom":"2026-08-19","latest":{"name":"1.25.14"}}
+    ]}}`;
+    final l = lifecycleOf("go", url: "https://endoflife.date/api/v1/products/go", body: body);
+    assert\equal(l.key, want: "go", message: "the key asked is the key answered");
+    assert\equal(l.asOf, want: "2026-09-24T07:44:41+00:00", message: "as-of is upstream's last_modified");
+    assert\equal(l.cycles.len(), want: 2, message: "every release line");
+    assert\equal(l.cycles[0].eol, want: "", message: "no end date announced");
+    assert\equal(l.cycles[1].eol, want: "2026-08-19", message: "an announced end date");
+    assert\equal(l.cycles[1].latest, want: "1.25.14", message: "the newest release in the line");
+}
+
+test "an lts cycle says so" {
+    final body = `{"last_modified":"2026-09-01T00:00:00+00:00","result":{"releases":[
+        {"name":"22","releaseDate":"2024-04-24","isLts":true,"eolFrom":"2027-04-30","latest":{"name":"22.19.0"}}
+    ]}}`;
+    final l = lifecycleOf("nodejs", url: "https://endoflife.date/api/v1/products/nodejs", body: body);
+    assert\equal(l.cycles[0].lts, want: true, message: "isLts reads through");
+    assert\equal(l.cycles[0].cycle, want: "22", message: "the cycle is the release name");
+}

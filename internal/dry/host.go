@@ -148,6 +148,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	review.MapSet("provider", fn("magus.review.provider", retNull))
 	m.MapSet("review", review)
 
+	// magus.lifecycle.<...>: selects the spell that answers when release cycles end.
+	// Stubbed for the same reason as review: a top-level selection with no VM here to
+	// resolve the handle.
+	lifecycle := vm.NewMap()
+	lifecycle.MapSet("provider", fn("magus.lifecycle.provider", retNull))
+	m.MapSet("lifecycle", lifecycle)
+
 	// magus.secret.<...>: selects the secret provider spell and reads a credential
 	// through it in the real module. provider() stubs to a no-op like the two above.
 	//
@@ -265,6 +272,23 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("workspace", vm.StrValue(""))
 		res.MapSet("count", vm.IntValue(0))
 		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	// magus.tools probes and fetches in the live host; here it is the empty report, its
+	// lifecycle unwired, so `magus\tools().lifecycle.state` resolves.
+	m.MapSet("tools", fn("magus.tools", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		lifecycle := vm.NewMap()
+		lifecycle.MapSet("provider", vm.StrValue(""))
+		lifecycle.MapSet("state", vm.StrValue(types.LifecycleUnwired))
+		lifecycle.MapSet("sources", vm.ListValue(nil))
+		lifecycle.MapSet("asOf", vm.StrValue(""))
+		lifecycle.MapSet("fetchedAt", vm.StrValue(""))
+		lifecycle.MapSet("detail", vm.StrValue(""))
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("lifecycle", lifecycle)
+		res.MapSet("tools", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {

@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { toolchainTile } from "./toolchain";
-import { initialState, type DashboardState, type ToolRowView } from "../state";
+import { initialState, type DashboardState, type LifecycleView, type ToolRowView } from "../state";
 
 function row(over: Partial<ToolRowView> = {}): ToolRowView {
   return {
@@ -23,14 +23,19 @@ function row(over: Partial<ToolRowView> = {}): ToolRowView {
     verdict: "inside",
     code: "",
     probedAtMs: 0,
+    cycle: "",
+    eol: "",
+    support: "",
     ...over,
   };
 }
 
-function stateWith(rows: ToolRowView[]): DashboardState {
+const unwired: LifecycleView = { provider: "", state: "unwired", sources: [], detail: "" };
+
+function stateWith(rows: ToolRowView[], lifecycle: LifecycleView = unwired): DashboardState {
   return {
     ...initialState(),
-    tools: { rows, violations: rows.filter((r) => r.code !== "").length },
+    tools: { rows, violations: rows.filter((r) => r.code !== "").length, lifecycle },
   };
 }
 
@@ -109,6 +114,54 @@ test("a tool that could not be probed reads as not found, not as a version", () 
   assert.equal(r[2], "not found");
   assert.equal(r[5], "unknown", "an unprobeable tool is not a violation");
   assert.equal(r[6], "-", "and it has no probe age to show");
+});
+
+test("a cycle past its end of life is shown and counted in the note", () => {
+  const live: LifecycleView = {
+    provider: "endoflife-date",
+    state: "live",
+    sources: ["https://endoflife.date/api/v1/products/go"],
+    detail: "",
+  };
+  const tile = toolchainTile();
+  tile.update(
+    stateWith(
+      [
+        row({ installed: "v1.25.3", cycle: "1.25", eol: "2026-08-19", support: "eol" }),
+        row({ project: "docs", bin: "node", cycle: "24", eol: "2028-04-30", support: "supported" }),
+      ],
+      live,
+    ),
+  );
+  const [goRow, nodeRow] = cells(tile.el);
+  assert.deepEqual(goRow.slice(7), ["1.25", "2026-08-19", "eol"]);
+  assert.deepEqual(nodeRow.slice(7), ["24", "2028-04-30", "supported"]);
+  assert.equal(note(tile.el), "2 tools, all inside their window; 1 past end of life");
+});
+
+test("an unreached provider says so instead of leaving the columns to read as fine", () => {
+  // Every row reads unknown when the provider did not answer, and a note that only counted
+  // windows would let that pass as a clean toolchain.
+  const tile = toolchainTile();
+  tile.update(
+    stateWith([row({ support: "unknown" })], {
+      provider: "endoflife-date",
+      state: "unreached",
+      sources: [],
+      detail: "no route to host",
+    }),
+  );
+  assert.equal(cells(tile.el)[0][9], "unknown");
+  assert.equal(
+    note(tile.el),
+    "1 tools, all inside their window; end of life unknown: endoflife-date did not answer (no route to host)",
+  );
+});
+
+test("a tool whose spell names no product shows dashes, not unknown", () => {
+  const tile = toolchainTile();
+  tile.update(stateWith([row()]));
+  assert.deepEqual(cells(tile.el)[0].slice(7), ["-", "-", "-"]);
 });
 
 test("an empty view keeps the tile's own note and offers the empty state", () => {

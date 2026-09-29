@@ -8,12 +8,11 @@
 // this repo says it supports", which the CLI answers one op at a time (MGS3005/MGS3006)
 // and which nothing could answer for the workspace as a whole.
 //
-// Everything here is a READ of state magus already builds: the probe is a cache-key input
-// that runs on every build regardless, and the window comes from a spell's `supported`
-// plus a project's `tools` key. magus does not learn which versions exist upstream, does
-// not select one, and carries no end-of-life data - see docs/scope.md. A future eol field
-// would be an ADDITION to Tool, which proto3 permits without a wire break, so its absence
-// here costs nothing later.
+// The probe is a cache-key input that runs on every build regardless, and the window comes
+// from a spell's `supported` plus a project's `tools` key. End-of-life data is the one
+// thing magus does not already hold: it comes from the lifecycle provider the workspace
+// wires (magus\lifecycle.provider), a spell that reads it upstream. magus never selects a
+// version or installs one, and nothing here fails a build (docs/scope.md).
 //
 // A sibling of magus.status.v1alpha1: status is "what is happening right now", this is "what is
 // this workspace built with". buf-breaking gates this file.
@@ -28,7 +27,62 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/tool/v1alpha1/tool.proto.
  */
 export const file_magus_tool_v1alpha1_tool: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYWd1cy90b29sL3YxYWxwaGExL3Rvb2wucHJvdG8SE21hZ3VzLnRvb2wudjFhbHBoYTEiKwoNVmVyc2lvbkJvdW5kcxILCgNtaW4YASABKAkSDQoFYmVsb3cYAiABKAki9AIKBFRvb2wSCwoDYmluGAEgASgJEg0KBXNwZWxsGAIgASgJEhkKEWluc3RhbGxlZF92ZXJzaW9uGAMgASgJEjgKDHNwZWxsX2JvdW5kcxgEIAEoCzIiLm1hZ3VzLnRvb2wudjFhbHBoYTEuVmVyc2lvbkJvdW5kcxI8ChB3b3Jrc3BhY2VfYm91bmRzGAUgASgLMiIubWFndXMudG9vbC52MWFscGhhMS5WZXJzaW9uQm91bmRzEjUKCWVmZmVjdGl2ZRgGIAEoCzIiLm1hZ3VzLnRvb2wudjFhbHBoYTEuVmVyc2lvbkJvdW5kcxItCgd2ZXJkaWN0GAcgASgOMhwubWFndXMudG9vbC52MWFscGhhMS5WZXJkaWN0EhcKD2RpYWdub3N0aWNfY29kZRgIIAEoCRIuCgpwcm9iZV90aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAoQC1IIZW5mb3JjZWQiTwoHUHJvamVjdBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSKAoFdG9vbHMYAyADKAsyGS5tYWd1cy50b29sLnYxYWxwaGExLlRvb2wiIgoQTGlzdFRvb2xzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkiQwoRTGlzdFRvb2xzUmVzcG9uc2USLgoIcHJvamVjdHMYASADKAsyHC5tYWd1cy50b29sLnYxYWxwaGExLlByb2plY3QqdQoHVmVyZGljdBIXChNWRVJESUNUX1VOU1BFQ0lGSUVEEAASEgoOVkVSRElDVF9JTlNJREUQARITCg9WRVJESUNUX1RPT19PTEQQAhITCg9WRVJESUNUX1RPT19ORVcQAxITCg9WRVJESUNUX1VOS05PV04QBDJpCgtUb29sU2VydmljZRJaCglMaXN0VG9vbHMSJS5tYWd1cy50b29sLnYxYWxwaGExLkxpc3RUb29sc1JlcXVlc3QaJi5tYWd1cy50b29sLnYxYWxwaGExLkxpc3RUb29sc1Jlc3BvbnNlQtsBChdjb20ubWFndXMudG9vbC52MWFscGhhMUIJVG9vbFByb3RvUAFaR2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3Rvb2wvdjFhbHBoYTE7dG9vbHYxYWxwaGExogIDTVRYqgITTWFndXMuVG9vbC5WMWFscGhhMcoCE01hZ3VzXFRvb2xcVjFhbHBoYTHiAh9NYWd1c1xUb29sXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIVTWFndXM6OlRvb2w6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5tYWd1cy90b29sL3YxYWxwaGExL3Rvb2wucHJvdG8SE21hZ3VzLnRvb2wudjFhbHBoYTEizQEKCUxpZmVjeWNsZRIQCghwcm92aWRlchgBIAEoCRIyCgVzdGF0ZRgCIAEoDjIjLm1hZ3VzLnRvb2wudjFhbHBoYTEuTGlmZWN5Y2xlU3RhdGUSDwoHc291cmNlcxgDIAMoCRIpCgVhc19vZhgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZmV0Y2hlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGZGV0YWlsGAYgASgJIisKDVZlcnNpb25Cb3VuZHMSCwoDbWluGAEgASgJEg0KBWJlbG93GAIgASgJItIDCgRUb29sEgsKA2JpbhgBIAEoCRINCgVzcGVsbBgCIAEoCRIZChFpbnN0YWxsZWRfdmVyc2lvbhgDIAEoCRI4CgxzcGVsbF9ib3VuZHMYBCABKAsyIi5tYWd1cy50b29sLnYxYWxwaGExLlZlcnNpb25Cb3VuZHMSPAoQd29ya3NwYWNlX2JvdW5kcxgFIAEoCzIiLm1hZ3VzLnRvb2wudjFhbHBoYTEuVmVyc2lvbkJvdW5kcxI1CgllZmZlY3RpdmUYBiABKAsyIi5tYWd1cy50b29sLnYxYWxwaGExLlZlcnNpb25Cb3VuZHMSLQoHdmVyZGljdBgHIAEoDjIcLm1hZ3VzLnRvb2wudjFhbHBoYTEuVmVyZGljdBIXCg9kaWFnbm9zdGljX2NvZGUYCCABKAkSLgoKcHJvYmVfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJbGlmZWN5Y2xlGAsgASgJEg0KBWN5Y2xlGAwgASgJEgsKA2VvbBgNIAEoCRItCgdzdXBwb3J0GA4gASgOMhwubWFndXMudG9vbC52MWFscGhhMS5TdXBwb3J0SgQIChALUghlbmZvcmNlZCJPCgdQcm9qZWN0EgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIoCgV0b29scxgDIAMoCzIZLm1hZ3VzLnRvb2wudjFhbHBoYTEuVG9vbCIiChBMaXN0VG9vbHNSZXF1ZXN0Eg4KBnBhcmVudBgBIAEoCSJ2ChFMaXN0VG9vbHNSZXNwb25zZRIuCghwcm9qZWN0cxgBIAMoCzIcLm1hZ3VzLnRvb2wudjFhbHBoYTEuUHJvamVjdBIxCglsaWZlY3ljbGUYAiABKAsyHi5tYWd1cy50b29sLnYxYWxwaGExLkxpZmVjeWNsZSp1CgdWZXJkaWN0EhcKE1ZFUkRJQ1RfVU5TUEVDSUZJRUQQABISCg5WRVJESUNUX0lOU0lERRABEhMKD1ZFUkRJQ1RfVE9PX09MRBACEhMKD1ZFUkRJQ1RfVE9PX05FVxADEhMKD1ZFUkRJQ1RfVU5LTk9XThAEKngKB1N1cHBvcnQSFwoTU1VQUE9SVF9VTlNQRUNJRklFRBAAEhUKEVNVUFBPUlRfU1VQUE9SVEVEEAESDwoLU1VQUE9SVF9FT0wQAhIXChNTVVBQT1JUX1VOQU5OT1VOQ0VEEAMSEwoPU1VQUE9SVF9VTktOT1dOEAQqwAEKDkxpZmVjeWNsZVN0YXRlEh8KG0xJRkVDWUNMRV9TVEFURV9VTlNQRUNJRklFRBAAEhgKFExJRkVDWUNMRV9TVEFURV9MSVZFEAESGgoWTElGRUNZQ0xFX1NUQVRFX0NBQ0hFRBACEhsKF0xJRkVDWUNMRV9TVEFURV9PRkZMSU5FEAMSHQoZTElGRUNZQ0xFX1NUQVRFX1VOUkVBQ0hFRBAEEhsKF0xJRkVDWUNMRV9TVEFURV9VTldJUkVEEAUyaQoLVG9vbFNlcnZpY2USWgoJTGlzdFRvb2xzEiUubWFndXMudG9vbC52MWFscGhhMS5MaXN0VG9vbHNSZXF1ZXN0GiYubWFndXMudG9vbC52MWFscGhhMS5MaXN0VG9vbHNSZXNwb25zZULbAQoXY29tLm1hZ3VzLnRvb2wudjFhbHBoYTFCCVRvb2xQcm90b1ABWkdnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy90b29sL3YxYWxwaGExO3Rvb2x2MWFscGhhMaICA01UWKoCE01hZ3VzLlRvb2wuVjFhbHBoYTHKAhNNYWd1c1xUb29sXFYxYWxwaGEx4gIfTWFndXNcVG9vbFxWMWFscGhhMVxHUEJNZXRhZGF0YeoCFU1hZ3VzOjpUb29sOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+
+/**
+ * Lifecycle says where every Tool's cycle, eol and support came from.
+ *
+ * @generated from message magus.tool.v1alpha1.Lifecycle
+ */
+export type Lifecycle = Message<"magus.tool.v1alpha1.Lifecycle"> & {
+  /**
+   * the spell wired as the lifecycle provider, empty when none is
+   *
+   * @generated from field: string provider = 1;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: magus.tool.v1alpha1.LifecycleState state = 2;
+   */
+  state: LifecycleState;
+
+  /**
+   * the URLs the provider read
+   *
+   * @generated from field: repeated string sources = 3;
+   */
+  sources: string[];
+
+  /**
+   * as_of is the OLDEST upstream last-modified among the answers: the data is no fresher
+   * than its stalest source. Unset when nothing was answered.
+   *
+   * @generated from field: google.protobuf.Timestamp as_of = 4;
+   */
+  asOf?: Timestamp;
+
+  /**
+   * fetched_at is when the provider was asked; on a replay, when the replayed answer was.
+   *
+   * @generated from field: google.protobuf.Timestamp fetched_at = 5;
+   */
+  fetchedAt?: Timestamp;
+
+  /**
+   * why the provider was not asked or did not answer
+   *
+   * @generated from field: string detail = 6;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message magus.tool.v1alpha1.Lifecycle.
+ * Use `create(LifecycleSchema)` to create a new message.
+ */
+export const LifecycleSchema: GenMessage<Lifecycle> = /*@__PURE__*/
+  messageDesc(file_magus_tool_v1alpha1_tool, 0);
 
 /**
  * VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a
@@ -56,7 +110,7 @@ export type VersionBounds = Message<"magus.tool.v1alpha1.VersionBounds"> & {
  * Use `create(VersionBoundsSchema)` to create a new message.
  */
 export const VersionBoundsSchema: GenMessage<VersionBounds> = /*@__PURE__*/
-  messageDesc(file_magus_tool_v1alpha1_tool, 0);
+  messageDesc(file_magus_tool_v1alpha1_tool, 1);
 
 /**
  * Tool is one binary a spell drives, as this workspace currently sees it.
@@ -132,6 +186,30 @@ export type Tool = Message<"magus.tool.v1alpha1.Tool"> & {
    * @generated from field: google.protobuf.Timestamp probe_time = 9;
    */
   probeTime?: Timestamp;
+
+  /**
+   * lifecycle is the product the spell names for this binary (spells.Tool.lifecycle),
+   * empty when it names none. cycle is the release line the installed version belongs
+   * to and eol that line's end date, both empty when nothing matched.
+   *
+   * @generated from field: string lifecycle = 11;
+   */
+  lifecycle: string;
+
+  /**
+   * @generated from field: string cycle = 12;
+   */
+  cycle: string;
+
+  /**
+   * @generated from field: string eol = 13;
+   */
+  eol: string;
+
+  /**
+   * @generated from field: magus.tool.v1alpha1.Support support = 14;
+   */
+  support: Support;
 };
 
 /**
@@ -139,7 +217,7 @@ export type Tool = Message<"magus.tool.v1alpha1.Tool"> & {
  * Use `create(ToolSchema)` to create a new message.
  */
 export const ToolSchema: GenMessage<Tool> = /*@__PURE__*/
-  messageDesc(file_magus_tool_v1alpha1_tool, 1);
+  messageDesc(file_magus_tool_v1alpha1_tool, 2);
 
 /**
  * Project groups the tools one project drives, since a window is declared per project and
@@ -171,7 +249,7 @@ export type Project = Message<"magus.tool.v1alpha1.Project"> & {
  * Use `create(ProjectSchema)` to create a new message.
  */
 export const ProjectSchema: GenMessage<Project> = /*@__PURE__*/
-  messageDesc(file_magus_tool_v1alpha1_tool, 2);
+  messageDesc(file_magus_tool_v1alpha1_tool, 3);
 
 /**
  * @generated from message magus.tool.v1alpha1.ListToolsRequest
@@ -192,7 +270,7 @@ export type ListToolsRequest = Message<"magus.tool.v1alpha1.ListToolsRequest"> &
  * Use `create(ListToolsRequestSchema)` to create a new message.
  */
 export const ListToolsRequestSchema: GenMessage<ListToolsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_tool_v1alpha1_tool, 3);
+  messageDesc(file_magus_tool_v1alpha1_tool, 4);
 
 /**
  * @generated from message magus.tool.v1alpha1.ListToolsResponse
@@ -202,6 +280,11 @@ export type ListToolsResponse = Message<"magus.tool.v1alpha1.ListToolsResponse">
    * @generated from field: repeated magus.tool.v1alpha1.Project projects = 1;
    */
   projects: Project[];
+
+  /**
+   * @generated from field: magus.tool.v1alpha1.Lifecycle lifecycle = 2;
+   */
+  lifecycle?: Lifecycle;
 };
 
 /**
@@ -209,7 +292,7 @@ export type ListToolsResponse = Message<"magus.tool.v1alpha1.ListToolsResponse">
  * Use `create(ListToolsResponseSchema)` to create a new message.
  */
 export const ListToolsResponseSchema: GenMessage<ListToolsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_tool_v1alpha1_tool, 4);
+  messageDesc(file_magus_tool_v1alpha1_tool, 5);
 
 /**
  * Verdict is how a probed version sits in its window. Mirrors spells.Verdict.
@@ -260,8 +343,113 @@ export const VerdictSchema: GenEnum<Verdict> = /*@__PURE__*/
   enumDesc(file_magus_tool_v1alpha1_tool, 0);
 
 /**
+ * Support is where the installed version's release cycle stands. Mirrors spells.Support.
+ *
+ * @generated from enum magus.tool.v1alpha1.Support
+ */
+export enum Support {
+  /**
+   * the spell names no lifecycle product, or no provider is wired
+   *
+   * @generated from enum value: SUPPORT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * before its end-of-life date
+   *
+   * @generated from enum value: SUPPORT_SUPPORTED = 1;
+   */
+  SUPPORTED = 1,
+
+  /**
+   * on or after its end-of-life date
+   *
+   * @generated from enum value: SUPPORT_EOL = 2;
+   */
+  EOL = 2,
+
+  /**
+   * upstream has named no end date
+   *
+   * @generated from enum value: SUPPORT_UNANNOUNCED = 3;
+   */
+  UNANNOUNCED = 3,
+
+  /**
+   * SUPPORT_UNKNOWN means the provider gave nothing to place the version with: it did not
+   * answer, it does not know the product, or no cycle carries the version. The response's
+   * lifecycle state says which.
+   *
+   * @generated from enum value: SUPPORT_UNKNOWN = 4;
+   */
+  UNKNOWN = 4,
+}
+
+/**
+ * Describes the enum magus.tool.v1alpha1.Support.
+ */
+export const SupportSchema: GenEnum<Support> = /*@__PURE__*/
+  enumDesc(file_magus_tool_v1alpha1_tool, 1);
+
+/**
+ * LifecycleState is where the end-of-life data came from. Mirrors the types.Lifecycle*
+ * states `magus describe tools -o json` prints.
+ *
+ * @generated from enum magus.tool.v1alpha1.LifecycleState
+ */
+export enum LifecycleState {
+  /**
+   * @generated from enum value: LIFECYCLE_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * asked the provider for this response
+   *
+   * @generated from enum value: LIFECYCLE_STATE_LIVE = 1;
+   */
+  LIVE = 1,
+
+  /**
+   * replayed a stored answer without asking
+   *
+   * @generated from enum value: LIFECYCLE_STATE_CACHED = 2;
+   */
+  CACHED = 2,
+
+  /**
+   * MAGUS_OFFLINE forbade asking; a stored answer, or none
+   *
+   * @generated from enum value: LIFECYCLE_STATE_OFFLINE = 3;
+   */
+  OFFLINE = 3,
+
+  /**
+   * asked and not answered; a stored answer, or none
+   *
+   * @generated from enum value: LIFECYCLE_STATE_UNREACHED = 4;
+   */
+  UNREACHED = 4,
+
+  /**
+   * the workspace wires no lifecycle provider
+   *
+   * @generated from enum value: LIFECYCLE_STATE_UNWIRED = 5;
+   */
+  UNWIRED = 5,
+}
+
+/**
+ * Describes the enum magus.tool.v1alpha1.LifecycleState.
+ */
+export const LifecycleStateSchema: GenEnum<LifecycleState> = /*@__PURE__*/
+  enumDesc(file_magus_tool_v1alpha1_tool, 2);
+
+/**
  * ToolService serves the toolchain view. Read-only: nothing here installs, selects, or
- * moves a version.
+ * moves a version. ListTools reaches the network through the lifecycle provider; the
+ * server memoizes that answer, and Lifecycle names what it read.
  *
  * @generated from service magus.tool.v1alpha1.ToolService
  */

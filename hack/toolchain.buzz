@@ -31,9 +31,11 @@
 // the tag objects, which means a fetch rather than a listing, and that trade has not been
 // worth making.
 //
-// It reports no end-of-life date, because a tag carries none. A spell names each tool's
-// endoflife.date product (Tool.lifecycle); reading dates for it is not this file's job.
+// A tag carries no end-of-life date either. Those come from the workspace's lifecycle
+// provider (magus\lifecycle.provider, spells/endoflife-date here), read through
+// magus\tools(), the same answer `magus describe tools` prints.
 
+import "magus";
 import "std";
 import "os";
 import "proc";
@@ -196,10 +198,43 @@ fun observe(name: str, bin: str, args: [str]) > void {
     }
 }
 
+// support prints where each installed version's release cycle stands, once per distinct
+// (tool, version), since six projects driving one go are one fact. It never throws, for
+// the reason observe gives.
+fun support() > void {
+    try {
+        final tools = magus\tools();
+        final seen = mut {<str: bool>};
+        foreach (row in tools.tools) {
+            final key = row.bin + " " + row.installedVersion;
+            if (row.support == "" or seen[key] != null) {
+                continue;
+            }
+            seen[key] = true;
+            var line = "toolchain " + row.bin + " " + row.installedVersion + ": " + row.support;
+            if (row.cycle != "") {
+                line = line + " (" + row.lifecycle + " " + row.cycle;
+                if (row.eol != "") {
+                    line = line + ", end of life " + row.eol;
+                }
+                line = line + ")";
+            }
+            std\print(line);
+        }
+        if (tools.lifecycle.state == "offline" or tools.lifecycle.state == "unreached") {
+            std\print("toolchain lifecycle: " + tools.lifecycle.provider + " " + tools.lifecycle.state
+                + "; support reads unknown");
+        }
+    } catch (e) {
+        std\print("toolchain lifecycle: could not read magus\\tools(): {e}");
+    }
+}
+
 // report observes every wired toolchain. It prints and never throws: nothing here is a
 // defect in the tree, it is information about the world outside it, and deciding what to
 // do about that belongs to whoever reads it.
 export fun report() > void {
     observe("go", bin: "go", args: ["version"]);
     observe("node", bin: "node", args: ["--version"]);
+    support();
 }

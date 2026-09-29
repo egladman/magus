@@ -670,6 +670,39 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
+export object LifecycleStatus {
+    provider: str = "",
+    state: str = "",
+    sources: [str] = [],
+    asOf: str = "",
+    fetchedAt: str = "",
+    detail: str = "",
+}
+
+export object ToolRow {
+    project: str = "",
+    bin: str = "",
+    spell: str = "",
+    installedVersion: str = "",
+    probeError: str = "",
+    spellBounds: str = "",
+    workspaceBounds: str = "",
+    effective: str = "",
+    verdict: str = "",
+    diagnosticCode: str = "",
+    lifecycle: str = "",
+    cycle: str = "",
+    eol: str = "",
+    support: str = "",
+}
+
+export object ToolReport {
+    workspace: str = "",
+    count: int = 0,
+    lifecycle: LifecycleStatus = LifecycleStatus{},
+    tools: [ToolRow] = [],
+}
+
 export object GuardVerdict {
     decision: str = "",
     reason: str = "",
@@ -1047,6 +1080,7 @@ export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
+export extern fun tools() > ToolReport !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
 export object log {
@@ -1095,6 +1129,11 @@ export object secret {
 
 // Where this workspace's changes are discussed. One member: a magusfile says WHERE reviews live and does not conduct one, so opening a review, reading its threads and publishing drafts are reserved names on the provider spell instead (see spells/review.go). Wiring no provider is the ordinary state and never an error: the workspace reviews locally.
 export object review {
+    static extern fun provider(spell: {str: any}) > void;
+}
+
+// Where this workspace learns when its tools' release cycles reach end of life. The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers for the products the spells' tools name (Tool.lifecycle); magus\tools() and `magus describe tools` carry the answer, and nothing it says fails a build. One provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.
+export object lifecycle {
     static extern fun provider(spell: {str: any}) > void;
 }
 

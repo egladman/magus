@@ -113,6 +113,14 @@ var Magus = Module{
 			Impl:    MagusTargets,
 		},
 		{
+			Name:    "tools",
+			Doc:     "Every project's tools as `magus describe tools` reports them: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Annotate the result `> ToolReport` (magus's own type, no import needed) for compile-checked field access. Probes every tool's version, and asks the wired lifecycle provider (magus\\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not, like magus.targets.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ToolReport"}},
+			Raises:  true,
+			Impl:    MagusTools,
+		},
+		{
 			Name: "affected",
 			Doc:  "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
 			Args: []Arg{
@@ -638,6 +646,20 @@ var Magus = Module{
 			}},
 		},
 		{
+			Name: "lifecycle",
+			Doc: "Where this workspace learns when its tools' release cycles reach end of life. " +
+				"The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers " +
+				"for the products the spells' tools name (Tool.lifecycle); magus\\tools() and " +
+				"`magus describe tools` carry the answer, and nothing it says fails a build. One " +
+				"provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.",
+			Methods: []Method{{
+				Name:   "provider",
+				Doc:    "Select the lifecycle provider, given an imported spell handle. Declared at the top level of the root magusfile; wiring a second, different spell is an error.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
+		{
 			Name: "workspace",
 			Doc:  "Workspace-level declarations made from the root magusfile.",
 			Methods: []Method{{
@@ -1059,6 +1081,19 @@ func MagusTargets(ctx context.Context, opts map[string]any) (types.TargetGraphOu
 		return ws.TargetGraph(ctx)
 	}
 	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
+}
+
+// MagusTools returns every project's tools, versions, windows and lifecycle columns. Like
+// MagusTargets it serves the workspace on the context when there is one and forks a nested
+// `magus describe tools` when there is not, so a `magus buzz` script gets the same report.
+func MagusTools(ctx context.Context) (types.ToolReport, error) {
+	type toolReporter interface {
+		Tools(ctx context.Context, projects ...string) (types.ToolReport, error)
+	}
+	if ws, ok := types.WorkspaceFromContext(ctx).(toolReporter); ok {
+		return ws.Tools(ctx)
+	}
+	return runMagusJSON[types.ToolReport](ctx, "describe", []string{"tools"}, nil)
 }
 
 // MagusAffected computes the affected project set in-process. See MagusProjects for why

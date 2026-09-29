@@ -31,6 +31,7 @@ import (
 // spells/ is expected to compile; see the check in runSpells for why the distinction has
 // to be declared rather than inferred.
 var workspaceLocalSpells = map[string]bool{
+	"endoflife-date":  true, // reaches endoflife.date, so it imports http
 	"onepassword":     true, // reaches the `op` CLI, so it imports os
 	"system-keychain": true, // reaches the platform's keychain CLI, so it imports proc
 }

@@ -334,6 +334,53 @@ func ObjectTargetGraphOutput(v types.TargetGraphOutput) vm.Value {
 	return out
 }
 
+func ObjectLifecycleStatus(v types.LifecycleStatus) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("provider", vm.StrValue(v.Provider))
+	out.MapSet("state", vm.StrValue(v.State))
+	itemsSources := make([]vm.Value, len(v.Sources))
+	for indexSources := range v.Sources {
+		itemsSources[indexSources] = vm.StrValue(v.Sources[indexSources])
+	}
+	out.MapSet("sources", vm.ListValue(itemsSources))
+	out.MapSet("asOf", vm.StrValue(v.AsOf))
+	out.MapSet("fetchedAt", vm.StrValue(v.FetchedAt))
+	out.MapSet("detail", vm.StrValue(v.Detail))
+	return out
+}
+
+func ObjectToolRow(v types.ToolRow) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("bin", vm.StrValue(v.Bin))
+	out.MapSet("spell", vm.StrValue(v.Spell))
+	out.MapSet("installedVersion", vm.StrValue(v.InstalledVersion))
+	out.MapSet("probeError", vm.StrValue(v.ProbeError))
+	out.MapSet("spellBounds", vm.StrValue(v.SpellBounds))
+	out.MapSet("workspaceBounds", vm.StrValue(v.WorkspaceBounds))
+	out.MapSet("effective", vm.StrValue(v.Effective))
+	out.MapSet("verdict", vm.StrValue(v.Verdict))
+	out.MapSet("diagnosticCode", vm.StrValue(v.DiagnosticCode))
+	out.MapSet("lifecycle", vm.StrValue(v.Lifecycle))
+	out.MapSet("cycle", vm.StrValue(v.Cycle))
+	out.MapSet("eol", vm.StrValue(v.EOL))
+	out.MapSet("support", vm.StrValue(v.Support))
+	return out
+}
+
+func ObjectToolReport(v types.ToolReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	out.MapSet("count", vm.IntValue(int64(v.Count)))
+	out.MapSet("lifecycle", ObjectLifecycleStatus(v.Lifecycle))
+	itemsTools := make([]vm.Value, len(v.Tools))
+	for indexTools := range v.Tools {
+		itemsTools[indexTools] = ObjectToolRow(v.Tools[indexTools])
+	}
+	out.MapSet("tools", vm.ListValue(itemsTools))
+	return out
+}
+
 func ObjectAffectedResult(v types.AffectedResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))

@@ -513,6 +513,16 @@ var allChecks = []checkDef{
 		run:            (*runner).checkReadinessProbes,
 	},
 	{
+		Name: "toolchain-lifecycle",
+		// Measured by the provider, not by doctor: it reads the answer `magus describe
+		// tools` stored and never fetches, so a workspace with no stored answer reports
+		// unknown rather than fine.
+		Doc:            "an installed tool, or a workspace window floor, in a release cycle past its end of life",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkToolchainLifecycle,
+	},
+	{
 		Name:           "stale-spell-shadow-acknowledgments",
 		Doc:            "a spells.allow_shadow entry whose shadow no longer exists, so the reason is dead config",
 		Code:           types.SpellShadowed,

@@ -58,6 +58,10 @@ var boundaryTypes = []boundaryType{
 	// the adjective because types.Project and types.ProjectEntry already exist. The
 	// registry keys on the Buzz name, which is what makes that split expressible.
 	{Name: "Project", Type: reflect.TypeFor[spells.ProvidedProject]()},
+	// A lifecycle provider WRITES these, like Project. Leaf first: Lifecycle.cycles is
+	// [ReleaseCycle].
+	{Name: "ReleaseCycle", Type: reflect.TypeFor[spells.ReleaseCycle]()},
+	{Name: "Lifecycle", Type: reflect.TypeFor[spells.Lifecycle]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "ShellCommand", Type: reflect.TypeFor[types.ShellCommand](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
@@ -91,6 +95,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "Module", Type: reflect.TypeFor[types.ModuleEntry](), RuntimeObject: true},
 	{Name: "ProjectEntry", Type: reflect.TypeFor[types.ProjectEntry](), RuntimeObject: true},
 	{Name: "Projects", Type: reflect.TypeFor[types.ProjectsOutput](), RuntimeObject: true},
+	// magus\tools()'s report, leaves first.
+	{Name: "ToolRow", Type: reflect.TypeFor[types.ToolRow](), RuntimeObject: true},
+	{Name: "LifecycleStatus", Type: reflect.TypeFor[types.LifecycleStatus](), RuntimeObject: true},
+	{Name: "ToolReport", Type: reflect.TypeFor[types.ToolReport](), RuntimeObject: true},
 	{Name: "CrossTargetRef", Type: reflect.TypeFor[types.CrossTargetRef](), RuntimeObject: true},
 	{Name: "TargetSpellUse", Type: reflect.TypeFor[types.TargetSpellUse](), RuntimeObject: true},
 	{Name: "InputRef", Type: reflect.TypeFor[types.InputRef](), RuntimeObject: true},

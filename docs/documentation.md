@@ -71,6 +71,7 @@ Start here to understand the model magus is built on.
 - [Cache model](concepts/cache.md) - needs/provides, the content-addressed cache key, invalidation, and replay.
 - [Sandbox model](concepts/sandbox.md) - the threat model and allowlist semantics that confine spell execution.
 - [Services](concepts/services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
+- [Providers](concepts/providers.md) - the spells a magusfile hands a job to (projects, the remote cache, CI, secrets, review, harnesses, toolchain end-of-life dates), and the contract each one exports.
 - [Wards](concepts/wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
 - [Knowledge graph](concepts/knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
 - [Diagnostics](reference/diagnostics.md) - every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.

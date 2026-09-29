@@ -165,6 +165,16 @@ var SymbolIndexerSource string
 //go:embed gen/types/project.buzz
 var ProjectSource string
 
+// ReleaseCycleSource and LifecycleSource are the generated mirrors of spells.ReleaseCycle
+// and spells.Lifecycle: what a lifecycle provider's list_lifecycles contract returns.
+// ReleaseCycle must precede Lifecycle in the bundle (Lifecycle.cycles is [ReleaseCycle]).
+//
+//go:embed gen/types/releasecycle.buzz
+var ReleaseCycleSource string
+
+//go:embed gen/types/lifecycle.buzz
+var LifecycleSource string
+
 // LintModulePath is the import path of the lint value-types module: the Finding a Buzz
 // lint rule returns. Like magus/spell it is source only, so importing it makes Finding
 // constructible, which a type declared on the magus namespace is not.
@@ -196,7 +206,7 @@ var CharmModuleSource string
 // cross-references so their position is free). Shared by the runtime registration
 // (modules.go) and the built-in inliner (builtinModuleSources) below, so the two
 // can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

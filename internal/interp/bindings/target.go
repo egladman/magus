@@ -140,6 +140,37 @@ func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	return review
 }
 
+// buildLifecycle assembles magus\lifecycle for a magusfile. provider() wires an imported
+// spell as the one place this workspace learns when its tools' release cycles end:
+//
+//	import "spells/endoflife-date" as eol
+//	magus\lifecycle.provider(eol)
+//
+// The spell exports list_lifecycles (see spells/lifecycle.go), which lifecycle_provider.go
+// runs. ONE per workspace, recorded on the per-Open registry like cache.remote, because
+// Tool.Lifecycle is one vocabulary and a second provider would read "go" as a different
+// product. Wiring none is the ordinary state, as for review: the lifecycle columns of
+// `magus describe tools` read "-".
+func buildLifecycle(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	lifecycle := vm.NewMap()
+	lifecycle.MapSet("provider", directVal(obs, "magus.lifecycle.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: expected an imported spell handle`)
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: argument is not a spell handle (no name)`)
+		}
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+			if err := reg.SetLifecycleProvider(nv.AsString()); err != nil {
+				return vm.Null, fmt.Errorf(`magus\lifecycle.provider: %w`, err)
+			}
+		}
+		return vm.Null, nil
+	}))
+	return lifecycle
+}
+
 // buildSecret assembles magus\secret for a magusfile. provider() wires an imported
 // spell as this workspace's secret backend; read() reads one credential through it:
 //

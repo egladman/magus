@@ -249,6 +249,31 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
 
+// fakeToolReporter is a workspace that reports its tools, so magus\tools() can be shown
+// to answer in-process rather than forking a nested magus.
+type fakeToolReporter struct {
+	types.WorkspaceRepository
+	report types.ToolReport
+}
+
+func (f *fakeToolReporter) Tools(context.Context, ...string) (types.ToolReport, error) {
+	return f.report, nil
+}
+
+func TestMagusToolsIsServedInProcess(t *testing.T) {
+	t.Parallel()
+
+	want := types.ToolReport{
+		Workspace: "/ws",
+		Count:     1,
+		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
+		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
+	}
+	got, err := MagusTools(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
 // TestInsightNeedsAWorkspace pins the cost of removing the subcommand: there is no
 // longer a nested magus to fall back to, so a caller with no workspace on the
 // context is told so rather than silently getting a different answer.

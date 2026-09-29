@@ -96,16 +96,21 @@ which a monorepo needs.
 </details>
 
 The hosted feed was tried once more, as a signed registry `magus self refresh`
-fetched. Its pipeline never published a file, and it is gone. What stayed is one
-fact per tool: a spell's `lifecycle` names the endoflife.date product its binary
-follows (`go`, `nodejs`). It says what to look up and carries no dates.
+fetched. Its pipeline never published a file, and it is gone.
 
 The surviving design is a version range you declare, compared against a version
-magus already probes. It never learns which versions exist upstream and never
-picks one. To find out when your range has gone stale, write that in your own
-repo with `http`, `json`, and `semver`, the way `hack/advisories.buzz` wraps the
-advisory scanner. The binary supplies primitives. You supply knowledge about the
-world.
+magus already probes. That is the gate, and it makes no network call. End-of-life
+dates sit beside it, never in it: a contract type in the binary, the feed in a
+spell. A spell's `lifecycle` names the product its binary follows (`go`,
+`nodejs`), and the [lifecycle provider](concepts/providers.md#the-lifecycle-provider)
+a workspace wires answers when each release cycle ends. The binary defines what an
+answer looks like and what "past end of life" means; the spell decides where to
+read it, and `spells/endoflife-date` is one choice, shipped as source you copy
+rather than compiled in. The answer fills a column of `magus describe tools` and a
+doctor line. It never fails a build, never selects a version, and is never asked
+under `MAGUS_OFFLINE`. To act on it, write that in your own repo, the way
+`hack/advisories.buzz` wraps the advisory scanner. The binary supplies primitives.
+You supply knowledge about the world.
 
 ## The line
 

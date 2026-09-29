@@ -48,6 +48,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectTargetGraphOutput(ret0), nil
 	}))
+	m.MapSet("tools", vm.DirectValue("magus.tools", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusTools(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectToolReport(ret0), nil
+	}))
 	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusAffected(ctx, base)

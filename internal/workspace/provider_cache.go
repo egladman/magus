@@ -84,7 +84,8 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 	if cache.Dir != "" {
 		fingerprint = providerFingerprint(ctx, root, spellName)
 		if fingerprint != "" {
-			if entry, ok := readProviderCache(cache.Dir, spellName); ok && entry.Fingerprint == fingerprint {
+			var entry providerCacheEntry
+			if readProviderCache(providerCachePath(cache.Dir, spellName), &entry) && entry.Fingerprint == fingerprint {
 				slog.DebugContext(ctx, "magus: workspace provider replayed from cache",
 					slog.String("provider", spellName), slog.String("fingerprint", fingerprint))
 				return entry.Projects, nil
@@ -115,13 +116,51 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 			slog.String("provider", spellName))
 		return provided, nil
 	}
-	entry := providerCacheEntry{Fingerprint: fingerprint, Projects: provided}
-	if data, merr := json.Marshal(entry); merr != nil {
-		slog.DebugContext(ctx, "magus: workspace provider cache not encodable", slog.String("err", merr.Error()))
-	} else if werr := file.WriteFileAtomic(providerCachePath(cache.Dir, spellName), data, 0o644); werr != nil {
-		slog.DebugContext(ctx, "magus: workspace provider cache not writable", slog.String("err", werr.Error()))
-	}
+	writeProviderCache(ctx, providerCachePath(cache.Dir, spellName), providerCacheEntry{Fingerprint: fingerprint, Projects: provided})
 	return provided, nil
+}
+
+// writeProviderCache stores one provider's entry at path. A failure is logged and
+// dropped: the provider is the source of truth, so a lost entry costs a re-run.
+func writeProviderCache(ctx context.Context, path string, entry any) {
+	if data, err := json.Marshal(entry); err != nil {
+		slog.DebugContext(ctx, "magus: provider cache not encodable", slog.String("path", path), slog.String("err", err.Error()))
+	} else if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
+		slog.DebugContext(ctx, "magus: provider cache not writable", slog.String("path", path), slog.String("err", err.Error()))
+	}
+}
+
+// readProviderCache decodes the entry at path into entry, reporting false when there is
+// none or it does not decode, which every caller treats as a miss.
+func readProviderCache(path string, entry any) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(data, entry) == nil
+}
+
+// providerDigest is the fingerprint every provider cache shares: the entry format, the
+// root, the spell name, the built-in registry's hash, then the caller's own inputs, one
+// line each. See providerFingerprint for why each of the first four is there.
+func providerDigest(format int, root, spellName string, inputs ...[]string) string {
+	h := sha256.New()
+	_, _ = h.Write([]byte(strconv.Itoa(format) + "\n"))
+	// The root, because cache.dir may be absolute and shared: two workspaces both
+	// wiring a spell named "nx" would otherwise overwrite each other's entry on every
+	// command and neither would ever hit.
+	_, _ = h.Write([]byte(root + "\n"))
+	// The spell name, because providerCachePath sanitizes it: "my/nx" and "my_nx" land on
+	// the same file, and without this the two would agree on a fingerprint whenever their
+	// inputs matched, so each would replay the other's answer.
+	_, _ = h.Write([]byte(spellName + "\n"))
+	_, _ = h.Write([]byte(spell.BuiltinsHash() + "\n"))
+	for _, lines := range inputs {
+		for _, l := range lines {
+			_, _ = h.Write([]byte(l + "\n"))
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }
 
 // providerOwnSourceGlobs are folded into every provider's fingerprint on top of what
@@ -170,24 +209,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 		return ""
 	}
 
-	h := sha256.New()
-	_, _ = h.Write([]byte(strconv.Itoa(providerCacheVersion) + "\n"))
-	// The root, because cache.dir may be absolute and shared: two workspaces both
-	// wiring a spell named "nx" would otherwise overwrite each other's entry on every
-	// command and neither would ever hit.
-	_, _ = h.Write([]byte(root + "\n"))
-	// The spell name, because providerCachePath sanitizes it: "my/nx" and "my_nx" land on
-	// the same file, and without this the two would agree on a fingerprint whenever their
-	// declared globs matched the same files, so each would replay the other's project set.
-	_, _ = h.Write([]byte(spellName + "\n"))
-	_, _ = h.Write([]byte(spell.BuiltinsHash() + "\n"))
-	for _, g := range globs {
-		_, _ = h.Write([]byte(g + "\n"))
-	}
-	for _, l := range lines {
-		_, _ = h.Write([]byte(l + "\n"))
-	}
-	return hex.EncodeToString(h.Sum(nil)[:16])
+	return providerDigest(providerCacheVersion, root, spellName, globs, lines)
 }
 
 // matchedFileIdentities returns "<rel>\x00<size>\x00<mtime>" for every file under
@@ -252,16 +274,4 @@ func providerCachePath(cacheDir, spellName string) string {
 		}
 	}
 	return filepath.Join(cacheDir, "providers", string(safe)+".json")
-}
-
-func readProviderCache(cacheDir, spellName string) (providerCacheEntry, bool) {
-	data, err := os.ReadFile(providerCachePath(cacheDir, spellName))
-	if err != nil {
-		return providerCacheEntry{}, false
-	}
-	var entry providerCacheEntry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return providerCacheEntry{}, false
-	}
-	return entry, true
 }

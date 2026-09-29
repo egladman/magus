@@ -115,6 +115,12 @@ if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
 if (os\env("CI_PROVIDER") == "github-actions") {
     magus\ci.provider(github);
 }
+// endoflife.date answers when each installed toolchain's release cycle ends. Asked only by
+// `magus describe tools` and magus\tools(), never by a build, and not at all under
+// MAGUS_OFFLINE; doctor reads the answer describe tools stored.
+import "spells/endoflife-date" as eol;
+magus\lifecycle.provider(eol);
+
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);

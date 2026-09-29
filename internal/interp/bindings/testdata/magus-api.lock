@@ -39,6 +39,8 @@ job.list
 job.put
 job.register
 job.wait
+lifecycle
+lifecycle.provider
 log
 log.debug
 log.error
@@ -73,6 +75,7 @@ service.release
 skills
 stats
 targets
+tools
 vcs
 vcs.checkpoint
 where
