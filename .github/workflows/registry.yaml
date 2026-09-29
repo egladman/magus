@@ -8,7 +8,7 @@ name: Registry
 # NOT audit.yaml. That workflow's header promises neither job publishes anything,
 # and this one exists to publish.
 #
-# The work is hack/registry.buzz, not a Go program, and docs/scope.md is why:
+# The work is hack/toolchain-releases.buzz, not a Go program, and docs/scope.md is why:
 # "The binary supplies primitives. You supply knowledge about the world." Which
 # upstream to read and which of its fields matter is knowledge about the world, so
 # it belongs in a file anyone can change without cutting a magus release.
@@ -56,7 +56,7 @@ jobs:
       # Its own step so a network failure stops here, loudly, rather than being
       # folded into a build that would then publish a half-refreshed snapshot.
       - name: Fetch from endoflife.date
-        run: magus buzz hack/registry.buzz -- fetch
+        run: magus buzz hack/toolchain-releases.buzz -- fetch
 
       - name: Build and sign the registry
         env:
@@ -64,7 +64,7 @@ jobs:
         run: |
           # 180 days, matching the release index. Long because nothing republishes on
           # a timer - this workflow does, and `magus doctor` warns as it nears.
-          magus buzz hack/registry.buzz -- build \
+          magus buzz hack/toolchain-releases.buzz -- build \
             --expires "$(date -u -d '+180 days' +%Y-%m-%dT%H:%M:%SZ)"
 
       # Everything below goes through `gh`, which already holds a token, rather than
@@ -107,7 +107,7 @@ jobs:
           gh pr create --base main --head "$branch" \
             --title "Refresh the signed registry from endoflife.date" \
             --body "$(cat <<'BODY'
-          Opened by `.github/workflows/registry.yaml`, built by `hack/registry.buzz`.
+          Opened by `.github/workflows/registry.yaml`, built by `hack/toolchain-releases.buzz`.
 
           Republished end-of-life facts, keyed by upstream product slug. The signature
           says these are the bytes our pipeline built; it does not say any date in them
@@ -116,6 +116,6 @@ jobs:
           Every upstream response's digest is recorded in the file, so anyone can rebuild
           it and diff rather than take our word for it:
 
-              magus buzz hack/registry.buzz -- verify --expires <the file's expires_at>
+              magus buzz hack/toolchain-releases.buzz -- verify --expires <the file's expires_at>
           BODY
           )" 2>/dev/null || echo "a pull request for $branch is already open"

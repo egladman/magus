@@ -1,5 +1,5 @@
-// registry.buzz - aggregate endoflife.date into one signed file, so no magus user
-// ever reads that API.
+// toolchain-releases.buzz - aggregate endoflife.date into one signed file, so no magus
+// user ever reads that API.
 //
 // This is Buzz rather than Go on purpose, and docs/scope.md is where the reason is
 // written down: "The binary supplies primitives. You supply knowledge about the
@@ -10,9 +10,9 @@
 //
 // Three steps, because the split is what makes the output checkable:
 //
-//	magus buzz hack/registry.buzz -- fetch                       download into ./upstream
-//	magus buzz hack/registry.buzz -- build --expires <rfc3339>   transform -> the signed pair
-//	magus buzz hack/registry.buzz -- verify --expires <rfc3339>  rebuild and diff the published file
+//	magus buzz hack/toolchain-releases.buzz -- fetch                       download into ./upstream
+//	magus buzz hack/toolchain-releases.buzz -- build --expires <rfc3339>   transform -> the signed pair
+//	magus buzz hack/toolchain-releases.buzz -- verify --expires <rfc3339>  rebuild and diff the published file
 //
 // There is no default step. build signs and overwrites the published file, so it runs
 // only when a caller names it; a bare run prints the usage line and fails.
@@ -28,7 +28,7 @@
 // the last place it should appear. crypto\ed25519Sign takes the NAME of the
 // variable rather than the key, so the key never becomes a Buzz value that could be
 // interpolated into a log.
-namespace registry;
+namespace toolchainreleases;
 
 import "std";
 import "flags";
@@ -238,7 +238,7 @@ fun encode(doc: {str: any}) > str {
     return serialize\jsonEncode(serialize\Boxed.init(doc)) + "\n";
 }
 
-final usage = "usage: magus buzz hack/registry.buzz -- <step> <flags>\n"
+final usage = "usage: magus buzz hack/toolchain-releases.buzz -- <step> <flags>\n"
     + "  fetch [--upstream <dir>]\n"
     + "  build --expires <rfc3339> [--upstream <dir>] [--releases <dir>] [--out <dir>] [--no-sign]\n"
     + "  verify --expires <rfc3339> [--upstream <dir>] [--releases <dir>] [--out <dir>]\n"
@@ -271,12 +271,12 @@ final STEP_FLAGS = {
 // step a default would pick is the one that signs.
 export fun parse(args: [str]) > Invocation !> any {
     if (args.len() == 0) {
-        throw "registry: no step given\n{usage}";
+        throw "toolchain-releases:no step given\n{usage}";
     }
     final step = args[0];
     final valued = STEP_FLAGS[step];
     if (valued == null) {
-        throw "registry: unknown step \"{step}\"\n{usage}";
+        throw "toolchain-releases:unknown step \"{step}\"\n{usage}";
     }
     var switches = [<str>];
     if (step == "build") {
@@ -285,12 +285,12 @@ export fun parse(args: [str]) > Invocation !> any {
     final parsed = flags\parse(args.sub(1), switches: switches, valued: valued!);
     final extra = "{parsed.unknown.join(" ")} {parsed.positionals.join(" ")}".trim();
     if (extra != "") {
-        throw "registry: {step} does not take {extra}\n{usage}";
+        throw "toolchain-releases:{step} does not take {extra}\n{usage}";
     }
     final v = parsed.values;
     final expires = v["--expires"] ?? "";
     if (step != "fetch" and expires == "") {
-        throw "registry: {step} needs --expires (RFC3339); it is the bound on replaying an old copy, so there is no safe default to guess\n{usage}";
+        throw "toolchain-releases:{step} needs --expires (RFC3339); it is the bound on replaying an old copy, so there is no safe default to guess\n{usage}";
     }
     final d = Options{ expires = "" };
     return Invocation{ step = step, options = Options{
@@ -316,7 +316,7 @@ export fun render(o: Options) > str !> any {
     // buildDoc reads, and it is typed [str] where doc["eol"] is any.
     final cached = productSlugs(o.upstreamDir).len();
     if (cached < MIN_PRODUCTS) {
-        throw "registry: refusing to build from {cached} cached product(s) in \"{o.upstreamDir}\"; expected at least {MIN_PRODUCTS}. Re-run the fetch step, or lower MIN_PRODUCTS deliberately if upstream really shrank";
+        throw "toolchain-releases:refusing to build from {cached} cached product(s) in \"{o.upstreamDir}\"; expected at least {MIN_PRODUCTS}. Re-run the fetch step, or lower MIN_PRODUCTS deliberately if upstream really shrank";
     }
     return encode(buildDoc(o.upstreamDir, releasesDir: o.releasesDir, expiresAt: o.expires));
 }
@@ -356,7 +356,7 @@ export fun main(args: [str]) > void !> any {
         std\print("fetched {n} product(s) into {o.upstreamDir}");
     } else if (inv.step == "verify") {
         if (!verify(o)) {
-            throw "registry: {o.outDir}/index.json does NOT reproduce from the recorded inputs";
+            throw "toolchain-releases:{o.outDir}/index.json does NOT reproduce from the recorded inputs";
         }
         std\print("{o.outDir}/index.json reproduces byte-for-byte from the recorded inputs");
     } else if (inv.step == "build") {
@@ -370,7 +370,7 @@ export fun main(args: [str]) > void !> any {
     } else {
         // Signing is reached only by naming build. A verify that fell through to the
         // sign path once overwrote and re-signed the published file.
-        throw "registry: step \"{inv.step}\" has no arm";
+        throw "toolchain-releases:step \"{inv.step}\" has no arm";
     }
 }
 
@@ -385,17 +385,17 @@ fun refusal(args: [str]) > str {
 }
 
 test "a bare run names no step, so nothing builds or signs" {
-    assert\equal(refusal([<str>]), want: "registry: no step given\n" + usage, message: "no default step");
+    assert\equal(refusal([<str>]), want: "toolchain-releases:no step given\n" + usage, message: "no default step");
 }
 
 test "an unknown step is refused with the usage line" {
-    assert\equal(refusal(["sign"]), want: "registry: unknown step \"sign\"\n" + usage, message: "unknown step");
+    assert\equal(refusal(["sign"]), want: "toolchain-releases:unknown step \"sign\"\n" + usage, message: "unknown step");
 }
 
 test "build and verify need --expires" {
     foreach (step in ["build", "verify"]) {
-        assert\isTrue(refusal([step]).startsWith("registry: {step} needs --expires"), message: step);
-        assert\isTrue(refusal([step, "--expires", ""]).startsWith("registry: {step} needs --expires"), message: "{step} empty");
+        assert\isTrue(refusal([step]).startsWith("toolchain-releases:{step} needs --expires"), message: step);
+        assert\isTrue(refusal([step, "--expires", ""]).startsWith("toolchain-releases:{step} needs --expires"), message: "{step} empty");
     }
     assert\equal(refusal(["fetch"]), want: "", message: "fetch needs no expiry");
 }
@@ -408,7 +408,7 @@ test "each step takes only its own flags" {
         ["build", "--expires", "2027-01-01T00:00:00Z", "extra"],
         ["build", "--expires", "2027-01-01T00:00:00Z", "--", "extra"],
     ]) {
-        assert\isTrue(refusal(args).startsWith("registry: {args[0]} does not take "), message: args.join(" "));
+        assert\isTrue(refusal(args).startsWith("toolchain-releases:{args[0]} does not take "), message: args.join(" "));
         assert\isTrue(refusal(args).endsWith("\n" + usage), message: "{args.join(" ")} prints usage");
     }
     assert\isTrue(refusal(["build", "--out"]) != "", message: "a valued flag with no value");

@@ -303,13 +303,13 @@ func TestLoadDegradesRatherThanFailing(t *testing.T) {
 }
 
 // TestBuzzProducerMatchesThisReader is the seam that moving the aggregator to Buzz
-// created: the file is now written by hack/registry.buzz and read by this package,
+// created: the file is now written by hack/toolchain-releases.buzz and read by this package,
 // in two different languages, with no compiler between them. The fixture is real
 // output from that script, so a field renamed on either side fails here.
 //
 // Regenerate it with:
 //
-//	magus buzz hack/registry.buzz -- build --upstream cmd/magus-utils/testdata/upstream \
+//	magus buzz hack/toolchain-releases.buzz -- build --upstream cmd/magus-utils/testdata/upstream \
 //	  --releases releases --out internal/registry/testdata \
 //	  --expires 2027-01-01T00:00:00Z --no-sign
 func TestBuzzProducerMatchesThisReader(t *testing.T) {

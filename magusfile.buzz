@@ -3046,7 +3046,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/*.buzz", "hack/policy/*.buzz",
+        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/*.buzz", "hack/ci/*.buzz", "hack/policy/*.buzz",
         "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
@@ -3083,9 +3083,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   `import "assert";`, so they failed the moment anything ran them.
     //                   An embedded stdlib module, so --embedded like the spells.
     //
-    //   hack/*.buzz     registry.buzz did not PARSE. Three steps of
+    //   hack/*.buzz     toolchain-releases.buzz did not PARSE. Three steps of
     //                   .github/workflows/registry.yaml invoke it as
-    //                   `magus buzz hack/registry.buzz`, so the registry workflow was
+    //                   `magus buzz hack/toolchain-releases.buzz`, so the registry workflow was
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
     // The MODE is per file, not per directory, because hack/ is not uniform. A script
@@ -3107,6 +3107,10 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         } else {
             cover_for(mod.value, [], {});
         }
+    }
+    // Workflow steps run bare, so they are gated strict.
+    foreach (mod in fs\glob("hack/ci/*.buzz")) {
+        cover_for(mod.value, [], {});
     }
     // The agent policy is a magusfile import like the embedded scripts above it.
     foreach (mod in fs\glob("hack/policy/*.buzz")) {

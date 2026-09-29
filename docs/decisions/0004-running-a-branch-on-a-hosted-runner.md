@@ -30,7 +30,7 @@ queue gates a candidate in, and `ci.yaml`'s shards run inside it. `setup-magus` 
 magus from the checked-out tree. `.github/actions/magus` passes an argv through its
 environment, so a word-split argv never reaches a shell as code. GitHub's dispatch API
 returns the run it created (changelog 2026-02-19), and `gh workflow run` prints its URL
-since v2.87.0. `hack/gha-queue.buzz` already dispatches `queue.yaml` with `gh`.
+since v2.87.0. `hack/ci/merge-queue.buzz` already dispatches `queue.yaml` with `gh`.
 
 ## Options
 

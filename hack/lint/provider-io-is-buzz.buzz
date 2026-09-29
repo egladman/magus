@@ -71,9 +71,15 @@ fun allowed(path: str) > bool {
             return true;
         }
     }
-    // hack/*.buzz: a file directly under hack/, not one of its subdirectories
-    // (hack/lint/*, hack/policy/*), which carry no provider call of their own.
-    return path.startsWith("hack/") and path.endsWith(".buzz") and path.indexOf("/", from: 5) == null;
+    // hack/*.buzz and hack/ci/*.buzz: the drivers a person or a workflow runs, not the
+    // other subdirectories (hack/lint/*, hack/policy/*), which carry no provider call of
+    // their own.
+    foreach (dir in ["hack/", "hack/ci/"]) {
+        if (path.startsWith(dir) and path.endsWith(".buzz") and path.indexOf("/", from: dir.len()) == null) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fun outOfScope(path: str) > bool {
@@ -102,7 +108,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (ghExec.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "runs gh outside the Buzz files that may reach a provider",
-                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a top-level hack/*.buzz, "
+                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a hack/*.buzz or hack/ci/*.buzz driver, "
                         + "or a workflow action; or add the path to ALLOWED_FILES in hack/lint/provider-io-is-buzz.buzz, naming why" });
             } else if (curlExec.match(line) != null and providerHost.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
@@ -208,7 +214,11 @@ test "the allowed dirs, top-level hack files and named files pass; a nested hack
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
-        "hack/registry.buzz": `namespace x;
+        "hack/toolchain-releases.buzz": `namespace x;
+
+fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+`,
+        "hack/ci/merge-queue.buzz": `namespace x;
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,

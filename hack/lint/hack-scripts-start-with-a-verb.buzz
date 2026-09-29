@@ -108,6 +108,6 @@ test "a script named for its subject rather than its effect is refused, and so i
 test "reads() takes the root of hack/ and leaves hack/ci/ and the rule files alone" {
     final globs = reads();
     assert\equal(path\matchesAny(globs, path: "hack/rename-symbol.buzz"), want: true, message: "root script");
-    assert\equal(path\matchesAny(globs, path: "hack/ci/registry.buzz"), want: false, message: "ci step");
+    assert\equal(path\matchesAny(globs, path: "hack/ci/merge-queue.buzz"), want: false, message: "ci step");
     assert\equal(path\matchesAny(globs, path: "hack/lint/hack-scripts-start-with-a-verb.buzz"), want: false, message: "rule file");
 }

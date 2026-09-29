@@ -236,7 +236,7 @@ generated file, a candidate tree or a review proof from a verdict.
     sandbox.
   - With `--sandbox=required`, or `sandbox.mode: required` on the base, the queue
     refuses ([MGS2012](../reference/codes/sandbox/MGS2012.md)) to run a hook the kernel
-    cannot confine, and stops. `hack/gha-queue.buzz` passes it to `validate` and
+    cannot confine, and stops. `hack/ci/merge-queue.buzz` passes it to `validate` and
     `apply`. Without it, on a host without landlock (macOS, Windows, an older Linux), a
     hook runs under the environment allowlist and the program check alone: `magus queue
     validate` runs on a laptop, and confines nothing on its filesystem there.

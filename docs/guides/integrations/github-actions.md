@@ -432,7 +432,7 @@ jobs:
           queue-app-client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
         env:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
-      - run: magus buzz hack/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
+      - run: magus buzz hack/ci/merge-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
@@ -444,7 +444,7 @@ jobs:
 
 With neither the variable nor the secret, `setup-magus` mints nothing and its outputs are
 empty; this repository's apply job then fails before the queue starts, and
-`gha-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
+`merge-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
 other `setup-magus` fails the job. The token is an output, never an environment
 variable, because `setup-magus` also runs in jobs that execute pull-request code. The app
 reaches the queue as explicit flags; nothing reads the runner's environment to guess.

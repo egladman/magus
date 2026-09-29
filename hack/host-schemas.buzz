@@ -6,7 +6,7 @@
 // this script is the other half, because a vendored copy with nothing that re-fetches
 // it is a snapshot that quietly ages into a claim about a host that no longer exists.
 //
-// Two steps, and the split is the same one hack/registry.buzz makes for the same
+// Two steps, and the split is the same one hack/toolchain-releases.buzz makes for the same
 // reason: reading upstream and WRITING from it are different acts, and only one of them
 // should be able to change the tree.
 //
