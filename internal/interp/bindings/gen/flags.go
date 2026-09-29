@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,12 +18,12 @@ func RegisterFlags(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("flags.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		argv := StrSlice(bzArgs, 0)
-		switches := StrSlice(bzArgs, 1)
-		valued := StrSlice(bzArgs, 2)
+		argv := ffi.StrSlice(bzArgs, 0)
+		switches := ffi.StrSlice(bzArgs, 1)
+		valued := ffi.StrSlice(bzArgs, 2)
 		ret0, err := std.FlagsParse(ctx, argv, switches, valued)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectFlagParse(ret0), nil
 	}))

@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -23,215 +24,215 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("cmd", vm.DirectValue("magus.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		sub := Str(bzArgs, 0)
-		args := StrSlice(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		sub := ffi.Str(bzArgs, 0)
+		args := ffi.StrSlice(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.MagusCmd(ctx, sub, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("projects", vm.DirectValue("magus.projects", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusProjects(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectProjectsOutput(ret0), nil
 	}))
 	m.MapSet("targets", vm.DirectValue("magus.targets", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.MagusTargets(ctx, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectTargetGraphOutput(ret0), nil
 	}))
 	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Str(bzArgs, 0)
+		base := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusAffected(ctx, base)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectAffectedResult(ret0), nil
 	}))
 	m.MapSet("projectGraph", vm.DirectValue("magus.projectGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGraph(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectGraphView(ret0), nil
 	}))
 	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		dir := Str(bzArgs, 0)
+		dir := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusWhere(ctx, dir)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		code := Str(bzArgs, 0)
-		message := Str(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		code := ffi.Str(bzArgs, 0)
+		message := ffi.Str(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		if err := std.MagusRaise(ctx, code, message, opts); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusRun(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("describe", vm.DirectValue("magus.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDescribe(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.MagusInsight(ctx, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectInsightReport(ret0), nil
 	}))
 	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		query := Str(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		query := ffi.Str(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusQuery(ctx, query, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectKnowledgeQueryOutput(ret0), nil
 	}))
 	m.MapSet("explain", vm.DirectValue("magus.explain", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := Str(bzArgs, 0)
+		node := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusExplain(ctx, node)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectKnowledgeExplainOutput(ret0), nil
 	}))
 	m.MapSet("path", vm.DirectValue("magus.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := Str(bzArgs, 0)
-		to := Str(bzArgs, 1)
+		node := ffi.Str(bzArgs, 0)
+		to := ffi.Str(bzArgs, 1)
 		ret0, err := std.MagusPath(ctx, node, to)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectKnowledgePathOutput(ret0), nil
 	}))
 	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		symbol := Str(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		symbol := ffi.Str(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusRefs(ctx, symbol, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectKnowledgeRefsOutput(ret0), nil
 	}))
 	m.MapSet("stats", vm.DirectValue("magus.stats", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		kind := Str(bzArgs, 0)
+		kind := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusStats(ctx, kind)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectKnowledgeStats(ret0), nil
 	}))
 	m.MapSet("output", vm.DirectValue("magus.output", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ref := Str(bzArgs, 0)
+		ref := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusOutput(ctx, ref)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectOutputRecord(ret0), nil
 	}))
 	m.MapSet("impact", vm.DirectValue("magus.impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Str(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		base := ffi.Str(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusImpact(ctx, base, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImpactResult(ret0), nil
 	}))
 	m.MapSet("describeFile", vm.DirectValue("magus.describeFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		paths := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		paths := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDescribeFile(ctx, paths, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectFileReport(ret0), nil
 	}))
 	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.MagusDiff(ctx, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectDiff(ret0), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDoctor(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectDoctorReport(ret0), nil
 	}))
 	m.MapSet("clean", vm.DirectValue("magus.clean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusClean(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectCleanReport(ret0), nil
 	}))
 	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusAttention(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyMapVal(ret0), nil
+		return ffi.AnyMapVal(ret0), nil
 	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		outputs := StrSlice(bzArgs, 0)
-		inputs := StrSlice(bzArgs, 1)
+		outputs := ffi.StrSlice(bzArgs, 0)
+		inputs := ffi.StrSlice(bzArgs, 1)
 		ret0, err := std.MagusDiagnoseDrift(ctx, outputs, inputs)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectDriftResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		project_path := Str(bzArgs, 0)
+		project_path := ffi.Str(bzArgs, 0)
 		if err := std.MagusBustCache(ctx, project_path); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("hasCharm", vm.DirectValue("magus.hasCharm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusHasCharm(ctx, name)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	return m
 }

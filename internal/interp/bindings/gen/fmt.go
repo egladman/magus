@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,13 +18,13 @@ func RegisterFmt(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("sprintf", vm.DirectValue("fmt.sprintf", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		format := Str(bzArgs, 0)
-		args := VariadicStr(bzArgs, 1)
+		format := ffi.Str(bzArgs, 0)
+		args := ffi.VariadicStr(bzArgs, 1)
 		ret0, err := std.FmtSprintf(ctx, format, args...)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

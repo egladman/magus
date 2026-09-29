@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,8 +29,8 @@ func runForProject(t *testing.T, c *Cache, root, projectPath, outContent string)
 	out := filepath.Join(abs, "out.txt")
 	step := Step{
 		ProjectPath:   projectPath,
-		Sources:       []string{filepath.Join(projectPath, "*.go")},
-		Outputs:       []string{filepath.Join(projectPath, "out.txt")},
+		Sources:       types.MustParseGlobs(filepath.Join(projectPath, "*.go")),
+		Outputs:       types.MustParseGlobs(filepath.Join(projectPath, "out.txt")),
 		WorkspaceRoot: root,
 	}
 	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
@@ -129,7 +130,7 @@ func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 
 	// A real, manifest-backed entry.
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	_, err := c.Run(context.Background(), step, func(context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)

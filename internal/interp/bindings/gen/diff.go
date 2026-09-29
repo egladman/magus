@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,34 +18,34 @@ func RegisterDiff(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("unified", vm.DirectValue("diff.unified", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := Str(bzArgs, 0)
-		b := Str(bzArgs, 1)
-		from_label := Str(bzArgs, 2)
-		to_label := Str(bzArgs, 3)
-		context := Int(bzArgs, 4, 0)
+		a := ffi.Str(bzArgs, 0)
+		b := ffi.Str(bzArgs, 1)
+		from_label := ffi.Str(bzArgs, 2)
+		to_label := ffi.Str(bzArgs, 3)
+		context := ffi.Int(bzArgs, 4, 0)
 		ret0, err := std.DiffUnified(ctx, a, b, from_label, to_label, context)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("equal", vm.DirectValue("diff.equal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := Str(bzArgs, 0)
-		b := Str(bzArgs, 1)
+		a := ffi.Str(bzArgs, 0)
+		b := ffi.Str(bzArgs, 1)
 		ret0, err := std.DiffEqual(ctx, a, b)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("stat", vm.DirectValue("diff.stat", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := Str(bzArgs, 0)
-		b := Str(bzArgs, 1)
+		a := ffi.Str(bzArgs, 0)
+		b := ffi.Str(bzArgs, 1)
 		ret0, err := std.DiffStat(ctx, a, b)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

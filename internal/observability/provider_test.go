@@ -172,8 +172,8 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
 
@@ -220,8 +220,8 @@ func TestCacheRunOptions_HitRecordsSavedTime(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
 
@@ -257,8 +257,8 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
 
@@ -323,8 +323,8 @@ func TestTargetRunOptions(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 		Target:        "test",
 	}
@@ -361,7 +361,7 @@ func TestTargetRunOptions(t *testing.T) {
 	multiOpts := TargetRunOptions(context.Background(), rec, multiSpellsOf)
 	multiStep := cache.Step{
 		ProjectPath:   "q",
-		Sources:       []string{"p/*.go"},
+		Sources:       types.MustParseGlobs("p/*.go"),
 		WorkspaceRoot: root,
 		Target:        "build",
 	}

@@ -91,6 +91,30 @@ magusfiles and any spell sources specific to that target, but it does not inheri
 the broad project baseline. This is what lets one target be precise without making
 its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-target)).
 
+### Excluding files from a glob
+
+A `!` argument excludes. It narrows every glob of the same call, wherever it sits in
+the call, and never a glob declared by another call:
+
+```buzz
+export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/*_test.go"); // every generated file, not the tests
+}
+```
+
+The same holds in `ctx.readsFiles`, `ctx.modifiesExistingFiles`, and a project's
+`sources` and `outputs`, and it is the meaning `!` has in
+[`ctx.glob`](dependencies.md). A call of nothing but exclusions is refused at load, since
+it declares nothing; write a literal leading `!` as `\!`. A glob naming a directory
+without a wildcard covers every file beneath it, and so does an exclusion.
+
+An excluded file is not the target's: the cache never stores or replays it,
+`magus clean` never removes it, `magus describe file` does not call it an output, and
+watch mode rebuilds when it changes. In `.gitattributes` magus lists each output glob
+as declared, then names every tracked file an exclusion carves out with
+`!merge !linguist-generated`, so git merges it as ordinary text; Mercurial and Sapling
+get the same carve-out, first in `[merge-patterns]`.
+
 ### Files a target edits rather than produces
 
 The declaration names encode ownership, not merely direction:

@@ -418,9 +418,9 @@ func outputClaim(p *types.Project, desc string, b *changeBucket) (target, glob s
 			if ref.Project != "" && ref.Project != p.Path {
 				continue
 			}
-			rooted := types.RootGlob(p.Path, ref.Glob)
+			rooted := ref.Rooted(p.Path)
 			for _, c := range changed {
-				if types.MatchesAnyGlob([]string{rooted}, c) {
+				if rooted.Match(c) {
 					return name, ref.Glob, true
 				}
 			}

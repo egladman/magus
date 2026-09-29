@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -19,60 +20,60 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("get", vm.DirectValue("http.get", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := Str(bzArgs, 0)
-		headers := StrMap(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
-		retry := AnyMap(bzArgs, 3)
+		url := ffi.Str(bzArgs, 0)
+		headers := ffi.StrMap(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
+		retry := ffi.AnyMap(bzArgs, 3)
 		ret0, err := std.HTTPGet(ctx, url, headers, opts, retry)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := Str(bzArgs, 0)
-		dest := Str(bzArgs, 1)
-		headers := StrMap(bzArgs, 2)
-		opts := AnyMap(bzArgs, 3)
-		retry := AnyMap(bzArgs, 4)
+		url := ffi.Str(bzArgs, 0)
+		dest := ffi.Str(bzArgs, 1)
+		headers := ffi.StrMap(bzArgs, 2)
+		opts := ffi.AnyMap(bzArgs, 3)
+		retry := ffi.AnyMap(bzArgs, 4)
 		ret0, err := std.HTTPDownload(ctx, url, dest, headers, opts, retry)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("post", vm.DirectValue("http.post", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := Str(bzArgs, 0)
-		body := Str(bzArgs, 1)
-		headers := StrMap(bzArgs, 2)
-		opts := AnyMap(bzArgs, 3)
-		retry := AnyMap(bzArgs, 4)
+		url := ffi.Str(bzArgs, 0)
+		body := ffi.Str(bzArgs, 1)
+		headers := ffi.StrMap(bzArgs, 2)
+		opts := ffi.AnyMap(bzArgs, 3)
+		retry := ffi.AnyMap(bzArgs, 4)
 		ret0, err := std.HTTPPost(ctx, url, body, headers, opts, retry)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("request", vm.DirectValue("http.request", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		method := Str(bzArgs, 0)
-		url := Str(bzArgs, 1)
-		body := Str(bzArgs, 2)
-		headers := StrMap(bzArgs, 3)
-		opts := AnyMap(bzArgs, 4)
-		retry := AnyMap(bzArgs, 5)
+		method := ffi.Str(bzArgs, 0)
+		url := ffi.Str(bzArgs, 1)
+		body := ffi.Str(bzArgs, 2)
+		headers := ffi.StrMap(bzArgs, 3)
+		opts := ffi.AnyMap(bzArgs, 4)
+		retry := ffi.AnyMap(bzArgs, 5)
 		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts, retry)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("server", vm.DirectValue("http.server", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.HTTPServe(ctx, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	return m
 }

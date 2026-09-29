@@ -209,9 +209,9 @@ func externDecl(m std.Method) (string, error) {
 		return "", err
 	}
 	// A raising Method emits `!> any`, not a specific error type: every host error
-	// crosses the VM boundary through gen.HostError, which wraps it in a map
+	// crosses the VM boundary through ffi.Error, which wraps it in a map
 	// (StructuredError.BuzzError()) rather than a plain str; see
-	// internal/interp/bindings/gen/runtime.go. `any` is the honest declared shape,
+	// internal/interp/bindings/ffi/convert.go. `any` is the honest declared shape,
 	// and it is also what an untyped `catch (e)` already binds to, so it costs
 	// existing call sites nothing.
 	raises := ""

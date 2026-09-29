@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -21,57 +22,57 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("isInteractive", vm.DirectValue("term.isInteractive", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.TermIsInteractive(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("wantsColor", vm.DirectValue("term.wantsColor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.TermWantsColor(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("size", vm.DirectValue("term.size", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.TermSizeOf(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectTermSize(ret0), nil
 	}))
 	m.MapSet("colorize", vm.DirectValue("term.colorize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		style := Str(bzArgs, 1)
+		s := ffi.Str(bzArgs, 0)
+		style := ffi.Str(bzArgs, 1)
 		ret0, err := std.TermColorize(ctx, s, style)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("pick", vm.DirectValue("term.pick", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		items := StrSlice(bzArgs, 0)
-		prompt := Str(bzArgs, 1)
-		initial_filter := Str(bzArgs, 2)
-		initial := Int(bzArgs, 3, 0)
-		max_rows := Int(bzArgs, 4, 0)
+		items := ffi.StrSlice(bzArgs, 0)
+		prompt := ffi.Str(bzArgs, 1)
+		initial_filter := ffi.Str(bzArgs, 2)
+		initial := ffi.Int(bzArgs, 3, 0)
+		max_rows := ffi.Int(bzArgs, 4, 0)
 		ret0, err := std.TermPick(ctx, items, prompt, initial_filter, initial, max_rows)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("notify", vm.DirectValue("term.notify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := Str(bzArgs, 0)
-		level := Str(bzArgs, 1)
-		ttl_ms := Int(bzArgs, 2, 0)
+		message := ffi.Str(bzArgs, 0)
+		level := ffi.Str(bzArgs, 1)
+		ttl_ms := ffi.Int(bzArgs, 2, 0)
 		if err := std.TermNotify(ctx, message, level, ttl_ms); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("clearScreen", vm.DirectValue("term.clearScreen", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		if err := std.TermClearScreen(ctx); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))

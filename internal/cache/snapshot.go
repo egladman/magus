@@ -42,18 +42,19 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	//
 	// Found among matches, which exclusions have already narrowed: a required glob whose
 	// every file is excluded produced nothing the snapshot keeps.
+	kept := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		kept[m.rel] = true
+	}
 	for _, g := range s.RequiredOutputs {
-		found, err := expandOutputGlobs([]string{g}, root, s.NestedDirs)
+		found, err := expandOutputGlobs([]types.Glob{g}, root, s.NestedDirs)
 		if err != nil {
 			return nil, nil, err
 		}
-		if !slices.ContainsFunc(found, func(f relAbs) bool {
-			_, kept := slices.BinarySearchFunc(matches, f.rel, func(m relAbs, rel string) int { return cmp.Compare(m.rel, rel) })
-			return kept
-		}) {
+		if !slices.ContainsFunc(found, func(f relAbs) bool { return kept[f.rel] }) {
 			return nil, nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
 				"target %q declared an output into another project (%q) but produced no file matching it; check the path the target actually writes",
-				s.Target, g)
+				s.Target, g.Pattern)
 		}
 	}
 	manifest := &Manifest{
@@ -163,61 +164,59 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 
 // expandOutputGlobs expands output globs relative to root; rejects absolute paths and "..".
 // A match inside one of nested is dropped unless its glob is rooted inside that project,
-// and one an exclusion of its glob's run matches is dropped too (types.GlobRuns), so an
-// excluded file is never stored.
-func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, error) {
+// and one its glob's exclusions claim is dropped too, so an excluded file is never stored.
+func expandOutputGlobs(globs []types.Glob, root string, nested []string) ([]relAbs, error) {
 	for _, g := range globs {
-		if pattern, _ := types.CutExclusion(g); filepath.IsAbs(pattern) || strings.Contains(pattern, "..") {
-			return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", g)
+		for _, pattern := range append([]string{g.Pattern}, g.Except...) {
+			if filepath.IsAbs(pattern) || strings.Contains(pattern, "..") {
+				return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", pattern)
+			}
 		}
 	}
 	rootFS := os.DirFS(root)
 	seen := map[string]struct{}{}
 	var out []relAbs
-	for run := range types.GlobRuns(globs) {
-		keep := func(g, rel string) bool {
-			if !types.GlobClaims(g, rel, nested) || run.Excludes(rel) {
+	for _, g := range globs {
+		keep := func(rel string) bool {
+			if !types.GlobClaims(g.Pattern, rel, nested) || g.Excludes(rel) {
 				return false
 			}
 			_, dup := seen[rel]
 			seen[rel] = struct{}{}
 			return !dup
 		}
-		for _, g := range run.Globs {
-			g = filepath.ToSlash(g)
-			matches, err := doublestar.Glob(rootFS, g)
+		matches, err := doublestar.Glob(rootFS, g.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("glob %q: %w", g.Pattern, err)
+		}
+		for _, m := range matches {
+			abs := filepath.Join(root, m)
+			info, err := os.Lstat(abs)
 			if err != nil {
-				return nil, fmt.Errorf("glob %q: %w", g, err)
+				continue
 			}
-			for _, m := range matches {
-				abs := filepath.Join(root, m)
-				info, err := os.Lstat(abs)
-				if err != nil {
-					continue
-				}
-				if info.IsDir() {
-					err := filepath.WalkDir(abs, func(p string, d os.DirEntry, err error) error {
-						if err != nil {
-							return err
-						}
-						if d.IsDir() {
-							return nil
-						}
-						rel, _ := filepath.Rel(root, p)
-						rel = filepath.ToSlash(rel)
-						if keep(g, rel) {
-							out = append(out, relAbs{rel: rel, abs: p})
-						}
-						return nil
-					})
+			if info.IsDir() {
+				err := filepath.WalkDir(abs, func(p string, d os.DirEntry, err error) error {
 					if err != nil {
-						return nil, err
+						return err
 					}
-					continue
+					if d.IsDir() {
+						return nil
+					}
+					rel, _ := filepath.Rel(root, p)
+					rel = filepath.ToSlash(rel)
+					if keep(rel) {
+						out = append(out, relAbs{rel: rel, abs: p})
+					}
+					return nil
+				})
+				if err != nil {
+					return nil, err
 				}
-				if keep(g, m) {
-					out = append(out, relAbs{rel: m, abs: abs})
-				}
+				continue
+			}
+			if keep(m) {
+				out = append(out, relAbs{rel: m, abs: abs})
 			}
 		}
 	}
@@ -226,16 +225,13 @@ func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, 
 }
 
 // ownedOutputs drops the records s's outputs do not own: one inside a nested project that
-// no glob of s rooted there claims, and one every claiming glob's run excludes. A manifest
-// is not trusted to have been snapshotted under these rules (a remote tier, an older
-// binary, a declaration that gained an exclusion), so a hit enforces them again: replay
-// must never write over a file the declaration carves out. It returns m itself when
-// nothing drops.
+// no glob of s rooted there claims, and one every claiming glob excludes. A manifest is
+// not trusted to have been snapshotted under these rules (a remote tier, an older binary,
+// a declaration that gained an exclusion), so a hit enforces them again: replay must
+// never write over a file the declaration carves out. It returns m itself when nothing
+// drops.
 func ownedOutputs(m *Manifest, s Step) *Manifest {
-	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g string) bool {
-		_, ok := types.CutExclusion(g)
-		return ok
-	}) {
+	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g types.Glob) bool { return len(g.Except) > 0 }) {
 		return m
 	}
 	kept := make([]OutputRecord, 0, len(m.Outputs))
@@ -257,23 +253,14 @@ func ownedOutputs(m *Manifest, s Step) *Manifest {
 func ownsRecord(s Step, rel string) bool {
 	nested := types.NestedOwner(rel, s.NestedDirs) != ""
 	claimed := false
-	for run := range types.GlobRuns(s.Outputs) {
-		for _, g := range run.Globs {
-			g = filepath.ToSlash(g)
-			// A literal glob that names a directory claims every file beneath it, as
-			// expandOutputGlobs walks it.
-			ok := rel == g || strings.HasPrefix(rel, g+"/")
-			if !ok {
-				ok, _ = doublestar.Match(g, rel)
-			}
-			if !ok || !types.GlobClaims(g, rel, s.NestedDirs) {
-				continue
-			}
-			if !run.Excludes(rel) {
-				return true
-			}
-			claimed = true
+	for _, g := range s.Outputs {
+		if !(types.Glob{Pattern: g.Pattern}).Match(rel) || !types.GlobClaims(g.Pattern, rel, s.NestedDirs) {
+			continue
 		}
+		if !g.Excludes(rel) {
+			return true
+		}
+		claimed = true
 	}
 	return !claimed && !nested
 }

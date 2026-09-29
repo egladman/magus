@@ -480,7 +480,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
 func TestRunAllReplaysALocalHitWithoutAMachineClaim(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
-	step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: []string{"a.txt"}, MemoryMB: 9000}
+	step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: types.MustParseGlobs("a.txt"), MemoryMB: 9000}
 	c, adm := cachedUnderFullBudget(t, step)
 	noRun := func(context.Context) error {
 		t.Error("a cached step must replay, not run")
@@ -513,7 +513,7 @@ func TestRunAllClaimsForAStepThatWillExecute(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
-			step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: []string{"a.txt"}, MemoryMB: 9000}
+			step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: types.MustParseGlobs("a.txt"), MemoryMB: 9000}
 			c, adm := cachedUnderFullBudget(t, step)
 			tc.edit(root, &step)
 

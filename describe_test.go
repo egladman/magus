@@ -1100,7 +1100,49 @@ func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
 
 	_, err := Open(context.Background(), root)
 
-	require.ErrorContains(t, err, `target "generate": ctx.writesFiles: every glob in`)
+	require.ErrorContains(t, err, `target "generate": ctx.writesFiles: exclusion "!gen/runtime.go" has no glob to narrow`)
+}
+
+// TestClassifyFiles_ExclusionsStayWithTheirCall pins the order-free, per-call meaning: a
+// later call's exclusion carves nothing out of an earlier call, so a/x.go stays declared.
+func TestClassifyFiles_ExclusionsStayWithTheirCall(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("a/x.go");
+    ctx.writesFiles("!a/x.go", "a/*.go");
+}
+`,
+	})
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	out, err := m.ClassifyFiles(context.Background(), []string{"a/x.go"})
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, out, 1)
+	assert.Equal(t, "output", out[0].Role, "the first call declares a/x.go whatever the second excludes")
+	assert.Equal(t, []types.FileClaim{{Project: ".", Target: "generate", Role: "output", Glob: "a/x.go"}}, out[0].Claims)
+}
+
+// TestOpen_ValidatesACrossProjectExclusionAgainstItsOwnProject: an exclusion narrows only
+// the globs its call declares against the same project, so one into another project with
+// no glob there is refused even when the call declares globs of its own.
+func TestOpen_ValidatesACrossProjectExclusionAgainstItsOwnProject(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `import "project/site";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**", site.file("!gen/x"));
+}
+`,
+		"site/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {}
+`,
+	})
+
+	_, err := Open(context.Background(), root)
+
+	require.ErrorContains(t, err, `exclusion "!gen/x" has no glob to narrow`)
 }
 
 // TestEvaluateTarget_ReportsTheChainInOrder walks the composition the whole way: the
@@ -1550,23 +1592,31 @@ func TestResolveNodeRefsLeavesAnEmptyNodeAlone(t *testing.T) {
 // be claimed. The writer re-declaring its OWN glob is idempotent and must not
 // report a collision with itself.
 func TestExistingWriter(t *testing.T) {
-	co := crossOutput{owner: "site", writer: "p1", glob: "shared.txt"}
+	co := crossOutput{owner: "site", writer: "p1", glob: types.Glob{Pattern: "shared.txt"}}
 
 	t.Run("another writer holds the same inbound path", func(t *testing.T) {
-		owner := &types.Project{Path: "site", InboundOutputs: map[string][]string{
-			"p2": {"shared.txt"},
-			"p3": {"other.txt"},
+		owner := &types.Project{Path: "site", InboundOutputs: map[string][]types.Glob{
+			"p2": types.MustParseGlobs("shared.txt"),
+			"p3": types.MustParseGlobs("other.txt"),
 		}}
 		assert.Equal(t, "p2", existingWriter(owner, co))
 	})
 
 	t.Run("the writer re-declaring its own glob is idempotent", func(t *testing.T) {
-		owner := &types.Project{Path: "site", InboundOutputs: map[string][]string{"p1": {"shared.txt"}}}
+		owner := &types.Project{Path: "site", InboundOutputs: map[string][]types.Glob{"p1": types.MustParseGlobs("shared.txt")}}
 		assert.Empty(t, existingWriter(owner, co))
 	})
 
+	t.Run("two writers excluding the same file do not overlap", func(t *testing.T) {
+		carving := crossOutput{owner: "site", writer: "p1", glob: types.Glob{Pattern: "gen/*.go", Except: []string{"gen/x.go"}}}
+		owner := &types.Project{Path: "site", InboundOutputs: map[string][]types.Glob{
+			"p2": {{Pattern: "gen/*.ts", Except: []string{"gen/x.go"}}},
+		}}
+		assert.Empty(t, existingWriter(owner, carving))
+	})
+
 	t.Run("the owner declares it project-wide", func(t *testing.T) {
-		owner := &types.Project{Path: "site", Outputs: []string{"shared.txt"}}
+		owner := &types.Project{Path: "site", Outputs: types.MustParseGlobs("shared.txt")}
 		assert.Equal(t, "site", existingWriter(owner, co))
 	})
 
@@ -1600,7 +1650,7 @@ func TestExistingWriter(t *testing.T) {
 func TestMatchedClaims(t *testing.T) {
 	p := &types.Project{
 		Path:    "web",
-		Outputs: []string{"dist/**"},
+		Outputs: types.MustParseGlobs("dist/**"),
 		TargetOutputs: map[string][]types.OutputRef{
 			"generate": {{Glob: "gen/**"}, {Project: "site", Glob: "index.html"}},
 		},
@@ -1610,7 +1660,7 @@ func TestMatchedClaims(t *testing.T) {
 		TargetUpdates: map[string][]types.UpdateRef{
 			"generate": {{Glob: "README.md"}},
 		},
-		InboundOutputs: map[string][]string{"p2": {"vendor/**"}},
+		InboundOutputs: map[string][]types.Glob{"p2": types.MustParseGlobs("vendor/**")},
 	}
 
 	assert.Equal(t, []types.FileClaim{{Project: "web", Target: "", Role: "output", Glob: "web/dist/**"}},
@@ -1626,7 +1676,7 @@ func TestMatchedClaims(t *testing.T) {
 	assert.Equal(t, []types.FileClaim{
 		{Project: "web", Target: "", Role: "source", Glob: "web/src/**"},
 		{Project: "web", Target: "build", Role: "source", Glob: "web/src/**"},
-	}, matchedClaims(p, []string{"web/src/**"}, "web/src/main.go"),
+	}, matchedClaims(p, types.MustParseGlobs("web/src/**"), "web/src/main.go"),
 		"the project-wide source and the per-target one are distinct declarations")
 
 	assert.Equal(t, []types.FileClaim{{Project: "web", Target: "generate", Role: "update", Glob: "web/README.md"}},

@@ -200,15 +200,15 @@ func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
 	t.Run("an unknown path carrying a newline stays one path", func(t *testing.T) {
 		weird := "we\nird.txt"
 		require.NoError(t, os.WriteFile(filepath.Join(dir, weird), []byte("x\n"), 0o644))
-		got, err := hgFamilyStatusPaths(t.Context(), "hg", dir, "--unknown")
+		got, err := hgStatusPaths(t.Context(), "hg", dir, "--unknown")
 		require.NoError(t, err)
 		assert.Equal(t, []string{weird}, got, "a newline in a name split one path into two")
 	})
 }
 
-// hgFamilyHistoryRepo builds assertHistoryScenario's history with prog, hg or sl, whose
+// hgHistoryRepo builds assertHistoryScenario's history with prog, hg or sl, whose
 // commands for it are the same.
-func hgFamilyHistoryRepo(t *testing.T, prog string) string {
+func hgHistoryRepo(t *testing.T, prog string) string {
 	t.Helper()
 	if _, err := exec.LookPath(prog); err != nil {
 		t.Skipf("%s not available", prog)
@@ -235,7 +235,7 @@ func hgFamilyHistoryRepo(t *testing.T, prog string) string {
 }
 
 func TestHgHistoryFollowsPathsAndFirstParent(t *testing.T) {
-	assertHistoryScenario(t, hgVCS{}, hgFamilyHistoryRepo(t, "hg"))
+	assertHistoryScenario(t, hgVCS{}, hgHistoryRepo(t, "hg"))
 }
 
 // A count that disagrees with the fields after it is an error, never a guess at where the

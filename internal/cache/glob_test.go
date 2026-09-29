@@ -9,14 +9,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
-// TestCompileGlobsScopesExclusionsToTheirRun pins the compiled matcher to the list
-// semantics types.MatchesAnyGlob answers with: an exclusion narrows only the globs of its
-// own run, it yields no matcher of its own, and a cached pattern never carries one list's
-// exclusions into another.
-func TestCompileGlobsScopesExclusionsToTheirRun(t *testing.T) {
-	matches := func(globs []string, path string) bool {
+// TestCompiledGlobsAnswerAsTypesGlob pins the compiled matcher to types.Glob.Match, the one
+// meaning every other consumer uses, and pins that a cached pattern never carries one
+// declaration's exclusions into another.
+func TestCompiledGlobsAnswerAsTypesGlob(t *testing.T) {
+	matches := func(globs []types.Glob, path string) bool {
 		for _, g := range compileGlobs(globs) {
 			if g.Match(path) {
 				return true
@@ -24,17 +25,71 @@ func TestCompileGlobsScopesExclusionsToTheirRun(t *testing.T) {
 		}
 		return false
 	}
-	narrowed := []string{"gen/*.go", "!gen/runtime.go"}
+	narrowed := types.MustParseGlobs("gen/*.go", "!gen/runtime.go")
 
-	require.Len(t, compileGlobs(narrowed), 1, "an exclusion compiles to no matcher of its own")
-	assert.True(t, matches(narrowed, "gen/fs.go"))
-	assert.False(t, matches(narrowed, "gen/runtime.go"))
-	assert.True(t, matches([]string{"gen/*.go"}, "gen/runtime.go"),
+	for _, tc := range []struct {
+		globs []types.Glob
+		path  string
+	}{
+		{narrowed, "gen/fs.go"},
+		{narrowed, "gen/runtime.go"},
+		{types.MustParseGlobs("gen/*.go"), "gen/runtime.go"},
+		{types.MustParseGlobs(`gen/\!bang.go`), "gen/!bang.go"},
+		{types.MustParseGlobs("dist", "!dist/vendor"), "dist/app.js"},
+		{types.MustParseGlobs("dist", "!dist/vendor"), "dist/vendor/lib.js"},
+		{types.MustParseGlobs("dist"), "distro/app.js"},
+	} {
+		assert.Equal(t, types.MatchGlobs(tc.globs, tc.path), matches(tc.globs, tc.path), "%v against %q", tc.globs, tc.path)
+	}
+	assert.True(t, matches(types.MustParseGlobs("gen/*.go"), "gen/runtime.go"),
 		"the same pattern compiled without the exclusion is not narrowed by the cached one")
-	assert.True(t, matches([]string{"gen/*.go", "!gen/runtime.go", "gen/runtime.go"}, "gen/runtime.go"),
-		"a glob after an exclusion starts a run the exclusion does not reach")
-	assert.True(t, matches([]string{`gen/\!bang.go`}, "gen/!bang.go"), "an escaped bang is a literal glob")
-	assert.False(t, matches([]string{"!gen/runtime.go"}, "gen/runtime.go"), "a leading exclusion matches nothing")
+}
+
+// TestExpandSourcesKeepsAnExclusionOnEveryRoute is the split the review found: a source
+// declaration's exclusion must narrow its glob whether the glob is resolved by stat, by
+// the walk, or by a walk of a pruned directory it names.
+func TestExpandSourcesKeepsAnExclusionOnEveryRoute(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"pkg/fs.go", "pkg/x.go", "gen/types/a.buzz", "gen/types/b.buzz", "lit/keep.txt", "lit/skip.txt"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+	}
+	var globs []types.Glob
+	for _, decl := range [][]string{
+		{"pkg/*.go", "!pkg/fs.go"},
+		{"gen/types/*.buzz", "!gen/types/b.buzz"},
+		{"lit", "!lit/skip.txt"},
+	} {
+		globs = append(globs, types.MustParseGlobs(decl...)...)
+	}
+
+	got, err := expandSources(globs, root, nil, nil)
+	require.NoError(t, err)
+
+	var rels []string
+	for _, ra := range got {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"gen/types/a.buzz", "lit/keep.txt", "pkg/x.go"}, rels)
+}
+
+// TestExpandSourcesDoesNotPruneAnOutputTreeHoldingAnExclusion: output trees are pruned
+// from the source walk, but a file an output excludes is a source, so its tree is walked.
+func TestExpandSourcesDoesNotPruneAnOutputTreeHoldingAnExclusion(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"out/fs.go", "out/runtime.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "out"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+	}
+
+	got, err := expandSources(types.MustParseGlobs("**/*.go"), root, types.MustParseGlobs("out/**", "!out/runtime.go"), nil)
+	require.NoError(t, err)
+
+	var rels []string
+	for _, ra := range got {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"out/runtime.go"}, rels)
 }
 
 // TestExcludedOutputIsNeverStoredOrReplayed is the property exclusions exist for: a
@@ -49,7 +104,7 @@ func TestExcludedOutputIsNeverStoredOrReplayed(t *testing.T) {
 	require.NoError(t, os.WriteFile(hand, []byte("hand v1"), 0o644))
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/gen/*.go", "!test/pkg/gen/runtime.go"}
+	step.Outputs = types.MustParseGlobs("test/pkg/gen/*.go", "!test/pkg/gen/runtime.go")
 	step.OutputsDeclared = true
 	build := func(context.Context) error {
 		return os.WriteFile(filepath.Join(gen, "fs.go"), []byte("generated"), 0o644)
@@ -86,13 +141,23 @@ func TestExcludedOutputIsNeverStoredOrReplayed(t *testing.T) {
 // know the syntax. A hit re-applies the exclusion rather than trusting the entry.
 func TestOwnedOutputsDropsAnExcludedRecord(t *testing.T) {
 	m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: "gen/runtime.go"}, {Path: "other.txt"}}}
-	s := Step{Outputs: []string{"gen/*.go", "!gen/runtime.go"}}
+	s := Step{Outputs: types.MustParseGlobs("gen/*.go", "!gen/runtime.go")}
 
 	got := ownedOutputs(m, s)
 
 	assert.Equal(t, []OutputRecord{{Path: "gen/fs.go"}, {Path: "other.txt"}}, got.Outputs,
 		"a record no glob claims stays, as it always has outside a nested project")
-	assert.Same(t, m, ownedOutputs(m, Step{Outputs: []string{"gen/*.go"}}), "no exclusion, nothing to narrow")
+	assert.Same(t, m, ownedOutputs(m, Step{Outputs: types.MustParseGlobs("gen/*.go")}), "no exclusion, nothing to narrow")
+}
+
+// TestOwnedOutputsExcludesALiteralDirectoryTree: a literal output directory claims its
+// tree, and a literal exclusion beneath it carves out ITS tree, consistently.
+func TestOwnedOutputsExcludesALiteralDirectoryTree(t *testing.T) {
+	m := &Manifest{Outputs: []OutputRecord{{Path: "dist/app.js"}, {Path: "dist/vendor/lib.js"}}}
+
+	got := ownedOutputs(m, Step{Outputs: types.MustParseGlobs("dist", "!dist/vendor")})
+
+	assert.Equal(t, []OutputRecord{{Path: "dist/app.js"}}, got.Outputs)
 }
 
 // TestExpandSourcesKeysAFileItsOutputsExclude: output globs are subtracted from the
@@ -105,8 +170,8 @@ func TestExpandSourcesKeysAFileItsOutputsExclude(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
 	}
 
-	got, err := expandSources([]string{"pkg/runtime.go", "pkg/fs.go"}, root,
-		[]string{"pkg/*.go", "!pkg/runtime.go"}, nil)
+	got, err := expandSources(types.MustParseGlobs("pkg/runtime.go", "pkg/fs.go"), root,
+		types.MustParseGlobs("pkg/*.go", "!pkg/runtime.go"), nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -120,11 +185,11 @@ func TestExpandSourcesKeysAFileItsOutputsExclude(t *testing.T) {
 // (extension globs and exact paths) is zero-alloc. Any allocation on the
 // fast paths indicates a regression (e.g., a string conversion snuck in).
 func TestCompiledGlobAllocsBudget(t *testing.T) {
-	pats := compileGlobs([]string{
+	pats := compileGlobs(types.MustParseGlobs(
 		"web/studio/**/*.ts",
 		"web/studio/**/*.tsx",
 		"web/studio/package.json",
-	})
+	))
 	paths := []string{
 		"web/studio/src/foo.ts",
 		"web/studio/package.json",
@@ -194,8 +259,8 @@ func TestExpandSourcesSemantics(t *testing.T) {
 	write("pkg/dist/bundle.js")        // pruned by exclude
 	write("other/c.js")                // outside the glob's project prefix
 
-	globs := []string{"pkg/**/*.js", "pkg/package.json"}
-	exclude := []string{"pkg/dist/**"}
+	globs := types.MustParseGlobs("pkg/**/*.js", "pkg/package.json")
+	exclude := types.MustParseGlobs("pkg/dist/**")
 
 	got, err := expandSources(globs, root, exclude, nil)
 	require.NoError(t, err)
@@ -221,7 +286,7 @@ func TestExpandSourcesSkipsSymlinkedFiles(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "real.js"), filepath.Join(root, "link.js")); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	got, err := expandSources([]string{"*.js"}, root, nil, nil)
+	got, err := expandSources(types.MustParseGlobs("*.js"), root, nil, nil)
 	require.NoError(t, err)
 	for _, ra := range got {
 		assert.NotEqualf(t, "link.js", ra.rel, "symlink link.js should be skipped, got %v", got)

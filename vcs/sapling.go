@@ -204,7 +204,7 @@ func (v saplingVCS) DirtyFiles(ctx context.Context, dir string, paths []string) 
 	args := []string{"status", "--root-relative"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "sl", args...)
 	if err != nil {
@@ -219,7 +219,7 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 	args := []string{"diff", "-U", "1"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "sl", args...)
 	if err != nil {
@@ -245,7 +245,7 @@ func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths
 	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "sl", args...)
 	if err != nil {
@@ -294,9 +294,9 @@ func (v saplingVCS) FindCommit(ctx context.Context, dir, rev string) (types.Comm
 	return c, nil
 }
 
-// History implements types.VCSDriver; see hgFamilyHistory.
+// History implements types.VCSDriver; see hgHistory.
 func (v saplingVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
-	return hgFamilyHistory(ctx, v, "sl", dir, q)
+	return hgHistory(ctx, v, "sl", dir, q)
 }
 
 // TrackedFiles implements types.TrackedFileReporter. `sl files -- <paths>` prints the
@@ -357,34 +357,34 @@ func (v saplingVCS) IgnoredFiles(ctx context.Context, dir string, paths []string
 	return out, nil
 }
 
-// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL. For a git-backed
+// RemoteURL implements types.RemoteReporter; see hgRemoteURL. For a git-backed
 // clone the default path is the git remote.
 func (v saplingVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
-	return hgFamilyRemoteURL(ctx, "sl", dir, name)
+	return hgRemoteURL(ctx, "sl", dir, name)
 }
 
-// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles. --root-relative for
+// RangeFiles implements types.RangeReporter; see hgRangeFiles. --root-relative for
 // the reason DirtyFiles passes it, except with paths, which sl refuses it beside; those run
 // from the repository root instead, where the output is root-relative anyway.
 func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
 	if len(paths) == 0 {
-		return hgFamilyRangeFiles(ctx, "sl", dir, base, head, nil, "--root-relative")
+		return hgRangeFiles(ctx, "sl", dir, base, head, nil, "--root-relative")
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
 	}
-	return hgFamilyRangeFiles(ctx, "sl", root, base, head, paths)
+	return hgRangeFiles(ctx, "sl", root, base, head, paths)
 }
 
-// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
+// RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgFamilyRangeCommits(ctx, v, "sl", dir, base, head, paths)
+	return hgRangeCommits(ctx, v, "sl", dir, base, head, paths)
 }
 
-// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+// IsAncestor implements types.AncestryReporter; see hgIsAncestor.
 func (v saplingVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
-	return hgFamilyIsAncestor(ctx, "sl", dir, ancestor, descendant)
+	return hgIsAncestor(ctx, "sl", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
@@ -462,9 +462,9 @@ func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bo
 // delete plus an add) lives at that constant.
 const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` + hgChurnFileTail
 
-// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
+// ChangesByCommit implements types.ChurnReporter; see hgChangesByCommit.
 func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	return hgFamilyChangesByCommit(ctx, v, "sl", saplingChurnTemplate, dir, commits, since)
+	return hgChangesByCommit(ctx, v, "sl", saplingChurnTemplate, dir, commits, since)
 }
 
 // saplingArchivalMeta is the provenance file `sl archive` injects into every export. It is
@@ -478,9 +478,9 @@ func (saplingVCS) CheckoutID(dir string) (string, bool) {
 }
 
 // OpenObjectBatch starts one command server for every approved source a guard
-// load reads. See hgFamilyOpenObjectBatch.
+// load reads. See hgOpenObjectBatch.
 func (saplingVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
-	return hgFamilyOpenObjectBatch(ctx, "sl", root, rev)
+	return hgOpenObjectBatch(ctx, "sl", root, rev)
 }
 
 // ReadFileAt implements types.RevisionFileReader via `sl cat -r <rev>`. "" is `.`, the
@@ -504,7 +504,7 @@ func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (str
 // repository, so it is a guard against an unqualified include rather than a size limit.
 // `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
 func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	return hgFamilyExportRevision(ctx, v, "sl", dir, rev, dstDir, "-I", "glob:**", "-X", saplingArchivalMeta)
+	return hgExportRevision(ctx, v, "sl", dir, rev, dstDir, "-I", "glob:**", "-X", saplingArchivalMeta)
 }
 
 // copyTree copies src's contents into dst, creating dst. A rename would be cheaper but is
@@ -653,7 +653,7 @@ func (v saplingVCS) InstallMergeDriver(ctx context.Context, root string, globs t
 
 func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(slConfigPath(root), globs, WriteJudge(ctx, root))
+		return writeHgMergeDriverSection(slConfigPath(root), globs, WriteJudge(ctx, root))
 	})
 }
 
@@ -661,9 +661,9 @@ func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, globs typ
 // the merge, so a conflict still standing is one it did not settle.
 func (saplingVCS) RunMergeDriver(context.Context, string, []string) error { return nil }
 
-// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgMergeDriverCommand.
 func (v saplingVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
-	return hgFamilyMergeDriverCommand(ctx, "sl", root)
+	return hgMergeDriverCommand(ctx, "sl", root)
 }
 
 // CheckMergeDriver reports whether .sl/config holds the magus merge-driver section. A
@@ -689,7 +689,7 @@ func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, globs ty
 // section in .sl/config is an error.
 func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyRefreshSection(slConfigPath(root), command, WriteJudge(ctx, root))
+		return writeHgRefreshSection(slConfigPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -701,13 +701,13 @@ func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string
 }
 
 // InstallDriftHook implements types.DriftHookInstaller with Sapling's `commit` and
-// `outgoing` hooks (see hgFamilyDriftHooks). Neither hook can fail the sl command. It
+// `outgoing` hooks (see hgDriftHooks). Neither hook can fail the sl command. It
 // returns their labels when it changed .sl/config and nil when they were already current.
 // Installs are serialized per repository, and a torn managed section in .sl/config is an
 // error.
 func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyDriftSection(slConfigPath(root), command, WriteJudge(ctx, root))
+		return writeHgDriftSection(slConfigPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -715,7 +715,7 @@ func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) 
 	if !changed {
 		return nil, nil
 	}
-	return slices.Clone(hgFamilyDriftHooks), nil
+	return slices.Clone(hgDriftHooks), nil
 }
 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
@@ -1028,7 +1028,7 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if !dirty {
 		return "", nil
 	}
-	pending, err := hgFamilyReadPending(ctx, "sl", dir)
+	pending, err := hgReadPending(ctx, "sl", dir)
 	if err != nil {
 		return "", fmt.Errorf("sl preserve: %w", err)
 	}
@@ -1048,7 +1048,7 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if out, err := run("uncommit"); err != nil {
 		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w: %s", sha, err, out)
 	}
-	if err := hgFamilyRestorePending(ctx, "sl", pending); err != nil {
+	if err := hgRestorePending(ctx, "sl", pending); err != nil {
 		return sha, fmt.Errorf("sl preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			sha, pending.unknown, pending.missing, err)
 	}
@@ -1077,7 +1077,7 @@ func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string
 }
 
 // CommitPushed implements types.PushStatusReporter via Sapling's phases, which it
-// inherits from Mercurial; see hgFamilyCommitPushed.
+// inherits from Mercurial; see hgCommitPushed.
 func (v saplingVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
-	return hgFamilyCommitPushed(ctx, "sl", dir, id)
+	return hgCommitPushed(ctx, "sl", dir, id)
 }

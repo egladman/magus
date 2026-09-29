@@ -597,8 +597,12 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 		if len(patterns) == 0 {
 			return vm.Null, fmt.Errorf("ctx.glob: requires at least one glob pattern")
 		}
+		matched, err := matchBuzzTargets(targets, patterns)
+		if err != nil {
+			return vm.Null, fmt.Errorf("ctx.glob: %w", err)
+		}
 		var handles []vm.Value
-		for _, name := range matchBuzzTargets(targets, patterns) {
+		for _, name := range matched {
 			if h, ok := exports[name]; ok {
 				handles = append(handles, h)
 			}
@@ -741,7 +745,7 @@ func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) erro
 // (suffix shorthand, "*" globs, and "!" negation). types.MatchTargetPatterns owns the
 // semantics so this dispatch set, the dry-run tracer's, and describe's static edge set
 // cannot drift apart.
-func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []string {
+func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) ([]string, error) {
 	names := make([]string, 0, len(targets))
 	for name := range targets {
 		names = append(names, name)

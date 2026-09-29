@@ -159,7 +159,7 @@ func deadOutputRepo(t *testing.T, built bool) string {
 }
 
 func deadOutputProject(dir string) *types.Project {
-	return &types.Project{Path: "console", Name: "console", Dir: dir, Outputs: []string{"gen/**", "src/gen/**"}}
+	return &types.Project{Path: "console", Name: "console", Dir: dir, Outputs: types.MustParseGlobs("gen/**", "src/gen/**")}
 }
 
 // TestDeadOutputGlobsIgnoresCommittedOutputs is the regression. On a fresh clone src/gen/**
@@ -185,7 +185,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 	repo := deadOutputRepo(t, true)
 	p := deadOutputProject(repo)
-	p.Outputs = []string{"gen/**", "src/gen/**", "dist/**"}
+	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
 	r := &runner{root: repo, ws: stubWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
@@ -224,7 +224,7 @@ func TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, rel), []byte("x"), 0o644))
 	}
 	p := deadOutputProject(dir)
-	p.Outputs = []string{"src/gen/**", "gen/*.ts", "!gen/hand.ts"}
+	p.Outputs = types.MustParseGlobs("src/gen/**", "gen/*.ts", "!gen/hand.ts")
 	r := &runner{root: dir, ws: stubWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
@@ -273,8 +273,8 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
 			Path: "docs", Name: "docs",
 			TargetOutputs: map[string][]types.OutputRef{
-				"generate": {{Glob: "gen/*.go"}, {Glob: "!gen/runtime.go"}},
-				"format":   {{Glob: "gen/*.md"}, {Glob: "!gen/runtime.go"}},
+				"generate": {{Glob: "gen/*.go", Except: []string{"gen/runtime.go"}}},
+				"format":   {{Glob: "gen/*.md", Except: []string{"gen/runtime.go"}}},
 			},
 		}})
 		assert.Equal(t, types.CheckOK, got.Status)
@@ -516,7 +516,7 @@ func TestDeclaredOutputFiles(t *testing.T) {
 		"per-target outputs are expanded; undeclared files are not")
 
 	t.Run("a directory is not a file to scan", func(t *testing.T) {
-		p := &types.Project{Path: ".", Dir: dir, Outputs: []string{"gen"}}
+		p := &types.Project{Path: ".", Dir: dir, Outputs: types.MustParseGlobs("gen")}
 		assert.Empty(t, declaredOutputFiles(p))
 	})
 }
@@ -573,7 +573,7 @@ func seedingRepo(t *testing.T) string {
 }
 
 func seedingProject() *types.Project {
-	return &types.Project{Path: ".", Name: "root", Sources: []string{"**/*.go"}}
+	return &types.Project{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.go")}
 }
 
 // TestUndeclaredSeedingFilesReportsTheStandingSet is MGS1028 asked of the whole tree
@@ -611,7 +611,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 	repo := seedingRepo(t)
 	p := seedingProject()
-	p.Sources = []string{"**/*.go", ".golangci.yml"}
+	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
 	r := &runner{root: repo, ws: stubWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
@@ -636,10 +636,10 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 // matches nothing and keys nothing, and the target replays while those files change.
 func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
-	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/*.binpb",
 		"src/**/*.ts",
-	}}
+	)}
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
@@ -656,10 +656,10 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 // would tell the author to fix something that already works.
 func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
-	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/descriptor.binpb",
 		"node_modules/pkg/index.js",
-	}}
+	)}
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
@@ -712,8 +712,8 @@ func TestCheckAgentSkills(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
-		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"MAGUS.md"}},
+		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
+		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
@@ -727,7 +727,7 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: "docs", Name: "docs", Sources: []string{"**/*.md"}, Outputs: []string{"MAGUS.md"}},
+		{Path: "docs", Name: "docs", Sources: types.MustParseGlobs("**/*.md"), Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
@@ -740,8 +740,8 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
-		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"docs/**"}},
+		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
+		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("docs/**")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)

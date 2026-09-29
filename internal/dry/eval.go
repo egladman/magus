@@ -12,6 +12,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 )
@@ -47,7 +48,7 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
 	for name, reg := range bindinggen.Modules {
-		if !reg.Capabilities.Has(bindinggen.WASM) {
+		if !reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
 		// Keyed by IMPORT PATH, not by the registry key: a nested module resolves

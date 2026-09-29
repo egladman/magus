@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // depStep builds a minimal step for project path p depending on deps. Sources
@@ -79,7 +81,7 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 	// its key can only change via upstream-key propagation.
 	mkSteps := func() []Step {
 		return []Step{
-			{ProjectPath: "A", WorkspaceRoot: root, Target: "build", Sources: []string{"a.txt"}},
+			{ProjectPath: "A", WorkspaceRoot: root, Target: "build", Sources: types.MustParseGlobs("a.txt")},
 			{ProjectPath: "B", WorkspaceRoot: root, Target: "build", DependsOn: []string{"A"}},
 		}
 	}

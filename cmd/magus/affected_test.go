@@ -64,16 +64,6 @@ func TestShardSkillsDeriveFromWhatTheShardDoes(t *testing.T) {
 	assert.Len(t, why, 3)
 }
 
-// TestJoinProjectGlobRootsTheCollisionSurface: two briefings are compared for overlap, so
-// a glob that stayed project-relative would read as colliding with an identically-named
-// one in a different project: the exact mistake the field exists to prevent.
-func TestJoinProjectGlobRootsTheCollisionSurface(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "console/gen/**", joinProjectGlob("console", "gen/**"))
-	assert.Equal(t, "gen/*.json", joinProjectGlob(".", "gen/*.json"), "the root project is already the workspace")
-	assert.Equal(t, "docs/MAGUS.md", joinProjectGlob("docs", "docs/MAGUS.md"), "an already-rooted glob is left alone")
-}
-
 func TestAppendUniquePreservesOrderAndDropsBlanks(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, []string{"go", "buzz"}, appendUnique(nil, "go", "", "buzz", "go"))

@@ -56,15 +56,16 @@ type ContentSnap map[string][32]byte
 //
 // A slice, not one root, because a target may declare an output into another project's tree.
 type OutputGlobs struct {
-	Root  string   // absolute
-	Globs []string // relative to Root, as the magusfile declared them
+	Root  string       // absolute
+	Globs []types.Glob // relative to Root, as the magusfile declared them
 	// Nested are the dirs, relative to Root, of the projects nested under it. A file in one
 	// is claimed only by a glob rooted there; see types.GlobClaims.
 	Nested []string
 }
 
 // HashContent returns a SHA-256 digest per regular file matching one of the declared output
-// globs in sets. A malformed glob is an error; a glob matching nothing is not.
+// globs in sets, less what each glob's exclusions claim. A malformed glob is an error; a
+// glob matching nothing is not.
 //
 // It expands globs exactly the way the cache snapshot does (internal/cache/snapshot.go):
 // glob against the root, and where a match is a DIRECTORY, take every file beneath it. That
@@ -83,14 +84,14 @@ func HashContent(ctx context.Context, sets []OutputGlobs) (ContentSnap, error) {
 	for _, set := range sets {
 		rootFS := os.DirFS(set.Root)
 		for _, g := range set.Globs {
-			g = filepath.ToSlash(g)
-			matches, err := doublestar.Glob(rootFS, g)
+			matches, err := doublestar.Glob(rootFS, g.Pattern)
 			if err != nil {
-				return nil, fmt.Errorf("declared output glob %q: %w", g, err)
+				return nil, fmt.Errorf("declared output glob %q: %w", g.Pattern, err)
 			}
 			claims := func(abs string) bool {
 				rel, err := filepath.Rel(set.Root, abs)
-				return err == nil && types.GlobClaims(g, filepath.ToSlash(rel), set.Nested)
+				rel = filepath.ToSlash(rel)
+				return err == nil && types.GlobClaims(g.Pattern, rel, set.Nested) && !g.Excludes(rel)
 			}
 			for _, m := range matches {
 				if err := hashPath(ctx, snap, filepath.Join(set.Root, m), claims); err != nil {

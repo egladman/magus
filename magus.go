@@ -1796,17 +1796,17 @@ func (m *Magus) volatilityConfig() volatility.Config {
 
 // baseStep returns the cache.Step for p; always includes magusfiles so edits produce a miss.
 func (m *Magus) baseStep(p *types.Project) cache.Step {
-	sources := make([]string, 0, len(p.Sources))
+	sources := make([]types.Glob, 0, len(p.Sources))
 	for _, glob := range p.Sources {
-		sources = append(sources, joinGlob(p.Path, glob))
+		sources = append(sources, glob.Root(p.Path))
 	}
 	sources = append(sources, magusfileGlobs(p.Path)...)
 	if p.Path != "." {
 		sources = append(sources, magusfileGlobs(".")...)
 	}
-	outputs := make([]string, 0, len(p.Outputs))
+	outputs := make([]types.Glob, 0, len(p.Outputs))
 	for _, o := range p.Outputs {
-		outputs = append(outputs, joinGlob(p.Path, o))
+		outputs = append(outputs, o.Root(p.Path))
 	}
 	// Union the non-source dirs every resolved spell declares (vendor, node_modules,
 	// __pycache__, ...) so the source walk prunes them per-project instead of the cache
@@ -1833,28 +1833,16 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 	}
 }
 
-func magusfileGlobs(projectPath string) []string {
+func magusfileGlobs(projectPath string) []types.Glob {
 	names := []string{
 		"magusfile.buzz",
 		"magusfiles/**/*.buzz",
 	}
-	if projectPath == "." {
-		return names
-	}
-	out := make([]string, len(names))
+	out := make([]types.Glob, len(names))
 	for i, n := range names {
-		out[i] = projectPath + "/" + n
+		out[i] = types.Glob{Pattern: n}.Root(projectPath)
 	}
 	return out
-}
-
-// joinGlob roots a project-relative glob at the workspace for the cache step and the
-// describe surfaces. It is a named pass-through on purpose: the call sites in this
-// package read as "join", and the rooting rule itself belongs in types, where
-// Project.DeclaredGlobs (the attribution mirror of these very lines) can share it.
-// See types.RootGlob for why the join is cleaned rather than concatenated.
-func joinGlob(projectPath, glob string) string {
-	return types.RootGlob(projectPath, glob)
 }
 
 // ExpandPath resolves the target pattern to concrete per-project targets; empty or "/" fans out to all.

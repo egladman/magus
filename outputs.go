@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -39,26 +40,24 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 		if ctx.Err() != nil {
 			return found, ctx.Err()
 		}
-		for run := range types.GlobRuns(m.buildStep(p, target).Outputs) {
-			for _, glob := range run.Globs {
-				matches, err := doublestar.Glob(fsys, glob)
-				if err != nil {
-					return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob, err)
+		for _, glob := range m.buildStep(p, target).Outputs {
+			matches, err := doublestar.Glob(fsys, glob.Pattern)
+			if err != nil {
+				return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob.Pattern, err)
+			}
+			for _, rel := range matches {
+				abs := filepath.Join(m.Root(), rel)
+				// A glob can match a directory (dist/** matches dist itself); an
+				// artifact list is about files, and a directory entry would make
+				// the count disagree with what a consumer can open.
+				if fi, statErr := os.Stat(abs); statErr != nil || fi.IsDir() {
+					continue
 				}
-				for _, rel := range matches {
-					abs := filepath.Join(m.Root(), rel)
-					// A glob can match a directory (dist/** matches dist itself); an
-					// artifact list is about files, and a directory entry would make
-					// the count disagree with what a consumer can open.
-					if fi, statErr := os.Stat(abs); statErr != nil || fi.IsDir() {
-						continue
-					}
-					wsRel, err := filepath.Rel(m.Root(), abs)
-					if err != nil || run.Excludes(filepath.ToSlash(wsRel)) {
-						continue
-					}
-					found = append(found, types.TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
+				wsRel, err := filepath.Rel(m.Root(), abs)
+				if err != nil || glob.Excludes(filepath.ToSlash(wsRel)) {
+					continue
 				}
+				found = append(found, types.TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob.Pattern, ProjectPath: p.Path})
 			}
 		}
 	}
@@ -103,33 +102,31 @@ func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dry
 			return CleanedOutputs{}, ctx.Err()
 		}
 		fsys := os.DirFS(p.Dir)
-		for run := range types.GlobRuns(p.AllOutputs()) {
-			for _, glob := range run.Globs {
-				if ctx.Err() != nil {
-					return CleanedOutputs{}, ctx.Err()
+		for _, glob := range p.AllOutputs() {
+			if ctx.Err() != nil {
+				return CleanedOutputs{}, ctx.Err()
+			}
+			found, err := doublestar.Glob(fsys, glob.Pattern)
+			if err != nil {
+				return CleanedOutputs{}, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob.Pattern, err)
+			}
+			for _, rel := range found {
+				// An excluded file is hand-maintained, never a build product.
+				if glob.Excludes(rel) {
+					continue
 				}
-				found, err := doublestar.Glob(fsys, glob)
+				abs := filepath.Join(p.Dir, rel)
+				info, err := os.Lstat(abs)
 				if err != nil {
-					return CleanedOutputs{}, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob, err)
-				}
-				for _, rel := range found {
-					// An excluded file is hand-maintained, never a build product.
-					if run.Excludes(rel) {
+					if os.IsNotExist(err) {
 						continue
 					}
-					abs := filepath.Join(p.Dir, rel)
-					info, err := os.Lstat(abs)
-					if err != nil {
-						if os.IsNotExist(err) {
-							continue
-						}
-						return CleanedOutputs{}, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
-					}
-					if info.IsDir() {
-						continue // globs may match containing dirs; only remove files
-					}
-					matched = append(matched, match{project: p.Path, rel: rel, abs: abs})
+					return CleanedOutputs{}, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
 				}
+				if info.IsDir() {
+					continue // globs may match containing dirs; only remove files
+				}
+				matched = append(matched, match{project: p.Path, rel: rel, abs: abs})
 			}
 		}
 	}
@@ -232,9 +229,9 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 // handed the owner, it would run a target that touches nothing, then copy the
 // unregenerated file over the conflict and report a clean merge.
 func (m *Magus) FindOutputProducer(absPath string) *types.Project {
-	matches := func(p *types.Project, globs []string) bool {
+	matches := func(p *types.Project, globs []types.Glob) bool {
 		rel, err := filepath.Rel(p.Dir, absPath)
-		return err == nil && types.MatchesAnyGlob(globs, filepath.ToSlash(rel))
+		return err == nil && types.MatchGlobs(globs, filepath.ToSlash(rel))
 	}
 	for _, p := range m.ws.All() {
 		// Sorted, so a path claimed by more than one writer resolves to the same
@@ -249,4 +246,56 @@ func (m *Magus) FindOutputProducer(absPath string) *types.Project {
 		}
 	}
 	return nil
+}
+
+// CarvedOutputs returns the tracked files, workspace-relative, sorted, that an output
+// declaration's pattern covers and its exclusions carve out, and that no other output
+// declaration claims (FindOutputProducer's answer is nil): hand-maintained files among
+// generated ones. A VCS attribute file lists its patterns without their exclusions, so
+// it needs these named one by one to undo the pattern for them.
+//
+// Untracked files are left out: there is nothing to merge until one is committed.
+func (m *Magus) CarvedOutputs(ctx context.Context) ([]string, error) {
+	fsys := os.DirFS(m.ws.Root)
+	var carved []string
+	for _, p := range m.ws.All() {
+		for _, g := range p.AllOutputs() {
+			if len(g.Except) == 0 {
+				continue
+			}
+			rooted := g.Root(p.Path)
+			matches, err := doublestar.Glob(fsys, rooted.Pattern)
+			if err != nil {
+				continue // an unparsable pattern matches nothing; see types.InvalidGlobs
+			}
+			for _, match := range matches {
+				err := fs.WalkDir(fsys, match, func(rel string, d fs.DirEntry, err error) error {
+					if err != nil || d.IsDir() || !rooted.Excludes(rel) {
+						return err
+					}
+					if abs := filepath.Join(m.ws.Root, filepath.FromSlash(rel)); m.FindOutputProducer(abs) == nil {
+						carved = append(carved, abs)
+					}
+					return nil
+				})
+				if err != nil {
+					return nil, fmt.Errorf("carved outputs: %w", err)
+				}
+			}
+		}
+	}
+	tracked, err := m.trackedPaths(ctx, carved)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for abs := range tracked {
+		rel, err := filepath.Rel(m.ws.Root, abs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, filepath.ToSlash(rel))
+	}
+	slices.Sort(out)
+	return out, nil
 }

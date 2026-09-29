@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io/fs"
@@ -1008,7 +1009,7 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	build := func(context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
 	miss, err := c.Run(context.Background(), step, build)

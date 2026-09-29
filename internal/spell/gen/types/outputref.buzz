@@ -8,4 +8,5 @@
 export object OutputRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }

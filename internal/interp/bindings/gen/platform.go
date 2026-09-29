@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,36 +18,36 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("arch", vm.DirectValue("platform.arch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
-		style := Str(bzArgs, 1)
+		name := ffi.Str(bzArgs, 0)
+		style := ffi.Str(bzArgs, 1)
 		ret0, err := std.PlatformArch(ctx, name, style)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("os", vm.DirectValue("platform.os", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
-		style := Str(bzArgs, 1)
+		name := ffi.Str(bzArgs, 0)
+		style := ffi.Str(bzArgs, 1)
 		ret0, err := std.PlatformOS(ctx, name, style)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("memoryBytes", vm.DirectValue("platform.memoryBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PlatformMemory(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("cpus", vm.DirectValue("platform.cpus", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PlatformCPUs(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	return m
 }

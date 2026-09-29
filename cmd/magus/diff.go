@@ -694,10 +694,12 @@ func opensDir(root string, added map[string]bool) bool {
 // requirement: a target rewriting a generated file would fire a re-render, which is the same
 // rebuild-loop guard `magus watch` needs, for the same reason.
 func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
-	var outputGlobs []string
+	var outputGlobs []types.Glob
 	var projectIgnores []types.IgnorePattern
 	for _, p := range m.All() {
-		outputGlobs = append(outputGlobs, p.AllOutputs()...)
+		for _, g := range p.AllOutputs() {
+			outputGlobs = append(outputGlobs, g.Root(p.Path))
+		}
 		projectIgnores = append(projectIgnores, p.WatchIgnores...)
 	}
 

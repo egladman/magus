@@ -1431,6 +1431,47 @@ func TestEnsureMergeDriverRoutesAutoResolveGlobs(t *testing.T) {
 	assert.True(t, changed, "auto-resolve globs alone are worth a registration")
 }
 
+// TestGitAttrsCarveOutsReturnAHandFileToTheDefaultMerge pins the carve-out block against
+// git's own answer. The output lines carry only the positive patterns; each carved file
+// follows as `!merge !linguist-generated`, which is UNSPECIFIED (git's text merge) where
+// `-merge` would be unset (binary: take ours, conflict every time). A slashless pattern is
+// anchored, since git matches one at every depth and magus's globs are rooted. An
+// auto-resolve glob, written last, can still opt a carved file back in.
+func TestGitAttrsCarveOutsReturnAHandFileToTheDefaultMerge(t *testing.T) {
+	repo := t.TempDir()
+	isolateGitConfig(t)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	globs := types.MergeDriverGlobs{
+		Outputs:     []string{"MAGUS.md", "gen/*.go"},
+		Carved:      []string{"gen/runtime.go", "gen/opted.go"},
+		AutoResolve: []string{"gen/opted.go"},
+	}
+	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, globs))
+
+	assertFile(t, filepath.Join(repo, ".gitattributes"), generatedMarkers.section(wantDiffDriverLines+
+		"/MAGUS.md merge=magus linguist-generated\n"+
+		"gen/*.go merge=magus linguist-generated\n"+
+		"gen/runtime.go !merge !linguist-generated\n"+
+		"gen/opted.go !merge !linguist-generated\n"+
+		"gen/opted.go merge=magus\n"), 0o644)
+
+	out, err := gitOutput(t.Context(), repo, gitOpts{}, "check-attr", "merge", "linguist-generated", "--",
+		"gen/fs.go", "gen/runtime.go", "gen/opted.go", "MAGUS.md", "docs/MAGUS.md")
+	require.NoError(t, err)
+	assert.Equal(t, strings.Join([]string{
+		"gen/fs.go: merge: magus",
+		"gen/fs.go: linguist-generated: set",
+		"gen/runtime.go: merge: unspecified",
+		"gen/runtime.go: linguist-generated: unspecified",
+		"gen/opted.go: merge: magus",
+		"gen/opted.go: linguist-generated: unspecified",
+		"MAGUS.md: merge: magus",
+		"MAGUS.md: linguist-generated: set",
+		"docs/MAGUS.md: merge: unspecified",
+		"docs/MAGUS.md: linguist-generated: unspecified",
+	}, "\n"), out)
+}
+
 // wantDiffDriverLines opens every managed section, spelled out rather than rendered from
 // gitDiffDrivers so a dropped driver fails here.
 const wantDiffDriverLines = "*.go diff=golang\n" +

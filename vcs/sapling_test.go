@@ -313,6 +313,36 @@ func TestSaplingTrackedFiles(t *testing.T) {
 	assert.Equal(t, []string{"a.txt"}, got)
 }
 
+// TestSaplingMergeToolRoutesOnlyWhatOutputsClaim is the hg case on Sapling, which shares
+// the Mercurial-dialect writer and reads merge-patterns and `disabled` the same way: a
+// carved hand file keeps the built-in merge, the output goes to magus, and a source file
+// never reaches magus.
+func TestSaplingMergeToolRoutesOnlyWhatOutputsClaim(t *testing.T) {
+	dir := slRepo(t, map[string]string{"a.txt": "one\n", "gen/x.go": "x\n", "gen/runtime.go": "hand\n"})
+	changed, err := saplingVCS{}.EnsureMergeDriver(t.Context(), dir,
+		types.MergeDriverGlobs{Outputs: []string{"gen/*.go"}, Carved: []string{"gen/runtime.go"}})
+	require.NoError(t, err)
+	require.True(t, changed)
+	// The tool has to be found for a pattern to pick it; the test binary stands in for magus.
+	self, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := exec.CommandContext(t.Context(), "sl", "--config", "merge-tools.magus.executable="+self,
+		"debugpickmergetool", "a.txt", "gen/runtime.go", "gen/x.go")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	picked := map[string]string{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		path, tool, _ := strings.Cut(line, " = ")
+		picked[path] = tool
+	}
+	assert.Equal(t, ":merge", picked["gen/runtime.go"], "a carved hand file keeps the built-in merge")
+	assert.Equal(t, "magus", picked["gen/x.go"])
+	assert.NotEqual(t, "magus", picked["a.txt"], "a source file never reaches magus")
+}
+
 // The merge driver is registered in .sl/config, and EnsureMergeDriver has to be silent in
 // the steady state: callers run it on every workspace load.
 func TestSaplingMergeDriverInstall(t *testing.T) {
@@ -380,7 +410,7 @@ func TestSaplingStartMergeRefusesWhenOneIsUnderway(t *testing.T) {
 }
 
 func TestSaplingHistoryFollowsPathsAndFirstParent(t *testing.T) {
-	assertHistoryScenario(t, saplingVCS{}, hgFamilyHistoryRepo(t, "sl"))
+	assertHistoryScenario(t, saplingVCS{}, hgHistoryRepo(t, "sl"))
 }
 
 func TestSlCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {

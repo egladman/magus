@@ -1527,15 +1527,9 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 	if graph, gerr := m.TargetGraph(ctx); gerr == nil {
 		for _, proj := range graph.Projects {
 			for _, node := range proj.Nodes {
-				writes := make([]string, 0, len(node.WritesFiles))
 				for _, ref := range node.WritesFiles {
-					owner := ref.Project
-					if owner == "" {
-						owner = proj.Path
-					}
-					writes = append(writes, joinProjectGlob(owner, ref.Glob))
+					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], ref.Rooted(proj.Path).String())
 				}
-				writesByProject[proj.Path] = types.UnionGlobs(writesByProject[proj.Path], writes)
 			}
 		}
 	}
@@ -1554,11 +1548,12 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 			}
 			// Project-relative as declared, rooted at the project, so two briefings can be
 			// compared for overlap without the reader re-deriving where each one sits.
-			outputs := make([]string, 0, len(p.Outputs))
-			for _, g := range p.Outputs {
-				outputs = append(outputs, joinProjectGlob(path, g))
+			if proj := m.Get(path); proj != nil {
+				for _, g := range proj.Outputs {
+					b.Writes = appendUnique(b.Writes, g.Root(path).String())
+				}
 			}
-			b.Writes = types.UnionGlobs(b.Writes, outputs, writesByProject[path])
+			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
 		}
 		skills, why := shardSkills(b)
 		b.Agents = &shardAgents{Skills: skills, Why: why}
@@ -1586,18 +1581,6 @@ func shardSkills(b shardDetail) (skills, why []string) {
 	}
 	why = append(why, "variant: each skill is named as its always-full twin, because the reader of this record is not the session that chose the install")
 	return skills, why
-}
-
-// joinProjectGlob roots a project-relative declared glob at the project, leaving an
-// already-rooted or workspace-level glob alone. An exclusion keeps its "!" in front.
-func joinProjectGlob(project, glob string) string {
-	if pattern, ok := types.CutExclusion(glob); ok {
-		return "!" + joinProjectGlob(project, pattern)
-	}
-	if project == "" || project == "." || strings.HasPrefix(glob, project+"/") {
-		return glob
-	}
-	return project + "/" + glob
 }
 
 // appendUnique appends each value not already present, preserving order.

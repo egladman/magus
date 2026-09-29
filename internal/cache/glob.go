@@ -9,38 +9,31 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// compiledGlob is a pre-processed glob for zero-alloc repeated matching.
-// Fast paths: exact path (==), extension glob ([prefix/]**/*.<ext> → HasSuffix+HasPrefix),
-// complex (doublestar.Match). Source matching; output matching uses doublestar.Glob —
-// keep semantics in sync.
+// compiledGlob is a pre-processed types.Glob for zero-alloc repeated matching, giving
+// the answers types.Glob.Match gives. Fast paths: literal (the path itself, or a
+// directory it claims whole), extension glob ([prefix/]**/*.<ext> → HasSuffix+HasPrefix),
+// complex (doublestar.Match).
 type compiledGlob struct {
 	raw    string // original pattern for doublestar fallback and diagnostics
 	prefix string // path prefix before "**/" (may be empty)
 	suffix string // ".ext" for extension-glob patterns; empty otherwise
 	exact  bool   // true when raw contains no glob metacharacters
-	// except are the exclusions of this glob's run (types.GlobRuns). Never cached with
-	// the glob: one pattern appears in lists that narrow it differently.
+	// except are the glob's exclusions. Never cached with the pattern: one pattern
+	// appears in declarations that narrow it differently.
 	except []compiledGlob
 }
 
 // compiledGlobs caches compiled patterns once per process (bounded by spell count).
 var compiledGlobs sync.Map // string → compiledGlob
 
-// compileGlobs compiles a declared glob list into one matcher per glob, each carrying
-// the exclusions of its run, so a path matches the list exactly when one of them matches
-// it. An exclusion yields no matcher of its own.
-func compileGlobs(globs []string) []compiledGlob {
-	out := make([]compiledGlob, 0, len(globs))
-	for run := range types.GlobRuns(globs) {
-		var except []compiledGlob
-		for _, g := range run.Exclusions {
-			pattern, _ := types.CutExclusion(g)
-			except = append(except, compileGlob(pattern))
-		}
-		for _, g := range run.Globs {
-			cg := compileGlob(g)
-			cg.except = except
-			out = append(out, cg)
+// compileGlobs compiles declared globs into one matcher each, carrying its exclusions,
+// so a path matches the list exactly when one of them matches it.
+func compileGlobs(globs []types.Glob) []compiledGlob {
+	out := make([]compiledGlob, len(globs))
+	for i, g := range globs {
+		out[i] = compileGlob(g.Pattern)
+		for _, e := range g.Except {
+			out[i].except = append(out[i].except, compileGlob(e))
 		}
 	}
 	return out
@@ -59,11 +52,11 @@ func compileGlob(g string) compiledGlob {
 // newCompiledGlob classifies pat as exact, extension-glob, or complex. A backslash
 // escape (`\!` for a literal leading bang) is left to doublestar.
 func newCompiledGlob(pat string) compiledGlob {
-	const meta = "*?[{\\"
-	if !strings.ContainsAny(pat, meta) {
+	if types.IsLiteralGlob(pat) {
 		return compiledGlob{raw: pat, exact: true}
 	}
 
+	const meta = "*?[{\\"
 	const dstarDot = "**/*."
 	if idx := strings.Index(pat, dstarDot); idx != -1 {
 		suffix := "." + pat[idx+len(dstarDot):]
@@ -92,7 +85,8 @@ func (g compiledGlob) Match(path string) bool {
 
 func (g compiledGlob) matchPattern(path string) bool {
 	if g.exact {
-		return path == g.raw
+		rest, ok := strings.CutPrefix(path, g.raw)
+		return ok && (rest == "" || rest[0] == '/')
 	}
 	if g.suffix != "" {
 		if !strings.HasSuffix(path, g.suffix) {

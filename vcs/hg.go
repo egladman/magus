@@ -165,7 +165,7 @@ func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 	args := []string{"status"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
@@ -188,7 +188,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	args := []string{"diff", "--git", "-U", "1"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
@@ -217,7 +217,7 @@ func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, hgFamilyGlobs(paths)...)
+		args = append(args, hgGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
@@ -297,16 +297,16 @@ func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, e
 	return c, nil
 }
 
-// History implements types.VCSDriver; see hgFamilyHistory.
+// History implements types.VCSDriver; see hgHistory.
 func (v hgVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
-	return hgFamilyHistory(ctx, v, "hg", dir, q)
+	return hgHistory(ctx, v, "hg", dir, q)
 }
 
 // hgHistoryTemplate follows hgCommitTemplate with a file count and each file, so a record
 // parses by counting and no byte of a message or a path can end one early.
 const hgHistoryTemplate = hgCommitTemplate + `\0{files|count}\0{files % "{file}\0"}`
 
-// hgFamilyHistory is History for hg and Sapling in one `log`. _firstancestors is the
+// hgHistory is History for hg and Sapling in one `log`. _firstancestors is the
 // revset behind hg's --follow-first: private by name, and the only first-parent walk
 // either CLI offers. null goes because an empty repository's "." is the null revision.
 //
@@ -314,7 +314,7 @@ const hgHistoryTemplate = hgCommitTemplate + `\0{files|count}\0{files % "{file}\
 // `status --change`, which is, from the root so both programs print root-relative paths.
 // For the same reason the log takes no path filter, which would judge a merge by {files}:
 // historyTouching narrows instead.
-func hgFamilyHistory(ctx context.Context, v types.VCSDriver, prog, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+func hgHistory(ctx context.Context, v types.VCSDriver, prog, dir string, q types.HistoryQuery) ([]types.Commit, error) {
 	revs := "::."
 	if q.FirstParent {
 		revs = "_firstancestors(.)"
@@ -342,7 +342,7 @@ func hgFamilyHistory(ctx context.Context, v types.VCSDriver, prog, dir string, q
 			}
 		}
 		st := append([]string{"status", "--no-status", "--added", "--modified", "--removed", "--change", c.ID},
-			hgFamilyRootPaths(q.Paths)...)
+			hgRootPaths(q.Paths)...)
 		files, err := vcsOutput(ctx, root, prog, st...)
 		if err != nil {
 			return nil, fmt.Errorf("%s status --change %s: %w", prog, c.ID, err)
@@ -488,7 +488,7 @@ func (v hgVCS) InstallMergeDriver(ctx context.Context, root string, globs types.
 
 func (v hgVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(hgrcPath(root), globs, WriteJudge(ctx, root))
+		return writeHgMergeDriverSection(hgrcPath(root), globs, WriteJudge(ctx, root))
 	})
 }
 
@@ -496,9 +496,9 @@ func (v hgVCS) writeMergeDriver(ctx context.Context, root string, globs types.Me
 // merge, so a conflict still standing is one it did not settle.
 func (hgVCS) RunMergeDriver(context.Context, string, []string) error { return nil }
 
-// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgMergeDriverCommand.
 func (v hgVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
-	return hgFamilyMergeDriverCommand(ctx, "hg", root)
+	return hgMergeDriverCommand(ctx, "hg", root)
 }
 
 // CheckMergeDriver reports whether .hg/hgrc holds the magus merge-driver section. A torn
@@ -524,7 +524,7 @@ func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.M
 // section in .hg/hgrc is an error.
 func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyRefreshSection(hgrcPath(root), command, WriteJudge(ctx, root))
+		return writeHgRefreshSection(hgrcPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -536,12 +536,12 @@ func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]
 }
 
 // InstallDriftHook implements types.DriftHookInstaller with hg's `commit` and `outgoing`
-// hooks (see hgFamilyDriftHooks). Neither hook can fail the hg command. It returns their
+// hooks (see hgDriftHooks). Neither hook can fail the hg command. It returns their
 // labels when it changed .hg/hgrc and nil when they were already current. Installs are
 // serialized per repository, and a torn managed section in .hg/hgrc is an error.
 func (v hgVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyDriftSection(hgrcPath(root), command, WriteJudge(ctx, root))
+		return writeHgDriftSection(hgrcPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -549,7 +549,7 @@ func (v hgVCS) InstallDriftHook(ctx context.Context, root, command string) ([]st
 	if !changed {
 		return nil, nil
 	}
-	return slices.Clone(hgFamilyDriftHooks), nil
+	return slices.Clone(hgDriftHooks), nil
 }
 
 // ConflictResolver (below) is implemented for hg so `magus vcs resolve` is not a
@@ -768,24 +768,24 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 // keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
 // notes on the individual methods say where. What hg declines is in unsupported.go.
 
-// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL.
+// RemoteURL implements types.RemoteReporter; see hgRemoteURL.
 func (v hgVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
-	return hgFamilyRemoteURL(ctx, "hg", dir, name)
+	return hgRemoteURL(ctx, "hg", dir, name)
 }
 
-// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles.
+// RangeFiles implements types.RangeReporter; see hgRangeFiles.
 func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
-	return hgFamilyRangeFiles(ctx, "hg", dir, base, head, paths)
+	return hgRangeFiles(ctx, "hg", dir, base, head, paths)
 }
 
-// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
+// RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgFamilyRangeCommits(ctx, v, "hg", dir, base, head, paths)
+	return hgRangeCommits(ctx, v, "hg", dir, base, head, paths)
 }
 
-// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+// IsAncestor implements types.AncestryReporter; see hgIsAncestor.
 func (v hgVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
-	return hgFamilyIsAncestor(ctx, "hg", dir, ancestor, descendant)
+	return hgIsAncestor(ctx, "hg", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
@@ -916,9 +916,9 @@ const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` + hgC
 // arrives as a delete plus an add, costing lineage but staying correct.
 const hgChurnFileTail = `{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
-// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
+// ChangesByCommit implements types.ChurnReporter; see hgChangesByCommit.
 func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	return hgFamilyChangesByCommit(ctx, v, "hg", hgChurnTemplate, dir, commits, since)
+	return hgChangesByCommit(ctx, v, "hg", hgChurnTemplate, dir, commits, since)
 }
 
 // hgArchivalMeta is the provenance file `hg archive` injects into every export. It belongs
@@ -932,9 +932,9 @@ func (hgVCS) CheckoutID(dir string) (string, bool) {
 }
 
 // OpenObjectBatch starts one command server for every approved source a guard
-// load reads. See hgFamilyOpenObjectBatch.
+// load reads. See hgOpenObjectBatch.
 func (hgVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
-	return hgFamilyOpenObjectBatch(ctx, "hg", root, rev)
+	return hgOpenObjectBatch(ctx, "hg", root, rev)
 }
 
 // ReadFileAt implements types.RevisionFileReader via `hg cat -r <rev>`. "" is `.`, hg's
@@ -956,7 +956,7 @@ func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 // Unlike Sapling's, hg's archive needs no explicit include set: `sl archive` refuses a
 // whole-tree export without one, and hg does not.
 func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	return hgFamilyExportRevision(ctx, v, "hg", dir, rev, dstDir, "-X", hgArchivalMeta)
+	return hgExportRevision(ctx, v, "hg", dir, rev, dstDir, "-X", hgArchivalMeta)
 }
 
 // StartMerge begins a merge of ref without committing it. See types.MergeStarter.
@@ -1046,7 +1046,7 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if !dirty {
 		return "", nil
 	}
-	pending, err := hgFamilyReadPending(ctx, "hg", dir)
+	pending, err := hgReadPending(ctx, "hg", dir)
 	if err != nil {
 		return "", fmt.Errorf("hg preserve: %w", err)
 	}
@@ -1059,7 +1059,7 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	}
 	// The shelf EXISTS from here, so a failed restore reports the handle rather than
 	// discarding it, and NAMES the files so the state is actionable.
-	if err := hgFamilyRestorePending(ctx, "hg", pending); err != nil {
+	if err := hgRestorePending(ctx, "hg", pending); err != nil {
 		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			name, pending.unknown, pending.missing, err)
 	}
@@ -1145,8 +1145,8 @@ func hgShelfListing(out string) map[string]string {
 }
 
 // CommitPushed implements types.PushStatusReporter via Mercurial's phases; see
-// hgFamilyCommitPushed for why a phase answers this question exactly where git's
+// hgCommitPushed for why a phase answers this question exactly where git's
 // reachability walk only approximates it.
 func (v hgVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
-	return hgFamilyCommitPushed(ctx, "hg", dir, id)
+	return hgCommitPushed(ctx, "hg", dir, id)
 }

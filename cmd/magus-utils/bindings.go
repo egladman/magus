@@ -187,6 +187,9 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	buzz "github.com/egladman/magus/libs/gopherbuzz"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
+	if bytes.Contains(body.Bytes(), []byte("ffi.")) {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
+	}
 	if implPath != "" {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
@@ -288,13 +291,13 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 	switch len(meth.Returns) {
 	case 0:
 		fmt.Fprintf(w, "\t\tif err := %s.%s(%s); err != nil {\n", implPkg, std.MethodFuncName(meth), callStr)
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
 		fmt.Fprintf(w, "\t\tret0, err := %s.%s(%s)\n", implPkg, std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
 		fmt.Fprintln(w, "\t\t}")
 		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects)
 		if err != nil {
@@ -309,7 +312,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		lhsParts = append(lhsParts, "err")
 		fmt.Fprintf(w, "\t\t%s := %s.%s(%s)\n", strings.Join(lhsParts, ", "), implPkg, std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {
@@ -329,53 +332,53 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	if a.Variadic {
 		// Only TypeString variadic is used in practice.
-		fmt.Fprintf(w, "\t\t%s := VariadicStr(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.VariadicStr(bzArgs, %d)\n", a.Name, idx)
 		return
 	}
 	switch a.Type {
 	case std.TypeString:
-		fmt.Fprintf(w, "\t\t%s := Str(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.Str(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeInt:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := Int(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := ffi.Int(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeFloat:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := Float(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := ffi.Float(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeIndex:
 		// Buzz lists are 0-based, matching the Go Impl; no offset.
-		fmt.Fprintf(w, "\t\t%s := Int(bzArgs, %d, 0)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.Int(bzArgs, %d, 0)\n", a.Name, idx)
 	case std.TypeBool:
 		def := "false"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := ffi.Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeStringSlice:
-		fmt.Fprintf(w, "\t\t%s := StrSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StrSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFloatSlice:
-		fmt.Fprintf(w, "\t\t%s := FloatSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.FloatSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeByteSlice:
-		fmt.Fprintf(w, "\t\t%s := ByteSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.ByteSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringSliceSlice:
-		fmt.Fprintf(w, "\t\t%s := StrSliceSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StrSliceSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMapMap:
-		fmt.Fprintf(w, "\t\t%s := StrMapMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StrMapMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMap:
-		fmt.Fprintf(w, "\t\t%s := StrMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StrMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
-		fmt.Fprintf(w, "\t\t%s := AnyMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFunc:
-		fmt.Fprintf(w, "\t\t%s := CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
-		fmt.Fprintf(w, "\t\t%s := Any(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d)\n", a.Name, idx)
 	default:
-		fmt.Fprintf(w, "\t\t%s := Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
+		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
 	}
 }
 
@@ -489,29 +492,29 @@ func checkObjectDecls(mods []std.Module) error {
 func buzzValConv(t std.TypeTag, src string) string {
 	switch t {
 	case std.TypeString:
-		return fmt.Sprintf("StrVal(%s)", src)
+		return fmt.Sprintf("ffi.StrVal(%s)", src)
 	case std.TypeInt, std.TypeIndex:
-		return fmt.Sprintf("IntVal(%s)", src)
+		return fmt.Sprintf("ffi.IntVal(%s)", src)
 	case std.TypeBool:
-		return fmt.Sprintf("BoolVal(%s)", src)
+		return fmt.Sprintf("ffi.BoolVal(%s)", src)
 	case std.TypeFloat:
-		return fmt.Sprintf("FloatVal(%s)", src)
+		return fmt.Sprintf("ffi.FloatVal(%s)", src)
 	case std.TypeStringSlice:
-		return fmt.Sprintf("StrSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.StrSliceVal(%s)", src)
 	case std.TypeFloatSlice:
-		return fmt.Sprintf("FloatSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.FloatSliceVal(%s)", src)
 	case std.TypeByteSlice:
-		return fmt.Sprintf("ByteSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.ByteSliceVal(%s)", src)
 	case std.TypeStringSliceSlice:
-		return fmt.Sprintf("StrSliceSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.StrSliceSliceVal(%s)", src)
 	case std.TypeStringMapMap:
-		return fmt.Sprintf("StrMapMapVal(%s)", src)
+		return fmt.Sprintf("ffi.StrMapMapVal(%s)", src)
 	case std.TypeStringMap:
-		return fmt.Sprintf("StrMapVal(%s)", src)
+		return fmt.Sprintf("ffi.StrMapVal(%s)", src)
 	case std.TypeAnyMap:
-		return fmt.Sprintf("AnyMapVal(%s)", src)
+		return fmt.Sprintf("ffi.AnyMapVal(%s)", src)
 	case std.TypeAny:
-		return fmt.Sprintf("AnyVal(%s)", src)
+		return fmt.Sprintf("ffi.AnyVal(%s)", src)
 	default:
 		panic(fmt.Sprintf("buzzValConv: unsupported type tag %s for value conversion", t.GoType()))
 	}
@@ -552,7 +555,7 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error)
 		if err := e.emitStruct(t.Elem()); err != nil {
 			return "", err
 		}
-		return "ObjectSlice(" + src + ", " + e.funcName(t.Elem()) + ")", nil
+		return "ffi.ObjectSlice(" + src + ", " + e.funcName(t.Elem()) + ")", nil
 	default:
 		return "", fmt.Errorf("object return %s is not a struct or slice of structs", t)
 	}

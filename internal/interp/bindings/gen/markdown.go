@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,28 +18,28 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("toHtml", vm.DirectValue("markdown.toHtml", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := Str(bzArgs, 0)
+		source := ffi.Str(bzArgs, 0)
 		ret0, err := std.MarkdownToHTML(ctx, source)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("frontmatter", vm.DirectValue("markdown.frontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := Str(bzArgs, 0)
+		source := ffi.Str(bzArgs, 0)
 		ret0, err := std.MarkdownFrontmatter(ctx, source)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("stripFrontmatter", vm.DirectValue("markdown.stripFrontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := Str(bzArgs, 0)
+		source := ffi.Str(bzArgs, 0)
 		ret0, err := std.MarkdownStripFrontmatter(ctx, source)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

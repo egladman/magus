@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -169,7 +170,7 @@ func TestHashStep_SourceExecBit(t *testing.T) {
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 	script := filepath.Join(root, "run.sh")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o644))
-	s := &Step{ProjectPath: ".", WorkspaceRoot: root, Sources: []string{"run.sh"}}
+	s := &Step{ProjectPath: ".", WorkspaceRoot: root, Sources: types.MustParseGlobs("run.sh")}
 
 	h1, err := c.hashStep(context.Background(), s)
 	require.NoError(t, err, "hashStep(0644)")

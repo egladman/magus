@@ -622,16 +622,19 @@ export object ChainStep {
 export object InputRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object OutputRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object UpdateRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object TargetGraphNode {

@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,28 +18,28 @@ func RegisterSort(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("strings", vm.DirectValue("sort.strings", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		items := StrSlice(bzArgs, 0)
+		items := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.SortStrings(ctx, items)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("natural", vm.DirectValue("sort.natural", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		items := StrSlice(bzArgs, 0)
+		items := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.SortNatural(ctx, items)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("semver", vm.DirectValue("sort.semver", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		items := StrSlice(bzArgs, 0)
+		items := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.SortSemver(ctx, items)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	return m
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -206,7 +207,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		if name != "" && len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
 		}
-		return bindinggen.ObjectSlice(out, bindinggen.ObjectModuleEntry), nil
+		return ffi.ObjectSlice(out, bindinggen.ObjectModuleEntry), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name (a target, a
@@ -222,7 +223,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		if len(args) == 0 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
-		return bindinggen.StrVal(types.Normalize(args[0].AsString())), nil
+		return ffi.StrVal(types.Normalize(args[0].AsString())), nil
 	}))
 
 	// magus.log.*: the one way to emit a message from a magusfile; there is no

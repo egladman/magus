@@ -138,8 +138,8 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	s.EmitShardTotal(ctx, "1", 4, time.Second)
 	s.EmitDetach(ctx, 4242, "/state/run.log")
 	checkOutputOverlap(ctx, []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "build", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
 	}, s)
 	require.NoError(t, s.Close())
 
@@ -399,10 +399,10 @@ func TestJSONLSinkNeverDropsARecord(t *testing.T) {
 // record each, and neither ever as the other.
 func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	steps := []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "build", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
 	}
-	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: []string{"**/*.go"}}
+	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: types.MustParseGlobs("**/*.go")}
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var text bytes.Buffer

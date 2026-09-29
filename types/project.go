@@ -2,8 +2,6 @@ package types
 
 import (
 	"fmt"
-	"iter"
-	"maps"
 	"path"
 	"path/filepath"
 	"slices"
@@ -174,8 +172,8 @@ type Project struct {
 	Spell     string // primary spell name; use Spells for fan-out dispatch
 	Spells    []string
 	Bindings  []*Binding // parallel to Spells, in registration order
-	Sources   []string   // doublestar globs relative to Dir for the cache key
-	Outputs   []string   // doublestar globs snapshotted into and replayed from cache
+	Sources   []Glob     // relative to Dir; key the cache
+	Outputs   []Glob     // relative to Dir; snapshotted into and replayed from cache
 	DependsOn []string
 	// NoLanguage is the reason a project binds no toolchain spell ON PURPOSE, from
 	// magus.project's "no_language" key. A spell-less project is legal and common, so
@@ -325,7 +323,7 @@ type Project struct {
 	// is what lets the merge driver regenerate the file, since only the writer can.
 	// Populated at load, after the walk, once every project is known (the owner may not
 	// be discovered yet when the writer declares it).
-	InboundOutputs map[string][]string
+	InboundOutputs map[string][]Glob
 	ResolvedSpells []*spells.Spell // set at the end of magus.Open; immutable thereafter
 }
 
@@ -347,37 +345,22 @@ type Project struct {
 // spare capacity from AttachSpell, so handing the live backing array out of an exported
 // method lets one append reach into the project record.
 //
-// Contributions are sorted so the result is deterministic despite the maps. A
-// declaration carrying exclusions stays whole, joined by [UnionGlobs], so its
-// exclusions narrow only its own globs.
-func (p *Project) AllOutputs() []string {
-	if len(p.TargetOutputs) == 0 && len(p.InboundOutputs) == 0 {
-		return slices.Clone(p.Outputs)
-	}
-	lists := [][]string{p.Outputs}
-	var extra []string
-	add := func(globs []string) {
-		if slices.ContainsFunc(globs, isExclusion) {
-			lists = append(lists, globs)
-			return
-		}
-		extra = append(extra, globs...)
-	}
-	for _, target := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
-		var own []string
-		for _, ref := range p.TargetOutputs[target] {
+// Every Glob carries its own exclusions, so the union needs no ordering: the result is
+// sorted and deduplicated.
+func (p *Project) AllOutputs() []Glob {
+	out := slices.Clone(p.Outputs)
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
 			if ref.Project != "" && ref.Project != p.Path {
 				continue // written into another tree; that project counts it
 			}
-			own = append(own, ref.Glob)
+			out = append(out, Glob{Pattern: ref.Glob, Except: ref.Except})
 		}
-		add(own)
 	}
-	for _, writer := range slices.Sorted(maps.Keys(p.InboundOutputs)) {
-		add(p.InboundOutputs[writer])
+	for _, globs := range p.InboundOutputs {
+		out = append(out, globs...)
 	}
-	slices.Sort(extra)
-	return UnionGlobs(append(lists, extra)...)
+	return CompactGlobs(out)
 }
 
 // RootGlob roots a glob declared against projectPath at the WORKSPACE, which is the
@@ -397,182 +380,174 @@ func (p *Project) AllOutputs() []string {
 // A glob reaching PAST the workspace root is rejected where it is declared
 // (workspace.WithSources), not here: this is a pure path operation with one answer, and
 // only the declaration site can name the option that wrote it.
-//
-// An exclusion stays one: its pattern is rooted and the "!" goes back in front.
 func RootGlob(projectPath, glob string) string {
-	if pattern, ok := CutExclusion(glob); ok {
-		return "!" + RootGlob(projectPath, pattern)
-	}
 	if projectPath == "" || projectPath == "." {
 		return path.Clean(glob)
 	}
 	return path.Clean(projectPath + "/" + glob)
 }
 
-// MatchesAnyGlob reports whether a workspace-relative path matches any of the
-// workspace-rooted globs: the question every consumer of [Project.DeclaredGlobs] asks,
-// so it lives beside the rooting rather than once per caller. The three callers (affected
-// attribution, doctor's standing check, `magus describe file`) would otherwise be three
-// places for the matcher family to drift from the cache's.
+// Glob is one declared doublestar pattern and the exclusions declared with it.
 //
-// It TOLERATES an unparsable pattern, which then matches nothing: the same thing the
-// cache walk does with one. Tolerance is the right default (a bad glob must not fail a
-// build that never depended on it) but it is silent, so the pattern is worth reporting
-// where the glob set is assembled: see [InvalidGlobs].
+// A magusfile spells an exclusion in-band, as a "!pattern" argument to the same call:
+// ctx.writesFiles("gen/*.go", "!gen/runtime.go"). [ParseGlobs] reads that call once,
+// where it is declared, into one Glob per positive pattern, each carrying every
+// exclusion of the call. Order within the call does not matter, and an exclusion never
+// reaches a pattern declared by another call, so a list of Globs is a plain union that
+// can be merged, sorted and deduplicated freely. Pattern and Except are bare: no "!".
+type Glob struct {
+	Pattern string   `json:"pattern" yaml:"pattern"`
+	Except  []string `json:"except,omitempty" yaml:"except,omitempty"`
+}
+
+// Match reports whether Pattern claims path and no entry of Except does. A literal
+// pattern (no glob metacharacter) also claims every file beneath it, on both sides:
+// "dist" declares dist/app.js, the way a snapshot walks a named directory, and an
+// exclusion of "dist/vendor" carves out dist/vendor/lib.js.
 //
-// Exclusions apply as [GlobRuns] scopes them, so a path matches when some run's glob
-// matches it and none of that run's exclusions do.
-func MatchesAnyGlob(globs []string, path string) bool {
-	for run := range GlobRuns(globs) {
-		if run.Matches(path) {
-			return true
+// An unparsable pattern matches nothing, as the cache walk treats one; [InvalidGlobs]
+// is where it gets reported.
+func (g Glob) Match(path string) bool {
+	return claims(g.Pattern, path) && !g.Excludes(path)
+}
+
+// Excludes reports whether an entry of Except claims path, whether or not Pattern does.
+func (g Glob) Excludes(path string) bool {
+	return slices.ContainsFunc(g.Except, func(e string) bool { return claims(e, path) })
+}
+
+// Root roots g, declared against projectPath, at the workspace (see [RootGlob]).
+func (g Glob) Root(projectPath string) Glob {
+	out := Glob{Pattern: RootGlob(projectPath, g.Pattern)}
+	if len(g.Except) > 0 {
+		out.Except = make([]string, len(g.Except))
+		for i, e := range g.Except {
+			out.Except[i] = RootGlob(projectPath, e)
 		}
 	}
-	return false
+	return out
 }
 
-// CutExclusion reports whether a declared glob is an exclusion ("!pattern") and returns
-// the pattern after the bang. A literal leading bang is written `\!`, doublestar's own
-// escape, so that entry stays an ordinary glob matching a name that starts with "!".
-func CutExclusion(glob string) (pattern string, ok bool) {
-	return strings.CutPrefix(glob, "!")
-}
-
-func isExclusion(glob string) bool { return strings.HasPrefix(glob, "!") }
-
-// GlobRun is one run of a declared glob list: its globs, then the exclusions that
-// follow them, each still carrying its "!".
-type GlobRun struct {
-	Globs      []string
-	Exclusions []string
-}
-
-// Excludes reports whether one of the run's exclusions matches path.
-func (r GlobRun) Excludes(path string) bool {
-	for _, g := range r.Exclusions {
-		pattern, _ := CutExclusion(g)
-		if ok, _ := doublestar.Match(pattern, path); ok {
-			return true
-		}
+// String renders g the way a declaration spells it: the pattern, then each exclusion
+// with its "!", space-separated.
+func (g Glob) String() string {
+	if len(g.Except) == 0 {
+		return g.Pattern
 	}
-	return false
+	return g.Pattern + " !" + strings.Join(g.Except, " !")
 }
 
-// Matches reports whether one of the run's globs matches path and no exclusion does.
-func (r GlobRun) Matches(path string) bool {
-	for _, g := range r.Globs {
-		if ok, _ := doublestar.Match(g, path); ok {
-			return !r.Excludes(path)
-		}
+// GlobStrings renders each glob with [Glob.String], for a display field that lists one
+// declared glob per entry.
+func GlobStrings(globs []Glob) []string {
+	if globs == nil {
+		return nil
 	}
-	return false
-}
-
-// GlobRuns splits a declared glob list into runs, each some globs followed by the
-// exclusions that narrow them. An exclusion reaches back only to the previous
-// exclusion, so a glob listed after one starts a fresh run that no earlier exclusion
-// narrows. That is where this departs from gitignore, deliberately: a target's separate
-// ctx.writesFiles calls reach magus as one list, and a list [UnionGlobs] flattens from
-// several declarations must match their union, so no declaration's exclusions may leak
-// into the globs of another. Leading exclusions narrow nothing and are skipped; see
-// [CheckExclusions] for where a declaration is refused over one.
-//
-// The runs share globs' backing array.
-func GlobRuns(globs []string) iter.Seq[GlobRun] {
-	return func(yield func(GlobRun) bool) {
-		for start := 0; start < len(globs); {
-			mid := start
-			for mid < len(globs) && !isExclusion(globs[mid]) {
-				mid++
-			}
-			end := mid
-			for end < len(globs) && isExclusion(globs[end]) {
-				end++
-			}
-			if mid > start && !yield(GlobRun{Globs: globs[start:mid], Exclusions: globs[mid:end]}) {
-				return
-			}
-			start = end
-		}
-	}
-}
-
-// UnionGlobs flattens several declared glob lists into one that [MatchesAnyGlob]
-// answers as their union. Plain concatenation cannot: a list ending in a glob, followed
-// by one opening with a glob and closing with an exclusion, fuses into one run, and the
-// second list's exclusion then narrows the first's globs. So every list's runs up to its
-// last exclusion come first, in the order given and each distinct run once, and the
-// trailing plain globs of every list follow, deduplicated. A list's leading exclusions
-// are dropped, since they narrow nothing and would otherwise join the run before them.
-//
-// The result never aliases an argument.
-func UnionGlobs(lists ...[]string) []string {
-	var runs, plain []string
-	var seen []GlobRun
-	for _, list := range lists {
-		cut := 0
-		for i, g := range list {
-			if isExclusion(g) {
-				cut = i + 1
-			}
-		}
-		for run := range GlobRuns(list[:cut]) {
-			if slices.ContainsFunc(seen, func(r GlobRun) bool {
-				return slices.Equal(r.Globs, run.Globs) && slices.Equal(r.Exclusions, run.Exclusions)
-			}) {
-				continue
-			}
-			seen = append(seen, run)
-			runs = append(append(runs, run.Globs...), run.Exclusions...)
-		}
-		for _, g := range list[cut:] {
-			if !slices.Contains(plain, g) {
-				plain = append(plain, g)
-			}
-		}
-	}
-	return append(runs, plain...)
-}
-
-// CheckExclusions refuses a declaration whose exclusions cannot narrow anything: one
-// that opens with an exclusion, which includes one made of nothing else, and an
-// exclusion naming no pattern. Each would otherwise be kept and silently match nothing,
-// leaving the author believing a file is carved out while every consumer disagrees.
-func CheckExclusions(globs []string) error {
+	out := make([]string, len(globs))
 	for i, g := range globs {
-		pattern, ok := CutExclusion(g)
-		if !ok {
-			continue
+		out[i] = g.String()
+	}
+	return out
+}
+
+// Compare orders globs by pattern, then by exclusions, for sorting and deduplication.
+func (g Glob) Compare(other Glob) int {
+	if c := strings.Compare(g.Pattern, other.Pattern); c != 0 {
+		return c
+	}
+	return slices.Compare(g.Except, other.Except)
+}
+
+// IsLiteralGlob reports whether pattern has no glob metacharacter, so it names one path:
+// a file, or a directory whose whole tree it claims. A backslash escape counts as a
+// metacharacter, leaving `\!x` to doublestar.
+func IsLiteralGlob(pattern string) bool {
+	return !strings.ContainsAny(pattern, `*?[{\`)
+}
+
+func claims(pattern, path string) bool {
+	if IsLiteralGlob(pattern) {
+		return path == pattern || strings.HasPrefix(path, pattern+"/")
+	}
+	ok, _ := doublestar.Match(pattern, path)
+	return ok
+}
+
+// MatchGlobs reports whether some glob in globs matches path, each under its own
+// exclusions: the union every declared glob list means.
+func MatchGlobs(globs []Glob, path string) bool {
+	return slices.ContainsFunc(globs, func(g Glob) bool { return g.Match(path) })
+}
+
+// CompactGlobs sorts globs and drops duplicates in place, returning the shortened slice.
+func CompactGlobs(globs []Glob) []Glob {
+	slices.SortFunc(globs, Glob.Compare)
+	return slices.CompactFunc(globs, func(a, b Glob) bool { return a.Compare(b) == 0 })
+}
+
+// ParseGlobs reads the arguments of ONE declaration call, in the magusfile syntax: a
+// leading "!" marks an exclusion, and `\!` (doublestar's escape) spells a pattern that
+// starts with a literal bang. Every positive pattern becomes a Glob, in the order
+// written and each once, carrying all of the call's exclusions, sorted, wherever in the
+// call they were written.
+//
+// It refuses an empty pattern and a call made only of exclusions, since either would be
+// kept and match nothing while the author believes it declares or carves out a file.
+func ParseGlobs(declared []string) ([]Glob, error) {
+	var patterns, except []string
+	for _, raw := range declared {
+		pattern, exclusion := strings.CutPrefix(raw, "!")
+		if pattern == "" {
+			return nil, fmt.Errorf("glob %q names no pattern", raw)
 		}
 		switch {
-		case pattern == "":
-			return fmt.Errorf("exclusion %q names no pattern", g)
-		case i == 0 && !slices.ContainsFunc(globs, func(other string) bool { return !isExclusion(other) }):
-			return fmt.Errorf("every glob in %q is an exclusion, so it declares nothing; "+
-				"list the globs to declare first, then the exclusions that narrow them (a literal leading ! is written \\!)", globs)
-		case i == 0:
-			return fmt.Errorf("exclusion %q comes before any glob it could narrow; "+
-				"list the globs to declare first, then the exclusions that narrow them (a literal leading ! is written \\!)", g)
+		case exclusion:
+			except = append(except, pattern)
+		case !slices.Contains(patterns, pattern):
+			patterns = append(patterns, pattern)
 		}
 	}
-	return nil
+	if len(patterns) == 0 && len(except) > 0 {
+		return nil, fmt.Errorf("exclusion %q has no glob to narrow", "!"+except[0])
+	}
+	slices.Sort(except)
+	except = slices.Compact(except)
+	out := make([]Glob, len(patterns))
+	for i, p := range patterns {
+		out[i] = Glob{Pattern: p, Except: except}
+	}
+	return out, nil
 }
 
-// InvalidGlobs returns the globs doublestar cannot parse, deduplicated and in the order
-// given. It is what lets a caller SAY that a declaration matches nothing before it
-// silently matches nothing for the rest of the run: an unparsable glob declares an input
-// that can never key, and MGS1028 would then advise declaring a path that is already
-// declared, by a pattern that never matches it. An exclusion is judged by its pattern
-// and reported as written.
+// MustParseGlobs is ParseGlobs for a declaration fixed at compile time; it panics on a
+// malformed one.
+func MustParseGlobs(declared ...string) []Glob {
+	globs, err := ParseGlobs(declared)
+	if err != nil {
+		panic(err)
+	}
+	return globs
+}
+
+// InvalidGlobs returns the patterns doublestar cannot parse, exclusions included,
+// deduplicated and in the order given. It is what lets a caller SAY that a declaration
+// matches nothing before it silently matches nothing for the rest of the run: an
+// unparsable glob declares an input that can never key, and MGS1028 would then advise
+// declaring a path that is already declared, by a pattern that never matches it.
 //
 // The error is not returned with it because doublestar has only one (ErrBadPattern, with
 // no position), so the pattern itself is the whole of the information.
-func InvalidGlobs(globs []string) []string {
+func InvalidGlobs(globs []Glob) []string {
 	var bad []string
+	check := func(pattern string) {
+		if !doublestar.ValidatePattern(pattern) && !slices.Contains(bad, pattern) {
+			bad = append(bad, pattern)
+		}
+	}
 	for _, g := range globs {
-		pattern, _ := CutExclusion(g)
-		if !doublestar.ValidatePattern(pattern) && !slices.Contains(bad, g) {
-			bad = append(bad, g)
+		check(g.Pattern)
+		for _, e := range g.Except {
+			check(e)
 		}
 	}
 	return bad
@@ -591,62 +566,55 @@ func InvalidGlobs(globs []string) []string {
 // Measured, they do not: plain concatenation leaves a reaching "../" glob at a path
 // nothing can match, while joining the same glob with filepath.Join resolves it.
 //
-// Dedup here is string equality on the ROOTED form, so two spellings that resolve to
-// one path collapse to one entry: a project-wide "../proto/**" and a per-target
-// ctx.readsFiles of proto's "**" are the same declaration and count once. A declaration
-// carrying exclusions is kept whole instead, ahead of the sorted plain globs, as
-// [UnionGlobs] joins it.
+// Dedup compares the ROOTED form, so two spellings that resolve to one path collapse to
+// one entry: a project-wide "../proto/**" and a per-target ctx.readsFiles of proto's
+// "**" are the same declaration and count once.
 //
 // Deliberately NOT the magusfile globs the cache step layers on top. Every project's
 // key carries the ROOT magusfile, so counting those here would make one magusfile
 // edit read as a declaration by every project in the workspace, and attribution
 // would then seed all of them where directory containment seeds exactly one.
-func (p *Project) DeclaredGlobs() []string {
-	rooted := func(owner string, globs []string) []string {
-		out := make([]string, len(globs))
-		for i, glob := range globs {
-			out[i] = RootGlob(owner, glob)
+func (p *Project) DeclaredGlobs() []Glob {
+	var out []Glob
+	for _, g := range p.Sources {
+		out = append(out, g.Root(p.Path))
+	}
+	for _, g := range p.AllOutputs() {
+		out = append(out, g.Root(p.Path))
+	}
+	for _, refs := range p.TargetInputs {
+		for _, ref := range refs {
+			out = append(out, ref.Rooted(p.Path))
 		}
-		return out
 	}
-	lists := [][]string{rooted(p.Path, p.Sources), rooted(p.Path, p.AllOutputs())}
-	addRef := func(list []string, owner, glob string) []string {
-		if owner == "" {
-			owner = p.Path
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			out = append(out, ref.Rooted(p.Path))
 		}
-		return append(list, RootGlob(owner, glob))
 	}
-	for _, target := range slices.Sorted(maps.Keys(p.TargetInputs)) {
-		var list []string
-		for _, ref := range p.TargetInputs[target] {
-			list = addRef(list, ref.Project, ref.Glob)
+	for _, refs := range p.TargetUpdates {
+		for _, ref := range refs {
+			out = append(out, ref.Rooted(p.Path))
 		}
-		lists = append(lists, list)
 	}
-	for _, target := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
-		var list []string
-		for _, ref := range p.TargetOutputs[target] {
-			list = addRef(list, ref.Project, ref.Glob)
-		}
-		lists = append(lists, list)
-	}
-	for _, target := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
-		var list []string
-		for _, ref := range p.TargetUpdates[target] {
-			list = addRef(list, ref.Project, ref.Glob)
-		}
-		lists = append(lists, list)
-	}
-	out := UnionGlobs(lists...)
-	plain := len(out)
-	for plain > 0 && !isExclusion(out[plain-1]) {
-		plain--
-	}
-	slices.Sort(out[plain:])
-	return out
+	return CompactGlobs(out)
 }
 
-// AttachSpell associates spell with p without applying registration overrides.
+// SpellGlobs parses what a spell contributes to every project it binds: its Sources and
+// its Outputs, each one declaration (see [ParseGlobs]).
+func SpellGlobs(spell *spells.Spell) (sources, outputs []Glob, err error) {
+	if sources, err = ParseGlobs(spell.Sources()); err != nil {
+		return nil, nil, fmt.Errorf("spell %q: sources: %w", spell.Name(), err)
+	}
+	if outputs, err = ParseGlobs(spell.Outputs()); err != nil {
+		return nil, nil, fmt.Errorf("spell %q: outputs: %w", spell.Name(), err)
+	}
+	return sources, outputs, nil
+}
+
+// AttachSpell associates spell with p without applying registration overrides. Its
+// callers re-attach spells a registration already bound, so a contribution
+// [SpellGlobs] refuses was refused there, and one that fails here contributes nothing.
 func (p *Project) AttachSpell(spell *spells.Spell) {
 	// Internal plumbing never claims the primary slot; see the same rule in
 	// magus.bindSpell. The magusfile registration attaches on every project (it is
@@ -658,6 +626,8 @@ func (p *Project) AttachSpell(spell *spells.Spell) {
 	}
 	p.Spells = append(p.Spells, spell.Name())
 	p.Bindings = append(p.Bindings, &Binding{Name: spell.Name()})
-	p.Sources = append(p.Sources, spell.Sources()...)
-	p.Outputs = append(p.Outputs, spell.Outputs()...)
+	if sources, outputs, err := SpellGlobs(spell); err == nil {
+		p.Sources = append(p.Sources, sources...)
+		p.Outputs = append(p.Outputs, outputs...)
+	}
 }

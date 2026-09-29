@@ -334,19 +334,19 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.NotNil(t, p, "root project")
 
 	buildStep := m.buildStep(p, "build")
-	assert.Subset(t, buildStep.Sources, []string{"src/**", "tsconfig.json"},
+	assert.Subset(t, buildStep.Sources, []types.Glob{{Pattern: "src/**"}, {Pattern: "tsconfig.json"}},
 		"build's declared inputs must be in its cache-key sources")
-	assert.NotContains(t, buildStep.Sources, "**/*.go",
+	assert.NotContains(t, buildStep.Sources, types.Glob{Pattern: "**/*.go"},
 		"explicit inputs narrow the project-wide source baseline")
-	assert.Contains(t, buildStep.Outputs, "dist/**",
+	assert.Contains(t, buildStep.Outputs, types.Glob{Pattern: "dist/**"},
 		"build's declared output must be in its snapshot/replay set")
-	assert.NotContains(t, buildStep.Outputs, "legacy/**",
+	assert.NotContains(t, buildStep.Outputs, types.Glob{Pattern: "legacy/**"},
 		"explicit outputs narrow the project-wide replay baseline")
 
 	testStep := m.buildStep(p, "test")
-	assert.NotContains(t, testStep.Sources, "src/**",
+	assert.NotContains(t, testStep.Sources, types.Glob{Pattern: "src/**"},
 		"a sibling target must not inherit build's per-target inputs")
-	assert.NotContains(t, testStep.Outputs, "dist/**",
+	assert.NotContains(t, testStep.Outputs, types.Glob{Pattern: "dist/**"},
 		"a sibling target must not inherit build's per-target outputs")
 }
 
@@ -782,7 +782,7 @@ func gateDriftFixture(t *testing.T) (*Magus, *types.Project) {
 func driftingFixture(t *testing.T) (*Magus, *types.Project, func() error) {
 	t.Helper()
 	m, p := gateDriftFixture(t)
-	p.Outputs = []string{"out.txt"}
+	p.Outputs = types.MustParseGlobs("out.txt")
 	path := filepath.Join(p.Dir, "out.txt")
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o644))
 	return m, p, func() error { return os.WriteFile(path, []byte("after"), 0o644) }
@@ -805,7 +805,7 @@ func TestDeclaresOutputFollowsTheChain(t *testing.T) {
 	assert.True(t, declaresOutput(p, "generate"), "a composed writer makes its composer write")
 	assert.True(t, declaresOutput(p, "index-generate"))
 	assert.False(t, declaresOutput(p, "ci"), "a chain that reaches no writer declares nothing")
-	assert.True(t, declaresOutput(&types.Project{Outputs: []string{"gen/**"}}, "ci"),
+	assert.True(t, declaresOutput(&types.Project{Outputs: types.MustParseGlobs("gen/**")}, "ci"),
 		"project-wide outputs cover every target")
 }
 
@@ -871,7 +871,7 @@ func TestGateDriftIgnoresUntrackedOutput(t *testing.T) {
 func TestGateDriftIgnoresBrokenVCSWhenNothingMoved(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
 	m, p := gateDriftFixture(t)
-	p.Outputs = []string{"out.txt"}
+	p.Outputs = types.MustParseGlobs("out.txt")
 	require.NoError(t, os.WriteFile(filepath.Join(p.Dir, "out.txt"), []byte("stable"), 0o644))
 
 	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return nil })
@@ -1130,8 +1130,8 @@ func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutpu
 // "build", which is what this test now asserts.
 func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 	steps := []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "build", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
 	}
 
 	evs := recordOutputOverlapEvents(t, steps)
@@ -1150,8 +1150,8 @@ func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 // alone is "the" target; both must be visible in the report.
 func TestCheckOutputOverlap_DifferingTargetsReportsBoth(t *testing.T) {
 	steps := []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "test", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "test", Outputs: types.MustParseGlobs("dist/**")},
 	}
 
 	evs := recordOutputOverlapEvents(t, steps)
@@ -1178,7 +1178,7 @@ type recordedMissingDependency struct {
 // label (the value genuinely available), so a caller reading it is not left with an
 // empty field.
 func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
-	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: []string{"**/*.go"}}
+	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: types.MustParseGlobs("**/*.go")}
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
@@ -1500,7 +1500,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {}
 
 	step := m.buildStep(rootProject, "ci")
 
-	assert.Contains(t, step.OwnedOutputs, "leaf/INDEX.md",
+	assert.Contains(t, step.OwnedOutputs, types.Glob{Pattern: "leaf/INDEX.md"},
 		"the root step must exempt a nested project's declared output, or running its generate reports MGS4007")
 }
 

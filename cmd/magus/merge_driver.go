@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -71,7 +70,11 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 		return nil
 	}
 
-	globs := workspaceMergeGlobs(m)
+	globs, err := workspaceMergeGlobs(ctx, m)
+	if err != nil {
+		slog.WarnContext(ctx, "init: skipping merge-driver setup; could not list the files output exclusions carve out", slog.String("error", err.Error()))
+		return nil
+	}
 	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
 		slog.InfoContext(ctx, "init: no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
 		return nil
@@ -180,7 +183,13 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	if !ok {
 		return
 	}
-	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceMergeGlobs(m))
+	globs, err := workspaceMergeGlobs(ctx, m)
+	if err != nil {
+		// Installing without the carve-outs would route a hand-maintained file to magus.
+		slog.ErrorContext(ctx, "merge-driver: could not refresh registration", slog.String("error", err.Error()))
+		return
+	}
+	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), globs)
 	if err != nil {
 		// A git dir this process may not write, which the queue's sandbox makes of every
 		// candidate's, is the one failure that is not a problem: no merge is ever run there.
@@ -394,37 +403,32 @@ func mergeDriverRelPath(root, pathArg string) (string, error) {
 }
 
 // workspaceMergeGlobs is what the merge driver registration routes to magus: every
-// project's output globs and magus.yaml's vcs.auto_resolve, each sorted.
-func workspaceMergeGlobs(m *magus.Magus) types.MergeDriverGlobs {
-	return types.MergeDriverGlobs{Outputs: workspaceOutputGlobs(m), AutoResolve: m.AutoResolveGlobs()}
+// project's output patterns, the tracked files their exclusions carve back out, and
+// magus.yaml's vcs.auto_resolve, each sorted.
+func workspaceMergeGlobs(ctx context.Context, m *magus.Magus) (types.MergeDriverGlobs, error) {
+	carved, err := m.CarvedOutputs(ctx)
+	if err != nil {
+		return types.MergeDriverGlobs{}, err
+	}
+	return types.MergeDriverGlobs{Outputs: workspaceOutputPatterns(m), Carved: carved, AutoResolve: m.AutoResolveGlobs()}, nil
 }
 
-// workspaceOutputGlobs returns deduplicated workspace-relative output globs for all
-// projects, sorted.
+// workspaceOutputPatterns returns every project's output patterns, workspace-relative,
+// without their exclusions, deduplicated and sorted.
 //
 // Sorted because the result goes into the TRACKED .gitattributes. In project iteration
 // order the same workspace can render that file two ways, so a branch that changed no
 // outputs still shows a diff, and two branches that each add a glob conflict over line
 // order rather than content.
-func workspaceOutputGlobs(m *magus.Magus) []string {
-	seen := make(map[string]struct{})
-	var globs []string
+func workspaceOutputPatterns(m *magus.Magus) []string {
+	var patterns []string
 	for _, p := range m.All() {
 		for _, g := range p.AllOutputs() {
-			var wsGlob string
-			if p.Path == "." {
-				wsGlob = g
-			} else {
-				wsGlob = p.Path + "/" + g
-			}
-			if _, ok := seen[wsGlob]; !ok {
-				seen[wsGlob] = struct{}{}
-				globs = append(globs, wsGlob)
-			}
+			patterns = append(patterns, types.RootGlob(p.Path, g.Pattern))
 		}
 	}
-	slices.Sort(globs)
-	return globs
+	slices.Sort(patterns)
+	return slices.Compact(patterns)
 }
 
 // settleTarget returns the project's target that declares absPath among its OWN outputs
@@ -453,7 +457,7 @@ func settleTarget(p *types.Project, absPath string) (string, bool) {
 			if ref.Project != "" && ref.Project != p.Path {
 				continue
 			}
-			if ok, err := doublestar.Match(ref.Glob, rel); err == nil && ok {
+			if (types.Glob{Pattern: ref.Glob, Except: ref.Except}).Match(rel) {
 				return name, true
 			}
 		}

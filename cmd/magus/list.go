@@ -124,8 +124,8 @@ func lsProjects(ctx context.Context, root string) error {
 			Dir:       p.Dir,
 			Spell:     p.Spell,
 			Targets:   targetsByPath[p.Path],
-			Sources:   p.Sources,
-			Outputs:   p.Outputs,
+			Sources:   types.GlobStrings(p.Sources),
+			Outputs:   types.GlobStrings(p.Outputs),
 			DependsOn: p.DependsOn,
 		})
 	}

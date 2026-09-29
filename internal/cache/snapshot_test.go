@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestSnapshotAtomicBlob verifies that if the blob copy fails (because the
@@ -31,9 +33,9 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 
 	step := Step{
 		ProjectPath:   "test/pkg",
-		Sources:       []string{"test/pkg/*.go"},
+		Sources:       types.MustParseGlobs("test/pkg/*.go"),
 		WorkspaceRoot: root,
-		Outputs:       []string{"test/pkg/out.txt"},
+		Outputs:       types.MustParseGlobs("test/pkg/out.txt"),
 	}
 
 	// Open a second write-mode cache that shares the same cache directory.
@@ -139,9 +141,9 @@ func TestExportFDsBounded(t *testing.T) {
 
 	step := Step{
 		ProjectPath:   "test/pkg",
-		Sources:       []string{"test/pkg/*.go"},
+		Sources:       types.MustParseGlobs("test/pkg/*.go"),
 		WorkspaceRoot: root,
-		Outputs:       outputs,
+		Outputs:       types.MustParseGlobs(outputs...),
 	}
 
 	_, err := c.Run(context.Background(), step, func(_ context.Context) error { return nil })
@@ -192,7 +194,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
@@ -265,7 +267,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
@@ -425,14 +427,14 @@ func TestSnapshotOneRefusesANonRegularFile(t *testing.T) {
 // TestExpandOutputGlobsRejectsAbsolute verifies absolute output globs are
 // rejected before any filesystem access.
 func TestExpandOutputGlobsRejectsAbsolute(t *testing.T) {
-	_, err := expandOutputGlobs([]string{"/etc/passwd"}, t.TempDir(), nil)
+	_, err := expandOutputGlobs(types.MustParseGlobs("/etc/passwd"), t.TempDir(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "repo-relative")
 }
 
 // TestExpandOutputGlobsRejectsDotDot verifies ".." escapes are rejected.
 func TestExpandOutputGlobsRejectsDotDot(t *testing.T) {
-	_, err := expandOutputGlobs([]string{"../escape"}, t.TempDir(), nil)
+	_, err := expandOutputGlobs(types.MustParseGlobs("../escape"), t.TempDir(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "repo-relative")
 }
@@ -447,7 +449,7 @@ func TestExpandOutputGlobsExpandsDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "b.js"), []byte("b"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "sub", "a.js"), []byte("a"), 0o644))
 
-	out, err := expandOutputGlobs([]string{"dist"}, root, nil)
+	out, err := expandOutputGlobs(types.MustParseGlobs("dist"), root, nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -465,7 +467,7 @@ func TestExpandOutputGlobsDedupsAcrossGlobs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "dist"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "a.js"), []byte("a"), 0o644))
 
-	out, err := expandOutputGlobs([]string{"dist", "dist/a.js"}, root, nil)
+	out, err := expandOutputGlobs(types.MustParseGlobs("dist", "dist/a.js"), root, nil)
 	require.NoError(t, err)
 
 	count := 0
@@ -480,7 +482,7 @@ func TestExpandOutputGlobsDedupsAcrossGlobs(t *testing.T) {
 // TestExpandOutputGlobsNoMatch verifies a glob that matches nothing yields an
 // empty result without error (the caller decides how to treat a no-match).
 func TestExpandOutputGlobsNoMatch(t *testing.T) {
-	out, err := expandOutputGlobs([]string{"nonexistent/*.txt"}, t.TempDir(), nil)
+	out, err := expandOutputGlobs(types.MustParseGlobs("nonexistent/*.txt"), t.TempDir(), nil)
 	require.NoError(t, err)
 	assert.Empty(t, out)
 }
@@ -496,7 +498,7 @@ func TestExpandOutputGlobsStopsAtNestedProjects(t *testing.T) {
 	}
 	nested := []string{"leaf", "leaf/deep"}
 	rels := func(globs ...string) []string {
-		out, err := expandOutputGlobs(globs, root, nested)
+		out, err := expandOutputGlobs(types.MustParseGlobs(globs...), root, nested)
 		require.NoError(t, err)
 		var got []string
 		for _, ra := range out {
@@ -518,7 +520,7 @@ func TestOwnedOutputsDropsNestedRecords(t *testing.T) {
 	m := &Manifest{Outputs: []OutputRecord{
 		{Path: "gen/own.go"}, {Path: "leaf/gen/child.go"}, {Path: "leaf/out/x.go"},
 	}}
-	s := Step{Outputs: []string{"**/gen/*.go", "leaf/out/*.go"}, NestedDirs: []string{"leaf"}}
+	s := Step{Outputs: types.MustParseGlobs("**/gen/*.go", "leaf/out/*.go"), NestedDirs: []string{"leaf"}}
 
 	got := ownedOutputs(m, s)
 

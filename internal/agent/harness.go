@@ -714,8 +714,7 @@ func dropSupersededEntries(entries []any, wanted []map[string]any) (kept []any, 
 }
 
 // runsAShippedTemplate reports whether any command inside entry names a template
-// this repository ships, in either form: the POSIX sh copies and the Buzz ports
-// beside them.
+// this repository ships.
 func runsAShippedTemplate(entry map[string]any) bool {
 	var commands []string
 	collectCommands(entry, &commands)

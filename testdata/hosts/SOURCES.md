@@ -30,7 +30,7 @@ Two origins, and the difference is the whole point of the table:
 | `codex/stop.command.input.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/stop.command.input.schema.json` | 2026-09-16 | `7db4793c404b5c46b230c27b9507eb1a558fd958689d8715221c5dd81351a06a` | Apache-2.0 (openai/codex) |
 | `codex/stop.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/stop.command.output.schema.json` | 2026-09-16 | `dc2b30e84c97beca5825aa64ca46e1337e402781dc5a9142b67111d10523f15c` | Apache-2.0 (openai/codex) |
 | `cursor/hooks.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `9df2d5591a4a0dd83f030037f313ea40b6281c7ae217ec16f6fec623d1333333` | ours |
-| `cursor/hook-output.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `3fa77adf5158ad5551a1cd1763e8bb44db4c059b26721fbbed5f2ed036c98671` | ours |
+| `cursor/hook-output.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `7edfaabf147eda2146799060c487d752c30662e0ffedf6073fda2245e1fc241b` | ours |
 | `cursor/post-tool-use.output.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `7696693a85b717d9f51db735b122203aa8071514784d50e17cf7cb640632f2af` | ours |
 
 ## What each host publishes

@@ -101,6 +101,27 @@ func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
 	assert.Contains(t, text, hint.JobExit.With("root/orphan"))
 }
 
+// TestGeneratedBoundaryNamesWhatAnOutputCarvesOut: a brief fences a lease's generated
+// globs, and the hand files an exclusion carves out of one must read as the exception
+// rather than fenced with the rest.
+func TestGeneratedBoundaryNamesWhatAnOutputCarvesOut(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+}
+`), 0o644))
+	m, err := magus.Open(t.Context(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	got := generatedBoundary(m, []string{"."}, []string{"gen"})
+
+	require.Len(t, got, 1)
+	assert.Equal(t, "gen/*.go", got[0].Path)
+	assert.Contains(t, got[0].Reason, "except gen/runtime.go")
+}
+
 func TestLeasedBoundarySkipsTheRowsAncestors(t *testing.T) {
 	t.Parallel()
 

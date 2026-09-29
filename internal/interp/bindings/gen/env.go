@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,95 +18,95 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("get", vm.DirectValue("env.get", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 0)
 		ret0, err := std.EnvGet(ctx, name)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("lookup", vm.DirectValue("env.lookup", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 0)
 		ret0, ret1, err := std.EnvLookup(ctx, name)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return vm.ListValue([]vm.Value{StrVal(ret0), BoolVal(ret1)}), nil
+		return vm.ListValue([]vm.Value{ffi.StrVal(ret0), ffi.BoolVal(ret1)}), nil
 	}))
 	m.MapSet("set", vm.DirectValue("env.set", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
-		value := Str(bzArgs, 1)
+		name := ffi.Str(bzArgs, 0)
+		value := ffi.Str(bzArgs, 1)
 		if err := std.EnvSet(ctx, name, value); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("list", vm.DirectValue("env.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.EnvList(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrMapVal(ret0), nil
+		return ffi.StrMapVal(ret0), nil
 	}))
 	m.MapSet("unset", vm.DirectValue("env.unset", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 0)
 		if err := std.EnvUnset(ctx, name); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("expand", vm.DirectValue("env.expand", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.EnvExpand(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("home", vm.DirectValue("env.home", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.EnvHome(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("getOr", vm.DirectValue("env.getOr", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
-		def := Str(bzArgs, 1)
+		name := ffi.Str(bzArgs, 0)
+		def := ffi.Str(bzArgs, 1)
 		ret0, err := std.EnvGetOr(ctx, name, def)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("require", vm.DirectValue("env.require", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 0)
 		ret0, err := std.EnvRequire(ctx, name)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("parseDotenv", vm.DirectValue("env.parseDotenv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		content := Str(bzArgs, 0)
+		content := ffi.Str(bzArgs, 0)
 		ret0, err := std.EnvParseDotenv(ctx, content)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrMapVal(ret0), nil
+		return ffi.StrMapVal(ret0), nil
 	}))
 	m.MapSet("readDotenv", vm.DirectValue("env.readDotenv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.EnvReadDotenv(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrMapVal(ret0), nil
+		return ffi.StrMapVal(ret0), nil
 	}))
 	m.MapSet("loadDotenv", vm.DirectValue("env.loadDotenv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		if err := std.EnvLoadDotenv(ctx, path); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))

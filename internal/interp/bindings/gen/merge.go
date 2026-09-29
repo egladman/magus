@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,31 +18,31 @@ func RegisterMerge(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("shallow", vm.DirectValue("merge.shallow", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Any(bzArgs, 0)
-		overlay := Any(bzArgs, 1)
+		base := ffi.Any(bzArgs, 0)
+		overlay := ffi.Any(bzArgs, 1)
 		ret0, err := std.MergeShallow(ctx, base, overlay)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("deep", vm.DirectValue("merge.deep", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Any(bzArgs, 0)
-		overlay := Any(bzArgs, 1)
+		base := ffi.Any(bzArgs, 0)
+		overlay := ffi.Any(bzArgs, 1)
 		ret0, err := std.MergeDeep(ctx, base, overlay)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("json", vm.DirectValue("merge.json", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Str(bzArgs, 0)
-		overlay := Str(bzArgs, 1)
+		base := ffi.Str(bzArgs, 0)
+		overlay := ffi.Str(bzArgs, 1)
 		ret0, err := std.MergeJSON(ctx, base, overlay)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

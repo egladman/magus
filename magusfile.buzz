@@ -1199,9 +1199,10 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 //
-// The gen/ package also holds the hand-maintained VM runtime and its tests, and
-// types_generate's boundary files; the exclusions keep all of those out of this
-// target's outputs, so they read as sources and replay never touches them.
+// gen/ also holds the package's hand-written tests and types_generate's boundary files;
+// the exclusions keep both out of this target's outputs, so the tests read as sources
+// and replay never touches either. The hand-maintained VM runtime the trampolines call
+// lives beside gen/, in a package of its own.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
@@ -1209,8 +1210,6 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
-        "!internal/interp/bindings/gen/runtime.go",
-        "!internal/interp/bindings/gen/modules_types.go",
         "!internal/interp/bindings/gen/boundary_*.go");
     proc\exec("go", ["generate", "./std/..."]);
 }
@@ -2826,7 +2825,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
     // The hook templates a reader installs and the site stylesheet: conventions_test and
     // internal/agent's tests read them as code (coverage lines, wiring, the landing palette), never as prose.
-    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.buzz",
+    ctx.readsFiles("docs/guides/integrations/agents/*.buzz",
                    "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to

@@ -233,13 +233,13 @@ func Where(w *types.Workspace, dir string) (*types.Project, bool) {
 // of attribution.
 type projectIndex struct {
 	w     *types.Workspace
-	paths []string            // sorted by descending length; excludes "."
-	globs map[string][]string // project path -> its DeclaredGlobs, "." included
+	paths []string                // sorted by descending length; excludes "."
+	globs map[string][]types.Glob // project path -> its DeclaredGlobs, "." included
 }
 
 func newProjectIndex(ctx context.Context, w *types.Workspace) *projectIndex {
 	paths := make([]string, 0, len(w.Projects))
-	globs := make(map[string][]string, len(w.Projects))
+	globs := make(map[string][]types.Glob, len(w.Projects))
 	for path, p := range w.Projects {
 		globs[path] = p.DeclaredGlobs()
 		// Tolerated exactly as the cache walk tolerates it (an unparsable pattern
@@ -314,7 +314,7 @@ func (idx *projectIndex) seedsForFile(file string) (paths []string, declared boo
 
 	var reaching []string
 	for path, globs := range idx.globs {
-		if !types.MatchesAnyGlob(globs, file) {
+		if !types.MatchGlobs(globs, file) {
 			continue
 		}
 		if path == owner {

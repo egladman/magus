@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -10,7 +11,7 @@ import (
 )
 
 // buildMemory assembles magus\memory over the per-repository memory store. Hand-bound
-// for the reason buildJob is, and like it every failure goes through HostError so a
+// for the reason buildJob is, and like it every failure goes through ffi.Error so a
 // caught value is the same map every other magus\* raise hands back.
 func buildMemory(obs buzz.DirectObserver) vm.Value {
 	memory := vm.NewMap()
@@ -18,26 +19,26 @@ func buildMemory(obs buzz.DirectObserver) vm.Value {
 		memory.MapSet(name, directVal(obs, "magus.memory."+name, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 			rec, err := call(ctx, args)
 			if err != nil {
-				return vm.Null, bindinggen.HostError(err)
+				return vm.Null, ffi.Error(err)
 			}
-			return bindinggen.AnyMapVal(rec), nil
+			return ffi.AnyMapVal(rec), nil
 		}))
 	}
 	record("list", func(ctx context.Context, _ []vm.Value) (map[string]any, error) {
 		return std.MagusListMemory(ctx)
 	})
 	record("get", func(ctx context.Context, args []vm.Value) (map[string]any, error) {
-		return std.MagusGetMemory(ctx, bindinggen.Str(args, 0))
+		return std.MagusGetMemory(ctx, ffi.Str(args, 0))
 	})
 	record("put", func(ctx context.Context, args []vm.Value) (map[string]any, error) {
-		return std.MagusPutMemory(ctx, bindinggen.Str(args, 0), bindinggen.AnyMap(args, 1))
+		return std.MagusPutMemory(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
 	})
 	record("verify", func(ctx context.Context, _ []vm.Value) (map[string]any, error) {
 		return std.MagusVerifyMemory(ctx)
 	})
 	memory.MapSet("delete", directVal(obs, "magus.memory.delete", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if err := std.MagusDeleteMemory(ctx, bindinggen.Str(args, 0)); err != nil {
-			return vm.Null, bindinggen.HostError(err)
+		if err := std.MagusDeleteMemory(ctx, ffi.Str(args, 0)); err != nil {
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
@@ -50,7 +51,7 @@ func buildVCS(obs buzz.DirectObserver) vm.Value {
 	vcs.MapSet("checkpoint", directVal(obs, "magus.vcs.checkpoint", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		cp, err := std.MagusVCSCheckpoint(ctx)
 		if err != nil {
-			return vm.Null, bindinggen.HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return bindinggen.ObjectVCSCheckpoint(cp), nil
 	}))

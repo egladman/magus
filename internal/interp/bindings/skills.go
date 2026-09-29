@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -22,11 +23,11 @@ var skillCatalog = sync.OnceValue(func() *agent.Catalog {
 // internal/agent, which imports std, so std cannot hold an Impl for it.
 func buildSkills(obs buzz.DirectObserver) vm.Value {
 	return directVal(obs, "magus.skills", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := magusSkills(ctx, bindinggen.AnyMap(args, 0))
+		out, err := magusSkills(ctx, ffi.AnyMap(args, 0))
 		if err != nil {
-			return vm.Null, bindinggen.HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectSlice(out, bindinggen.ObjectSkill), nil
+		return ffi.ObjectSlice(out, bindinggen.ObjectSkill), nil
 	})
 }
 

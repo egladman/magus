@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -250,6 +253,37 @@ func TestRebuiltProjectsFindsRoot(t *testing.T) {
 
 	assert.True(t, plan.rebuiltProjects()[projectKey(root)],
 		"a root-owned regenerated output must be recognized as covered by the rebuild")
+}
+
+// TestPlanResolutionLeavesAnExcludedHandFileToAPerson is the jj path: jj routes nothing by
+// pattern, so `magus vcs resolve` picks the paths to settle itself, through
+// FindOutputProducer. A hand file an output carves out is source, so it goes to a person
+// while the generated file beside it is kept and rebuilt.
+func TestPlanResolutionLeavesAnExcludedHandFileToAPerson(t *testing.T) {
+	root := t.TempDir()
+	magusfile := `import "magus";
+
+magus.project({})
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	m, err := magus.Open(t.Context(), root)
+	require.NoError(t, err)
+	resolver := mocks.NewMockConflictResolver(t)
+	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)
+
+	plan, err := planResolution(t.Context(), m, resolver, []types.Conflict{
+		{Path: "gen/fs.go", Kind: types.ConflictKindContent},
+		{Path: "gen/runtime.go", Kind: types.ConflictKindContent},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"gen/fs.go"}, plan.keep)
+	assert.Equal(t, []string{"gen/runtime.go"}, plan.manual)
+	assert.Equal(t, map[string][]string{"generate": {"."}}, plan.rebuild)
 }
 
 // initGitRepo creates a temp git repo with an identity, so a commit can be made in it.

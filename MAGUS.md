@@ -54,7 +54,7 @@ magus graph export -o json  # the whole graph (MCP: client, magus\query, magus\e
 | module     | built in | `magus query kind=module`     |                                                                                                                  |
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
-| doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
+| doc        |     900+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                   |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                              |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `records`                                                                                 |

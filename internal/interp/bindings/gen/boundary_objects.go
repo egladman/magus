@@ -199,6 +199,11 @@ func ObjectInputRef(v types.InputRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsExcept := make([]vm.Value, len(v.Except))
+	for indexExcept := range v.Except {
+		itemsExcept[indexExcept] = vm.StrValue(v.Except[indexExcept])
+	}
+	out.MapSet("except", vm.ListValue(itemsExcept))
 	return out
 }
 
@@ -206,6 +211,11 @@ func ObjectOutputRef(v types.OutputRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsExcept := make([]vm.Value, len(v.Except))
+	for indexExcept := range v.Except {
+		itemsExcept[indexExcept] = vm.StrValue(v.Except[indexExcept])
+	}
+	out.MapSet("except", vm.ListValue(itemsExcept))
 	return out
 }
 
@@ -213,6 +223,11 @@ func ObjectUpdateRef(v types.UpdateRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsExcept := make([]vm.Value, len(v.Except))
+	for indexExcept := range v.Except {
+		itemsExcept[indexExcept] = vm.StrValue(v.Except[indexExcept])
+	}
+	out.MapSet("except", vm.ListValue(itemsExcept))
 	return out
 }
 

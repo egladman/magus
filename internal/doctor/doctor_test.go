@@ -401,13 +401,13 @@ func TestCheckCacheableExternalOps(t *testing.T) {
 func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	r := &runner{root: t.TempDir()}
 	t.Run("no redundancy is clean", func(t *testing.T) {
-		p := &types.Project{Path: ".", Sources: []string{"**/*.go"},
+		p := &types.Project{Path: ".", Sources: types.MustParseGlobs("**/*.go"),
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("explicit input duplicating a project source is clean", func(t *testing.T) {
-		p := &types.Project{Path: ".", Sources: []string{"src/**"},
+		p := &types.Project{Path: ".", Sources: types.MustParseGlobs("src/**"),
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
@@ -415,7 +415,7 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	t.Run("cross-project input is never flagged redundant", func(t *testing.T) {
 		// A cross input's Rel is relative to the OTHER project, so it must not be
 		// compared against this project's sources even when the strings coincide.
-		p := &types.Project{Path: "consumer", Sources: []string{"go.mod"},
+		p := &types.Project{Path: "consumer", Sources: types.MustParseGlobs("go.mod"),
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: "lib", Glob: "go.mod"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
@@ -424,7 +424,7 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 		// ctx.writesFiles REPLACES the baseline, so this target's snapshot is exactly what
 		// it names. Reporting "gen/**" as a duplicate would advise dropping the only thing
 		// keeping it in that snapshot: the check would be arguing for silent data loss.
-		p := &types.Project{Path: "proto", Outputs: []string{"gen/**"},
+		p := &types.Project{Path: "proto", Outputs: types.MustParseGlobs("gen/**"),
 			TargetOutputs: map[string][]types.OutputRef{"generate": {
 				{Project: "proto", Glob: "gen/**"},
 				{Project: "docs", Glob: "src/gen/**"},
@@ -435,7 +435,7 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	t.Run("a declaration restating only baseline globs is genuinely redundant", func(t *testing.T) {
 		// Nothing here is lost by dropping it: replacing the baseline with the same set
 		// leaves the snapshot identical, so the declaration buys nothing.
-		p := &types.Project{Path: ".", Outputs: []string{"gen/**"},
+		p := &types.Project{Path: ".", Outputs: types.MustParseGlobs("gen/**"),
 			TargetOutputs: map[string][]types.OutputRef{"generate": {{Project: ".", Glob: "gen/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)

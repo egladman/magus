@@ -723,7 +723,7 @@ type SessionsConfig struct {
 // It is a COMMAND rather than a host magus knows how to read, and that is the whole
 // design: transcript formats belong to the hosts, so a host renaming a tool costs this
 // one line instead of a magus release. magus ships a ready adapter per host it documents
-// (docs/guides/integrations/agents/magus-session-load-*.sh); declaring one here is how a
+// (docs/guides/integrations/agents/magus-session-load-*.buzz); declaring one here is how a
 // workspace opts in, and writing your own is how an undocumented host gets supported
 // without waiting for anybody.
 //

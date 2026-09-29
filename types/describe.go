@@ -297,6 +297,10 @@ type TargetGraphNode struct {
 	// only records that ExecOverrides is an incomplete view of what the target will run
 	// with. Not serialized, same as DynamicIO.
 	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
+	// FootprintErr is a ctx.readsFiles/writesFiles/modifiesExistingFiles call the static
+	// read refused (see ParseGlobs), naming the call. The load path rejects it the way it
+	// rejects DynamicIO. Not serialized, same as DynamicIO.
+	FootprintErr error `json:"-" yaml:"-" buzz:"-"`
 }
 
 // CrossTargetRef names one target in another project: a target-level cross-project
@@ -389,12 +393,37 @@ func (c Chain) String() string {
 // workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
 // affected-tracking depends_on edge, and the consumes edge all read this one shape.
 //
-// A Glob starting with "!" is an exclusion, here and in OutputRef and UpdateRef: it
-// narrows globs the target declared before it in the same kind of call, as GlobRuns
-// scopes it. Order within a target's refs is therefore meaningful and preserved.
+// Except, here and in OutputRef and UpdateRef, holds the exclusions declared in the same
+// call against the same project (see [Glob]), bare and relative to that project.
 type InputRef struct {
-	Project string `json:"project,omitempty" yaml:"project,omitempty"`
-	Glob    string `json:"glob" yaml:"glob"`
+	Project string   `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string   `json:"glob" yaml:"glob"`
+	Except  []string `json:"except,omitempty" yaml:"except,omitempty"`
+}
+
+// Rooted is the ref as a workspace-rooted Glob. An empty Project means the declaring
+// project, projectPath.
+func (r InputRef) Rooted(projectPath string) Glob {
+	return rootRef(r.Project, projectPath, r.Glob, r.Except)
+}
+
+// AppendRef appends ref to refs unless an identical ref is already there.
+func AppendRef[T InputRef | OutputRef | UpdateRef](refs []T, ref T) []T {
+	want := InputRef(ref)
+	if slices.ContainsFunc(refs, func(have T) bool {
+		h := InputRef(have)
+		return h.Project == want.Project && h.Glob == want.Glob && slices.Equal(h.Except, want.Except)
+	}) {
+		return refs
+	}
+	return append(refs, ref)
+}
+
+func rootRef(owner, projectPath, glob string, except []string) Glob {
+	if owner == "" {
+		owner = projectPath
+	}
+	return Glob{Pattern: glob, Except: except}.Root(owner)
 }
 
 // OutputRef names one file output a target declares via ctx.writesFiles, in the same shape
@@ -408,8 +437,14 @@ type InputRef struct {
 // the owner gains the edge, not the declarer. Sharing one type would let a caller pass
 // an input where an output belongs and silently invert a build order.
 type OutputRef struct {
-	Project string `json:"project,omitempty" yaml:"project,omitempty"`
-	Glob    string `json:"glob" yaml:"glob"`
+	Project string   `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string   `json:"glob" yaml:"glob"`
+	Except  []string `json:"except,omitempty" yaml:"except,omitempty"`
+}
+
+// Rooted is the ref as a workspace-rooted Glob; see [InputRef.Rooted].
+func (r OutputRef) Rooted(projectPath string) Glob {
+	return rootRef(r.Project, projectPath, r.Glob, r.Except)
 }
 
 // UpdateRef names one EXISTING file a target edits in place rather than produces, declared via
@@ -429,8 +464,14 @@ type OutputRef struct {
 // not excluded from the source hash, so editing the authored prose around the generated
 // region correctly invalidates the target that maintains it.
 type UpdateRef struct {
-	Project string `json:"project,omitempty" yaml:"project,omitempty"`
-	Glob    string `json:"glob" yaml:"glob"`
+	Project string   `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string   `json:"glob" yaml:"glob"`
+	Except  []string `json:"except,omitempty" yaml:"except,omitempty"`
+}
+
+// Rooted is the ref as a workspace-rooted Glob; see [InputRef.Rooted].
+func (r UpdateRef) Rooted(projectPath string) Glob {
+	return rootRef(r.Project, projectPath, r.Glob, r.Except)
 }
 
 // CrossFileMember is the reserved member on a project-import handle
@@ -526,7 +567,8 @@ type ProjectEntry struct {
 	// (joined against the project path, plus the magusfile's own globs folded into
 	// Sources), the same name, a different representation, because the evaluated
 	// view answers "what does the cache key actually see" rather than "what was
-	// written".
+	// written". Each entry is one glob as Glob.String renders it: its pattern, then its
+	// exclusions.
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`

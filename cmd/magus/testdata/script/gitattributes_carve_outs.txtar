@@ -1,0 +1,51 @@
+# A generated directory that also holds hand-maintained files: the declaration excludes
+# them, .gitattributes carries the output patterns as they are, and each TRACKED file an
+# exclusion carves out follows as `!merge !linguist-generated`, returning it to git's own
+# text merge. A file another generator writes stays that generator's output, and git's
+# own check-attr agrees with the section line for line.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add magusfile.buzz gen
+exec git commit -m initial
+
+exec magus ls
+grep '^gen/\*\.go merge=magus linguist-generated$' .gitattributes
+grep '^gen/boundary_list\.go merge=magus linguist-generated$' .gitattributes
+grep '^gen/modules_test\.go !merge !linguist-generated$' .gitattributes
+grep '^gen/runtime\.go !merge !linguist-generated$' .gitattributes
+! grep 'boundary_list\.go !merge' .gitattributes
+! grep ' -merge' .gitattributes
+
+exec git check-attr merge linguist-generated -- gen/fs.go gen/runtime.go gen/modules_test.go gen/boundary_list.go
+stdout '^gen/fs.go: merge: magus$'
+stdout '^gen/fs.go: linguist-generated: set$'
+stdout '^gen/runtime.go: merge: unspecified$'
+stdout '^gen/runtime.go: linguist-generated: unspecified$'
+stdout '^gen/modules_test.go: merge: unspecified$'
+stdout '^gen/boundary_list.go: merge: magus$'
+stdout '^gen/boundary_list.go: linguist-generated: set$'
+
+# A second load finds the section current and rewrites nothing.
+exec git add .gitattributes
+exec git commit -m attributes
+exec magus ls
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+-- magusfile.buzz --
+export fun types_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/boundary_list.go");
+}
+export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/*_test.go", "!gen/runtime.go", "!gen/boundary_*.go");
+}
+-- gen/fs.go --
+package gen
+-- gen/runtime.go --
+package gen
+-- gen/modules_test.go --
+package gen
+-- gen/boundary_list.go --
+package gen

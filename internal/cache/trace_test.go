@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // recTracer records the names of spans the cache opens, in order.
@@ -38,8 +40,8 @@ func TestRun_PhaseSpans(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	step := Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
 

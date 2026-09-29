@@ -3,15 +3,12 @@ package magus
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
@@ -329,33 +326,8 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // be read contributes nothing, matching the static extractor's never-error contract.
 // ONE exception: a ctx.readsFiles/writesFiles/modifiesExistingFiles call with a
 // non-literal argument is a hard load error, because a computed footprint is invisible
-// to this static read and under-declaring it risks a stale cache hit.
-// checkFootprintExclusions refuses a target whose ctx.readsFiles, ctx.writesFiles or
-// ctx.modifiesExistingFiles declaration carries an exclusion that narrows nothing. Each
-// kind is one declaration however many calls spell it, which is the list every consumer
-// reads.
-func checkFootprintExclusions(n types.TargetGraphNode) error {
-	check := func(call string, globs []string) error {
-		if err := types.CheckExclusions(globs); err != nil {
-			return fmt.Errorf("ctx.%s: %w", call, err)
-		}
-		return nil
-	}
-	reads := make([]string, len(n.ReadsFiles))
-	for i, ref := range n.ReadsFiles {
-		reads[i] = ref.Glob
-	}
-	writes := make([]string, len(n.WritesFiles))
-	for i, ref := range n.WritesFiles {
-		writes[i] = ref.Glob
-	}
-	updates := make([]string, len(n.ModifiesExistingFiles))
-	for i, ref := range n.ModifiesExistingFiles {
-		updates[i] = ref.Glob
-	}
-	return errors.Join(check("readsFiles", reads), check("writesFiles", writes), check("modifiesExistingFiles", updates))
-}
-
+// to this static read and under-declaring it risks a stale cache hit. So is a call the
+// static read refused (TargetGraphNode.FootprintErr).
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// Cross-project OUTPUT declarations, collected across the whole walk and applied
 	// after it. Deferred because the owner may not be walked yet when the writer declares
@@ -419,14 +391,14 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				if n.DynamicIO {
 					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
-				if err := checkFootprintExclusions(n); err != nil {
-					return fmt.Errorf("%s: target %q: %w", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, err)
+				if n.FootprintErr != nil {
+					return fmt.Errorf("%s: target %q: %w", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, n.FootprintErr)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
 				// owner is this project; a <alias>.file cross ref's owner is file.ResolveImport
 				// of the raw import path), then store the resolved InputRef. buildStep folds it
-				// to the cache key via joinGlob(Project, Glob). A cross
+				// to the cache key via InputRef.Rooted. A cross
 				// input's owner is also unioned into DependsOn so a change to it marks this
 				// project affected (project.Affected is a DependsOn-reverse-closure); a
 				// same-project owner is this project itself and is skipped: a self-edge is
@@ -444,10 +416,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					if p.TargetInputs == nil {
 						p.TargetInputs = map[string][]types.InputRef{}
 					}
-					resolved := types.InputRef{Project: owner, Glob: ref.Glob}
-					if !slices.Contains(p.TargetInputs[n.Name], resolved) {
-						p.TargetInputs[n.Name] = append(p.TargetInputs[n.Name], resolved)
-					}
+					ref.Project = owner
+					p.TargetInputs[n.Name] = types.AppendRef(p.TargetInputs[n.Name], ref)
 					if owner != p.Path {
 						extra = append(extra, owner)
 					}
@@ -472,10 +442,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					if p.TargetOutputs == nil {
 						p.TargetOutputs = map[string][]types.OutputRef{}
 					}
-					resolved := types.OutputRef{Project: owner, Glob: ref.Glob}
-					if !slices.Contains(p.TargetOutputs[n.Name], resolved) {
-						p.TargetOutputs[n.Name] = append(p.TargetOutputs[n.Name], resolved)
-					}
+					ref.Project = owner
+					p.TargetOutputs[n.Name] = types.AppendRef(p.TargetOutputs[n.Name], ref)
 					// The edge runs the OTHER WAY from an input's. Writing another
 					// project's tree means that project must run AFTER this one, so the
 					// OWNER gains the dependency, not this project. Recorded here and
@@ -489,12 +457,13 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// workspace, since clean expands globs for every project in one loop
 						// and doublestar rejects the pattern. The rule is the cache's own
 						// (internal/cache/snapshot.go): owner-relative, no "..".
-						if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
+						if bad, ok := escapingPattern(ref.Glob, ref.Except); ok {
 							return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
 								"%s: target %q: ctx.writesFiles glob %q must be relative to %q and must not contain ..",
-								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
+								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, bad, owner)
 						}
-						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
+						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path,
+							glob: types.Glob{Pattern: ref.Glob, Except: ref.Except}})
 					}
 				}
 				if !slices.Contains(p.MagusfileTargets, n.Name) {
@@ -589,15 +558,13 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// update folds into step.Sources, which is glob-expanded exactly as
 					// outputs are, and an escaping pattern there once made magus clean
 					// abort the WHOLE workspace (doublestar rejects it mid-loop).
-					if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
+					if bad, ok := escapingPattern(ref.Glob, ref.Except); ok {
 						return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
 							"%s: target %q: ctx.modifiesExistingFiles glob %q must be relative to %q and must not contain ..",
-							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, bad, owner)
 					}
-					resolved := types.UpdateRef{Project: owner, Glob: ref.Glob}
-					if !slices.Contains(p.TargetUpdates[n.Name], resolved) {
-						p.TargetUpdates[n.Name] = append(p.TargetUpdates[n.Name], resolved)
-					}
+					ref.Project = owner
+					p.TargetUpdates[n.Name] = types.AppendRef(p.TargetUpdates[n.Name], ref)
 					// No ordering edge either way, unlike inputs and outputs. Both of those
 					// infer one from ownership ("I read you, so I run after" and "I write
 					// your tree, so you run after me"), and neither inference holds for a
@@ -655,7 +622,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		// can see the writer's declaration, and all of which resolve globs against the
 		// project's own root, which is exactly what this glob is relative to.
 		if op.InboundOutputs == nil {
-			op.InboundOutputs = map[string][]string{}
+			op.InboundOutputs = map[string][]types.Glob{}
 		}
 		// Two projects writing one path is not a conflict magus can order its way out of.
 		// Both snapshot the file, so whichever loses the race still records the winner's
@@ -681,30 +648,48 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 // crossOutput is one target's declaration that it writes into ANOTHER project's tree:
 // the owner whose tree receives the file, the writer producing it, and the glob relative
 // to the OWNER's root. Collected during the walk and applied once every project is known.
-type crossOutput struct{ owner, writer, glob string }
+type crossOutput struct {
+	owner, writer string
+	glob          types.Glob
+}
 
-// existingWriter returns the project already declaring co.glob as an output in the owner's
-// tree, or "" when none does. That is either another writer holding the same inbound path or
-// the owner declaring it for itself; the second matters just as much, since the owner's own
-// build would then produce and clean a file the writer also owns. The writer re-declaring its
-// own glob does not count; that is idempotent.
+// existingWriter returns the project already declaring co.glob's pattern as an output in
+// the owner's tree, or "" when none does. That is either another writer holding the same
+// inbound path or the owner declaring it for itself; the second matters just as much, since
+// the owner's own build would then produce and clean a file the writer also owns. The writer
+// re-declaring its own glob does not count; that is idempotent. Patterns are compared
+// without their exclusions: two declarations carving out the same file claim no file
+// together.
 func existingWriter(owner *types.Project, co crossOutput) string {
+	same := func(g types.Glob) bool { return g.Pattern == co.glob.Pattern }
 	for _, writer := range slices.Sorted(maps.Keys(owner.InboundOutputs)) {
-		if writer != co.writer && slices.Contains(owner.InboundOutputs[writer], co.glob) {
+		if writer != co.writer && slices.ContainsFunc(owner.InboundOutputs[writer], same) {
 			return writer
 		}
 	}
-	if slices.Contains(owner.Outputs, co.glob) {
+	if slices.ContainsFunc(owner.Outputs, same) {
 		return owner.Path
 	}
 	for _, refs := range owner.TargetOutputs {
 		for _, ref := range refs {
-			if (ref.Project == "" || ref.Project == owner.Path) && ref.Glob == co.glob {
+			if (ref.Project == "" || ref.Project == owner.Path) && ref.Glob == co.glob.Pattern {
 				return owner.Path
 			}
 		}
 	}
 	return ""
+}
+
+// escapingPattern returns the first of a glob's pattern and exclusions that is absolute or
+// contains "..", the cache's own rule (internal/cache/snapshot.go) for a glob relative to
+// its owner.
+func escapingPattern(pattern string, except []string) (string, bool) {
+	for _, p := range append([]string{pattern}, except...) {
+		if filepath.IsAbs(p) || strings.Contains(p, "..") {
+			return p, true
+		}
+	}
+	return "", false
 }
 
 // concatSource reads a project source's files in load order into one string for the
@@ -854,14 +839,16 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 			resolved := make([]types.InputRef, 0, len(n.ReadsFiles))
 			for _, ref := range n.ReadsFiles {
 				if ref.Project == "" {
-					resolved = append(resolved, types.InputRef{Project: projectPath, Glob: ref.Glob})
+					ref.Project = projectPath
+					resolved = append(resolved, ref)
 					continue
 				}
 				r, err := file.ResolveImport(ref.Project, projectPath)
 				if err != nil {
 					continue
 				}
-				resolved = append(resolved, types.InputRef{Project: r, Glob: ref.Glob})
+				ref.Project = r
+				resolved = append(resolved, ref)
 			}
 			n.ReadsFiles = resolved
 		}
@@ -880,8 +867,8 @@ func projectEntry(p *types.Project, root string) types.ProjectEntry {
 		Dir:       p.Dir,
 		Spell:     p.Spell,
 		Spells:    p.Spells,
-		Sources:   p.Sources,
-		Outputs:   p.Outputs,
+		Sources:   types.GlobStrings(p.Sources),
+		Outputs:   types.GlobStrings(p.Outputs),
 		DependsOn: p.DependsOn,
 		Manifests: manifestNames(manifests),
 		Lockfiles: projectLockfiles(manifests, p.Dir, root),
@@ -1125,8 +1112,8 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			Project:   et.Path,
 			Target:    et.Name,
 			Dir:       p.Dir,
-			Sources:   step.Sources,
-			Outputs:   step.Outputs,
+			Sources:   types.GlobStrings(step.Sources),
+			Outputs:   types.GlobStrings(step.Outputs),
 			Chain:     p.TargetChains[et.Name],
 			DependsOn: p.DependsOn,
 			Charms:    charms,
@@ -1162,8 +1149,8 @@ func (m *Magus) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOu
 		// Outputs, which are overwritten with the RESOLVED, workspace-rooted globs
 		// baseStep computes (see the field comment on ProjectEntry.Sources).
 		pe := projectEntry(p, m.ws.Root)
-		pe.Sources = step.Sources
-		pe.Outputs = step.Outputs
+		pe.Sources = types.GlobStrings(step.Sources)
+		pe.Outputs = types.GlobStrings(step.Outputs)
 
 		entry := types.EvaluatedProject{ProjectEntry: pe, ResolvedSpells: spellEntries}
 		if len(p.TargetPolicies) > 0 {
@@ -1258,12 +1245,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		// (the root MAGUS.md) or written in by another project would report as a
 		// hand-editable source. This is the "what lands in this tree" question, the
 		// same one clean and the merge driver ask.
-		declared := p.AllOutputs()
-		outputs := make([]string, 0, len(declared))
-		for _, o := range declared {
-			outputs = append(outputs, joinGlob(p.Path, o))
-		}
-		if types.MatchesAnyGlob(outputs, path) {
+		if slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Root(p.Path).Match(path) }) {
 			entry.OutputOf = append(entry.OutputOf, p.Path)
 		}
 		// Per-target ctx.readsFiles folded in, for the same reason AllOutputs folds in
@@ -1279,20 +1261,11 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		// Cross-project refs are KEPT here, unlike AllOutputs which drops them: the
 		// ownership rule inverts, because writing into another tree makes that project
 		// the owner, while READING one is a fact about THIS project's footprint.
-		inputs := make([][]string, 0, len(p.TargetInputs)+1)
-		inputs = append(inputs, step.Sources)
+		sourced := types.MatchGlobs(step.Sources, path)
 		for _, refs := range p.TargetInputs {
-			list := make([]string, 0, len(refs))
-			for _, ref := range refs {
-				owner := ref.Project
-				if owner == "" {
-					owner = p.Path
-				}
-				list = append(list, joinGlob(owner, ref.Glob))
-			}
-			inputs = append(inputs, list)
+			sourced = sourced || slices.ContainsFunc(refs, func(ref types.InputRef) bool { return ref.Rooted(p.Path).Match(path) })
 		}
-		if slices.ContainsFunc(inputs, func(globs []string) bool { return types.MatchesAnyGlob(globs, path) }) {
+		if sourced {
 			entry.SourceOf = append(entry.SourceOf, p.Path)
 		}
 	}
@@ -1339,61 +1312,38 @@ func fileExists(p string) bool {
 // ctx.writesFiles ref re-filed on the tree it lands in, and the caller walks every
 // project, so reading it here would report one declaration twice: the second time
 // without the target name that makes it actionable.
-func matchedClaims(p *types.Project, sources []string, path string) []types.FileClaim {
+func matchedClaims(p *types.Project, sources []types.Glob, path string) []types.FileClaim {
 	type claimKey struct{ target, role, glob string }
 	seen := make(map[claimKey]bool)
 	var out []types.FileClaim
-	// One declaration at a time, so a glob claims the path only when its own run's
-	// exclusions leave it in.
-	add := func(target, role string, globs []string) {
-		for run := range types.GlobRuns(globs) {
-			for _, glob := range run.Globs {
-				k := claimKey{target, role, glob}
-				if seen[k] {
-					continue
-				}
-				if ok, _ := doublestar.Match(glob, path); ok && !run.Excludes(path) {
-					seen[k] = true
-					out = append(out, types.FileClaim{Project: p.Path, Target: target, Role: role, Glob: glob})
-				}
-			}
+	// A glob claims the path only when its own exclusions leave it in.
+	add := func(target, role string, glob types.Glob) {
+		k := claimKey{target, role, glob.Pattern}
+		if !seen[k] && glob.Match(path) {
+			seen[k] = true
+			out = append(out, types.FileClaim{Project: p.Path, Target: target, Role: role, Glob: glob.Pattern})
 		}
 	}
-	// A same-project ref carries no project of its own; a cross-project one is
-	// relative to the tree it names.
-	rooted := func(refs []types.InputRef) []string {
-		globs := make([]string, len(refs))
-		for i, ref := range refs {
-			owner := ref.Project
-			if owner == "" {
-				owner = p.Path
-			}
-			globs[i] = joinGlob(owner, ref.Glob)
-		}
-		return globs
+	for _, glob := range p.Outputs {
+		add("", "output", glob.Root(p.Path))
 	}
-	outputs := make([]string, len(p.Outputs))
-	for i, glob := range p.Outputs {
-		outputs[i] = joinGlob(p.Path, glob)
-	}
-	add("", "output", outputs)
 	for _, t := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
-		refs := make([]types.InputRef, len(p.TargetOutputs[t]))
-		for i, ref := range p.TargetOutputs[t] {
-			refs[i] = types.InputRef(ref)
+		for _, ref := range p.TargetOutputs[t] {
+			add(t, "output", ref.Rooted(p.Path))
 		}
-		add(t, "output", rooted(refs))
 	}
-	add("", "source", sources)
+	for _, glob := range sources {
+		add("", "source", glob)
+	}
 	for _, t := range slices.Sorted(maps.Keys(p.TargetInputs)) {
-		add(t, "source", rooted(p.TargetInputs[t]))
+		for _, ref := range p.TargetInputs[t] {
+			add(t, "source", ref.Rooted(p.Path))
+		}
 	}
 	for _, t := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
-		refs := make([]types.InputRef, len(p.TargetUpdates[t]))
-		for i, ref := range p.TargetUpdates[t] {
-			refs[i] = types.InputRef(ref)
+		for _, ref := range p.TargetUpdates[t] {
+			add(t, "update", ref.Rooted(p.Path))
 		}
-		add(t, "update", rooted(refs))
 	}
 	return out
 }

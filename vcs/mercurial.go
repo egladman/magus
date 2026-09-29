@@ -1,17 +1,13 @@
 package vcs
 
 import (
-	"bufio"
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -21,16 +17,16 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Mercurial and Sapling share a command set, a revset language, and INI-shaped config,
-// so the helpers here serve both backends.
+// Mercurial's command set, revset language and INI-shaped config, which Sapling (a
+// Mercurial fork) speaks too, so the helpers here serve both backends.
 
-// hgFamilyDriftHooks: "commit" fires right after a local commit; "outgoing" fires in the
+// hgDriftHooks: "commit" fires right after a local commit; "outgoing" fires in the
 // source repo once a push (or pull/bundle) has decided which changesets are leaving, the
 // closest either tool has to git's pre-push. Neither can block: a non-zero "commit" hook
 // cannot undo the commit, and "outgoing" fires after the changeset set is already
 // decided, which is why it, not "preoutgoing", is the one used. Verified against hg 6.x
 // and sl 0.2.x.
-var hgFamilyDriftHooks = []string{"commit", "outgoing"}
+var hgDriftHooks = []string{"commit", "outgoing"}
 
 // hgUsername is the global option naming as as the acting user, none for the zero Person.
 func hgUsername(as types.Person) ([]string, error) {
@@ -43,19 +39,35 @@ func hgUsername(as types.Person) ([]string, error) {
 	return []string{"--config", "ui.username=" + as.Name + " <" + as.Email + ">"}, nil
 }
 
-// writeHgFamilyMergeDriverSection routes the output and auto-resolve globs to the magus
+// writeHgMergeDriverSection routes the output and auto-resolve globs to the magus
 // merge tool in the hg-family config at path, each glob once. The caller holds
 // withRepoLock.
-func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs, j stamp.Judge) (bool, error) {
+//
+// merge-patterns has no exclusion, but filemerge._picktool takes the FIRST entry that
+// matches, so each carved file (see MergeDriverGlobs.Carved) is named ahead of the output
+// globs with Mercurial's own :merge. The auto-resolve globs come first of all, so one can
+// still opt a carved file in, as the last matching line does in .gitattributes.
+//
+// The tool is disabled because a registered tool is also a candidate for Mercurial's
+// fallback: with no ui.merge set, _picktool ranks every [merge-tools] entry by priority
+// and picked magus for EVERY conflicted file, source included. `disabled` is read only by
+// that fallback, so merge-patterns still routes the globs here. Sapling's _picktool reads
+// both the same way; it ships ui.merge = internal:merge, which outranks the fallback, so
+// it never picked magus that way, and the setting is harmless there. Verified against
+// hg 7.2.4 and sl 0.2.20260811.
+func writeHgMergeDriverSection(path string, globs types.MergeDriverGlobs, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[merge-patterns]\n")
-	all := slices.Concat(globs.Outputs, globs.AutoResolve)
-	for i, glob := range all {
-		// merge-patterns has no exclusion; an excluded file keeps the default merge.
-		if _, excluded := types.CutExclusion(glob); excluded {
-			continue
+	for i, glob := range globs.AutoResolve {
+		if !slices.Contains(globs.AutoResolve[:i], glob) {
+			fmt.Fprintf(&body, "glob:%s = magus\n", glob)
 		}
-		if !slices.Contains(all[:i], glob) {
+	}
+	for _, carved := range globs.Carved {
+		fmt.Fprintf(&body, "path:%s = :merge\n", carved)
+	}
+	for i, glob := range globs.Outputs {
+		if !slices.Contains(globs.Outputs[:i], glob) && !slices.Contains(globs.AutoResolve, glob) {
 			fmt.Fprintf(&body, "glob:%s = magus\n", glob)
 		}
 	}
@@ -64,13 +76,14 @@ func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs, 
 	body.WriteString("magus.args = vcs merge-driver $base $local $other 0 $local\n")
 	body.WriteString("magus.premerge = False\n")
 	body.WriteString("magus.gui = False\n")
+	body.WriteString("magus.disabled = True\n")
 	return writeManagedSection(path, generatedMarkers, body.String(), configFile, j)
 }
 
-// hgFamilyMergeDriverCommand is MergeDriverCommand for hg and Sapling: the merge tool
-// writeHgFamilyMergeDriverSection registers, as `config` resolves it across every layer.
+// hgMergeDriverCommand is MergeDriverCommand for hg and Sapling: the merge tool
+// writeHgMergeDriverSection registers, as `config` resolves it across every layer.
 // `config` exits 1 for an unset key.
-func hgFamilyMergeDriverCommand(ctx context.Context, prog, root string) (string, error) {
+func hgMergeDriverCommand(ctx context.Context, prog, root string) (string, error) {
 	exe, err := vcsOutput(ctx, root, prog, "config", "merge-tools.magus.executable")
 	if exitCode(err) == 1 {
 		return "", nil
@@ -85,25 +98,25 @@ func hgFamilyMergeDriverCommand(ctx context.Context, prog, root string) (string,
 	return strings.TrimSpace(exe + " " + args), nil
 }
 
-// writeHgFamilyRefreshSection registers an `update` hook running command in the
+// writeHgRefreshSection registers an `update` hook running command in the
 // hg-family config at path. The caller holds withRepoLock.
-func writeHgFamilyRefreshSection(path, command string, j stamp.Judge) (bool, error) {
+func writeHgRefreshSection(path, command string, j stamp.Judge) (bool, error) {
 	body := fmt.Sprintf("[hooks]\nupdate.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
 	return writeManagedSection(path, refreshMarkers, body, configFile, j)
 }
 
-// writeHgFamilyDriftSection registers each of hgFamilyDriftHooks to run command in the
+// writeHgDriftSection registers each of hgDriftHooks to run command in the
 // hg-family config at path. The caller holds withRepoLock.
-func writeHgFamilyDriftSection(path, command string, j stamp.Judge) (bool, error) {
+func writeHgDriftSection(path, command string, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[hooks]\n")
-	for _, name := range hgFamilyDriftHooks {
+	for _, name := range hgDriftHooks {
 		fmt.Fprintf(&body, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
 	}
 	return writeManagedSection(path, driftMarkers, body.String(), configFile, j)
 }
 
-// hgFamilyGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two
+// hgGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two
 // backends that speak Mercurial's pathspec syntax (hg and sl).
 //
 // It is a silent-wrong-answer fix, not a nicety. An hg pathspec defaults to the "relpath"
@@ -118,7 +131,7 @@ func writeHgFamilyDriftSection(path, command string, j stamp.Judge) (bool, error
 // A pattern with no wildcards still matches itself under glob:, so this is safe for the
 // literal paths some callers pass. It also removes a latent ambiguity: an unprefixed
 // pathspec containing a colon would be read as "<kind>:<pattern>" and rejected.
-func hgFamilyGlobs(paths []string) []string {
+func hgGlobs(paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		out = append(out, "glob:"+p)
@@ -126,10 +139,10 @@ func hgFamilyGlobs(paths []string) []string {
 	return out
 }
 
-// hgFamilyRemoteURL is RemoteURL for hg and Sapling: `paths <name>` prints the named
+// hgRemoteURL is RemoteURL for hg and Sapling: `paths <name>` prints the named
 // path, "default" when name is empty, and exits 1 with "not found!" for one that is not
 // configured, the ErrVCSUnsupported case callers degrade on. Any other failure is real.
-func hgFamilyRemoteURL(ctx context.Context, prog, dir, name string) (string, error) {
+func hgRemoteURL(ctx context.Context, prog, dir, name string) (string, error) {
 	name = cmp.Or(name, "default")
 	if err := checkRemoteName(name); err != nil {
 		return "", err
@@ -144,28 +157,17 @@ func hgFamilyRemoteURL(ctx context.Context, prog, dir, name string) (string, err
 	return out, nil
 }
 
-// exitCode is err's exit status, or -1 when the command did not exit normally (it never
-// started, or ctx ended it). The callers that read a status as an answer (`paths` 1,
-// merge-tree 1, check-ignore 1, remote get-url 2, merge-base --is-ancestor 1) use it.
-func exitCode(err error) int {
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		return ee.ExitCode()
-	}
-	return -1
-}
-
-// hgFamilyRangeFiles is RangeFiles for hg and Sapling: status between ancestor(), the
+// hgRangeFiles is RangeFiles for hg and Sapling: status between ancestor(), the
 // merge base RangeDiff also diffs from, and head. Without --copies a rename is a removal
 // and an add, which is the contract. extra carries sl's --root-relative.
-func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, paths []string, extra ...string) ([]string, error) {
+func hgRangeFiles(ctx context.Context, prog, dir, base, head string, paths []string, extra ...string) ([]string, error) {
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
 	args := append([]string{"status"}, extra...)
 	args = append(args, "--no-status", "--added", "--modified", "--removed",
 		"--rev", "ancestor("+base+","+head+")", "--rev", head)
-	args = append(args, hgFamilyRootPaths(paths)...)
+	args = append(args, hgRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s status ancestor(%s,%s)-%s: %w", prog, base, head, head, err)
@@ -173,15 +175,15 @@ func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, paths
 	return splitLines([]byte(out)), nil
 }
 
-// hgFamilyRangeCommits is RangeCommits for hg and Sapling. only(head,base) is ascending,
+// hgRangeCommits is RangeCommits for hg and Sapling. only(head,base) is ascending,
 // and reverse() makes it newest first. "path:" makes each path literal and relative to the
 // repository root, as RangeFiles reports them.
-func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
+func hgRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
 	args := append([]string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"},
-		hgFamilyRootPaths(paths)...)
+		hgRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s log only(%s,%s): %w", prog, head, base, err)
@@ -189,9 +191,9 @@ func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, bas
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
-// hgFamilyRootPaths spells repository-relative paths as literal "path:" patterns after
+// hgRootPaths spells repository-relative paths as literal "path:" patterns after
 // `--`, or nothing when there are none.
-func hgFamilyRootPaths(paths []string) []string {
+func hgRootPaths(paths []string) []string {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -202,9 +204,9 @@ func hgFamilyRootPaths(paths []string) []string {
 	return out
 }
 
-// hgFamilyIsAncestor is IsAncestor for hg and Sapling: ancestors() includes the revision
+// hgIsAncestor is IsAncestor for hg and Sapling: ancestors() includes the revision
 // itself, and an unknown revision aborts the log rather than matching nothing.
-func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (bool, error) {
+func hgIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (bool, error) {
 	if err := checkRequiredRevsetRef(ancestor, descendant); err != nil {
 		return false, err
 	}
@@ -215,7 +217,7 @@ func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant str
 	return out != "", nil
 }
 
-// hgFamilyChangesByCommit is ChangesByCommit for hg and Sapling, which share the revset
+// hgChangesByCommit is ChangesByCommit for hg and Sapling, which share the revset
 // language and differ only in the program and the churn template it renders.
 //
 // `-r` scopes the walk to the working copy's ancestors, so a repository with several heads
@@ -229,7 +231,7 @@ func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant str
 // since bounds the scan by commit date. date() takes a date STRING rather than an epoch and
 // reads a leading ">" as "after", so an RFC 3339 bound arrives as
 // `date('>2026-01-01T00:00:00Z')`.
-func hgFamilyChangesByCommit(ctx context.Context, v types.VCSDriver, prog, template, dir string, commits int, since string) ([]types.CommitChange, error) {
+func hgChangesByCommit(ctx context.Context, v types.VCSDriver, prog, template, dir string, commits int, since string) ([]types.CommitChange, error) {
 	if commits <= 0 {
 		commits = 1
 	}
@@ -253,13 +255,13 @@ func hgFamilyChangesByCommit(ctx context.Context, v types.VCSDriver, prog, templ
 	return keepSubtree(parseChangesByCommit(out), prefix), nil
 }
 
-// hgFamilyExportRevision is ExportRevision for hg and Sapling: `archive -t files` into a
+// hgExportRevision is ExportRevision for hg and Sapling: `archive -t files` into a
 // staging directory, then copy dir's subtree out. extra carries each program's own include
 // and exclude flags.
 //
 // The archive keeps repository-relative paths where git's `archive <rev> -- .` re-roots
 // them, which is why dir's prefix is stripped on the way out.
-func hgFamilyExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, dstDir string, extra ...string) error {
+func hgExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, dstDir string, extra ...string) error {
 	if rev == "" {
 		rev = "."
 	}
@@ -285,21 +287,21 @@ func hgFamilyExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, r
 	return copySubtree(staging, prefix, dstDir)
 }
 
-// hgFamilyPending is the working-copy state preserving consumes and has to put
+// hgPending is the working-copy state preserving consumes and has to put
 // back: the files the backend calls unknown, and the tracked files missing from disk.
 //
 // Mercurial and Sapling capture unknown files by ADDING them and missing files by marking
 // them REMOVED, so a capture that does not restore leaves the user with files staged for a
 // commit they never made and a deletion they never scheduled.
-type hgFamilyPending struct {
+type hgPending struct {
 	// root is the repository root, and both the directory the paths below are relative to
-	// and the only directory putting them back may run in; see hgFamilyRoot.
+	// and the only directory putting them back may run in; see hgRoot.
 	root    string
 	unknown []string
 	missing []string
 }
 
-// hgFamilyRoot resolves the repository root, where reading the pending state and putting
+// hgRoot resolves the repository root, where reading the pending state and putting
 // it back both have to run.
 //
 // `hg status` answers in ROOT-relative paths while `hg revert` and `hg forget` resolve
@@ -314,7 +316,7 @@ type hgFamilyPending struct {
 //
 // The root comes back with symlinks RESOLVED, so a repository reached through a symlink
 // gets its real path here and every command anchored on it reports that path back.
-func hgFamilyRoot(ctx context.Context, prog, dir string) (string, error) {
+func hgRoot(ctx context.Context, prog, dir string) (string, error) {
 	cmd := vcsExec(ctx, prog, "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -328,40 +330,40 @@ func hgFamilyRoot(ctx context.Context, prog, dir string) (string, error) {
 	return root, nil
 }
 
-// hgFamilyReadPending reads that state. It must run BEFORE the capture, since the capture
+// hgReadPending reads that state. It must run BEFORE the capture, since the capture
 // is what changes it.
-func hgFamilyReadPending(ctx context.Context, prog, dir string) (hgFamilyPending, error) {
-	root, err := hgFamilyRoot(ctx, prog, dir)
+func hgReadPending(ctx context.Context, prog, dir string) (hgPending, error) {
+	root, err := hgRoot(ctx, prog, dir)
 	if err != nil {
-		return hgFamilyPending{}, err
+		return hgPending{}, err
 	}
-	unknown, err := hgFamilyStatusPaths(ctx, prog, root, "--unknown")
+	unknown, err := hgStatusPaths(ctx, prog, root, "--unknown")
 	if err != nil {
-		return hgFamilyPending{}, err
+		return hgPending{}, err
 	}
-	missing, err := hgFamilyStatusPaths(ctx, prog, root, "--deleted")
+	missing, err := hgStatusPaths(ctx, prog, root, "--deleted")
 	if err != nil {
-		return hgFamilyPending{}, err
+		return hgPending{}, err
 	}
-	return hgFamilyPending{root: root, unknown: unknown, missing: missing}, nil
+	return hgPending{root: root, unknown: unknown, missing: missing}, nil
 }
 
-// hgFamilyRestorePending returns the working copy to the state hgFamilyReadPending saw.
+// hgRestorePending returns the working copy to the state hgReadPending saw.
 //
 // forget un-adds, which is exact. A removal has no un-mark: `add` and `forget` both leave
 // it scheduled (measured), and only revert clears it, which writes the file back, so it is
 // deleted again immediately after. Those bytes are the committed ones the user had already
 // deleted, so nothing of theirs is at risk in between.
-func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending) error {
+func hgRestorePending(ctx context.Context, prog string, p hgPending) error {
 	if len(p.unknown) > 0 {
-		if err := hgFamilyRun(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
+		if err := hgRun(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
 			return err
 		}
 	}
 	if len(p.missing) == 0 {
 		return nil
 	}
-	if err := hgFamilyRun(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
+	if err := hgRun(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
 		return err
 	}
 	for _, rel := range p.missing {
@@ -372,7 +374,7 @@ func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending)
 	return nil
 }
 
-// hgFamilyStatusPaths lists the paths in one status class, NUL-delimited.
+// hgStatusPaths lists the paths in one status class, NUL-delimited.
 //
 // The template is what makes the list unambiguous. A newline is legal in a filename, so a
 // line-split parse turns "we\nird.txt" into two paths that name nothing: measured
@@ -383,7 +385,7 @@ func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending)
 //
 // Sapling takes the same template (measured on 0.2.20260811-150444) and refuses a newline
 // in a name outright, so one spelling covers both backends.
-func hgFamilyStatusPaths(ctx context.Context, prog, dir, class string) ([]string, error) {
+func hgStatusPaths(ctx context.Context, prog, dir, class string) ([]string, error) {
 	cmd := vcsExec(ctx, prog, "status", class, "--no-status", "-T", `{path}\0`)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -399,7 +401,7 @@ func hgFamilyStatusPaths(ctx context.Context, prog, dir, class string) ([]string
 	return files, nil
 }
 
-func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
+func hgRun(ctx context.Context, prog, dir string, args []string) error {
 	cmd := vcsExec(ctx, prog, args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -408,7 +410,7 @@ func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
 	return nil
 }
 
-// hgFamilyCommitPushed answers types.PushStatusReporter for Mercurial and Sapling, which
+// hgCommitPushed answers types.PushStatusReporter for Mercurial and Sapling, which
 // share a phase model: a changeset is "public" once it has been exchanged with a
 // publishing remote, and "draft" or "secret" while it is still local. That is a recorded
 // fact about the changeset rather than git's reachability question, so there is no
@@ -417,7 +419,7 @@ func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
 // A repository with no default path answers ok=false, matching git's no-upstream case:
 // everything is draft in a repo that has never had a remote, and reporting that as "not
 // pushed" would offer a rewrite on the strength of a remote nobody configured.
-func hgFamilyCommitPushed(ctx context.Context, prog, dir, id string) (pushed, ok bool, err error) {
+func hgCommitPushed(ctx context.Context, prog, dir, id string) (pushed, ok bool, err error) {
 	if remote, rerr := vcsOutput(ctx, dir, prog, "paths", "default"); rerr != nil || remote == "" {
 		//nolint:nilerr // an unset default path is a repo with no answer, not a failed lookup; ok=false already reports it
 		return false, false, nil
@@ -465,158 +467,4 @@ func dirstateCheckoutID(dot string) (string, bool) {
 		return "", false
 	}
 	return hex.EncodeToString(p1) + hex.EncodeToString(p2), true
-}
-
-// hgFamilyOpenObjectBatch starts one `serve --cmdserver pipe`. Each Read is a
-// `cat` on that process. A cat per path is a process per file, which is the
-// cost git's cat-file batch already avoids.
-func hgFamilyOpenObjectBatch(ctx context.Context, prog, root, rev string) (ObjectBatch, error) {
-	if rev == "" {
-		rev = "."
-	}
-	if err := checkRef(rev); err != nil {
-		return nil, err
-	}
-	cmd := vcsExec(ctx, prog, "serve", "--cmdserver", "pipe")
-	cmd.Dir = root
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		_ = stdin.Close()
-		return nil, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("%s cmdserver: %w", prog, err)
-	}
-	b := &cmdBatch{prog: prog, rev: rev, cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr}
-	ch, hello, err := b.message()
-	if err != nil || ch != 'o' || !bytes.Contains(hello, []byte("runcommand")) {
-		_ = b.Close()
-		if err == nil {
-			err = fmt.Errorf("hello %q", hello)
-		}
-		return nil, fmt.Errorf("%s cmdserver: %w", prog, err)
-	}
-	return b, nil
-}
-
-// cmdBatch speaks the Mercurial command-server protocol: a channel byte, a
-// big-endian length, then that many bytes. 'o' is stdout, 'e' is stderr, and
-// 'r' ends the command with a big-endian int32 exit code.
-type cmdBatch struct {
-	prog   string
-	rev    string
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	stderr *bytes.Buffer
-	// err is the failure that left the stream out of step with its commands.
-	// Every later Read returns it: the next reply would answer an earlier command.
-	err error
-}
-
-func (b *cmdBatch) Read(rel string) (string, error) {
-	if b.err != nil {
-		return "", b.err
-	}
-	if strings.ContainsRune(rel, 0) {
-		return "", fmt.Errorf("%s cat: path contains a NUL", b.prog)
-	}
-	code, out, errText, err := b.run("cat", "-r", b.rev, "--", rel)
-	if err != nil {
-		b.err = fmt.Errorf("%s cat: %w", b.prog, err)
-		return "", b.err
-	}
-	if code != 0 {
-		if strings.Contains(errText, "no such file") {
-			return "", fmt.Errorf("%s cat: %s: %w", b.prog, rel, ErrObjectMissing)
-		}
-		msg := strings.TrimSpace(errText)
-		if msg == "" {
-			msg = strings.TrimSpace(out)
-		}
-		return "", fmt.Errorf("%s cat: %s", b.prog, msg)
-	}
-	return out, nil
-}
-
-func (b *cmdBatch) run(args ...string) (int, string, string, error) {
-	var payload []byte
-	for i, a := range args {
-		if i > 0 {
-			payload = append(payload, 0)
-		}
-		payload = append(payload, a...)
-	}
-	if _, err := io.WriteString(b.stdin, "runcommand\n"); err != nil {
-		return 0, "", "", err
-	}
-	var n [4]byte
-	binary.BigEndian.PutUint32(n[:], uint32(len(payload)))
-	if _, err := b.stdin.Write(n[:]); err != nil {
-		return 0, "", "", err
-	}
-	if _, err := b.stdin.Write(payload); err != nil {
-		return 0, "", "", err
-	}
-	var stdout, stderr bytes.Buffer
-	for {
-		ch, data, err := b.message()
-		if err != nil {
-			return 0, "", "", err
-		}
-		switch ch {
-		case 'o':
-			_, _ = stdout.Write(data)
-		case 'e':
-			_, _ = stderr.Write(data)
-		case 'r':
-			if len(data) != 4 {
-				return 0, "", "", fmt.Errorf("exit %q", data)
-			}
-			code := int(int32(binary.BigEndian.Uint32(data)))
-			return code, stdout.String(), stderr.String(), nil
-		default:
-			// The protocol lets a client skip an unknown lowercase channel; an
-			// uppercase one asks for input, and there is none to give.
-			if ch >= 'a' && ch <= 'z' {
-				continue
-			}
-			return 0, "", "", fmt.Errorf("channel %q", ch)
-		}
-	}
-}
-
-func (b *cmdBatch) message() (byte, []byte, error) {
-	var hdr [5]byte
-	if _, err := io.ReadFull(b.stdout, hdr[:]); err != nil {
-		return 0, nil, err
-	}
-	n := binary.BigEndian.Uint32(hdr[1:])
-	buf := make([]byte, n)
-	if _, err := io.ReadFull(b.stdout, buf); err != nil {
-		return 0, nil, err
-	}
-	return hdr[0], buf, nil
-}
-
-func (b *cmdBatch) Close() error {
-	err := b.stdin.Close()
-	_, _ = io.Copy(io.Discard, b.stdout)
-	waitErr := b.cmd.Wait()
-	if err != nil {
-		return err
-	}
-	if waitErr != nil {
-		if msg := strings.TrimSpace(b.stderr.String()); msg != "" {
-			return fmt.Errorf("%s cmdserver: %w: %s", b.prog, waitErr, msg)
-		}
-		return fmt.Errorf("%s cmdserver: %w", b.prog, waitErr)
-	}
-	return nil
 }

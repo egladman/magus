@@ -3,6 +3,7 @@
 package gen
 
 import (
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -10,7 +11,7 @@ import (
 
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
-var RuntimeBoundaryTypes = []BoundaryType{
+var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},

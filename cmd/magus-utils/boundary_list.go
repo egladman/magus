@@ -54,6 +54,7 @@ func runBoundaryList(args []string) error {
 	fmt.Fprintln(&b, "package gen")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `import (`)
+	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
 	if usesSpells {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
@@ -63,7 +64,7 @@ func runBoundaryList(args []string) error {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "// RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired")
 	fmt.Fprintln(&b, "// with its encoder. A test populates each and asserts the round trip loses nothing.")
-	fmt.Fprintln(&b, "var RuntimeBoundaryTypes = []BoundaryType{")
+	fmt.Fprintln(&b, "var RuntimeBoundaryTypes = []ffi.BoundaryType{")
 	for _, r := range rows {
 		fmt.Fprintln(&b, r)
 	}

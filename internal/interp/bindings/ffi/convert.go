@@ -1,7 +1,4 @@
-// runtime.go holds the hand-maintained VM conversion primitives the generated
-// module trampolines call into. Do not add generated code here.
-
-package gen
+package ffi
 
 import (
 	"context"
@@ -540,7 +537,7 @@ func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
 	return []any{valToAny(res)}, nil
 }
 
-// HostError wraps an error on its way from a host method into the VM so a magusfile
+// Error wraps an error on its way from a host method into the VM so a magusfile
 // always catches the same SHAPE.
 //
 // gopherbuzz deliberately leaves a plain error as a string, because upstream Buzz does and
@@ -553,7 +550,7 @@ func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
 // A diagnostic keeps its own fields (code, url); anything else gets message alone. Every
 // generated trampoline routes its error through here, so the guarantee holds by
 // construction rather than by remembering.
-func HostError(err error) error {
+func Error(err error) error {
 	if err == nil {
 		return nil
 	}

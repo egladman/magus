@@ -223,20 +223,22 @@ func (m *Magus) edgeInputs() func(string) bool {
 			}
 		}
 	}
-	var declared [][]string
+	var globs []types.Glob
 	if m.wsReg != nil {
 		for _, name := range m.wsReg.Providers() {
 			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok {
-				declared = append(declared, sp.Sources())
+				// A malformed list matches nothing.
+				if sources, _, err := types.SpellGlobs(sp); err == nil {
+					globs = append(globs, sources...)
+				}
 			}
 		}
 	}
-	globs := types.UnionGlobs(declared...)
 	return func(p string) bool {
 		if names[path.Base(p)] || strings.HasSuffix(p, ".buzz") || types.LooksLikeBuildInput(p) {
 			return true
 		}
-		return types.MatchesAnyGlob(globs, p)
+		return types.MatchGlobs(globs, p)
 	}
 }
 

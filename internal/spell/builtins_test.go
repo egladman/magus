@@ -2,7 +2,7 @@ package spell
 
 import (
 	"context"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
@@ -219,7 +219,7 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		}, "\n"))
 		require.NoError(t, s.Exec(ctx, CharmModuleSource), "load charm.buzz")
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
-		return bindinggen.ValueToAny(s.GetGlobal("__r"))
+		return ffi.ValueToAny(s.GetGlobal("__r"))
 	}
 	// spells.Charm now, not map[string]any: the host constructors return the typed value
 	// the Buzz side already mirrored. norm marshals both sides through spells.Charm

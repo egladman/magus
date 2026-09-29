@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,6 +99,49 @@ func TestMergeDriverRejectsUndeclaredPath(t *testing.T) {
 	err := mergeDriverRun(ctx, root, []string{base, result, theirs, "7", "notes.txt"})
 	require.Error(t, err, "a code path both sides edited must not be auto-resolved")
 	assert.ErrorContains(t, err, "not auto-resolved: notes.txt: not settled")
+}
+
+// TestSettleTargetHonorsExclusions: one target declares gen/*.go but carves out gen/rt.go,
+// which another target writes. The file's rebuild is the second target's; matching each
+// ref's pattern alone named the first, sorted ahead of it, whose run never writes it.
+func TestSettleTargetHonorsExclusions(t *testing.T) {
+	p := &types.Project{Path: ".", Dir: "/ws", TargetOutputs: map[string][]types.OutputRef{
+		"a-generate": {{Glob: "gen/*.go", Except: []string{"gen/rt.go"}}},
+		"b-generate": {{Glob: "gen/rt.go"}},
+	}}
+
+	target, ok := settleTarget(p, "/ws/gen/rt.go")
+	require.True(t, ok)
+	assert.Equal(t, "b-generate", target)
+
+	target, ok = settleTarget(p, "/ws/gen/fs.go")
+	require.True(t, ok)
+	assert.Equal(t, "a-generate", target)
+}
+
+// TestMergeDriverTreatsAnExcludedFileAsSource: a hand file an output carves out is not an
+// output, so the driver must not keep one side of it the way it keeps a generated file.
+func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
+	root := t.TempDir()
+	magusfile := `import "magus";
+
+magus.project({})
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**", "!gen/hand.txt");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err)
+	ctx := withMagus(context.Background(), m)
+	result := writeResultFile(t, t.TempDir(), "hand written\n")
+
+	base, _, theirs := mergeSides(t, "x\n", "", "x2\n")
+	err = mergeDriverRun(ctx, root, []string{base, result, theirs, "7", "gen/hand.txt"})
+
+	require.Error(t, err, "an excluded file both sides edited must not be settled as generated")
+	assert.ErrorContains(t, err, "not auto-resolved: gen/hand.txt")
 }
 
 // TestMergeDriverRefusesUnrebuildableOutput covers the case that makes auto-resolution safe

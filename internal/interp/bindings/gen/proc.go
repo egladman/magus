@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -19,47 +20,47 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("exec", vm.DirectValue("proc.exec", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		cmd := Str(bzArgs, 0)
-		args := StrSlice(bzArgs, 1)
-		dir := Str(bzArgs, 2)
-		opts := AnyMap(bzArgs, 3)
+		cmd := ffi.Str(bzArgs, 0)
+		args := ffi.StrSlice(bzArgs, 1)
+		dir := ffi.Str(bzArgs, 2)
+		opts := ffi.AnyMap(bzArgs, 3)
 		ret0, err := std.OsExec(ctx, cmd, args, dir, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("shell", vm.DirectValue("proc.shell", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		line := Str(bzArgs, 0)
-		shell := Str(bzArgs, 1)
+		line := ffi.Str(bzArgs, 0)
+		shell := ffi.Str(bzArgs, 1)
 		ret0, err := std.OsShell(ctx, line, shell)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectShellCommand(ret0), nil
 	}))
 	m.MapSet("which", vm.DirectValue("proc.which", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		cmd := Str(bzArgs, 0)
+		cmd := ffi.Str(bzArgs, 0)
 		ret0, err := std.OsWhich(ctx, cmd)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("withSlots", vm.DirectValue("proc.withSlots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		n := Int(bzArgs, 0, 0)
-		callback := CallbackArg(sess, bzArgs, 1)
+		n := ffi.Int(bzArgs, 0, 0)
+		callback := ffi.CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithSlots(ctx, n, callback); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("stdinIsTerminal", vm.DirectValue("proc.stdinIsTerminal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsStdinIsTerminal(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	return m
 }

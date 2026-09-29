@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -19,64 +20,64 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("withEnv", vm.DirectValue("os.withEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		env := StrMap(bzArgs, 0)
-		callback := CallbackArg(sess, bzArgs, 1)
+		env := ffi.StrMap(bzArgs, 0)
+		callback := ffi.CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithEnv(ctx, env, callback); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("platform", vm.DirectValue("os.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, ret1, ret2, err := std.OsPlatform(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return vm.ListValue([]vm.Value{StrVal(ret0), StrVal(ret1), StrVal(ret2)}), nil
+		return vm.ListValue([]vm.Value{ffi.StrVal(ret0), ffi.StrVal(ret1), ffi.StrVal(ret2)}), nil
 	}))
 	m.MapSet("exit", vm.DirectValue("os.exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		code := Int(bzArgs, 0, 0)
+		code := ffi.Int(bzArgs, 0, 0)
 		if err := std.OsExit(ctx, code); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("sleep", vm.DirectValue("os.sleep", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ms := Float(bzArgs, 0, 0)
+		ms := ffi.Float(bzArgs, 0, 0)
 		if err := std.OsSleep(ctx, ms); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("numCpu", vm.DirectValue("os.numCpu", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsNumCPU(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("hostname", vm.DirectValue("os.hostname", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsHostname(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("executable", vm.DirectValue("os.executable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsExecutable(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		max := Int(bzArgs, 0, 0)
-		fn := CallbackArg(sess, bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		max := ffi.Int(bzArgs, 0, 0)
+		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.OsRetry(ctx, max, fn, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
 	return m
 }

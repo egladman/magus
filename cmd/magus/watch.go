@@ -92,10 +92,12 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	// The cross-project case closes it fastest: the writer produces the file, watch fires
 	// on the owner, the owner's depends_on drags the writer back in, and its cache hit
 	// replays the very file that triggered the round.
-	var outputGlobs []string
+	var outputGlobs []types.Glob
 	var projectIgnores []types.IgnorePattern
 	for _, p := range ws.All() {
-		outputGlobs = append(outputGlobs, p.AllOutputs()...)
+		for _, g := range p.AllOutputs() {
+			outputGlobs = append(outputGlobs, g.Root(p.Path))
+		}
 		projectIgnores = append(projectIgnores, p.WatchIgnores...)
 	}
 

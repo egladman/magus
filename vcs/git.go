@@ -1489,30 +1489,38 @@ func (v gitVCS) gitAttrsState(ctx context.Context, root string, globs types.Merg
 // merge=magus from its glob line and takes diff=golang from `*.go`, whichever line comes
 // first.
 //
-// An auto-resolve glob sets merge=magus alone: the file is source, and linguist-generated
-// would collapse it in review. One without a slash is anchored at the root, since git
-// matches a slashless pattern at every depth and magus.yaml's globs are rooted.
+// Output lines carry only the positive patterns: gitattributes has no exclusion, and a
+// later line wins. So each carved file (a tracked hand-maintained file an output pattern
+// covers but its declaration excludes) follows them as `!merge !linguist-generated`,
+// which returns both attributes to unspecified: git's default text merge. `-merge` would
+// UNSET merge, which git treats as binary, conflicting on every divergent change.
+//
+// An auto-resolve glob sets merge=magus alone, after the carve-outs so it can still opt a
+// carved file in: the file is source, and linguist-generated would collapse it in review.
 func gitAttrsBody(globs types.MergeDriverGlobs) string {
 	var body strings.Builder
 	for _, d := range gitDiffDrivers {
 		body.WriteString(d.line() + "\n")
 	}
 	for _, glob := range globs.Outputs {
-		// git ignores a negative pattern in attributes, so an exclusion unsets what the
-		// globs before it set.
-		if pattern, ok := types.CutExclusion(glob); ok {
-			fmt.Fprintf(&body, "%s -merge -linguist-generated\n", pattern)
-			continue
-		}
-		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", glob)
+		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", anchorAttrPattern(glob))
+	}
+	for _, path := range globs.Carved {
+		fmt.Fprintf(&body, "%s !merge !linguist-generated\n", anchorAttrPattern(path))
 	}
 	for _, glob := range globs.AutoResolve {
-		if !strings.Contains(glob, "/") {
-			glob = "/" + glob
-		}
-		fmt.Fprintf(&body, "%s merge=magus\n", glob)
+		fmt.Fprintf(&body, "%s merge=magus\n", anchorAttrPattern(glob))
 	}
 	return body.String()
+}
+
+// anchorAttrPattern anchors a slashless pattern at the root: git matches one at every
+// depth, and magus's globs are rooted.
+func anchorAttrPattern(pattern string) string {
+	if strings.Contains(pattern, "/") {
+		return pattern
+	}
+	return "/" + pattern
 }
 
 // gitDiffDriver routes paths matching glob to a git diff driver. The driver's hunk-header

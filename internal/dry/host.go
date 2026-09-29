@@ -578,7 +578,10 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 			}
 			patterns = append(patterns, a.AsString())
 		}
-		matched := types.MatchTargetPatterns(tr.targetKeys, patterns)
+		matched, err := types.MatchTargetPatterns(tr.targetKeys, patterns)
+		if err != nil {
+			return vm.Null, fmt.Errorf("ctx.glob: %w", err)
+		}
 		handles := make([]vm.Value, 0, len(matched))
 		for _, name := range matched {
 			handles = append(handles, fn(name, retNull))

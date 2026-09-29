@@ -593,7 +593,7 @@ func coversPath(declared, p string) bool {
 		return true
 	}
 	if strings.ContainsAny(declared, globMeta) {
-		return types.MatchesAnyGlob([]string{declared}, p)
+		return types.Glob{Pattern: declared}.Match(p)
 	}
 	return p == declared || strings.HasPrefix(p, declared+"/")
 }

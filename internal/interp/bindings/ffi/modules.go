@@ -1,7 +1,4 @@
-// Package gen is the generated native-to-Buzz adapter layer. Its hand-maintained
-// runtime and module registry sit beside generated module trampolines so both
-// consumers use the exact same VM boundary.
-package gen
+package ffi
 
 import (
 	"context"
@@ -28,14 +25,10 @@ type Capabilities uint8
 // Has reports whether c includes want.
 func (c Capabilities) Has(want Capability) bool { return c&Capabilities(want) != 0 }
 
-// ModuleReg is one host module's registration and its supported capabilities.
+// Registration is one host module's registration and its supported capabilities.
 // The browser currently requires WASM; future consumers can add independent
 // requirements without widening this record with another boolean.
-//
-// The types live here (not in modules.go) because modules.go is //go:build
-// !wasm (it references the IO trampolines) while the wasm build needs these
-// types for modules_wasm.go's parallel table.
-type ModuleReg struct {
+type Registration struct {
 	Register     RegisterFunc
 	Capabilities Capabilities
 	// Path is the import spelling when it differs from the registry key: the key
@@ -50,10 +43,10 @@ type ModuleReg struct {
 
 // Set is a module registry. Its With method returns a copy so tests can replace
 // one module without mutating the process-wide default or racing parallel tests.
-type Set map[string]ModuleReg
+type Set map[string]Registration
 
 // With returns a copy of s with name registered as reg.
-func (s Set) With(name string, reg ModuleReg) Set {
+func (s Set) With(name string, reg Registration) Set {
 	out := maps.Clone(s)
 	if out == nil {
 		out = Set{}

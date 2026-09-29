@@ -30,7 +30,7 @@ fun claude_skills_paths() > [str] {
 // claude_interpreter picks which magus RUNS the glue.
 //
 // Moving the glue from sh to Buzz moves the interpreter from a program that is
-// always present and has no version to one that does. The sh copies resolved the
+// always present and has no version to one that does. The glue resolves the
 // binary that renders the VERDICT by walking up to the magusfile, precisely so a
 // stale PATH copy could not answer with rules the tree no longer has; the same
 // argument applies to the interpreter, and more sharply, because a magus too old
@@ -57,10 +57,8 @@ fun claude_interpreter() > str {
     return "magus";
 }
 
-// The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX
-// shell, so the wiring works unchanged on Windows and a reader installs no runtime
-// dependency to be guarded. The sh copies stay for the hosts still wired to them
-// (codex, cursor, the any-host guide) and render byte-identical replies.
+// The Buzz glue needs neither jq nor a POSIX shell, so the wiring works unchanged on
+// Windows and a reader installs no runtime dependency to be guarded.
 //
 // `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other
 // BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
@@ -69,8 +67,7 @@ fun claude_interpreter() > str {
 //
 // Every command this spell builds is a plain argv. Claude Code splits a hook command
 // itself rather than handing it to a shell, so a leading `VAR=value` is a word the host
-// would look for a program named after; the sh copies beside the Buzz glue are run BY sh
-// and keep their variables for that reason. Flags a single entry declares ride after
+// would look for a program named after. Flags a single entry declares ride after
 // `--`, which `magus buzz` forwards to the script as its own argv.
 fun claude_buzz_command(script: str, flags: [str]) > str {
     final base = "{claude_interpreter()} buzz -s docs/guides/integrations/agents/{script}.buzz";

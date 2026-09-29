@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spell"
@@ -34,7 +35,7 @@ const (
 // byte-level companions) and layers it onto the stdlib module of the same name,
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
-func magusModules(modules bindinggen.Set) []buzz.Module {
+func magusModules(modules ffi.Set) []buzz.Module {
 	mods := hostModuleBinds(modules)
 	// Buzz-implemented modules bind through the SAME list, so a session sees one
 	// surface and nothing downstream can tell which language implemented what.
@@ -60,7 +61,7 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 // hostModuleBinds is the native half of magusModules: one buzz.Module per registry
 // entry, ordered by name. The MCP client surface uses it alone, because the
 // Buzz-implemented spell modules import the wider host and do not belong there.
-func hostModuleBinds(modules bindinggen.Set) []buzz.Module {
+func hostModuleBinds(modules ffi.Set) []buzz.Module {
 	names := make([]string, 0, len(modules))
 	for name := range modules {
 		names = append(names, name)
@@ -71,7 +72,7 @@ func hostModuleBinds(modules bindinggen.Set) []buzz.Module {
 	for _, name := range names {
 		reg := modules[name]
 		labels := []string{labelMagus}
-		if reg.Capabilities.Has(bindinggen.WASM) {
+		if reg.Capabilities.Has(ffi.WASM) {
 			labels = append(labels, labelWASM)
 		}
 		// The registry key is the identifier the module BINDS as; reg.Path is what
@@ -149,10 +150,10 @@ var clientWithheld = []string{"cmd", "pry"}
 
 // clientHostModules is the host-module set the MCP client tool provides: every
 // module marked WASM (pure compute) except env, which reads the process environment.
-func clientHostModules() bindinggen.Set {
-	out := make(bindinggen.Set, len(bindinggen.Modules))
+func clientHostModules() ffi.Set {
+	out := make(ffi.Set, len(bindinggen.Modules))
 	for name, reg := range bindinggen.Modules {
-		if name == "env" || !reg.Capabilities.Has(bindinggen.WASM) {
+		if name == "env" || !reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
 		out[name] = reg
@@ -217,7 +218,7 @@ func mergeModuleMap(dst, src vm.Value) {
 
 // moduleSurfaceConfig is the resolved options for one RegisterModuleSurface call.
 type moduleSurfaceConfig struct {
-	modules bindinggen.Set
+	modules ffi.Set
 	// scriptOut is where std.print goes. Defaults to STDERR: under `magus run` a
 	// magusfile's print is human output like every other thing magus says, and
 	// stdout carries the structured answer (-o json|yaml|jsonl|template) alone. A
@@ -233,7 +234,7 @@ type ModuleSurfaceOption func(*moduleSurfaceConfig)
 // WithModules replaces the default host-module set for one session. It is the
 // test seam for a fake fs/http/vcs module; callers use registry.Modules.With to
 // replace only the capability they need without mutating global state.
-func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
+func WithModules(modules ffi.Set) ModuleSurfaceOption {
 	return func(c *moduleSurfaceConfig) { c.modules = modules }
 }
 

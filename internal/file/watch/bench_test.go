@@ -58,9 +58,9 @@ func BenchmarkComposedIgnore(b *testing.B) {
 // predicate that guards against build→output-write→rebuild loops.
 func BenchmarkOutputsIgnore(b *testing.B) {
 	const wsRoot = "/repo"
-	globs := make([]string, 20)
+	globs := make([]types.Glob, 20)
 	for i := range globs {
-		globs[i] = fmt.Sprintf("svc%02d/dist/**", i)
+		globs[i] = types.Glob{Pattern: fmt.Sprintf("svc%02d/dist/**", i)}
 	}
 	ignore := OutputsIgnore(wsRoot, globs)
 

@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,55 +18,55 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("format", vm.DirectValue("time.format", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := Str(bzArgs, 0)
-		unix_millis := Float(bzArgs, 1, 0)
+		layout := ffi.Str(bzArgs, 0)
+		unix_millis := ffi.Float(bzArgs, 1, 0)
 		ret0, err := std.TimeFormat(ctx, layout, unix_millis)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("time.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := Str(bzArgs, 0)
-		value := Str(bzArgs, 1)
+		layout := ffi.Str(bzArgs, 0)
+		value := ffi.Str(bzArgs, 1)
 		ret0, err := std.TimeParse(ctx, layout, value)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("parseDuration", vm.DirectValue("time.parseDuration", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		duration := Str(bzArgs, 0)
+		duration := ffi.Str(bzArgs, 0)
 		ret0, err := std.TimeParseDuration(ctx, duration)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("nowIso", vm.DirectValue("time.nowIso", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.TimeNowISO(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("add", vm.DirectValue("time.add", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		unix_millis := Float(bzArgs, 0, 0)
-		duration := Str(bzArgs, 1)
+		unix_millis := ffi.Float(bzArgs, 0, 0)
+		duration := ffi.Str(bzArgs, 1)
 		ret0, err := std.TimeAdd(ctx, unix_millis, duration)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("diff", vm.DirectValue("time.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := Float(bzArgs, 0, 0)
-		b := Float(bzArgs, 1, 0)
+		a := ffi.Float(bzArgs, 0, 0)
+		b := ffi.Float(bzArgs, 1, 0)
 		ret0, err := std.TimeDiff(ctx, a, b)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	return m
 }

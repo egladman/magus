@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/types"
 )
 
 // TestNew_DisabledIsNoOp verifies that constructing a Provider with
@@ -69,8 +70,8 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Step{
 		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
 	opts := observability.CacheRunOptions(context.Background(), p)
