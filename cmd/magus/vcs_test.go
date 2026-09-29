@@ -7,12 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -223,67 +220,40 @@ func TestSplitExplainedOutputsGeneratedFileCannotExplainItself(t *testing.T) {
 	assert.Equal(t, []string{"docs/reference/cli.md", "docs/gen/index.html"}, unexplained)
 }
 
-// TestProjectKeyIsPathNotLabel pins the contract settledPaths depends on: the rebuild set
-// is keyed by project PATH, and for the ROOT that key is ".", never the display label,
-// which Display renders as the directory basename. Keying one side by label was a real
-// bug: the set held "." while the lookup asked for "magus" (or a worktree's own directory
-// name), so it missed every time and every root-owned regenerated output was left
-// modified and unstaged, which is what makes `git rebase --continue` refuse.
-func TestProjectKeyIsPathNotLabel(t *testing.T) {
-	root := &types.Project{Path: "", Dir: "/repos/magus"}
-	dotted := &types.Project{Path: ".", Dir: "/repos/magus"}
-	nested := &types.Project{Path: "docs", Dir: "/repos/magus/docs"}
-
-	assert.Equal(t, ".", projectKey(root), "the root keys as \".\", whatever its directory is called")
-	assert.Equal(t, ".", projectKey(dotted), "a root spelled \".\" keys the same as one spelled \"\"")
-	assert.Equal(t, "docs", projectKey(nested))
-
-	// The label is what this must NOT be, and only the root can tell the two apart.
-	assert.NotEqual(t, types.ProjectLabel(root.Path, root.Dir), projectKey(root),
-		"keying the root by its label is the bug; Display gives the directory basename")
-	assert.Equal(t, types.ProjectLabel(nested.Path, nested.Dir), projectKey(nested),
-		"a nested project's label and path agree, which is why the bug hid")
+// TestMergeDriverArgCount covers the protocol contract: git always passes five placeholders,
+// so anything shorter is a human at a prompt and must not report "resolved".
+func TestMergeDriverArgCount(t *testing.T) {
+	for name, args := range map[string][]string{
+		"none":  {},
+		"one":   {"ancestor"},
+		"four":  {"ancestor", "result", "other", "7"},
+		"empty": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := mergeDriverCmd(context.Background(), t.TempDir(), args)
+			require.Error(t, err)
+			assert.ErrorContains(t, err, "expected 5 arguments")
+		})
+	}
 }
 
-// TestRebuiltProjectsFindsRoot proves the two sides now meet: a plan filled the way
-// planResolution fills it is readable the way settledPaths reads it, for the root project.
-func TestRebuiltProjectsFindsRoot(t *testing.T) {
-	root := &types.Project{Path: "", Dir: "/repos/magus"}
-	plan := resolutionPlan{rebuild: map[string][]string{"generate": {projectKey(root)}}}
-
-	assert.True(t, plan.rebuiltProjects()[projectKey(root)],
-		"a root-owned regenerated output must be recognized as covered by the rebuild")
-}
-
-// TestPlanResolutionLeavesAnExcludedHandFileToAPerson is the jj path: jj routes nothing by
-// pattern, so `magus vcs resolve` picks the paths to settle itself, through
-// FindOutputProducer. A hand file an output carves out is source, so it goes to a person
-// while the generated file beside it is kept and rebuilt.
-func TestPlanResolutionLeavesAnExcludedHandFileToAPerson(t *testing.T) {
-	root := t.TempDir()
-	magusfile := `import "magus";
-
-magus.project({})
-
-export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
-}
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	m, err := magus.Open(t.Context(), root)
-	require.NoError(t, err)
-	resolver := mocks.NewMockConflictResolver(t)
-	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)
-
-	plan, err := planResolution(t.Context(), m, resolver, []types.Conflict{
-		{Path: "gen/fs.go", Kind: types.ConflictKindContent},
-		{Path: "gen/runtime.go", Kind: types.ConflictKindContent},
+// TestMergeDriverRelPath covers both callers' path conventions: git passes a repo-relative
+// path, hg an absolute one.
+func TestMergeDriverRelPath(t *testing.T) {
+	t.Run("git passes a repo-relative path through", func(t *testing.T) {
+		got, err := mergeDriverRelPath(t.TempDir(), filepath.Join("gen", "catalog.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "gen/catalog.md", got, "must be normalized to a slash path")
 	})
-	require.NoError(t, err)
 
-	assert.Equal(t, []string{"gen/fs.go"}, plan.keep)
-	assert.Equal(t, []string{"gen/runtime.go"}, plan.manual)
-	assert.Equal(t, map[string][]string{"generate": {"."}}, plan.rebuild)
+	t.Run("hg passes an absolute path, made workspace-relative", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("magus.project({})\n"), 0o644))
+
+		got, err := mergeDriverRelPath(root, filepath.Join(root, "gen", "catalog.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "gen/catalog.md", got)
+	})
 }
 
 // initGitRepo creates a temp git repo with an identity, so a commit can be made in it.
