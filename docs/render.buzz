@@ -429,3 +429,8 @@ export fun site_diagrams(dir: str) > void !> any {
 export fun site_diagram_drift(root: str, sourceGlobs: [str], verifyImports: bool) > [str] !> any {
     return diagramDrift(root, sourceGlobs: sourceGlobs, verifyImports: verifyImports);
 }
+
+// site_diagrams_observe forwards the diagrams-observe target's write, for the same reason.
+export fun site_diagrams_observe(dir: str, graph: ImportGraph) > [str] !> any {
+    return observeDiagrams(dir, graph: graph);
+}

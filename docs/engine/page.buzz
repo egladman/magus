@@ -818,6 +818,13 @@ export fun diagramDrift(root: str, sourceGlobs: [str], verifyImports: bool) > [s
     return report.findings;
 }
 
+// observeDiagrams writes each scoped figure's observed half from graph, forwarded for the
+// same reason writeDiagramPair is. Returns the paths written.
+export fun observeDiagrams(dir: str, graph: ImportGraph) > [str] !> any {
+    return diagrams\writeObservedFigures(dir,
+        imports: diagrams\ObservedImports{ indexed = graph.indexed, packages = graph.packages });
+}
+
 // dependencyFigure renders a generated dependency DAG as inline SVG inside the page's
 // Markdown. Goldmark passes block-level HTML through untouched, so the figure lands in the
 // flow without a fenced block or a client-side renderer.
@@ -879,18 +886,13 @@ export fun importFlow(id: str, title: str, scope: [str], graph: ImportGraph) > m
     final f = flow(id);
     f.title(title);
     f.scope(scope);
-    foreach (pkg in ordered) { f.node(importNodeId(pkg), label: pkg, anchor: pkg); }
+    foreach (pkg in ordered) { f.node(diagrams\observedNodeId(pkg), label: pkg, anchor: pkg); }
     foreach (pkg in ordered) {
         foreach (dep in graph.packages[pkg] ?? [<str>]) {
             if (inScope[dep] != null) {
-                f.edge(importNodeId(pkg), dst: importNodeId(dep), claim: "imports");
+                f.edge(diagrams\observedNodeId(pkg), dst: diagrams\observedNodeId(dep), claim: "imports");
             }
         }
     }
     return f;
-}
-
-// importNodeId keeps a package path out of the SVG's id space, where a slash is not welcome.
-fun importNodeId(pkg: str) > str {
-    return "pkg-" + pkg.replace("/", with: "-");
 }
