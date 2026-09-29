@@ -25,6 +25,7 @@ import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
+import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
@@ -62,6 +63,7 @@ export fun rules() > [Rule] {
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
+        Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
     ];
 }
 
@@ -72,6 +74,10 @@ final PRUNED = {".git": true, ".magus": true, "node_modules": true, "gen": true}
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
 // files would each be reported twice.
 final PRUNED_PATHS = {".claude/worktrees": true};
+
+// KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
+// figures import their observed halves.
+final KEPT_PATHS = {"docs/site/diagrams/gen": true};
 
 // walk returns every file under root outside the pruned trees, as root-relative paths.
 export fun walk(root: str) > [str] !> any {
@@ -86,7 +92,7 @@ fun walkInto(root: str, rel: str, acc: mut [str]) > void !> any {
         final p = if (rel == "") name else rel + "/" + name;
         if (!fs\isDir(root + "/" + p)) {
             acc.append(p);
-        } else if (PRUNED[name] == null and PRUNED_PATHS[p] == null) {
+        } else if ((PRUNED[name] == null or KEPT_PATHS[p] != null) and PRUNED_PATHS[p] == null) {
             walkInto(root, rel: p, acc: acc);
         }
     }
@@ -494,12 +500,14 @@ test "lint-files keys exactly what the rules read" {
 
 test "the walk prunes what no rule reads" {
     final root = fs\tempDir("lint-walk-");
-    foreach (p in ["a.lock", "gen/b.lock", "x/node_modules/c.lock", ".claude/worktrees/w/d.lock", ".claude/settings.json"]) {
+    foreach (p in ["a.lock", "gen/b.lock", "x/node_modules/c.lock", ".claude/worktrees/w/d.lock", ".claude/settings.json",
+                   "docs/site/diagrams/gen/e.buzz"]) {
         fs\mkdirAll(fs\dirname(root + "/" + p));
         fs\writeFile(root + "/" + p, content: "");
     }
     final got = walk(root);
-    assert\equal(got.len(), want: 2, message: "two files survive");
+    assert\equal(got.len(), want: 3, message: "three files survive");
     assert\contains(got, item: "a.lock", message: "top level");
     assert\contains(got, item: ".claude/settings.json", message: ".claude outside worktrees");
+    assert\contains(got, item: "docs/site/diagrams/gen/e.buzz", message: "a gen tree a rule reads");
 }

@@ -7,8 +7,9 @@
 // shared SOURCE with its own test suite, and `magus affected ci` should run that suite when
 // the library changes rather than only when a consumer happens to be rebuilt.
 //
+//   magus run lint libs/diagram   strict type check, warnings fail
 //   magus run test libs/diagram   run the in-file test blocks
-//   magus run ci libs/diagram     test
+//   magus run ci libs/diagram     lint, then test
 //
 // There is deliberately NO build target. The library ships no artifact; docs/ imports the
 // source directly (docs/site/diagrams/*.buzz and docs/engine/page.buzz), and the committed
@@ -55,6 +56,31 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["-t", "--embedded", "libs/diagram/flow.buzz"], opts: {"dir": "../.."});
 }
 
+// lint type-checks both files upstream-strict, as a figure author's `magus buzz` runs them,
+// and fails on any BZZ diagnostic. --check itself exits 0 on a warning, so the captured
+// output is graded here; an error already exits nonzero and raises out of magus\cmd.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("diagram.buzz", "flow.buzz");
+    // From the root, for the reason test gives: flow.buzz imports the renderer by that path.
+    final res = magus\cmd("buzz", args: ["--check", "libs/diagram/diagram.buzz", "libs/diagram/flow.buzz"],
+        opts: {"dir": "../..", "quiet": true});
+    final found = mut [<str>];
+    foreach (line in res.stderr.split("\n")) {
+        if (line.indexOf("[BZZ") != null) {
+            found.append(line);
+        }
+    }
+    if (found.len() > 0) {
+        foreach (line in found) {
+            magus\log.error(line);
+        }
+        throw "lint: buzz --check reported {found.len()} diagnostic(s)";
+    }
+}
+
+// ci runs lint before test, so a type error fails in seconds rather than after the suite.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, test);
+    ctx.needs(generate);
+    ctx.needs(lint);
+    ctx.needs(test);
 }

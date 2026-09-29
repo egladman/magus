@@ -3269,7 +3269,11 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "types/diagnostic.go",
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
-                   "docs/site/landing.buzz", "docs/src/styles/site.css");
+                   "docs/site/landing.buzz", "docs/src/styles/site.css",
+                   // figure-modules-type-check-strictly: the figures, the observed halves
+                   // and the renderer they import.
+                   "docs/site/diagrams/*.buzz", "docs/site/diagrams/gen/*.buzz",
+                   "libs/diagram/diagram.buzz", "libs/diagram/flow.buzz");
     magus\cmd("buzz", args: ["hack/lint.buzz"]);
 }
 

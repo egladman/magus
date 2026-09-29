@@ -515,6 +515,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // Same reasoning, one directory down: the guide embeds these templates, so their
     // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
+    // The figure modules' strict type check is a root lint-files rule. Needing it, rather
+    // than running --check here too, keeps it to one node when `magus affected ci` reaches
+    // both projects.
+    ctx.needs(workspace\lint_files);
     // The docs pages are the largest prose surface in the workspace and had no spell
     // check at all - the op was defined and never invoked from any target.
     markdown.typos(ctx);
