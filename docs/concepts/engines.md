@@ -12,6 +12,14 @@ embedded Buzz VM through a small internal seam. A `magusfile.buzz` exposes the
 [charms](charms.md). This page covers the seam and how a new language
 would plug in.
 
+<!--diagram:buzz-engine-->
+
+The same gopherbuzz pipeline runs every Buzz program magus touches: a magusfile,
+a spell, a `magus buzz` script and the browser playground. What differs per host
+is the set of modules registered before the program runs. The magusfile engine
+gets every host module; the playground's wasm build installs only the modules
+marked WASM.
+
 ## The engine interface
 
 The backend implements one small interface, `engine.Engine`, which is a

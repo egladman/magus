@@ -1,0 +1,64 @@
+// site/diagrams/buzz-engine.buzz - how a Buzz program runs, and what decides what it can
+// reach.
+//
+// The figure has one claim: every host runs the same gopherbuzz pipeline, and a host
+// differs only in the modules it registers. The magusfile engine gets every host module;
+// the browser playground gets the WASM-safe subset and nothing else. The accent pair (the
+// WASM module set, its connector to the host modules) is spent on that subset.
+//
+// parse, check and compile are one Go package, drawn as three boxes anchored at their
+// files, so the connectors between them are narrative. Every connector between packages
+// claims imports and is checked, except the playground's two: it reaches gopherbuzz and the
+// module set through internal/dry and internal/playground, which the figure does not draw.
+namespace buzzEngine;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/buzz-engine" as buzzEngineGen;
+
+export fun buzzEngineDiagram() > Diagram !> str {
+    final inside = "inside the parse, type-check and compile boxes";
+    return flow("buzz-engine", observed: buzzEngineGen\buzzEngineObserved())
+        .eyebrow("buzz")
+        .title("One pipeline, and the modules each host registers")
+        .desc("gopherbuzz parses Buzz source, type-checks it, compiles it to bytecode and "
+            + "runs it on its VM, the same way for a magusfile, a spell, a magus buzz "
+            + "script and the browser playground. The host bindings register magus's host "
+            + "modules at init, through the trampolines generated from each module's "
+            + "descriptor. The playground's wasm build installs only the modules marked "
+            + "WASM: pure compute, with no filesystem, process or network access.")
+        .node("engine", label: "Magusfile engine", sub: "load, cache, run targets", anchor: "internal/interp")
+        .node("bindings", label: "Host bindings", sub: "magus namespace, init()", anchor: "internal/interp/bindings")
+        .node("std", label: "Host modules", sub: "fs, vcs, proc, http, json", anchor: "std")
+        .node("parse", label: "Parse", sub: "tokens to AST", anchor: "libs/gopherbuzz/parser.go")
+        .node("check", label: "Type-check", sub: "BZZ diagnostics", anchor: "libs/gopherbuzz/checker.go")
+        .node("compile", label: "Compile", sub: "flat bytecode", anchor: "libs/gopherbuzz/compiler.go")
+        .node("vm", label: "VM", sub: "register window, JIT", anchor: "libs/gopherbuzz/vm")
+        .node("playground", label: "Browser playground", sub: "js/wasm editor, REPL", tag: "client", anchor: "cmd/buzz-playground")
+        .node("wasm", label: "WASM module set", sub: "pure compute only", role: Role.focal, anchor: "internal/interp/bindings/gen/modules_wasm.go")
+        .edge("engine", dst: "parse", label: "magusfile", claim: Claim.imports)
+        .edge("playground", dst: "parse", label: "editor source")
+        .edge("parse", dst: "check")
+        .edge("check", dst: "compile")
+        .edge("compile", dst: "vm", label: "bytecode", claim: Claim.imports)
+        .edge("bindings", dst: "engine", label: "init()", claim: Claim.imports)
+        .edge("bindings", dst: "std", label: "every module", claim: Claim.imports)
+        .edge("playground", dst: "wasm", label: "installs")
+        .edge("wasm", dst: "std", label: "WASM-safe only", role: EdgeRole.focal, claim: Claim.imports)
+        .zone("gopherbuzz", members: ["parse", "check", "compile", "vm"])
+        .zone("magus as host", members: ["engine", "bindings", "std"])
+        .boundary("the browser, js/wasm", members: ["playground", "wasm"])
+        .legend(Role.focal, label: "the browser's subset")
+        .scope(["libs/gopherbuzz", "libs/gopherbuzz/*", "internal/interp", "internal/interp/bindings", "std"])
+        .omit("libs/gopherbuzz", why: "drawn as its parse, type-check and compile stages, each anchored at its own file")
+        .omit("libs/gopherbuzz/ast", why: "the syntax tree parse builds and the later stages walk, " + inside)
+        .omit("libs/gopherbuzz/token", why: "the lexer's tokens and positions, inside the parse box")
+        .omit("libs/gopherbuzz/types", why: "the checker's type model, inside the type-check box")
+        .omit("libs/gopherbuzz/std", why: "upstream Buzz's stdlib; the bindings layer the host modules onto it under the same names")
+        .omit("libs/gopherbuzz/buzzgen", why: "mirrors Go types into Buzz declarations for the generators; it runs no program")
+        .omit("libs/gopherbuzz/wasm", why: "gopherbuzz's own WASI entry point; magus's browser build is the playground")
+        .omitEdge("engine", dst: "vm", why: "the engine reads vm.Value results and heap stats; programs reach the VM through the pipeline")
+        .omitEdge("engine", dst: "std", why: "one call, std.WithCwd, pins a target's working directory; the modules arrive through the bindings")
+        .omitEdge("bindings", dst: "vm", why: "every binding is a vm.DirectValue closure; the value types, not a stage")
+        .diagram();
+}

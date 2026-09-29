@@ -27,6 +27,8 @@ import "site/diagrams/cache-trust" as _;
 import "site/diagrams/diagram-pipeline" as _;
 import "site/diagrams/knowledge-graph" as _;
 import "site/diagrams/guard-path" as _;
+import "site/diagrams/agent-surface" as _;
+import "site/diagrams/buzz-engine" as _;
 // The observed halves diagrams-observe writes, one per figure with a scope. Aliased, never
 // flat: a flat import is skipped when its basename is already bound, and each shares its
 // basename with the declared figure imported above.
@@ -41,6 +43,8 @@ import "site/diagrams/gen/cache-trust" as cacheTrustGen;
 import "site/diagrams/gen/diagram-pipeline" as diagramPipelineGen;
 import "site/diagrams/gen/knowledge-graph" as knowledgeGraphGen;
 import "site/diagrams/gen/guard-path" as guardPathGen;
+import "site/diagrams/gen/agent-surface" as agentSurfaceGen;
+import "site/diagrams/gen/buzz-engine" as buzzEngineGen;
 
 // allDiagrams lays out every registered figure. Throws the first figure's layout findings,
 // so a figure that cannot be drawn cleanly fails every consumer rather than shipping.
@@ -62,6 +66,8 @@ export fun allDiagrams() > [Diagram] !> str {
         diagramPipelineDiagram(),
         knowledgeGraphDiagram(),
         guardPathDiagram(),
+        agentSurfaceDiagram(),
+        buzzEngineDiagram(),
     ];
 }
 
@@ -79,6 +85,8 @@ export fun observedFor(id: str) > Observed? {
     if (id == "diagram-pipeline") { return diagramPipelineGen\diagramPipelineObserved(); }
     if (id == "knowledge-graph") { return knowledgeGraphGen\knowledgeGraphObserved(); }
     if (id == "guard-path") { return guardPathGen\guardPathObserved(); }
+    if (id == "agent-surface") { return agentSurfaceGen\agentSurfaceObserved(); }
+    if (id == "buzz-engine") { return buzzEngineGen\buzzEngineObserved(); }
     return null;
 }
 
