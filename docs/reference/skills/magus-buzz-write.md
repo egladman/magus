@@ -3,8 +3,8 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-skill_full_bytes: 8872
-skill_short_bytes: 7345
+skill_full_bytes: 9479
+skill_short_bytes: 7952
 ---
 
 # magus-buzz-write
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `97` |
+| `agent-skill-version` | `98` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `4943b90e40ec` |
+| `skill-content` | `a3b37adae05b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -64,7 +64,7 @@ workspace's build logic.
 
 ## The smallest thing that runs
 
-Everything is imported by bare name, work goes in a function, and you call it.
+Everything is imported by name, work goes in a function, and you call it.
 
 ```buzz
 import "std";
@@ -119,17 +119,20 @@ not module functions: `"a.buzz".endsWith(".buzz")`, `s.len()`, `list.join(" ")`.
 
 ## Imports
 
-Every module, including the Buzz stdlib, must be imported by BARE name.
+Every module, including the Buzz stdlib, is imported by its bare name, except the
+data formats, which import under `encoding/`.
 
 ```buzz
-import "std";                 // print, assert
-import "fs"; import "json";   // host modules
+import "std";                        // print, assert
+import "fs"; import "encoding/json"; // host modules; json\parse, json\stringify
 ```
 
-Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
-`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `magus`, `os`,
-`path`, `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`,
-`vcs`, `xml`, `yaml`.
+`magus describe modules -o name` lists every module a script can import. By bare name:
+`archive`, `charm`, `crypto`, `diff`, `env`, `flags`, `fmt`, `fs`, `http`, `magus`,
+`markdown`, `os`, `path`, `platform`, `proc`, `semver`, `sort`, `strings`, `template`,
+`time`, `uuid`, `vcs`, and more. Under `encoding/`: `encoding/json`, `encoding/yaml`,
+`encoding/toml`, `encoding/xml`, `encoding/csv`, `encoding/ini`, `encoding/base64`,
+`encoding/hex`, `encoding/url`.
 
 ### Calling magus from a script
 
@@ -141,12 +144,11 @@ namespace rather than shelling out to the binary:
 ```buzz
 import "std"; import "magus";
 
-fun main() > void {
+export fun main(args: [str]) > void !> any {
     // opts.quiet captures the output instead of echoing it
     final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
     std\print(res.stdout);
 }
-main();
 ```
 
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
@@ -181,7 +183,7 @@ template\render(tpl, data: {"name": "world"});
 
 | thing | Buzz |
 | --- | --- |
-| namespace access | `fs\list(".")` - a BACKSLASH, not a dot |
+| namespace access | `fs\listDir(".")` - a BACKSLASH, not a dot |
 | member access | `obj.field`, `"s".len()` - a dot |
 | object literal | `Point{ x = 1 }` - `=`, not `:` |
 | map literal | `{"key": value}` - `:`, like JSON |
@@ -212,17 +214,20 @@ template\render(`Hello {{name}}!`, data: {"name": "world"});
 ## A worked script
 
 ```buzz
-import "std"; import "fs"; import "json"; import "strings";
+import "std"; import "fs"; import "encoding/json"; import "strings";
 
-fun main() > void {
+// magus buzz calls an exported main with the script's arguments; what it raises is reported.
+export fun main(args: [str]) > void !> any {
     var count = 0;
-    foreach (f in fs\list(".")) {
+    foreach (f in fs\listDir(".")) {
         if (f.endsWith(".buzz")) { count = count + 1; }
     }
     std\print(json\stringify({"buzz_files": count, "slug": strings\kebabCase("Hello World")}));
 }
-main();
 ```
+
+Before writing a script from nothing, look for one the workspace keeps to copy: magus's
+own repository indexes its scripts, each one tested, in `hack/README.md`.
 
 ## Test what you write
 
@@ -285,7 +290,7 @@ the same language the workspace's own build logic is written in.
 
 ## The smallest thing that runs
 
-Everything is imported by bare name, work goes in a function, and you call it.
+Everything is imported by name, work goes in a function, and you call it.
 That skeleton plus `magus describe module` covers most scripts:
 
 ```buzz
@@ -342,18 +347,21 @@ not module functions: `"a.buzz".endsWith(".buzz")`, `s.len()`, `list.join(" ")`.
 
 ## Imports
 
-Every module, including the Buzz stdlib, must be imported by BARE name. There is
-no `magus:` or `buzz:` prefix on the host modules.
+Every module, including the Buzz stdlib, is imported by its bare name, except the
+data formats, which import under `encoding/`. There is no `magus:` or `buzz:`
+prefix on the host modules.
 
 ```buzz
-import "std";                 // print, assert
-import "fs"; import "json";   // host modules
+import "std";                        // print, assert
+import "fs"; import "encoding/json"; // host modules; json\parse, json\stringify
 ```
 
-Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
-`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `magus`, `os`,
-`path`, `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`,
-`vcs`, `xml`, `yaml`.
+`magus describe modules -o name` lists every module a script can import. By bare name:
+`archive`, `charm`, `crypto`, `diff`, `env`, `flags`, `fmt`, `fs`, `http`, `magus`,
+`markdown`, `os`, `path`, `platform`, `proc`, `semver`, `sort`, `strings`, `template`,
+`time`, `uuid`, `vcs`, and more. Under `encoding/`: `encoding/json`, `encoding/yaml`,
+`encoding/toml`, `encoding/xml`, `encoding/csv`, `encoding/ini`, `encoding/base64`,
+`encoding/hex`, `encoding/url`.
 
 ### Calling magus from a script
 
@@ -366,12 +374,11 @@ version-pinned, and has no arg-quoting to get wrong:
 ```buzz
 import "std"; import "magus";
 
-fun main() > void {
+export fun main(args: [str]) > void !> any {
     // opts.quiet captures the output instead of echoing it
     final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
     std\print(res.stdout);
 }
-main();
 ```
 
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
@@ -406,7 +413,7 @@ template\render(tpl, data: {"name": "world"});
 
 | thing | Buzz |
 | --- | --- |
-| namespace access | `fs\list(".")` - a BACKSLASH, not a dot |
+| namespace access | `fs\listDir(".")` - a BACKSLASH, not a dot |
 | member access | `obj.field`, `"s".len()` - a dot |
 | object literal | `Point{ x = 1 }` - `=`, not `:` |
 | map literal | `{"key": value}` - `:`, like JSON |
@@ -442,17 +449,20 @@ template\render(`Hello {{name}}!`, data: {"name": "world"});
 ## A worked script
 
 ```buzz
-import "std"; import "fs"; import "json"; import "strings";
+import "std"; import "fs"; import "encoding/json"; import "strings";
 
-fun main() > void {
+// magus buzz calls an exported main with the script's arguments; what it raises is reported.
+export fun main(args: [str]) > void !> any {
     var count = 0;
-    foreach (f in fs\list(".")) {
+    foreach (f in fs\listDir(".")) {
         if (f.endsWith(".buzz")) { count = count + 1; }
     }
     std\print(json\stringify({"buzz_files": count, "slug": strings\kebabCase("Hello World")}));
 }
-main();
 ```
+
+Before writing a script from nothing, look for one the workspace keeps to copy: magus's
+own repository indexes its scripts, each one tested, in `hack/README.md`.
 
 ## Test what you write
 

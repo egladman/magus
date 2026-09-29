@@ -1,0 +1,120 @@
+// Cost: grows with tree size.
+//
+// Lists the working tree's uncommitted files grouped by owning project, then by the role
+// the workspace declares for each (source, output, maintained, unclaimed). A changed
+// output belongs with the source that generated it, and an unclaimed file is one no
+// project's globs mention: both read differently from an edited source.
+//
+//	magus buzz hack/ls-uncommitted.buzz
+namespace lsuncommitted;
+
+import "flags";
+import "magus";
+import "sort";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/ls-uncommitted.buzz";
+final HELP = "cost: grows with tree size\n{USAGE}";
+
+export object Entry {
+    path: str,
+    project: str,
+    role: str,
+}
+
+// render groups entries by project, projects and roles in name order, each with its count.
+export fun render(entries: [Entry]) > [str] {
+    final byProject = mut {<str: mut {str: mut [str]}>};
+    foreach (e in entries) {
+        final project = if (e.project == "") "(no project)" else e.project;
+        if (byProject[project] == null) {
+            byProject[project] = mut {<str: mut [str]>};
+        }
+        final roles = byProject[project]!;
+        if (roles[e.role] == null) {
+            roles[e.role] = mut [<str>];
+        }
+        roles[e.role]!.append(e.path);
+    }
+    final lines = mut [<str>];
+    foreach (project in sort\strings(byProject.keys())) {
+        final roles = byProject[project]!;
+        var n = 0;
+        foreach (_, paths in roles) {
+            n = n + paths.len();
+        }
+        lines.append("{project} ({n})");
+        foreach (role in sort\strings(roles.keys())) {
+            final paths = roles[role]!;
+            lines.append("  {role} ({paths.len()})");
+            foreach (p in sort\strings(paths)) {
+                lines.append("    {p}");
+            }
+        }
+    }
+    return lines;
+}
+
+export fun uncommitted() > [Entry] !> any {
+    final paths = mut [<str>];
+    foreach (p in vcs\status().files) {
+        paths.append(p.value);
+    }
+    final entries = mut [<Entry>];
+    if (paths.len() == 0) {
+        return entries;
+    }
+    foreach (f in magus\describeFile(paths).files) {
+        entries.append(Entry{ path = f.path, project = f.project, role = f.role });
+    }
+    return entries;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "ls-uncommitted: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    std\print("read-only");
+    final entries = uncommitted();
+    if (entries.len() == 0) {
+        std\print("nothing uncommitted");
+        return;
+    }
+    foreach (line in render(entries)) {
+        std\print(line);
+    }
+}
+
+test "files group by project, then by role, each with its count" {
+    final lines = render([
+        Entry{ path = "std/flags.go", project = ".", role = "source" },
+        Entry{ path = "docs/reference/buzz/flags.md", project = "docs", role = "output" },
+        Entry{ path = "internal/guard/shell.go", project = ".", role = "source" },
+        Entry{ path = "scratch.txt", project = "", role = "unclaimed" },
+    ]);
+    assert\equal(lines, want: [
+        "(no project) (1)",
+        "  unclaimed (1)",
+        "    scratch.txt",
+        ". (2)",
+        "  source (2)",
+        "    internal/guard/shell.go",
+        "    std/flags.go",
+        "docs (1)",
+        "  output (1)",
+        "    docs/reference/buzz/flags.md",
+    ], message: "grouped");
+}
+
+test "every uncommitted path in this checkout is classified once" {
+    final entries = uncommitted();
+    assert\equal(entries.len(), want: vcs\status().files.len(), message: "one entry per status path");
+}

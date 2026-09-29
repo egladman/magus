@@ -49,6 +49,12 @@ PY`,
 		"python3 - <<'PY'\np = 'internal/ledger/store.go'\ns = open(p).read()\nopen(p, 'w').write(s)\nPY",
 		`python3 -c "from pathlib import Path; Path('internal/ledger/store.go').write_text(x)"`,
 		"python3 - internal/ledger/store.go <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write(x)\nPY",
+		// A JavaScript binding names its destination behind a declaring keyword.
+		`node -e "const p = 'internal/ledger/store.go'; require('fs').writeFileSync(p, out)"`,
+		// Buzz carried on the line: an -e snippet, or a heredoc on stdin.
+		`./magus buzz -e 'fs\writeFile("internal/ledger/store.go", content: out);'`,
+		"magus buzz - <<'BZ'\nfinal p: str = \"internal/ledger/store.go\";\nfs\\writeFileAtomic(p, content: out);\nBZ",
+		"magus buzz --embedded <<'BZ'\nfs\\writeLines(\"internal/ledger/store.go\", lines: rows);\nBZ",
 	} {
 		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
 	}
@@ -93,6 +99,16 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		"python3 - <<'PY'\nimport json, os\nSCRATCH = '/private/tmp/claude-501/scratchpad'\nrows = {'internal/ledger/store.go': 1}\n" +
 			"with open(os.path.join(SCRATCH, 'rows.json'), 'w') as f:\n    f.write(json.dumps(rows))\nPY",
 		"python3 - <<'PY' > /private/tmp/claude-501/scratchpad/out.json\nimport json, sys\nsys.stdout.write(json.dumps(['internal/ledger/store.go']))\nPY",
+
+		// The same relative name, after a cd into scratch, is the scratch copy.
+		`cd /tmp/x/scratchpad && python3 -c "open('internal/ledger/store.go','w').write(x)"`,
+		`S=/private/tmp/c/scratchpad; cd "$S" && ./magus buzz -e 'fs\writeFile("internal/ledger/store.go", content: x);'`,
+
+		// Buzz that appends, creates, reads, or names its file for the content judge.
+		`magus buzz -e 'fs\appendFile("internal/ledger/store.go", content: x);'`,
+		`magus buzz -e 'fs\writeFile("internal/ledger/fresh.go", content: x);'`,
+		`magus buzz -e 'std\print(fs\readFile("internal/ledger/store.go"));'`,
+		"magus buzz hack/rewrite.buzz",
 	} {
 		assert.Empty(t, denyInterpreterRewrite(at, command, DialectBash), "%q", command)
 	}

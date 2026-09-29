@@ -84,6 +84,60 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 	assert.Empty(t, denyScriptContent(Dependencies{}, "", "bash retry.sh", DialectBash).Deny)
 }
 
+// TestGuardJudgesTheBuzzScriptALineRuns: `magus buzz <file>` writing a tracked file through
+// fs is the rewrite python's open(p, 'w') is refused for, and it was never read: the line's
+// first word is the magus binary, which the script judge took for the script.
+func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
+	dir := t.TempDir()
+	scripts := map[string]string{
+		"internal/x.go": "package x\n",
+		"rewrite.buzz": "import \"fs\";\nfinal p: str = \"internal/x.go\";\n" +
+			"export fun main(args: [str]) > void !> any {\n    fs\\writeFile(p, content: fs\\readFile(p).replace(\"A\", with: \"B\"));\n}\n",
+		"atomic.buzz":  "fs\\writeFileAtomic(\"internal/x.go\", content: body);\n",
+		"lines.buzz":   "fs\\writeLines(\"internal/x.go\", lines: rows);\n",
+		"append.buzz":  "fs\\appendFile(\"internal/x.go\", content: row);\n",
+		"fresh.buzz":   "fs\\writeFile(\"internal/fresh.go\", content: body);\n",
+		"scratch.buzz": "fs\\writeFile(\"/tmp/x/scratchpad/internal/x.go\", content: body);\n",
+		"argv.buzz":    "export fun main(args: [str]) > void !> any { fs\\writeFile(args[0], content: body); }\n",
+		"read.buzz":    "std\\print(fs\\readFile(\"internal/x.go\"));\n",
+	}
+	for name, body := range scripts {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+	deps := Dependencies{scope: workspaceScope{root: dir}}
+	for _, tt := range []struct {
+		command string
+		denied  bool
+	}{
+		{"./magus buzz rewrite.buzz", true},
+		{"magus buzz --embedded rewrite.buzz -- --file a.go", true},
+		{"magus buzz -t rewrite.buzz", true},
+		{"magus buzz atomic.buzz", true},
+		{"magus buzz lines.buzz", true},
+
+		// An append cannot mangle a line already there, and a new or scratch file is output.
+		{"magus buzz append.buzz", false},
+		{"magus buzz fresh.buzz", false},
+		{"magus buzz scratch.buzz", false},
+		// A destination built at run time proves nothing from the text.
+		{"magus buzz argv.buzz -- internal/x.go", false},
+		{"magus buzz read.buzz", false},
+		// --check runs nothing, and an -e snippet is read from the line itself.
+		{"magus buzz --check rewrite.buzz", false},
+		{`magus buzz -e 'fs\writeFile("internal/x.go", content: "")'`, false},
+		{"magus run build .", false},
+	} {
+		v := denyScriptContent(deps, dir, tt.command, DialectBash)
+		if !tt.denied {
+			assert.Empty(t, v.Deny, tt.command)
+			continue
+		}
+		assert.Equal(t, denyRuleInterpreterRewrite, v.Rule.Name, tt.command)
+		assert.Contains(t, v.Deny, "Use your editor tool on internal/x.go", tt.command)
+	}
+}
+
 // A line that earned its own deny keeps it, and a script's deny outranks an advisory.
 func TestRankScriptContent(t *testing.T) {
 	script := ShellVerdict{Deny: "script", Rule: denyRule{Name: denyRuleBusyWait}}
@@ -126,6 +180,12 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 		assert.Equal(t, tt.rule, v.Rule.Name, tt.name)
 		assert.Contains(t, v.Deny, "Judged from what this write leaves in", tt.name)
 	}
+
+	// A .buzz file is as often a magusfile or spell that writes its outputs by name, so it
+	// is judged when `magus buzz` runs it rather than when it is written.
+	require.NoError(t, os.WriteFile(path("tracked.go"), []byte("package x\n"), 0o644))
+	rooted := Dependencies{scope: workspaceScope{root: dir}}
+	assert.Empty(t, denyScriptWrite(rooted, path("gen.buzz"), writeFields{Content: "fs\\writeFile(\"tracked.go\", content: body);\n"}).Deny)
 }
 
 // The command side reaches Judge through the envelope's cwd, which is where a relative

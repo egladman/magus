@@ -1,0 +1,173 @@
+// Cost: grows with tree size.
+//
+// Compares two directory trees file by file: what only one side has, and a line count of
+// what changed in each file both have. Declared outputs are left out, because a generated
+// file differs whenever its source does and says nothing the source diff does not.
+//
+//	magus buzz hack/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]
+//
+// --unified prints each changed file's diff under its summary line. Paths are classified
+// against the workspace this runs in, so compare two checkouts of it, or a checkout and a
+// copy of one.
+namespace diffdirs;
+
+import "diff";
+import "flags";
+import "fs";
+import "magus";
+import "sort";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]";
+final HELP = "cost: grows with tree size\n{USAGE}";
+
+// PRUNED are directories that hold VCS metadata, local state or installed dependencies,
+// never content either side authored.
+final PRUNED = {".git": true, ".magus": true, "node_modules": true};
+
+export object Change {
+    path: str,
+    // side is "a" or "b" for a file only that side has, "both" for one that differs.
+    side: str,
+    stat: str,
+}
+
+// files returns every file under root outside the pruned directories, root-relative.
+export fun files(root: str) > [str] !> any {
+    final acc = mut [<str>];
+    walkInto(root, rel: "", acc: acc);
+    return acc;
+}
+
+fun walkInto(root: str, rel: str, acc: mut [str]) > void !> any {
+    final dir = if (rel == "") root else "{root}/{rel}";
+    foreach (name in fs\listDir(dir)) {
+        final p = if (rel == "") name else "{rel}/{name}";
+        if (!fs\isDir("{root}/{p}")) {
+            acc.append(p);
+        } else if (PRUNED[name] == null) {
+            walkInto(root, rel: p, acc: acc);
+        }
+    }
+}
+
+// compare reports each of paths that differs between a and b, in path order.
+export fun compare(a: str, b: str, paths: [str]) > [Change] !> any {
+    final changes = mut [<Change>];
+    foreach (p in sort\strings(paths)) {
+        final inA = fs\isFile("{a}/{p}");
+        final inB = fs\isFile("{b}/{p}");
+        if (inA and !inB) {
+            changes.append(Change{ path = p, side = "a", stat = "" });
+        } else if (inB and !inA) {
+            changes.append(Change{ path = p, side = "b", stat = "" });
+        } else {
+            final stat = diff\stat(fs\readFile("{a}/{p}"), b: fs\readFile("{b}/{p}"));
+            if (stat != "") {
+                changes.append(Change{ path = p, side = "both", stat = stat });
+            }
+        }
+    }
+    return changes;
+}
+
+// union is every path either side holds, once.
+export fun union(a: [str], b: [str]) > [str] {
+    final seen = mut {<str: bool>};
+    final all = mut [<str>];
+    foreach (p in a + b) {
+        if (seen[p] == null) {
+            seen[p] = true;
+            all.append(p);
+        }
+    }
+    return all;
+}
+
+export fun render(c: Change) > str {
+    if (c.side == "both") {
+        return "changed  {c.path}  ({c.stat})";
+    }
+    return "only {c.side}   {c.path}";
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--unified", "--help"], valued: ["--a", "--b"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "diff-dirs: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final a = parsed.values["--a"] ?? "";
+    final b = parsed.values["--b"] ?? "";
+    if (a == "" or b == "" or !fs\isDir(a) or !fs\isDir(b)) {
+        throw "diff-dirs: --a and --b each name a directory\n{USAGE}";
+    }
+    final report = diffDirs(a, b: b);
+    std\print("read-only");
+    foreach (c in report.changes) {
+        std\print(render(c));
+        if (parsed.values["--unified"] != null and c.side == "both") {
+            std\print(diff\unified(fs\readFile("{a}/{c.path}"), b: fs\readFile("{b}/{c.path}"),
+                from_label: "a/{c.path}", to_label: "b/{c.path}"));
+        }
+    }
+    std\print("{report.changes.len()} of {report.compared} files differ; {report.outputs} declared outputs left out");
+}
+
+export object Report {
+    changes: [Change],
+    compared: int,
+    outputs: int,
+}
+
+// diffDirs compares every file under a and b that is not a declared output.
+export fun diffDirs(a: str, b: str) > Report !> any {
+    final kept = mut [<str>];
+    var outputs = 0;
+    final all = union(files(a), b: files(b));
+    if (all.len() > 0) {
+        foreach (f in magus\describeFile(all).files) {
+            if (f.role == "output") {
+                outputs = outputs + 1;
+            } else {
+                kept.append(f.path);
+            }
+        }
+    }
+    return Report{ changes = compare(a, b: b, paths: kept), compared = kept.len(), outputs = outputs };
+}
+
+fun fixture() > obj{ a: str, b: str } !> any {
+    final root = fs\tempDir("diff-dirs-");
+    final layout = {
+        "a/same.txt": "x\n", "b/same.txt": "x\n",
+        "a/edited.txt": "one\ntwo\n", "b/edited.txt": "one\n2\nthree\n",
+        "a/gone.txt": "x\n",
+        "b/sub/new.txt": "x\n",
+        "a/.git/HEAD": "ref: a\n", "b/.git/HEAD": "ref: b\n",
+    };
+    foreach (p, body in layout) {
+        fs\mkdirAll(fs\dirname("{root}/{p}"));
+        fs\writeFile("{root}/{p}", content: body);
+    }
+    return .{ a = "{root}/a", b = "{root}/b" };
+}
+
+test "files lists every file below the root and skips VCS metadata" {
+    final dirs = fixture();
+    assert\equal(sort\strings(files(dirs.b)), want: ["edited.txt", "same.txt", "sub/new.txt"], message: "b");
+}
+
+test "compare reports each side's own files and a line count for each edit" {
+    final dirs = fixture();
+    final got = mut [<str>];
+    foreach (c in compare(dirs.a, b: dirs.b, paths: union(files(dirs.a), b: files(dirs.b)))) {
+        got.append(render(c));
+    }
+    assert\equal(got, want: ["changed  edited.txt  (2 added, 1 removed)", "only a   gone.txt", "only b   sub/new.txt"], message: "changes");
+}

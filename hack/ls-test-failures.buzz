@@ -1,0 +1,157 @@
+// Cost: none.
+//
+// Lists a failed Go test run's failures, one line each as `file:line: message`, from the
+// run's captured output: the output ref given, else the newest failed test target in
+// `magus session ls`. The whole log is `magus query output <ref>`; this is the part of it
+// a fix starts from.
+//
+//	magus buzz hack/ls-test-failures.buzz -- [--ref <output-ref>]
+//
+// go test prints a file's base name; the package line under it supplies the directory, so
+// each path is repository-relative. A failure that names no line (a parent of failed
+// subtests, a panic) is listed by its package and test name.
+namespace lstestfailures;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/ls-test-failures.buzz -- [--ref <output-ref>]";
+final HELP = "cost: none\n{USAGE}";
+
+final FAIL_TEST = std\pattern(`^\s*--- FAIL: (\S+)`);
+final LOCATION = std\pattern(`^\s+([\w.-]+\.go):(\d+): ?(.*)$`);
+final TESTIFY_ERROR = std\pattern(`^\s+Error:\s+(.*)$`);
+final FAIL_PACKAGE = std\pattern(`^FAIL\s+(\S+)\s`);
+
+export object Failure {
+    test: str,
+    file: str = "",
+    line: str = "",
+    message: str = "",
+    dir: str = "",
+}
+
+// failures reads go test's output. module is the Go module path, stripped from each
+// package to leave its directory.
+export fun failures(output: str, module: str) > [Failure] {
+    final found = mut [<mut Failure>];
+    // The failures from here on have not met their package line yet.
+    var unplaced = 0;
+    var current: mut Failure? = null;
+    foreach (line in output.split("\n")) {
+        final fail = FAIL_TEST.match(line);
+        if (fail != null) {
+            current = mut Failure{ test = fail![1] };
+            found.append(current!);
+            continue;
+        }
+        final pkg = FAIL_PACKAGE.match(line);
+        if (pkg != null) {
+            final dir = if (pkg![1] == module) "" else pkg![1].sub(module.len() + 1);
+            for (var i = unplaced; i < found.len(); i = i + 1) {
+                found[i].dir = dir;
+            }
+            unplaced = found.len();
+            current = null;
+            continue;
+        }
+        if (current == null) {
+            continue;
+        }
+        final loc = LOCATION.match(line);
+        if (loc != null and current!.file == "") {
+            current!.file = loc![1];
+            current!.line = loc![2];
+            current!.message = loc![3].trim();
+            continue;
+        }
+        final testify = TESTIFY_ERROR.match(line);
+        if (testify != null and current!.message == "") {
+            current!.message = testify![1].trim();
+        }
+    }
+    return found;
+}
+
+export fun render(f: Failure) > str {
+    if (f.file == "") {
+        final pkg = if (f.dir == "") "." else f.dir;
+        return "{pkg}: {f.test}: failed, no line named";
+    }
+    final dir = if (f.dir == "") "" else "{f.dir}/";
+    return "{dir}{f.file}:{f.line}: {f.test}: {f.message}";
+}
+
+// latestFailedTest is the newest failed test target's output ref, or "".
+fun latestFailedTest() > str !> any {
+    final listing = json\parse(magus\cmd("session", args: ["ls", "-o", "json"], opts: {"quiet": true}).stdout);
+    foreach (inv in listing["invocations"] ?? []) {
+        foreach (t in inv["targets"] ?? []) {
+            if ((t["target"] ?? "").startsWith("test") and t["outcome"] == "fail") {
+                return t["ref"] ?? "";
+            }
+        }
+    }
+    return "";
+}
+
+fun modulePath() > str !> any {
+    foreach (line in fs\readLines("go.mod")) {
+        if (line.startsWith("module ")) {
+            return line.sub(7).trim();
+        }
+    }
+    return "";
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--ref"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "ls-test-failures: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final run = testFailures(parsed.values["--ref"] ?? "");
+    std\print("read-only");
+    std\print("{run.ref} {run.target}: {run.failures.len()} failing tests");
+    foreach (f in run.failures) {
+        std\print(render(f));
+    }
+}
+
+export object Run {
+    ref: str,
+    target: str,
+    failures: [Failure],
+}
+
+// testFailures reads the failures of the test run whose output is ref, or of the newest
+// failed test target when ref is "".
+export fun testFailures(ref: str) > Run !> any {
+    final chosen = if (ref != "") ref else latestFailedTest();
+    if (chosen == "") {
+        throw "ls-test-failures: no failed test run in `magus session ls`; pass --ref <output-ref>";
+    }
+    final rec: magus\OutputRecord = magus\output(chosen);
+    return Run{ ref = rec.ref, target = "{rec.project}:{rec.target}", failures = failures(rec.output, module: modulePath()) };
+}
+
+test "each failure is its file and line under its package's directory, with its message" {
+    final got = mut [<str>];
+    foreach (f in failures(fs\readFile("hack/testdata/go-test-failure.txt"), module: "github.com/example/repo")) {
+        got.append(render(f));
+    }
+    assert\equal(got, want: [
+        "internal/guard/shell_test.go:1646: TestDenyTextsPointAtTheReferenceScripts: Not equal:",
+        "internal/guard: TestRewrite: failed, no line named",
+        "internal/guard/rewrite_test.go:97: TestRewrite/scratch_path: \"cd /tmp/x && python3 -c ...\" rewrites a tracked file",
+        "std/flags_test.go:40: TestParse: got [a], want [a b]",
+    ], message: "failures");
+}

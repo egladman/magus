@@ -34,8 +34,11 @@ var Flags = Module{
 			Doc: "Parse argv against the declared flags, returning {values, positionals, unknown}: " +
 				"switches take no value and record \"true\", valued flags take the next word or an " +
 				"=value suffix, everything after `--` is a positional, and every argument that was " +
-				"not declared is returned in unknown rather than guessed at. Errors when a valued " +
-				"flag is given no value.",
+				"not declared is returned in unknown rather than guessed at. A flag is declared as it " +
+				"is typed, dashes included (\"--file\", not \"file\"), and values is keyed the same way. " +
+				"A bare word before `--` is unknown, not a positional; `magus buzz <file> -- <args>` " +
+				"consumes its own `--`, so a script taking paths is run with a second one. Errors when " +
+				"a valued flag is given no value.",
 			Args: []Arg{
 				{Name: "argv", Type: TypeStringSlice},
 				{Name: "switches", Type: TypeStringSlice},

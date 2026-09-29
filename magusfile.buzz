@@ -3232,6 +3232,8 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    // table names or this project owns near them, not "**/*.buzz",
                    // which would reach into every nested project's own magusfile.
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
+                   // hack-scripts-start-with-a-verb checks every script is listed here.
+                   "hack/README.md",
                    ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",

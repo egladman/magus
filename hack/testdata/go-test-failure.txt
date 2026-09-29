@@ -1,0 +1,20 @@
+ok  	github.com/example/repo/internal/graph/url	1.982s	coverage: 0.0% of statements [no tests to run]
+--- FAIL: TestDenyTextsPointAtTheReferenceScripts (0.00s)
+    shell_test.go:1646:
+        	Error Trace:	github.com/example/repo/internal/guard/shell_test.go:1646
+        	Error:      	Not equal:
+        	            	expected: "output-pipe"
+        	            	actual  : ""
+        	Messages:   	./magus describe targets -o json | jq .
+--- FAIL: TestRewrite (0.00s)
+    --- FAIL: TestRewrite/scratch_path (0.00s)
+        rewrite_test.go:97: "cd /tmp/x && python3 -c ..." rewrites a tracked file
+FAIL
+coverage: 32.5% of statements
+FAIL	github.com/example/repo/internal/guard	1.296s
+--- FAIL: TestParse (0.01s)
+    flags_test.go:40: got [a], want [a b]
+FAIL
+FAIL	github.com/example/repo/std	0.412s
+ok  	github.com/example/repo/internal/handler	1.813s	coverage: 0.0% of statements [no tests to run]
+FAIL

@@ -159,24 +159,28 @@ self-improvement change the person asks for.
 
 | Script | Replaces | State |
 |---|---|---|
-| `rename-symbol` | regex renames: resolves through the graph, dry-runs `refs --rename`, applies on `--apply` | planned |
-| `transcript-tally` | ad hoc transcript mining: counts tool calls or pattern matches in a jsonl | planned |
-| `group-changes` | `git status \| awk \| sort \| uniq -c`: groups changed files by owning project and role | planned |
-| `magus-json` | `-o json \| python`: typed field access on magus results | planned |
-| `widen-job` | `jq` edits of job records: reads, appends paths, puts | planned |
-| `diff-trees` | ad hoc tree comparisons, skipping declared outputs | planned |
-| `code-census` | awk declaration counts: aggregates symbols from the graph | planned |
-| `import-session` | picking up a session that ended abruptly (Codex, Claude Code, Cursor): prints what was asked, how it ended, the checkout and its state, and the preserve-and-switch commands, never writing into the other checkout | planned |
-| `split-change` | splitting a large change by hand: groups by owning project, attaches outputs to their generator, orders by project dependencies, prints a stack of branches, creates local stacked branches on `--apply`, never pushes. Grouping is by project, so the root project stays one large branch; a finer split needs package or symbol coupling | done |
+| Naming | a name says what a script does and what it costs before it runs: the first word is a verb from a closed list (read-only `ls`, `show`, `count`, `diff`, `summarize`, `example`; writing `rename`, `split`, which dry-run until `--apply`), `on-<where>` prefixes run a command elsewhere, and libraries the magusfile imports are nouns. CI-only steps live in `hack/ci/`. The `hack-scripts-start-with-a-verb` lint rule enforces it and `hack/README.md` lists every script with its effect and cost. Five personas shaped it (plans/hack-script-naming-2026-09-29/) | done |
+| `rename-symbol` | regex renames: resolves through the graph, refuses a stale index naming `magus graph build`, dry-runs `refs --rename`, applies on `--apply` | done |
+| `summarize-transcript` | ad hoc transcript mining: calls per tool, refusals by rule, retries after a refusal, uptake of the suggested command, tokens; `--match` counts a pattern | done |
+| `count-refusals` | refusals by rule across recorded sessions (today only the recurring ones `magus session --brief` exposes; a typed trail reader would see all) | done |
+| `ls-uncommitted` | `git status \| awk \| sort \| uniq -c`: groups changed files by owning project and role | done |
+| `example-typed-results` | `-o json \| python`: a worked example of typed field access on magus results, to copy | done |
+| `diff-dirs` | ad hoc tree comparisons, skipping declared outputs | done |
+| `count-symbols` | awk declaration counts: aggregates symbols from the graph | done |
+| `ls-test-failures` | reading 400 lines of test log: one `file:line: message` per failing test | done |
+| `ls-worktrees` | `git worktree list` rounds: every worktree with dirty, unpushed and job columns | done |
+| `show-interrupted-session` | picking up a session that ended abruptly (Codex, Claude Code, Cursor): prints what was asked, how it ended, the checkout and its state, and the preserve-and-switch commands, never writing into the other checkout | done |
+| `split-into-branches` | splitting a large change by hand: groups by owning project, attaches outputs to their generator, orders by project dependencies, prints a stack of branches, creates local stacked branches on `--apply`, never pushes. Grouping is by project, so the root project stays one large branch; a finer split needs package or symbol coupling | done |
+| Widening a job's write paths | `jq` edits of job records: moves into the CLI (`magus job edit --add-write-path`/`--remove-write-path`, dry run until `--apply`), since the job store has one writer, the binary; no refusal ever names it | planned |
 | `on-actions` (exists) | proving something on Linux without a pull request: a prefix, `magus buzz hack/on-actions.buzz -- magus <argv>`, pushes a scratch branch, runs the command on a hosted runner, prints its output and exits with its code, then deletes the run and the branch; `--detach`, `--result`, `--delete` and `--ls` manage runs | done |
 | `on-linux` | the same prefix run in a local Podman container (ADR 0003's option B', revived while `--platform` stays on hold): `magus buzz hack/on-linux.buzz -- magus <argv>`, with `--arch`, `--env`, `--image`, `--keep`, `--ls`, `--delete` | in progress |
 | An explicit ephemeral copy. `magus buzz --copy hack/x.buzz` copies the script outside the tree and outside `.magus/`, stamps its first line with the source path, digest and revision, and prints the path. Running the copy prints one line saying it is a one-off (modified or not) and records its provenance in the activity trail. The tracked script is never edited in place unless the person asked (see the guard's ask above) | editing a reference script in place | planned |
 | `narrow-tests` | hand-built `magus run ... -- -run` lines (1,516): changed symbols to the tests that reference them directly, one line per project. Could instead be a tests column on `affected --impact` | proposed |
-| `fan-out` (with `widen-job` folded in) | hand-written job records (391 forks): expands a typed plan's globs, drops declared outputs, proves write sets disjoint and clear of live leases, prints the fork records; `--apply` writes them through `magus\job` | proposed |
+| `fan-out` | hand-written job records (391 forks): expands a typed plan's globs, drops declared outputs, proves write sets disjoint and clear of live leases, prints the fork records; `--apply` writes them through `magus\job` | proposed |
 | `worker-changes` | shuttling patches between checkouts (724 `git -C` calls): reads a worker's checkout, grades its changes against its job, and on `--apply` copies source changes here, refusing a path that also changed here | proposed |
 | `retro` | self-improvement: tallies recent guard verdicts per rule (denies that keep being retried, advice that rarely converts, the same edit to an ephemeral copy across sessions) and prints candidate rule, skill or memory changes with the command the person runs; never applies anything | proposed |
 | `provenance` | `git log -S` and `gh pr` archaeology (324): the commits, pull requests, pinning tests and memory entries behind a symbol or text; `--fetch` names the host and time | proposed |
-| `checkouts` | `git worktree list` rounds: every worktree's branch, dirty files, unpushed commits, lease and last guarded call; prints a removal command only for clean, landed, unleased checkouts | proposed |
+| Removing checkouts | beyond `ls-worktrees`: a removal command printed only for clean, landed, unleased checkouts | proposed |
 | Conflict context for `magus vcs resolve` (each remaining hunk's enclosing declaration and the commits touching it), rather than a script | awk passes over conflict markers (211) | proposed |
 | Running some scripts on a schedule | | proposed |
 | Long term: an agent reaching for an interpreter reaches for Buzz | | proposed |

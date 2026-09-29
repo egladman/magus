@@ -1,0 +1,101 @@
+// Cost: none.
+//
+// Counts guard refusals by rule from this checkout's activity trail, through the reader
+// magus already exposes: `magus session --brief`, whose feedback folds the trail's
+// observations per rule and host session. Each rule's line says how many refusals, across
+// how many sessions, and in how many of those the agent went on to run magus.
+//
+//	magus buzz hack/count-refusals.buzz
+//
+// That reader keeps only what recurs, a rule refused three times in one session or in two
+// sessions, over the trail's most recent observations: a one-off refusal is a correction
+// in progress, not a pattern. Every refusal of one transcript is summarize-transcript's.
+namespace countrefusals;
+
+import "encoding/json";
+import "flags";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/count-refusals.buzz";
+final HELP = "cost: none\n{USAGE}";
+
+export object Rule {
+    name: str,
+    denied: int,
+    sessions: int,
+    followed: int,
+    surfaces: [str],
+}
+
+// byRule folds the brief's feedback, one row per rule and surface, into one row per rule,
+// most refused first.
+export fun byRule(brief: str) > [Rule] !> any {
+    final rows = mut {<str: mut Rule>};
+    foreach (f in json\parse(brief)["feedback"] ?? []) {
+        final name = f["rule"] ?? "";
+        if (rows[name] == null) {
+            rows[name] = mut Rule{ name = name, denied = 0, sessions = 0, followed = 0, surfaces = mut [<str>] };
+        }
+        final r = rows[name]!;
+        r.denied = r.denied + std\toInt(f["denied"] ?? 0);
+        r.sessions = r.sessions + std\toInt(f["sessions"] ?? 0);
+        r.followed = r.followed + std\toInt(f["followed_sessions"] ?? 0);
+        r.surfaces = r.surfaces + [f["surface"] ?? ""];
+    }
+    final all = mut [<Rule>];
+    foreach (_, r in rows) {
+        all.append(r);
+    }
+    return all.sort(fun (a: Rule, b: Rule) > bool => a.denied > b.denied or (a.denied == b.denied and a.name < b.name));
+}
+
+export fun render(rules: [Rule]) > [str] {
+    final lines = mut ["recurring guard refusals in this checkout's recent trail: {rules.len()} rules"];
+    foreach (r in rules) {
+        lines.append("  {r.denied}  {r.name}  ({r.sessions} sessions, magus run after it in {r.followed}; {r.surfaces.join(", ")})");
+    }
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "count-refusals: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final rules = refusals();
+    std\print("read-only");
+    foreach (line in render(rules)) {
+        std\print(line);
+    }
+}
+
+// refusals are this checkout's recurring refusals, one row per rule.
+export fun refusals() > [Rule] !> any {
+    return byRule(magus\cmd("session", args: ["--brief", "-o", "json"], opts: {"quiet": true}).stdout);
+}
+
+// The feedback section of a brief, in the shape `magus session --brief -o json` prints.
+final BRIEF = `\{"workspace": "/work/repo", "feedback": [
+  \{"rule": "output-pipe", "surface": "shell.command", "denied": 5, "sessions": 2, "followed_sessions": 1\},
+  \{"rule": "sed-in-place", "surface": "shell.command", "denied": 3, "sessions": 1, "followed_sessions": 0\},
+  \{"rule": "output-pipe", "surface": "mcp.call", "denied": 2, "sessions": 1, "followed_sessions": 1\}
+]\}`;
+
+test "refusals fold into one row per rule, most refused first" {
+    assert\equal(render(byRule(BRIEF)), want: [
+        "recurring guard refusals in this checkout's recent trail: 2 rules",
+        "  7  output-pipe  (3 sessions, magus run after it in 2; shell.command, mcp.call)",
+        "  3  sed-in-place  (1 sessions, magus run after it in 0; shell.command)",
+    ], message: "rows");
+}
+
+test "a brief with no feedback reports no rules" {
+    assert\equal(byRule(`\{"workspace": "/work/repo"\}`).len(), want: 0, message: "empty");
+}

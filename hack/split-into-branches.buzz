@@ -1,8 +1,10 @@
+// Cost: grows with tree size.
+//
 // Splits one large change into a stack of branches, one per owning project, from the
 // workspace's own declarations: `magus describe file` names each path's project and role,
 // the project graph orders the stack so every branch builds only on those below it.
 //
-//	magus buzz hack/split-change.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]
+//	magus buzz hack/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]
 //
 // The change is everything between the merge base of --base (the workspace's base ref by
 // default) and the working tree, untracked files included. Branches are named after
@@ -15,7 +17,7 @@
 // Branches are named <prefix>-<n>-<project>, not <prefix>/<n>-<project>: git stores a
 // branch as a file under refs/heads, so a branch named <prefix> leaves no room for a
 // directory of the same name.
-namespace splitchange;
+namespace splitintobranches;
 
 import "flags";
 import "fs";
@@ -31,7 +33,8 @@ import "assert";
 // The group key for root-level workspace configuration, which every project builds on.
 final WORKSPACE = "(workspace)";
 
-final USAGE = "usage: magus buzz hack/split-change.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]";
+final USAGE = "usage: magus buzz hack/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]";
+final HELP = "cost: grows with tree size\n{USAGE}";
 
 export object Claim {
     project: str,
@@ -396,7 +399,7 @@ fun projectDeps() > {str: [str]} !> any {
 // commits in stack order. Every branch name is checked before anything is written.
 fun apply(groups: [Group], base: str, prefix: str) > [str] !> any {
     if (vcs\name() != "git") {
-        throw "split-change: --apply builds commits with git plumbing, and this checkout is {vcs\name()}";
+        throw "split-into-branches: --apply builds commits with git plumbing, and this checkout is {vcs\name()}";
     }
     final root = vcs\root();
     fun git(args: [str]) > str !> any {
@@ -407,12 +410,12 @@ fun apply(groups: [Group], base: str, prefix: str) > [str] !> any {
         final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{g.branch}"],
             opts: {"quiet": true, "dir": root, "allow_failure": true});
         if (taken.code == 0) {
-            throw "split-change: branch {g.branch} already exists; delete it or pass another --prefix";
+            throw "split-into-branches: branch {g.branch} already exists; delete it or pass another --prefix";
         }
     }
     var parent = git(["merge-base", base, "HEAD"]);
     final commits = mut [<str>];
-    final scratch = fs\tempDir("split-change-");
+    final scratch = fs\tempDir("split-into-branches-");
     try {
         os\withEnv({"GIT_INDEX_FILE": scratch + "/index"}, callback: fun () > void !> any {
             foreach (n, g in groups) {
@@ -440,49 +443,60 @@ fun apply(groups: [Group], base: str, prefix: str) > [str] !> any {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--apply"], valued: ["--base", "--prefix", "--min-files", "-o"]);
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["--base", "--prefix", "--min-files", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "split-change: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "split-into-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final base = parsed.values["--base"] ?? vcs\base();
     final prefix = parsed.values["--prefix"] ?? vcs\ref();
     if (prefix == "" or prefix == "HEAD") {
-        throw "split-change: no current branch to name the stack after; pass --prefix <branch>\n{USAGE}";
+        throw "split-into-branches: no current branch to name the stack after; pass --prefix <branch>\n{USAGE}";
     }
     final minFiles = std\parseInt(parsed.values["--min-files"] ?? "3");
     if (minFiles == null or minFiles! < 1) {
-        throw "split-change: --min-files takes a positive integer\n{USAGE}";
+        throw "split-into-branches: --min-files takes a positive integer\n{USAGE}";
     }
     final format = parsed.values["-o"] ?? "text";
     if (format != "text" and format != "json") {
-        throw "split-change: -o takes text or json\n{USAGE}";
+        throw "split-into-branches: -o takes text or json\n{USAGE}";
     }
 
     final changes = collect(base);
     if (changes.len() == 0) {
-        std\print("split-change: nothing changed against {base}");
+        std\print("read-only: nothing changed against {base}");
         return;
     }
     final groups = plan(changes, deps: projectDeps(), minFiles: minFiles!, prefix: prefix, base: prBase(base));
+    // -o json prints the plan document alone, so a reader can parse the whole of stdout.
     if (format == "json") {
         std\print(encode(groups, base: base));
-    } else {
-        std\print(render(groups, base: base));
+        if (parsed.values["--apply"] != null) { apply(groups, base: base, prefix: prefix); }
+        return;
     }
-    if (parsed.values["--apply"] == null) { return; }
+    if (parsed.values["--apply"] == null) {
+        std\print("dry run: nothing changed; pass --apply to write");
+        std\print(render(groups, base: base));
+        return;
+    }
 
     final commits = apply(groups, base: base, prefix: prefix);
+    std\print("created {groups.len()} local branches; nothing was pushed");
+    std\print(render(groups, base: base));
     std\print("");
     foreach (n, g in groups) {
         std\print("created {g.branch} at {commits[n].sub(0, len: 12)}");
     }
     std\print("");
-    std\print("nothing was pushed; to publish the stack:");
+    std\print("to publish the stack:");
     foreach (c in pushCommands(groups)) { std\print("  {c}"); }
 }
 
 fun fixture() > serialize\Boxed !> any {
-    return serialize\jsonDecode(fs\readFile("hack/testdata/split-change.json"));
+    return serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches.json"));
 }
 
 fun fixtureChanges(doc: serialize\Boxed, reversed: bool) > [Change] {

@@ -1,0 +1,186 @@
+// Cost: grows with the number of worktrees.
+//
+// Lists every git worktree of this repository, one row each: its path, how many files are
+// uncommitted there, how many commits no remote has, and the job whose checkout it is.
+// Clean worktrees are listed too, since "safe to remove" is a row with zeros in it; --dirty
+// keeps only the ones holding uncommitted files.
+//
+//	magus buzz hack/ls-worktrees.buzz -- [--dirty]
+//
+// Every git call is a read: status runs with --no-optional-locks, so listing a worktree
+// another session is working in never takes its index lock.
+namespace lsworktrees;
+
+import "flags";
+import "fs";
+import "magus";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/ls-worktrees.buzz -- [--dirty]";
+final HELP = "cost: grows with the number of worktrees\n{USAGE}";
+
+export object Worktree {
+    path: str,
+    branch: str,
+}
+
+export object Row {
+    path: str,
+    // dirty is the count of uncommitted files, -1 for a worktree whose directory is gone.
+    dirty: int,
+    unpushed: int,
+    job: str,
+}
+
+// parseWorktrees reads `git worktree list --porcelain`: one stanza per worktree, the main
+// one first.
+export fun parseWorktrees(porcelain: str) > [Worktree] {
+    final found = mut [<Worktree>];
+    var path = "";
+    var branch = "";
+    foreach (line in porcelain.split("\n") + [""]) {
+        if (line.startsWith("worktree ")) {
+            path = line.sub(9);
+        } else if (line.startsWith("branch refs/heads/")) {
+            branch = line.sub(18);
+        } else if (line == "detached") {
+            branch = "(detached)";
+        } else if (line == "" and path != "") {
+            found.append(Worktree{ path = path, branch = branch });
+            path = "";
+            branch = "";
+        }
+    }
+    return found;
+}
+
+// displayPath is path relative to the main worktree when it sits under it.
+export fun displayPath(path: str, main: str) > str {
+    if (path == main) {
+        return ".";
+    }
+    if (path.startsWith(main + "/")) {
+        return path.sub(main.len() + 1);
+    }
+    return path;
+}
+
+fun pad(s: str, width: int) > str {
+    final spaces = mut [<str>];
+    for (var i = s.len(); i < width; i = i + 1) {
+        spaces.append(" ");
+    }
+    return s + spaces.join("");
+}
+
+export fun render(rows: [Row]) > [str] {
+    var width = 4;
+    foreach (r in rows) {
+        if (r.path.len() > width) {
+            width = r.path.len();
+        }
+    }
+    final lines = mut ["{pad("PATH", width: width)}  DIRTY  UNPUSHED  JOB"];
+    foreach (r in rows) {
+        final dirty = if (r.dirty < 0) "gone" else "{r.dirty}";
+        lines.append("{pad(r.path, width: width)}  {pad(dirty, width: 5)}  {pad("{r.unpushed}", width: 8)}  {r.job}");
+    }
+    return lines;
+}
+
+fun git(dir: str, args: [str]) > str !> any {
+    return vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout;
+}
+
+fun countLines(text: str) > int {
+    var n = 0;
+    foreach (line in text.split("\n")) {
+        if (line.trim() != "") {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// jobsByCheckout is each checkout's newest job, as "<id> (<state>)".
+fun jobsByCheckout() > {str: str} !> any {
+    final list: magus\JobList = magus\job\list();
+    final newest = mut {<str: int>};
+    final label = mut {<str: str>};
+    foreach (j in list.jobs) {
+        if (j.checkoutRoot != "" and j.updated >= (newest[j.checkoutRoot] ?? -1)) {
+            newest[j.checkoutRoot] = j.updated;
+            label[j.checkoutRoot] = "{j.id} ({j.state})";
+        }
+    }
+    return label;
+}
+
+// worktrees is a row per worktree of this repository, main first; with dirtyOnly, only
+// those holding uncommitted files or gone from disk.
+export fun worktrees(dirtyOnly: bool) > [Row] !> any {
+    final trees = parseWorktrees(git(vcs\root(), args: ["worktree", "list", "--porcelain"]));
+    final jobs = jobsByCheckout();
+    final main = if (trees.len() > 0) trees[0].path else "";
+    final found = mut [<Row>];
+    foreach (t in trees) {
+        var dirty = -1;
+        var unpushed = 0;
+        if (fs\isDir(t.path)) {
+            dirty = countLines(git(t.path, args: ["--no-optional-locks", "status", "--porcelain"]));
+            unpushed = std\parseInt(git(t.path, args: ["rev-list", "--count", "HEAD", "--not", "--remotes"]).trim()) ?? 0;
+        }
+        if (!dirtyOnly or dirty != 0) {
+            found.append(Row{ path = displayPath(t.path, main: main), dirty = dirty, unpushed = unpushed, job = jobs[t.path] ?? "" });
+        }
+    }
+    return found;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--dirty", "--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "ls-worktrees: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "ls-worktrees: reads git worktrees, and this checkout is {vcs\name()}";
+    }
+    final rows = worktrees(parsed.values["--dirty"] != null);
+    std\print("read-only");
+    foreach (line in render(rows)) {
+        std\print(line);
+    }
+}
+
+final PORCELAIN = "worktree /work/repo\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/main\n\n" +
+    "worktree /work/repo/.claude/worktrees/topic\nHEAD 2222222222222222222222222222222222222222\ndetached\n\n" +
+    "worktree /elsewhere/copy\nHEAD 3333333333333333333333333333333333333333\nbranch refs/heads/fix\nprunable gitdir file points to non-existent location\n";
+
+test "porcelain parses to one worktree per stanza, the main one first" {
+    final trees = parseWorktrees(PORCELAIN);
+    final got = mut [<str>];
+    foreach (t in trees) {
+        got.append("{displayPath(t.path, main: trees[0].path)} {t.branch}");
+    }
+    assert\equal(got, want: [". main", ".claude/worktrees/topic (detached)", "/elsewhere/copy fix"], message: "worktrees");
+}
+
+test "rows render as aligned columns, a missing directory as gone" {
+    assert\equal(render([
+        Row{ path = ".", dirty = 0, unpushed = 0, job = "" },
+        Row{ path = ".claude/worktrees/topic", dirty = 3, unpushed = 12, job = "topic/fix (declared)" },
+        Row{ path = "/elsewhere/copy", dirty = -1, unpushed = 0, job = "" },
+    ]), want: [
+        "PATH                     DIRTY  UNPUSHED  JOB",
+        ".                        0      0         ",
+        ".claude/worktrees/topic  3      12        topic/fix (declared)",
+        "/elsewhere/copy          gone   0         ",
+    ], message: "table");
+}

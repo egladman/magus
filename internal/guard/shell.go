@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -1824,7 +1825,7 @@ var (
 		"A regex writes before anyone reads a diff, and it cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
 
 	denySedInPlace = "Use your editor tool: it reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
-		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed is untouched."
+		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
 	denyBusyWait = "Do not poll for work you started; you are told when it finishes. Start it and do something else.\n" +
 		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
@@ -2384,6 +2385,9 @@ func precedentIdent(cmds []hint.Invocation) string {
 func Evaluate(deps Dependencies, command string) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
 	builtin := evaluateRules(deps, command, d)
+	if builtin.Deny != "" {
+		builtin.Deny += referenceScriptNote(deps.scope.root, builtin.Rule.Name)
+	}
 	// Here rather than in gitGuard, which answers for every backend and names no paths.
 	if builtin.Rule.Name == denyRuleStageAll {
 		lead, next := stageAllRemedy(command, d)
@@ -2415,6 +2419,45 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 		v.Deny += nothingRanNote(command, d)
 	}
 	return v
+}
+
+// referenceScript is a Buzz script under hack/ that does, the sanctioned way, what a line a
+// rule refused was reaching for.
+type referenceScript struct {
+	lead string   // the question the reader was answering, ending in "?"
+	argv []string // the script's path, then how it is run
+}
+
+var (
+	renameScript = referenceScript{
+		lead: "Renaming a symbol from a script?",
+		argv: []string{"hack/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"},
+	}
+	typedResultScript = referenceScript{
+		lead: "Reading magus output in a script?",
+		argv: []string{"hack/example-typed-results.buzz"},
+	}
+	referenceScripts = map[denyRuleName]referenceScript{
+		denyRuleSedInPlace:         renameScript,
+		denyRuleScriptedRewrite:    renameScript,
+		denyRuleInterpreterRewrite: renameScript,
+		denyRuleOutputPipe:         typedResultScript,
+		denyRuleOutputRedirect:     typedResultScript,
+	}
+)
+
+// referenceScriptNote is the line naming rule's reference script, or "" when the workspace at
+// root does not carry it: hack/ is one repository's own, and a pointer to a file that is not
+// there is advice nobody can take.
+func referenceScriptNote(root string, rule denyRuleName) string {
+	s, ok := referenceScripts[rule]
+	if !ok || root == "" {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {
+		return ""
+	}
+	return "\n" + s.lead + " `" + hint.Buzz.With(s.argv...) + "`"
 }
 
 // changesDirectory reports a cd or pushd anywhere on the line, or a line that does not parse.
@@ -2460,7 +2503,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if credentialVerbFires(cmds, parsed, command) {
 		return ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}
 	}
-	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
+	// Both rewrite rules promise to leave a scratch file alone, and the promise has to hold
+	// however the path was spelled, including relative to a scratch directory cd'd into.
+	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) && !rewriteStaysOutside(deps.scope, command, d) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if busyWaitFires(command, d) {
@@ -2497,7 +2542,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if parsed && captureFilterFires(cmds, command, d) {
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
-	if scriptedRewriteFires(command, d, deps.scope) {
+	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory, chained ShellVerdict

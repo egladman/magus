@@ -1,0 +1,353 @@
+// Cost: none.
+//
+// Shows a session that ended abruptly (a usage limit, a crash) from Claude Code, Codex or
+// Cursor, so another session can pick its work up: what the person asked, the last things
+// the agent said, how it ended, the checkout it worked in, and that checkout's uncommitted
+// and unpushed state. Then it prints, and never runs, the commands that carry the work here.
+//
+//	magus buzz hack/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]
+//
+// Sessions come from `magus session ls`, which records each one's host, transcript and
+// checkout. The default is the newest one whose checkout is another worktree of this
+// repository: this checkout is where the work is going, not where it was left. Every
+// call into the other checkout is a read; git status runs with --no-optional-locks so it
+// never takes that checkout's index lock.
+namespace showinterruptedsession;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]";
+final HELP = "cost: none\n{USAGE}";
+
+// REPLIES is how many of the agent's last messages are shown.
+final REPLIES = 3;
+
+export object Session {
+    host: str,
+    id: str,
+    transcript: str,
+    workspace: str,
+}
+
+export object Transcript {
+    cwd: str = "",
+    asks: [str],
+    replies: [str],
+    ending: str,
+}
+
+export object Checkout {
+    path: str,
+    branch: str = "",
+    dirty: [str],
+    unpushed: [str],
+    gone: bool = false,
+}
+
+// pick chooses the session to show from `magus session ls -o json`: the one with id, else
+// the newest of host (any host when ""), whose checkout is one of trees but not here.
+export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Session? !> any {
+    var best: Session? = null;
+    var bestAt = "";
+    foreach (c in json\parse(listing)["checkpoints"] ?? []) {
+        final s = Session{ host = c["host"] ?? "", id = c["host_session"] ?? "", transcript = c["transcript"] ?? "", workspace = c["workspace"] ?? "" };
+        if (id != "") {
+            if (s.id == id) {
+                return s;
+            }
+            continue;
+        }
+        if ((host != "" and s.host != host) or s.workspace == here or trees.indexOf(s.workspace) == null) {
+            continue;
+        }
+        final at = c["At"] ?? "";
+        if (best == null or at > bestAt) {
+            best = s;
+            bestAt = at;
+        }
+    }
+    return best;
+}
+
+fun textOf(content: any) > str {
+    if (content is str) {
+        return content;
+    }
+    final parts = mut [<str>];
+    foreach (block in content ?? []) {
+        final kind = block["type"] ?? "";
+        if (kind == "text" or kind == "input_text" or kind == "output_text") {
+            parts.append(block["text"] ?? "");
+        }
+    }
+    return parts.join("\n").trim();
+}
+
+fun lastOf(items: [str], n: int) > [str] {
+    if (items.len() <= n) {
+        return items;
+    }
+    return items.sub(items.len() - n);
+}
+
+// readClaude reads a Claude Code transcript. A usage limit or API failure ends it with a
+// synthetic assistant record carrying isApiErrorMessage and the HTTP status.
+export fun readClaude(lines: [str]) > Transcript !> any {
+    var cwd = "";
+    final asks = mut [<str>];
+    final replies = mut [<str>];
+    var ending = "no ending recorded: the transcript stops mid-session";
+    foreach (line in lines) {
+        final rec = json\parse(line);
+        if (cwd == "" and rec["cwd"] != null) {
+            cwd = rec["cwd"];
+        }
+        final msg = rec["message"];
+        if (msg == null) {
+            continue;
+        }
+        final text = textOf(msg["content"]);
+        if (rec["isApiErrorMessage"] == true) {
+            ending = "API error {std\toInt(rec["apiErrorStatus"] ?? 0)} ({rec["error"] ?? "unknown"}): {text}";
+        } else if (rec["type"] == "user" and text != "" and !text.startsWith("<")) {
+            asks.append(text);
+            ending = "the last record is the person's message, with no reply";
+        } else if (rec["type"] == "assistant" and text != "") {
+            replies.append(text);
+            ending = "the last record is the agent's message: it may have been waiting on the person";
+        }
+    }
+    return Transcript{ cwd = cwd, asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+}
+
+// readCodex reads a Codex rollout. A task ends with task_complete, whose error says why it
+// stopped early, and an error event can come before it.
+export fun readCodex(lines: [str]) > Transcript !> any {
+    var cwd = "";
+    final asks = mut [<str>];
+    final replies = mut [<str>];
+    var ending = "no ending recorded: the rollout stops mid-task";
+    foreach (line in lines) {
+        final rec = json\parse(line);
+        final p = rec["payload"];
+        if (p == null) {
+            continue;
+        }
+        if (rec["type"] == "session_meta") {
+            cwd = p["cwd"] ?? "";
+        }
+        if (rec["type"] != "event_msg") {
+            continue;
+        }
+        final kind = p["type"] ?? "";
+        if (kind == "user_message") {
+            asks.append(p["message"] ?? "");
+        } else if (kind == "agent_message") {
+            replies.append(p["message"] ?? "");
+        } else if (kind == "error") {
+            ending = "error: {p["message"] ?? ""}";
+        } else if (kind == "task_complete") {
+            final err = p["error"];
+            if (err is str) {
+                ending = "task ended with {err}";
+            } else if (err != null) {
+                ending = "task ended with {err["code"] ?? err["type"] ?? "an error"}: {err["message"] ?? ""}";
+            } else {
+                ending = "task completed";
+            }
+        }
+    }
+    return Transcript{ cwd = cwd, asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+}
+
+// readCursor reads a Cursor agent transcript, which records roles and text but no ending
+// and no working directory: the checkout comes from the session's record.
+export fun readCursor(lines: [str]) > Transcript !> any {
+    final asks = mut [<str>];
+    final replies = mut [<str>];
+    var ending = "no ending recorded";
+    foreach (line in lines) {
+        final rec = json\parse(line);
+        final text = textOf(rec["message"]?["content"]);
+        if (text == "") {
+            continue;
+        }
+        if (rec["role"] == "user") {
+            asks.append(text.replace("<user_query>", with: "").replace("</user_query>", with: "").trim());
+            ending = "the last record is the person's message, with no reply";
+        } else if (rec["role"] == "assistant") {
+            replies.append(text);
+            ending = "the last record is the agent's message";
+        }
+    }
+    return Transcript{ asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+}
+
+export fun readTranscript(host: str, file: str) > Transcript !> any {
+    final lines = fs\readLines(file);
+    if (host == "codex") {
+        return readCodex(lines);
+    }
+    if (host == "cursor") {
+        return readCursor(lines);
+    }
+    return readClaude(lines);
+}
+
+fun git(dir: str, args: [str]) > [str] !> any {
+    final kept = mut [<str>];
+    foreach (line in vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout.split("\n")) {
+        if (line.trim() != "") {
+            kept.append(line);
+        }
+    }
+    return kept;
+}
+
+// checkoutState reads a checkout without writing to it.
+export fun checkoutState(path: str) > Checkout !> any {
+    if (!fs\isDir(path)) {
+        return Checkout{ path = path, dirty = [<str>], unpushed = [<str>], gone = true };
+    }
+    return Checkout{
+        path = path,
+        branch = git(path, args: ["rev-parse", "--abbrev-ref", "HEAD"]).join(""),
+        dirty = git(path, args: ["--no-optional-locks", "status", "--porcelain"]),
+        unpushed = git(path, args: ["log", "--oneline", "-20", "HEAD", "--not", "--remotes"]),
+    };
+}
+
+// handoff is what a person runs to carry the checkout's work here. It is printed, never
+// run: this script does not write into the other checkout.
+export fun handoff(c: Checkout) > [str] {
+    if (c.gone) {
+        return ["{c.path} is gone; nothing is left there to carry over"];
+    }
+    if (c.dirty.len() == 0 and c.unpushed.len() == 0) {
+        return ["{c.path} holds nothing uncommitted or unpushed; switch to its branch {c.branch} here if you want it"];
+    }
+    return [
+        "nothing was run; to carry the work here:",
+        "  in {c.path}:",
+        "    magus vcs checkpoint --preserve -o name",
+        "  then here, with the name it printed:",
+        "    git switch --detach <name>",
+        "  or read it first: magus diff --rev <name>",
+    ];
+}
+
+export object Report {
+    session: Session,
+    transcript: Transcript,
+    checkout: Checkout,
+}
+
+// show finds the session and reads its transcript and checkout.
+export fun show(host: str, id: str) > Report !> any {
+    final trees = mut [<str>];
+    foreach (line in git(vcs\root(), args: ["worktree", "list", "--porcelain"])) {
+        if (line.startsWith("worktree ")) {
+            trees.append(line.sub(9));
+        }
+    }
+    final listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: {"quiet": true}).stdout;
+    final s = pick(listing, trees: trees, here: vcs\root(), host: host, id: id);
+    if (s == null) {
+        throw "show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)";
+    }
+    final t = readTranscript(s!.host, file: s!.transcript);
+    final dir = if (s!.workspace != "") s!.workspace else t.cwd;
+    return Report{ session = s!, transcript = t, checkout = checkoutState(dir) };
+}
+
+export fun render(r: Report) > [str] {
+    final lines = mut ["read-only", "{r.session.host} session {r.session.id}", "  transcript {r.session.transcript}", "ended: {r.transcript.ending}", "asked:"];
+    foreach (a in r.transcript.asks) {
+        lines.append("  - {a}");
+    }
+    lines.append("last said:");
+    foreach (m in r.transcript.replies) {
+        lines.append("  - {m}");
+    }
+    final c = r.checkout;
+    lines.append("checkout {c.path} on {c.branch}: {c.dirty.len()} uncommitted, {c.unpushed.len()} unpushed");
+    foreach (d in c.dirty) {
+        lines.append("  {d}");
+    }
+    foreach (u in c.unpushed) {
+        lines.append("  {u}");
+    }
+    foreach (h in handoff(c)) {
+        lines.append(h);
+    }
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--host", "--session"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-interrupted-session: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final host = parsed.values["--host"] ?? "";
+    if (host != "" and host != "claude-code" and host != "codex" and host != "cursor") {
+        throw "show-interrupted-session: --host takes claude-code, codex or cursor\n{USAGE}";
+    }
+    foreach (line in render(show(host, id: parsed.values["--session"] ?? ""))) {
+        std\print(line);
+    }
+}
+
+test "a Claude Code transcript that hit its usage limit ends on the synthetic 429 record" {
+    final t = readTranscript("claude-code", file: "hack/testdata/claude-usage-limit.jsonl");
+    assert\equal(t.cwd, want: "/work/repo/.claude/worktrees/topic", message: "cwd");
+    assert\equal(t.asks, want: ["Add a --dirty flag to the worktree listing.", "Also list clean worktrees."], message: "asks");
+    assert\equal(t.replies, want: ["I will add the flag and a test for it.", "Clean ones stay in the list; the flag filters them out."], message: "replies");
+    assert\equal(t.ending, want: "API error 429 (rate_limit): Claude usage limit reached. Your limit will reset at 3pm.", message: "ending");
+}
+
+test "a Codex rollout that hit its usage limit ends on task_complete's error" {
+    final t = readTranscript("codex", file: "hack/testdata/codex-usage-limit.jsonl");
+    assert\equal(t.cwd, want: "/work/repo/.claude/worktrees/codex-topic", message: "cwd");
+    assert\equal(t.asks, want: ["Make the refusal name its rule."], message: "asks leave out the environment context");
+    assert\equal(t.replies, want: ["The rule name is already on the verdict; I will append it to the text."], message: "replies");
+    assert\equal(t.ending, want: "task ended with usage_limit_exceeded: You've hit your usage limit. Try again at 3:00 PM.", message: "ending");
+}
+
+test "a Cursor transcript records asks and replies but no ending" {
+    final t = readTranscript("cursor", file: "hack/testdata/cursor-session.jsonl");
+    assert\equal(t.asks, want: ["Run the guard tests and fix what fails.", "Only the guard package."], message: "asks");
+    assert\equal(t.replies[t.replies.len() - 1], want: "Narrowing to the guard package with -run.", message: "last reply");
+    assert\equal(t.ending, want: "the last record is the agent's message", message: "ending");
+}
+
+test "the default session is the newest in another worktree of this repository" {
+    final listing = `\{"checkpoints": [
+        \{"host": "claude-code", "host_session": "here", "transcript": "/t/1.jsonl", "workspace": "/work/repo/.claude/worktrees/here", "At": "2026-09-29T10:00:00Z"\},
+        \{"host": "codex", "host_session": "other-repo", "transcript": "/t/2.jsonl", "workspace": "/elsewhere/repo", "At": "2026-09-29T09:50:00Z"\},
+        \{"host": "claude-code", "host_session": "older", "transcript": "/t/3.jsonl", "workspace": "/work/repo", "At": "2026-09-29T08:00:00Z"\},
+        \{"host": "claude-code", "host_session": "newer", "transcript": "/t/4.jsonl", "workspace": "/work/repo/.claude/worktrees/topic", "At": "2026-09-29T09:00:00Z"\}
+    ]\}`;
+    final trees = ["/work/repo", "/work/repo/.claude/worktrees/topic", "/work/repo/.claude/worktrees/here"];
+    final here = "/work/repo/.claude/worktrees/here";
+    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "")?.id, want: "newer", message: "newest elsewhere");
+    assert\equal(pick(listing, trees: trees, here: here, host: "codex", id: ""), want: null, message: "codex ran in another repository");
+    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "here")?.workspace, want: here, message: "an id picks exactly");
+}
+
+test "the handoff is printed for a checkout holding work, and names nothing to run for a clean one" {
+    final busy = Checkout{ path = "/work/repo/.claude/worktrees/topic", branch = "topic", dirty = [" M list.go"], unpushed = [<str>] };
+    assert\equal(handoff(busy)[2], want: "    magus vcs checkpoint --preserve -o name", message: "checkpoint in the old checkout");
+    final clean = Checkout{ path = "/work/repo/.claude/worktrees/topic", branch = "topic", dirty = [<str>], unpushed = [<str>] };
+    assert\equal(handoff(clean), want: ["/work/repo/.claude/worktrees/topic holds nothing uncommitted or unpushed; switch to its branch topic here if you want it"], message: "clean");
+}

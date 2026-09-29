@@ -1,0 +1,107 @@
+// Cost: needs the code index.
+//
+// A worked example to copy: magus's own results read as typed Buzz values, where a shell
+// reaches for `-o json | jq` or a python one-liner. Each section is one member, its result
+// annotated with the type magus declares for it, so a misspelled field fails the type check
+// before the script runs rather than reading as null.
+//
+//	magus buzz hack/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]
+//
+// `magus describe module magus` lists every member and the type each returns.
+namespace exampletypedresults;
+
+import "flags";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]";
+final HELP = "cost: needs the code index\n{USAGE}";
+
+// fileLines classifies paths the way `magus describe file` does: owning project and role.
+export fun fileLines(paths: [str]) > [str] !> any {
+    final report: magus\FileReport = magus\describeFile(paths);
+    final lines = mut [<str>];
+    foreach (f in report.files) {
+        lines.append("{f.path}: project {f.project}, {f.role}");
+    }
+    return lines;
+}
+
+// queryLines are a knowledge-graph search's matches. Read the verdict before trusting an
+// empty list: `unknown` means part of the workspace had no index to search.
+export fun queryLines(terms: str) > [str] !> any {
+    final q: magus\QueryResult = magus\query(terms, opts: {"limit": 5});
+    final lines = mut ["{q.matchCount} matches ({q.answer.verdict})"];
+    foreach (m in q.matches) {
+        lines.append("  {m.kind} {m.label}");
+    }
+    return lines;
+}
+
+// refsLines are where a code symbol is defined and how widely it is used.
+export fun refsLines(symbol: str) > [str] !> any {
+    final r: magus\RefsResult = magus\refs(symbol, opts: {"limit": 5});
+    final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict})"];
+    foreach (d in r.defs) {
+        lines.append("  defined in {d.file}:{d.lines.join(",")}");
+    }
+    return lines;
+}
+
+// jobLines count the job store's rows by state, and the write paths the declared ones hold.
+export fun jobLines() > [str] !> any {
+    final list: magus\JobList = magus\job\list();
+    final byState = mut {<str: int>};
+    final declared = mut [<str>];
+    foreach (j in list.jobs) {
+        byState[j.state] = (byState[j.state] ?? 0) + 1;
+        if (j.state == "declared" and j.writePaths.len() > 0) {
+            declared.append("  {j.id}: {j.writePaths.len()} write paths");
+        }
+    }
+    final lines = mut ["{list.jobs.len()} jobs"];
+    foreach (state, n in byState) {
+        lines.append("  {n} {state}");
+    }
+    foreach (line in declared) {
+        lines.append(line);
+    }
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--file", "--query", "--symbol"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "example-typed-results: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    std\print("read-only");
+    final sections = mut [
+        fileLines([parsed.values["--file"] ?? "go.mod"]),
+        queryLines(parsed.values["--query"] ?? "kind=spell"),
+    ];
+    if (parsed.values["--symbol"] != null) {
+        sections.append(refsLines(parsed.values["--symbol"]!));
+    }
+    sections.append(jobLines());
+    foreach (s in sections) {
+        std\print("");
+        foreach (line in s) {
+            std\print(line);
+        }
+    }
+}
+
+test "describeFile names a path's owning project and role" {
+    assert\equal(fileLines(["go.mod"]), want: ["go.mod: project ., source"], message: "go.mod");
+}
+
+test "a query result carries its verdict beside its matches" {
+    final lines = queryLines("kind=spell go");
+    assert\equal(lines[0].endsWith("(found)"), want: true, message: lines[0]);
+}

@@ -100,6 +100,15 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 		}
 		for _, c := range peelWrappers(literalWords(call.Args), d) {
 			name := path.Base(c.Name)
+			if name == "magus" {
+				if script, ok := inlineBuzz(c.Args, heredocText(st)); ok {
+					hit = buzzRewrittenFile(location.workspace, script)
+				}
+				if hit != "" {
+					return false
+				}
+				continue
+			}
 			if !scriptedRewriteInterpreters[name] && name != "awk" {
 				continue
 			}
@@ -114,10 +123,10 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 		}
 		return true
 	})
-	if hit == "" {
+	if hit == "" || rewriteStaysOutside(scopeAt(location), command, d) {
 		return ""
 	}
-	return interpreterRewriteDenial(hit)
+	return interpreterRewriteDenial(hit) + referenceScriptNote(location.workspace, denyRuleInterpreterRewrite)
 }
 
 // rewrittenWorkspaceFile names the first file already in the tree that the script would
@@ -144,17 +153,79 @@ func rewrittenWorkspaceFile(location location, name, script string, args []strin
 	if unknown {
 		candidates = append(candidates, args...)
 	}
+	return existingWorkspaceFile(location.workspace, candidates)
+}
+
+// buzzRewrittenFile names the first file already in the workspace that a Buzz program
+// replaces through fs at a literal destination, or "". A destination built at run time
+// from argv or a computed path is not read: this judges what the program text proves.
+func buzzRewrittenFile(workspace, script string) string {
+	return existingWorkspaceFile(workspace, buzzWriteDestinations(script))
+}
+
+// buzzWriteDestinations are the literals each fs write in a Buzz program is spelled from,
+// less any write already aimed at a scratch or temp path.
+func buzzWriteDestinations(script string) []string {
+	var candidates []string
+	for _, loc := range buzzWriterRe.FindAllStringIndex(script, -1) {
+		callArgs, ok := callArguments(script, loc[1]-1)
+		if !ok {
+			continue
+		}
+		parts := splitArguments(callArgs)
+		if len(parts) == 0 {
+			continue
+		}
+		if literals := destinationLiterals(script, parts[0]); !slices.ContainsFunc(literals, throwawayDirRe.MatchString) {
+			candidates = append(candidates, literals...)
+		}
+	}
+	return candidates
+}
+
+// inlineBuzz is the program a `magus buzz` line carries itself: an -e snippet, or the
+// heredoc it reads from stdin when it names no file. A named file is judged from its
+// content instead, like any other script a line runs.
+func inlineBuzz(args []string, heredoc string) (string, bool) {
+	if len(args) == 0 || args[0] != "buzz" {
+		return "", false
+	}
+	for i := 1; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-e" && i+1 < len(args):
+			return args[i+1], true
+		case a == "-C":
+			i++
+		case a == "-" || a == "--":
+			return heredoc, heredoc != ""
+		case !strings.HasPrefix(a, "-"):
+			return "", false
+		}
+	}
+	return heredoc, heredoc != ""
+}
+
+// buzzWriterRe finds the fs members that replace a file's content. fs\appendFile only adds
+// to the end, which cannot mangle a line already there.
+var buzzWriterRe = regexp.MustCompile(`\bfs\\(?:writeFileAtomic|writeFile|writeLines)\s*\(`)
+
+// existingWorkspaceFile names the first candidate that is a file already in the workspace,
+// or "". A relative candidate resolves from the workspace root.
+func existingWorkspaceFile(workspace string, candidates []string) string {
+	if workspace == "" {
+		return ""
+	}
 	for _, candidate := range candidates {
 		if candidate == "" || throwawayDirRe.MatchString(candidate) {
 			continue
 		}
-		rel, inside := workspaceRelative(location.workspace, candidate)
+		rel, inside := workspaceRelative(workspace, candidate)
 		if !inside || rel == "." {
 			continue
 		}
 		abs := candidate
 		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(location.workspace, candidate)
+			abs = filepath.Join(workspace, candidate)
 		}
 		if info, err := os.Stat(abs); err == nil && !info.IsDir() {
 			return rel
@@ -245,11 +316,13 @@ func scriptWriteTargets(name, script string, args []string) (targets [][]string,
 }
 
 // destinationLiterals are the quoted strings a destination expression is built from, each
-// identifier in it read through its assignments, one level deep.
+// identifier in it read through its assignments, one level deep. A declaring keyword and a
+// type annotation are allowed before the `=`, which is how Buzz (`final p: str = ...`) and
+// JavaScript (`const p = ...`) bind one.
 func destinationLiterals(script, expr string) []string {
 	out := quotedLiterals(expr)
 	for _, ident := range identRe.FindAllString(expr, -1) {
-		assign := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(ident) + `\s*=\s*([^=\n].*)$`)
+		assign := regexp.MustCompile(`(?m)^\s*(?:(?:final|var|const|let)\s+)?` + regexp.QuoteMeta(ident) + `(?:\s*:[^=\n]*)?\s*=\s*([^=\n].*)$`)
 		for _, m := range assign.FindAllStringSubmatch(script, -1) {
 			out = append(out, quotedLiterals(m[1])...)
 		}
@@ -354,6 +427,131 @@ func interpreterRewriteDenial(rel string) string {
 	return fmt.Sprintf("Use your editor tool on %s: it reads the file first and reports what it changed.\n"+
 		"Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
 		"Scratch paths and scripts that CREATE a file are untouched.", rel)
+}
+
+// rewriteStaysOutside reports a line whose every in-place rewrite provably lands outside the
+// workspace, which is what lets the rewrite rules keep their promise that a scratch file is
+// untouched. A relative path resolves from the directory the line last cd'd into, the way a
+// scratch edit is usually typed; before any cd it resolves where the call runs, inside. A
+// rewrite whose files come from a traversal, a pipe or a computed path proves nothing, and
+// neither does a line that names no file.
+func rewriteStaysOutside(scope workspaceScope, command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return false
+	}
+	vars := map[string]string{}
+	for _, m := range assignmentRe.FindAllStringSubmatch(command, -1) {
+		vars[m[1]] = m[3]
+	}
+	if scope.home != "" {
+		vars["HOME"] = scope.home
+	}
+	dir, blind := "", false
+	var paths []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if blind {
+			return false
+		}
+		st, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		call, ok := st.Cmd.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		words := make([]string, len(call.Args))
+		for i, w := range call.Args {
+			words[i] = scopeWord(command, w, vars)
+		}
+		for _, c := range peelWrappers(words, d) {
+			if isCdInvocation(c) {
+				dir = cdTarget(dir, c.Args)
+				continue
+			}
+			rewritten, named := inPlaceRewrites(c, heredocText(st))
+			if !named {
+				blind = true
+				return false
+			}
+			for _, p := range rewritten {
+				paths = append(paths, underDir(dir, p))
+			}
+		}
+		return true
+	})
+	return !blind && allOutside(scope, paths)
+}
+
+// inPlaceRewrites are the files c rewrites, and false when it rewrites files it does not
+// name. A command that rewrites nothing names nothing and is true.
+func inPlaceRewrites(c hint.Invocation, heredoc string) ([]string, bool) {
+	name := path.Base(c.Name)
+	if driven, ok := hint.DrivenCommand(c); ok && rewritesInPlace(driven) {
+		return nil, false
+	}
+	switch {
+	case name == "sed" && hasFlag(c.Args, 'i', "in-place"):
+		files := sedEditedFiles(c.Args)
+		return files, len(files) > 0
+	case name == "awk":
+		return nil, !awkRedirectRe.MatchString(interpreterScript(c.Args, heredoc))
+	case name == "magus":
+		script, ok := inlineBuzz(c.Args, heredoc)
+		if !ok {
+			return nil, true
+		}
+		return buzzWriteDestinations(script), true
+	case scriptedRewriteInterpreters[name]:
+		script := interpreterScript(c.Args, heredoc)
+		if !scriptWrites(name, script, c.Args) {
+			return nil, true
+		}
+		// The program's own literals, plus the operands it would read as argv.
+		files := scriptPaths(script)
+		for _, op := range operands(c.Args, "ceEm") {
+			if op != "-" {
+				files = append(files, op)
+			}
+		}
+		return files, len(files) > 0
+	}
+	return nil, true
+}
+
+// sedEditedFiles are the files an in-place sed edits under either reading of a bare -i:
+// GNU's, where the next word is the script, and BSD's, where it is the backup suffix. An
+// empty suffix is never a file and the script is never one, so dropping both leaves the
+// files under each.
+func sedEditedFiles(args []string) []string {
+	ops := operands(args, "ef")
+	if len(ops) > 0 && ops[0] == "" {
+		ops = ops[1:]
+	}
+	if !hasFlag(args, 'e', "expression") && !hasFlag(args, 'f', "file") && len(ops) > 0 {
+		ops = ops[1:]
+	}
+	return ops
+}
+
+// cdTarget is the directory a cd from dir lands in. A cd to home or to the previous
+// directory is not read from the line, so it is unresolved.
+func cdTarget(dir string, args []string) string {
+	ops := operands(args, "")
+	if len(ops) == 0 || ops[0] == "-" {
+		return unresolved
+	}
+	return underDir(dir, ops[0])
+}
+
+// underDir resolves a relative p against dir, the directory the line cd'd into; with none,
+// p stays relative and resolves where the call runs.
+func underDir(dir, p string) string {
+	if dir == "" || p == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "~") || strings.HasPrefix(p, unresolved) {
+		return p
+	}
+	return filepath.Join(dir, p)
 }
 
 // rankInterpreterRewrite ranks this reason against the verdict the other command rules

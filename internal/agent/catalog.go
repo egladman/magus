@@ -244,7 +244,10 @@ import (
 // `client` call is bounded at 10 minutes and names `magus affected list`. magus-memory
 // passes refs as a list, magus-query pages with limit and offset, and insight names a
 // `magus buzz` fallback where it has no CLI verb.
-const SkillVersion = 97
+// 98: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
+// from an exported main, and it points at hack/README.md. magus-run names hack/on-actions
+// and hack/on-linux for proving a command on Linux without a pull request.
+const SkillVersion = 98
 
 const skillLicense = "GPL-3.0-or-later"
 
