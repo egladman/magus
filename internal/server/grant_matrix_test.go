@@ -53,6 +53,8 @@ var pinnedNeeds = map[string]types.Need{
 	"/api/v1/events":        read,
 	"/api/v1/insight":       read,
 	"/api/v1/graph":         read,
+	"/api/v1/diagrams":      read,
+	"/api/v1/diagrams/":     read,
 	"/api/v1/diff":          write,
 	"/api/v1/diff/patch":    write,
 	"/api/v1/diff/context":  write,
