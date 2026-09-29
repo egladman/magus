@@ -1,0 +1,705 @@
+// Runs a command inside a local Linux container through Podman, the way sudo and nice take
+// a command. It costs a local container, plus an image pull and a Go module download
+// (network) the first time.
+//
+//	magus buzz hack/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...
+//	magus buzz hack/on-linux.buzz -- --ls
+//	magus buzz hack/on-linux.buzz -- --delete <id>
+//
+// The options come first; the first word that is not one of them starts the command, which
+// runs verbatim, so `-- magus run test --keep` keeps its own --keep. A bare `--` also ends
+// the options. Inside, `magus` runs magus built from this tree for Linux, and so does
+// `./magus` wherever the checkout has one.
+//
+// This is option B' of docs/decisions/0003-running-an-invocation-on-another-operating-system.md,
+// revived while the engine-level design (E) is on hold. Of that page's contract it keeps:
+//
+//   - the checkout read-only at its own path, a git worktree's common directory read-only
+//     at its path, and .magus/platform/linux-<arch> read-write over .magus, so the inner
+//     cache never shares a manifest path with the host's; every mount is --mount, which
+//     fails on a missing source instead of creating an empty directory;
+//   - the environment crossing by name: the floor below, mise.toml's [env], and each
+//     --env NAME, whose value never appears in an argv. Nothing else crosses, and a host
+//     MAGUS_* variable left behind is named on stderr, never dropped silently. A value that
+//     is a host path outside the mounts is refused before start;
+//   - the floor: MAGUS_CACHE_REMOTE_WRITE_ENABLED=false, MAGUS_BROKER=off,
+//     MAGUS_NO_BOOTSTRAP_EXEC=1, MAGUS_PLATFORM=linux/<arch>, GOTOOLCHAIN=local;
+//   - the command's own stdout and stderr, and its own exit status once it has started;
+//     71 when the relay failed before it started (podman's 125 to 127, the build, a command
+//     the image lacks); 2 for a refusal decided before podman is asked anything;
+//   - a first line on stderr naming the platform, emulation, podman and the kernel, the
+//     image and its digest, and the tree magus is built from;
+//   - the host uid through --userns=keep-id under rootless podman, and --init so the
+//     command is never PID 1;
+//   - the Go image mise.toml pins, and a kernel of 5.13 or later (landlock) checked before
+//     start; a missing podman, a stopped machine or an older kernel prints its fix.
+//
+// It cannot keep: a digest pin (mise.toml pins a tag; line one prints the digest it got);
+// no implicit pull (a missing image is pulled, and line one says so); a TTY (never
+// allocated, so stdout and stderr stay apart); stdin (always /dev/null); the user-tier
+// config (not mounted: pass what matters with --env); a write into the checkout refused
+// before start (it fails inside as EROFS); remote writes held off as a floor (an argv flag
+// inside can raise them); signals waited for without a timer (Ctrl-C reaches podman as
+// SIGTERM and it is killed 5s later; a container that outlives it is labeled, and --ls
+// lists it). On a host whose arch is not --arch, podman emulates, and landlock under
+// emulation is unmeasured.
+namespace onlinux;
+
+import "encoding/toml";
+import "env";
+import "fs";
+import "log";
+import "os";
+import "path";
+import "proc";
+import "serialize";
+import "sort";
+import "std";
+import "uuid";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...\n       magus buzz hack/on-linux.buzz -- --ls\n       magus buzz hack/on-linux.buzz -- --delete <id>";
+
+final HELP = [
+    "on-linux: run a command in a local Linux container through Podman (a local container, plus an image pull and a Go module download over the network the first time)",
+    USAGE,
+    "",
+    "  --arch amd64|arm64  the Linux architecture (default: this host's; podman emulates the other)",
+    "  --env NAME          pass one host variable by name; nothing else crosses",
+    "  --image <ref>       the image (default: the Go image mise.toml pins)",
+    "  --keep              leave the container after the command exits",
+    "  --ls                list the containers this script left behind",
+    "  --delete <id>       remove one of them",
+].join("\n");
+
+// The label that marks a container or volume as this script's, for --ls and --delete.
+final USE_LABEL = "magus.use";
+final USE = "on-linux";
+
+final HOME = "/home/magus";
+
+// EX_OSERR: the relay could not run the process it was handed (ADR 0003).
+final RELAY_FAILED = 71;
+final REFUSED = 2;
+
+// Runs inside the container as `sh -c WRAPPER on-linux <root> <marker> <command>...`. The
+// build is copied over the store's binary rather than renamed onto it, because
+// <root>/magus is bind-mounted from that file and a rename would leave the mount on the
+// old inode. The marker is what tells a command's own 125 to 127 from podman's.
+final WRAPPER = [
+    `root=$1 marker=$2; shift 2`,
+    `bin="$root/.magus/on-linux"`,
+    `git config --global safe.directory '*' || exit 71`,
+    `mkdir -p "$HOME/.cache/on-linux" || exit 71`,
+    `(cd "$root" && go build -trimpath -o "$HOME/.cache/on-linux/magus" ./cmd/magus) || { echo "on-linux: building magus from $root failed, so nothing ran" >&2; exit 71; }`,
+    `cmp -s "$HOME/.cache/on-linux/magus" "$bin/magus" || cp "$HOME/.cache/on-linux/magus" "$bin/magus" || exit 71`,
+    `export PATH="$bin:$PATH"`,
+    `command -v "$1" >/dev/null 2>&1 || { echo "on-linux: $1 is not in the image, so nothing ran" >&2; exit 71; }`,
+    `: > "$marker" || exit 71`,
+    `exec "$@"`,
+].join("\n");
+
+export object Options {
+    arch: str = "",
+    envs: [str],
+    image: str = "",
+    keep: bool = false,
+    ls: bool = false,
+    delete: str = "",
+    help: bool = false,
+    command: [str],
+}
+
+// Plan is everything a run's podman argv is derived from.
+export object Plan {
+    name: str,
+    arch: str,
+    root: str,
+    cwd: str,
+    // A git worktree's common directory when it lies outside root, else "".
+    gitCommon: str,
+    image: str,
+    command: [str],
+    envNames: [str],
+    miseEnv: {str: str},
+    keep: bool,
+    rootless: bool,
+    // Whether <root>/magus exists to be overlaid with the Linux build.
+    overlayMagus: bool,
+}
+
+fun isName(s: str) > bool {
+    if (s == "") { return false; }
+    final alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
+    var i = 0;
+    while (i < s.len()) {
+        final c = s.sub(i, len: 1);
+        if (alpha.indexOf(c) == null and (i == 0 or "0123456789".indexOf(c) == null)) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// parse reads the options sudo-style: they come first, and the first word that is not one
+// of them, or a bare `--`, starts the command, which is kept verbatim.
+export fun parse(args: [str]) > Options !> str {
+    var arch = "";
+    final envs = mut [<str>];
+    var image = "";
+    var keep = false;
+    var ls = false;
+    var del = "";
+    var help = false;
+    var i = 0;
+    while (i < args.len()) {
+        final a = args[i];
+        if (a == "--") {
+            i = i + 1;
+            break;
+        }
+        if (!a.startsWith("-")) { break; }
+        if (a == "-h" or a == "--help") {
+            help = true;
+        } else if (a == "--keep") {
+            keep = true;
+        } else if (a == "--ls") {
+            ls = true;
+        } else if (a == "--arch" or a == "--env" or a == "--image" or a == "--delete") {
+            if (i + 1 >= args.len()) { throw "{a} takes a value"; }
+            final v = args[i + 1];
+            if (a == "--arch") {
+                if (v != "amd64" and v != "arm64") { throw "--arch takes amd64 or arm64, not {v}"; }
+                arch = v;
+            } else if (a == "--env") {
+                if (!isName(v)) { throw "--env takes a variable NAME, not {v}: its value crosses from this host's environment"; }
+                if (envs.indexOf(v) == null) { envs.append(v); }
+            } else if (a == "--image") {
+                image = v;
+            } else {
+                del = v;
+            }
+            i = i + 1;
+        } else {
+            throw "unknown option {a}";
+        }
+        i = i + 1;
+    }
+    final command = mut [<str>];
+    while (i < args.len()) {
+        command.append(args[i]);
+        i = i + 1;
+    }
+    final opts = Options{arch = arch, envs = envs, image = image, keep = keep, ls = ls, delete = del, help = help, command = command};
+    if (help) { return opts; }
+    if (ls or del != "") {
+        if (ls and del != "") { throw "--ls and --delete are two requests; pass one"; }
+        if (command.len() > 0 or arch != "" or envs.len() > 0 or image != "" or keep) {
+            final which = if (ls) "--ls" else "--delete";
+            throw "{which} stands alone: it takes no command and no other option";
+        }
+        return opts;
+    }
+    if (command.len() == 0) { throw "no command to run"; }
+    return opts;
+}
+
+// imageFor is the Go image mise.toml pins, fully qualified because podman refuses a short
+// name it cannot prompt about.
+export fun imageFor(mise: str) > str !> any {
+    final v = serialize\Boxed.init(toml\parse(mise)).q(["tools", "go"]).stringValue();
+    if (v == "") { throw "mise.toml pins no go tool, so there is no default image; pass --image"; }
+    return "docker.io/library/golang:{v}";
+}
+
+// miseEnv is mise.toml's [env] without its directives (`_.path` and the rest), which only
+// mise reads.
+export fun miseEnv(mise: str) > {str: str} !> any {
+    final vars = mut {<str: str>};
+    foreach (k, v in serialize\Boxed.init(toml\parse(mise)).q(["env"]).mapValue()) {
+        if (!k.startsWith("_") and v.string() != null) { vars[k] = v.stringValue(); }
+    }
+    return vars;
+}
+
+fun floor(arch: str) > {str: str} {
+    return {
+        "HOME": HOME,
+        "GOPATH": "{HOME}/go",
+        "GOTOOLCHAIN": "local",
+        "MAGUS_BROKER": "off",
+        "MAGUS_CACHE_REMOTE_WRITE_ENABLED": "false",
+        "MAGUS_NO_BOOTSTRAP_EXEC": "1",
+        "MAGUS_PLATFORM": "linux/{arch}",
+    };
+}
+
+fun under(p: str, dir: str) > bool {
+    return dir != "" and (p == dir or p.startsWith(dir + "/"));
+}
+
+// checkEnv is the refusal for the --env names, or "" when every one may cross. host holds
+// the value of each name the host sets.
+export fun checkEnv(p: Plan, host: {str: str}) > str {
+    final reserved = floor(p.arch);
+    foreach (n in p.envNames) {
+        if (n == "PATH" or reserved[n] != null) {
+            return "--env {n}: on-linux sets {n} itself";
+        }
+        if (p.miseEnv[n] != null) {
+            return "--env {n}: mise.toml sets {n}, and the container takes it from there";
+        }
+        final v = host[n];
+        if (v == null) {
+            return "--env {n}: {n} is not set here, so there is nothing to pass";
+        }
+        if (v!.startsWith("/") and !under(v!, dir: p.root) and !under(v!, dir: p.gitCommon)) {
+            return "--env {n}: {v!} is a host path outside the mounted checkout, so it would name nothing inside";
+        }
+    }
+    return "";
+}
+
+// leftBehind is every host MAGUS_* variable the run does not pass, for the stderr note.
+export fun leftBehind(p: Plan, hostNames: [str]) > [str] {
+    final reserved = floor(p.arch);
+    final left = mut [<str>];
+    foreach (n in hostNames) {
+        if (n.startsWith("MAGUS_") and p.envNames.indexOf(n) == null and reserved[n] == null) {
+            left.append(n);
+        }
+    }
+    return sort\strings(left);
+}
+
+export fun store(p: Plan) > str {
+    return "{p.root}/.magus/platform/linux-{p.arch}";
+}
+
+export fun volume(arch: str) > str {
+    return "on-linux-home-{arch}";
+}
+
+// markers returns the started marker's path on the host and inside the container.
+export fun markers(p: Plan) > [str] {
+    return ["{store(p)}/on-linux/run/{p.name}.started", "{p.root}/.magus/on-linux/run/{p.name}.started"];
+}
+
+export fun mounts(p: Plan) > [str] {
+    final ms = mut ["type=bind,src={p.root},dst={p.root},ro=true"];
+    if (p.gitCommon != "") {
+        ms.append("type=bind,src={p.gitCommon},dst={p.gitCommon},ro=true");
+    }
+    ms.append("type=bind,src={store(p)},dst={p.root}/.magus");
+    if (p.overlayMagus) {
+        ms.append("type=bind,src={store(p)}/on-linux/magus,dst={p.root}/magus,ro=true");
+    }
+    ms.append("type=volume,src={volume(p.arch)},dst={HOME}");
+    return ms;
+}
+
+// containerEnv is the --env list: the floor and mise.toml's values by value, and each
+// --env name bare, so podman reads its value from its own environment.
+export fun containerEnv(p: Plan) > [str] {
+    final set = floor(p.arch);
+    final vars = mut [<str>];
+    foreach (k in sort\strings(set.keys())) { vars.append("{k}={set[k]!}"); }
+    foreach (k in sort\strings(p.miseEnv.keys())) { vars.append("{k}={p.miseEnv[k]!}"); }
+    foreach (n in p.envNames) { vars.append(n); }
+    return vars;
+}
+
+export fun runArgv(p: Plan) > [str] {
+    final argv = mut ["run", "--init", "--name", p.name,
+        "--label", "{USE_LABEL}={USE}",
+        "--label", "magus.workspace={p.root}",
+        "--label", "magus.command={p.command.join(" ")}",
+        "--platform", "linux/{p.arch}",
+        "--pull=missing",
+        "--workdir", p.cwd];
+    if (!p.keep) { argv.append("--rm"); }
+    if (p.rootless) { argv.append("--userns=keep-id"); }
+    foreach (m in mounts(p)) {
+        argv.append("--mount");
+        argv.append(m);
+    }
+    foreach (e in containerEnv(p)) {
+        argv.append("--env");
+        argv.append(e);
+    }
+    foreach (a in [p.image, "sh", "-c", WRAPPER, USE, p.root, markers(p)[1]]) { argv.append(a); }
+    foreach (a in p.command) { argv.append(a); }
+    return argv;
+}
+
+// exitStatus is the status the script exits with: the command's own once it started, a
+// signal's as it came, and RELAY_FAILED for anything that stopped it starting.
+export fun exitStatus(code: int, started: bool) > int {
+    if (started or code == 0 or code == 129 or code == 130 or code == 143) { return code; }
+    return RELAY_FAILED;
+}
+
+fun leadingInt(s: str) > int {
+    var n = 0;
+    var i = 0;
+    while (i < s.len()) {
+        final d = "0123456789".indexOf(s.sub(i, len: 1));
+        if (d == null) { break; }
+        n = n * 10 + d!;
+        i = i + 1;
+    }
+    return n;
+}
+
+// hasLandlock reports whether a kernel release is 5.13 or later, the first with landlock.
+export fun hasLandlock(kernel: str) > bool {
+    final parts = kernel.split(".");
+    if (parts.len() < 2) { return false; }
+    final major = leadingInt(parts[0]);
+    final minor = leadingInt(parts[1]);
+    return major > 5 or (major == 5 and minor >= 13);
+}
+
+// effect is the first line a run prints. digest is "" when the image is absent and about
+// to be pulled.
+export fun effect(p: Plan, hostArch: str, podman: str, kernel: str, digest: str, tree: str) > str {
+    final how = if (p.arch == hostArch) "native" else "emulated on {hostArch}; landlock under emulation is unmeasured";
+    final img = if (digest == "") "{p.image} (absent: pulling it over the network)" else "{p.image}@{digest}";
+    return "on-linux: `{p.command.join(" ")}` in linux/{p.arch} ({how}), podman {podman}, kernel {kernel}, image {img}, magus built from {tree}, checkout read-only at {p.root}";
+}
+
+fun refuse(code: int, message: str) > int {
+    log\error("on-linux: {message}");
+    return code;
+}
+
+fun podman(args: [str]) > ExecResult !> any {
+    return proc\exec("podman", args: args, opts: {"quiet": true, "allow_failure": true});
+}
+
+// reach returns "" when podman answers, else the refusal carrying the command that fixes it.
+fun reach(hostOS: str) > str !> any {
+    try {
+        proc\which("podman");
+    } catch (e) {
+        if (hostOS == "darwin") { return "podman is not installed; run `brew install podman`"; }
+        return "podman is not installed; install it from your distribution (https://podman.io/docs/installation)";
+    }
+    final info = podman(["info", "--format", "json"]);
+    if (info.ok) { return ""; }
+    if (hostOS != "linux") {
+        final machines = podman(["machine", "list", "--format", "json"]);
+        if (machines.ok and serialize\jsonDecode(machines.stdout).listValue().len() == 0) {
+            return "podman has no machine to run Linux in; run `podman machine init --now`";
+        }
+        return "the podman machine is not running; run `podman machine start`";
+    }
+    return "podman cannot run containers: {info.stderr}";
+}
+
+export fun lsArgv() > [str] {
+    return ["ps", "--all", "--filter", "label={USE_LABEL}={USE}",
+        "--format", "\{\{.ID}}\t\{\{.RunningFor}}\t\{\{index .Labels \"magus.command\"}}"];
+}
+
+fun ls() > int !> any {
+    final res = podman(lsArgv());
+    if (!res.ok) { return refuse(RELAY_FAILED, message: "podman ps failed: {res.stderr}"); }
+    std\print("ID\tAGE\tCOMMAND");
+    if (res.stdout != "") { std\print(res.stdout); }
+    return 0;
+}
+
+fun delete(id: str) > int !> any {
+    final res = podman(["container", "inspect", "--format", "\{\{index .Config.Labels \"{USE_LABEL}\"}}", id]);
+    if (!res.ok) { return refuse(REFUSED, message: "there is no container {id}"); }
+    if (res.stdout != USE) { return refuse(REFUSED, message: "{id} was not created by on-linux, so it is not this script's to remove"); }
+    return proc\exec("podman", args: ["rm", id], opts: {"allow_failure": true}).code;
+}
+
+fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
+    final root = vcs\root();
+    final cwd = path\abs(".");
+    if (!under(cwd, dir: root)) {
+        return refuse(REFUSED, message: "{cwd} is outside the checkout {root}, and only the checkout is mounted");
+    }
+    var gitCommon = "";
+    if (vcs\name() == "git") {
+        final common = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts: {"quiet": true}).stdout;
+        if (!under(common, dir: root)) { gitCommon = common; }
+    }
+    final mise = fs\readFile("{root}/mise.toml");
+    final p = mut Plan{
+        name = "on-linux-{uuid\randomHex(6)}",
+        arch = if (o.arch != "") o.arch else hostArch,
+        root = root,
+        cwd = cwd,
+        gitCommon = gitCommon,
+        image = if (o.image != "") o.image else imageFor(mise),
+        command = o.command,
+        envNames = o.envs,
+        miseEnv = miseEnv(mise),
+        keep = o.keep,
+        rootless = true,
+        overlayMagus = fs\isFile("{root}/magus"),
+    };
+    final host: {str: str} = env\list();
+    final bad = checkEnv(p, host: host);
+    if (bad != "") { return refuse(REFUSED, message: bad); }
+
+    final unreachable = reach(hostOS);
+    if (unreachable != "") { return refuse(RELAY_FAILED, message: unreachable); }
+    final info = serialize\jsonDecode(podman(["info", "--format", "json"]).stdout);
+    final kernel = info.q(["host", "kernel"]).stringValue();
+    if (!hasLandlock(kernel)) {
+        final fix = if (hostOS == "linux") "boot a Linux 5.13 or later kernel" else "run `podman machine os upgrade`";
+        return refuse(RELAY_FAILED, message: "kernel {kernel} predates landlock (5.13); {fix}");
+    }
+    p.rootless = info.q(["host", "security", "rootless"]).booleanValue();
+
+    var digest = "";
+    final inspect = podman(["image", "inspect", "--format", "\{\{.Architecture}} \{\{.Digest}}", p.image]);
+    if (inspect.ok) {
+        final fields = inspect.stdout.split(" ");
+        if (fields.len() == 2 and fields[0] == p.arch) { digest = fields[1]; }
+    }
+    if (!podman(["volume", "exists", volume(p.arch)]).ok) {
+        final made = podman(["volume", "create", "--label", "{USE_LABEL}={USE}", volume(p.arch)]);
+        if (!made.ok) { return refuse(RELAY_FAILED, message: "podman volume create failed: {made.stderr}"); }
+    }
+    fs\mkdirAll("{store(p)}/on-linux/run");
+    final bin = "{store(p)}/on-linux/magus";
+    if (!fs\exists(bin)) {
+        fs\writeFile(bin, content: "");
+        fs\chmod(bin, mode: 493);
+    }
+
+    final head = vcs\commit().short;
+    final tree = if (vcs\isDirty()) "{head}-dirty" else head;
+    log\info(effect(p, hostArch: hostArch, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree));
+    final left = leftBehind(p, hostNames: host.keys());
+    if (left.len() > 0) {
+        log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
+    }
+
+    final res = proc\exec("podman", args: runArgv(p), opts: {"allow_failure": true});
+    final marker = markers(p)[0];
+    final started = fs\exists(marker);
+    if (started) { fs\remove(marker); }
+    final code = exitStatus(res.code, started: started);
+    if (!started and code == RELAY_FAILED) {
+        log\error("on-linux: the command never started (podman exited {res.code})");
+    }
+    if (p.keep) {
+        log\info("on-linux: kept {p.name}; `magus buzz hack/on-linux.buzz -- --delete {p.name}` removes it");
+    }
+    return code;
+}
+
+export fun main(args: [str]) > void !> any {
+    var o = Options{envs = [<str>], command = [<str>]};
+    try {
+        o = parse(args);
+    } catch (e: str) {
+        log\error("on-linux: {e}\n{USAGE}");
+        os\exit(REFUSED);
+    }
+    if (o.help) {
+        std\print(HELP);
+        return;
+    }
+    final host = os\platform();
+    var code = 0;
+    if (o.ls or o.delete != "") {
+        final unreachable = reach(host[0]);
+        if (unreachable != "") {
+            code = refuse(RELAY_FAILED, message: unreachable);
+        } else if (o.ls) {
+            code = ls();
+        } else {
+            code = delete(o.delete);
+        }
+    } else {
+        code = run(o, hostOS: host[0], hostArch: host[1]);
+    }
+    if (code != 0) { os\exit(code); }
+}
+
+fun fixture() > mut Plan {
+    return mut Plan{
+        name = "on-linux-abc123",
+        arch = "arm64",
+        root = "/src/magus",
+        cwd = "/src/magus/libs/core",
+        gitCommon = "/src/main/.git",
+        image = "docker.io/library/golang:1.26.6",
+        command = ["magus", "run", "test", ".", "--keep"],
+        envNames = ["MAGUS_LOG_FORMAT"],
+        miseEnv = {"GOEXPERIMENT": "jsonv2"},
+        keep = false,
+        rootless = true,
+        overlayMagus = true,
+    };
+}
+
+test "parse takes the options first and the rest as the command, verbatim" {
+    final o = parse(["--arch", "amd64", "--env", "NO_COLOR", "--keep", "magus", "run", "test", "--keep", "--env", "X", "--"]);
+    assert\equal(o.arch, want: "amd64", message: "arch");
+    assert\equal(o.envs, want: ["NO_COLOR"], message: "envs");
+    assert\equal(o.keep, want: true, message: "keep");
+    assert\equal(o.command, want: ["magus", "run", "test", "--keep", "--env", "X", "--"], message: "the command keeps its own flags");
+}
+
+test "parse ends the options at a bare --" {
+    final o = parse(["--image", "alpine", "--", "--ls", "-x"]);
+    assert\equal(o.image, want: "alpine", message: "image");
+    assert\equal(o.ls, want: false, message: "--ls after -- is the command's");
+    assert\equal(o.command, want: ["--ls", "-x"], message: "command");
+}
+
+test "parse passes a command that starts with a word" {
+    final o = parse(["bash"]);
+    assert\equal(o.command, want: ["bash"], message: "command");
+    assert\equal(o.arch, want: "", message: "arch defaults later to the host's");
+}
+
+test "parse refuses what it cannot run" {
+    final cases = {
+        "no command to run": [<str>],
+        "unknown option --platform": ["--platform", "linux/arm64", "magus"],
+        "--arch takes amd64 or arm64, not riscv64": ["--arch", "riscv64", "magus"],
+        "--env takes a variable NAME, not A=b: its value crosses from this host's environment": ["--env", "A=b", "magus"],
+        "--image takes a value": ["--image"],
+        "--ls stands alone: it takes no command and no other option": ["--ls", "magus"],
+        "--delete stands alone: it takes no command and no other option": ["--keep", "--delete", "on-linux-1"],
+        "--ls and --delete are two requests; pass one": ["--ls", "--delete", "x"],
+    };
+    foreach (want, args in cases) {
+        var got = "";
+        try {
+            _ = parse(args);
+        } catch (e: str) {
+            got = e;
+        }
+        assert\equal(got, want: want, message: "{args}");
+    }
+}
+
+test "parse reads --ls and --delete alone" {
+    assert\equal(parse(["--ls"]).ls, want: true, message: "ls");
+    assert\equal(parse(["--delete", "on-linux-1"]).delete, want: "on-linux-1", message: "delete");
+    assert\equal(parse(["--help", "whatever"]).help, want: true, message: "help wins");
+}
+
+test "the default image and environment come from mise.toml" {
+    final mise = fs\readFile("hack/testdata/on-linux/mise.toml");
+    assert\equal(imageFor(mise), want: "docker.io/library/golang:1.26.6", message: "image");
+    assert\equal(miseEnv(mise), want: {"GOEXPERIMENT": "jsonv2"}, message: "[env] without mise's directives");
+}
+
+test "mounts: checkout and git common dir read-only, store over .magus, magus overlaid" {
+    assert\equal(mounts(fixture()), want: [
+        "type=bind,src=/src/magus,dst=/src/magus,ro=true",
+        "type=bind,src=/src/main/.git,dst=/src/main/.git,ro=true",
+        "type=bind,src=/src/magus/.magus/platform/linux-arm64,dst=/src/magus/.magus",
+        "type=bind,src=/src/magus/.magus/platform/linux-arm64/on-linux/magus,dst=/src/magus/magus,ro=true",
+        "type=volume,src=on-linux-home-arm64,dst=/home/magus",
+    ], message: "mounts");
+}
+
+test "the environment crosses by name, over the floor" {
+    assert\equal(containerEnv(fixture()), want: [
+        "GOPATH=/home/magus/go",
+        "GOTOOLCHAIN=local",
+        "HOME=/home/magus",
+        "MAGUS_BROKER=off",
+        "MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
+        "MAGUS_NO_BOOTSTRAP_EXEC=1",
+        "MAGUS_PLATFORM=linux/arm64",
+        "GOEXPERIMENT=jsonv2",
+        "MAGUS_LOG_FORMAT",
+    ], message: "env");
+}
+
+test "checkEnv refuses a name the script sets, an unset name and a host path" {
+    final p = fixture();
+    assert\equal(checkEnv(p, host: {"MAGUS_LOG_FORMAT": "json"}), want: "", message: "a plain value crosses");
+    assert\equal(checkEnv(p, host: {<str: str>}), want: "--env MAGUS_LOG_FORMAT: MAGUS_LOG_FORMAT is not set here, so there is nothing to pass", message: "unset");
+    p.envNames = ["MAGUS_CACHE_DIR"];
+    assert\equal(checkEnv(p, host: {"MAGUS_CACHE_DIR": "/Users/me/cache"}),
+        want: "--env MAGUS_CACHE_DIR: /Users/me/cache is a host path outside the mounted checkout, so it would name nothing inside", message: "host path");
+    assert\equal(checkEnv(p, host: {"MAGUS_CACHE_DIR": "/src/magus/.cache"}), want: "", message: "a path under the checkout crosses");
+    p.envNames = ["MAGUS_BROKER"];
+    assert\equal(checkEnv(p, host: {"MAGUS_BROKER": "required"}), want: "--env MAGUS_BROKER: on-linux sets MAGUS_BROKER itself", message: "floor");
+    p.envNames = ["GOEXPERIMENT"];
+    assert\equal(checkEnv(p, host: {"GOEXPERIMENT": "none"}), want: "--env GOEXPERIMENT: mise.toml sets GOEXPERIMENT, and the container takes it from there", message: "mise");
+}
+
+test "leftBehind names the host MAGUS_ variables that do not cross" {
+    assert\equal(leftBehind(fixture(), hostNames: ["PATH", "MAGUS_SANDBOX", "MAGUS_LOG_FORMAT", "MAGUS_BROKER", "MAGUS_CONCURRENCY"]),
+        want: ["MAGUS_CONCURRENCY", "MAGUS_SANDBOX"], message: "left behind");
+}
+
+test "runArgv labels the container, removes it unless kept, and ends with the command" {
+    final p = fixture();
+    final argv = runArgv(p);
+    assert\equal(argv.sub(0, len: 17), want: ["run", "--init", "--name", "on-linux-abc123",
+        "--label", "magus.use=on-linux",
+        "--label", "magus.workspace=/src/magus",
+        "--label", "magus.command=magus run test . --keep",
+        "--platform", "linux/arm64",
+        "--pull=missing",
+        "--workdir", "/src/magus/libs/core",
+        "--rm", "--userns=keep-id"], message: "head");
+    final tail = argv.sub(argv.len() - 12);
+    assert\equal(tail, want: ["docker.io/library/golang:1.26.6", "sh", "-c", WRAPPER, "on-linux", "/src/magus",
+        "/src/magus/.magus/on-linux/run/on-linux-abc123.started",
+        "magus", "run", "test", ".", "--keep"], message: "tail");
+    p.keep = true;
+    assert\equal(runArgv(p).indexOf("--rm"), want: null, message: "--keep leaves the container");
+}
+
+test "exitStatus passes the command's status and marks the relay's own failures 71" {
+    assert\equal(exitStatus(3, started: true), want: 3, message: "the command's own");
+    assert\equal(exitStatus(125, started: true), want: 125, message: "a command's own 125");
+    assert\equal(exitStatus(125, started: false), want: 71, message: "podman's 125");
+    assert\equal(exitStatus(127, started: false), want: 71, message: "nothing started");
+    assert\equal(exitStatus(130, started: false), want: 130, message: "Ctrl-C");
+    assert\equal(exitStatus(0, started: false), want: 0, message: "success");
+}
+
+test "--ls lists only this script's containers, by id, age and command" {
+    assert\equal(lsArgv(), want: ["ps", "--all", "--filter", "label=magus.use=on-linux",
+        "--format", `{{.ID}}` + "\t" + `{{.RunningFor}}` + "\t" + `{{index .Labels "magus.command"}}`], message: "ps argv");
+}
+
+test "hasLandlock needs 5.13 or later" {
+    assert\equal(hasLandlock("6.12.5-200.fc41.aarch64"), want: true, message: "6.12");
+    assert\equal(hasLandlock("5.13.0"), want: true, message: "5.13");
+    assert\equal(hasLandlock("5.10.216-linuxkit"), want: false, message: "5.10");
+    assert\equal(hasLandlock(""), want: false, message: "unknown");
+}
+
+test "the first line states what runs, where, and with which image" {
+    final p = fixture();
+    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "sha256:abc", tree: "92b8265-dirty"),
+        want: "on-linux: `magus run test . --keep` in linux/arm64 (native), podman 5.6.1, kernel 6.12.5, image docker.io/library/golang:1.26.6@sha256:abc, magus built from 92b8265-dirty, checkout read-only at /src/magus",
+        message: "native");
+    p.arch = "amd64";
+    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "", tree: "92b8265"),
+        want: "on-linux: `magus run test . --keep` in linux/amd64 (emulated on arm64; landlock under emulation is unmeasured), podman 5.6.1, kernel 6.12.5, image docker.io/library/golang:1.26.6 (absent: pulling it over the network), magus built from 92b8265, checkout read-only at /src/magus",
+        message: "emulated and pulling");
+}
+
+test "live: a command's exit status crosses unchanged" {
+    final host = os\platform();
+    final why = reach(host[0]);
+    if (why != "") {
+        std\print("skip: {why}");
+        return;
+    }
+    assert\equal(run(parse(["sh", "-c", "uname -s | grep -qx Linux && exit 3"]), hostOS: host[0], hostArch: host[1]), want: 3, message: "exit status");
+}
