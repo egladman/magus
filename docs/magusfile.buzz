@@ -6,13 +6,14 @@ import "../hack/drift" as drift;
 import "../hack/index" as index;
 import "../hack/changelog" as changelog;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
-// npm), vcs (drift gate), http (serve). render.buzz owns the rendering
-// machinery's own imports (markdown, io, std, serialize, encoding).
+// npm), vcs (drift gate), http (serve), flags (diagrams-generate's switch). render.buzz
+// owns the rendering machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
 import "proc";
 import "vcs";
 import "http";
+import "flags";
 // build-playground compiles the gopherbuzz Buzz VM to wasm with the stock Go
 // toolchain, so it depends on
 // gopherbuzz's build. The path import binds its targets as cross-project handles
@@ -609,10 +610,20 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 // GENERATED list in generate - which only measures this tree because generate composes
 // this target; a gate cannot see bytes nothing moved.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // --verify-imports checks each figure's imports claims against the symbol index, and
+    // refuses when there is none. Off by default: the index costs a graph build.
+    final parsed = flags\parse(args, switches: ["--verify-imports"], valued: [<str>]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "diagrams-generate: unexpected arguments {args.join(" ")}; the only one is --verify-imports";
+    }
+    final verifyImports = parsed.values["--verify-imports"] == "true";
     // workspace.file, not a project-relative path: the renderer moved out to
     // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
     // key blind to renderer edits - it replayed committed SVGs through a Style change.
-    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/diagram.buzz"));
+    // The Go sources are read because the verifier checks each figure's scope against the
+    // packages that exist; without them a new package would replay a cached pass.
+    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/diagram.buzz"),
+        workspace\file("internal/**/*.go"), workspace\file("cmd/**/*.go"), workspace\file("broker/**/*.go"));
     ctx.writesFiles("assets/gen/diagram-*.svg");
     // Verified before writing, not after: a diagram that names a package which no longer
     // exists should fail the target rather than ship a rendered picture of a tree that is
@@ -622,10 +633,11 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     // real package), which is a different question from whether the rendered bytes moved.
     // The old name also shadowed the hack/drift module this file imports, so reaching for
     // drift.hashes inside this function would have failed on a list.
-    final anchors = renderer\site_diagram_drift(ROOT, ["internal/**/*.go", "cmd/**/*.go"]);
+    final anchors = renderer\site_diagram_drift(ROOT,
+        sourceGlobs: ["internal/**/*.go", "cmd/**/*.go"], verifyImports: verifyImports);
     if (anchors.len() > 0) {
         foreach (msg in anchors) { magus\log.error(msg); }
-        throw "diagram anchors are stale: {anchors.len()} finding(s)";
+        throw "diagrams drifted from the code: {anchors.len()} finding(s)";
     }
     renderer\site_diagrams("assets/gen");
     magus\log.info("rendered the diagram pair into docs/assets/gen");

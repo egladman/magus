@@ -6,6 +6,7 @@ namespace diagrams;
 
 import "assert";
 import "fs";
+import "magus";
 import "../libs/diagram/diagram" as _;
 import "site/diagrams/server-http" as _;
 import "site/diagrams/server-socket" as _;
@@ -123,46 +124,235 @@ export fun inlinePageDiagrams(html: str) > str !> any {
 // the host language's comment opener, and nothing here needs to know what it is.
 final BackrefMarker = "magus:diagram ";
 
-// verifyAnchors checks both directions of the diagram-to-code link and returns one message
-// per break, empty when they agree.
-//
-// Forward: every anchor a diagram declares must still resolve to a path in the tree. This
-// is the half that catches the common rot - a package renamed or deleted while the figure
-// keeps naming it.
-//
-// Reverse: every magus:diagram marker in the sources must name a diagram that exists. This
-// is the half that catches a diagram being renamed or dropped while call sites still point
-// at it. Neither half asserts the figure's SHAPE is right; that stays a human judgment.
-export fun verifyAnchors(root: str, sourceGlobs: [str]) > [str] !> any {
-    final findings: mut [str] = mut [<str>];
+// DriftOptions carries the drift step's switches. Import verification is off unless the step
+// was invoked with --verify-imports, because it needs a symbol index a plain checkout lacks.
+export object DriftOptions {
+    verifyImports: bool = false,
+}
 
-    foreach (d in allDiagrams()) {
-        foreach (n in d.nodes) {
-            if (n.anchor != "" and fs\exists(root + "/" + n.anchor) == false) {
-                findings.append("diagram \"{d.id}\": node \"{n.id}\" anchors {n.anchor}, which no longer exists");
+// ObservedImports mirrors magus\ImportGraph field for field. The host type exists only for
+// the checker, so a test cannot construct one; this record it can.
+export object ObservedImports {
+    indexed: bool = false,
+    packages: {str: [str]} = {<str: [str]>},
+}
+
+// DriftReport is what verifyFigures found. findings fail the drift step; summaries are one
+// line per figure saying how much of it is checked at all.
+export object DriftReport {
+    findings: [str] = [<str>],
+    summaries: [str] = [<str>],
+}
+
+// verifyFigures checks every registered figure against the tree and returns what it found.
+// Nothing here infers a relationship: a gap is a finding that names the line to add.
+//
+// Per figure, in order: anchors that no longer resolve; Go packages under the figure's scope
+// that no node anchors and no omit names; omits naming a path that is gone; edges whose
+// claim is unknown or cannot be checked; and, with opts.verifyImports, imports claims the
+// import graph does not bear out. Then every magus:diagram marker in sourceGlobs that names
+// no figure. None of it asserts the figure's SHAPE is right; that stays a human judgment.
+//
+// Raises when opts.verifyImports is set and the workspace has no symbol index: an empty
+// import graph would otherwise read as "no drift".
+export fun verifyFigures(root: str, sourceGlobs: [str], opts: DriftOptions) > DriftReport !> any {
+    var imports: ObservedImports? = null;
+    if (opts.verifyImports) {
+        final observed: ImportGraph = magus\importGraph();
+        imports = ObservedImports{ indexed = observed.indexed, packages = observed.packages };
+    }
+    return checkFigures(allDiagrams(), root: root, sourceGlobs: sourceGlobs, imports: imports);
+}
+
+// checkFigures is verifyFigures over any figure list; imports is null when not verifying.
+fun checkFigures(figures: [Diagram], root: str, sourceGlobs: [str], imports: ObservedImports?) > DriftReport !> any {
+    if (imports != null and imports!.indexed == false) {
+        throw "--verify-imports needs the symbol index, and magus\\importGraph() answered indexed=false: "
+            + "no index was ingested. Build it with `magus graph build`, then rerun.";
+    }
+    final findings: mut [str] = mut [<str>];
+    final summaries: mut [str] = mut [<str>];
+    foreach (d in figures) {
+        foreach (msg in figureFindings(d, root: root, imports: imports)) { findings.append(msg); }
+        summaries.append(summaryLine(d, verified: imports != null));
+    }
+    foreach (msg in unknownMarkers(figures, root: root, sourceGlobs: sourceGlobs)) { findings.append(msg); }
+    return DriftReport{ findings = findings, summaries = summaries };
+}
+
+fun figureFindings(d: Diagram, root: str, imports: ObservedImports?) > [str] !> any {
+    final found: mut [str] = mut [<str>];
+    final anchorDirs: mut {str: bool} = mut {<str: bool>};
+    final nodeAnchor: mut {str: str} = mut {<str: str>};
+    foreach (n in d.nodes) {
+        nodeAnchor[n.id] = n.anchor;
+        if (n.anchor == "") { continue; }
+        if (fs\exists(root + "/" + n.anchor) == false) {
+            found.append("diagram \"{d.id}\": node \"{n.id}\" anchors {n.anchor}, which no longer exists");
+            continue;
+        }
+        anchorDirs[anchorDir(root, anchor: n.anchor)] = true;
+    }
+
+    final reported: mut {str: bool} = mut {<str: bool>};
+    foreach (glob in d.scope) {
+        foreach (seg in glob.split("/")) {
+            if (seg.indexOf("*") != null and seg != "*" and seg != "**") {
+                found.append("diagram \"{d.id}\": scope {glob} puts a wildcard inside a segment; a wildcard is a whole segment, * or **");
             }
+        }
+        foreach (dir in packagesUnder(root, glob: glob)) {
+            if (anchorDirs[dir] != null or d.omits[dir] != null or reported[dir] != null) { continue; }
+            reported[dir] = true;
+            found.append("diagram \"{d.id}\": {dir} is under scope {glob} but no node anchors it; add a node or omit it with a reason");
         }
     }
 
-    final known: mut [str] = mut [<str>];
-    foreach (d in allDiagrams()) { known.append(d.id); }
+    foreach (omitted, _ in d.omits) {
+        if (fs\exists(root + "/" + omitted) == false) {
+            found.append("diagram \"{d.id}\": omit {omitted} names a path that no longer exists; drop the omit");
+        }
+    }
 
+    foreach (e in d.edges) {
+        final edge = "edge {e.src} -> {e.dst}";
+        if (e.claim != "imports" and e.claim != "calls" and e.claim != "flow") {
+            found.append("diagram \"{d.id}\": {edge} claims \"{e.claim}\"; a claim is imports, calls or flow");
+            continue;
+        }
+        if (e.claim != "imports") { continue; }
+        final srcAnchor = nodeAnchor[e.src] ?? "";
+        final dstAnchor = nodeAnchor[e.dst] ?? "";
+        if (srcAnchor == "" or dstAnchor == "") {
+            var bare = e.src;
+            if (srcAnchor != "") { bare = e.dst; }
+            found.append("diagram \"{d.id}\": {edge} claims imports, but node \"{bare}\" has no anchor to check it against; anchor it or claim flow");
+            continue;
+        }
+        if (imports == null) { continue; }
+        final srcDir = anchorDir(root, anchor: srcAnchor);
+        final dstDir = anchorDir(root, anchor: dstAnchor);
+        final observed = imports!.packages[srcDir] ?? [<str>];
+        var holds = false;
+        foreach (dep in observed) {
+            if (dep == dstDir) { holds = true; }
+        }
+        if (holds == false) {
+            var seen = "none";
+            if (observed.len() > 0) { seen = observed.join(", "); }
+            found.append("diagram \"{d.id}\": {edge} claims imports, but {srcDir} does not import {dstDir}; {srcDir} imports: {seen}");
+        }
+    }
+    // TODO: verify calls claims once the magus:calls source marker's shape is settled
+    // (plans/diagram-flow-2026-09-29.md, decision 4b). Until then they are only counted.
+    return found;
+}
+
+// summaryLine says how much of a figure is backed by anything. An all-flow figure reads as
+// unverified here rather than passing quietly.
+fun summaryLine(d: Diagram, verified: bool) > str {
+    var anchored = 0;
+    foreach (n in d.nodes) {
+        if (n.anchor != "") { anchored = anchored + 1; }
+    }
+    var imports = 0;
+    var calls = 0;
+    var narrative = 0;
+    foreach (e in d.edges) {
+        if (e.claim == "imports") { imports = imports + 1; }
+        if (e.claim == "calls") { calls = calls + 1; }
+        if (e.claim == "flow") { narrative = narrative + 1; }
+    }
+    var line = "{d.id}: {d.nodes.len()} nodes, {anchored} anchored; "
+        + "edges: {imports} imports, {calls} calls, {narrative} flow (unverified)";
+    if (verified) {
+        line = line + "; imports verified";
+    } else {
+        line = line + "; imports unverified (run with --verify-imports)";
+    }
+    return line;
+}
+
+// anchorDir is the package an anchor depicts: the anchor itself, or the directory holding
+// an anchored file.
+fun anchorDir(root: str, anchor: str) > str !> any {
+    if (fs\isFile(root + "/" + anchor)) { return fs\dirname(anchor); }
+    return anchor;
+}
+
+// packagesUnder lists the workspace-relative directories matching glob that hold a non-test
+// .go file, sorted. A glob matches directories exactly as written: "internal/ci" is that one
+// package, and only an explicit ** reaches below it.
+fun packagesUnder(root: str, glob: str) > [str] !> any {
+    final dirs: mut [str] = mut [<str>];
+    final seen: mut {str: bool} = mut {<str: bool>};
+    // fs\glob answers relative to the working directory whatever root looks like, so the
+    // prefix to strip is root as fs\glob spells it. The path module is out of reach here:
+    // engine/path claims the namespace in the docs build.
+    final spelled = fs\glob(root);
+    if (spelled.len() == 0) { throw "drift root {root} does not exist"; }
+    var prefix = spelled[0].value + "/";
+    if (spelled[0].value == ".") { prefix = ""; }
+    foreach (file in fs\glob(root + "/" + glob + "/*.go")) {
+        if (file.value.startsWith(prefix) == false) {
+            throw "drift: {file.value} does not sit under {prefix}; fs\\glob spelled the root differently";
+        }
+        if (file.value.endsWith("_test.go")) { continue; }
+        final dir = fs\dirname(file.value.sub(prefix.len()));
+        if (seen[dir] != null) { continue; }
+        seen[dir] = true;
+        dirs.append(dir);
+    }
+    return dirs.sort(fun (a: str, b: str) > bool { return a < b; });
+}
+
+// scopeMatches reports whether a workspace-relative directory falls under a scope glob.
+// Wildcards are whole segments: * is one segment, ** is any number of them.
+export fun scopeMatches(dir: str, glob: str) > bool {
+    final ds = dir.split("/");
+    final gs = glob.split("/");
+    // reach[j]: the dir segments consumed so far match the first j glob segments.
+    var reach: mut [bool] = mut [true];
+    var j = 1;
+    while (j <= gs.len()) {
+        reach.append(reach[j - 1] and gs[j - 1] == "**");
+        j = j + 1;
+    }
+    foreach (seg in ds) {
+        final next: mut [bool] = mut [false];
+        j = 1;
+        while (j <= gs.len()) {
+            final g = gs[j - 1];
+            if (g == "**") {
+                next.append(next[j - 1] or reach[j]);
+            } else {
+                next.append(reach[j - 1] and (g == "*" or g == seg));
+            }
+            j = j + 1;
+        }
+        reach = next;
+    }
+    return reach[gs.len()];
+}
+
+// unknownMarkers is the reverse half: a magus:diagram marker naming no figure means a figure
+// was renamed or dropped while the code still points at it.
+fun unknownMarkers(figures: [Diagram], root: str, sourceGlobs: [str]) > [str] !> any {
+    final found: mut [str] = mut [<str>];
+    final known: mut {str: bool} = mut {<str: bool>};
+    foreach (d in figures) { known[d.id] = true; }
     foreach (pattern in sourceGlobs) {
-        foreach (path in fs\glob(root + "/" + pattern)) {
-            final body = fs\readFile(path.value);
+        foreach (file in fs\glob(root + "/" + pattern)) {
+            final body = fs\readFile(file.value);
             if (body.indexOf(BackrefMarker) == null) { continue; }
             foreach (id in markedIds(body)) {
-                var found = false;
-                foreach (k in known) {
-                    if (k == id) { found = true; }
-                }
-                if (found == false) {
-                    findings.append("{path.value}: marks diagram \"{id}\", which no diagram declares");
+                if (known[id] == null) {
+                    found.append("{file.value}: marks diagram \"{id}\", which no diagram declares");
                 }
             }
         }
     }
-    return findings;
+    return found;
 }
 
 // markedIds pulls each id following a marker. The id runs to the first space or end of
@@ -178,4 +368,102 @@ fun markedIds(body: str) > [str] {
         if (rest != "") { ids.append(rest); }
     }
     return ids;
+}
+
+// driftTree lays out a throwaway workspace: two packages, and a directory holding only a
+// test file, which is no package.
+fun driftTree() > str !> any {
+    final root = fs\tempDir("magus-drift-");
+    fs\mkdirAll(root + "/pkg/a");
+    fs\mkdirAll(root + "/pkg/b");
+    fs\mkdirAll(root + "/pkg/c");
+    fs\writeFile(root + "/pkg/a/a.go", "package a\n");
+    fs\writeFile(root + "/pkg/b/b.go", "package b\n");
+    fs\writeFile(root + "/pkg/b/b_test.go", "package b\n");
+    fs\writeFile(root + "/pkg/c/c_test.go", "package c\n");
+    return root;
+}
+
+test "an unanchored package under scope and a stale omit are findings" {
+    final root = driftTree();
+    final d = Diagram{
+        id = "t",
+        nodes = [Node{ id = "a", anchor = "pkg/a" }],
+        scope = ["pkg/*"],
+        omits = {"pkg/gone": "deleted long ago"},
+    };
+    final got = checkFigures([d], root: root, sourceGlobs: [<str>], imports: null);
+    assert\equal(got.findings, want: [
+        "diagram \"t\": pkg/b is under scope pkg/* but no node anchors it; add a node or omit it with a reason",
+        "diagram \"t\": omit pkg/gone names a path that no longer exists; drop the omit",
+    ], message: "pkg/c holds only a test file, so it is no package");
+
+    final covered = Diagram{
+        id = "t",
+        nodes = [Node{ id = "a", anchor = "pkg/a/a.go" }],
+        scope = ["pkg/*"],
+        omits = {"pkg/b": "drawn elsewhere"},
+    };
+    assert\equal(checkFigures([covered], root: root, sourceGlobs: [<str>], imports: null).findings,
+        want: [<str>], message: "a file anchor covers its package and an omit covers the rest");
+    fs\removeAll(root);
+}
+
+test "the summary counts nodes, anchors and each claim" {
+    final d = Diagram{
+        id = "t",
+        nodes = [Node{ id = "a", anchor = "pkg/a" }, Node{ id = "b", anchor = "pkg/b" }, Node{ id = "c" }],
+        edges = [
+            Edge{ src = "a", dst = "b", claim = "imports" },
+            Edge{ src = "b", dst = "c", claim = "calls" },
+            Edge{ src = "c", dst = "a" },
+            Edge{ src = "a", dst = "c" },
+        ],
+    };
+    assert\equal(summaryLine(d, verified: false),
+        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports unverified (run with --verify-imports)",
+        message: "unverified");
+    assert\equal(summaryLine(d, verified: true),
+        want: "t: 3 nodes, 2 anchored; edges: 1 imports, 1 calls, 2 flow (unverified); imports verified",
+        message: "verified");
+}
+
+test "verifying imports refuses without an index and checks each imports claim" {
+    final root = driftTree();
+    final d = Diagram{
+        id = "t",
+        nodes = [Node{ id = "a", anchor = "pkg/a" }, Node{ id = "b", anchor = "pkg/b" }, Node{ id = "x" }],
+        edges = [
+            Edge{ src = "a", dst = "b", claim = "imports" },
+            Edge{ src = "b", dst = "a", claim = "imports" },
+            Edge{ src = "a", dst = "x", claim = "imports" },
+            Edge{ src = "x", dst = "b", claim = "import" },
+        ],
+    };
+
+    var refusal = "";
+    try {
+        _ = checkFigures([d], root: root, sourceGlobs: [<str>], imports: ObservedImports{ indexed = false });
+    } catch (e) {
+        refusal = "{e}";
+    }
+    assert\isTrue(refusal.indexOf("magus graph build") != null, message: "an absent index is an error naming the fix");
+
+    final observed = ObservedImports{ indexed = true, packages = {"pkg/a": ["pkg/b"], "pkg/b": ["pkg/c", "pkg/d"]} };
+    assert\equal(checkFigures([d], root: root, sourceGlobs: [<str>], imports: observed).findings, want: [
+        "diagram \"t\": edge b -> a claims imports, but pkg/b does not import pkg/a; pkg/b imports: pkg/c, pkg/d",
+        "diagram \"t\": edge a -> x claims imports, but node \"x\" has no anchor to check it against; anchor it or claim flow",
+        "diagram \"t\": edge x -> b claims \"import\"; a claim is imports, calls or flow",
+    ], message: "a -> b holds; the rest are findings");
+    fs\removeAll(root);
+}
+
+test "scope wildcards are whole segments" {
+    assert\isTrue(scopeMatches("internal/httpx", glob: "internal/httpx"), message: "a literal matches itself");
+    assert\isTrue(scopeMatches("internal/handler/mcp", glob: "internal/handler/*"), message: "* is one segment");
+    assert\isFalse(scopeMatches("internal/handler/mcp/gen", glob: "internal/handler/*"), message: "and only one");
+    assert\isFalse(scopeMatches("internal/handler", glob: "internal/handler/*"), message: "and never zero");
+    assert\isTrue(scopeMatches("internal/graph", glob: "internal/graph/**"), message: "** may be empty");
+    assert\isTrue(scopeMatches("internal/graph/knowledge/gen", glob: "internal/graph/**"), message: "or span several");
+    assert\isFalse(scopeMatches("internal/grapher", glob: "internal/graph/**"), message: "a prefix is no segment");
 }

@@ -426,6 +426,6 @@ export fun site_diagrams(dir: str) > void !> any {
 
 // site_diagram_drift forwards the diagram-to-code check, for the same reason
 // site_diagrams does: engine/page owns the single import of the registry.
-export fun site_diagram_drift(root: str, sourceGlobs: [str]) > [str] !> any {
-    return diagramDrift(root, sourceGlobs);
+export fun site_diagram_drift(root: str, sourceGlobs: [str], verifyImports: bool) > [str] !> any {
+    return diagramDrift(root, sourceGlobs: sourceGlobs, verifyImports: verifyImports);
 }
