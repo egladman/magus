@@ -318,7 +318,8 @@ func gitSubcommand(argv string) string {
 // safe to run from inside git's own index manipulation: git holds index.lock (and
 // MERGE_RR.lock, replaying rerere) for the whole call, so any subcommand of its own that
 // takes a repository lock would deadlock against the caller holding it. `rev-parse` takes
-// none; nothing else may be introduced without opening that seam back up.
+// none, and `--version` (the minimum-version probe in vcs/version.go) reads no repository
+// at all; nothing else may be introduced without opening that seam back up.
 func TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock(t *testing.T) {
 	ctx, root := mergeDriverWorkspace(t)
 	logPath := gitArgvRecorder(t)
@@ -331,7 +332,7 @@ func TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(logged)), "\n")
 	require.NotEmpty(t, lines)
 	for _, line := range lines {
-		assert.Equal(t, "rev-parse", gitSubcommand(line),
+		assert.Contains(t, []string{"rev-parse", "--version"}, gitSubcommand(line),
 			"a git subcommand beyond rev-parse can take a repository lock the caller already holds: %s", line)
 	}
 }
