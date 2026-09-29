@@ -3,7 +3,7 @@
 //
 // It is NOT part of the staged-config model the rest of the General tab uses. Installing is an act on the
 // BROWSER, not a console preference: there is nothing to persist, nothing to diff, and nothing a Reset
-// could undo. So it applies immediately, like the server-facing Access and Memory sections.
+// could undo. So it applies immediately, like the server-facing Access section.
 //
 // The offer itself is captured at shell boot (lib/install.ts) - by the time this section mounts the
 // browser's one `beforeinstallprompt` has long fired. This only renders whatever state the store is in

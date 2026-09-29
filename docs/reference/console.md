@@ -35,9 +35,6 @@ of it runs an arbitrary command or writes into your working tree:
 - `POST /api/v1/share`, which opens the time-boxed LAN listener described under
   [what the console serves](#what-the-console-serves). It requires a loopback
   peer as well as the bearer token, so only the local console can trigger it.
-- `magus.memory.v1alpha1.MemoryService`, which edits your own memory
-  ([`magus memory`](manpage/magus-memory.md)). That journal lives in the user
-  state directory outside the repository, so it is not workspace state either.
 
 Every one of them is gated behind the same loopback bind and bearer token.
 
@@ -66,7 +63,7 @@ Every route on the console's `/api/v1/` surface, enumerated:
 
 One more route sits under `/api/v1/` without belonging to this read surface:
 `POST /api/v1/share`, described below. The server's typed Connect
-services - status, activity, metrics, insight, viewer, memory, notes, tool, and
+services - status, activity, metrics, insight, viewer, notes, tool, and
 [job control](#job-control) - are mounted at their own
 `magus.<service>.v1alpha1.<Service>/` prefixes rather than here, and the
 [server API reference](api/index.md) is their schema. The console mounts at
@@ -127,7 +124,7 @@ Separate from the read routes above, the server hosts a **mutating** Connect
 service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the only surface
 that changes anything magus computed - the others record a person's own review
-state, open a share listener, or edit their memory - and it is bounded:
+state or open a share listener - and it is bounded:
 it submits a fixed set of named jobs, never an arbitrary command.
 
 The service exposes two RPCs, not one per job: `RunJob(name)` submits any

@@ -56,7 +56,7 @@ const (
 	// to read around; see Gate.OnceOrBrief.
 	advisoryGeneratedWrite hint.MarkerKind = "generated-write"
 	advisoryInstalledSkill hint.MarkerKind = "installed-skill"
-	advisoryMemoryWrite    hint.MarkerKind = "memory-write"
+	advisoryInstruction    hint.MarkerKind = "instruction-write"
 	advisoryScopeDrift     hint.MarkerKind = "scope-drift"
 	advisoryNewSourceDir   hint.MarkerKind = "new-source-dir"
 )

@@ -206,13 +206,13 @@ func verifiedAs(credential types.Credential, next http.Handler) http.Handler {
 }
 
 // TestInterceptorAuditReadsRecordsRead pins the WithAuditReads opt-in: with it set, a read verb
-// (ListTokens) IS recorded, alongside the mutation. This is the memory service's mode; the token
+// (ListTokens) IS recorded, alongside the mutation. This is the notes service's mode; the token
 // service (TestInterceptorRecordsMutationSkipsRead) leaves the option off and skips the read.
 func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		fakeTokenService{},
-		connect.WithInterceptors(Interceptor(dir, trail.KindMemory, WithAuditReads())),
+		connect.WithInterceptors(Interceptor(dir, trail.KindNotes, WithAuditReads())),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -247,8 +247,8 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	if got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the operator credential)", got)
 	}
-	if events[0].Kind != trail.KindMemory || events[1].Kind != trail.KindMemory {
-		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindMemory)
+	if events[0].Kind != trail.KindNotes || events[1].Kind != trail.KindNotes {
+		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindNotes)
 	}
 }
 

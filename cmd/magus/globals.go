@@ -112,7 +112,6 @@ var commandsWithoutOutput = map[string]bool{
 	"mcp":                      true,
 	"notes capture":            true,
 	"notes edit":               true,
-	"notes promote":            true,
 	"queue apply":              true,
 	"queue ls":                 true,
 	"queue plan":               true,

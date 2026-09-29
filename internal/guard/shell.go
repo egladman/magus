@@ -1444,7 +1444,7 @@ func helpOnlyLine(command string, d Dialect) bool {
 // `--help` anywhere before `--` is usage, since no subcommand takes either as a
 // positional. The bare word `help` is usage only where magus dispatches it: at the root,
 // right after a top-level command, or right after a group. After a leaf it is data, as in
-// `magus memory get help`.
+// `magus notes get help`.
 func magusHelpRequest(args []string) bool {
 	for _, a := range args {
 		if a == "--" {
@@ -1685,7 +1685,7 @@ var (
 	// The path rule refuses an agent write into a notes store, but it sees file writes
 	// only, and these verbs write through magus. It also resolves the SHARED store alone,
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
-	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
+	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture)\b`)
 
 	// agentSignOffRe matches an invocation of either verb this package folds into one
 	// rule: minting a read receipt, or closing an attention request.
@@ -1810,8 +1810,7 @@ var (
 	denyCredentialVerb = "Use the token you were given. Minting, printing, rotating or revoking a credential is the person's to do: `" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and they run it for you.\n" +
 		"A session that mints a token, or holds a console link's code, holds a grant nobody handed it; the operator token also reaches token management, so whoever reads it can mint any grant."
 
-	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
-		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
+	denyNotesAuthor = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read.\n" +
 		"If it genuinely belongs in the notes, say so and let the person run it."
 
 	// LEADS with the editor tool, because that is the answer for most of what trips this:
@@ -2307,10 +2306,7 @@ func ruleFires(cmds []hint.Invocation, parsed bool, command string,
 
 // notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note; `ls`, `get` and
 // `verify` read and stay allowed.
-//
-// `promote` is listed even though it already refuses an unmodified body: an agent editing
-// the draft it wrote satisfies that check, so the refusal cannot stand in for this rule.
-var notesWriteVerbs = []string{"edit", "capture", "promote"}
+var notesWriteVerbs = []string{"edit", "capture"}
 
 // notesWriteFires is magusRuleFires over a set of verbs, which it cannot reuse because
 // magusInvokes requires every word it is handed and these verbs are alternatives.

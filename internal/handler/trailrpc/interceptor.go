@@ -111,7 +111,7 @@ func WithAuditReads() Option {
 // the given kind (one wire Kind per mounted service: the token service is all token_lifecycle) and the
 // name of the credential the bearer guard verified, read from the request context rather than from any
 // field the caller sent. Reads are not recorded by default (the trail is for consequential actions, not
-// queries); pass WithAuditReads to also record read verbs, as the memory service does.
+// queries); pass WithAuditReads to also record read verbs, as the notes service does.
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC (trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract), and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.

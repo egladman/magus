@@ -109,7 +109,7 @@ func TestEveryMagusToolRendersSomethingJudgeable(t *testing.T) {
 		require.True(t, ok, "%s renders %q, which does not parse", tool, rendered)
 		require.Len(t, cmds, 1, "%s renders %q, which is not one command", tool, rendered)
 
-		if _, hasCLI := mcpCLIEquivalents[tool]; hasCLI || tool == hint.ToolMemory {
+		if _, hasCLI := mcpCLIEquivalents[tool]; hasCLI {
 			assert.Equal(t, "magus", path.Base(cmds[0].Name),
 				"%s has a CLI equivalent, so it must render as that argv: %q", tool, rendered)
 			continue
@@ -131,8 +131,6 @@ func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
 		"an affected run":  {hint.ToolRunAffected, map[string]any{"target": "ci"}, "magus affected ci"},
 		"a shard plan":     {hint.ToolAffectedPlan, map[string]any{"target": "ci"}, "magus affected --plan ci"},
 		"a checkpoint":     {hint.ToolVCSCheckpoint, nil, "magus vcs checkpoint"},
-		"a memory put":     {hint.ToolMemory, map[string]any{"op": "put", "name": "a-decision"}, "magus memory put a-decision"},
-		"a memory read":    {hint.ToolMemory, map[string]any{"op": "list"}, "magus memory ls"},
 		"a graph query":    {hint.ToolQuery, map[string]any{"query": "guard rules"}, `magus query "guard rules"`},
 		"no CLI door":      {hint.ToolInsight, map[string]any{"lens": "hotspots"}, "magus_insight"},
 		"the job tool":     {hint.ToolJob, map[string]any{"op": "fork", "id": "a/b"}, "magus_job op=fork id=a/b"},

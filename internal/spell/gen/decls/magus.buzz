@@ -959,15 +959,6 @@ export object job {
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
 }
 
-// The per-repository memory: named decisions, plans, pointers and ruled-out hypotheses, kept outside the checkout so every worktree of one repository reads the same entries. The same store `magus memory`, the magus_memory MCP tool and the console read. Records are the snake_case JSON `magus memory -o json` prints. Read straight off the workspace on the context; raises MGS1022 outside one. Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\job is.
-export object memory {
-    static extern fun delete(name: str) > void !> any;
-    static extern fun get(name: str) > {str: any} !> any;
-    static extern fun list() > {str: any} !> any;
-    static extern fun put(name: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
-    static extern fun verify() > {str: any} !> any;
-}
-
 // Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
 export object vcs {
     static extern fun checkpoint() > VCSCheckpoint !> any;

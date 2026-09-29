@@ -14,7 +14,7 @@ magus serves its tools as an **MCP (Model Context Protocol) server**, so agents 
 
 Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
-For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
+For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, and the drift check - see [Agents](agents.md).
 
 ## stdio: the host launches magus
 
@@ -229,12 +229,11 @@ Review:
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `magus_diff` | Join the review session a person has open and pair with them on it: `op=state` (default) returns the annotated changeset, `comment`, `suggest`, and `resolve` write to it, addressed by workspace-relative path and 0-based hunk digest |
 
-Memory and scratch:
+Jobs:
 
-| Tool           | Purpose                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `magus_memory` | User-owned per-repo memory: list/get/put/delete/verify named entries shared across worktrees                              |
-| `magus_job`    | The orchestrating agent's declared jobs (list/fork/exec/exit/wait), recorded for humans to see; magus never enforces them |
+| Tool        | Purpose                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `magus_job` | The orchestrating agent's declared jobs (list/fork/exec/exit/wait), recorded for humans to see; magus never enforces them |
 
 Console:
 

@@ -62,7 +62,7 @@ function rememberPick(root: string): void {
 //
 // THERE IS NO TOKENLESS MODE, which two earlier versions of this line both got wrong. Every console
 // route is wrapped in BearerGuard (internal/server/server.go): the API bridge, StatusService,
-// activity, tools, insight, jobs, memory, notes. httpx.guard 401s when no token is presented at all,
+// activity, tools, insight, jobs, notes. httpx.guard 401s when no token is presented at all,
 // and every verifier in internal/auth fails closed. Only /livez and /readyz are unguarded, on purpose
 // so an orchestrator can probe them, and they carry no workspace paths. RequireLoopbackPeer appears
 // once, on /api/v1/share, where it ADDS a restriction on top of the bearer token rather than waiving

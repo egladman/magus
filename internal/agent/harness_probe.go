@@ -40,7 +40,7 @@ const (
 	// workspace, which is what makes it usable as a universal probe event.
 	probeDenyCommandEvent = `{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}`
 	// probeAdvisePathEvent triggers the built-in cross-host-instruction-file advisory
-	// (adviseMemoryWrite), matched on the bare filename AGENTS.md regardless of any
+	// (adviseInstructionWrite), matched on the bare filename AGENTS.md regardless of any
 	// workspace declaration; also universal.
 	probeAdvisePathEvent = `{"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}`
 	// probeCursorShellDenyEvent is the same universal deny, shaped for the

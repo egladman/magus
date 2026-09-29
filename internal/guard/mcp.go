@@ -113,13 +113,6 @@ func renderMCPCall(name string, input map[string]any) string {
 		return strings.Join(out, " ")
 	}
 	cli, ok := mcpCLIEquivalents[hint.ToolName(name)]
-	if name == hint.ToolMemory.String() {
-		// The one tool whose op picks the verb: a put writes, everything else reads.
-		cli, ok = mcpCLIEquivalent{command: hint.MemoryLs}, true
-		if envelopeString(input, "op") == "put" {
-			cli = mcpCLIEquivalent{command: hint.MemoryPut, operands: []string{"name"}}
-		}
-	}
 	if !ok {
 		return name
 	}

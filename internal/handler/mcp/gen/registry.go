@@ -132,22 +132,6 @@ var Registry = []ToolDescriptor{
 		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
-		Name:        "magus_memory",
-		Description: "A user-owned per-repository memory, shared across worktrees and kept outside the checkout. It is not automatic model memory: create a named entry only for a decision, plan, saved pointer, or ruled-out hypothesis a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision, plan and elimination entries carry a short why. Record an elimination when an investigation kills a hypothesis, so the next session reopens the reasoning; without one it re-derives the search and re-proposes a branch that is already dead. put writes only the fields you send: an entry that exists keeps every field you omit, so updating a status cannot drop the body beside it, and clearing a field means deleting the entry and creating it again. Use verify to surface malformed, stale, broken-linked entries and evidence refs that no longer resolve. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's entry.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create by name, or write the fields you send on an entry that exists), delete, verify. cursor is legacy read-only."},
-			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
-			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan, elimination. Required to create. On an entry that exists it must match the type already stored - a record cannot be updated into another type, because the type decides which fields it may carry; delete it and create the entry you want."},
-			{Name: "refs", Type: "string", Description: "put only, REQUIRED to create: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc. Sending refs on an entry that exists replaces its whole ref list; omitting them keeps it."},
-			{Name: "allow_missing", Type: "boolean", Description: "put only, default true: create the entry when the name is absent. Pass false when you mean to update something that already exists, so a mistyped name is an error instead of a stray second entry."},
-			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan, or for an elimination the reason the hypothesis is dead. Omit for a pointer; a pointer carries no prose."},
-			{Name: "excerpt", Type: "string", Description: "put only, REQUIRED for an elimination and rejected on every other type: the evidence that ruled the hypothesis out, copied inline. An output ref resolves only from the checkout that minted it, so paste the deciding lines into the record."},
-			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
-			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: "string", Description: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
-		},
-	},
-	{
 		Name:        "magus_query",
 		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{

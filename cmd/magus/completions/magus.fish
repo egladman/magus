@@ -21,9 +21,8 @@ function __magus_subcommands
         diff       'read uncommitted changes in the order they deserve attention, generated folded' \
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         session    'what magus invocations did and what agents are blocked on: humans read (ls, attention) and dispose; hosts write (notify)' \
-        memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
         job        'declare and act on jobs (fork, exec, exit, wait, run)' \
-        notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)' \
+        notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture)' \
         queue      'merge approved changes through a speculative, partitioned merge queue (describe, ls, plan, validate, apply)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \

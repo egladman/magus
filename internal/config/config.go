@@ -592,16 +592,9 @@ type Knowledge struct {
 }
 
 // NotesConfig declares where human-authored notes live. There are two locations because
-// there are two audiences, and the pair is one half of a 2x2 the whole knowledge surface
-// turns on:
-//
-//	                    the team sees it        only you see it
-//	a person wrote it   notes.shared            notes.private
-//	an agent wrote it   (deliberately nothing)  magus memory
-//
-// The empty cell is the design, not a gap: an agent's derived claims are never pushed at
-// the team, which is the same rule the guard enforces by refusing agent writes to either
-// notes location.
+// there are two audiences: the team (shared) and only you (private). An agent writes to
+// neither, which the guard enforces: an agent's derived claims are never pushed at the
+// team under a person's name.
 //
 // A note is prose a PERSON wrote about the code, anchored to graph entities but derived
 // from none of them, the one node class magus cannot regenerate, because its only
@@ -634,23 +627,13 @@ type NotesConfig struct {
 	//
 	// Agents still may not write here. That is the point: it is the vault case.
 	//
-	// compat(until: `magus notes promote` has replaced this in practice: no workspace here
-	// or in the wild sets knowledge.notes.private, and `magus memory` carries the drafting
-	// tier instead): SUPERSEDED, still read, no longer the recommended shape.
-	//
-	// Line the three stores up by property rather than by who types into them and this one
-	// has no column of its own: private notes and `magus memory` are both uncommitted,
-	// unattributed, unreviewed and unrecoverable. The only thing separating them was who
-	// wrote the file, which is a field rather than a store, and one the guard cannot
-	// actually enforce, since a person pasting an agent's prose into $EDITOR passes it
-	// cleanly. What private bought that memory did not was ANCHORS; `notes promote` closes
-	// that by deriving a note's anchors from a record's node refs, so the drafting tier can
-	// now graduate into the committed one without a third store in between.
-	//
-	// Observe that it is safe to drop by checking that nothing sets it: it was never set in
-	// this repository, and a store nobody points at holds nothing to lose. Kept readable
-	// until then because the path may name someone's vault, and deleting the key would
-	// orphan real prose to save a struct field.
+	// compat(until: no workspace here or in the wild sets knowledge.notes.private):
+	// SUPERSEDED, still read, no longer the recommended shape. A private note is
+	// uncommitted, unattributed, unreviewed and unrecoverable, and nothing that reads notes
+	// has needed one. Observe that it is safe to drop by checking that nothing sets it: it
+	// was never set in this repository, and a store nobody points at holds nothing to lose.
+	// Kept readable until then because the path may name someone's vault, and deleting the
+	// key would orphan real prose to save a struct field.
 	Private string `json:"private" yaml:"private"`
 }
 
