@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-253-ga4967a12a (commit a4967a12a, 2026-09-29T12:23:59-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-287-g5820bb8c5 (commit 5820bb8c5, 2026-09-29T16:58:15-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -13,6 +13,7 @@
 .agents/skills/magus-change-summary*/** merge=magus linguist-generated
 .agents/skills/magus-commit-composition*/** merge=magus linguist-generated
 .agents/skills/magus-context-audit*/** merge=magus linguist-generated
+.agents/skills/magus-diagram*/** merge=magus linguist-generated
 .agents/skills/magus-docs-lookup*/** merge=magus linguist-generated
 .agents/skills/magus-memory*/** merge=magus linguist-generated
 .agents/skills/magus-multi-agent*/** merge=magus linguist-generated
@@ -28,6 +29,7 @@
 .claude/skills/magus-change-summary*/** merge=magus linguist-generated
 .claude/skills/magus-commit-composition*/** merge=magus linguist-generated
 .claude/skills/magus-context-audit*/** merge=magus linguist-generated
+.claude/skills/magus-diagram*/** merge=magus linguist-generated
 .claude/skills/magus-docs-lookup*/** merge=magus linguist-generated
 .claude/skills/magus-memory*/** merge=magus linguist-generated
 .claude/skills/magus-multi-agent*/** merge=magus linguist-generated
@@ -46,6 +48,7 @@
 .opencode/skills/magus-change-summary*/** merge=magus linguist-generated
 .opencode/skills/magus-commit-composition*/** merge=magus linguist-generated
 .opencode/skills/magus-context-audit*/** merge=magus linguist-generated
+.opencode/skills/magus-diagram*/** merge=magus linguist-generated
 .opencode/skills/magus-docs-lookup*/** merge=magus linguist-generated
 .opencode/skills/magus-memory*/** merge=magus linguist-generated
 .opencode/skills/magus-multi-agent*/** merge=magus linguist-generated
