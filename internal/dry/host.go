@@ -442,6 +442,21 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("job", job)
 
+	// A dry run starts no service: acquire answers with an unowned lease, release does nothing.
+	service := vm.NewMap()
+	service.MapSet("acquire", fn("magus.service.acquire", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("key", vm.StrValue(""))
+		res.MapSet("owned", vm.BoolValue(false))
+		res.MapSet("brokered", vm.BoolValue(false))
+		res.MapSet("idle", vm.StrValue(""))
+		return res, nil
+	}))
+	service.MapSet("release", fn("magus.service.release", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.Null, nil
+	}))
+	m.MapSet("service", service)
+
 	// The knowledge-graph reads, output, memory and vcs.checkpoint read real state the
 	// dry run never opens, so each answers with its snake_case record shaped and empty.
 	shaped := func(name string, fields map[string]vm.Value) vm.Value {
