@@ -662,6 +662,8 @@ Nothing is opted in by default. `--facts` answers the same question with an
 that cannot answer it settles nothing. The same files settle the same way in a local
 merge, through magus's [merge driver](../guides/integrations/git.md#auto-resolving-source-files).
 
+<!--diagram:merge-queue-risk-->
+
 A settled candidate is gated like any other; the gate's own format check is the only one
 it gets, so a resolution that breaks formatting is a red kick-back. Planning, validation
 and apply each settle the file themselves from the same three versions, and apply
