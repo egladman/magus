@@ -94,7 +94,9 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 func TestBriefOffCheckIsRefused(t *testing.T) {
 	row := figuresLease()
 	produces := func() func(target, project string) bool {
-		return func(target, project string) bool { return targetName(target) == "figures-generate" && project == "docs" }
+		return func(target, project string) bool {
+			return targetName(target) == "figures-generate" && project == "docs"
+		}
 	}
 	defines := func(target string) bool {
 		return slices.Contains([]string{"lint", "lint-files", "diagrams-generate", "figures-generate"}, targetName(target))
