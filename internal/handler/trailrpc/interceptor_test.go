@@ -18,7 +18,6 @@ import (
 	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"

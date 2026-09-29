@@ -436,7 +436,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("job", job)
 
-	// The knowledge-graph reads, output, memory and vcs.checkpoint read real state the
+	// The knowledge-graph reads, output and vcs.checkpoint read real state the
 	// dry run never opens, so each answers with its snake_case record shaped and empty.
 	shaped := func(name string, fields map[string]vm.Value) vm.Value {
 		return fn(name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -470,15 +470,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
 		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StrValue(""),
 	}))
-	memory := vm.NewMap()
-	for _, name := range []string{"list", "verify"} {
-		memory.MapSet(name, shaped("magus.memory."+name, map[string]vm.Value{"records": empty, "issues": empty}))
-	}
-	for _, name := range []string{"get", "put"} {
-		memory.MapSet(name, shaped("magus.memory."+name, map[string]vm.Value{"name": vm.StrValue(""), "type": vm.StrValue("")}))
-	}
-	memory.MapSet("delete", fn("magus.memory.delete", retNull))
-	m.MapSet("memory", memory)
 	vcs := vm.NewMap()
 	vcs.MapSet("checkpoint", shaped("magus.vcs.checkpoint", map[string]vm.Value{
 		"revision": vm.StrValue(""), "branch": vm.StrValue(""), "dirty": vm.BoolValue(false), "patchDigest": vm.StrValue(""),

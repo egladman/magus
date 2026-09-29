@@ -420,6 +420,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_UPDATE_URL**
 : Env-only, no magus.yaml equivalent: override the release index URL for \`magus self update\`; set to a self-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
 
+**MAGUS_STAMPED_LEASE**
+: Set by a shared server on a script it forks for a remote caller: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant
+
 **MAGUS_NO_BOOTSTRAP_EXEC**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 

@@ -543,7 +543,7 @@ func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 	assert.Equal(t, "pass", write(elsewhere+"/CLAUDE.md").Decision)
 	inside := write(root + "/CLAUDE.md")
 	assert.Equal(t, "advise", inside.Decision)
-	assert.Equal(t, string(advisoryMemoryWrite), inside.Rule)
+	assert.Equal(t, string(advisoryInstruction), inside.Rule)
 }
 
 // driftWorkspace is focusFixture loaded as the hook's workspace. Only the reader half and

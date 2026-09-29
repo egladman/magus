@@ -29,7 +29,7 @@ magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary/).
 
-Need the detail this index leaves out? Run `magus describe target <name>` for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and `magus describe mcp-tools` for the tools this workspace exposes to AI agents.
+Need the detail this index leaves out? Run `magus describe target <name>` for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy).
 
 ## Query first
 
@@ -39,8 +39,8 @@ This workspace has a knowledge graph (schema v15). Query it instead of grepping:
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
-magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
-magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
+magus graph stats           # god nodes, orphans, doc coverage
+magus graph export -o json  # the whole graph
 ```
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
@@ -63,20 +63,20 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
 
-| Project                         | Targets | Scope a query                                         | Key targets                                              |
-| ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      54 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
-| console                         |      10 | `magus query project=console`                         | `install`, `ci`, `build`                                 |
-| docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
-| libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
-| libs/conventions                |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
-| libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
-| libs/diagram                    |       4 | `magus query project=libs/diagram`                    | `test`, `ci`, `generate`                                 |
-| libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
-| libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
-| proto                           |       4 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
+| Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
+| --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
+| [.](MAGUS.md)                                                               |      54 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
+| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `install`, `ci`, `build`                                 |
+| [docs](docs/MAGUS.md)                                                       |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
+| [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
+| [libs/coldread](libs/coldread/MAGUS.md)                                     |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
+| [libs/conventions](libs/conventions/MAGUS.md)                               |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
+| [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
+| [libs/diagram](libs/diagram/MAGUS.md)                                       |       4 | `magus query project=libs/diagram`                    | `test`, `ci`, `generate`                                 |
+| [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
+| [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
+| [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 
 ## Project: magus
 
@@ -136,147 +136,3 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `advice-test`            | Runs the PR advisors' `test "..." {}` blocks.                                                                                                                                                                                                                                                                                                                                                  |
 | `buzz-test`              | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine, and holds their merged line coverage above a floor.                                                                                                                                                                                                                             |
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                                                                                                                                                                                      |
-
-## Project: console
-
-| Target              | What it does                                                                                                                                                                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`          | Regenerates MAGUS.md and fails on drift.                                                                                                                                                                                                                      |
-| `test`              | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and holds the merged line coverage above a floor.                                                                                                          |
-| `build`             |                                                                                                                                                                                                                                                               |
-| `lint`              | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.                                                                                                                                                                          |
-| `format`            | `format:rw` maintains declared source inputs.                                                                                                                                                                                                                 |
-| `security`          | security audits the dependency tree against the npm advisory database.                                                                                                                                                                                        |
-| `ci`                | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.                                                                                            |
-| `install`           | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                 |
-| `index-generate`    | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                              |
-| `diffdemo-generate` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
-
-## Project: docs
-
-| Target                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `site-generate`           | site-generate owns publication.                                                                                                                                                                                                                                                                                                                                                                                                |
-| `generate`                | generate owns the COMMITTED derived files, and nothing else.                                                                                                                                                                                                                                                                                                                                                                   |
-| `format`                  | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it.                                                                                                                                                                                       |
-| `lint`                    | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).                                                                                                                                                                                                                                                                         |
-| `build`                   | build renders the site: the tree cd.yaml publishes and deploy-generate assembles.                                                                                                                                                                                                                                                                                                                                              |
-| `test`                    |                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `security`                | security audits what actually ships against the npm advisory database.                                                                                                                                                                                                                                                                                                                                                         |
-| `ci`                      |                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `build-playground`        | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it.                                                                                                                                                                                                 |
-| `build-hljs`              | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.                                                                                                                                                                                                                                                                                                          |
-| `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                                                                                                                                                                                                                                                                      |
-| `render`                  | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                                                                                                                                                                                                                                                                            |
-| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                                                                                                                                                                                  |
-| `index-generate`          | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                               |
-| `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
-| `changelog-page`          | changelog-page renders the changelog, the one place it is assembled: every release from releases/*.yaml, and under [Unreleased] the fragments in changes/unreleased/, through templates/changelog.mustache.                                                                                                                                                                                                                    |
-| `conventions`             | conventions holds every doc page to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.                                                                                                                                                                                                                          |
-| `buzz-test`               | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve.                                                                                                                                                                                                                                                                                 |
-| `diagrams-generate`       | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/.                                                                                                                                                                                                                                                                                                                                  |
-
-## Project: docs/guides/integrations/agents
-
-| Target                    | What it does                                                                                                                                                                                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
-| `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                                                                                                                                                                          |
-| `lint`                    | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
-| `test`                    | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |
-| `host-integration`        | host-integration is deliberately NOT a dependency of ci.                                                                                                                                                                                                             |
-| `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
-| `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
-| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                        |
-| `index-generate`          | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                     |
-
-## Project: libs/coldread
-
-| Target           | What it does                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                     |
-| `format`         |                                                                                                                                                              |
-| `lint`           | go-vet only, as in libs/testlayout.                                                                                                                          |
-| `build`          |                                                                                                                                                              |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
-
-## Project: libs/conventions
-
-| Target           | What it does                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                     |
-| `format`         |                                                                                                                                                              |
-| `lint`           | go-vet only, as in libs/coldread: this module is what the custom golangci-lint binary is built FROM.                                                         |
-| `build`          | Compiles every analyzer package; ./...                                                                                                                       |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
-
-## Project: libs/diagnostics
-
-| Target           | What it does                                                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                                                                                      |
-| `format`         |                                                                                                                                                            |
-| `lint`           |                                                                                                                                                            |
-| `build`          |                                                                                                                                                            |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                           |
-
-## Project: libs/diagram
-
-| Target           | What it does                                     |
-| ---------------- | ------------------------------------------------ |
-| `generate`       | Regenerates MAGUS.md and fails on drift.         |
-| `ci`             |                                                  |
-| `index-generate` | Renders MAGUS.md, this project's target catalog. |
-| `test`           | test runs the in-file test blocks.               |
-
-## Project: libs/gopherbuzz
-
-| Target           | What it does                                                                                                                                                                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                                                                                                                                                                                                       |
-| `format`         |                                                                                                                                                                                                                                                                             |
-| `lint`           |                                                                                                                                                                                                                                                                             |
-| `build`          |                                                                                                                                                                                                                                                                             |
-| `test`           | README.md's "Contributing gotchas" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe. |
-| `buzz-build`     | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.                                                                                                                                                       |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
-| `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                            |
-
-## Project: libs/testlayout
-
-| Target           | What it does                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                     |
-| `format`         |                                                                                                                                                              |
-| `lint`           | go-vet only, as in libs/diagnostics.                                                                                                                         |
-| `build`          |                                                                                                                                                              |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                             |
-
-## Project: libs/textsearch
-
-| Target           | What it does                                                                                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                               |
-| `lint`           | lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.                                                                                    |
-| `ci`             | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.                                                                                     |
-| `install`        | install installs node_modules through the typescript spell's pnpm-install op.                                                                                          |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                       |
-
-## Project: proto
-
-| Target           | What it does                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
-| `ci`             |                                                                                                                                 |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                |
-| `lint`           |                                                                                                                                 |
