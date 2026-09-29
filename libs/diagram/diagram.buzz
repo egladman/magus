@@ -252,6 +252,9 @@ export object Diagram {
     // out on purpose, each with its reason. Read by a drift check, never by the painters.
     scope: [str] = [<str>],
     omits: {str: str} = {<str: str>},
+    // Digest of the observed set a flow composed in, empty for a figure nobody observed.
+    // Painted nowhere; a drift check compares it against a fresh observation.
+    stamp: str = "",
 }
 
 fun iabs(n: int) > int {
