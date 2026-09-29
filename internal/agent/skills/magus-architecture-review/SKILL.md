@@ -12,14 +12,17 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-{{tool "insight"}} lens=hotspots  # churn x complexity per project, with blast radius
-{{tool "insight"}} lens=affinity  # projects that change together: hidden coupling
-{{tool "insight"}} lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
-MCP: `{{tool "stats"}}`, `{{tool "insight"}}` {lens}, and `{{tool "query"}}` cover the same
-ground.{{if .Full}} Affinity deserves special weight: two projects that keep changing
+MCP: `{{tool "client"}}` covers the same ground through `{{buzz "stats"}}`, `{{buzz "insight"}}`
+(read hotspots, affinity, and ownership on the one report), and `{{buzz "query"}}`.
+Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
+
+```sh
+magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
+```
+{{if .Full}} Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.{{else}} Weight affinity most: changing
 together with no declared edge is back-door coupling.{{end}}

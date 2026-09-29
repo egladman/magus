@@ -1,15 +1,15 @@
 ---
 title: magus-memory
 generated_from: internal/agent/skills/magus-memory/SKILL.md
-description: "Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
+description: "Maintain a user-owned per-repository memory through the client MCP tool (magus\\memory) or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
 tags: [agents, skills, magus-memory]
-skill_full_bytes: 5720
-skill_short_bytes: 4772
+skill_full_bytes: 5776
+skill_short_bytes: 4828
 ---
 
 # magus-memory
 
-Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.
+Maintain a user-owned per-repository memory through the client MCP tool (magus\memory) or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `92` |
+| `agent-skill-version` | `97` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `5b73861dd801` |
+| `skill-content` | `af7b3693ea7d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,7 +56,7 @@ magus agent install --tar | tar -xO -f - magus-memory/SKILL.md
 ````markdown
 # Repository memory
 
-`magus memory` and `magus_memory` are two frontends to a small, user-owned
+`magus memory` and `client` (`magus\memory.list`) are two frontends to a small, user-owned
 memory. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
@@ -91,7 +91,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- When picking work up, use `magus_memory` `{op: "list"}` or
+- When picking work up, use `client` (`magus\memory.list`) or
   `magus memory ls`.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
@@ -108,16 +108,16 @@ than a ref you can anchor, it is theirs to record, not yours.
   ```
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
-  verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
+  verify` (or `client` calling `magus\memory.verify`) after editing entries or when list reports
   an issue.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+- `client` (`magus\memory.put`) creates a record
   by `name` (a kebab slug), and on a name that exists writes the fields you send and
-  keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
-  `refs` replaces the whole list.
+  keeps the rest. Pass `refs` as a list of `kind: target` strings (e.g.
+  `["query: kind=op depends cache", "node: file:internal/hash/hasher.go"]`; the CLI
+  takes one `--ref` per ref); sending `refs` replaces the whole list.
 - Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
   already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
@@ -131,14 +131,14 @@ than a ref you can anchor, it is theirs to record, not yours.
   re-proposing a branch that is already dead.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it.
-- Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
+- Prune with `magus\memory.delete`; list-then-get with `magus\memory.list` / `magus\memory.get`.
 
 ## Scope boundaries
 
 - Intra-session scratch (checklists, partial findings) stays in the
   session, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
-  belong in memory; record the `magus_query` that surfaces them instead.
+  belong in memory; record the `magus\query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.
 - Do not create a memory entry for each guard event. Activity is automatic evidence;
   memory starts only after a person makes a durable decision or plan from it.
@@ -156,7 +156,7 @@ magus agent install --tar | tar -xO -f - magus-memory-full/SKILL.md
 ````markdown
 # Repository memory
 
-`magus memory` and `magus_memory` are two frontends to a small, user-owned
+`magus memory` and `client` (`magus\memory.list`) are two frontends to a small, user-owned
 memory. It lives outside the repo, is shared by its worktrees, and is
 visible in the console. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
@@ -193,7 +193,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- When picking work up, use `magus_memory` `{op: "list"}` or
+- When picking work up, use `client` (`magus\memory.list`) or
   `magus memory ls`. Empty is normal; do not manufacture entries.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
@@ -211,17 +211,17 @@ than a ref you can anchor, it is theirs to record, not yours.
   ```
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
-  verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
+  verify` (or `client` calling `magus\memory.verify`) after editing entries or when list reports
   an issue. It gives a path and repair step for malformed, stale, or broken
   linked entries, and warns when an entry's evidence ref no longer resolves.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+- `client` (`magus\memory.put`) creates a record
   by `name` (a kebab slug), and on a name that exists writes the fields you send and
-  keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
-  `refs` replaces the whole list.
+  keeps the rest. Pass `refs` as a list of `kind: target` strings (e.g.
+  `["query: kind=op depends cache", "node: file:internal/hash/hasher.go"]`; the CLI
+  takes one `--ref` per ref); sending `refs` replaces the whole list.
 - Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
   already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
@@ -236,14 +236,14 @@ than a ref you can anchor, it is theirs to record, not yours.
   re-proposing a branch that is already dead.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it, not a sentence that rots.
-- Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
+- Prune with `magus\memory.delete`; list-then-get with `magus\memory.list` / `magus\memory.get`.
 
 ## Scope boundaries
 
 - Intra-session scratch (checklists, partial findings) stays in the
   session - it is disposable by definition, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
-  belong in memory; record the `magus_query` that surfaces them instead.
+  belong in memory; record the `magus\query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one

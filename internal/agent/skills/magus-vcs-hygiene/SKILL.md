@@ -14,7 +14,7 @@ each against the workspace's declared globs{{end}}:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `{{tool "describe_file"}}` {paths}. Each path comes back with its owning
+MCP: `{{tool "client"}}` calling `{{buzz "describeFile"}}([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -184,6 +184,6 @@ Then, whatever the backend:
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.{{end}}
 
-`{{tool "affected_explain"}}` {project} answers why a specific project is in the
-affected set{{if .Full}} (the changed files and dependency chains that pulled it in) when
-the result surprises you{{end}}.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set{{if .Full}}, when the result surprises you{{end}}. `{{tool "client"}}`
+(`{{buzz "impact"}}`) lists the changed files per seed project.

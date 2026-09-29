@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9855
-skill_short_bytes: 7017
+skill_full_bytes: 9884
+skill_short_bytes: 7105
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `92` |
+| `agent-skill-version` | `97` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `c36be70dcba2` |
+| `skill-content` | `d8000d00fcb8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -68,7 +68,7 @@ Feed every changed or conflicting path to magus in one call:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -193,8 +193,9 @@ Then, whatever the backend:
    agent's untracked work.
 2. Restore PER FILE, never whole-tree.
 
-`magus_affected_explain` {project} answers why a specific project is in the
-affected set.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set. `client`
+(`magus\impact`) lists the changed files per seed project.
 ````
 
 
@@ -223,7 +224,7 @@ each against the workspace's declared globs:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -380,9 +381,9 @@ Then, whatever the backend:
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.
 
-`magus_affected_explain` {project} answers why a specific project is in the
-affected set (the changed files and dependency chains that pulled it in) when
-the result surprises you.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set, when the result surprises you. `client`
+(`magus\impact`) lists the changed files per seed project.
 ````
 
 

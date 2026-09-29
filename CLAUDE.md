@@ -15,8 +15,9 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 
 - Use `./magus`, built by `magus run go-build .`. A fresh worktree has none, and
   until it does the hooks run whatever `magus` is on PATH, which may not load this
-  tree; `tools/policy/guard.buzz` does not run at all then. Build before relying
-  on the guard.
+  tree; `tools/policy/guard.buzz` does not run at all then. Bootstrap before
+  relying on the guard: `go run -trimpath ./cmd/magus run go-build --no-cache .`
+  runs the real target (the magus cache cannot key it; Go's cache stays on).
 - Never keep running a renamed `./magus`. The hooks find the binary by that name,
   so a rename hands every session in the checkout to the PATH binary, and the guard
   recognizes magus by basename, so the renamed one escapes every magus rule.
@@ -73,7 +74,7 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 
 ## Agent surface
 
-- Record decisions worth keeping, with the why, via `magus_memory`.
+- Record decisions worth keeping, with the why, via `magus memory` or the `client` tool (`magus\memory`).
 - If a convention matters, give it an enforcement point; `internal/guard/dir.go`
   is the worked example. Measured 2026-08-24: a rule that lives only in prose has
   roughly even odds.

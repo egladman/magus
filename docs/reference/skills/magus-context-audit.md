@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `92` |
+| `agent-skill-version` | `97` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `76687b5af876` |
+| `skill-content` | `4001533e17f8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,7 +56,7 @@ magus agent install --tar | tar -xO -f - magus-context-audit/SKILL.md
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus\insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as
@@ -160,7 +160,7 @@ magus agent install --tar | tar -xO -f - magus-context-audit-full/SKILL.md
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus\insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as

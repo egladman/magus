@@ -16,7 +16,7 @@ and a generator overwrites without asking.{{end}}
 | the repo instruction file (`CLAUDE.md`, `AGENTS.md`) outside managed markers | this workspace | for ALWAYS-ON rules only, and it costs context every session |
 | the repository memory (`magus memory`) | the user | for the EVIDENCE, not the rule |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
-| `{{buzz "guard.shell"}}(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
+| `{{buzz "guard.shell"}}(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only |
 | `{{buzz "harness.provider"}}(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
@@ -119,7 +119,7 @@ guard rule.
    `{{cmd "agent harness verify"}}` answers this for wiring{{if .Full}}. The two differ more
    often than anyone expects: a skill directory this repo does not install into
    receives nothing, and a forked harness spell reaches the host only once a person
-   merges what `{{cmd "describe harness"}}` prints into its config{{end}}.
+   runs the merge command `{{cmd "describe harness"}}` prints{{end}}.
 2. Re-run the command the evidence cites and read the verdict.{{if .Full}} A change that
    does not move the verdict on the command that motivated it changed nothing,
    and nothing else in the loop would have said so.{{end}}

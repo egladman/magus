@@ -30,7 +30,7 @@ inconveniences. Probe every claim adversarially before teaching it: when
 workaround in the skill; the right response was tracing the scorer, fixing
 the filter, and adding a regression test. Fix the tool before teaching the
 workaround. When the fix is out of reach, teach ONLY verified idioms and file
-the gap where it will be found (the plans doc, a task, magus_memory).
+the gap where it will be found (the plans doc, a task, the repository memory).
 
 ## 3. One source of truth, drift-gated
 
@@ -107,7 +107,7 @@ The whole vocabulary, each resolving against the registry that defines it:
 | write | renders | resolves against |
 | --- | --- | --- |
 | `{{cmd "agent harness verify"}}` | `magus agent harness verify` | `hint.AllCommands` |
-| `{{tool "query"}}` | `magus_query` | `hint.AllToolNames` |
+| `{{tool "client"}}` | `client` | `hint.AllToolNames` (a `magus_` prefix is tried when the bare name misses) |
 | `{{skill "vcs-hygiene"}}` | `magus-vcs-hygiene` | the shipped catalog |
 | `{{buzz "harness.provider"}}` | `magus\harness.provider` | the magus host module |
 | `{{mgs "MGS2001"}}` | `MGS2001` | the diagnostic registry |
@@ -262,7 +262,7 @@ reader can generalize for a ritual.
 
 ## 6. Record the why, then verify the whole
 
-- Decisions with a why go to magus_memory (file=decisions) so the next
+- Decisions with a why go to the repository memory (`client` calling magus\memory, or `magus memory`) so the next
   session - possibly a lesser model - inherits them instead of re-deriving.
   Read status and decisions before re-litigating anything.
 - After editing skills, in this order:

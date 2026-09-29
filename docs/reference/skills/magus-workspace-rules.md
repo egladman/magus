@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 10866
-skill_short_bytes: 8696
+skill_full_bytes: 10832
+skill_short_bytes: 8667
 ---
 
 # magus-workspace-rules
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `92` |
+| `agent-skill-version` | `97` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `657299d96042` |
+| `skill-content` | `0efad363c3ec` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -71,7 +71,7 @@ and a generator overwrites without asking.
 | the repo instruction file (`CLAUDE.md`, `AGENTS.md`) outside managed markers | this workspace | for ALWAYS-ON rules only, and it costs context every session |
 | the repository memory (`magus memory`) | the user | for the EVIDENCE, not the rule |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
-| `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
+| `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only |
 | `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
@@ -263,7 +263,7 @@ generator overwrites its output without asking.
 | the repo instruction file (`CLAUDE.md`, `AGENTS.md`) outside managed markers | this workspace | for ALWAYS-ON rules only, and it costs context every session |
 | the repository memory (`magus memory`) | the user | for the EVIDENCE, not the rule |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
-| `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
+| `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only |
 | `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
@@ -362,7 +362,7 @@ guard rule.
    `magus agent harness verify` answers this for wiring. The two differ more
    often than anyone expects: a skill directory this repo does not install into
    receives nothing, and a forked harness spell reaches the host only once a person
-   merges what `magus describe harness` prints into its config.
+   runs the merge command `magus describe harness` prints.
 2. Re-run the command the evidence cites and read the verdict. A change that
    does not move the verdict on the command that motivated it changed nothing,
    and nothing else in the loop would have said so.
