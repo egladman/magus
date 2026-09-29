@@ -1,12 +1,16 @@
 package guard
 
 import (
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // TestBriefThatTeachesADeniedCommandIsRefused: a worker runs its brief's commands as
@@ -82,4 +86,71 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, Dependencies{}, Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
 	assert.NotEqual(t, "deny", v.Decision)
+}
+
+// TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"
+// lint, and two ran it at once. A brief naming a live row is held to that row's check before
+// any worker exists.
+func TestBriefOffCheckIsRefused(t *testing.T) {
+	row := figuresLease()
+	produces := func() func(target, project string) bool {
+		return func(target, project string) bool { return targetName(target) == "figures-generate" && project == "docs" }
+	}
+	defines := func(target string) bool {
+		return slices.Contains([]string{"lint", "lint-files", "diagrams-generate", "figures-generate"}, targetName(target))
+	}
+	for _, tt := range []struct {
+		name, brief, target string // target is what the refusal names; "" for none
+	}{
+		{"may also run", "You may also run `./magus run lint docs` beside the check.", "lint"},
+		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", "lint"},
+		{"a shell block", "Validate:\n```bash\n./magus run diagrams_generate docs\n./magus run lint docs\n```", "lint"},
+		{"the gate", "Finish with `./magus affected ci`.", "ci"},
+		{"run the X target", "Then run the lint target and report.", "lint"},
+
+		{"never run", "Never run `./magus run lint docs`; the orchestrator does.", ""},
+		{"do not run, in prose", "Do not run lint docs: validations serialize.", ""},
+		{"the row's own check", "Run `./magus run diagrams_generate docs` once at the end.", ""},
+		{"the check with a charm, in prose", "Run ./magus run diagrams-generate:rw docs -- -v and report.", ""},
+		{"a target regenerating the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", ""},
+		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
+		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
+		{"a read", "Read `./magus describe job figures/flow` first.", ""},
+	} {
+		line, target, found := briefOffCheck(tt.brief, row, false, produces, defines)
+		if tt.target == "" {
+			assert.False(t, found, "%s: refused over %q", tt.name, line)
+			continue
+		}
+		require.True(t, found, tt.name)
+		assert.Equal(t, tt.target, target, tt.name)
+		deny := briefOffCheckDeny(row, line, target)
+		assert.Contains(t, deny, strconv.Quote(strings.TrimSpace(line)), "%s: the refusal quotes the line", tt.name)
+		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
+		assert.Contains(t, deny, "["+string(denyRuleWorkerCheckOnly)+"]", tt.name)
+	}
+}
+
+// TestBriefNamesItsRow: the row is found by the lease a brief exports, the job it takes, or
+// its JOB ID line, and only a live worker row that names a check is one to hold it to.
+func TestBriefNamesItsRow(t *testing.T) {
+	brief := "JOB ID: figures/flow. Export `BAGGAGE=magus.lease=figures/flow`, then `./magus job exec figures/flow`."
+	assert.Equal(t, []string{"figures/flow"}, briefJobIDs(brief))
+	assert.Empty(t, briefJobIDs("Run `magus job exec <its id>` once."))
+
+	row := figuresLease()
+	got, ok := briefRow([]string{"figures/flow"}, []types.Job{row})
+	require.True(t, ok)
+	assert.Equal(t, row.ID, got.ID)
+
+	for name, change := range map[string]func(*types.Job){
+		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
+		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
+		"a row declaring no check": func(j *types.Job) { j.Check = nil },
+	} {
+		r := figuresLease()
+		change(&r)
+		_, ok := briefRow([]string{r.ID}, []types.Job{r})
+		assert.False(t, ok, name)
+	}
 }

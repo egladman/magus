@@ -281,6 +281,13 @@ var denyRuleDocs = []RuleDoc{
 			"It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. " +
 			"Verify in place instead: no magus run needs a clean tree. " +
 			"git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work."},
+	{Name: string(denyRuleWorkerCheckOnly), Decision: "deny",
+		Catches: "a bound worker running a target other than its row's check or one writing its write paths",
+		Why: "A worker's row names one check, and the orchestrator runs every other target serially, in its own tree, after the units land. " +
+			"Measured 2026-09-29: briefs told six workers they \"may also run\" `magus run lint docs`, and two ran it at the same moment from two worktrees. The cache replays a run that has landed and never two in flight, and two trees share no key, so the pair doubled the load and proved nothing the orchestrator's one run does not. " +
+			"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); magus's own `go-build .` in its own checkout; and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
+			"`magus affected` is never the check, since it takes its projects from the diff. An unbound caller, a row that owns the gate and a row declaring no check are untouched. " +
+			"The same rule grades a spawn or continuation brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists."},
 	{Name: string(denyRuleWorktreeRemove), Decision: "deny",
 		Catches: "removing a worktree magus cannot prove holds nothing that would be lost",
 		Why: "A worktree may be where another session is working right now, and what it holds may exist nowhere else. " +
