@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -23,6 +24,46 @@ type packageGraph map[string]map[string]bool
 // packages exist for exactly that), so its imports do not constrain where non-test code
 // can move.
 func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
+
+// PackageDeps maps each workspace package directory ("." for the root) to the package
+// directories it imports, sorted. Test files, packages outside the workspace, and a
+// package importing itself are left out. The map is empty, never nil, when no SCIP index
+// was ingested; HasSymbols tells that apart from a workspace whose packages import nothing.
+func (g *Graph) PackageDeps() map[string][]string {
+	// A namespace's directory is the lowest one holding a non-test file that defines it,
+	// the same placement Precedents reads, so both name a package by one directory.
+	dir := map[string]string{}
+	for id, nss := range g.fileNamespaces() {
+		n := g.nodes[id]
+		if n.Kind != types.KindFile || isTestSource(n.Source) {
+			continue
+		}
+		d := path.Dir(n.Source)
+		for _, ns := range nss {
+			if cur, ok := dir[ns]; !ok || d < cur {
+				dir[ns] = d
+			}
+		}
+	}
+	out := map[string][]string{}
+	for from, tos := range g.packageDeps() {
+		fd, ok := dir[from]
+		if !ok {
+			continue
+		}
+		for to := range tos {
+			// Two namespaces in one directory, one per language, are one package here.
+			if td, ok := dir[to]; ok && td != fd {
+				out[fd] = append(out[fd], td)
+			}
+		}
+	}
+	for d, tos := range out {
+		slices.Sort(tos)
+		out[d] = slices.Compact(tos)
+	}
+	return out
+}
 
 // packageDepsExcept is packageDeps without the imports and calls made from the files skip
 // reports, given a workspace-relative path. A nil skip leaves none out.
