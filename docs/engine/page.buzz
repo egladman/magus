@@ -20,6 +20,7 @@ import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
 import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
 import "lib/conventions" as _;
 // The single importer of the diagram registry. A module imported by two different paths
 // binds only once: the second import resolves to nothing, with no error at the import
@@ -808,9 +809,13 @@ export fun writeDiagramPair(dir: str) > void !> any {
     diagrams\writeStandalonePair(dir);
 }
 
-// diagramDrift re-exports the anchor check, alongside writeDiagramPair.
-export fun diagramDrift(root: str, sourceGlobs: [str]) > [str] !> any {
-    return diagrams\verifyAnchors(root, sourceGlobs);
+// diagramDrift runs the figure verifier, alongside writeDiagramPair. It logs each figure's
+// summary line and returns the findings, which the caller fails on.
+export fun diagramDrift(root: str, sourceGlobs: [str], verifyImports: bool) > [str] !> any {
+    final report = diagrams\verifyFigures(root, sourceGlobs: sourceGlobs,
+        opts: diagrams\DriftOptions{ verifyImports = verifyImports });
+    foreach (line in report.summaries) { magus\log.info(line); }
+    return report.findings;
 }
 
 // dependencyFigure renders a generated dependency DAG as inline SVG inside the page's
@@ -836,4 +841,56 @@ export fun dependencyFigure(id: str, title: str, items: [LayeredItem]) > str {
     final svg = renderSvg(d, cssVarPalette()) catch "";
     if (svg == "") { return ""; }
     return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
+}
+
+// importFigure draws the Go packages under scope and the imports between them, as the
+// symbol index observed them: the picture a declared figure's scope is read against. Every
+// edge claims imports, since that is all the index can show. Returns "" when graph is not
+// indexed or the flow cannot be laid out, logging why, as dependencyFigure drops a figure.
+export fun importFigure(id: str, title: str, scope: [str], graph: ImportGraph) > str {
+    if (graph.indexed == false) {
+        magus\log.warn("skipped import figure {id}: no symbol index; build it with `magus graph build`");
+        return "";
+    }
+    try {
+        final svg = importFlow(id, title: title, scope: scope, graph: graph).svg(cssVarPalette());
+        return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
+    } catch (e) {
+        magus\log.warn("skipped import figure {id}: {e}");
+    }
+    return "";
+}
+
+// importFlow is importFigure's flow before it is painted, so a caller can pick the palette.
+export fun importFlow(id: str, title: str, scope: [str], graph: ImportGraph) > mut Flow !> any {
+    final pkgs: mut [str] = mut [<str>];
+    final inScope: mut {str: bool} = mut {<str: bool>};
+    foreach (pkg, _ in graph.packages) {
+        foreach (glob in scope) {
+            if (inScope[pkg] == null and diagrams\scopeMatches(pkg, glob: glob)) {
+                pkgs.append(pkg);
+                inScope[pkg] = true;
+            }
+        }
+    }
+    // The graph arrives as a host map, whose order is not the index's; sorted, the same
+    // index always draws the same figure.
+    final ordered = pkgs.sort(fun (a: str, b: str) > bool { return a < b; });
+    final f = flow(id);
+    f.title(title);
+    f.scope(scope);
+    foreach (pkg in ordered) { f.node(importNodeId(pkg), label: pkg, anchor: pkg); }
+    foreach (pkg in ordered) {
+        foreach (dep in graph.packages[pkg] ?? [<str>]) {
+            if (inScope[dep] != null) {
+                f.edge(importNodeId(pkg), dst: importNodeId(dep), claim: "imports");
+            }
+        }
+    }
+    return f;
+}
+
+// importNodeId keeps a package path out of the SVG's id space, where a slash is not welcome.
+fun importNodeId(pkg: str) > str {
+    return "pkg-" + pkg.replace("/", with: "-");
 }
