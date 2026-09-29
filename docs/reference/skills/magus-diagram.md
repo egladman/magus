@@ -3,8 +3,8 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, compose, check and view an architecture figure with flow, the Buzz diagram library: declared boxes and connectors, a claim on every connector (imports, calls or flow), a scope every package under it answers to, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 15067
-skill_short_bytes: 12060
+skill_full_bytes: 15065
+skill_short_bytes: 12058
 ---
 
 # magus-diagram
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `92` |
+| `agent-skill-version` | `93` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `71c5f819ed83` |
+| `skill-content` | `430d77cbe4ce` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -123,7 +123,7 @@ with `magus buzz <file>`. A clean figure returns; a refused one prints one
 ## Roles are the only styling words
 
 A box's `role:` and a connector's `role:` pick its treatment from the design
-system. There is no colour, font, or stroke argument, and there will not be one.
+system. There is no color, font, or stroke argument, and there will not be one.
 
 `Role` is default, focal, store, external, input, optional or decision;
 `EdgeRole` is default, focal, external or optional. The enum declarations in
@@ -204,7 +204,7 @@ Import the generated module ALIASED (`as guardPathGen`), never flat.
 ## Shape: rank, row and order
 
 flow takes no coordinates and no weights. Three declarations relate boxes to each
-other instead, and each is honoured or refused, never silently ignored:
+other instead, and each is honored or refused, never silently ignored:
 
 | call | does | refused when |
 | --- | --- | --- |
@@ -402,7 +402,7 @@ layout.
 ## Roles are the only styling words
 
 A box's `role:` and a connector's `role:` pick its treatment from the design
-system. There is no colour, font, or stroke argument, and there will not be one.
+system. There is no color, font, or stroke argument, and there will not be one.
 
 | `Role` | meaning |
 | --- | --- |
@@ -503,7 +503,7 @@ basename with the declared figure.
 ## Shape: rank, row and order
 
 flow takes no coordinates and no weights. Three declarations relate boxes to each
-other instead, and each is honoured or refused, never silently ignored:
+other instead, and each is honored or refused, never silently ignored:
 
 | call | does | refused when |
 | --- | --- | --- |

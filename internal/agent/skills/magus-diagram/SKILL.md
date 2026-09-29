@@ -79,7 +79,7 @@ layout.
 {{end}}## Roles are the only styling words
 
 A box's `role:` and a connector's `role:` pick its treatment from the design
-system. There is no colour, font, or stroke argument, and there will not be one.
+system. There is no color, font, or stroke argument, and there will not be one.
 
 {{if .Full}}| `Role` | meaning |
 | --- | --- |
@@ -184,7 +184,7 @@ basename with the declared figure{{end}}.
 ## Shape: rank, row and order
 
 flow takes no coordinates and no weights. Three declarations relate boxes to each
-other instead, and each is honoured or refused, never silently ignored:
+other instead, and each is honored or refused, never silently ignored:
 
 | call | does | refused when |
 | --- | --- | --- |

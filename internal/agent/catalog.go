@@ -256,7 +256,8 @@ import (
 // magus-workspace-rules forks a harness spell with `magus spell pull`.
 // 101: magus-architecture-review's insight fence is followed by a blank line, which
 // markdownlint requires.
-const SkillVersion = 101
+// 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
+const SkillVersion = 102
 
 const skillLicense = "GPL-3.0-or-later"
 
