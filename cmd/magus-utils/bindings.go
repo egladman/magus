@@ -386,6 +386,12 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 // Object returns are emitted as direct, typed encoders; scalar and deliberately
 // untyped descriptor returns use the small shared primitive helpers.
 func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValueEmitter) (string, error) {
+	if ret.Nullable {
+		if ret.Type != std.TypeString || ret.Object != "" || goType != reflect.TypeFor[*string]() {
+			return "", fmt.Errorf("a nullable return is a str? whose Impl returns *string, not %s returning %s", ret.Type.GoType(), goType)
+		}
+		return fmt.Sprintf("ffi.OptStrVal(%s)", src), nil
+	}
 	if ret.Object != "" {
 		return objects.valueFunc(goType, src)
 	}

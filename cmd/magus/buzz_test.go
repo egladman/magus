@@ -387,6 +387,41 @@ func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
 	assert.Contains(t, stdout, "ok")
 }
 
+// --root names the checkout a script's vcs calls read. The process cwd here is the
+// magus checkout this test runs in, a different repository on a different ref.
+func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
+	repo := initGitRepo(t)
+	runGit(t, repo, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init")
+	runGit(t, repo, "switch", "-q", "-c", "split-target")
+	script := filepath.Join(t.TempDir(), "ref.buzz")
+	require.NoError(t, os.WriteFile(script, []byte(
+		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))
+
+	var runErr error
+	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), repo, []string{"-s", script}) })
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "split-target\n", stdout)
+}
+
+// Strict mode refuses a raising call at the top level, and the refusal names the form
+// that runs one, which an -e snippet takes as well as a file does.
+func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
+	var runErr error
+	captureStdout(t, func() {
+		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})
+	})
+	require.ErrorContains(t, runErr, string(buzz.UnhandledRaise))
+	assert.ErrorContains(t, runErr, "fun main(args: [str]) > void !> any")
+
+	stdout := captureStdout(t, func() {
+		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e",
+			`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`})
+	})
+	require.NoError(t, runErr)
+	assert.Equal(t, "root true\n", stdout)
+}
+
 // buzzTrace runs buzzCmd under an enabled startup trace wired the way main does it,
 // with the trace's profile on ctx.
 func buzzTrace(t *testing.T, args []string) (stdout, trace string) {

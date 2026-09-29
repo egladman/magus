@@ -2497,6 +2497,26 @@ func TestStatusAndDiffIgnoreDisplayConfig(t *testing.T) {
 	assert.NotContains(t, diff, "\x1b[")
 }
 
+// A detached HEAD has no movable name. git's --abbrev-ref answers the literal "HEAD",
+// which every caller of Ref would take for a branch: two detached checkouts would
+// share one gate record.
+func TestGitMetadataRefIsEmptyOnADetachedHead(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "work")
+	g := gitVCS{}
+
+	meta, err := g.Metadata(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "work", meta.Ref)
+
+	gitRun(t, dir, "switch", "-q", "--detach")
+	meta, err = g.Metadata(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Empty(t, meta.Ref)
+	assert.NotEmpty(t, meta.ID)
+}
+
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
 	probe := &ensureRecorder{VCSDriver: gitVCS{}}

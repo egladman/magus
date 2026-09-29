@@ -452,8 +452,8 @@ export fun main(args: [str]) > void !> any {
         throw "split-into-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final base = parsed.values["--base"] ?? vcs\base();
-    final prefix = parsed.values["--prefix"] ?? vcs\ref();
-    if (prefix == "" or prefix == "HEAD") {
+    final prefix = parsed.values["--prefix"] ?? vcs\ref() ?? "";
+    if (prefix == "") {
         throw "split-into-branches: no current branch to name the stack after; pass --prefix <branch>\n{USAGE}";
     }
     final minFiles = std\parseInt(parsed.values["--min-files"] ?? "3");

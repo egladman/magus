@@ -110,14 +110,14 @@ final SANDBOX = "--sandbox=required";
 
 // GATE and REGENERATE are validation's hook lines. Apply shows them on a kick-back from
 // its own flags: a verdict is written by a job that ran the change's code. The gate
-// takes ci.yaml's charms, since charms key every step and only a step keyed as main's
-// shards keyed it replays what they stored.
+// takes ci.yaml's charms and main's forwarded args, since both key the steps and only a
+// step keyed as main's shards keyed it replays what they stored.
 // A candidate's head becomes main's base, so a finding it inherits must fail it too.
 final GATE = candidateMagus("run ci:gha --no-default-charms -- --inherited=fatal");
 final REGENERATE = candidateMagus("run generate:rw");
 
-// validateArgs names no project: the queue appends the change's affected projects to
-// each hook line, or "/" when that set is no proof. Hooks read main's signed cache
+// validateArgs names no project: the queue adds the change's affected projects to each
+// hook line, ahead of its `--`, or "/" when that set is no proof. Hooks read main's signed cache
 // through the queue's read-only proxy; the runner's cache token stays with the queue.
 // The plan arrives on stdin; validate() feeds it.
 export fun validateArgs(dir: str, change: str) > [str] {

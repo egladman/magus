@@ -26,10 +26,12 @@ fun subjectOf(message: str) > str {
     return "";
 }
 
-// vcs\ref raises on an unborn branch, and a repository's first commit is on one.
+// vcs\ref raises on an unborn branch, and a repository's first commit is on one. A
+// detached HEAD names no branch.
 fun currentBranch() > str !> any {
-    return vcs\ref() catch vcs\cmd(["symbolic-ref", "--quiet", "--short", "HEAD"],
+    final ref = vcs\ref() catch vcs\cmd(["symbolic-ref", "--quiet", "--short", "HEAD"],
         opts: {"quiet": true, "allow_failure": true}).stdout.trim();
+    return ref ?? "";
 }
 
 fun main(args: [str]) > void !> any {

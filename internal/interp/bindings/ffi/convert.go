@@ -177,6 +177,14 @@ func IntVal(i int) vm.Value       { return vm.IntValue(int64(i)) }
 func BoolVal(b bool) vm.Value     { return vm.BoolValue(b) }
 func FloatVal(f float64) vm.Value { return vm.FloatValue(f) }
 
+// OptStrVal is a `str?` return: nil crosses as null.
+func OptStrVal(s *string) vm.Value {
+	if s == nil {
+		return vm.Null
+	}
+	return vm.StrValue(*s)
+}
+
 // ByteSlice converts argument n to raw bytes, accepting either a str (taken as
 // its bytes) or a list of ints.
 //

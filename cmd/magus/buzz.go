@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -267,6 +269,11 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	stopExec := tr.phase("buzz.exec")
 	if err := sess.Exec(ctx, code); err != nil {
 		stopExec()
+		// Strict mode refuses both a raising call and a try at the top level, so the
+		// fix is the one place a raise may go, which -e can hold as well as a file.
+		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
+			return fmt.Errorf("%s: %w\n  a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level; -e takes that form too", name, err)
+		}
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	stopExec()
@@ -599,6 +606,15 @@ func buzzUsage() {
 // has to be in force before the first line runs. globalCfg is the config the open
 // would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
+	// --root is the directory a script runs as if started in, as -C is for make: its
+	// vcs calls, execs and relative paths resolve there, not in the process cwd.
+	if _, set := std.CwdFromContext(ctx); root != "" && !set {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return nil, fmt.Errorf("magus buzz: --root: %w", err)
+		}
+		ctx = std.WithCwd(ctx, abs)
+	}
 	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Mode.Enabled() {
 		return newLazyWorkspaceContext(ctx, root), nil
 	}

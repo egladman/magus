@@ -1,17 +1,21 @@
 package interp
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
 	"crypto/sha256"
+	"debug/elf"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -335,14 +339,23 @@ const staleStampAge = 24 * time.Hour
 // hash>. It is outside the workspace because a stored chunk runs as it is
 // read back, and the working tree is writable by the agents the guard judges.
 //
-// Nil when the compiler cannot be identified or the cache is unavailable, and
-// the load compiles every time.
+// A cache is not a place only this user writes: CI restores it, a sync can fill
+// it, and a spell's sandbox can be granted part of it. So every chunk is sealed
+// with a key kept in the user's state dir, and one that does not verify is
+// compiled over.
+//
+// Nil when the compiler cannot be identified or the cache or the key is
+// unavailable, and the load compiles every time.
 func guardBytecodeStore(root string) buzz.BytecodeStore {
 	stamp := compilerStamp()
 	if root == "" || stamp == "" {
 		return nil
 	}
 	base, err := config.UserCacheDir()
+	if err != nil {
+		return nil
+	}
+	secret, err := bytecodeSecret()
 	if err != nil {
 		return nil
 	}
@@ -360,7 +373,90 @@ func guardBytecodeStore(root string) buzz.BytecodeStore {
 		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
 	}
 	sum := sha256.Sum256([]byte(abs))
-	return buzz.NewDiskBytecodeStore(filepath.Join(dir, hex.EncodeToString(sum[:])))
+	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
+	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secret, scope: dir}
+}
+
+// sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
+// kept in, its key and its bytes, so a chunk moved from another key, workspace
+// or compiler fails exactly as a forged one does.
+type sealedBytecodeStore struct {
+	inner  buzz.BytecodeStore
+	secret []byte
+	scope  string
+}
+
+var errUnsealedChunk = errors.New("bytecode chunk does not verify")
+
+func (s sealedBytecodeStore) Load(key string) ([]byte, error) {
+	sealed, err := s.inner.Load(key)
+	if err != nil {
+		return nil, err
+	}
+	if len(sealed) < sha256.Size || !hmac.Equal(sealed[:sha256.Size], s.seal(key, sealed[sha256.Size:])) {
+		return nil, errUnsealedChunk
+	}
+	return sealed[sha256.Size:], nil
+}
+
+func (s sealedBytecodeStore) Store(key string, blob []byte) error {
+	return s.inner.Store(key, append(s.seal(key, blob), blob...))
+}
+
+func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
+	m := hmac.New(sha256.New, s.secret)
+	for _, part := range []string{s.scope, key} {
+		m.Write([]byte(part))
+		m.Write([]byte{0})
+	}
+	m.Write(blob)
+	return m.Sum(nil)
+}
+
+// bytecodeSecret reads the key chunks are sealed with, creating it on first use.
+// It lives in the state dir, apart from the cache it protects.
+func bytecodeSecret() ([]byte, error) {
+	base, err := config.UserStateDir()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(base, "magus")
+	path := filepath.Join(dir, "buzz-bytecode.key")
+	read := func() ([]byte, error) {
+		secret, err := os.ReadFile(path)
+		if err == nil && len(secret) != sha256.Size {
+			return nil, fmt.Errorf("%s: want %d bytes, found %d", path, sha256.Size, len(secret))
+		}
+		return secret, err
+	}
+	if secret, err := read(); !errors.Is(err, fs.ErrNotExist) {
+		return secret, err
+	}
+	secret := make([]byte, sha256.Size)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.CreateTemp(dir, ".buzz-bytecode.key-")
+	if err != nil {
+		return nil, err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	_, werr := f.Write(secret)
+	if err := errors.Join(werr, f.Close()); err != nil {
+		return nil, err
+	}
+	// A link, not a rename: it refuses an existing key, so two processes starting
+	// together both end up using whichever key was placed first.
+	if err := os.Link(tmp, path); errors.Is(err, fs.ErrExist) {
+		return read()
+	} else if err != nil {
+		return nil, err
+	}
+	return secret, nil
 }
 
 // pruneStamps removes the chunk directories of other compilers last used
@@ -382,31 +478,64 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 }
 
 // compilerStamp identifies the build that compiles a chunk, so a chunk is only
-// ever run by the compiler that wrote it. The version and VCS settings name a
-// clean build; the executable's mtime and size tell apart two builds of one
-// dirty tree, which carry the same settings. Empty when the executable cannot
-// be read.
+// ever run by the compiler that wrote it. It is the executable's Go build ID,
+// which the toolchain derives from the build's inputs and output: a rebuild of
+// the same source matches (a fresh CI binary reuses the last run's chunks) and
+// any other build does not, dirty tree or not. Empty when the executable cannot
+// be read or carries no build ID.
 func compilerStamp() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
 	}
-	info, err := os.Stat(exe)
+	return compilerStampOf(exe)
+}
+
+func compilerStampOf(exe string) string {
+	id := goBuildID(exe)
+	if id == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// goBuildID reads the build ID the Go linker writes at the start of the text
+// segment, which lies in the file's first 32 KiB (cmd/internal/buildid reads the
+// same window), or from ELF's .note.go.buildid when an external link moved text.
+func goBuildID(exe string) string {
+	f, err := os.Open(exe)
 	if err != nil {
 		return ""
 	}
-	h := sha256.New()
-	fmt.Fprintf(h, "%d-%d", info.ModTime().UnixNano(), info.Size())
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		fmt.Fprintf(h, "\x00%s", bi.Main.Version)
-		for _, s := range bi.Settings {
-			switch s.Key {
-			case "vcs.revision", "vcs.modified":
-				fmt.Fprintf(h, "\x00%s=%s", s.Key, s.Value)
-			}
+	defer f.Close()
+	head := make([]byte, 32<<10)
+	n, _ := io.ReadFull(f, head)
+	const marker = "\xff Go build ID: \""
+	if i := bytes.Index(head[:n], []byte(marker)); i >= 0 {
+		rest := head[i+len(marker) : n]
+		if j := bytes.IndexByte(rest, '"'); j > 0 {
+			return string(rest[:j])
 		}
 	}
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	ef, err := elf.NewFile(f)
+	if err != nil {
+		return ""
+	}
+	note := ef.Section(".note.go.buildid")
+	if note == nil {
+		return ""
+	}
+	// namesz, descsz, type, then "Go\x00\x00" and the ID.
+	data, err := note.Data()
+	if err != nil || len(data) < 16 {
+		return ""
+	}
+	size := int(ef.ByteOrder.Uint32(data[4:8]))
+	if len(data) < 16+size {
+		return ""
+	}
+	return string(data[16 : 16+size])
 }
 
 // WithProjectPath stores the workspace-relative path of the project whose

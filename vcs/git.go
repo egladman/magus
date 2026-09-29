@@ -619,6 +619,10 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 	if err := errs[4]; err != nil {
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
 	}
+	// --abbrev-ref names a detached HEAD "HEAD", which no caller can tell from a branch.
+	if branch == "HEAD" {
+		branch = ""
+	}
 	return types.VCSMeta{
 		Short:      shortHash,
 		ID:         hash,

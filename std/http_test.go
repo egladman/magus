@@ -165,6 +165,20 @@ func TestHTTPFail(t *testing.T) {
 	assert.Contains(t, err.Error(), "nope", "fail_with_body: want body in error")
 }
 
+// MAGUS_OFFLINE stops the fetches magus makes on its own behalf, not the ones a
+// magusfile asks for; the variable's description and HTTP's doc both say so.
+func TestHTTPIgnoresMagusOffline(t *testing.T) {
+	t.Setenv("MAGUS_OFFLINE", "1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("online"))
+	}))
+	defer srv.Close()
+
+	res, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "online", res.Body)
+}
+
 // TestHTTPFailCarriesTheStatus is what lets a Buzz caller tell a 404 from a 500.
 // The thrown value used to be a message and nothing else, so branching on the
 // status meant substring-matching prose, the one part of an error nobody promises

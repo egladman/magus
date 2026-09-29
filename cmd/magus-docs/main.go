@@ -370,6 +370,9 @@ func renderModule(m std.Module) string {
 					if r.Type == std.TypeFunc {
 						typ = fmt.Sprintf("[%s](%s)", typ, callbackURL)
 					}
+					if r.Nullable {
+						typ += " or null"
+					}
 					if r.Name != "" {
 						rets[i] = r.Name + " " + typ
 					} else {

@@ -146,6 +146,10 @@ type Ret struct {
 	// Enum names the Buzz enum this return's string is a case of. Same role as
 	// Arg.Enum, on the way out.
 	Enum string
+	// Nullable declares a return that may be null (`str?`): the Impl returns a
+	// pointer and nil crosses as null. Only TypeString takes it; codegen refuses
+	// any other tag.
+	Nullable bool
 }
 
 // Namespace is a group of related host functions a module exposes behind one of its

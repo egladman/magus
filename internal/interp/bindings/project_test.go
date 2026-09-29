@@ -210,8 +210,8 @@ func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("./guides/**"), vm.StrValue("../proto/**/*.proto")}))
 	p := applyOptsAt(t, "docs", opts)
-	assert.Equal(t, []string{"guides/**", "../proto/**/*.proto"}, p.Sources)
-	assert.Equal(t, []string{"docs/guides/**", "proto/**/*.proto"}, p.DeclaredGlobs(),
+	assert.Equal(t, []types.Glob{{Pattern: "guides/**"}, {Pattern: "../proto/**/*.proto"}}, p.Sources)
+	assert.Equal(t, []types.Glob{{Pattern: "docs/guides/**"}, {Pattern: "proto/**/*.proto"}}, p.DeclaredGlobs(),
 		"both globs root at the workspace; only the reaching one moves")
 }
 

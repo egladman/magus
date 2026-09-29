@@ -302,6 +302,7 @@ func guardLoad(t *testing.T, ctx context.Context, root string) []string {
 func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", "")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export final marker = 1;\n"), 0o644))
 
@@ -323,6 +324,7 @@ func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
 func TestGuardLoadOfApprovedSourcesIgnoresTheStore(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(cache, "workspace"))
 	magusfile := filepath.Join(root, "magusfile.buzz")
 	const approved = "export final approved = 1;\n"
@@ -352,6 +354,7 @@ func TestGuardLoadOfApprovedSourcesIgnoresTheStore(t *testing.T) {
 func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	stamps := filepath.Join(cache, "magus", "buzz-bytecode")
 	old, recent := filepath.Join(stamps, "old"), filepath.Join(stamps, "recent")
 	for _, dir := range []string{old, recent} {
@@ -370,4 +373,64 @@ func TestCompilerStampIsStable(t *testing.T) {
 	stamp := compilerStamp()
 	assert.Len(t, stamp, 16)
 	assert.Equal(t, stamp, compilerStamp())
+}
+
+// CI builds a fresh binary on every run: same bytes, new file, new mtime. Its chunks
+// are the ones the last run compiled.
+func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	body, err := os.ReadFile(exe)
+	require.NoError(t, err)
+	fresh := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.WriteFile(fresh, body, 0o755))
+	long := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(fresh, long, long))
+
+	stamp := compilerStampOf(exe)
+	require.NotEmpty(t, stamp)
+	assert.Equal(t, stamp, compilerStampOf(fresh))
+
+	i := strings.Index(string(body), "Go build ID: \"")
+	require.GreaterOrEqual(t, i, 0, "the test binary carries a Go build ID")
+	other := slices.Clone(body)
+	other[i+len("Go build ID: \"")] ^= 1
+	rebuilt := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
+	assert.NotEqual(t, stamp, compilerStampOf(rebuilt), "another build is another compiler")
+}
+
+// A chunk is code the next load runs. One that does not verify is compiled over,
+// whoever wrote it: here, a valid chunk of other source moved to this source's key.
+func TestGuardLoadRefusesATamperedChunk(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(cache, "workspace"))
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	load := func(src string) string {
+		t.Helper()
+		before := storedChunks(t, cache)
+		require.NoError(t, os.WriteFile(magusfile, []byte(src), 0o644))
+		guardLoad(t, t.Context(), root)
+		for path := range storedChunks(t, cache) {
+			if !before[path] {
+				return path
+			}
+		}
+		t.Fatalf("no chunk stored for %q", src)
+		return ""
+	}
+	const marker = "export final marker = 1;\n"
+	markerChunk := load(marker)
+	planted, err := os.ReadFile(load("export final planted = 1;\n"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(markerChunk, planted, 0o600))
+
+	require.NoError(t, os.WriteFile(magusfile, []byte(marker), 0o644))
+	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
+	recompiled, err := os.ReadFile(markerChunk)
+	require.NoError(t, err)
+	assert.NotEqual(t, planted, recompiled, "the refused chunk is replaced by the compile")
+	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
 }

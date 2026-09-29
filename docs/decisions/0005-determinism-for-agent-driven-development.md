@@ -98,8 +98,8 @@ Measured during the pass:
 | Every recursive literal grep sent to `refs --text`; wiring Claude's Grep and Glob tools | not built |
 | Precision: the interpreter-rewrite rule judges real write targets, not every tracked path a script mentions | done |
 | Precision: a heredoc that merely mentions `.magus/logs` is not a write to the cache directory | proposed |
-| A `magus buzz` script writing a tracked file is judged like the same write from Python | planned |
-| The scratch-path deny text matches behavior (scratch edits outside the workspace are not tracked-file rewrites) | planned |
+| A `magus buzz` script writing a tracked file is judged like the same write from Python | done |
+| The scratch-path deny text matches behavior (scratch edits outside the workspace are not tracked-file rewrites) | done |
 | Host policy: a recursive search of the run-log directory is denied; Windows paths match; `rg -t` values are not paths | done |
 | Advise on `git diff <rev>` while untracked files exist (they read as deleted) and on hand-rolled `commit-tree` snapshots | planned |
 | A Cursor hook that receives malformed JSON says so instead of allowing silently | done |
@@ -121,7 +121,7 @@ Measured during the pass:
 | "Stale" counts the lease's last guarded call, not only the row's last update | planned |
 | Ending leases automatically, heartbeat expiry, new session-end hooks | not built |
 | Widening a live job's write paths without resetting it to declared (today a re-fork resets it, found three times) | proposed |
-| Replacing a declared job whose dependencies changed is judged against its new dependencies (today it is judged against the stored row, so the fix is remove and fork again) | planned |
+| Replacing a declared job whose dependencies changed is judged against its new dependencies (today it is judged against the stored row, so the fix is remove and fork again) | done |
 | A typed `magus\activity` member returning resolved guard verdicts, so scripts stop reading the activity store directly | proposed |
 
 ## 5. Engine
@@ -137,9 +137,11 @@ Measured during the pass:
 | The hand-written runtime files move out of `internal/interp/bindings/gen/` into their own package, `internal/interp/bindings/ffi`; the exclusion feature stays for tests and shared directories | done |
 | Mercurial's and Sapling's fallback no longer picks the magus merge tool for every conflicted file; `vcs/hgfamily.go` becomes `vcs/mercurial.go` | done |
 | A fresh checkout bootstraps with one command, `go run -trimpath ./cmd/magus run go-build --no-cache .`: the real target, magus cache bypassed, Go cache kept | done |
-| The root project declares its dependency on `proto` (it uses the generated Go code), which the graph lacked; `split-change` found it | planned |
-| `magus --root <dir> buzz` reads the VCS of `<dir>`, not of the process's working directory | planned |
-| `vcs\ref()` on a detached checkout returns what its documentation says (it returns `HEAD`, the docs say empty) | planned |
+| The root project declares its dependency on `proto` (it uses the generated Go code), which the graph lacked; `split-change` found it | done |
+| `magus --root <dir> buzz` reads the VCS of `<dir>`, not of the process's working directory | done |
+| `vcs\ref()` on a detached checkout returns null (`str?`), so every caller must handle "no name"; it throws only on a real VCS error | done |
+| The merge queue passes a change's projects ahead of the gate line's `--`, not after it as forwarded args (which selected every project) | done |
+| Cached Buzz bytecode is keyed by the build's content and authenticated with a per-user key, so a planted chunk is refused | done |
 
 ## 6. Harness and host configuration
 
@@ -171,7 +173,7 @@ self-improvement change the person asks for.
 | `ls-worktrees` | `git worktree list` rounds: every worktree with dirty, unpushed and job columns | done |
 | `show-interrupted-session` | picking up a session that ended abruptly (Codex, Claude Code, Cursor): prints what was asked, how it ended, the checkout and its state, and the preserve-and-switch commands, never writing into the other checkout | done |
 | `split-into-branches` | splitting a large change by hand: groups by owning project, attaches outputs to their generator, orders by project dependencies, prints a stack of branches, creates local stacked branches on `--apply`, never pushes. Grouping is by project, so the root project stays one large branch; a finer split needs package or symbol coupling | done |
-| Widening a job's write paths | `jq` edits of job records: moves into the CLI (`magus job edit --add-write-path`/`--remove-write-path`, dry run until `--apply`), since the job store has one writer, the binary; no refusal ever names it | planned |
+| Widening a job's write paths | `jq` edits of job records: moves into the CLI (`magus job edit --add-write-path`/`--remove-write-path`, dry run until `--apply`), since the job store has one writer, the binary; no refusal ever names it | done |
 | `on-actions` (exists) | proving something on Linux without a pull request: a prefix, `magus buzz hack/on-actions.buzz -- magus <argv>`, pushes a scratch branch, runs the command on a hosted runner, prints its output and exits with its code, then deletes the run and the branch; `--detach`, `--result`, `--delete` and `--ls` manage runs | done |
 | `on-linux` | the same prefix run in a local Podman container (ADR 0003's option B', revived while `--platform` stays on hold): `magus buzz hack/on-linux.buzz -- magus <argv>`, with `--arch`, `--env`, `--image`, `--keep`, `--ls`, `--delete` | in progress |
 | An explicit ephemeral copy. `magus buzz --copy hack/x.buzz` copies the script outside the tree and outside `.magus/`, stamps its first line with the source path, digest and revision, and prints the path. Running the copy prints one line saying it is a one-off (modified or not) and records its provenance in the activity trail. The tracked script is never edited in place unless the person asked (see the guard's ask above) | editing a reference script in place | planned |

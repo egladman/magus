@@ -53,7 +53,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.OptStrVal(ret0), nil
 	}))
 	m.MapSet("status", vm.DirectValue("vcs.status", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := ffi.StrSlice(bzArgs, 0)

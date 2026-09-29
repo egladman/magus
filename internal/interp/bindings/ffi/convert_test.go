@@ -28,6 +28,14 @@ func TestBuzzCallbackReturnsValue(t *testing.T) {
 	assert.Equal(t, "payload", ret[0])
 }
 
+func TestOptStrValCrossesNilAsNull(t *testing.T) {
+	assert.True(t, OptStrVal(nil).IsNull())
+	empty := ""
+	got := OptStrVal(&empty)
+	require.True(t, got.IsStr(), "an empty string is a value, not an absence")
+	assert.Equal(t, "", got.AsString())
+}
+
 func TestAnyValNamedBuzzObject(t *testing.T) {
 	t.Parallel()
 	got := AnyVal(types.BuzzObject{"major": 1, "original": "v1.2.3"})

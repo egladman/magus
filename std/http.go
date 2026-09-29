@@ -39,10 +39,10 @@ const defaultHTTPTimeout = 30 * time.Second
 // HTTP is the "http" host module: an HTTP client with automatic retry on
 // transient errors and curl-style per-request control over retry and failure.
 //
-// Security note: outbound requests are audited but NOT blocked when the sandbox
-// is active. There is no SSRF guard: any URL a magusfile passes is fetched,
-// including localhost, internal services, and the cloud metadata endpoint. Only
-// pass URLs you trust.
+// Security note: outbound requests are neither recorded nor blocked, sandbox or
+// not, and MAGUS_OFFLINE does not stop them. There is no SSRF guard: any URL a
+// magusfile passes is fetched, including localhost, internal services, and the
+// cloud metadata endpoint. Only pass URLs you trust.
 var HTTP = Module{
 	Name: "http",
 	Doc:  "HTTP client. Requests run ONCE unless given a retry policy.",

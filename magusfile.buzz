@@ -141,6 +141,10 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
+    // The handlers import proto/gen/go. **/*.go keys on the stubs' bytes, but only this
+    // edge puts a .proto edit in this project's affected set, orders proto's generate
+    // first, and keeps proto inside a lease focused here.
+    "depends_on": ["proto"],
     "spells": [go, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no

@@ -382,6 +382,12 @@ func buzzReturnType(m std.Method) (string, error) {
 		return "[" + first + "]", nil
 	}
 	r := m.Returns[0]
+	if r.Nullable {
+		if r.Type != std.TypeString || r.Object != "" {
+			return "", fmt.Errorf("a nullable return is a str?, not %s", r.Type.GoType())
+		}
+		return "str?", nil
+	}
 	if r.Object != "" {
 		return r.Object, nil
 	}
