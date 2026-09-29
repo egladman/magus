@@ -1,0 +1,587 @@
+// Splits one large change into a stack of branches, one per owning project, from the
+// workspace's own declarations: `magus describe file` names each path's project and role,
+// the project graph orders the stack so every branch builds only on those below it.
+//
+//	magus buzz hack/split-change.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]
+//
+// The change is everything between the merge base of --base (the workspace's base ref by
+// default) and the working tree, untracked files included. Branches are named after
+// --prefix (the current branch by default), and a project group under --min-files (3)
+// folds into one above it. Run it from the checkout it splits. It prints the plan; --apply
+// also creates the local branches, reading file contents from the working tree through a
+// temporary index, so neither the working tree nor the real index is touched. It never
+// pushes: it prints the push and pull request commands for a person to run.
+//
+// Branches are named <prefix>-<n>-<project>, not <prefix>/<n>-<project>: git stores a
+// branch as a file under refs/heads, so a branch named <prefix> leaves no room for a
+// directory of the same name.
+namespace splitchange;
+
+import "flags";
+import "fs";
+import "magus";
+import "os";
+import "serialize";
+import "sort";
+import "std";
+import "vcs";
+
+import "assert";
+
+// The group key for root-level workspace configuration, which every project builds on.
+final WORKSPACE = "(workspace)";
+
+final USAGE = "usage: magus buzz hack/split-change.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]";
+
+export object Claim {
+    project: str,
+    target: str = "",
+    role: str,
+    glob: str,
+}
+
+// Change is one changed path as `magus describe file` classifies it.
+export object Change {
+    path: str,
+    project: str,
+    role: str,
+    claims: [Claim],
+}
+
+export object Group {
+    key: str,
+    projects: [str],
+    branch: str,
+    base: str,
+    files: [str],
+    notes: [str],
+}
+
+object Note {
+    key: str,
+    text: str,
+}
+
+// topoOrder lists every project dependencies first, taking the smallest ready name at each
+// step so the same graph always yields the same order. A cycle cannot come from a loaded
+// workspace; were one present, its members follow in name order.
+export fun topoOrder(deps: {str: [str]}) > [str] {
+    final seen = mut {<str: bool>};
+    final names = mut [<str>];
+    foreach (p, ds in deps) {
+        if (seen[p] == null) { seen[p] = true; names.append(p); }
+        foreach (d in ds) {
+            if (seen[d] == null) { seen[d] = true; names.append(d); }
+        }
+    }
+    final all = sort\strings(names);
+    final placed = mut {<str: bool>};
+    final order = mut [<str>];
+    while (order.len() < all.len()) {
+        var pick = "";
+        foreach (p in all) {
+            if (placed[p] != null) { continue; }
+            var ready = true;
+            foreach (d in deps[p] ?? [<str>]) {
+                if (placed[d] == null) { ready = false; }
+            }
+            if (ready) { pick = p; break; }
+        }
+        if (pick == "") {
+            foreach (p in all) {
+                if (placed[p] == null) { pick = p; break; }
+            }
+        }
+        placed[pick] = true;
+        order.append(pick);
+    }
+    return order;
+}
+
+fun dependsOn(p: str, on: str, deps: {str: [str]}) > bool {
+    final seen = mut {<str: bool>};
+    final stack = mut [p];
+    while (stack.len() > 0) {
+        final cur = stack.pop()!;
+        foreach (d in deps[cur] ?? [<str>]) {
+            if (d == on) { return true; }
+            if (seen[d] == null) { seen[d] = true; stack.append(d); }
+        }
+    }
+    return false;
+}
+
+// isWorkspaceConfig holds for a root-level file of the root project that the project itself
+// declares by exact path (go.mod, magus.yaml), or that magus maintains or nothing claims. A
+// root-level file matched by a wildcard, or named only by one target such as lint, is
+// ordinary project content.
+fun isWorkspaceConfig(c: Change) > bool {
+    if (c.path.indexOf("/") != null or c.role == "output") { return false; }
+    if (c.project == "") { return true; }
+    if (c.project != ".") { return false; }
+    if (c.role == "maintained" or c.role == "unclaimed") { return true; }
+    foreach (cl in c.claims) {
+        if (cl.project == "." and cl.target == "" and cl.glob == c.path) { return true; }
+    }
+    return false;
+}
+
+fun homeProject(c: Change) > str {
+    if (isWorkspaceConfig(c) or c.project == "") { return WORKSPACE; }
+    return c.project;
+}
+
+fun sourcesOfTarget(project: str, target: str, changes: [Change]) > [str] {
+    final found = mut [<str>];
+    foreach (d in changes) {
+        if (d.role == "output") { continue; }
+        foreach (dc in d.claims) {
+            if (dc.role == "source" and dc.project == project and dc.target == target) {
+                found.append(d.path);
+                break;
+            }
+        }
+    }
+    return found;
+}
+
+fun ownedBy(project: str, changes: [Change]) > [str] {
+    final found = mut [<str>];
+    foreach (d in changes) {
+        if (d.role != "output" and d.project == project) { found.append(d.path); }
+    }
+    return found;
+}
+
+// generatorSources is the changed non-output paths the target writing c reads: the ones it
+// declares itself, or, for a target whose inputs come from its spell rather than its own
+// declaration (proto:generate), its project's own. Not the project-level claims: the root
+// project's **/*.md reaches into every nested project.
+fun generatorSources(c: Change, changes: [Change]) > [str] {
+    final found = mut [<str>];
+    foreach (cl in c.claims) {
+        if (cl.role != "output" or cl.target == "") { continue; }
+        var srcs = sourcesOfTarget(cl.project, target: cl.target, changes: changes);
+        if (srcs.len() == 0) {
+            srcs = ownedBy(cl.project, changes: changes);
+        }
+        foreach (s in srcs) {
+            if (found.indexOf(s) == null) { found.append(s); }
+        }
+    }
+    return sort\strings(found);
+}
+
+fun generatorOf(c: Change) > str {
+    foreach (cl in c.claims) {
+        if (cl.role == "output" and cl.target != "") { return "{cl.project}:{cl.target}"; }
+    }
+    return c.project;
+}
+
+export fun slug(key: str) > str {
+    if (key == WORKSPACE) { return "workspace"; }
+    if (key == ".") { return "root"; }
+    final acc = mut [<str>];
+    final lower = key.lower();
+    for (i: int = 0; i < lower.len(); i = i + 1) {
+        final b = lower.sub(i, len: 1);
+        if ((b >= "a" and b <= "z") or (b >= "0" and b <= "9")) {
+            acc.append(b);
+        } else {
+            acc.append("-");
+        }
+    }
+    return acc.join("");
+}
+
+fun plural(n: int, word: str, many: str = "") > str {
+    if (n == 1) { return "1 {word}"; }
+    if (many != "") { return "{n} {many}"; }
+    return "{n} {word}s";
+}
+
+// plan groups changes by owning project, folds project groups under minFiles upward and attaches
+// each generated output to the highest group holding its generator's changed sources. The
+// result depends only on its arguments' contents, never their order.
+export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: str, base: str) > [Group] {
+    final order = topoOrder(deps);
+    fun rank(key: str) > int {
+        if (key == WORKSPACE) { return -1; }
+        return order.indexOf(key) ?? order.len();
+    }
+    fun below(a: str, b: str) > bool {
+        final ra = rank(a);
+        final rb = rank(b);
+        if (ra != rb) { return ra < rb; }
+        return a < b;
+    }
+
+    final sorted = mut [<Change>];
+    final byPath = mut {<str: Change>};
+    foreach (c in changes) { byPath[c.path] = c; }
+    foreach (p in sort\strings(byPath.keys())) { sorted.append(byPath[p]!); }
+
+    final home = mut {<str: str>};
+    final notes = mut [<Note>];
+    final deferred = mut [<Change>];
+    final count = mut {<str: int>};
+    final projects = mut {<str: [str]>};
+    foreach (c in sorted) {
+        if (c.role == "output" and generatorSources(c, changes: sorted).len() > 0) {
+            deferred.append(c);
+            continue;
+        }
+        final key = homeProject(c);
+        home[c.path] = key;
+        count[key] = (count[key] ?? 0) + 1;
+        projects[key] = [key];
+        if (c.role == "output") {
+            notes.append(Note{ key = key, text = "kept {c.path} with {key}: output of {generatorOf(c)}, and none of its generator's sources changed" });
+        }
+    }
+
+    final live = mut [<str>];
+    foreach (k in count.keys()) { live.append(k); }
+    live.sort(fun (a: str, b: str) > bool => below(a, b: b));
+
+    final into = mut {<str: str>};
+    var i = 0;
+    while (i < live.len()) {
+        final k = live[i];
+        final n = count[k]!;
+        // Workspace config stands alone however small: every branch builds on it, and a
+        // reviewer reads a tooling change apart from the code it governs.
+        if (k == WORKSPACE or n >= minFiles or i == live.len() - 1) { i = i + 1; continue; }
+        var target = "";
+        var why = "";
+        foreach (j, cand in live) {
+            if (j <= i or target != "") { continue; }
+            foreach (p in projects[cand]!) {
+                foreach (q in projects[k]!) {
+                    if (target == "" and dependsOn(p, on: q, deps: deps)) {
+                        target = cand;
+                        why = "{p} depends on {q}";
+                    }
+                }
+            }
+        }
+        if (target == "") {
+            target = live[i + 1];
+            why = "nothing above depends on it, so it joins the next group up";
+        }
+        into[k] = target;
+        count[target] = count[target]! + n;
+        final merged = mut [<str>];
+        foreach (p in projects[target]!) { merged.append(p); }
+        foreach (p in projects[k]!) { merged.append(p); }
+        projects[target] = sort\strings(merged);
+        notes.append(Note{ key = target, text = "folded {k} ({plural(n, word: "file")}, under --min-files {minFiles}): {why}" });
+        live.remove(i);
+    }
+
+    fun landed(key: str) > str {
+        var k = key;
+        while (into[k] != null) { k = into[k]!; }
+        return k;
+    }
+
+    foreach (c in deferred) {
+        final srcs = generatorSources(c, changes: sorted);
+        final holders = mut [<str>];
+        foreach (s in srcs) {
+            final h = landed(home[s]!);
+            if (holders.indexOf(h) == null) { holders.append(h); }
+        }
+        holders.sort(fun (a: str, b: str) > bool => below(a, b: b));
+        final key = holders[holders.len() - 1];
+        home[c.path] = key;
+        var verb = "are";
+        if (srcs.len() == 1) { verb = "is"; }
+        var where = "here";
+        if (holders.len() > 1) {
+            where = "in {holders.join(", ")}; the highest holds it";
+        }
+        notes.append(Note{ key = key, text = "attached {c.path}: output of {generatorOf(c)}, whose {plural(srcs.len(), word: "changed source")} {verb} {where}" });
+    }
+
+    final files = mut {<str: [str]>};
+    foreach (p in sort\strings(home.keys())) {
+        final k = landed(home[p]!);
+        final acc = mut [<str>];
+        foreach (f in files[k] ?? [<str>]) { acc.append(f); }
+        acc.append(p);
+        files[k] = acc;
+    }
+
+    final groups = mut [<Group>];
+    var prev = base;
+    foreach (n, k in live) {
+        final own = mut [<str>];
+        foreach (note in notes) {
+            if (landed(note.key) == k) { own.append(note.text); }
+        }
+        final branch = "{prefix}-{n + 1}-{slug(k)}";
+        groups.append(Group{ key = k, projects = projects[k]!, branch = branch, base = prev,
+            files = files[k] ?? [<str>], notes = own });
+        prev = branch;
+    }
+    return groups;
+}
+
+export fun render(groups: [Group], base: str) > str {
+    var total = 0;
+    foreach (g in groups) { total = total + g.files.len(); }
+    final lines = mut ["{plural(total, word: "file")} in {plural(groups.len(), word: "stacked branch", many: "stacked branches")} on {base}"];
+    foreach (n, g in groups) {
+        lines.append("");
+        lines.append("{n + 1}. {g.branch} <- {g.base}  ({plural(g.files.len(), word: "file")}: {g.projects.join(", ")})");
+        foreach (note in g.notes) { lines.append("   {note}"); }
+        foreach (f in g.files) { lines.append("     {f}"); }
+    }
+    return lines.join("\n");
+}
+
+fun encode(groups: [Group], base: str) > str {
+    final doc = mut [<{str: any}>];
+    foreach (g in groups) {
+        doc.append({"branch": g.branch, "base": g.base, "projects": g.projects, "files": g.files, "notes": g.notes});
+    }
+    return serialize\jsonEncode(serialize\Boxed.init({"base": base, "branches": doc}));
+}
+
+// prBase is the branch a pull request targets for a base given as a remote-tracking ref.
+fun prBase(base: str) > str {
+    if (base.startsWith("origin/")) { return base.sub(7); }
+    return base;
+}
+
+// pushCommands is what a person runs to publish the stack: one push, then one pull request
+// per branch against the branch below it.
+export fun pushCommands(groups: [Group]) > [str] {
+    final names = mut [<str>];
+    foreach (g in groups) { names.append(g.branch); }
+    final cmds = mut ["git push -u origin {names.join(" ")}"];
+    foreach (g in groups) {
+        cmds.append("gh pr create --base {g.base} --head {g.branch} --fill");
+    }
+    return cmds;
+}
+
+fun collect(base: str) > [Change] !> any {
+    final paths = mut [<str>];
+    foreach (p in vcs\changedFiles(base)) {
+        if (paths.indexOf(p.value) == null) { paths.append(p.value); }
+    }
+    if (paths.len() == 0) { return [<Change>]; }
+    final changes = mut [<Change>];
+    foreach (f in magus\describeFile(sort\strings(paths)).files) {
+        final claims = mut [<Claim>];
+        foreach (cl in f.claims) {
+            claims.append(Claim{ project = cl.project, target = cl.target, role = cl.role, glob = cl.glob });
+        }
+        changes.append(Change{ path = f.path, project = f.project, role = f.role, claims = claims });
+    }
+    return changes;
+}
+
+fun projectDeps() > {str: [str]} !> any {
+    final g = magus\projectGraph();
+    final deps = mut {<str: [str]>};
+    foreach (n in g.nodes) { deps[n] = g.dependsOn[n] ?? [<str>]; }
+    return deps;
+}
+
+// apply commits each group on top of the one below it and creates its branch, returning the
+// commits in stack order. Every branch name is checked before anything is written.
+fun apply(groups: [Group], base: str, prefix: str) > [str] !> any {
+    if (vcs\name() != "git") {
+        throw "split-change: --apply builds commits with git plumbing, and this checkout is {vcs\name()}";
+    }
+    final root = vcs\root();
+    fun git(args: [str]) > str !> any {
+        return vcs\cmd(args, opts: {"quiet": true, "dir": root}).stdout.trim();
+    }
+    foreach (g in groups) {
+        git(["check-ref-format", "--branch", g.branch]);
+        final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{g.branch}"],
+            opts: {"quiet": true, "dir": root, "allow_failure": true});
+        if (taken.code == 0) {
+            throw "split-change: branch {g.branch} already exists; delete it or pass another --prefix";
+        }
+    }
+    var parent = git(["merge-base", base, "HEAD"]);
+    final commits = mut [<str>];
+    final scratch = fs\tempDir("split-change-");
+    try {
+        os\withEnv({"GIT_INDEX_FILE": scratch + "/index"}, callback: fun () > void !> any {
+            foreach (n, g in groups) {
+                git(["read-tree", parent]);
+                // update-index reads each path from the working tree, and --remove drops the
+                // ones the change deleted.
+                final args = mut ["update-index", "--add", "--remove", "--"];
+                foreach (f in g.files) { args.append(f); }
+                git(args);
+                final tree = git(["write-tree"]);
+                parent = git(["commit-tree", tree, "-p", parent, "-m",
+                    "{slug(g.key)}: part {n + 1} of {groups.len()} split from {prefix}"]);
+                commits.append(parent);
+            }
+        });
+    } catch (e) {
+        fs\removeAll(scratch);
+        throw e;
+    }
+    fs\removeAll(scratch);
+    foreach (n, g in groups) {
+        git(["branch", g.branch, commits[n]]);
+    }
+    return commits;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply"], valued: ["--base", "--prefix", "--min-files", "-o"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "split-change: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final base = parsed.values["--base"] ?? vcs\base();
+    final prefix = parsed.values["--prefix"] ?? vcs\ref();
+    if (prefix == "" or prefix == "HEAD") {
+        throw "split-change: no current branch to name the stack after; pass --prefix <branch>\n{USAGE}";
+    }
+    final minFiles = std\parseInt(parsed.values["--min-files"] ?? "3");
+    if (minFiles == null or minFiles! < 1) {
+        throw "split-change: --min-files takes a positive integer\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "split-change: -o takes text or json\n{USAGE}";
+    }
+
+    final changes = collect(base);
+    if (changes.len() == 0) {
+        std\print("split-change: nothing changed against {base}");
+        return;
+    }
+    final groups = plan(changes, deps: projectDeps(), minFiles: minFiles!, prefix: prefix, base: prBase(base));
+    if (format == "json") {
+        std\print(encode(groups, base: base));
+    } else {
+        std\print(render(groups, base: base));
+    }
+    if (parsed.values["--apply"] == null) { return; }
+
+    final commits = apply(groups, base: base, prefix: prefix);
+    std\print("");
+    foreach (n, g in groups) {
+        std\print("created {g.branch} at {commits[n].sub(0, len: 12)}");
+    }
+    std\print("");
+    std\print("nothing was pushed; to publish the stack:");
+    foreach (c in pushCommands(groups)) { std\print("  {c}"); }
+}
+
+fun fixture() > serialize\Boxed !> any {
+    return serialize\jsonDecode(fs\readFile("hack/testdata/split-change.json"));
+}
+
+fun fixtureChanges(doc: serialize\Boxed, reversed: bool) > [Change] {
+    final changes = mut [<Change>];
+    foreach (f in doc.q("files").listValue()) {
+        final claims = mut [<Claim>];
+        foreach (cl in f.q("claims").listValue()) {
+            claims.append(Claim{ project = cl.q("project").stringValue(), target = cl.q("target").stringValue(),
+                role = cl.q("role").stringValue(), glob = cl.q("glob").stringValue() });
+        }
+        changes.append(Change{ path = f.q("path").stringValue(), project = f.q("project").stringValue(),
+            role = f.q("role").stringValue(), claims = claims });
+    }
+    if (reversed) { return changes.reverse(); }
+    return changes;
+}
+
+fun fixtureDeps(doc: serialize\Boxed) > {str: [str]} {
+    final deps = mut {<str: [str]>};
+    foreach (p, ds in doc.q("depends_on").mapValue()) {
+        final acc = mut [<str>];
+        foreach (d in ds.listValue()) { acc.append(d.stringValue()); }
+        deps[p] = acc;
+    }
+    return deps;
+}
+
+fun fixturePlan() > [Group] !> any {
+    final doc = fixture();
+    return plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main");
+}
+
+fun groupOf(groups: [Group], path: str) > str {
+    foreach (g in groups) {
+        if (g.files.indexOf(path) != null) { return g.branch; }
+    }
+    return "";
+}
+
+test "the stack runs workspace config, then projects dependencies first, each on the branch below" {
+    final groups = fixturePlan();
+    final got = mut [<str>];
+    foreach (g in groups) { got.append("{g.branch}<-{g.base}"); }
+    assert\equal(got.join(" "),
+        want: "topic-1-workspace<-main topic-2-libs-core<-topic-1-workspace topic-3-root<-topic-2-libs-core topic-4-docs<-topic-3-root topic-5-proto<-topic-4-docs",
+        message: "branches and bases");
+}
+
+test "every path lands in its owning project's group, and root-level config named by exact path in the workspace group" {
+    final groups = fixturePlan();
+    assert\equal(groups[0].files, want: [".gitattributes", "go.mod", "magus.yaml"], message: "workspace");
+    assert\equal(groups[1].files, want: ["libs/core/a.go", "libs/core/b.go", "libs/core/c.go"], message: "libs/core");
+    assert\equal(groupOf(groups, path: "README.md"), want: "topic-3-root", message: "a wildcard-claimed root file is root project content");
+    assert\equal(groupOf(groups, path: "CONTRIBUTING.md"), want: "topic-3-root", message: "a root file only lint names exactly is root project content");
+    var total = 0;
+    foreach (g in groups) { total = total + g.files.len(); }
+    assert\equal(total, want: 24, message: "every fixture path is placed once");
+}
+
+test "an output travels with its generator's changed sources, the highest group when they span several" {
+    final groups = fixturePlan();
+    assert\equal(groupOf(groups, path: "internal/gen/x.go"), want: "topic-3-root", message: "same-project generator");
+    assert\equal(groupOf(groups, path: "docs/reference/cli.md"), want: "topic-3-root", message: "docs output generated from root sources");
+    assert\equal(groupOf(groups, path: "docs/reference/api.md"), want: "topic-4-docs", message: "sources in root and docs");
+    assert\equal(groupOf(groups, path: "docs/reference/old.md"), want: "topic-4-docs", message: "no changed source keeps it with its project");
+    assert\equal(groups[4].files, want: ["console/src/gen/x_pb.ts", "proto/a.proto", "proto/b.proto", "proto/gen/x.pb.go"],
+        message: "a generator declaring no sources of its own reads its project's, and its outputs in other projects follow them");
+    assert\equal(groups[3].notes.indexOf("attached docs/reference/api.md: output of docs:ref-generate, whose 2 changed sources are in ., docs; the highest holds it") != null,
+        want: true, message: "the attachment names its reason: {groups[3].notes}");
+}
+
+test "a group under --min-files folds into the first group above that depends on it, else the next one up" {
+    final groups = fixturePlan();
+    assert\equal(groups[2].projects, want: [".", "libs/extra", "libs/util"], message: "root absorbs util, which absorbed extra");
+    assert\equal(groups[2].notes, want: [
+        "folded libs/extra (1 file, under --min-files 3): nothing above depends on it, so it joins the next group up",
+        "folded libs/util (2 files, under --min-files 3): . depends on libs/util",
+        "attached docs/reference/cli.md: output of docs:cli-generate, whose 1 changed source is here",
+        "attached internal/gen/x.go: output of .:x-generate, whose 2 changed sources are here",
+    ], message: "root's notes");
+    assert\equal(groupOf(groups, path: "console/src/app.ts"), want: "topic-4-docs", message: "console has no dependent, so it joins docs above it");
+    assert\equal(groups[4].projects, want: ["proto"], message: "the top group has nothing above to fold into, so it stands at 2 files");
+    final doc = fixture();
+    final strict = plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 5, prefix: "topic", base: "main");
+    assert\equal(strict[0].files, want: [".gitattributes", "go.mod", "magus.yaml"], message: "workspace config never folds");
+}
+
+test "the plan is a function of the change, not of the order it was listed in" {
+    final doc = fixture();
+    final forward = render(plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main"), base: "main");
+    final backward = render(plan(fixtureChanges(doc, reversed: true), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main"), base: "main");
+    assert\equal(backward, want: forward, message: "reversed input");
+    assert\equal(topoOrder({"b": ["a"], "c": [<str>], "a": [<str>]}), want: ["a", "b", "c"], message: "ties break by name");
+}
+
+test "the push commands publish every branch and open each pull request against the branch below" {
+    final cmds = pushCommands(fixturePlan());
+    assert\equal(cmds.len(), want: 6, message: "one push and five pull requests");
+    assert\equal(cmds[0], want: "git push -u origin topic-1-workspace topic-2-libs-core topic-3-root topic-4-docs topic-5-proto", message: "one push");
+    assert\equal(cmds[1], want: "gh pr create --base main --head topic-1-workspace --fill", message: "the bottom targets the base");
+    assert\equal(cmds[5], want: "gh pr create --base topic-4-docs --head topic-5-proto --fill", message: "the top targets the branch below");
+}
