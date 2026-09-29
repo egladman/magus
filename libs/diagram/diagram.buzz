@@ -62,6 +62,8 @@ export final MaxDecisionExits = 3;
 final BendFloor = 6;
 // Space between an edge label's mask and the stroke it names.
 final LabelGap = 10;
+// The least a label's mask keeps from any stroke or box: the design system's 6px floor.
+final LabelClear = 6;
 
 // Palette carries the nine semantic roles every diagram draws from. Values are whatever the
 // SVG `fill`/`stroke` attributes accept, so a palette is either resolved hex or CSS vars.
@@ -316,6 +318,11 @@ fun imin(a: int, b: int) > int {
     return b;
 }
 
+fun imax(a: int, b: int) > int {
+    if (a > b) { return a; }
+    return b;
+}
+
 // snap rounds onto the 4px grid. Applied to derived geometry only; an authored coordinate
 // that misses the grid is a validation error rather than something to silently fix.
 fun snap(n: int) > int {
@@ -446,6 +453,111 @@ fun overlappingConnectors(d: Diagram) > [Fault] {
         i = i + 1;
     }
     return errs;
+}
+
+// A bridge is a semicircle of HopRadius over the crossing. It needs HopClear of its leg on
+// either side, the hop plus the shipped bend radius, so it never runs into a rounded corner.
+final HopRadius = 8;
+final HopClear = 16;
+
+// Crossing is one proper crossing of two connectors at x,y: bridged indexes the edge the
+// renderer draws a hop on, kept the one it hops over, both into d.edges.
+export object Crossing {
+    bridged: int = 0,
+    kept: int = 0,
+    x: int = 0,
+    y: int = 0,
+}
+
+// edgeWeight ranks connectors for bridging, lesser first: dashed, plain, accent. A back edge
+// and an optional edge both reach the renderer as dashed, so they rank together here.
+fun edgeWeight(e: Edge) > int {
+    if (e.kind == "accent") { return 2; }
+    if (e.dashed) { return 0; }
+    return 1;
+}
+
+// crossings reports every proper crossing, a horizontal leg meeting a vertical one strictly
+// inside both, so a shared end or a touch is none. The lesser edge carries the bridge, and
+// of two equals the one declared later. A crossing is drawn, never refused; only a bridge
+// with no room to seat is a fault.
+export fun crossings(d: Diagram) > [Crossing] {
+    final found: mut [Crossing] = mut [<Crossing>];
+    final segs: mut [[[int]]] = mut [<[[int]]>];
+    foreach (e in d.edges) { segs.append(edgeSegments(d, e: e)); }
+    var i = 0;
+    while (i < d.edges.len()) {
+        var j = i + 1;
+        while (j < d.edges.len()) {
+            var bridged = j;
+            var kept = i;
+            if (edgeWeight(d.edges[i]) < edgeWeight(d.edges[j])) {
+                bridged = i;
+                kept = j;
+            }
+            foreach (a in segs[i]) {
+                foreach (b in segs[j]) {
+                    var flat = a;
+                    var upright = b;
+                    if (a[0] == a[2]) {
+                        flat = b;
+                        upright = a;
+                    }
+                    final proper = flat[1] == flat[3] and flat[0] != flat[2] and upright[0] == upright[2] and upright[1] != upright[3]
+                        and imin(flat[0], b: flat[2]) < upright[0] and upright[0] < imax(flat[0], b: flat[2])
+                        and imin(upright[1], b: upright[3]) < flat[1] and flat[1] < imax(upright[1], b: upright[3]);
+                    if (proper) { found.append(Crossing{ bridged = bridged, kept = kept, x = upright[0], y = flat[1] }); }
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return found;
+}
+
+// bridgeRoom is how far a crossing's hop may reach along the bridged leg before it meets the
+// leg's end or halfway to another hop on it.
+fun bridgeRoom(d: Diagram, c: Crossing, found: [Crossing]) > int {
+    var room = 0;
+    foreach (seg in edgeSegments(d, e: d.edges[c.bridged])) {
+        if (onSegment(seg, x: c.x, y: c.y)) {
+            room = imin(iabs(c.x - seg[0]) + iabs(c.y - seg[1]), b: iabs(c.x - seg[2]) + iabs(c.y - seg[3]));
+            foreach (other in found) {
+                final apart = iabs(other.x - c.x) + iabs(other.y - c.y);
+                if (other.bridged == c.bridged and apart > 0 and onSegment(seg, x: other.x, y: other.y)) {
+                    room = imin(room, b: apart / 2);
+                }
+            }
+        }
+    }
+    return room;
+}
+
+// bridgeFaults reports a crossing whose hop cannot seat. A generated figure has no author to
+// move a bend, so there the renderer draws that crossing plain instead.
+fun bridgeFaults(d: Diagram, found: [Crossing]) > [Fault] {
+    final errs: mut [Fault] = mut [<Fault>];
+    if (d.generated) { return errs; }
+    foreach (c in found) {
+        final room = bridgeRoom(d, c: c, found: found);
+        if (room < HopClear) {
+            final e = d.edges[c.bridged];
+            final k = d.edges[c.kept];
+            errs.append(Fault{
+                rule = "bridge", subjects = [e.src, e.dst, k.src, k.dst],
+                text = "edge {e.src}->{e.dst} crosses {k.src}->{k.dst} at {c.x},{c.y}, {room}px from a bend or another hop; a bridge needs {HopClear}",
+            });
+        }
+    }
+    return errs;
+}
+
+// onSegment reports x,y strictly inside an axis-aligned segment.
+fun onSegment(seg: [int], x: int, y: int) > bool {
+    if (seg[1] == seg[3] and y == seg[1]) { return imin(seg[0], b: seg[2]) < x and x < imax(seg[0], b: seg[2]); }
+    if (seg[0] == seg[2] and x == seg[0]) { return imin(seg[1], b: seg[3]) < y and y < imax(seg[1], b: seg[3]); }
+    return false;
 }
 
 // Fault is one broken rule. rule names the check, subjects the node or edge ids it is
@@ -590,6 +702,20 @@ export fun faults(d: Diagram) > [Fault] {
 
     foreach (f in sharedAttachPoints(d)) { errs.append(f); }
     foreach (f in overlappingConnectors(d)) { errs.append(f); }
+    foreach (f in bridgeFaults(d, found: crossings(d))) { errs.append(f); }
+    final spots = labelSpots(d);
+    var k = 0;
+    while (k < d.edges.len()) {
+        final e = d.edges[k];
+        k = k + 1;
+        if (e.label != "" and findNode(d, id: e.src) != null and findNode(d, id: e.dst) != null and spots[k - 1].len() == 0) {
+            errs.append(Fault{
+                rule = "label", subjects = [e.src, e.dst],
+                text = "edge {e.src}->{e.dst}: label \"{e.label}\" has no spot {LabelClear}px clear of every stroke, box and label",
+                fix = "shorten the label or give the connector a longer leg",
+            });
+        }
+    }
     return errs;
 }
 
@@ -826,10 +952,10 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
 
 // routePath is connectorPath for a polyline of x,y pairs: one rounded bend per interior
 // corner. A corner may take all of an end leg but only half of an inner one, which the
-// corner at its other end shares.
-// TODO(diagram/routing-2): every proper crossing hops the dashed or lesser edge, and flow's
-// properCrossings check moves into validate (critique rule 9).
-fun routePath(pts: [int], radius: int) > str {
+// corner at its other end shares, and never the room a hop on either leg needs. Each hop
+// is a crossing point on a leg, drawn as a semicircle that bulges up over a horizontal
+// leg and left of a vertical one whichever way the leg runs.
+fun routePath(pts: [int], radius: int, hops: [[int]] = [<[int]>]) > str {
     final n = pts.len() / 2;
     final parts: mut [str] = mut ["M {pts[0]} {pts[1]}"];
     var i = 1;
@@ -844,7 +970,15 @@ fun routePath(pts: [int], radius: int) > str {
         var outLen = iabs(nx - cx) + iabs(ny - cy);
         if (i > 1) { inLen = inLen / 2; }
         if (i < n - 2) { outLen = outLen / 2; }
-        final r = imin(radius, b: imin(inLen, b: outLen));
+        var r = imin(radius, b: imin(inLen, b: outLen));
+        foreach (h in hops) {
+            final seg = [px, py, cx, cy];
+            final next = [cx, cy, nx, ny];
+            if (onSegment(seg, x: h[0], y: h[1]) or onSegment(next, x: h[0], y: h[1])) {
+                r = imin(r, b: iabs(h[0] - cx) + iabs(h[1] - cy) - HopRadius);
+            }
+        }
+        appendHops(parts, leg: [px, py, cx, cy], hops: hops);
         if (r <= 0) {
             parts.append("L {cx} {cy}");
         } else {
@@ -857,8 +991,26 @@ fun routePath(pts: [int], radius: int) > str {
         }
         i = i + 1;
     }
+    if (n >= 2) { appendHops(parts, leg: [pts[2 * n - 4], pts[2 * n - 3], pts[2 * n - 2], pts[2 * n - 1]], hops: hops); }
     parts.append("L {pts[2 * n - 2]} {pts[2 * n - 1]}");
     return parts.join(" ");
+}
+
+// appendHops draws the hops lying on one leg, in the order the leg meets them.
+fun appendHops(parts: mut [str], leg: [int], hops: [[int]]) > void {
+    final on: mut [[int]] = mut [<[int]>];
+    foreach (h in hops) {
+        if (onSegment(leg, x: h[0], y: h[1])) { on.append(h); }
+    }
+    final dx = isign(leg[2] - leg[0]);
+    final dy = isign(leg[3] - leg[1]);
+    on.sort(fun (a: [int], b: [int]) > bool { return (a[0] - b[0]) * dx + (a[1] - b[1]) * dy < 0; });
+    var sweep = 0;
+    if (dx > 0 or dy < 0) { sweep = 1; }
+    foreach (h in on) {
+        parts.append("L {h[0] - dx * HopRadius} {h[1] - dy * HopRadius}");
+        parts.append("A {HopRadius} {HopRadius} 0 0 {sweep} {h[0] + dx * HopRadius} {h[1] + dy * HopRadius}");
+    }
 }
 
 // nodePaint and nodeStroke implement the role-to-treatment table. Roles the table does not
@@ -925,8 +1077,23 @@ export fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     foreach (n in d.nodes) {
         if (n.role == "security") { parts.append(renderNode(n, p, s)); }
     }
-    foreach (e in d.edges) { parts.append(renderEdge(d, e, p, s)); }
-    foreach (e in d.edges) { parts.append(renderEdgeLabel(d, e, p, s)); }
+    final ids = edgeIds(d);
+    final found = crossings(d);
+    var k = 0;
+    while (k < d.edges.len()) {
+        final hops: mut [[int]] = mut [<[int]>];
+        foreach (c in found) {
+            if (c.bridged == k and bridgeRoom(d, c: c, found: found) >= HopClear) { hops.append([c.x, c.y]); }
+        }
+        parts.append(renderEdge(d, e: d.edges[k], p: p, s: s, id: ids[k], hops: hops));
+        k = k + 1;
+    }
+    final spots = labelSpots(d);
+    k = 0;
+    while (k < d.edges.len()) {
+        parts.append(renderEdgeLabel(d.edges[k], p: p, s: s, at: spots[k]));
+        k = k + 1;
+    }
     foreach (n in d.nodes) {
         if (n.role != "security") { parts.append(renderNode(n, p, s)); }
     }
@@ -1075,7 +1242,9 @@ fun renderNodeBody(n: Node, p: Palette, s: Style) > str {
     return svg;
 }
 
-fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
+// renderEdge paints one connector. id is its stable fragment, so a link can target one
+// arrow and CSS :target can light it with no script; hops are the crossings it bridges.
+fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style, id: str, hops: [[int]]) > str {
     final geo = edgeGeometry(d, e);
     var dash = "";
     if (e.dashed) { dash = " stroke-dasharray=\"{s.edgeDash}\""; }
@@ -1083,13 +1252,59 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     if (radius < BendFloor) { radius = BendFloor; }
     var route = "";
     if (e.via.len() > 0) {
-        route = routePath(edgePoints(geo, e), radius: radius);
+        route = routePath(edgePoints(geo, e), radius: radius, hops: hops);
     } else {
-        route = connectorPath(geo[0], y1: geo[1], x2: geo[2], y2: geo[3], horizontal: geo[4] == 1, bend: e.bend, radius: radius);
+        if (hops.len() > 0) {
+            final segs = edgeSegments(d, e);
+            final pts: mut [int] = mut [segs[0][0], segs[0][1]];
+            foreach (seg in segs) {
+                pts.append(seg[2]);
+                pts.append(seg[3]);
+            }
+            route = routePath(pts, radius: radius, hops: hops);
+        } else {
+            route = connectorPath(geo[0], y1: geo[1], x2: geo[2], y2: geo[3], horizontal: geo[4] == 1, bend: e.bend, radius: radius);
+        }
     }
-    return "<path data-edge=\"" + escapeSvg(e.src) + "->" + escapeSvg(e.dst) + "\" d=\"" + route + "\""
+    return "<path data-edge=\"" + escapeSvg(e.src) + "->" + escapeSvg(e.dst) + "\" id=\"" + id + "\" d=\"" + route + "\""
         + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
+}
+
+// edgeIds names each connector `<figure>-edge-<src>-<dst>`, every byte outside
+// [A-Za-z0-9_-] written as _ and its hex, so the id is a valid fragment. The same pair drawn
+// twice takes -2, -3 on the later ones, so no two paths share an id.
+export fun edgeIds(d: Diagram) > [str] {
+    final ids: mut [str] = mut [<str>];
+    final seen: mut {str: int} = mut {<str: int>};
+    foreach (e in d.edges) {
+        final base = fragment(d.id) + "-edge-" + fragment(e.src) + "-" + fragment(e.dst);
+        final n = (seen[base] ?? 0) + 1;
+        seen[base] = n;
+        if (n == 1) {
+            ids.append(base);
+        } else {
+            ids.append("{base}-{n}");
+        }
+    }
+    return ids;
+}
+
+fun fragment(s: str) > str {
+    final parts: mut [str] = mut [<str>];
+    var i = 0;
+    while (i < s.len()) {
+        final c = s.sub(i, len: 1);
+        final b = s.byte(i);
+        final plain = (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95 or b == 45;
+        if (plain) {
+            parts.append(c);
+        } else {
+            parts.append("_" + c.hex());
+        }
+        i = i + 1;
+    }
+    return parts.join("");
 }
 
 // edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a
@@ -1108,9 +1323,8 @@ fun edgeGeometry(d: Diagram, e: Edge) > [int] {
     return [s[0], s[1], t[0], t[1], h];
 }
 
-fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
-    if (e.label == "") { return ""; }
-    final at = labelPlacement(d, e);
+fun renderEdgeLabel(e: Edge, p: Palette, s: Style, at: [int]) > str {
+    if (e.label == "" or at.len() == 0) { return ""; }
     final cx = at[0];
     final cy = at[1];
     final w = at[2];
@@ -1121,14 +1335,55 @@ fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
 }
 
 // labelPlacement returns [cx, cy, w] for an edge label: centred on cx, baseline just under
-// cy, over a mask w wide spanning cy-8 to cy+4.
-//
-// Horizontal legs come first, longest first, the label above the stroke; then beside each
-// vertical leg, right before left. The first spot whose mask stays on the canvas and clears
-// every box wins. The centre of a bend's vertical crossing is not a candidate: on a route
-// between neighbours that segment runs through the corridor between the two boxes, and a
-// mask there lands on both.
-fun labelPlacement(d: Diagram, e: Edge) > [int] {
+// cy, over a mask w wide spanning cy-8 to cy+4. Empty when no spot is clear, which validate
+// reports as a finding naming the edge, or when e is not one of d's edges.
+export fun labelPlacement(d: Diagram, e: Edge) > [int] {
+    final spots = labelSpots(d);
+    var k = 0;
+    while (k < d.edges.len()) {
+        final x = d.edges[k];
+        if (x.src == e.src and x.dst == e.dst and x.label == e.label) { return spots[k]; }
+        k = k + 1;
+    }
+    return [<int>];
+}
+
+// labelSpots places every edge's label in declaration order, each mask an obstacle to the
+// labels after it; an unlabelled edge, or one with no clear spot, gets an empty entry.
+fun labelSpots(d: Diagram) > [[int]] {
+    final obstacles: mut [[int]] = mut [<[int]>];
+    foreach (s in strokesOf(d)) { obstacles.append(s); }
+    final spots: mut [[int]] = mut [<[int]>];
+    foreach (e in d.edges) {
+        var at: [int] = [<int>];
+        if (e.label != "" and findNode(d, id: e.src) != null and findNode(d, id: e.dst) != null) {
+            at = labelSpot(d, e: e, strokes: obstacles);
+        }
+        if (at.len() > 0) { obstacles.append([at[0] - at[2] / 2, at[1] - 8, at[0] + at[2] / 2, at[1] + 4]); }
+        spots.append(at);
+    }
+    return spots;
+}
+
+// strokesOf is every leg of every connector, plus the square each bridge's hop can reach, as
+// the obstacles a label keeps clear of: [x1, y1, x2, y2], a leg or a box's corners.
+fun strokesOf(d: Diagram) > [[int]] {
+    final all: mut [[int]] = mut [<[int]>];
+    foreach (e in d.edges) {
+        foreach (seg in edgeSegments(d, e: e)) { all.append(seg); }
+    }
+    foreach (c in crossings(d)) {
+        all.append([c.x - HopRadius, c.y - HopRadius, c.x + HopRadius, c.y + HopRadius]);
+    }
+    return all;
+}
+
+// labelSpot searches leg by leg: horizontal legs first, longest first, then vertical ones.
+// On each leg it tries the midpoint, then slides a grid step at a time either way along
+// it; a horizontal leg takes the label above its stroke, else below, a vertical one right,
+// else left. The first spot whose mask stays on the canvas and keeps LabelClear from every
+// stroke and box wins, so a label crowded off one leg moves to the next.
+fun labelSpot(d: Diagram, e: Edge, strokes: [[int]]) > [int] {
     final w = snap(e.label.len() * 5 + 12);
     final flat: mut [[int]] = mut [<[int]>];
     final upright: mut [[int]] = mut [<[int]>];
@@ -1136,23 +1391,36 @@ fun labelPlacement(d: Diagram, e: Edge) > [int] {
         if (seg[1] == seg[3] and seg[0] != seg[2]) { insertByLength(flat, seg: seg); }
         if (seg[0] == seg[2] and seg[1] != seg[3]) { insertByLength(upright, seg: seg); }
     }
-    final spots: mut [[int]] = mut [<[int]>];
     foreach (seg in flat) {
-        spots.append([snap(seg[0] + (seg[2] - seg[0]) / 2), seg[1] - LabelGap - 4, w]);
+        foreach (x in slides(seg[0], b: seg[2])) {
+            foreach (at in [[x, seg[1] - LabelGap - 4, w], [x, seg[1] + LabelGap + 8, w]]) {
+                if (labelClear(d, at: at, strokes: strokes)) { return at; }
+            }
+        }
     }
     foreach (seg in upright) {
-        final my = snap(seg[1] + (seg[3] - seg[1]) / 2);
-        spots.append([seg[0] + LabelGap + w / 2, my, w]);
-        spots.append([seg[0] - LabelGap - w / 2, my, w]);
+        foreach (y in slides(seg[1], b: seg[3])) {
+            foreach (at in [[seg[0] + LabelGap + w / 2, y, w], [seg[0] - LabelGap - w / 2, y, w]]) {
+                if (labelClear(d, at: at, strokes: strokes)) { return at; }
+            }
+        }
     }
-    if (spots.len() == 0) {
-        final geo = edgeGeometry(d, e);
-        return [geo[0], geo[1] - LabelGap - 4, w];
+    return [<int>];
+}
+
+// slides is a leg's midpoint, then every 8px either way out to its ends, nearest first.
+fun slides(a: int, b: int) > [int] {
+    final lo = imin(a, b: b);
+    final hi = imax(a, b: b);
+    final mid = snap(a + (b - a) / 2);
+    final at: mut [int] = mut [mid];
+    var step = 8;
+    while (mid - step >= lo or mid + step <= hi) {
+        if (mid - step >= lo) { at.append(mid - step); }
+        if (mid + step <= hi) { at.append(mid + step); }
+        step = step + 8;
     }
-    foreach (at in spots) {
-        if (labelClear(d, at: at)) { return at; }
-    }
-    return spots[0];
+    return at;
 }
 
 fun insertByLength(segs: mut [[int]], seg: [int]) > void {
@@ -1164,15 +1432,25 @@ fun insertByLength(segs: mut [[int]], seg: [int]) > void {
     segs.insert(i, value: seg);
 }
 
-// labelClear reports whether a label mask at [cx, cy, w] sits on the canvas and off every
-// box. A security boundary is exempt: a label inside one reads as inside the boundary.
-fun labelClear(d: Diagram, at: [int]) > bool {
+// labelClear reports whether a label mask at [cx, cy, w] sits on the canvas and keeps
+// LabelClear from every box and stroke. A security boundary is exempt: a label inside one
+// reads as inside the boundary.
+fun labelClear(d: Diagram, at: [int], strokes: [[int]]) > bool {
     final mask = [at[0] - at[2] / 2, at[1] - 8, at[2], 12];
     if (mask[0] < 0 or mask[1] < 0 or mask[0] + mask[2] > d.width or mask[1] + mask[3] > d.height) {
         return false;
     }
+    final lx = mask[0] - LabelClear;
+    final ly = mask[1] - LabelClear;
+    final hx = mask[0] + mask[2] + LabelClear;
+    final hy = mask[1] + mask[3] + LabelClear;
     foreach (n in d.nodes) {
-        if (n.role != "security" and boxesOverlap(mask, n: n)) { return false; }
+        if (n.role != "security" and boxesOverlap([lx, ly, hx - lx, hy - ly], n: n)) { return false; }
+    }
+    foreach (s in strokes) {
+        if (imin(s[0], b: s[2]) < hx and imax(s[0], b: s[2]) > lx and imin(s[1], b: s[3]) < hy and imax(s[1], b: s[3]) > ly) {
+            return false;
+        }
     }
     return true;
 }
@@ -1336,8 +1614,8 @@ test "an invalid diagram fails the render rather than shipping crooked" {
 }
 
 // A diff nobody intended here is a default that drifted; a deliberate change to the design
-// system regenerates it. Last regenerated for diagram-design parity: the skill's palette and
-// paper, stroke 1.2, and the data-node / data-edge hooks a viewer reads.
+// system regenerates it. Last regenerated for the edge path's stable id, a fragment a link
+// can target.
 test "the default Style renders the pre-Style bytes" {
     final want = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" width="480" height="280" role="img" aria-labelledby="t-title t-desc" class="magus-diagram">`
         + `<title id="t-title">Two boxes</title><desc id="t-desc">a and b</desc><defs>`
@@ -1350,7 +1628,7 @@ test "the default Style renders the pre-Style bytes" {
         + `<rect width="100%" height="100%" fill="#f5f5f5"/>`
         + `<text x="32" y="60" fill="#2d3142" font-size="20" font-weight="600" font-family="var(--pico-font-family, sans-serif)">Two boxes</text>`
         + `<g transform="translate(0,40)">`
-        + `<path data-edge="a->b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#t-arrow-default)"/>`
+        + `<path data-edge="a->b" id="t-edge-a-b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#t-arrow-default)"/>`
         + `<g data-node="a"><rect x="32" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
         + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
         + `<text x="112" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text></g>`
@@ -1684,6 +1962,78 @@ test "a via route is validated leg by leg" {
         edges = [ Edge{ src = "a", dst = "b", srcSide = "bottom", dstSide = "left", via = [112, 200, 240, 200] } ],
     };
     assert\equal(validate(diagonal).len(), want: 1, message: "the leg into b's left side runs diagonally");
+}
+
+// cross is a plus: a->b runs across y=140, c->d down x=240, crossing at 240,140.
+fun cross(across: Edge, down: Edge) > Diagram {
+    return Diagram{
+        id = "t", width = 480, height = 320,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 112, h = 56 },
+            Node{ id = "b", label = "B", x = 336, y = 112, w = 112, h = 56 },
+            Node{ id = "c", label = "C", x = 184, y = 16, w = 112, h = 56 },
+            Node{ id = "d", label = "D", x = 184, y = 232, w = 112, h = 56 },
+        ],
+        edges = [across, down],
+    };
+}
+
+test "every proper crossing hops the dashed or lesser edge" {
+    final plain = Edge{ src = "a", dst = "b" };
+    final down = Edge{ src = "c", dst = "d", srcSide = "bottom", dstSide = "top" };
+    final tie = crossings(cross(plain, down: down));
+    assert\equal(tie.len(), want: 1, message: "one crossing");
+    assert\equal([tie[0].bridged, tie[0].kept, tie[0].x, tie[0].y], want: [1, 0, 240, 140], message: "of equals the later-declared hops");
+    final dashed = crossings(cross(Edge{ src = "a", dst = "b", dashed = true }, down: down));
+    assert\equal(dashed[0].bridged, want: 0, message: "a dashed edge hops whatever its order");
+    final accent = crossings(cross(plain, down: Edge{ src = "c", dst = "d", srcSide = "bottom", dstSide = "top", kind = "accent" }));
+    assert\equal(accent[0].bridged, want: 0, message: "a plain edge hops the accent");
+    final svg = renderSvg(cross(plain, down: down), p: lightPalette()) catch "threw";
+    std\assert(svg.indexOf("d=\"M 240 72 L 240 132 A 8 8 0 0 0 240 148 L 240 232\"") != null, message: "a downward hop bulges left: {svg}");
+    std\assert(svg.indexOf("d=\"M 144 140 L 336 140\"") != null, message: "the kept edge runs unbroken");
+    assert\equal(routePath([0, 0, 100, 0], radius: 8, hops: [[40, 0]]), want: "M 0 0 L 32 0 A 8 8 0 0 1 48 0 L 100 0", message: "a rightward hop bulges up");
+}
+
+test "a crossing too near a bend to seat its hop is a finding, never a refusal of the crossing" {
+    final tight = Diagram{
+        id = "t", width = 480, height = 320,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 112, h = 56 },
+            Node{ id = "b", label = "B", x = 336, y = 16, w = 112, h = 56 },
+            Node{ id = "c", label = "C", x = 184, y = 16, w = 112, h = 56 },
+            Node{ id = "d", label = "D", x = 184, y = 232, w = 112, h = 56 },
+        ],
+        edges = [
+            Edge{ src = "c", dst = "d", srcSide = "bottom", dstSide = "top" },
+            Edge{ src = "a", dst = "b", srcSide = "right", dstSide = "left", via = [248, 140, 248, 44] },
+        ],
+    };
+    final errs = faults(tight);
+    assert\equal(errs.len(), want: 1, message: "one fault: {validate(tight)}");
+    assert\equal(errs[0].rule, want: "bridge", message: "the hop has 8px before the corner at 248,140");
+    final generated = Diagram{ id = tight.id, width = tight.width, height = tight.height, nodes = tight.nodes, edges = tight.edges, generated = true };
+    assert\equal(validate(generated).len(), want: 0, message: "a generated figure draws that crossing plain");
+}
+
+test "a label with no spot 6px clear of every stroke and box is a finding naming its edge" {
+    final nodes = [ Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 }, Node{ id = "b", label = "B", x = 264, y = 112, w = 160, h = 56 } ];
+    final d = Diagram{ id = "t", width = 480, height = 240, nodes = nodes, edges = [ Edge{ src = "a", dst = "b", label = "abcdefghijklmn" } ] };
+    final errs = faults(d);
+    assert\equal(errs.len(), want: 1, message: "one fault: {validate(d)}");
+    assert\equal([errs[0].rule, errs[0].subjects[0], errs[0].subjects[1]], want: ["label", "a", "b"], message: "an 80px mask on a 72px leg");
+    assert\equal(labelPlacement(d, e: d.edges[0]).len(), want: 0, message: "no spot");
+}
+
+test "every edge path carries a stable id a fragment can target" {
+    final base = twoBox();
+    final d = Diagram{ id = "my fig", width = base.width, height = base.height, nodes = [
+            Node{ id = "a/b", label = "A", x = 32, y = 112, w = 160, h = 56 },
+            Node{ id = "c", label = "C", x = 288, y = 112, w = 160, h = 56 },
+        ],
+        edges = [ Edge{ src = "a/b", dst = "c" }, Edge{ src = "a/b", dst = "c", srcSide = "bottom", dstSide = "bottom", via = [112, 200, 368, 200] } ] };
+    assert\equal(edgeIds(d), want: ["my_20fig-edge-a_2fb-c", "my_20fig-edge-a_2fb-c-2"], message: "escaped, and the repeat numbered");
+    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    std\assert(svg.indexOf("data-edge=\"a/b->c\" id=\"my_20fig-edge-a_2fb-c\"") != null, message: "beside data-edge: {svg}");
 }
 
 // LayeredItem is one node handed to layered(): an id, its display label, and the ids it
