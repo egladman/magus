@@ -159,7 +159,7 @@ function buildJournal(
   return create(JournalSchema, { invocation, events });
 }
 
-// brokenTestJournal is the primary streamed invocation: the agent-driven services/identity:test run
+// brokenTestJournal is the primary streamed invocation: the MCP-triggered services/identity:test run
 // that FAILs.
 function brokenTestJournal(): Journal {
   const runs = scenarioRuns(Date.now());

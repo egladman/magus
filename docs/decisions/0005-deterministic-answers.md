@@ -1,11 +1,11 @@
 ---
-title: "ADR 0005: determinism for agent-driven development"
+title: "ADR 0005: deterministic answers"
 order: 5
 description: The v0.5.0 finishing pass, recorded in full. A stalled multi-agent change showed where agents improvise and where magus stays silent. The person drives; magus answers from the graph, the job store and typed APIs, and prints what to run. Every idea and use case raised during the pass is listed here with its state, so this page is also the plan.
 tags: [adr, decision, agents, guard, mcp, jobs, vcs, buzz, hack, scope]
 ---
 
-# ADR 0005: determinism for agent-driven development
+# ADR 0005: deterministic answers
 
 - **Status:** Accepted, partly implemented. Each item below carries its own state.
 - **Date:** 2026-09-29

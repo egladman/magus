@@ -111,7 +111,7 @@ export interface ScenarioRun {
   inv: string;
   project: string;
   target: string;
-  trigger: string; // mcp (agent-driven) | ci (the sweep) | cli (manual)
+  trigger: string; // mcp (through the client tool) | ci (the sweep) | cli (manual)
   state: RunState;
   startMs: number;
   endMs: number;
@@ -123,7 +123,7 @@ export interface ScenarioRun {
 }
 
 // The invocation ids the timeline threads runs onto. The CI sweep's targets all share INV_CI, so
-// the tree and dashboard group them as one run; the agent-driven test runs each get their own.
+// the tree and dashboard group them as one run; the MCP-triggered test runs each get their own.
 export const INV_CI = "invci7a";
 export const INV_TEST_BREAK = "inv92e1";
 export const INV_TEST_FIX = "inv80f2";
@@ -429,7 +429,7 @@ export interface ScenarioActivity {
 // the trail records what the agent was handed back, the journal records what the tool printed.
 export function scenarioActivity(now: number): ScenarioActivity[] {
   const runs = scenarioRuns(now);
-  // Each agent-driven invocation holds a single run, so lookup by invocation id is unambiguous.
+  // Each MCP-triggered invocation holds a single run, so lookup by invocation id is unambiguous.
   const run = (inv: string): ScenarioRun => must(runs.find((x) => x.inv === inv));
   const fresh = run(INV_BUILD_FRESH);
   const fix = run(INV_TEST_FIX);
