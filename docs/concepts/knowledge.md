@@ -28,6 +28,8 @@ It exists so agents and humans can ask "what is this, what touches it, how do
 these relate" and get a precise answer instead of grepping. Agents reach it over
 MCP; humans reach it through three verbs and the `magus graph` home.
 
+<!--diagram:knowledge-graph-->
+
 ## What this graph is not
 
 "Knowledge graph" now names architectures this one deliberately is not, and the

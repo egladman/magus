@@ -1,6 +1,6 @@
 ---
 title: Any other host
-description: The host-neutral contract - install the guidance where your host reads it, pipe the event to magus session hook, render the verdict with -o template - for an agent host magus does not document by name.
+description: The host-neutral contract - install the guidance where your host reads it, pipe the event to magus shell, render the verdict with -o template - for an agent host magus does not document by name.
 tags: [agents, guard, hooks, integration, template]
 ---
 
@@ -52,11 +52,13 @@ solely to obtain tools.
 ## Guard hook
 
 The wiring is the same shape everywhere: get the command or path out of the host
-event, hand it to `magus session hook`, and render the verdict into the host's reply.
+event, hand it to `magus shell`, and render the verdict into the host's reply.
 
 ```sh
-printf '%s' "$command" | magus session hook -o 'template=<your host reply>'
+printf '%s' "$command" | magus shell -o 'template=<your host reply>'
 ```
+
+<!--diagram:guard-path-->
 
 If your host writes its payload as JSON with `tool_input.command` or
 `tool_input.file_path`, pipe the payload in unchanged: magus reads the envelope
@@ -102,11 +104,11 @@ grew.
 ## Lease capture
 
 Separate from the guard, and the same shape: pipe the host's pre-tool event to
-`magus session hook` when the tool being called is the one that hands work to a
+`magus shell` when the tool being called is the one that hands work to a
 sub-agent.
 
 ```sh
-printf '%s' "$event" | magus session hook --agent-name <your host> >/dev/null 2>&1; exit 0
+printf '%s' "$event" | magus shell --agent-name <your host> >/dev/null 2>&1; exit 0
 ```
 
 magus recognizes a lease by the FIELD it carries, never by a tool name it
@@ -219,7 +221,7 @@ records that for the documented four.
 ## Verify
 
 ```sh
-printf '%s' 'git stash' | magus session hook -o name
+printf '%s' 'git stash' | magus shell -o name
 magus doctor
 ```
 

@@ -24,6 +24,9 @@ import "site/diagrams/volatility" as _;
 import "site/diagrams/commit-generated" as _;
 import "site/diagrams/lease-loop" as _;
 import "site/diagrams/cache-trust" as _;
+import "site/diagrams/diagram-pipeline" as _;
+import "site/diagrams/knowledge-graph" as _;
+import "site/diagrams/guard-path" as _;
 // The observed halves diagrams-observe writes, one per figure with a scope. Aliased, never
 // flat: a flat import is skipped when its basename is already bound, and each shares its
 // basename with the declared figure imported above.
@@ -35,6 +38,9 @@ import "site/diagrams/gen/ci-providers" as ciProvidersGen;
 import "site/diagrams/gen/volatility" as volatilityGen;
 import "site/diagrams/gen/lease-loop" as leaseLoopGen;
 import "site/diagrams/gen/cache-trust" as cacheTrustGen;
+import "site/diagrams/gen/diagram-pipeline" as diagramPipelineGen;
+import "site/diagrams/gen/knowledge-graph" as knowledgeGraphGen;
+import "site/diagrams/gen/guard-path" as guardPathGen;
 
 // allDiagrams lays out every registered figure. Throws the first figure's layout findings,
 // so a figure that cannot be drawn cleanly fails every consumer rather than shipping.
@@ -53,6 +59,9 @@ export fun allDiagrams() > [Diagram] !> str {
         commitGeneratedDiagram(),
         leaseLoopDiagram(),
         cacheTrustDiagram(),
+        diagramPipelineDiagram(),
+        knowledgeGraphDiagram(),
+        guardPathDiagram(),
     ];
 }
 
@@ -67,6 +76,9 @@ export fun observedFor(id: str) > Observed? {
     if (id == "volatility") { return volatilityGen\volatilityObserved(); }
     if (id == "lease-loop") { return leaseLoopGen\leaseLoopObserved(); }
     if (id == "cache-trust") { return cacheTrustGen\cacheTrustObserved(); }
+    if (id == "diagram-pipeline") { return diagramPipelineGen\diagramPipelineObserved(); }
+    if (id == "knowledge-graph") { return knowledgeGraphGen\knowledgeGraphObserved(); }
+    if (id == "guard-path") { return guardPathGen\guardPathObserved(); }
     return null;
 }
 

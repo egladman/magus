@@ -1,0 +1,52 @@
+// site/diagrams/guard-path.buzz: what happens between an agent's tool call and the verdict it gets back.
+//
+// The figure has one claim: one command judges every call, and the verdict it returns
+// carries its own next step. The built-in rules run first; the workspace's rules only
+// see what they let through and can only add to the verdict. The accent is the verdict.
+//
+// The hook runs magus as a separate process, so that connector claims calls: declared and
+// counted, never checked against an import. The Go connectors claim imports. The rules
+// file and the two rule boxes are Buzz and a single package's files, which no import graph
+// records, so they claim flow.
+namespace guardPath;
+
+import "../libs/diagram/diagram" as _;
+import "../libs/diagram/flow" as _;
+import "site/diagrams/gen/guard-path" as guardPathGen;
+
+export fun guardPathDiagram() > Diagram !> str {
+    return flow("guard-path", observed: guardPathGen\guardPathObserved())
+        .eyebrow("guard")
+        .title("One command judges every call, and says what to run instead")
+        .desc("The host's PreToolUse hook, wired by magus agent harness install, pipes the "
+            + "event to magus shell. The built-in rules judge it first, reading the job store "
+            + "for the lease the call acts as; the workspace's magus\\guard.command rule sees "
+            + "only what they let through and can only add to the verdict. A deny carries its "
+            + "reason and a next: breadcrumb naming the command to run instead, and the hook "
+            + "renders it into the host's reply.")
+        .node("hook", label: "Host hook", sub: "PreToolUse, stdin JSON", tag: "settings", role: Role.external, anchor: "docs/guides/integrations/agents/magus-command.buzz")
+        .node("shell", label: "magus shell", sub: "the guard with one door", anchor: "cmd/magus/shell.go")
+        .node("builtin", label: "Built-in rules", sub: "catalogued, run first", anchor: "internal/guard")
+        .node("policy", label: "Workspace rules file", sub: "magus\\guard.command", role: Role.input, anchor: "tools/policy/guard.buzz")
+        .node("workspace", label: "Workspace rule", sub: "can only add", anchor: "internal/guard/workspace_rule.go")
+        .node("jobs", label: "Job store", sub: "leases, write paths", role: Role.store, anchor: "internal/job")
+        .node("hint", label: "next: breadcrumb", sub: "a command to run", anchor: "internal/hint")
+        .node("verdict", label: "Verdict", sub: "deny, advise or pass", role: Role.focal, anchor: "internal/guard/denial.go")
+        .edge("hook", dst: "shell", label: "argv + stdin", claim: Claim.calls)
+        .edge("shell", dst: "builtin", claim: Claim.imports)
+        .edge("builtin", dst: "jobs", label: "lease", claim: Claim.imports)
+        .edge("builtin", dst: "workspace", label: "let through")
+        .edge("policy", dst: "workspace")
+        .edge("builtin", dst: "verdict")
+        .edge("workspace", dst: "verdict")
+        .edge("verdict", dst: "hint", label: "next", claim: Claim.imports)
+        .edge("verdict", dst: "hook", label: "reply")
+        .legend(Role.focal, label: "what the agent reads")
+        .legend(Role.external, label: "the host's side")
+        .legend(Role.input, label: "this repo's rules")
+        .legend(Role.store, label: "the declared leases")
+        .omitEdge("builtin", dst: "hint", why: "drawn from the verdict instead, where the next: breadcrumb attaches")
+        .omitEdge("jobs", dst: "hint", why: "job results carry their own next: steps; the guard's comes from the verdict")
+        .scope(["internal/guard", "internal/job", "internal/hint"])
+        .diagram();
+}
