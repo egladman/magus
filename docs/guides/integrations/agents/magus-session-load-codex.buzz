@@ -1,0 +1,208 @@
+// magus session load adapter: turns Codex's rollout files into the magus session
+// event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, and you can download
+// it and run it yourself. Its Claude Code sibling carries the full contract; the
+// fields are identical, less the agent object this host cannot fill.
+//
+// Run it as `magus buzz -s magus-session-load-codex.buzz` to pipe the stream into
+// `magus session load`; add `-- --stdout` to read the stream yourself. Override any
+// of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A cwd UNDER it counts,
+//                       which keeps nested project sessions in
+//   HOST_SESSION_STORE  where Codex keeps its rollout files
+//   SESSION_STATE_DIR   where the per-file offsets live
+//   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// Codex records no skill loads and no hook output, and its only exit-like signal
+// is patch_apply_end's success flag, which describes a patch rather than a
+// command. Neither session_meta nor a turn record carries a model name or a CLI
+// version this adapter can point at with confidence, so both are declared none
+// rather than guessed. The coverage line says so, and a report reading it says
+// unobservable for those dimensions rather than zero. Declaring commands=yes on
+// the strength of what the other hosts supply is the failure this line exists
+// to prevent.
+// magus-guard-template: 19
+// magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
+
+// EVERY call that can fail is caught: a rollout this run cannot read is not a
+// reason to abandon the rest.
+
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "time";
+import "encoding/json";
+import "lib/hook" as hook;
+
+final HOST = "codex";
+final STDOUT_FLAG = "--stdout";
+
+// warn says why nothing was extracted; see the Claude Code adapter.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
+}
+
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{ts},\"cwd\":{s(cwd)},"
+        + "\"kind\":{s(kind)},\"ref\":{s(ref)},\"text\":{s(text)},\"transcript\":{s(transcript)},"
+        + "\"outcome\":\{\"exit\":null,\"denied\":false,\"interrupted\":false}}";
+}
+
+// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
+fun ms(stamp: str) > int {
+    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed);
+}
+
+fun inScope(cwd: str, root: str) > bool {
+    return cwd == root or cwd.startsWith(root + "/");
+}
+
+// extract reads one rollout and returns contract lines.
+//
+// Codex nests rollouts by date and names none of them after the repository, so
+// every file is opened and scoped from the session_meta record inside it. The
+// session id and cwd arrive on that first record and are carried forward, which is
+// why this folds state rather than mapping each line independently.
+fun extract(lines: [str], transcript: str, root: str) > [str] {
+    final emitted = mut [<str>];
+    var session = "";
+    var cwd = "";
+    foreach (line in lines) {
+        if (line == "") { continue; }
+        final r = json\parse(line) catch null;
+        if (r == null) { continue; }
+        final kind = hook\field(r, dotPath: "type");
+        if (kind == "session_meta") {
+            session = hook\field(r, dotPath: "payload.session_id");
+            cwd = hook\field(r, dotPath: "payload.cwd");
+            continue;
+        }
+        if (!inScope(cwd, root: root)) { continue; }
+        final ts = ms(hook\field(r, dotPath: "timestamp"));
+        if (kind == "custom_tool_call" and hook\field(r, dotPath: "payload.name") == "exec") {
+            final input = hook\dig(r, dotPath: "payload.input");
+            var text = hook\field(r, dotPath: "payload.input");
+            if (input is {str: any}) { text = hook\field(input, dotPath: "command"); }
+            emitted.append(render(session, ts: ts, cwd: cwd, kind: "shell.command",
+                ref: hook\field(r, dotPath: "payload.call_id"), text: text, transcript: transcript));
+        } else if (kind == "spawn_agent") {
+            var ref = hook\field(r, dotPath: "payload.call_id");
+            if (ref == "") { ref = hook\field(r, dotPath: "payload.agent_id"); }
+            emitted.append(render(session, ts: ts, cwd: cwd, kind: "spawn",
+                ref: ref, text: hook\field(r, dotPath: "payload.name"), transcript: transcript));
+        }
+    }
+    return emitted;
+}
+
+// wholeLines is the prefix of chunk that ends at its last line break, so a record
+// the host is still appending is read whole on the next run.
+fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+fun offsetOf(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+fun rollouts(store: str) > [str] {
+    final found = mut [<str>];
+    fs\walk(store, callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and fs\basename(path).startsWith("rollout-") and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final store = hook\envOr("HOST_SESSION_STORE", fallback: "{home}/.codex/sessions");
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (transcript in rollouts(store)) {
+        final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
+        final content = fs\readFile(transcript) catch null;
+        if (content == null) { continue; }
+        var offset = offsetOf(mark);
+        if (content!.len() < offset) { offset = 0; }
+        if (content!.len() <= offset) { continue; }
+
+        // The whole file, never the unread tail: session_meta is the FIRST record and
+        // carries the session id and cwd every later record is scoped by, so a chunk
+        // starting after it has nothing to scope. Re-reading is cheap here because a
+        // rollout closes when its session ends, and only the open one grows.
+        final whole = wholeLines(content!);
+        if (whole.len() <= offset) { continue; }
+
+        // Emitting from byte 0 every time and letting `session load` dedup on
+        // (host, session, kind, ref) is the trade this host's format forces. The
+        // checkpoint still earns its place: a rollout whose size has not moved is
+        // skipped entirely, which is every closed session after the first run.
+        foreach (line in extract(whole.split("\n"), transcript: transcript, root: root)) {
+            events.append(line);
+        }
+        marks[mark] = whole.len();
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Committed only once the stream has been delivered, so a failed load is retried.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}

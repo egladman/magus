@@ -81,7 +81,7 @@ The `hooks` row reports the stage and whether it is enabled. Hooks are stable an
 enabled by default; read the row when working with an older local build.
 
 Prefer wiring the Codex harness from the root magusfile when you bounce between
-hosts; apply then covers every wired provider:
+hosts; `magus describe harness` then covers every wired provider:
 
 ```buzz
 import "ghcr.io/egladman/magus/spells/codex";
@@ -128,7 +128,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -138,7 +138,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-path.sh --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -148,7 +148,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking MCP tool call"
           }
         ]
@@ -158,8 +158,18 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-observe.sh --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name codex",
             "statusMessage": "magus: recording read"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking read"
           }
         ]
       }
@@ -170,7 +180,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -182,7 +192,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-rehydrate.sh\"",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: restating this checkout's rules"
           }
         ]
@@ -193,7 +203,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\" --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -203,10 +213,11 @@ shown here:
 }
 ```
 
-The shipped scripts talk to `magus session hook`. The harness descriptor only
-merges those opaque fragments into `.codex/hooks.json`; Magus does not inject a
-codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the repository,
-or apply the descriptor.
+Every entry runs the Buzz glue as a plain argv: `magus buzz -s <file>`, with the
+host and any flags after `--`. It needs neither jq nor a POSIX shell. The harness
+descriptor only merges those opaque fragments into `.codex/hooks.json`; Magus does
+not inject a codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the
+repository, or merge what `magus describe harness codex` prints.
 
 The two `PreToolUse` entries used to carry `__MAGUS_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks
@@ -222,7 +233,7 @@ build behaves otherwise, `__MAGUS_NO_ADVISE=1` still suppresses the arm.
 A push no passing gate covers needs the person's approval. Codex hooks cannot ask:
 Codex parses `permissionDecision: "ask"`, marks the hook run failed, and runs the
 call anyway, so the template never sends it. The prompt comes from
-`.codex/rules/magus.rules`, which apply writes: a `prefix_rule` with
+`.codex/rules/magus.rules`, which `magus describe harness codex` prints: a `prefix_rule` with
 `decision = "prompt"` for each backend's push, `git push`, `hg push`, `sl push` and
 `jj git push`. Before that prompt Codex raises `PermissionRequest`, and the
 same command template answers it: allow for a push a gate covers, so nobody is
@@ -258,7 +269,7 @@ a session id nobody wrote down. `magus session` lists what it recorded, and
 
 The `SessionStart` entry matches `compact`, the moment Codex replaces a long
 session's history with a summary, and runs
-[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh). What it prints is
+[`magus-rehydrate.buzz`](guard-templates.md#magus-rehydratebuzz). What it prints is
 this checkout: branch and revision, commits not yet on the base ref, the dirty
 tree split into sources, generated outputs and unclaimed paths, the live leases,
 the last recorded run's failures, and where the rules live.
@@ -266,11 +277,11 @@ When repeated guard feedback needs review, the same brief adds one bounded line
 that directs the model to `magus doctor`; it does not edit memory or
 instructions by itself.
 
-Two variables shape it for this host. `REHYDRATE_FORMAT=json` is required, not
-cosmetic: Codex reads a `SessionStart` hook's stdout as a JSON reply and adds
+Two flags shape it for this host. `--format json` is required, not cosmetic:
+Codex reads a `SessionStart` hook's stdout as a JSON reply and adds
 `hookSpecificOutput.additionalContext` to the developer context, so plain text
-arrives nowhere. `REHYDRATE_RULES=AGENTS.md` names the instruction file Codex
-actually reads, since the template's default is another host's.
+arrives nowhere. `--rules AGENTS.md` names the instruction file Codex actually
+reads, since the template's default is another host's.
 
 `compact` is the matcher wired here, matching what this repository dogfoods on
 [Claude Code](claude-code.md#handing-a-compacted-session-its-state-back): it is

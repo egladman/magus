@@ -1,6 +1,6 @@
 ---
 title: Guard hook templates
-description: The hook templates Claude Code and Codex run for the magus guard, the checkpoint and the post-compaction brief, in POSIX sh and in Buzz - the variables that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
+description: The Buzz hook templates Claude Code and Codex run for the magus guard, the checkpoint and the post-compaction brief - the knobs that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
 tags: [agents, guard, hooks, templates, claude code, codex]
 ---
 
@@ -13,18 +13,19 @@ the same files rather than keeping a private copy, so what it dogfoods is what
 you get, and two tests fail if its config stops referencing them or a block here
 drifts from the file.
 
-They are a magus project of their own, so the TypeScript beside them is held to
-the same gates as the rest of the workspace
+They are a magus project of their own, so the TypeScript and Buzz beside them are
+held to the same gates as the rest of the workspace
 (`magus run lint docs/guides/integrations/agents` runs `tsc --noEmit`, Biome,
-and shellcheck).
+and `magus buzz --check`).
 
 Two hosts run these files: [Claude Code](claude-code.md) and [Codex](codex.md).
-Claude Code's harness wires the Buzz ports below; Codex wires the sh copies.
-The two forms are one guard, and an executed case refuses a difference between them.
-Harness apply merges opaque fragments that already name the scripts; Magus does
-not inject a reserved command. [Cursor](cursor.md) and [OpenCode](opencode.md)
-each ship one self-contained file instead, on their own pages, because a host
-that needs five downloads to install a guard ends up without one.
+Both wire the same Buzz templates, run as `magus buzz -s <file>`, so there is one
+guard to reason about. Each needs neither a POSIX shell nor `jq`, so it runs
+unchanged on Windows and installs nothing. `magus describe harness` prints the
+entries that name the files; Magus does not inject a reserved command.
+[Cursor](cursor.md) and [OpenCode](opencode.md) each ship one self-contained file
+instead, on their own pages, because a host that needs five downloads to install a
+guard ends up without one.
 
 ## Checking whether your copy is current
 
@@ -34,7 +35,7 @@ fix magus makes never arrives on its own, and nothing about your copy says how
 old it is. So each one carries a version line:
 
 ```sh
-grep magus-guard-template ~/.claude/hooks/magus-command.sh
+grep magus-guard-template magus-command.buzz
 ```
 
 Compare it with the version in the block below. If yours is lower or absent,
@@ -54,26 +55,43 @@ your host config points at, and fails when it is stale or missing.
 
 ## How they fit together
 
-One implementation per guard surface. A host sets overrides and delegates:
+One implementation per guard surface. A hook command is a plain argv - the host
+splits it and runs `magus buzz` itself - so what varies PER ENTRY rides on that
+argv, after `--`:
 
-| variable                       | what it is                                                                                                                                                                                                                                   |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HOST_EVENT_PATH`              | dot-path to the command or file path inside your host's event JSON                                                                                                                                                                           |
-| `HOST_EVENT_RAW`               | (the `.sh` copies only) hand the whole event instead of one `HOST_EVENT_PATH` field - for a surface like MCP whose payload is a tool name plus a params object, not one string. The `.buzz` ports read this off the event instead; see below |
-| `HOST_SESSION_PATH`            | dot-path to the session id inside your host's event JSON                                                                                                                                                                                     |
-| `HOST_RESPONSE`                | Go template rendering your host's reply from the verdict                                                                                                                                                                                     |
-| `__MAGUS_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance                                                                                                                                              |
-| `__MAGUS_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence                                                                                                                                     |
-| `__MAGUS_BIN`                  | absolute path to magus when it is not on PATH                                                                                                                                                                                                |
+- `--agent-name <host>`, on every command. The template reads the host from there
+  and nowhere else: not from the event's shape, not from the environment, never by
+  default. The configuration `magus describe harness` prints renders it from the
+  harness spell's own name. A template given none refuses the call
+  ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a
+  guessed host's dialect, because a reply shaped for the wrong host can let a call
+  through.
+- `magus shell` flags an entry declares about itself, such as
+  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
+  against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
+  named on stderr and left out, and the call is judged anyway - your host shows that
+  line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
+  chose is the failure this shape exists to avoid, and so is a guard that refuses to
+  answer because an entry was typed wrong.
 
-The host is not a variable. Every command names it as an argument, `--agent-name <host>`
-(`sh magus-command.sh --agent-name codex`, or `magus buzz -s magus-command.buzz --
---agent-name claude-code`), and the template reads it from there and nowhere else: not
-from the event's shape, not from the environment, never by default. The configuration
-`magus describe harness` prints renders it from the harness spell's own name. A
-template given none refuses the call
-([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a guessed
-host's dialect, because a reply shaped for the wrong host can let a call through.
+Whether to forward the whole event is worked out from the event, not set on the
+entry: `magus-command.buzz` selects one field only when the tool is not in the
+`mcp__` namespace AND `HOST_EVENT_PATH` finds a string there. Everything else goes
+whole, because magus's own decoder knows every payload shape it reads and answers
+that there is nothing to judge for the rest, while a field selected out of an
+unrecognized shape gets judged as a command line it never was.
+
+What is a property of the HOST rather than of one entry is an environment variable,
+set once:
+
+| variable                       | what it is                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `HOST_EVENT_PATH`              | dot-path to the command or file path inside your host's event JSON                                       |
+| `HOST_SESSION_PATH`            | dot-path to the session id inside your host's event JSON                                                 |
+| `HOST_RESPONSE`                | Go template rendering your host's reply from the verdict                                                 |
+| `__MAGUS_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance          |
+| `__MAGUS_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence |
+| `__MAGUS_BIN`                  | absolute path to magus when it is not on PATH                                                            |
 
 To magus, the name and `HOST_SESSION_PATH` are attribution: they label the recorded
 observation and cannot change a verdict. The template does read the name for one thing,
@@ -83,69 +101,53 @@ which reply shape its host can parse.
 own configuration surface, and a variable these templates invent must not look
 like a setting magus reads.
 
-### Why the two forms differ on knobs
+Each command is `magus buzz -s <file>`: `-s` keeps the interpreter's own
+advisories off stderr, which a host would otherwise show as a hook error. What the
+templates need is a `magus` new enough to run them, because the interpreter has a
+version. A magus too old to run the script renders no verdict, and your host
+reports that as a hook error rather than passing the call silently; see
+[Claude Code](claude-code.md) for what that looks like.
 
-Each surface ships twice: a POSIX `sh` copy and a `.buzz` port that renders the same
-replies. The table above is the `sh` contract in full, because `sh` is what runs those
-copies and `sh` is what reads a variable.
+They import no magus Buzz module and no spell, and a test refuses one. A hook
+fires on every tool call, and either import would make it pay for opening the
+workspace: about 700ms here, against roughly 10ms for a script that reads none of
+it.
 
-A `.buzz` port is wired differently. Its hook command is a plain argv - the host splits
-it and runs `magus buzz` itself, with no shell anywhere - so a `VAR=value` prefix is a
-word the host would look for a program named after, not an assignment. The two knobs
-that vary PER ENTRY move accordingly:
+## `magus-command.buzz`
 
-- `HOST_EVENT_RAW` is gone. `magus-command.buzz` works out from the event whether to
-  forward the whole envelope: it selects one field only when the tool is not in the
-  `mcp__` namespace AND `HOST_EVENT_PATH` finds a string there. Everything else goes
-  whole, because magus's own decoder knows every payload shape it reads and answers that
-  there is nothing to judge for the rest, while a field selected out of an unrecognized
-  shape gets judged as a command line it never was.
-- `__MAGUS_SHELL_FLAGS` becomes argv: `magus buzz -s <file> -- --observes-skill-loads`.
-  `magus buzz` forwards everything after `--` to the script, which parses it against the
-  flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is named on stderr
-  and left out, and the call is judged anyway - your host shows that line as a hook error.
-  Nothing is dropped quietly: a guard running with flags nobody chose is the failure this
-  shape exists to avoid, and so is a guard that refuses to answer because an entry was
-  typed wrong.
+The command guard. Wired to the host's `Read` tool as well, it restates the read
+as the shell line it stands for - `cat <file>`, or `sed -n <first>,<last>p <file>`
+over its offset and limit, a limit over 300 counting as whole - so the read rules
+judge a `Read` exactly as they judge the `cat` it replaces.
 
-The host name rides on the argv in both forms, after `--` for a `.buzz` port. The
-host-level variables in the table - `HOST_RESPONSE`, `__MAGUS_BIN`, the two notice
-overrides - are unchanged in both forms. A host sets those
-once; they do not distinguish one entry from another.
+<!-- embed: magus-command.buzz -->
 
-## `magus-command.sh`
-
-The command guard, in POSIX sh. Codex runs this file; Claude Code runs the Buzz
-port of it below. Each host sets its overrides and execs one of the two, so there
-is one implementation to reason about and two ways to run it.
-
-<!-- embed: magus-command.sh -->
-
-## `magus-path.sh`
+## `magus-path.buzz`
 
 The declared-output guard. Wire it to your host's file-editing tool rather than
 its shell tool. It explains rather than blocks: editing a generated file is
 wasteful, not destructive.
 
-<!-- embed: magus-path.sh -->
+<!-- embed: magus-path.buzz -->
 
-## `magus-observe.sh`
+## `magus-observe.buzz`
 
 The one template that carries no verdict. Wire it to the tools that only LOOK -
 your host's read equivalent - and it records the path the agent reached without
 judging it. It prints nothing and always exits 0.
 
-Do not point a read tool at `magus-path.sh` instead. A read event carries
-a file path just as a write event does, so the write rules would advise "you are
-editing a declared output" at a file the agent merely opened. `--observe` is
-what separates the two, and only this wrapper can set it, because only it knows
-which of your host's tools look.
+A host that wants its reads judged too wires `magus-command.buzz` beside it, which
+restates the read as a shell line. Do not point a read tool at `magus-path.buzz`. A
+read event carries a file path just as a write event does, so the write rules would
+advise "you are editing a declared output" at a file the agent merely opened.
+`--observe` is what separates the two, and only this wrapper can set it, because
+only it knows which of your host's tools look.
 
 It declares no `magus-guard-coverage` line, and that absence is deliberate: a
 coverage declaration states how much of a verdict a host can carry on a guard
 surface, and this file carries no verdict on no surface.
 
-<!-- embed: magus-observe.sh -->
+<!-- embed: magus-observe.buzz -->
 
 ## What a template must not get wrong
 
@@ -156,13 +158,13 @@ guard.
 advise arm. A template missing one does not fail loudly; it renders nothing, and
 every host reads nothing as allow. Claude Code's `--path` wiring once rendered
 only the deny arm, so every advisory it produced was silently dropped, while the
-shipped `magus-path.sh` had the opposite gap and dropped denials.
+shipped path template had the opposite gap and dropped denials.
 
 **A pass and a broken guard both render nothing.** A pass exits 0 with empty
 output because there was nothing to say. A binary that cannot run - too old for
 `session hook`, unable to load the workspace, half-written by a concurrent build - exits
 non-zero with empty output. Printing that as a pass disables every rule with
-nothing anywhere saying so. Both scripts discriminate on status and emptiness
+nothing anywhere saying so. Both templates discriminate on status and emptiness
 together, and announce the second case. The announcement names its evidence -
 the binary path they resolved, that binary's version, and the first line it
 printed on stderr - because the guesses it used to offer sent readers to check a
@@ -172,72 +174,11 @@ with a fixed response of your own.
 **Attribution must never break a verdict.** `--agent-name` and `--session`
 postdate the current release, and an older binary rejects an unknown flag by
 printing usage and exiting non-zero, which leaves the host with no verdict at
-all. Both scripts try with attribution and retry without it, and they retry only
+all. Both templates try with attribution and retry without it, and they retry only
 when the call produced no verdict - never merely because it exited non-zero,
 since a deny exits 2 with the verdict on stdout.
 
-## The Buzz ports
-
-Beside every template on this page sits a `.buzz` file of the same name: the three
-guard templates above, and the two verdict-free wrappers documented below. Each
-reads the same host event, renders the same reply, and carries the same version
-marker; `cmd/magus/testdata/script/guard_templates.txtar` runs both forms against
-every recorded event and fails on one byte of difference.
-
-Which one to wire is a question about your machine, not about the guard. The sh
-copy needs a POSIX shell and `jq`; the Buzz port needs neither, so it runs
-unchanged on Windows and installs nothing. What it does need is a `magus` new
-enough to run it, because moving the glue into Buzz moves the interpreter from a
-program that is always present to one that has a version. A magus too old to run
-the script renders no verdict, and your host reports that as a hook error rather
-than passing the call silently; see [Claude Code](claude-code.md) for what that
-looks like.
-
-`magus describe harness claude-code` prints the entries that wire these, and the
-command you run to merge them. The command in each entry is
-`magus buzz -s <file>`, or `./magus buzz -s <file>` in a workspace that builds its
-own binary: `-s` keeps the interpreter's own advisories off stderr, which a host
-would otherwise show as a hook error. An entry that declares a capability adds a
-`-- <flags>` tail and nothing else; see [why the two forms differ on knobs](#why-the-two-forms-differ-on-knobs) for what does not appear there.
-
-They import no magus Buzz module and no spell, and a test refuses one. A hook
-fires on every tool call, and either import would make it pay for opening the
-workspace: about 700ms here, against roughly 10ms for a script that reads none of
-it.
-
-### `magus-command.buzz`
-
-The command guard, in Buzz. Same host overrides, same replies, same version marker; it selects the event's fields with `encoding/json` instead of `jq` and reaches the binary with `proc\exec` instead of a pipeline. The two PER-ENTRY knobs are not overrides here: `wholeEvent` reads the raw-event question off the event, and `shellFlags` takes the `magus shell` flags from the script's own argv.
-
-<!-- embed: magus-command.buzz -->
-
-### `magus-path.buzz`
-
-The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assembled exactly as its sh twin assembles them.
-
-<!-- embed: magus-path.buzz -->
-
-### `magus-observe.buzz`
-
-The observer, in Buzz. It prints nothing, always exits 0, and declares no coverage, for the same reasons its sh twin does.
-
-<!-- embed: magus-observe.buzz -->
-
-### `magus-checkpoint.buzz`
-
-The stop recorder, in Buzz. It forwards the event whole, exactly as its sh twin
-does, so it selects nothing and imports no JSON reader at all.
-
-<!-- embed: magus-checkpoint.buzz -->
-
-### `magus-rehydrate.buzz`
-
-The post-compaction brief, in Buzz. It needs neither `tr` nor `sed`: the JSON
-escape its sh twin builds out of a pipeline is one byte-indexed loop here.
-
-<!-- embed: magus-rehydrate.buzz -->
-
-## `magus-checkpoint.sh`
+## `magus-checkpoint.buzz`
 
 The second template that carries no verdict. Wire it to your host's stop or
 session-end event and it records where the work stands: the revision, branch and
@@ -257,18 +198,18 @@ computes and prints, and keeps it. What makes one worth keeping is the note, so
 records the position and the pointers, and leaves the prose alone. Nothing in the
 host's payload becomes the note.
 
-There is no `jq` here, unlike its siblings: magus parses the envelope itself, so
-a machine without jq records a checkpoint rather than silently recording none. A
-host that spells those fields differently passes `--session` and `--transcript`
-instead, and one that can supply neither still records a usable checkpoint,
-because the part that matters is read from the tree.
+It forwards the event whole and magus parses the envelope itself, so it selects
+nothing and imports no JSON reader. A host that spells those fields differently
+passes `--session` and `--transcript` instead, and one that can supply neither
+still records a usable checkpoint, because the part that matters is read from the
+tree.
 
 It declares no `magus-guard-coverage` line, for the reason
-`magus-observe.sh` declares none: it carries no verdict on any surface.
+`magus-observe.buzz` declares none: it carries no verdict on any surface.
 
-<!-- embed: magus-checkpoint.sh -->
+<!-- embed: magus-checkpoint.buzz -->
 
-## `magus-rehydrate.sh`
+## `magus-rehydrate.buzz`
 
 The third template that carries no verdict. Wire it to your host's session-start
 event, at least for the compaction and resume cases, and every time a host
@@ -283,13 +224,12 @@ Every line of it is read off the disk at the moment it prints, which is the
 property that makes it worth wiring. A summary degrades with each retelling and
 nothing in the transcript says by how much; a fact read from the tree cannot
 degrade at all. Nothing in it is remembered between sessions, and none of it
-comes from the host's event, which is why the hook needs no `jq` and reads no
-payload.
+comes from the host's event, which the hook does not read.
 
 It restates no rule either. `magus session --brief` names the files this
 workspace's rules live in (AGENTS.md and the installed skill directories, when
 they exist), and the template adds one line for your host's own instruction file,
-`REHYDRATE_RULES`, which defaults to `CLAUDE.md` and prints only when that file
+`--rules <file>`, which defaults to `CLAUDE.md` and prints only when that file
 is really there. A rule copied into a hook's output is a second copy to go stale,
 and the model can read the first.
 
@@ -298,16 +238,14 @@ handed; `-o json` is the same brief for a wrapper that wants to reshape it.
 
 Hosts disagree about what a session-start hook's stdout IS, so this template has
 two channels. Plain text is the default, for a host that adds stdout to the
-model's context. `REHYDRATE_FORMAT=json` wraps the same text in
+model's context. `--format json` wraps the same text in
 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":...}}`
 for a host that parses stdout as a reply and drops anything that is not one.
-There is still no `jq`: the escaping is done in the template, so a machine without
-it gets its checkout back like any other.
 
 It declares no `magus-guard-coverage` line, for the reason
-`magus-observe.sh` declares none: it carries no verdict on any surface.
+`magus-observe.buzz` declares none: it carries no verdict on any surface.
 
-<!-- embed: magus-rehydrate.sh -->
+<!-- embed: magus-rehydrate.buzz -->
 
 ## Trying a verdict by hand
 

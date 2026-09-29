@@ -205,9 +205,10 @@ config: the hook wiring is what lets the guard see an agent at all, so a change 
 it is one a person makes with their own hands.
 
 -o json prints the plan the command reads back: files keyed by path, each with the
-exact fragment to merge (jq's * operator: objects merge key by key, and an array
-arrives whole, with your own entries kept in place) or the whole content to write.
-The command needs jq. Omit the id for every wired harness.`,
+exact fragment to merge (objects merge key by key, and an array arrives whole, with
+your own entries kept in place) or the whole content to write. The command pipes
+that plan into ` + "`magus buzz`" + `, which merges each file with merge\json. Omit the
+id for every wired harness.`,
 		},
 	},
 	Examples: []Example{
@@ -659,7 +660,7 @@ Subcommands (the first argument):
            share of diagnostics, spells, and modules with a doc). --kind scopes
            every section to one node kind. The VCS-history lenses (hotspots,
            affinity, ownership, trend, unreferenced) are a separate view, served
-           by the magus_insight MCP tool and the console's Insight page - not by
+           by the client MCP tool (magus\insight) and the console's Insight page - not by
            this command.
   diff     Nodes and edges added, removed, or changed relative to a baseline
            export or a git revision (--rev): the PR-review blast-radius
@@ -2178,7 +2179,12 @@ without it the event is recorded and nothing pops up.
 An event whose outcome is waiting (blocked on input) or permission (blocked on
 approval) additionally opens a durable request in this repository, listed by
 ` + "`session attention`" + ` and closed only by a person. Any other outcome opens
-none. This is the only command that opens one.`,
+none. This is the only command that opens one.
+
+A repeat of a request the queue already holds does not raise another desktop
+notification. The open row is the block, and a second toast asks for a yes on
+it. A failure still notifies, and so does a waiting or permission event that
+could not be filed, because that one has no row.`,
 			Usage: "magus session notify [--outcome <vocab>] [--desktop]",
 			Flags: []Flag{
 				{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
@@ -2233,7 +2239,7 @@ the name to exist, and change a record's type by deleting and recreating it.
 
 verify is the maintenance verb: it reports entries that are malformed, stale,
 that link to something no longer there, or whose evidence no longer resolves.
-The same entries are reachable through the magus_memory MCP tool and the
+The same entries are reachable through the client MCP tool (magus\memory) and the
 console, so a journal written from the CLI is readable by an agent without
 either side learning a new format.`,
 	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
@@ -2277,7 +2283,7 @@ is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: ` + "`magus run`" + ` executes a target with no job involved,
 while a job's check and the server's maintenance each cause runs.
 
-Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+Two channels write the job store. The client MCP tool (magus\job) is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own
@@ -2501,7 +2507,7 @@ needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
 The console's Diff surface reads the same annotations over the same session,
-and an agent can join that session through the magus_diff MCP tool.
+and an agent can join that session through the diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild
 and which were merely edited, who has been changing them, an estimate of the
@@ -2685,6 +2691,7 @@ nothing loads.`,
 		{Name: "test", Kind: FlagBool, AliasOf: "t", Doc: "Alias for -t"},
 		{Name: "check", Kind: FlagBool, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
 		{Name: "coverprofile", Kind: FlagString, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
+		{Name: "profile", Kind: FlagBool, Doc: "Print where compile and import time went, after the script runs"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
@@ -2701,6 +2708,7 @@ nothing loads.`,
 		{"Check files without running them", "magus buzz --check scripts/report.buzz scripts/build.buzz"},
 		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
 		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
+		{"See which imports a script spends its time on", "magus buzz --profile scripts/report.buzz"},
 	},
 }
 
@@ -2748,8 +2756,7 @@ a pattern no graph verb fits.`,
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "harness", Short: "Install skills for, or verify, harnesses wired in the magusfile", Children: []Command{
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
-			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
-		}},
+			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}}}},
 		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
 			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it commands are read from stdin"},

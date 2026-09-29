@@ -1,12 +1,12 @@
-# EXTRACTION PARITY: a shipped session-load adapter, executed against a synthetic
-# transcript.
+# EXTRACTION PARITY: the shipped session-load adapters, executed against synthetic
+# host stores.
 #
 # The sibling gate in internal/agent/session_test.go checks that every adapter DECLARES what
 # its host supplies and that the guide's table agrees. A declaration can be
 # sincere and still wrong, because nothing there runs the file: the OpenCode guard
 # plugin declared a correct stance for months while invoking a subcommand that no
-# longer existed. This runs the real file (__MAGUS_TEMPLATES is an absolute path to
-# docs/guides/integrations/agents, never a copy) and asserts the lines it emits.
+# longer existed. This runs the real files (__MAGUS_TEMPLATES is an absolute path to
+# docs/guides/integrations/agents, never a copy) and asserts the lines they emit.
 #
 # Every case is labeled `# kind: <kind>`; TestSessionAdapterCasesCoverEveryKind
 # fails when the contract grows a kind no case covers.
@@ -14,14 +14,11 @@
 # The fixture is SYNTHETIC and stays that way. A real transcript carries a
 # person's own commands, paths and prompts, and a fixture is committed forever.
 
-[!exec:jq] skip 'the session adapters extract with jq, which is not installed'
-[windows] skip 'POSIX sh adapters; a Windows host reads the same stores differently'
-
 env HOST_REPO_ROOT=/repo
 env HOST_PROJECT_DIRS=$WORK/transcripts
 env SESSION_STATE_DIR=$WORK/state
 
-exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-claude-code.buzz -- --stdout
 
 # kind: skill.load
 # The skill NAME, not the tool call: what an audit counts is which skill loaded.
@@ -54,7 +51,9 @@ stdout '"kind":"file.write","ref":"t6","text":"AGENTS.md"'
 # kind: magus.call
 # A direct MCP call to magus. It never appears as a shell command, so an adapter
 # that only read Bash tool uses would report a session driving magus hard as one
-# that never touched it.
+# that never touched it. The transcript is a recorded past session: t7 is the
+# per-verb query tool that session called, a name the server no longer mounts, and
+# the adapter reports it verbatim.
 stdout '"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"'
 
 # A cwd outside the repository is dropped. Scoping is on the record's own cwd
@@ -70,14 +69,25 @@ stdout '"exit":null'
 # A re-run reads only what is new. Without the checkpoint an audit re-loads the
 # whole store on every invocation, which is the cost that gets an adapter switched
 # off after the first week.
-exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-claude-code.buzz -- --stdout
 ! stdout .
 
 # An appended record is picked up on the next run, and only that record.
 cp $WORK/appended.jsonl $WORK/transcripts/s1.jsonl
-exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-claude-code.buzz -- --stdout
 stdout '"kind":"shell.command","ref":"t8"'
 ! stdout '"ref":"t1"'
+
+# --- Codex: rollouts scoped by the session_meta record inside each one --------
+
+env HOST_SESSION_STORE=$WORK/codex
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-codex.buzz -- --stdout
+stdout '"host":"codex","session":"c1","ts":[0-9]+,"cwd":"/repo/sub","kind":"shell.command","ref":"x1","text":"git status"'
+stdout '"kind":"shell.command","ref":"x2","text":"ls -la"'
+stdout '"kind":"spawn","ref":"a9","text":"reviewer"'
+! stdout 'apply_patch'
+! stdout 'elsewhere-command'
+! stdout '"agent"'
 
 # --- fail-open: an adapter that cannot run says so ----------------------------
 #
@@ -86,10 +96,41 @@ stdout '"kind":"shell.command","ref":"t8"'
 
 env HOST_REPO_ROOT=
 cd $WORK/nogit
-exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-claude-code.buzz -- --stdout
 ! stdout .
 stderr 'no Magus workspace here'
 cd $WORK
+env HOST_REPO_ROOT=/repo
+
+# Without --stdout there has to be a magus to load into, and saying so beats a load
+# that quietly went nowhere.
+env SESSION_MAGUS_BIN=$WORK/absent-magus
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-codex.buzz
+! stdout .
+stderr 'magus is not on PATH'
+env SESSION_MAGUS_BIN=
+
+# --- OpenCode: the documented export, read per session ------------------------
+#
+# The stand-in for opencode below is a POSIX sh script, and it is the only part of
+# this archive that needs one.
+[windows] skip 'the opencode stand-in is a POSIX sh script'
+
+env HOST_OPENCODE_BIN=$WORK/absent-opencode
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-opencode.buzz -- --stdout
+! stdout .
+stderr 'opencode is not on PATH'
+
+chmod 0755 $WORK/opencode
+env HOST_OPENCODE_BIN=$WORK/opencode
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-opencode.buzz -- --stdout
+stdout '"host":"opencode","session":"o1","ts":1788955200100,"cwd":"/repo","kind":"shell.command","ref":"p1","text":"make test","transcript":"opencode://o1","outcome":\{"exit":2,"denied":false'
+stdout '"kind":"file.read","ref":"p2","text":"a.go".*"denied":true'
+! stdout 'p3'
+
+# The checkpoint counts parts, so a re-run with nothing new says nothing.
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-session-load-opencode.buzz -- --stdout
+! stdout .
 
 -- transcripts/s1.jsonl --
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:00.100Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"magus-run"}}]}}
@@ -114,5 +155,21 @@ cd $WORK
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:07.000Z","message":{"content":[{"type":"tool_use","id":"t6","name":"Write","input":{"file_path":"AGENTS.md"}}]}}
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:08.000Z","message":{"content":[{"type":"tool_use","id":"t7","name":"mcp__magus__magus_query","input":{}}]}}
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:09.000Z","message":{"content":[{"type":"tool_use","id":"t8","name":"Bash","input":{"command":"a later command"}}]}}
+-- codex/2026/09/09/rollout-a.jsonl --
+{"type":"session_meta","timestamp":"2026-09-09T12:00:00.000Z","payload":{"session_id":"c1","cwd":"/repo/sub"}}
+{"type":"custom_tool_call","timestamp":"2026-09-09T12:00:01.000Z","payload":{"name":"exec","call_id":"x1","input":{"command":"git status"}}}
+{"type":"custom_tool_call","timestamp":"2026-09-09T12:00:02.000Z","payload":{"name":"exec","call_id":"x2","input":"ls -la"}}
+{"type":"spawn_agent","timestamp":"2026-09-09T12:00:03.000Z","payload":{"agent_id":"a9","name":"reviewer"}}
+{"type":"custom_tool_call","timestamp":"2026-09-09T12:00:04.000Z","payload":{"name":"apply_patch","call_id":"x3","input":"patch"}}
+-- codex/2026/09/09/rollout-b.jsonl --
+{"type":"session_meta","timestamp":"2026-09-09T12:00:00.000Z","payload":{"session_id":"c2","cwd":"/elsewhere"}}
+{"type":"custom_tool_call","timestamp":"2026-09-09T12:00:01.000Z","payload":{"name":"exec","call_id":"y1","input":{"command":"elsewhere-command"}}}
+-- opencode --
+#!/bin/sh
+case "$1" in
+  sessions) printf '[{"id":"o1"}]' ;;
+  export) printf '%s' '{"session":{"id":"o1","directory":"/repo"},"messages":[{"parts":[{"type":"text"},{"callID":"p1","tool":"bash","state":{"status":"completed","input":{"command":"make test"},"metadata":{"exit":2},"time":{"start":1788955200100}}},{"callID":"p2","tool":"read","state":{"status":"error","input":{"filePath":"a.go"},"time":{"start":1788955201000}}},{"callID":"p3","tool":"webfetch","state":{}}]}]}' ;;
+  *) exit 1 ;;
+esac
 -- nogit/keep.txt --
 a directory outside any checkout, so the adapter has nothing to scope to

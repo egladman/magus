@@ -169,6 +169,9 @@ fun claude_entries() > [any] {
                 claude_pretool_entry("Edit|Write|NotebookEdit", claude_path_command()),
                 claude_pretool_entry("^mcp__magus__", claude_guard_command()),
                 claude_pretool_entry("Read", claude_observe_command()),
+                // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
+                // the read rules judge it like the shell read it replaces.
+                claude_pretool_entry("Read", claude_guard_command()),
                 claude_pretool_entry(SKILL_MATCHER, claude_guard_command()),
                 claude_pretool_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, claude_agent_command()),
             ],
@@ -273,6 +276,21 @@ test "harness_skills installs both forms under .claude/skills" {
     final paths = skills["paths"] as [str];
     assert\equal(paths.len(), 1, "one skills install path");
     assert\equal(paths[0], ".claude/skills", "Claude Code reads .claude/skills");
+}
+
+test "a Read is both recorded and judged" {
+    var observed = false;
+    var judged = false;
+    foreach (entry in claude_entries()[0]["entries"] as [any]) {
+        if ((entry["matcher"] as? str) != "Read") { continue; }
+        foreach (hook in entry["hooks"] as [any]) {
+            final command = (hook["command"] as? str) ?? "";
+            if (command == claude_observe_command()) { observed = true; }
+            if (command == claude_guard_command()) { judged = true; }
+        }
+    }
+    assert\isTrue(observed, "the observer records the path");
+    assert\isTrue(judged, "the command guard judges the read it stands for");
 }
 
 test "guard commands name the Buzz glue, never the sh copies" {
@@ -397,7 +415,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and Subage
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 6, "Bash path mcp Read skill and spawn matchers");
+    assert\equal(pre_entries.len(), 7, "Bash path mcp Read-observe Read-guard skill and spawn matchers");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

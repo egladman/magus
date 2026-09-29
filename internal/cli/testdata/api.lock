@@ -130,6 +130,7 @@ flag buzz/coverprofile
 flag buzz/e
 flag buzz/embedded
 flag buzz/no-autoload
+flag buzz/profile
 flag buzz/t
 flag buzz/test
 flag clean/cache

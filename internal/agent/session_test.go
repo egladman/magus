@@ -21,9 +21,9 @@ const sessionAdapterPrefix = "magus-session-load-"
 // appear in hookTemplates, which is what gets it embedded and version-stamped;
 // this list is what the coverage and parity gates iterate.
 var sessionAdapters = []string{
-	"magus-session-load-claude-code.sh",
-	"magus-session-load-codex.sh",
-	"magus-session-load-opencode.sh",
+	"magus-session-load-claude-code.buzz",
+	"magus-session-load-codex.buzz",
+	"magus-session-load-opencode.buzz",
 }
 
 // sessionGuideDoc is the page that embeds the adapters and carries the parity
@@ -141,9 +141,12 @@ func TestSessionSchemaCarriesModelAndHostVersion(t *testing.T) {
 	assert.Contains(t, SessionDimensions(), "host-version")
 }
 
-// sessionExitArmRe matches an adapter giving up: a bare `exit 0` inside a
+// sessionExitArmRe matches an adapter giving up: a bare `return 0;` inside a
 // conditional block, which is how every one of these arms ends.
-var sessionExitArmRe = regexp.MustCompile(`^exit 0$`)
+var sessionExitArmRe = regexp.MustCompile(`^return 0;$`)
+
+// sessionNoticeRe matches an arm saying why it gave up, on stderr.
+var sessionNoticeRe = regexp.MustCompile(`\bwarn\(|io\\stderr\.write\(`)
 
 // TestSessionAdapterFailOpenArmsAnnounceThemselves is the session half of the
 // doctrine's enforcement point, and it exists for the same reason its guard
@@ -159,7 +162,10 @@ func TestSessionAdapterFailOpenArmsAnnounceThemselves(t *testing.T) {
 		lines := strings.Split(string(body), "\n")
 		arms := 0
 		for i, line := range lines {
-			if !strings.HasPrefix(strings.TrimSpace(line), "if ") {
+			// A block that spans lines; a one-line `if (...) { ... }` returns from a
+			// helper, never from the run.
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "if (") || !strings.HasSuffix(trimmed, "{") {
 				continue
 			}
 			block := lines[i:failOpenArmEnd(lines, i)]
@@ -167,7 +173,7 @@ func TestSessionAdapterFailOpenArmsAnnounceThemselves(t *testing.T) {
 				continue
 			}
 			arms++
-			assert.True(t, strings.Contains(strings.Join(block, "\n"), ">&2"),
+			assert.True(t, sessionNoticeRe.MatchString(strings.Join(block, "\n")),
 				"%s stops extracting at line %d and says nothing.\n"+
 					"An adapter that loaded no events looks exactly like a host nobody used, so every arm that\n"+
 					"gives up announces why on stderr.", name, i+1)

@@ -159,11 +159,11 @@ The table is not prose. Each adapter carries the same statement in a line the
 build reads:
 
 ```sh
-grep magus-session-coverage magus-session-load-claude-code.sh
+grep magus-session-coverage magus-session-load-claude-code.buzz
 ```
 
 ```text
-# magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
+// magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 ```
 
 An adapter that drops a dimension fails the build, and so does a table cell that
@@ -182,9 +182,12 @@ a verdict for the join against magus's trail, not for the extraction.
 ## Run an adapter
 
 ```sh
-sh magus-session-load-claude-code.sh            # extract and load
-sh magus-session-load-claude-code.sh --stdout   # read the stream yourself
+magus buzz -s magus-session-load-claude-code.buzz               # extract and load
+magus buzz -s magus-session-load-claude-code.buzz -- --stdout   # read the stream yourself
 ```
+
+Each adapter is Buzz, run by `magus buzz`, so it needs neither a POSIX shell nor
+`jq`.
 
 Declare it instead, and you stop running it by hand:
 
@@ -193,7 +196,7 @@ knowledge:
   sessions:
     adapters:
       - host: claude-code
-        command: sh magus-session-load-claude-code.sh
+        command: [magus, buzz, -s, magus-session-load-claude-code.buzz]
 ```
 
 `magus graph build` runs each declared adapter before it assembles, so the
@@ -208,8 +211,8 @@ Nothing is derived. An adapter reads a transcript store under your home
 directory, and magus does not go looking through it because a config key was left
 blank.
 
-Each one scopes to a repository (`HOST_REPO_ROOT`, defaulting to the git toplevel
-of the current directory) and keeps a per-file checkpoint under
+Each one scopes to a repository (`HOST_REPO_ROOT`, defaulting to the active
+workspace of the current directory) and keeps a per-file checkpoint under
 `${XDG_STATE_HOME:-~/.local/state}/magus/session-load/<host>/`, so a re-run reads
 only what is new. The checkpoint moves only after the whole stream is delivered:
 a failed load is retried, never skipped. `--stdout` delivers it to you, so it
@@ -217,7 +220,7 @@ moves the checkpoint too; to look without consuming, point `SESSION_STATE_DIR` a
 a scratch directory for that run.
 
 Each file's header lists the variables it takes. Every one of them announces
-itself on stderr when it cannot run, rather than exiting quietly, because a
+itself on stderr when it cannot run, rather than exiting quietly, because an
 adapter that extracted nothing looks exactly like a host nobody used.
 
 ## Checking whether your copy is current
@@ -227,7 +230,7 @@ reason: once you copy one it is yours, magus cannot reach it again, and nothing
 about your copy says how old it is.
 
 ```sh
-grep magus-guard-template magus-session-load-claude-code.sh
+grep magus-guard-template magus-session-load-claude-code.buzz
 ```
 
 ## Claude Code
@@ -236,216 +239,340 @@ Sessions are JSONL under `~/.claude/projects/<encoded-cwd>/`, with subagent
 transcripts a level down under `<sessionId>/subagents/`. Both are read: excluded,
 the delegated half of every fanned-out session goes with them.
 
-```sh
-#!/usr/bin/env sh
-# magus session load adapter: turns Claude Code's session store into the magus
-# session event contract, one JSON object per line.
-#
-# This file is the source of truth. The docs site embeds it, magus's own
-# repository invokes it, and you can download it and do the same. POSIX sh, no
-# bashisms; nothing in it is magus-internal.
-#
-# Contract, one line per event:
-#
-#   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
-#    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
-#    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
-#    "transcript":"<abs>",
-#    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
-#    "outcome":{"exit":null,"denied":false,"interrupted":false}}
-#
-# Run it with no arguments to pipe the stream into `magus session load`; run it
-# with --stdout to read the stream yourself. Override any of:
-#
-#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
-#                       workspace of the current directory. A cwd UNDER it counts,
-#                       which keeps nested project sessions in
-#   HOST_SESSION_STORE  where Claude Code keeps its sessions
-#   HOST_PROJECT_DIRS   the directories to walk, space separated. Default is
-#                       every project directory under the store whose name
-#                       begins with the encoded repo root
-#   SESSION_STATE_DIR   where the per-file offsets live
-#   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
-#
-# The `text` of a spawn is the SUBAGENT TYPE, not the prompt the host records.
-# A prompt is the delegating agent's own words about work in progress, it is
-# unbounded, and the audit question it would answer ("what was this agent told")
-# is not one any report here asks. The type answers the one that IS asked: which
-# kind of agent ran, how often, and what it did next.
-#
-# Re-runs are incremental: each transcript's consumed byte count is checkpointed
-# under SESSION_STATE_DIR, and the checkpoint is written only after the whole
-# stream is delivered, so a failed load is retried rather than skipped. Byte
-# offsets stop at the last COMPLETE line, because the host appends to a file this
-# script is reading.
-#
-# The line below declares, per dimension of the contract, what this host can
-# supply: yes when the store carries it, none when it does not. It is machine-read
-# by the session-parity gate, which fails the build when an adapter drops a
-# dimension or the guide's table disagrees with it. A host that supplies less
-# declares less; the report then says unobservable rather than zero.
-# magus-guard-template: 18
-# magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
+```buzz
+// magus session load adapter: turns Claude Code's session store into the magus
+// session event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, magus's own
+// repository invokes it, and you can download it and do the same. Nothing in it is
+// magus-internal: it reads the store with the magus Buzz host modules and hands the
+// stream to `magus session load`.
+//
+// Contract, one line per event:
+//
+//   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
+//    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
+//    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
+//    "transcript":"<abs>",
+//    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
+//    "outcome":{"exit":null,"denied":false,"interrupted":false}}
+//
+// Run it as `magus buzz -s magus-session-load-claude-code.buzz` to pipe the stream
+// into `magus session load`; add `-- --stdout` to read the stream yourself. Override
+// any of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A cwd UNDER it counts,
+//                       which keeps nested project sessions in
+//   HOST_SESSION_STORE  where Claude Code keeps its sessions
+//   HOST_PROJECT_DIRS   the directories to walk, space separated. Default is
+//                       every project directory under the store whose name
+//                       begins with the encoded repo root
+//   SESSION_STATE_DIR   where the per-file offsets live
+//   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// The `text` of a spawn is the SUBAGENT TYPE, not the prompt the host records.
+// A prompt is the delegating agent's own words about work in progress, it is
+// unbounded, and the audit question it would answer ("what was this agent told")
+// is not one any report here asks. The type answers the one that IS asked: which
+// kind of agent ran, how often, and what it did next.
+//
+// Re-runs are incremental: each transcript's consumed byte count is checkpointed
+// under SESSION_STATE_DIR, and the checkpoint is written only after the whole
+// stream is delivered, so a failed load is retried rather than skipped. Byte
+// offsets stop at the last COMPLETE line, because the host appends to a file this
+// script is reading.
+//
+// The line below declares, per dimension of the contract, what this host can
+// supply: yes when the store carries it, none when it does not. It is machine-read
+// by the session-parity gate, which fails the build when an adapter drops a
+// dimension or the guide's table disagrees with it. A host that supplies less
+// declares less; the report then says unobservable rather than zero.
+// magus-guard-template: 19
+// magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
-# NO `set -e`. Every failure below is a transcript this run does not read, not a
-# reason to abandon the ones it can: a single malformed line would otherwise end
-# the walk and leave every later session unloaded.
+// EVERY call that can fail is caught. A failure is a transcript this run does not
+// read, not a reason to abandon the ones it can: a single malformed line would
+// otherwise end the walk and leave every later session unloaded.
 
-[ -n "$HOST_SESSION_STORE" ] || HOST_SESSION_STORE=$HOME/.claude/projects
-[ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/claude-code
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "time";
+import "strings";
+import "encoding/json";
+import "lib/hook" as hook;
 
-# Resolve the workspace's own binary before asking it for the active workspace.
-# A session can start below the checkout root; the workspace model is VCS-neutral
-# and its root is not necessarily a Git toplevel.
-if [ -z "$SESSION_MAGUS_BIN" ]; then
-  session_root=$PWD
-  while [ -n "$session_root" ]; do
-    if [ -x "$session_root/magus" ]; then
-      SESSION_MAGUS_BIN=$session_root/magus
-      break
-    fi
-    session_root=${session_root%/*}
-  done
-fi
-[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
-if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
-  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
-fi
+final HOST = "claude-code";
+final STDOUT_FLAG = "--stdout";
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-# jq is the whole extraction. Announce its absence rather than reporting an empty
-# session store: an adapter that silently loads nothing looks exactly like a host
-# nobody has used, which is the reading this audit exists to make impossible.
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
-  exit 0
-fi
-
-if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
-  echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2
-  exit 0
-fi
-
-# Claude Code names a project directory after the cwd it was opened in, with every
-# character outside [A-Za-z0-9] replaced by a dash. Encoding the repo root the same
-# way and matching on the PREFIX is what picks up worktrees: their paths extend the
-# root, so their directory names extend its encoding.
-if [ -z "$HOST_PROJECT_DIRS" ]; then
-  encoded=$(printf '%s' "$HOST_REPO_ROOT" | LC_ALL=C tr -c 'A-Za-z0-9' '-')
-  HOST_PROJECT_DIRS=$(find "$HOST_SESSION_STORE" -maxdepth 1 -type d -name "$encoded*" 2>/dev/null)
-fi
-
-work=$(mktemp -d) || exit 0
-trap 'rm -rf "$work"' EXIT INT TERM
-: > "$work/events"
-: > "$work/marks"
-
-# extract reads one transcript's unread tail and writes contract lines.
-#
-# The fold over `inputs, null` is what lets an outcome reach the event it belongs
-# to without holding the file in memory. Claude Code records a tool_use and its
-# result as two records, so an event is parked under its id and released when the
-# result arrives; the trailing null releases whatever is still parked, which is
-# how the last call of an incremental chunk is emitted rather than lost.
-extract() {
-  jq -c -n --arg host claude-code --arg transcript "$1" --arg root "$2" '
-    def ms: try ((sub("\\.[0-9]+";"") | sub("Z?$";"Z") | fromdateiso8601) * 1000) catch 0;
-    def kindof($n):
-      if $n == "Bash" then "shell.command"
-      elif $n == "Read" or $n == "NotebookRead" then "file.read"
-      elif $n == "Edit" or $n == "Write" or $n == "MultiEdit" or $n == "NotebookEdit" then "file.write"
-      elif $n == "Skill" then "skill.load"
-      elif $n == "Agent" or $n == "Task" then "spawn"
-      elif ($n | startswith("mcp__magus")) then "magus.call"
-      else null end;
-    def textof($n; $i):
-      if $n == "Bash" then ($i.command // "")
-      elif $n == "Skill" then ($i.skill // $i.name // "")
-      elif $n == "Agent" or $n == "Task" then ($i.subagent_type // "")
-      elif ($n | startswith("mcp__magus")) then $n
-      else ($i.file_path // "") end;
-    def event($r; $kind; $ref; $text):
-      {host: $host, session: ($r.sessionId // ""), ts: ($r.timestamp // "" | ms),
-       cwd: ($r.cwd // ""), kind: $kind, ref: $ref, text: $text, transcript: $transcript,
-       agent: {model: ($r.message.model // null), host_version: ($r.version // null)},
-       outcome: {exit: null, denied: false, interrupted: false}};
-    foreach (inputs, null) as $r ({p: {}, e: []};
-      .e = []
-      | if $r == null then .e = [.p[]] | .p = {}
-        elif ($r.cwd // "") != $root and (($r.cwd // "") | startswith($root + "/") | not) then .
-        elif $r.type == "assistant" then
-          reduce ($r.message.content[]? | select(.type == "tool_use")) as $t (.;
-            if kindof($t.name) == null then .
-            else .p[$t.id] = event($r; kindof($t.name); $t.id; textof($t.name; $t.input)) end)
-        elif $r.type == "user" then
-          reduce ($r.message.content[]? | select(.type == "tool_result")) as $x (.;
-            if (.p | has($x.tool_use_id)) then
-              .e += [.p[$x.tool_use_id]
-                     | .outcome.denied = (($r.toolDenialKind // null) != null)
-                     | .outcome.interrupted = (($r.toolUseResult.interrupted // false) == true)]
-              | del(.p[$x.tool_use_id])
-            else . end)
-        elif $r.type == "attachment" and (($r.attachment.type // "") | startswith("hook_")) then
-          .e += [event($r; "hook.output"; ($r.attachment.toolUseID // $r.uuid // "");
-                       (($r.attachment.content // $r.attachment.stdout // "") | tostring))]
-        else . end;
-      .e[])' 2>/dev/null
+// warn says why nothing was extracted. An adapter that loaded nothing looks exactly
+// like a host nobody used, so every arm that gives up announces itself on stderr.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
 }
 
-for dir in $HOST_PROJECT_DIRS; do
-  [ -d "$dir" ] || continue
-  # Subagent transcripts sit a level down, under <sessionId>/subagents/, and carry
-  # the orchestrator's session id. Excluded, they take the delegated half of every
-  # fanned-out session with them.
-  find "$dir" -name '*.jsonl' -type f 2>/dev/null | while read -r transcript; do
-    mark=$SESSION_STATE_DIR/$(printf '%s' "$transcript" | cksum | cut -d' ' -f1)
-    offset=0
-    [ -f "$mark" ] && offset=$(cat "$mark" 2>/dev/null)
-    case $offset in *[!0-9]*|'') offset=0;; esac
-    size=$(LC_ALL=C wc -c < "$transcript" 2>/dev/null)
-    [ -n "$size" ] || continue
-    # A file smaller than its checkpoint was rotated or replaced, so the offset
-    # describes bytes that no longer exist and reading from it would land mid-record.
-    [ "$size" -lt "$offset" ] && offset=0
-    [ "$size" -le "$offset" ] && continue
+object Event {
+    session: str,
+    ts: int,
+    cwd: str,
+    kind: str,
+    ref: str,
+    text: str,
+    model: any?,
+    hostVersion: any?,
+    denied: bool,
+    interrupted: bool,
+}
 
-    tail -c "+$((offset + 1))" "$transcript" > "$work/chunk" 2>/dev/null
-    # A non-empty last byte means the host is mid-append and the final line is a
-    # fragment. Dropping it leaves the checkpoint short, so the next run reads that
-    # record whole.
-    if [ -n "$(tail -c 1 "$work/chunk" 2>/dev/null)" ]; then
-      sed '$d' "$work/chunk" > "$work/whole" 2>/dev/null
-    else
-      cat "$work/chunk" > "$work/whole"
-    fi
-    consumed=$(LC_ALL=C wc -c < "$work/whole")
-    [ "$consumed" -gt 0 ] || continue
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(e: Event, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(e.session)},\"ts\":{e.ts},\"cwd\":{s(e.cwd)},"
+        + "\"kind\":{s(e.kind)},\"ref\":{s(e.ref)},\"text\":{s(e.text)},\"transcript\":{s(transcript)},"
+        + "\"agent\":\{\"model\":{s(e.model)},\"host_version\":{s(e.hostVersion)}},"
+        + "\"outcome\":\{\"exit\":null,\"denied\":{e.denied},\"interrupted\":{e.interrupted}}}";
+}
 
-    extract "$transcript" "$HOST_REPO_ROOT" < "$work/whole" >> "$work/events"
-    echo "$mark $((offset + consumed))" >> "$work/marks"
-  done
-done
+// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
+fun ms(stamp: str) > int {
+    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed);
+}
 
-if [ -n "$session_stdout" ]; then
-  cat "$work/events"
-else
-  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
-fi
+fun kindOf(name: str) > str? {
+    if (name == "Bash") { return "shell.command"; }
+    if (name == "Read" or name == "NotebookRead") { return "file.read"; }
+    if (name == "Edit" or name == "Write" or name == "MultiEdit" or name == "NotebookEdit") { return "file.write"; }
+    if (name == "Skill") { return "skill.load"; }
+    if (name == "Agent" or name == "Task") { return "spawn"; }
+    if (name.startsWith("mcp__magus")) { return "magus.call"; }
+    return null;
+}
 
-# Checkpoints are committed only once the stream has been delivered. A load that
-# failed leaves every offset where it was, so the retry re-reads the same records
-# instead of the audit quietly losing them.
-mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
-while read -r mark position; do
-  printf '%s' "$position" > "$mark" 2>/dev/null
-done < "$work/marks"
+fun textOf(name: str, input: any?) > str {
+    if (name == "Bash") { return hook\field(input, dotPath: "command"); }
+    if (name == "Skill") {
+        final skill = hook\field(input, dotPath: "skill");
+        if (skill != "") { return skill; }
+        return hook\field(input, dotPath: "name");
+    }
+    if (name == "Agent" or name == "Task") { return hook\field(input, dotPath: "subagent_type"); }
+    if (name.startsWith("mcp__magus")) { return name; }
+    return hook\field(input, dotPath: "file_path");
+}
+
+fun eventOf(r: any?, kind: str, ref: str, text: str) > Event {
+    return Event{
+        session = hook\field(r, dotPath: "sessionId"),
+        ts = ms(hook\field(r, dotPath: "timestamp")),
+        cwd = hook\field(r, dotPath: "cwd"),
+        kind = kind,
+        ref = ref,
+        text = text,
+        model = hook\dig(r, dotPath: "message.model"),
+        hostVersion = hook\dig(r, dotPath: "version"),
+        denied = false,
+        interrupted = false,
+    };
+}
+
+fun listAt(r: any?, dotPath: str) > [any] {
+    return (hook\dig(r, dotPath: dotPath) as? [any]) ?? [<any>];
+}
+
+fun inScope(cwd: str, root: str) > bool {
+    return cwd == root or cwd.startsWith(root + "/");
+}
+
+// extract reads one transcript's unread records and returns contract lines.
+//
+// Claude Code records a tool_use and its result as two records, so an event is
+// parked under its id and released when the result arrives, carrying the outcome
+// back to the call it belongs to. Whatever is still parked at the end of the chunk
+// is released too, which is how the last call of an incremental chunk is emitted
+// rather than lost.
+fun extract(lines: [str], transcript: str, root: str) > [str] {
+    final emitted = mut [<str>];
+    final parked = mut {<str: Event>};
+    final order = mut [<str>];
+    foreach (line in lines) {
+        if (line == "") { continue; }
+        final r = json\parse(line) catch null;
+        if (r == null) { continue; }
+        if (!inScope(hook\field(r, dotPath: "cwd"), root: root)) { continue; }
+        final kind = hook\field(r, dotPath: "type");
+        if (kind == "assistant") {
+            foreach (item in listAt(r, dotPath: "message.content")) {
+                if (hook\field(item, dotPath: "type") != "tool_use") { continue; }
+                final name = hook\field(item, dotPath: "name");
+                final eventKind = kindOf(name);
+                if (eventKind == null) { continue; }
+                final id = hook\field(item, dotPath: "id");
+                if (parked[id] == null) { order.append(id); }
+                parked[id] = eventOf(r, kind: eventKind!, ref: id, text: textOf(name, input: hook\dig(item, dotPath: "input")));
+            }
+        } else if (kind == "user") {
+            foreach (item in listAt(r, dotPath: "message.content")) {
+                if (hook\field(item, dotPath: "type") != "tool_result") { continue; }
+                final id = hook\field(item, dotPath: "tool_use_id");
+                final e = parked[id];
+                if (e == null) { continue; }
+                final interrupted = (hook\dig(r, dotPath: "toolUseResult.interrupted") as? bool) ?? false;
+                emitted.append(render(Event{
+                    session = e!.session, ts = e!.ts, cwd = e!.cwd, kind = e!.kind, ref = e!.ref,
+                    text = e!.text, model = e!.model, hostVersion = e!.hostVersion,
+                    denied = hook\dig(r, dotPath: "toolDenialKind") != null,
+                    interrupted = interrupted,
+                }, transcript: transcript));
+                parked.remove(id);
+            }
+        } else if (kind == "attachment" and hook\field(r, dotPath: "attachment.type").startsWith("hook_")) {
+            var ref = hook\field(r, dotPath: "attachment.toolUseID");
+            if (ref == "") { ref = hook\field(r, dotPath: "uuid"); }
+            var text = hook\field(r, dotPath: "attachment.content");
+            if (text == "") { text = hook\field(r, dotPath: "attachment.stdout"); }
+            emitted.append(render(eventOf(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
+        }
+    }
+    foreach (id in order) {
+        final e = parked[id];
+        if (e != null) { emitted.append(render(e!, transcript: transcript)); }
+    }
+    return emitted;
+}
+
+// wholeLines is the prefix of chunk that ends at its last line break. A chunk whose
+// last byte is not one is a host mid-append, and the fragment after the break is
+// left for the next run to read whole.
+fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+fun offsetOf(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+// encodeRoot names a project directory the way Claude Code does: every byte outside
+// [A-Za-z0-9] becomes a dash. Matching on the encoded root as a PREFIX is what picks
+// up worktrees, whose paths extend the root.
+fun encodeRoot(root: str) > str {
+    final encoded = mut [<str>];
+    foreach (i in 0..root.len()) {
+        final b = root.byte(i) catch 0;
+        final ok = (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122);
+        if (ok) { encoded.append(root.sub(i, len: 1)); } else { encoded.append("-"); }
+    }
+    return encoded.join("");
+}
+
+fun projectDirs(store: str, root: str) > [str] {
+    final declared = env\get("HOST_PROJECT_DIRS") catch "";
+    if (declared != "") { return strings\fields(declared); }
+    final prefix = encodeRoot(root);
+    final dirs = mut [<str>];
+    foreach (name in fs\listDir(store) catch [<str>]) {
+        if (!name.startsWith(prefix)) { continue; }
+        final dir = "{store}/{name}";
+        if (fs\isDir(dir) catch false) { dirs.append(dir); }
+    }
+    return dirs;
+}
+
+// transcripts lists every JSONL file under dir. Subagent transcripts sit a level
+// down, under <sessionId>/subagents/, and carry the orchestrator's session id;
+// excluded, they take the delegated half of every fanned-out session with them.
+fun transcripts(dir: str) > [str] {
+    final found = mut [<str>];
+    fs\walk(dir, callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final store = hook\envOr("HOST_SESSION_STORE", fallback: "{home}/.claude/projects");
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (dir in projectDirs(store, root: root)) {
+        foreach (transcript in transcripts(dir)) {
+            final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
+            final content = fs\readFile(transcript) catch null;
+            if (content == null) { continue; }
+            var offset = offsetOf(mark);
+            // A file smaller than its checkpoint was rotated or replaced, so the offset
+            // describes bytes that no longer exist and reading from it would land mid-record.
+            if (content!.len() < offset) { offset = 0; }
+            if (content!.len() <= offset) { continue; }
+            final whole = wholeLines(content!.sub(offset));
+            if (whole == "") { continue; }
+            foreach (line in extract(whole.split("\n"), transcript: transcript, root: root)) {
+                events.append(line);
+            }
+            marks[mark] = offset + whole.len();
+        }
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Checkpoints are committed only once the stream has been delivered. A load that
+    // failed leaves every offset where it was, so the retry re-reads the same records
+    // instead of the audit quietly losing them.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}
 ```
 
 ## Codex
@@ -455,149 +582,215 @@ after a repository, so each is opened and scoped from the `session_meta` record
 inside it. Codex records no skill loads and no hook output, and its only
 exit-like signal describes a patch rather than a command.
 
-```sh
-#!/usr/bin/env sh
-# magus session load adapter: turns Codex's rollout files into the magus session
-# event contract, one JSON object per line.
-#
-# This file is the source of truth. The docs site embeds it, and you can download
-# it and run it yourself. POSIX sh, no bashisms; nothing in it is magus-internal.
-# Its Claude Code sibling carries the full contract; the fields are identical.
-#
-# Run it with no arguments to pipe the stream into `magus session load`; run it
-# with --stdout to read the stream yourself. Override any of:
-#
-#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
-#                       workspace of the current directory. A cwd UNDER it counts,
-#                       which keeps nested project sessions in
-#   HOST_SESSION_STORE  where Codex keeps its rollout files
-#   SESSION_STATE_DIR   where the per-file offsets live
-#   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
-#
-# Codex records no skill loads and no hook output, and its only exit-like signal
-# is patch_apply_end's success flag, which describes a patch rather than a
-# command. Neither session_meta nor a turn record carries a model name or a CLI
-# version this adapter can point at with confidence, so both are declared none
-# rather than guessed. The coverage line says so, and a report reading it says
-# unobservable for those dimensions rather than zero. Declaring commands=yes on
-# the strength of what the other hosts supply is the failure this line exists
-# to prevent.
-# magus-guard-template: 18
-# magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
+```buzz
+// magus session load adapter: turns Codex's rollout files into the magus session
+// event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, and you can download
+// it and run it yourself. Its Claude Code sibling carries the full contract; the
+// fields are identical, less the agent object this host cannot fill.
+//
+// Run it as `magus buzz -s magus-session-load-codex.buzz` to pipe the stream into
+// `magus session load`; add `-- --stdout` to read the stream yourself. Override any
+// of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A cwd UNDER it counts,
+//                       which keeps nested project sessions in
+//   HOST_SESSION_STORE  where Codex keeps its rollout files
+//   SESSION_STATE_DIR   where the per-file offsets live
+//   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// Codex records no skill loads and no hook output, and its only exit-like signal
+// is patch_apply_end's success flag, which describes a patch rather than a
+// command. Neither session_meta nor a turn record carries a model name or a CLI
+// version this adapter can point at with confidence, so both are declared none
+// rather than guessed. The coverage line says so, and a report reading it says
+// unobservable for those dimensions rather than zero. Declaring commands=yes on
+// the strength of what the other hosts supply is the failure this line exists
+// to prevent.
+// magus-guard-template: 19
+// magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
-# NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
+// EVERY call that can fail is caught: a rollout this run cannot read is not a
+// reason to abandon the rest.
 
-[ -n "$HOST_SESSION_STORE" ] || HOST_SESSION_STORE=$HOME/.codex/sessions
-[ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/codex
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "time";
+import "encoding/json";
+import "lib/hook" as hook;
 
-# Resolve the workspace's own binary before asking it for the active workspace.
-# A session can start below the checkout root; the workspace model is VCS-neutral
-# and its root is not necessarily a Git toplevel.
-if [ -z "$SESSION_MAGUS_BIN" ]; then
-  session_root=$PWD
-  while [ -n "$session_root" ]; do
-    if [ -x "$session_root/magus" ]; then
-      SESSION_MAGUS_BIN=$session_root/magus
-      break
-    fi
-    session_root=${session_root%/*}
-  done
-fi
-[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
-if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
-  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
-fi
+final HOST = "codex";
+final STDOUT_FLAG = "--stdout";
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
-  exit 0
-fi
-
-if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
-  echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2
-  exit 0
-fi
-
-work=$(mktemp -d) || exit 0
-trap 'rm -rf "$work"' EXIT INT TERM
-: > "$work/events"
-: > "$work/marks"
-
-# Codex nests rollouts by date and names none of them after the repository, so
-# every file is opened and scoped from the session_meta record inside it. The
-# session id and cwd arrive on that first record and are carried forward, which
-# is why this folds state rather than mapping each line independently.
-extract() {
-  jq -c -n --arg host codex --arg transcript "$1" --arg root "$2" '
-    def ms: try ((sub("\\.[0-9]+";"") | sub("Z?$";"Z") | fromdateiso8601) * 1000) catch 0;
-    def event($r; $kind; $ref; $text):
-      {host: $host, session: .sid, ts: ($r.timestamp // "" | ms), cwd: .cwd,
-       kind: $kind, ref: $ref, text: $text, transcript: $transcript,
-       outcome: {exit: null, denied: false, interrupted: false}};
-    foreach inputs as $r ({sid: "", cwd: "", e: []};
-      .e = []
-      | if $r.type == "session_meta" then
-          .sid = ($r.payload.session_id // "") | .cwd = ($r.payload.cwd // "")
-        elif .cwd != $root and (.cwd | startswith($root + "/") | not) then .
-        elif $r.type == "custom_tool_call" and ($r.payload.name // "") == "exec" then
-          .e += [event($r; "shell.command"; ($r.payload.call_id // "");
-                       (($r.payload.input | if type == "object" then (.command // "") else . end) | tostring))]
-        elif $r.type == "spawn_agent" then
-          .e += [event($r; "spawn"; ($r.payload.call_id // $r.payload.agent_id // "");
-                       ($r.payload.name // ""))]
-        else . end;
-      .e[])' 2>/dev/null
+// warn says why nothing was extracted; see the Claude Code adapter.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
 }
 
-find "$HOST_SESSION_STORE" -name 'rollout-*.jsonl' -type f 2>/dev/null | while read -r transcript; do
-  mark=$SESSION_STATE_DIR/$(printf '%s' "$transcript" | cksum | cut -d' ' -f1)
-  offset=0
-  [ -f "$mark" ] && offset=$(cat "$mark" 2>/dev/null)
-  case $offset in *[!0-9]*|'') offset=0;; esac
-  size=$(LC_ALL=C wc -c < "$transcript" 2>/dev/null)
-  [ -n "$size" ] || continue
-  [ "$size" -lt "$offset" ] && offset=0
-  [ "$size" -le "$offset" ] && continue
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{ts},\"cwd\":{s(cwd)},"
+        + "\"kind\":{s(kind)},\"ref\":{s(ref)},\"text\":{s(text)},\"transcript\":{s(transcript)},"
+        + "\"outcome\":\{\"exit\":null,\"denied\":false,\"interrupted\":false}}";
+}
 
-  # The whole file, never the unread tail: session_meta is the FIRST record and
-  # carries the session id and cwd every later record is scoped by, so a chunk
-  # starting after it has nothing to scope. Re-reading is cheap here because a
-  # rollout closes when its session ends, and only the open one grows.
-  cat "$transcript" > "$work/chunk" 2>/dev/null
-  if [ -n "$(tail -c 1 "$work/chunk" 2>/dev/null)" ]; then
-    sed '$d' "$work/chunk" > "$work/whole" 2>/dev/null
-  else
-    cat "$work/chunk" > "$work/whole"
-  fi
-  consumed=$(LC_ALL=C wc -c < "$work/whole")
-  [ "$consumed" -gt "$offset" ] || continue
+// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
+fun ms(stamp: str) > int {
+    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed);
+}
 
-  # Emitting from byte 0 every time and letting `session load` dedup on
-  # (host, session, kind, ref) is the trade this host's format forces. The
-  # checkpoint still earns its place: a rollout whose size has not moved is
-  # skipped entirely, which is every closed session after the first run.
-  extract "$transcript" "$HOST_REPO_ROOT" < "$work/whole" >> "$work/events"
-  echo "$mark $consumed" >> "$work/marks"
-done
+fun inScope(cwd: str, root: str) > bool {
+    return cwd == root or cwd.startsWith(root + "/");
+}
 
-if [ -n "$session_stdout" ]; then
-  cat "$work/events"
-else
-  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
-fi
+// extract reads one rollout and returns contract lines.
+//
+// Codex nests rollouts by date and names none of them after the repository, so
+// every file is opened and scoped from the session_meta record inside it. The
+// session id and cwd arrive on that first record and are carried forward, which is
+// why this folds state rather than mapping each line independently.
+fun extract(lines: [str], transcript: str, root: str) > [str] {
+    final emitted = mut [<str>];
+    var session = "";
+    var cwd = "";
+    foreach (line in lines) {
+        if (line == "") { continue; }
+        final r = json\parse(line) catch null;
+        if (r == null) { continue; }
+        final kind = hook\field(r, dotPath: "type");
+        if (kind == "session_meta") {
+            session = hook\field(r, dotPath: "payload.session_id");
+            cwd = hook\field(r, dotPath: "payload.cwd");
+            continue;
+        }
+        if (!inScope(cwd, root: root)) { continue; }
+        final ts = ms(hook\field(r, dotPath: "timestamp"));
+        if (kind == "custom_tool_call" and hook\field(r, dotPath: "payload.name") == "exec") {
+            final input = hook\dig(r, dotPath: "payload.input");
+            var text = hook\field(r, dotPath: "payload.input");
+            if (input is {str: any}) { text = hook\field(input, dotPath: "command"); }
+            emitted.append(render(session, ts: ts, cwd: cwd, kind: "shell.command",
+                ref: hook\field(r, dotPath: "payload.call_id"), text: text, transcript: transcript));
+        } else if (kind == "spawn_agent") {
+            var ref = hook\field(r, dotPath: "payload.call_id");
+            if (ref == "") { ref = hook\field(r, dotPath: "payload.agent_id"); }
+            emitted.append(render(session, ts: ts, cwd: cwd, kind: "spawn",
+                ref: ref, text: hook\field(r, dotPath: "payload.name"), transcript: transcript));
+        }
+    }
+    return emitted;
+}
 
-mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
-while read -r mark position; do
-  printf '%s' "$position" > "$mark" 2>/dev/null
-done < "$work/marks"
+// wholeLines is the prefix of chunk that ends at its last line break, so a record
+// the host is still appending is read whole on the next run.
+fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+fun offsetOf(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+fun rollouts(store: str) > [str] {
+    final found = mut [<str>];
+    fs\walk(store, callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and fs\basename(path).startsWith("rollout-") and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final store = hook\envOr("HOST_SESSION_STORE", fallback: "{home}/.codex/sessions");
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (transcript in rollouts(store)) {
+        final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
+        final content = fs\readFile(transcript) catch null;
+        if (content == null) { continue; }
+        var offset = offsetOf(mark);
+        if (content!.len() < offset) { offset = 0; }
+        if (content!.len() <= offset) { continue; }
+
+        // The whole file, never the unread tail: session_meta is the FIRST record and
+        // carries the session id and cwd every later record is scoped by, so a chunk
+        // starting after it has nothing to scope. Re-reading is cheap here because a
+        // rollout closes when its session ends, and only the open one grows.
+        final whole = wholeLines(content!);
+        if (whole.len() <= offset) { continue; }
+
+        // Emitting from byte 0 every time and letting `session load` dedup on
+        // (host, session, kind, ref) is the trade this host's format forces. The
+        // checkpoint still earns its place: a rollout whose size has not moved is
+        // skipped entirely, which is every closed session after the first run.
+        foreach (line in extract(whole.split("\n"), transcript: transcript, root: root)) {
+            events.append(line);
+        }
+        marks[mark] = whole.len();
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Committed only once the stream has been delivered, so a failed load is retried.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}
 ```
 
 ## OpenCode
@@ -606,146 +799,228 @@ done < "$work/marks"
 contract rather than a store. OpenCode is the only one of the three that records
 a command's exit code, and the only one with no hook records and no spawn part.
 
-```sh
-#!/usr/bin/env sh
-# magus session load adapter: turns `opencode export` output into the magus
-# session event contract, one JSON object per line.
-#
-# This file is the source of truth. The docs site embeds it, and you can download
-# it and run it yourself. POSIX sh, no bashisms; nothing in it is magus-internal.
-# Its Claude Code sibling carries the full contract; the fields are identical.
-#
-# Run it with no arguments to pipe the stream into `magus session load`; run it
-# with --stdout to read the stream yourself. Override any of:
-#
-#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
-#                       workspace of the current directory. A cwd UNDER it counts,
-#                       which keeps nested project sessions in
-#   HOST_SESSION_IDS    the sessions to export, space separated. Default is every
-#                       id `opencode sessions` lists
-#   HOST_OPENCODE_BIN   path to the opencode binary, when it is not on PATH
-#   SESSION_STATE_DIR   where the per-session part counts live
-#   SESSION_MAGUS_BIN   path to the magus binary, when it is not on PATH
-#
-# This one reads a CONTRACT rather than a store: `opencode export` is documented
-# output, where the other two hosts' files are de-facto shapes versioned per
-# record. So it shells out per session instead of walking a directory, and there
-# is no partial-line handling to do - each export is one complete document.
-#
-# OpenCode is the only host of the three that records a command's exit code, and
-# the only one with neither hook records nor a spawn part. The coverage line says
-# both; a report reading it says unobservable, never zero. An export part carries
-# no CLI version and this adapter does not read a per-part model id with enough
-# confidence to publish it, so both new dimensions are declared none rather than
-# guessed.
-# magus-guard-template: 18
-# magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
+```buzz
+// magus session load adapter: turns `opencode export` output into the magus
+// session event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, and you can download
+// it and run it yourself. Its Claude Code sibling carries the full contract; the
+// fields are identical, less the agent object this host cannot fill.
+//
+// Run it as `magus buzz -s magus-session-load-opencode.buzz` to pipe the stream into
+// `magus session load`; add `-- --stdout` to read the stream yourself. Override any
+// of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A cwd UNDER it counts,
+//                       which keeps nested project sessions in
+//   HOST_SESSION_IDS    the sessions to export, space separated. Default is every
+//                       id `opencode sessions` lists
+//   HOST_OPENCODE_BIN   path to the opencode binary, when it is not on PATH
+//   SESSION_STATE_DIR   where the per-session part counts live
+//   SESSION_MAGUS_BIN   path to the magus binary, when it is not on PATH
+//
+// This one reads a CONTRACT rather than a store: `opencode export` is documented
+// output, where the other two hosts' files are de-facto shapes versioned per
+// record. So it runs the export per session instead of walking a directory, and
+// there is no partial-line handling to do: each export is one complete document.
+//
+// OpenCode is the only host of the three that records a command's exit code, and
+// the only one with neither hook records nor a spawn part. The coverage line says
+// both; a report reading it says unobservable, never zero. An export part carries
+// no CLI version and this adapter does not read a per-part model id with enough
+// confidence to publish it, so both are declared none rather than guessed.
+// magus-guard-template: 19
+// magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
 
-# NO `set -e`: a session whose export fails is not a reason to abandon the rest.
+// EVERY call that can fail is caught: a session whose export fails is not a reason
+// to abandon the rest.
 
-[ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/opencode
-[ -n "$HOST_OPENCODE_BIN" ] || HOST_OPENCODE_BIN=$(command -v opencode 2>/dev/null)
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "strings";
+import "encoding/json";
+import "lib/hook" as hook;
 
-# Resolve the workspace's own binary before asking it for the active workspace.
-# A session can start below the checkout root; the workspace model is VCS-neutral
-# and its root is not necessarily a Git toplevel.
-if [ -z "$SESSION_MAGUS_BIN" ]; then
-  session_root=$PWD
-  while [ -n "$session_root" ]; do
-    if [ -x "$session_root/magus" ]; then
-      SESSION_MAGUS_BIN=$session_root/magus
-      break
-    fi
-    session_root=${session_root%/*}
-  done
-fi
-[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
-if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
-  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
-fi
+final HOST = "opencode";
+final STDOUT_FLAG = "--stdout";
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
-  exit 0
-fi
-
-if [ -z "$HOST_OPENCODE_BIN" ] || [ ! -x "$HOST_OPENCODE_BIN" ]; then
-  echo 'magus session load: opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.' >&2
-  exit 0
-fi
-
-if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
-  echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2
-  exit 0
-fi
-
-[ -n "$HOST_SESSION_IDS" ] || HOST_SESSION_IDS=$("$HOST_OPENCODE_BIN" sessions --json 2>/dev/null | jq -r '.[].id // empty' 2>/dev/null)
-
-work=$(mktemp -d) || exit 0
-trap 'rm -rf "$work"' EXIT INT TERM
-: > "$work/events"
-: > "$work/marks"
-
-# An export is one document, so the checkpoint counts PARTS rather than bytes:
-# the first N tool parts of a session are the ones already loaded.
-extract() {
-  jq -c --arg host opencode --arg transcript "$1" --arg root "$2" --argjson skip "$3" '
-    (.session.directory // .directory // "") as $cwd
-    | (.session.id // .id // "") as $sid
-    | if $cwd != $root and ($cwd | startswith($root + "/") | not) then empty else
-        [.parts[]? // (.messages[]?.parts[]? // empty) | select(.callID != null)]
-        | .[$skip:][]
-        | . as $p
-        | (if $p.tool == "bash" then "shell.command"
-           elif $p.tool == "skill" then "skill.load"
-           elif $p.tool == "read" then "file.read"
-           elif $p.tool == "write" or $p.tool == "edit" or $p.tool == "patch" then "file.write"
-           else null end) as $kind
-        | select($kind != null)
-        | {host: $host, session: $sid,
-           ts: (($p.state.time.start // $p.time.start // 0) | floor),
-           cwd: $cwd, kind: $kind, ref: $p.callID,
-           text: (if $p.tool == "bash" then ($p.state.input.command // "")
-                  elif $p.tool == "skill" then ($p.state.input.name // "")
-                  else ($p.state.input.filePath // $p.state.input.path // "") end),
-           transcript: $transcript,
-           outcome: {exit: ($p.state.metadata.exit // null),
-                     denied: (($p.state.status // "") == "error"),
-                     interrupted: false}}
-      end' 2>/dev/null
+// warn says why nothing was extracted; see the Claude Code adapter.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
 }
 
-for sid in $HOST_SESSION_IDS; do
-  mark=$SESSION_STATE_DIR/$(printf '%s' "$sid" | cksum | cut -d' ' -f1)
-  skip=0
-  [ -f "$mark" ] && skip=$(cat "$mark" 2>/dev/null)
-  case $skip in *[!0-9]*|'') skip=0;; esac
+fun inScope(cwd: str, root: str) > bool {
+    return cwd == root or cwd.startsWith(root + "/");
+}
 
-  "$HOST_OPENCODE_BIN" export "$sid" > "$work/export" 2>/dev/null || continue
-  parts=$(jq '[.parts[]? // (.messages[]?.parts[]? // empty) | select(.callID != null)] | length' "$work/export" 2>/dev/null)
-  case $parts in *[!0-9]*|'') continue;; esac
-  [ "$parts" -le "$skip" ] && continue
+fun firstOf(node: any?, dotPaths: [str]) > str {
+    foreach (dotPath in dotPaths) {
+        final value = hook\field(node, dotPath: dotPath);
+        if (value != "") { return value; }
+    }
+    return "";
+}
 
-  extract "opencode://$sid" "$HOST_REPO_ROOT" "$skip" < "$work/export" >> "$work/events"
-  echo "$mark $parts" >> "$work/marks"
-done
+fun kindOf(tool: str) > str? {
+    if (tool == "bash") { return "shell.command"; }
+    if (tool == "skill") { return "skill.load"; }
+    if (tool == "read") { return "file.read"; }
+    if (tool == "write" or tool == "edit" or tool == "patch") { return "file.write"; }
+    return null;
+}
 
-if [ -n "$session_stdout" ]; then
-  cat "$work/events"
-else
-  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
-fi
+fun textOf(tool: str, part: any?) > str {
+    if (tool == "bash") { return hook\field(part, dotPath: "state.input.command"); }
+    if (tool == "skill") { return hook\field(part, dotPath: "state.input.name"); }
+    return firstOf(part, dotPaths: ["state.input.filePath", "state.input.path"]);
+}
 
-mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
-while read -r mark position; do
-  printf '%s' "$position" > "$mark" 2>/dev/null
-done < "$work/marks"
+// toolParts is every part that records a tool call, in export order: the top-level
+// parts when the export has any, the parts of each message otherwise.
+fun toolParts(doc: any?) > [any] {
+    var parts = (hook\dig(doc, dotPath: "parts") as? [any]) ?? [<any>];
+    if (parts.len() == 0) {
+        final nested = mut [<any>];
+        foreach (message in (hook\dig(doc, dotPath: "messages") as? [any]) ?? [<any>]) {
+            foreach (part in (hook\dig(message, dotPath: "parts") as? [any]) ?? [<any>]) {
+                nested.append(part);
+            }
+        }
+        parts = nested;
+    }
+    final calls = mut [<any>];
+    foreach (part in parts) {
+        if (hook\dig(part, dotPath: "callID") != null) { calls.append(part); }
+    }
+    return calls;
+}
+
+// startOf is the part's start time in Unix milliseconds, floored, 0 when absent.
+fun startOf(part: any?) > int {
+    final start = (hook\dig(part, dotPath: "state.time.start") as? double)
+        ?? (hook\dig(part, dotPath: "time.start") as? double)
+        ?? 0.0;
+    return std\toInt(start);
+}
+
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(session: str, cwd: str, part: any?, kind: str, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{startOf(part)},\"cwd\":{s(cwd)},"
+        + "\"kind\":{s(kind)},\"ref\":{s(hook\field(part, dotPath: "callID"))},"
+        + "\"text\":{s(textOf(hook\field(part, dotPath: "tool"), part: part))},\"transcript\":{s(transcript)},"
+        + "\"outcome\":\{\"exit\":{s(hook\dig(part, dotPath: "state.metadata.exit"))},"
+        + "\"denied\":{hook\field(part, dotPath: "state.status") == "error"},\"interrupted\":false}}";
+}
+
+// extract returns the contract lines for the tool parts past the first skip.
+fun extract(doc: any?, parts: [any], skip: int, transcript: str, root: str) > [str] {
+    final emitted = mut [<str>];
+    final cwd = firstOf(doc, dotPaths: ["session.directory", "directory"]);
+    if (!inScope(cwd, root: root)) { return emitted; }
+    final session = firstOf(doc, dotPaths: ["session.id", "id"]);
+    foreach (i, part in parts) {
+        if (i < skip) { continue; }
+        final kind = kindOf(hook\field(part, dotPath: "tool"));
+        if (kind == null) { continue; }
+        emitted.append(render(session, cwd: cwd, part: part, kind: kind!, transcript: transcript));
+    }
+    return emitted;
+}
+
+fun skipOf(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+fun sessionIds(opencode: str) > [str] {
+    final declared = env\get("HOST_SESSION_IDS") catch "";
+    if (declared != "") { return strings\fields(declared); }
+    final listed = proc\exec(opencode, args: ["sessions", "--json"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (listed == null or listed!.code != 0) { return [<str>]; }
+    final ids = mut [<str>];
+    final listing = json\parse(listed!.stdout) catch null;
+    foreach (entry in (listing as? [any]) ?? [<any>]) {
+        final id = hook\field(entry, dotPath: "id");
+        if (id != "") { ids.append(id); }
+    }
+    return ids;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    final opencode = hook\envOr("HOST_OPENCODE_BIN", fallback: proc\which("opencode") catch "");
+    if (opencode == "" or !hook\isExecutable(opencode)) {
+        warn("opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    // An export is one document, so the checkpoint counts PARTS rather than bytes:
+    // the first N tool parts of a session are the ones already loaded.
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (id in sessionIds(opencode)) {
+        final mark = "{stateDir}/{crypto\sha256Hex(id).sub(0, len: 16)}";
+        final exported = proc\exec(opencode, args: ["export", id], opts: {"quiet": true, "allow_failure": true}) catch null;
+        if (exported == null or exported!.code != 0) { continue; }
+        final doc = json\parse(exported!.stdout) catch null;
+        if (doc == null) { continue; }
+        final parts = toolParts(doc);
+        final skip = skipOf(mark);
+        if (parts.len() <= skip) { continue; }
+        foreach (line in extract(doc, parts: parts, skip: skip, transcript: "opencode://{id}", root: root)) {
+            events.append(line);
+        }
+        marks[mark] = parts.len();
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Committed only once the stream has been delivered, so a failed load is retried.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}
 ```

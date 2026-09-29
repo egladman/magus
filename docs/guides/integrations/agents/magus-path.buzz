@@ -1,8 +1,7 @@
 // magus guard hook: judges ONE file path an agent is about to write.
 //
 // Companion to magus-command.buzz, wired to your host's file-editing tool
-// rather than its shell tool. The Buzz port of magus-path.sh, rendering
-// byte-identical replies without jq or a POSIX shell.
+// rather than its shell tool. It needs neither jq nor a POSIX shell.
 //
 // Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz module
@@ -61,20 +60,16 @@
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// claude-code only, and no codex row: codex is wired to magus-path.sh, and a
-// coverage declaration states what a HOST gets. The Codex ask arm is implemented and
-// graded here anyway, so a Codex config can move to Buzz with no window in which a
-// decision renders as nothing.
-// magus-guard-template: 18
+// magus-guard-template: 19
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";
 import "encoding/json";
 import "env";
-import "fs";
-import "path";
 import "proc";
+import "lib/hook" as hook;
 
 final ADVISE_DEFAULT = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}`;
 
@@ -92,115 +87,11 @@ final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse",
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
-// The namespace a host gives a tool served over MCP; see magus-command.buzz.
-final MCP_TOOL_PREFIX = "mcp__";
 
 // What magus's own decoder tests to tell an envelope from a bare path. `\{` escapes the
 // interpolation a lone brace would open.
 final ENVELOPE_PREFIX = "\{";
 
-fun envOr(name: str, fallback: str) > str {
-    final value = env\get(name) catch "";
-    if (value == "") { return fallback; }
-    return value;
-}
-
-fun digKey(node: any?, key: str) > any? {
-    final m = node as? {str: any};
-    if (m == null) { return null; }
-    return m![key];
-}
-
-fun dig(event: any?, dotPath: str) > any? {
-    var cur = event;
-    foreach (key in dotPath.split(".")) {
-        cur = digKey(cur, key: key);
-        if (cur == null) { return null; }
-    }
-    return cur;
-}
-
-fun render(value: any) > str {
-    if (value is str) { return value as str; }
-    return json\stringify(value) catch "null";
-}
-
-// field is `jq -r ".<dotPath> // empty"`: absent reads as the empty string.
-fun field(event: any?, dotPath: str) > str {
-    final value = dig(event, dotPath: dotPath);
-    if (value == null) { return ""; }
-    return render(value);
-}
-
-// rawField is `jq -r ".<dotPath>"`, so an absent field reaches magus as "null".
-fun rawField(event: any?, dotPath: str) > str {
-    final value = dig(event, dotPath: dotPath);
-    if (value == null) { return "null"; }
-    return render(value);
-}
-
-// wholeEvent decides whether `magus shell` gets the whole envelope or just the string
-// HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path`
-// spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.
-fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
-    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
-    final value = dig(event, dotPath: dotPath);
-    if (value == null) { return true; }
-    return !(value is str);
-}
-
-// trimTrailingNewlines matches shell command substitution, which drops every
-// trailing newline from a captured verdict.
-fun trimTrailingNewlines(s: str) > str {
-    var end = s.len();
-    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
-    return s.sub(0, len: end);
-}
-
-// isExecutable answers "could proc\exec run this", which a directory cannot; see
-// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
-// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
-fun isExecutable(candidate: str) > bool {
-    final info = fs\stat(candidate) catch null;
-    if (info == null) { return false; }
-    if ((info!.is_dir as? bool) ?? false) { return false; }
-    final mode = info!.mode as? int;
-    if (mode == null) { return false; }
-    return (mode! & 73) != 0;
-}
-
-// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
-// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
-fun parentDir(dir: str) > str {
-    var i = dir.len() - 1;
-    while (i >= 0) {
-        final ch = dir.sub(i, len: 1);
-        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
-        i = i - 1;
-    }
-    return "";
-}
-
-// resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the
-// magusfile rather than testing ./magus alone. magus-command.buzz carries the full
-// reasoning and the two measurements behind it.
-fun resolveBin() > str {
-    final declared = env\get("__MAGUS_BIN") catch "";
-    if (declared != "") { return declared; }
-    var dir = path\abs(".") catch "";
-    while (dir != "") {
-        final marker = "{dir}/magusfile.buzz";
-        final found = fs\isFile(marker) catch false;
-        if (found) {
-            final candidate = "{dir}/magus";
-            if (isExecutable(candidate)) { return candidate; }
-            break;
-        }
-        dir = parentDir(dir);
-    }
-    return proc\which("magus") catch "";
-}
 
 object Guard {
     bin: str,
@@ -223,7 +114,7 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
 fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
-    return envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
+    return hook\envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
 }
 
 // warn names the file: a host reports a hook's stderr with the entry's matcher at best
@@ -256,18 +147,18 @@ fun agentNameOf(args: [str]) > str {
 
 fun main(args: [str]) > void {
     final agentName = agentNameOf(args);
-    final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
-    final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
-    final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
-    final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
+    final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
 
     // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
     // That file's notices are held to one firing per session and the session id keys them,
     // so it has to read the event to stay quiet; this surface prints nothing by default and
     // needs no key. The cost is that a host writing to a stdin nobody reads can see a broken
     // pipe, which is why the two orders are stated rather than assumed to match.
-    final bin = resolveBin();
-    if (bin == "" or !isExecutable(bin)) {
+    final bin = hook\resolveBin();
+    if (bin == "" or !hook\isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
         // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
         final unavailable = env\get("__MAGUS_UNAVAILABLE_RESPONSE") catch "";
@@ -281,14 +172,14 @@ fun main(args: [str]) > void {
     // A payload that opens like an envelope but does not parse is a TRUNCATED one, not a
     // path. Judged as text it matches no rule and passes; see magus-command.buzz.
     if (raw == null or (event == null and raw!.startsWith(ENVELOPE_PREFIX))) {
-        io\stdout.write(envOr("__MAGUS_UNREADABLE_RESPONSE", fallback: UNREADABLE_DEFAULT)) catch void;
+        io\stdout.write(hook\envOr("__MAGUS_UNREADABLE_RESPONSE", fallback: UNREADABLE_DEFAULT)) catch void;
         return;
     }
-    final session = field(event, dotPath: sessionPath);
+    final session = hook\field(event, dotPath: sessionPath);
     // Forwarded for the reason magus-command.buzz forwards it: a selected path carries no
     // subagent id of its own.
-    final agent = field(event, dotPath: agentPath);
-    final transcript = field(event, dotPath: transcriptPath);
+    final agent = hook\field(event, dotPath: agentPath);
+    final transcript = hook\field(event, dotPath: transcriptPath);
 
     // Codex is the host the entry names, exactly as magus-command.buzz decides it. No
     // Codex rule prompts for a write, so there an ask renders as a deny.
@@ -308,9 +199,9 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    final toolPath = envOr("HOST_TOOL_PATH", fallback: "tool_name");
-    if (!wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
-        payload = rawField(event, dotPath: eventPath) + "\n";
+    final toolPath = hook\envOr("HOST_TOOL_PATH", fallback: "tool_name");
+    if (!hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
+        payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
     final guard = Guard{ bin = bin, payload = payload, response = response };
 
@@ -326,7 +217,7 @@ fun main(args: [str]) > void {
     final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
-    if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 
@@ -334,10 +225,10 @@ fun main(args: [str]) > void {
     // telling them apart matters. Kept identical here so neither surface grows a behavior
     // the other lacks. The difference is only that this one has no default message,
     // because for most hosts an empty response on this surface already means "allow".
-    if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         final failed = env\get("__MAGUS_FAILED_RESPONSE") catch "";
         if (failed != "") { io\stdout.write(failed) catch void; }
         return;
     }
-    io\stdout.write(trimTrailingNewlines(result!.stdout)) catch void;
+    io\stdout.write(hook\trimTrailingNewlines(result!.stdout)) catch void;
 }

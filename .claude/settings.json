@@ -72,6 +72,16 @@
           }
         ],
         "matcher": "Agent|Task|SendMessage"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
       }
     ],
     "SessionStart": [

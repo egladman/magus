@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -59,8 +58,7 @@ func mergeHarness(t *testing.T, root, id string) HarnessPlan {
 			require.NoError(t, err)
 			require.NoError(t, decodeHarnessJSON(body, &doc))
 		}
-		mergeFragment(doc, file.Fragment)
-		encoded, err := json.MarshalIndent(doc, "", "  ")
+		encoded, err := json.MarshalIndent(mergeFragment(doc, file.Fragment), "", "  ")
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(path, append(encoded, '\n'), 0o644))
 	}
@@ -91,8 +89,8 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	assert.Equal(t, original, string(got), "planning writes nothing")
 
 	own := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "my-own-hook"}}}
-	command := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "sh magus-command.sh", "statusMessage": "magus guard: checking command"}}}
-	pathEntry := map[string]any{"match": "write", "commands": []any{map[string]any{"type": "command", "command": "sh magus-path.sh", "timeout": float64(10)}}}
+	command := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz", "statusMessage": "magus guard: checking command"}}}
+	pathEntry := map[string]any{"match": "write", "commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-path.buzz", "timeout": float64(10)}}}
 	assert.Equal(t, map[string]HarnessFile{
 		"test-host/hooks.json": {
 			Exists:   true,
@@ -135,54 +133,6 @@ func TestPlanHarnessRefusesMalformedOrWrongShapeJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "not an object")
 }
 
-// TestHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command, with the plan
-// served from a file where the command reads `magus describe harness`, and pins that it
-// merges exactly what the plan asks: afterwards nothing is left to merge, the person's own
-// entries survive, and a retired entry is gone.
-func TestHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
-	if _, err := exec.LookPath("jq"); err != nil {
-		t.Skip("the merge command needs jq")
-	}
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	path := filepath.Join(root, "test-host", "hooks.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{
-  "large": 9007199254740993,
-  "hooks": {
-    "before": [
-      {"match": "run", "commands": [{"type": "command", "command": "sh old/magus-command.sh"}]},
-      {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
-    ],
-    "after": [{"command": "theirs"}]
-  }
-}`), 0o644))
-
-	plan, err := PlanHarness(context.Background(), root, "test-host")
-	require.NoError(t, err)
-	encoded, err := json.Marshal(plan)
-	require.NoError(t, err)
-	planPath := filepath.Join(t.TempDir(), "plan.json")
-	require.NoError(t, os.WriteFile(planPath, encoded, 0o644))
-	read := "magus describe harness test-host -o json"
-	require.Contains(t, plan.Merge, read)
-	command := strings.ReplaceAll(plan.Merge, read, "cat "+posixQuote(planPath))
-
-	cmd := exec.Command("sh", "-c", command)
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(out))
-
-	requireCurrent(t, root, "test-host")
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	doc := string(body)
-	assert.Contains(t, doc, "9007199254740993")
-	assert.Contains(t, doc, "my-own-hook")
-	assert.Contains(t, doc, `"theirs"`)
-	assert.NotContains(t, doc, "old/magus-command.sh")
-}
-
 func TestPlanHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
@@ -199,7 +149,7 @@ func TestPlanHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "9007199254740993")
 	assert.Contains(t, string(body), "my custom status")
-	assert.Contains(t, string(body), "magus-command.sh")
+	assert.Contains(t, string(body), "magus-command.buzz")
 }
 
 func TestPlanHarnessCanWireReadObserver(t *testing.T) {
@@ -212,7 +162,7 @@ func TestPlanHarnessCanWireReadObserver(t *testing.T) {
   "skills": {"paths": [".agents/skills"], "form": "full"},
   "managed_entries": [{
     "path": ["hooks", "PreToolUse"],
-    "entries": [{"matcher": "Read", "hooks": [{"type": "command", "command": "sh magus-observe.sh"}]}]
+    "entries": [{"matcher": "Read", "hooks": [{"type": "command", "command": "./magus buzz -s magus-observe.buzz"}]}]
   }]
 }`)
 
@@ -221,7 +171,7 @@ func TestPlanHarnessCanWireReadObserver(t *testing.T) {
 
 	body, err := os.ReadFile(filepath.Join(root, "reader/hooks.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "magus-observe.sh")
+	assert.Contains(t, string(body), "magus-observe.buzz")
 
 	result, err := VerifyHarness(context.Background(), root, "reader")
 	require.NoError(t, err)
@@ -254,7 +204,7 @@ func TestPlanHarnessForAMissingFileCreatesIt(t *testing.T) {
 	require.Contains(t, plan.Files, "test-host/hooks.json")
 	assert.False(t, plan.Files["test-host/hooks.json"].Exists)
 	assert.Equal(t,
-		"mkdir -p 'test-host' && magus describe harness test-host -o json | jq --arg p 'test-host/hooks.json' '.files[$p].fragment' > 'test-host/hooks.json'",
+		"magus describe harness test-host -o json | magus buzz -e "+posixQuote(harnessMergeScript),
 		plan.Merge)
 }
 
@@ -277,8 +227,8 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	mergeHarness(t, root, "test-host")
 	// The wired commands now have to actually answer, not merely be present: give
 	// them something real to run.
-	writeStubGuardScript(t, root, "magus-command.sh", "deny")
-	writeStubGuardScript(t, root, "magus-path.sh", "advise")
+	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
+	writeStubGuardScript(t, root, "magus-path.buzz", "advise")
 	result, err = VerifyHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -294,9 +244,9 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
   "config_defaults": {"version": 1},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]},
-    {"path": ["hooks", "afterTool"], "entries": [{"matcher": "Write", "command": "sh cursor-hook.sh"}]},
-    {"path": ["hooks", "sessionStop"], "entries": [{"command": "sh magus-checkpoint.sh"}]}
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "./magus buzz -s cursor-hook.buzz"}]},
+    {"path": ["hooks", "afterTool"], "entries": [{"matcher": "Write", "command": "./magus buzz -s cursor-hook.buzz"}]},
+    {"path": ["hooks", "sessionStop"], "entries": [{"command": "./magus buzz -s magus-checkpoint.buzz"}]}
   ]
 }`)
 
@@ -306,14 +256,14 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join(root, "flat/hooks.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"version": 1`)
-	assert.Contains(t, string(body), "cursor-hook.sh")
+	assert.Contains(t, string(body), "cursor-hook.buzz")
 	assert.Contains(t, string(body), `"beforeShell"`)
 	assert.NotContains(t, string(body), `"hooks": [`)
 
-	// cursor-hook.sh's reply dialect is self-contained (see probeEvent), so the
-	// probe only checks that it answers something; magus-checkpoint.sh renders no
+	// cursor-hook.buzz's reply dialect is self-contained (see probeEvent), so the
+	// probe only checks that it answers something; magus-checkpoint.buzz renders no
 	// verdict at all and is never probed.
-	writeStubGuardScript(t, root, "cursor-hook.sh", "ok")
+	writeStubGuardScript(t, root, "cursor-hook.buzz", "ok")
 	result, err := VerifyHarness(context.Background(), root, "flat")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -332,11 +282,11 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
   "managed_entries": [
     {
       "path": ["hooks", "PreToolUse"],
-      "entries": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "sh magus-command.sh"}]}]
+      "entries": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "./magus buzz -s magus-command.buzz"}]}]
     },
     {
       "path": ["hooks", "Stop"],
-      "entries": [{"hooks": [{"type": "command", "command": "sh magus-checkpoint.sh"}]}]
+      "entries": [{"hooks": [{"type": "command", "command": "./magus buzz -s magus-checkpoint.buzz"}]}]
     }
   ]
 }`)
@@ -344,9 +294,9 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	plan := mergeHarness(t, root, "managed")
 	assert.False(t, plan.Current())
 
-	// magus-checkpoint.sh renders no verdict and is never probed; magus-command.sh
+	// magus-checkpoint.buzz renders no verdict and is never probed; magus-command.buzz
 	// is, so it needs something real behind it now.
-	writeStubGuardScript(t, root, "magus-command.sh", "deny")
+	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
 	result, err := VerifyHarness(context.Background(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -363,7 +313,7 @@ func TestPlanHarnessReplacesSameIdentityInPlace(t *testing.T) {
   "hooks": {
     "before": [{
       "match": "run",
-      "commands": [{"type": "command", "command": "sh magus-command.sh", "statusMessage": "stale status"}]
+      "commands": [{"type": "command", "command": "./magus buzz -s magus-command.buzz", "statusMessage": "stale status"}]
     }]
   }
 }`), 0o644))
@@ -375,7 +325,7 @@ func TestPlanHarnessReplacesSameIdentityInPlace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "magus guard: checking command")
 	assert.NotContains(t, string(body), "stale status")
-	assert.Equal(t, 1, strings.Count(string(body), "magus-command.sh"), "identity match must replace, not append")
+	assert.Equal(t, 1, strings.Count(string(body), "magus-command.buzz"), "identity match must replace, not append")
 }
 
 // TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote pins the upgrade path.
@@ -396,8 +346,8 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{
   "hooks": {
     "before": [
-      {"match": "run", "commands": [{"type": "command", "command": "sh old/magus-command.sh"}]},
-      {"match": "write", "commands": [{"type": "command", "command": "sh old/magus-path.sh"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "./magus buzz -s old/magus-command.buzz"}]},
+      {"match": "write", "commands": [{"type": "command", "command": "./magus buzz -s old/magus-path.buzz"}]},
       {"match": "run", "commands": [{"type": "command", "command": "magus session notify"}]},
       {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
     ]
@@ -416,10 +366,10 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	doc := string(body)
-	assert.NotContains(t, doc, "old/magus-command.sh", "the previous descriptor's entry is retired, not kept beside the new one")
-	assert.NotContains(t, doc, "old/magus-path.sh")
-	assert.Equal(t, 1, strings.Count(doc, "magus-command.sh"), "exactly one command entry")
-	assert.Equal(t, 1, strings.Count(doc, "magus-path.sh"), "exactly one path entry")
+	assert.NotContains(t, doc, "old/magus-command.buzz", "the previous descriptor's entry is retired, not kept beside the new one")
+	assert.NotContains(t, doc, "old/magus-path.buzz")
+	assert.Equal(t, 1, strings.Count(doc, "magus-command.buzz"), "exactly one command entry")
+	assert.Equal(t, 1, strings.Count(doc, "magus-path.buzz"), "exactly one path entry")
 	assert.Contains(t, doc, "magus session notify", "a reader's own magus hook is theirs to keep")
 	assert.Contains(t, doc, "my-own-hook")
 
@@ -509,7 +459,7 @@ func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 func TestInvokesMagusRejectsGenericGuardScripts(t *testing.T) {
 	assert.False(t, invokesMagus("sh host-guard.sh"))
 	assert.False(t, invokesMagus("echo shell"))
-	assert.True(t, invokesMagus("sh docs/guides/integrations/agents/cursor-hook.sh"))
+	assert.True(t, invokesMagus("magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz"))
 	assert.True(t, invokesMagus("magus shell -o json"))
 	assert.True(t, invokesMagus("./magus session notify"))
 }
@@ -585,17 +535,19 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	assert.Equal(t, "spell/hooks.json", d.Config.Path)
 }
 
-// writeStubGuardScript drops a trivial POSIX sh script at root/name that drains
-// stdin and prints output verbatim, standing in for a shipped guard script so
-// VerifyHarness's probe (harness_probe.go) has something real to execute. Tests
-// that only exercise PlanHarness's own merge mechanics do not need this;
-// only a test that calls VerifyHarness against a command probeHarnessCommands
-// recognizes as guard-shaped does, now that presence alone no longer earns
-// HarnessVerified. See harness_probe_test.go for the probe's own tests.
+// writeStubGuardScript registers output as the answer to the glue file called name,
+// and puts a stub magus at root/magus that drains stdin and prints the answer
+// registered for whichever glue file its argv names. It stands in for magus running
+// the shipped glue, so VerifyHarness's probe (harness_probe.go) has something real
+// to execute when a harness wires `./magus buzz -s <glue>`. Tests that only exercise
+// PlanHarness's own merge mechanics do not need this; only a test that calls
+// VerifyHarness against a command probeHarnessCommands recognizes as guard-shaped
+// does. See harness_probe_test.go for the probe's own tests.
 func writeStubGuardScript(t *testing.T, root, name, output string) {
 	t.Helper()
-	script := "#!/bin/sh\ncat >/dev/null\nprintf '%s' '" + output + "'\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stub-"+name), []byte(output), 0o644))
+	const stub = "#!/bin/sh\ncat >/dev/null\nfor a in \"$@\"; do [ -f \"stub-$a\" ] && exec cat \"stub-$a\"; done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(stub), 0o755))
 }
 
 // writeTestHarness registers the "test-host" fixture as a fake harness spell. root
@@ -612,8 +564,8 @@ func writeTestHarness(t *testing.T, root string) {
   "managed_entries": [{
     "path": ["hooks", "before"],
     "entries": [
-      {"match": "run", "commands": [{"type": "command", "command": "sh magus-command.sh", "statusMessage": "magus guard: checking command"}]},
-      {"match": "write", "commands": [{"type": "command", "command": "sh magus-path.sh", "timeout": 10}]}
+      {"match": "run", "commands": [{"type": "command", "command": "./magus buzz -s magus-command.buzz", "statusMessage": "magus guard: checking command"}]},
+      {"match": "write", "commands": [{"type": "command", "command": "./magus buzz -s magus-path.buzz", "timeout": 10}]}
     ]
   }]
 }`)
@@ -956,7 +908,7 @@ func harnessSpellName(t *testing.T, id string) string {
 
 // namedGlue matches a hook command that reaches glue which reads its host from the argv.
 // rehydrate reads none, and is left out on purpose.
-var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.(sh|buzz)|cursor-hook\.sh`)
+var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.buzz|cursor-hook\.buzz`)
 
 // hookCommands collects every "command" string in a host's hook config.
 func hookCommands(t *testing.T, path string) []string {

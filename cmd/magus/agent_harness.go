@@ -248,7 +248,7 @@ func writeHarnessPlan(w io.Writer, plan agent.HarnessPlan) error {
 				printf("    %s %s: %s\n", change.Op, change.Key, value)
 			}
 		}
-		printf("merge it yourself (magus never writes host config; needs jq):\n  %s\n", plan.Merge)
+		printf("merge it yourself (magus never writes host config):\n  %s\n", plan.Merge)
 	}
 	if plan.MCPHint != "" {
 		printf("mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", plan.ID, plan.MCPHint)

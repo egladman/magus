@@ -121,8 +121,8 @@ import (
 // 58: magus-query says every result names its own next step, and that following it is
 // optional. The breadcrumb is a field on the result now, so a reader that never meets
 // the text still meets the suggestion.
-// 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
-// onto the bytes magus_output already returns, keyed by project instead of by ref.
+// 59: magus-run stops naming the tail_log tool, which is gone. It was a second door
+// onto the bytes magus\output already returns, keyed by project instead of by ref.
 // 60: magus-buzz-write says `magus` is a host module and the import is what makes the
 // namespace exist. It used to read as "also available in a script", from when the
 // namespace was a session global an import never had to name.
@@ -229,7 +229,22 @@ import (
 // 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
 // adapted harness through `magus describe harness`, which prints the host config and the
 // merge command a person runs; magus never writes host config.
-const SkillVersion = 92
+// 93: `magus agent harness apply` and `remove` return. apply merges host config after
+// confirming each file (--yes skips); remove stays unprompted for lockout recovery.
+// describe harness still prints the plan and a magus buzz fallback.
+// 94: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
+// and the member (`magus\query`, `magus\run`, ...). `{{tool}}` resolves a bare
+// tool name, and `{{buzz}}` resolves a top-level method.
+// 95: where, run_affected, affected_plan, and affected_explain fold into client
+// (`magus\where`, `magus\affected`, `magus\cmd`). config_get is config
+// and console_present is console. The blast radius member is magus\impact.
+// 96: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
+// 97: `magus agent harness apply` and `remove` are gone again; magus-workspace-rules
+// sends a forked harness through `magus describe harness`. magus-run says a direct
+// `client` call is bounded at 10 minutes and names `magus affected list`. magus-memory
+// passes refs as a list, magus-query pages with limit and offset, and insight names a
+// `magus buzz` fallback where it has no CLI verb.
+const SkillVersion = 97
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -473,9 +488,9 @@ var skillFuncs = template.FuncMap{
 		return c.StringAs(hint.DefaultBinaryName), nil
 	},
 	"tool": func(verb string) (string, error) {
-		t, ok := hint.LookupTool("magus_" + verb)
+		t, ok := hint.LookupTool(verb)
 		if !ok {
-			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", "magus_"+verb)
+			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", verb)
 		}
 		return t.String(), nil
 	},
@@ -508,21 +523,26 @@ var skillFuncs = template.FuncMap{
 		}
 		return "[" + code + "](" + types.CodeURL(c) + ")", nil
 	},
-	// buzz renders a call into the magus host module from "namespace.method":
-	// magus\harness.provider. These are the load-bearing lines in magus-workspace-rules,
-	// the calls a workspace makes to wire a host or strengthen the guard, so a renamed
-	// method would teach a call that errors in the one place a reader cannot check it.
+	// buzz renders a call into the magus host module: "query" is magus\query, and
+	// "harness.provider" is magus\harness.provider. These are the load-bearing lines
+	// a skill teaches, so a renamed method fails install rather than teaching a call
+	// that errors in the one place a reader cannot check it.
 	//
 	// The backslash is namespace access and the dot is member access on the object the
 	// namespace resolves to, which is why this walks Namespaces rather than Methods.
 	"buzz": func(call string) (string, error) {
-		space, method, ok := strings.Cut(call, ".")
-		if !ok {
-			return "", fmt.Errorf("buzz call %q must be \"namespace.method\"", call)
-		}
+		space, method, nested := strings.Cut(call, ".")
 		for _, m := range hostmodules.All() {
 			if m.Name != magusModule {
 				continue
+			}
+			if !nested {
+				for _, decl := range m.Methods {
+					if buzzSurfaceName(decl) == call {
+						return magusModule + `\` + call, nil
+					}
+				}
+				return "", fmt.Errorf(`no method %q on the %s module`, call, magusModule)
 			}
 			for _, ns := range m.Namespaces {
 				if ns.Name != space {
@@ -636,7 +656,7 @@ var skillSources = []skillSource{
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-multi-agent/SKILL.md"},
 	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md"},
-	{name: "magus-memory", description: "Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
+	{name: "magus-memory", description: "Maintain a user-owned per-repository memory through the client MCP tool (magus\\memory) or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
 	{name: "magus-run", description: "Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).", bodyPath: "skills/magus-run/SKILL.md"},
 	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},

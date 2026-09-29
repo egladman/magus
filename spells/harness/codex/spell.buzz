@@ -27,37 +27,45 @@ fun codex_skills_paths() > [str] {
     return [".agents/skills"];
 }
 
-// codex_named_command runs one sh glue script with `--agent-name` and this spell's own
-// mgs_getName(), the one identity the glue acts on. Rendered here, from the declaration,
-// so the name on the command cannot drift from the harness it belongs to; the glue
-// refuses a call without it (MGS3024) rather than guessing a host. env is a per-entry
-// variable prefix, which works here because Codex runs a hook command through a shell.
-fun codex_named_command(script: str, env: str) > str {
-    return "{env}sh docs/guides/integrations/agents/{script}.sh --agent-name {mgs_getName()}";
+// codex_buzz_command runs one Buzz glue script as a plain argv, the same shape the
+// claude-code spell renders; see claude_interpreter there for why the interpreter is
+// PATH's `magus`. Flags ride after `--`, which `magus buzz` forwards to the script.
+fun codex_buzz_command(script: str, flags: [str]) > str {
+    final base = "magus buzz -s docs/guides/integrations/agents/{script}.buzz";
+    if (flags.len() == 0) { return base; }
+    return base + " -- " + flags.join(" ");
 }
 
+// codex_named_command names this host on the glue's argv: `--agent-name` and the spell's
+// own mgs_getName(), the one identity the glue acts on. Rendered here, from the
+// declaration, so the name on the command cannot drift from the harness it belongs to;
+// the glue refuses a call without it (MGS3024) rather than guessing a host.
+fun codex_named_command(script: str) > str {
+    return codex_buzz_command(script, flags: ["--agent-name", mgs_getName()]);
+}
+
+// One command serves the Bash, Read, MCP and PermissionRequest matchers: the glue reads
+// off the event whether to forward it whole, so an MCP call needs nothing on its entry.
 fun codex_guard_command() > str {
-    return codex_named_command("magus-command", env: "");
+    return codex_named_command("magus-command");
 }
 
 fun codex_path_command() > str {
-    return codex_named_command("magus-path", env: "");
+    return codex_named_command("magus-path");
 }
 
 fun codex_observe_command() > str {
-    return codex_named_command("magus-observe", env: "");
+    return codex_named_command("magus-observe");
 }
 
-fun codex_mcp_command() > str {
-    return codex_named_command("magus-command", env: "HOST_EVENT_RAW=1 ");
-}
-
+// Codex parses a SessionStart hook's stdout as a reply, so the brief has to arrive as
+// JSON, and its instruction file is AGENTS.md.
 fun codex_rehydrate_command() > str {
-    return "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh";
+    return codex_buzz_command("magus-rehydrate", flags: ["--format", "json", "--rules", "AGENTS.md"]);
 }
 
 fun codex_checkpoint_command() > str {
-    return codex_named_command("magus-checkpoint", env: "");
+    return codex_named_command("magus-checkpoint");
 }
 
 fun codex_command_hook(cmd: str, status: str) > {str: any} {
@@ -84,7 +92,10 @@ fun codex_entries() > [any] {
                 codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking command"),
                 codex_pretool_entry("Edit|Write", codex_path_command(), "magus guard: checking file"),
                 codex_pretool_entry("Read", codex_observe_command(), "magus: recording read"),
-                codex_pretool_entry("mcp__.*", codex_mcp_command(), "magus guard: checking MCP tool call"),
+                // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
+                // the read rules judge it like the shell read it replaces.
+                codex_pretool_entry("Read", codex_guard_command(), "magus guard: checking read"),
+                codex_pretool_entry("mcp__.*", codex_guard_command(), "magus guard: checking MCP tool call"),
             ],
         },
         {
@@ -225,30 +236,28 @@ test "every glue command names this host on its argv, and rehydrate takes none" 
     assert\isTrue(codex_guard_command().endsWith(named), "command surface");
     assert\isTrue(codex_path_command().endsWith(named), "path surface");
     assert\isTrue(codex_observe_command().endsWith(named), "read surface");
-    assert\isTrue(codex_mcp_command().endsWith(named), "mcp surface");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
-    foreach (cmd in [codex_guard_command(), codex_path_command(), codex_observe_command(),
-            codex_mcp_command(), codex_checkpoint_command()]) {
-        assert\isTrue(cmd.indexOf("AGENT_NAME=") == null, "the host rides on argv, never in the environment: {cmd}");
-    }
 }
 
-test "guard commands name the shared templates" {
-    assert\isTrue(codex_guard_command().indexOf("magus-command.sh") != null, "command surface");
-    assert\isTrue(codex_path_command().indexOf("magus-path.sh") != null, "path surface");
-    assert\isTrue(codex_observe_command().indexOf("magus-observe.sh") != null, "read observe");
-    assert\isTrue(codex_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
-    assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_FORMAT=json") != null, "SessionStart needs JSON stdout");
-    assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_RULES=AGENTS.md") != null, "Codex reads AGENTS.md");
-    assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
+test "guard commands name the Buzz glue as a plain argv" {
+    assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command surface");
+    assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path surface");
+    assert\isTrue(codex_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
+    assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart needs JSON stdout and AGENTS.md");
+    assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
+    foreach (cmd in [codex_guard_command(), codex_path_command(), codex_observe_command(),
+            codex_rehydrate_command(), codex_checkpoint_command()]) {
+        assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
+        assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
+    }
 }
 
 test "harness_prompts keeps the git push prompt rule the shared template looks for" {
     final prompts = codex_prompts();
     assert\equal(prompts.len(), 1, "one rules file");
     assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
-    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-command.sh greps this exact pattern");
+    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-command.buzz looks for this exact pattern");
     assert\isTrue(codex_rules().indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
 }
 
@@ -278,7 +287,13 @@ test "harness_entries covers PreToolUse PermissionRequest SessionStart and Stop"
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 4, "Bash EditWrite Read and mcp matchers");
+    assert\equal(pre_entries.len(), 5, "Bash EditWrite Read-observe Read-guard and mcp matchers");
+    var judged = false;
+    foreach (entry in pre_entries) {
+        final hooks = entry["hooks"] as [any];
+        if ("{entry["matcher"]}" == "Read" and "{hooks[0]["command"]}" == codex_guard_command()) { judged = true; }
+    }
+    assert\isTrue(judged, "a Read is judged as the read it stands for");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

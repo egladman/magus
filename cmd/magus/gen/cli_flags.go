@@ -99,6 +99,8 @@ const (
 	FlagBuzzEmbedded = "embedded"
 	// buzz: --no-autoload
 	FlagBuzzNoAutoload = "no-autoload"
+	// buzz: --profile
+	FlagBuzzProfile = "profile"
 	// buzz: --t
 	FlagBuzzT = "t"
 	// buzz: --test
@@ -1925,6 +1927,7 @@ type BuzzFlags struct {
 	Test         bool   // -t, --test
 	Check        bool   // --check
 	Coverprofile string // --coverprofile
+	Profile      bool   // --profile
 	Embedded     bool   // --embedded
 	NoAutoload   bool   // --no-autoload
 	C            string // -C
@@ -1938,6 +1941,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
+	fs.BoolVar(&f.Profile, FlagBuzzProfile, false, "Print where compile and import time went, after the script runs")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")

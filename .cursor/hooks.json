@@ -1,36 +1,32 @@
 {
+  "version": 1,
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
-      }
-    ],
-    "postToolUse": [
-      {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
-        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch"
-      },
-      {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
-        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|WebSearch|WebFetch"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
       }
     ],
     "preToolUse": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
-        "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit"
+        "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
       }
     ],
-    "sessionEnd": [
+    "postToolUse": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
+        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
       }
     ],
     "subagentStart": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
       }
     ]
-  },
-  "version": 1
+  }
 }

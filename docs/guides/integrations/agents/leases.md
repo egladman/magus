@@ -9,7 +9,7 @@ tags:
     checkpoint,
     magus vcs checkpoint,
     magus job,
-    magus_job,
+    client,
     console,
     activity,
   ]
@@ -36,15 +36,15 @@ partition by write set rather than by affected project, prove the jobs cannot
 collide, narrow the scope at every level, match a model to each job. This page is the surface
 that skill writes to and reads from.
 
-| step                      | surface                                         |
-| ------------------------- | ----------------------------------------------- |
-| Record the working state  | `magus vcs checkpoint`, `magus_vcs_checkpoint`  |
-| Declare the work          | `magus job fork`, `magus_job`                   |
-| Hand out the jobs         | the host's own spawn, recorded but never judged |
-| Give the holder its terms | `magus describe job <job>`                      |
-| Take the lease            | `magus job exec <job>`                          |
-| Watch it                  | `magus ls jobs`, the console Jobs view          |
-| Return and verify         | `magus job exit`, `magus job wait`              |
+| step                      | surface                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| Record the working state  | `magus vcs checkpoint`, `client` (`magus\vcs.checkpoint`) |
+| Declare the work          | `magus job fork`, `client` (`magus\job.put`)              |
+| Hand out the jobs         | the host's own spawn, recorded but never judged           |
+| Give the holder its terms | `magus describe job <job>`                                |
+| Take the lease            | `magus job exec <job>`                                    |
+| Watch it                  | `magus ls jobs`, the console Jobs view                    |
+| Return and verify         | `magus job exit`, `magus job wait`                        |
 
 Only one thing in that table enforces, and it is not the store. The job row is a
 declaration, the checkpoint is a reading, and the console renders both. The
@@ -95,7 +95,7 @@ The command takes no arguments: it reports the whole workspace's working state.
 A path argument is refused rather than ignored, because
 `magus vcs checkpoint <path>` would read as a path-scoped digest, which is a
 different and much narrower fact. Agents connected over
-[MCP](../mcp.md) call `magus_vcs_checkpoint`, which takes no parameters and
+[MCP](../mcp.md) call `client` (`magus\vcs.checkpoint`), which takes no parameters and
 returns the same record. Full flags: [`magus vcs`](../../../reference/manpage/magus-vcs.md).
 
 ## Declare the work
@@ -181,13 +181,13 @@ releases a path), end its own job, and fork a child of itself inside its own
 paths. Every other write is refused, by name and with the remedy: widening a
 boundary, changing the plan's shape, and verifying a result are the forking
 session's. The rule lives in the store rather than in a guard pattern because
-the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
+the CLI, the `client` tool (`magus\job`) and a magusfile's `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
 the orchestrator or a person at a terminal, writes anything.
 
 **A child is forked with `--parent <your job>`.** The guard lets a leased
 session fork a NEW row that names its own job as `parent`, as flags, as a
-`--stdin` record in a quoted heredoc, or as `magus_job` `op=fork` with
+`--stdin` record in a quoted heredoc, or as `client` calling `magus\job.put` with
 `parent`, and leaves its boundary to the store: a child claiming more than its
 parent is refused there, once. The store grades a child only when it writes as
 that lease, which it reads from the checkout's binding; a worker the guard
@@ -213,7 +213,7 @@ file and the job that holds the checkout, and the fix it names is a worktree
 rather than a narrower boundary. Half-saved, one of those files stops the workspace
 loading for EVERY worker in the checkout at once: they lose `magus run`, `magus
 ls` and their own tests, over an edit none of them made and none of them can
-see. The same three doors are covered, since `magus job fork`, `magus_job` and
+see. The same three doors are covered, since `magus job fork`, `client` (`magus\job.put`) and
 `magus\job.put` share one declaration path.
 
 Nothing else about a shared checkout is refused. Two sets of write paths that
@@ -242,7 +242,7 @@ carried forward the first time the new one opens it.
 and deny paths that then read as deliberate rather than forgotten.
 
 **A timeout is optional.** `magus job fork <job> --timeout 2h` (or `timeout` in
-the `--stdin` record or the `magus_job` call) has the store stamp a `deadline`
+the `--stdin` record or the `client` call) has the store stamp a `deadline`
 on the row at fork time; nothing accepts a deadline directly. It is unset by
 default, and a job with acceptance criteria needs no bound. Past the deadline the
 guard denies every write graded under that lease and its write paths stop
@@ -297,7 +297,7 @@ updated within `jobs.stale_after`, naming `magus job exit <id>` for each, and
 could not prove dead, so ending them stays yours.
 
 Three doors write the store and they reach one set of rules: `magus job` is the
-person's, `magus_job` is the agent's, and `magus\job` is a magusfile's.
+person's, `client` (`magus\job`) is the agent's, and `magus\job` is a magusfile's.
 
 ```sh
 magus ls jobs                # every job, parents above the ones they forked
@@ -308,7 +308,7 @@ magus describe job <job>     # one job's terms
 ### Jobs magus ends itself
 
 Every read of the store (`magus ls jobs`, `magus job fork`, the guard's lease
-lookup, `magus doctor`, the `magus_job` tool) first ends each live job magus can
+lookup, `magus doctor`, `client` calling `magus\job`) first ends each live job magus can
 prove nobody holds, as `no_return` with an `end_reason`, and prints one line per
 job on stderr:
 
@@ -364,7 +364,7 @@ beside the checkpoint the job was handed, with the divergence between them as a
 fact rather than a refusal, and the checkout it was taken in.
 
 **The guard binds the caller, not the checkout.** When the guard hook lets
-`magus job exec <job>` (or `magus_job op=exec`) through, it records that the
+`magus job exec <job>` through, it records that the
 caller acts under the job, keyed on exactly the host, session and subagent ids
 the host put on the hook call. So several workers sharing one checkout each hold
 their own lease, each has its own write paths graded, and none of them binds the
@@ -452,7 +452,7 @@ A small change to a path a live job owns does not need a new worker or the
 job ended. Enter the path first, then write it:
 
 ```sh
-magus_job op=fork id=<job> enter=<path>
+# client tool: magus\job.put("<job>", opts: {"enter": "<path>"})
 echo '{"schema_version": 11, "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
 ```
 
@@ -616,7 +616,7 @@ you is the next section's subject.
 A job's acceptance criteria are prose a person grades. A **goal** is the part
 magus grades itself, and `magus job wait` will not record `pass` until every one
 verifies. Goals are data: they live in the job record's `goals`, which
-`magus job fork --stdin`, the `magus_job` tool's `fork` op and `magus\job.put`
+`magus job fork --stdin`, the `client` tool's `magus\job.put` and a magusfile's `magus\job.put`
 all accept. There are no flags for them. `fork` refuses a job that writes and
 declares neither a `check` nor a goal, since `wait` would have nothing to grade
 it by; a `read_only` job is exempt.

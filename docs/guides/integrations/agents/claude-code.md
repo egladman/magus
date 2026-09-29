@@ -19,7 +19,7 @@ event.
 | command surface  | deny and advise both reach the model                          |
 | file surface     | deny and advise both reach the model                          |
 | MCP call surface | deny and advise both reach the model                          |
-| read observation | `PreToolUse` on the read tool                                 |
+| read surface     | `PreToolUse` on the read tool: recorded, and judged as `cat`  |
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
@@ -85,8 +85,8 @@ magus describe harness claude-code
 magus agent harness verify --id claude-code
 ```
 
-The spell installs entries for commands, file edits, Magus MCP tool calls, read
-observation, and sub-agent spawns. Each runs a shipped script that talks to
+The spell installs entries for commands, file edits, Magus MCP tool calls, reads
+(recorded and judged), and sub-agent spawns. Each runs a shipped script that talks to
 `magus shell`:
 
 ```json
@@ -111,11 +111,8 @@ scripts are the glue; the harness only prints the fragments that name them.
 See [guard templates](guard-templates.md) for the files and the variables that
 adapt them.
 
-The Claude Code harness wires the Buzz form, which needs neither a POSIX shell
-nor `jq`. Its sh twin, `magus-command.sh`, is the same guard and renders the
-same replies; an executed case runs both against every recorded event and fails
-on one byte of difference. Wire the sh copy instead if you would rather not pin
-the guard to a `magus buzz`, and see below for what that pin costs.
+The glue is Buzz, which needs neither a POSIX shell nor `jq`. It does pin the
+guard to a `magus buzz`; see below for what that pin costs.
 
 `./magus` when the workspace carries its own binary, `magus` otherwise. Apply
 decides, because a hook command is one string with no shell in it to test a file
@@ -126,12 +123,10 @@ path would ship one machine's layout to every clone.
 Every entry is a plain argv: `<interpreter> buzz -s <file>`, with at most a
 `-- <flags>` tail and never a `VAR=value` prefix. Claude Code splits a hook command
 itself rather than handing it to a shell, so a leading assignment is a word it would
-look for a program named after. The two knobs that used to ride there are gone from
-this config for that reason: the glue reads whether to forward the whole event off
-the event itself, and takes the `magus shell` flags an entry declares from the argv
-after `--`, which `magus buzz` forwards to the script. The sh twins keep their
-environment variables, because `sh` is what runs them and `sh` is what reads a
-variable; that is the one place the two forms differ by design.
+look for a program named after. So nothing per entry rides in the environment: the
+glue reads whether to forward the whole event off the event itself, and takes the
+`magus shell` flags an entry declares from the argv after `--`, which `magus buzz`
+forwards to the script.
 
 ### When the hook itself cannot run
 
@@ -202,12 +197,19 @@ denying or advising on one - which is the honest state to ship rather than
 silence. The next rule this surface grows reaches the model the moment it
 ships, with no new host wiring, because the transport is already here.
 
-## Recording what was read
+## Recording and judging what was read
 
-A third `PreToolUse` entry, matching `Read`, runs
+Two `PreToolUse` entries match `Read`. The first runs
 [`magus-observe.buzz`](guard-templates.md#magus-observebuzz). It judges
 nothing and prints nothing: it records the path on the activity trail so a later
 `magus session show` can say what a session looked at, not only what it changed.
+
+The second runs `magus-command.buzz`, which restates the read as the shell line
+it stands for: `cat <file>`, or `sed -n <first>,<last>p <file>` over the call's
+offset and limit, a limit over 300 counting as whole. The read rules then judge
+it as they judge that `cat`: a whole read of a Go, Buzz or Markdown file over
+120 lines is refused with the file's map, and a bounded read inside one indexed
+declaration is advised toward `magus refs`.
 
 ```json
 {
@@ -222,15 +224,25 @@ nothing and prints nothing: it records the path on the activity trail so a later
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-This repository dogfoods it, and it is the one job here that is deliberately not
-carried to the other hosts: it changes no verdict, so a reader who skips it loses
-detail in a trail rather than enforcement.
+The observer is the one job here that is deliberately not carried to every host:
+it changes no verdict, so a reader who skips it loses detail in a trail rather
+than enforcement. The judging entry is enforcement, and Codex carries it too.
 
 ## Lease capture
 
@@ -424,7 +436,7 @@ the block on sessions that would have been fine without it.
 
 Every line is read off the disk when the hook runs, so nothing in it can be a
 retelling of a retelling. It restates no rule: the last line names the files your
-rules live in, `CLAUDE.md` by default and `REHYDRATE_RULES` when yours is
+rules live in, `CLAUDE.md` by default and `-- --rules <file>` when yours is
 somewhere else. Run `magus session --brief` yourself to see what a session will
 be handed.
 

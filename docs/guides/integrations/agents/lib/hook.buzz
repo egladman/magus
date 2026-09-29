@@ -1,0 +1,243 @@
+// Shared glue for the Buzz hook templates in the directory above this one.
+//
+// One copy of the walk up to the magusfile, the event-field readers, and the
+// once-per-session notice. Per-template copies drifted: a comment shortened in
+// one file, a warn dropped in another, and a reader could not tell which copy was
+// the one a measurement had justified.
+//
+// This file imports no magus module and no spell. That is what keeps a hook's
+// workspace CLOSED. Opening one costs roughly 700ms, and a read or a shell hook
+// pays it on every tool call. Importing this file does not open the workspace:
+// it is Buzz beside the template, resolved relative to it, so a hook whose
+// working directory is the host's session directory still finds it.
+//
+// A template imports it as `hook`. The alias keeps a template's own names
+// (observe's string-only field, each template's warn) from colliding with these.
+
+import "encoding/json";
+import "env";
+import "fs";
+import "io";
+import "os";
+import "path";
+import "proc";
+import "std";
+
+// The namespace a host gives a tool served over MCP. wholeEvent matches it so an
+// MCP call is forwarded whole rather than reduced to a command field it happens
+// to carry. Matching the namespace only ever adds a whole-envelope answer.
+final MCP_TOOL_PREFIX = "mcp__";
+
+export fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+fun digKey(node: any?, key: str) > any? {
+    final m = node as? {str: any};
+    if (m == null) { return null; }
+    return m![key];
+}
+
+// dig walks a dot-path and returns null where the field is absent.
+export fun dig(event: any?, dotPath: str) > any? {
+    var cur = event;
+    foreach (key in dotPath.split(".")) {
+        cur = digKey(cur, key: key);
+        if (cur == null) { return null; }
+    }
+    return cur;
+}
+
+// render prints a string bare and anything else as JSON, so a number reaches magus
+// without quotes.
+fun render(value: any) > str {
+    if (value is str) { return value as str; }
+    return json\stringify(value) catch "null";
+}
+
+// field is the absent-as-empty read. rawField leaves an absent field as the
+// literal "null"; its callers reach it only once wholeEvent has found a string.
+export fun field(event: any?, dotPath: str) > str {
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return ""; }
+    return render(value);
+}
+
+export fun rawField(event: any?, dotPath: str) > str {
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return "null"; }
+    return render(value);
+}
+
+// wholeEvent decides which of the two payloads magus shell gets: the whole
+// envelope, or the one string a dot-path selects out of it.
+//
+// Selecting a field is the narrow case and needs two facts at once. Everything
+// else forwards the envelope, because magus's decoder knows every payload shape
+// magus reads and answers "nothing to judge" for the rest, while a field taken
+// out of a shape this file did not recognize is judged as a command. Judging the
+// wrong string is silent in both directions. Refusing is not the safer answer:
+// the command port fails open, and a deny it cannot justify is one a reader
+// routes around.
+//
+// The two facts:
+//
+//   1. The tool is not an MCP call. magus shell reads an MCP call off the tool
+//      name, ahead of any command in the params, so a params object that happens
+//      to carry a command key must not be reduced to that key. mcp__<server>__
+//      <tool> is the naming convention the hosts wired here use, and matching
+//      the namespace only ever adds a whole-envelope answer.
+//   2. The dot-path selects a string. A spawn is a prompt plus a subagent type,
+//      a skill load is a skill name, an MCP call is a tool name plus params:
+//      none of them carries the command field, so the field is absent and the
+//      envelope goes whole. Present but not a string takes the same road.
+//
+// No host publishes a schema that could settle this on types. Codex's published
+// pre-tool-use input declares tool_input as unconstrained. Claude Code types its
+// settings and its hook stdout, not an event. Cursor publishes no hook input
+// schema. Shape is the only fact on offer.
+export fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return true; }
+    return !(value is str);
+}
+
+// trimTrailingNewlines matches shell command substitution, which drops every
+// trailing newline from a captured verdict.
+export fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+export fun firstLine(s: str) > str {
+    return s.split("\n")[0];
+}
+
+// isExecutable answers "could proc\exec run this", which a directory cannot: one
+// named magus at the workspace root carries the execute bits too, and accepting
+// it sent the caller to the arm that names a path it then cannot run.
+//
+// 73 is 0111, the three execute bits. Parenthesized for the reader, not the
+// parser: Buzz binds `&` tighter than `!=`, which is the opposite of C and Go.
+export fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return (mode! & 73) != 0;
+}
+
+// parentDir strips the last path element and yields the empty string at the top,
+// which is what ends the walk. fs\dirname answers "/" there and the walk would
+// never terminate.
+//
+// Both separators, because a split on `/` alone makes `C:\...` one part, so the
+// walk never runs and resolveBin falls through to PATH.
+export fun parentDir(dir: str) > str {
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
+}
+
+// workspaceRoot is the directory holding the magusfile, or "" when the walk
+// never finds one. A hook's working directory is the host's session directory,
+// which is not always the workspace root.
+export fun workspaceRoot() > str {
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final found = fs\isFile("{dir}/magusfile.buzz") catch false;
+        if (found) { return dir; }
+        dir = parentDir(dir);
+    }
+    return "";
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH. A repository that
+// builds magus, or pins a newer one than is installed, keeps its rules in that
+// binary, and an older PATH copy does not fail loudly when it lacks them. It
+// does not recognize the config key that arms a rule, warns about an unknown
+// field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13,
+// when a write into a declared notes store was allowed by a binary that predated
+// the knowledge.notes key while magus doctor reported the guard as fine.
+//
+// The walk is up to the magusfile, not a test of ./magus alone. Measured
+// 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
+// unjudged because the session directory was not the workspace root.
+export fun resolveBin() > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    final root = workspaceRoot();
+    if (root != "") {
+        final candidate = "{root}/magus";
+        if (isExecutable(candidate)) { return candidate; }
+        // The magusfile was found and the binary beside it cannot be run. Falling
+        // through to PATH here is the same answer the walk's `break` gave: do not
+        // keep climbing into a parent checkout.
+    }
+    return proc\which("magus") catch "";
+}
+
+fun fileSafe(key: str) > str {
+    final parts = mut [<str>];
+    foreach (i in 0..key.len()) {
+        final ch = key.sub(i, len: 1);
+        final ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "-" or ch == "_";
+        if (ok) { parts.append(ch); } else { parts.append("x"); }
+    }
+    return parts.join("");
+}
+
+fun olderThanWindow(marker: str) > bool {
+    final window = envOr("__MAGUS_NOTICE_WINDOW", fallback: "120");
+    final minutes = std\parseDouble(window) ?? 120.0;
+    final info = fs\stat(marker) catch null;
+    if (info == null) { return true; }
+    final mtime = info!.mtime as? double;
+    if (mtime == null) { return true; }
+    return os\time() - mtime! > minutes * 60000.0;
+}
+
+// noticeOnce holds a broken-installation notice to one firing per session.
+//
+// The notices report a broken installation. That is a fact for the person, and
+// there is nothing in it an agent can act on, so a repeat is noise: measured at
+// 2,741 firings over recent sessions, 99% of them same-session repeats.
+//
+// The marker lives under TMPDIR, per user, because a world-writable /tmp lets
+// anyone pre-create someone else's marker and silence their notices. This runs
+// when magus cannot be asked for a place to put it. A host that reports no
+// session id shares one marker, aged out after __MAGUS_NOTICE_WINDOW minutes, so
+// the first session cannot silence every later one.
+//
+// file is the port's own name, written on the stderr line. A host shows that
+// line with the entry's matcher at best, and a reader with several entries
+// needs to know which file said it.
+export fun noticeOnce(session: str, family: str, file: str) > bool {
+    final tmp = envOr("TMPDIR", fallback: "/tmp");
+    final dir = "{tmp}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
+    var key = session;
+    if (key == "") { key = "anon"; }
+    final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
+    fs\mkdirAll(dir) catch void;
+    final exists = fs\isFile(marker) catch false;
+    if (exists) {
+        if (session != "") { return false; }
+        if (!olderThanWindow(marker)) { return false; }
+    }
+    fs\writeFile(marker, content: "") catch void;
+    if (!(fs\isFile(marker) catch false)) {
+        io\stderr.write("{file}: could not write {marker}, so a guard notice cannot be held to one firing "
+            + "per session; reporting it here instead of in the reply\n") catch void;
+        return false;
+    }
+    return true;
+}
