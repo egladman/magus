@@ -51,5 +51,6 @@ export fun volatilityDiagram() > Diagram {
         legend = [
             LegendItem{ role = "focal", label = "wants a human" },
         ],
+        scope = ["internal/retry"],
     };
 }

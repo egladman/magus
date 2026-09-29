@@ -55,5 +55,7 @@ export fun commitGeneratedDiagram() > Diagram {
         legend = [
             LegendItem{ role = "focal", label = "needs a drift gate" },
         ],
+        // A decision a person makes, not a Go package.
+        scope = [<str>],
     };
 }

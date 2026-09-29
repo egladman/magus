@@ -50,5 +50,6 @@ export fun ciProvidersDiagram() > Diagram {
         legend = [
             LegendItem{ role = "external", label = "outside magus" },
         ],
+        scope = ["internal/ci"],
     };
 }

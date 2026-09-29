@@ -54,5 +54,6 @@ export fun serverSocketDiagram() > Diagram {
             LegendItem{ role = "store", label = "shared server state" },
             LegendItem{ role = "optional", label = "spawned on demand" },
         ],
+        scope = ["internal/proc", "internal/share", "broker"],
     };
 }

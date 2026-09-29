@@ -87,5 +87,6 @@ export fun leaseLoopDiagram() > Diagram {
             LegendItem{ role = "focal", label = "the whole guarantee" },
             LegendItem{ role = "external", label = "agents and people" },
         ],
+        scope = ["internal/job", "internal/changeset"],
     };
 }

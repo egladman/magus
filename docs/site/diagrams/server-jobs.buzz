@@ -48,5 +48,6 @@ export fun serverJobsDiagram() > Diagram {
             LegendItem{ role = "external", label = "outside the server" },
             LegendItem{ role = "focal", label = "the one warm copy" },
         ],
+        scope = ["internal/file"],
     };
 }

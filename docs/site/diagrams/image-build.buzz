@@ -41,5 +41,7 @@ export fun imageBuildDiagram() > Diagram {
             Edge{ src = "channel", dst = "stable", label = "stable",
                   srcSide = "bottom", dstSide = "top", bend = 324 },
         ],
+        // A spell's decision process, not a Go package.
+        scope = [<str>],
     };
 }

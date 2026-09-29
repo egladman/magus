@@ -51,5 +51,7 @@ export fun projectReferenceDiagram() > Diagram {
         legend = [
             LegendItem{ role = "focal", label = "one canonical form" },
         ],
+        // An input and output contract, drawn with no anchors to hold a scope to.
+        scope = [<str>],
     };
 }

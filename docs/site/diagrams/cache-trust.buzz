@@ -52,5 +52,6 @@ export fun cacheTrustDiagram() > Diagram {
             LegendItem{ role = "store", label = "one pull request only" },
             LegendItem{ role = "optional", label = "never replayed" },
         ],
+        scope = ["internal/cache"],
     };
 }

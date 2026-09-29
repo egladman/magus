@@ -54,5 +54,7 @@ export fun dogfoodDiagram() > Diagram {
             LegendItem{ role = "focal", label = "blocks the branch" },
             LegendItem{ role = "optional", label = "advisory only" },
         ],
+        // A CI arrangement, not a Go package.
+        scope = [<str>],
     };
 }

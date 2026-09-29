@@ -71,5 +71,20 @@ export fun serverHttpDiagram() > Diagram {
             LegendItem{ role = "focal", label = "authenticated" },
             LegendItem{ role = "external", label = "open to any caller" },
         ],
+        scope = ["internal/handler/*", "internal/httpx", "internal/server"],
+        omits = {
+            "internal/handler/activity": "a Connect service, inside the Connect RPC box",
+            "internal/handler/attention": "a read route, inside the /api/v1 read views box",
+            "internal/handler/diff": "the diff and session routes, inside the review + plans box",
+            "internal/handler/insight": "a read route and Connect service, inside the read views box",
+            "internal/handler/job": "a Connect service, inside the Connect RPC box",
+            "internal/handler/memory": "a Connect service, inside the Connect RPC box",
+            "internal/handler/notes": "a Connect service, inside the Connect RPC box",
+            "internal/handler/plan": "the plan route, inside the review + plans box",
+            "internal/handler/token": "a Connect service, inside the Connect RPC box",
+            "internal/handler/tool": "a Connect service, inside the Connect RPC box",
+            "internal/handler/trailrpc": "the audit interceptor around Connect services, not a route",
+            "internal/handler/viewer": "read routes and a Connect service, inside the read views box",
+        },
     };
 }

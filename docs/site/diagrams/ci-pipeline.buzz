@@ -48,5 +48,7 @@ export fun ciPipelineDiagram() > Diagram {
             Edge{ src = "cmd", dst = "security", srcSide = "bottom", dstSide = "top",
                   srcSlot = 6, srcSlots = 6, bend = 156 },
         ],
+        // A magusfile convention, not a package: nothing in the tree to hold it to.
+        scope = [<str>],
     };
 }

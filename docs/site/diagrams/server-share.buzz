@@ -61,5 +61,6 @@ export fun serverShareDiagram() > Diagram {
             LegendItem{ role = "store", label = "served on a share" },
             LegendItem{ role = "optional", label = "loopback only" },
         ],
+        scope = ["internal/share", "internal/handler/viewer", "internal/handler/status", "internal/handler/graph"],
     };
 }
