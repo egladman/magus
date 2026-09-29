@@ -48,7 +48,7 @@ var Magus = Module{
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and " +
 		"the credentials read through it, `magus\\harness.provider(<spell>)` an agent-host harness " +
 		"(many hosts; like workspace.provider, unlike cache.remote's one), and `magus\\guard.shell(<rule>)` an additive " +
-		"shell-guard rule (strengthen-only; `magus\\guard.bash` is a deprecated alias), and `magus\\guard.spawn(<fun>)` the one " +
+		"shell-guard rule (strengthen-only), and `magus\\guard.spawn(<fun>)` the one " +
 		"function the agent guard calls on every spawn and continuation (see [magus\\guard.spawn](../guard-spawn.md)), and `magus\\guard.command(<fun>)` the one " +
 		"function it calls on every agent shell command (see [magus\\guard.command](../guard-command.md)), and `magus\\guard.write(<fun>)` the one " +
 		"function it calls on every agent file write. Each provider takes an imported spell handle. " +
@@ -186,78 +186,77 @@ var Magus = Module{
 		},
 		{
 			Name: "query",
-			Doc:  "Search the knowledge graph: {definition, schema_version, query, budget, match_count, offset, matches, nodes, links, answer}, the record `magus query -o json` prints, keyed the same way. query is free text plus field matchers (kind=spell, project=pkg/foo, relation=uses, kind!=op, id=~build$). A query that seeds code symbols (kind=symbol) reads the symbol shards too; every other query reads the domain graph. opts.budget caps the neighborhood (default 50); opts.limit and opts.offset window the matches while match_count stays the total. Read answer.verdict before trusting zero matches: `unknown` means part of the workspace had no symbol index. An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "Search the knowledge graph: {definition, schemaVersion, query, budget, matchCount, offset, matches, nodes, links, answer}. Annotate the result `> QueryResult`. query is free text plus field matchers (kind=spell, project=pkg/foo, relation=uses, kind!=op, id=~build$). A query that seeds code symbols (kind=symbol) reads the symbol shards too; every other query reads the domain graph. opts.budget caps the neighborhood (default 50); opts.limit and opts.offset window the matches while matchCount stays the total. Read answer.verdict before trusting zero matches: `unknown` means part of the workspace had no symbol index. An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "query", Type: TypeString},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "QueryResult"}},
 			Raises:  true,
 			Impl:    MagusQuery,
 		},
 		{
 			Name: "explain",
-			Doc:  "One knowledge-graph node's context card: {definition, schema_version, node, blast_radius, out, in}, the record `magus explain -o json` prints. node is a node ID (target:pkg/foo:build) or a name that resolves to one. With `to`, answers the path from node to it instead, the record magus\\path returns. Raises when node resolves to nothing, naming magus\\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One knowledge-graph node's context card: {definition, schemaVersion, node, blastRadius, out, in, docsURL}. Annotate the result `> ExplainResult`. node is a node ID (target:pkg/foo:build) or a name that resolves to one. A path between two nodes is magus\\path. Raises when node resolves to nothing, naming magus\\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "node", Type: TypeString},
-				{Name: "to", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExplainResult"}},
 			Raises:  true,
 			Impl:    MagusExplain,
 		},
 		{
 			Name: "path",
-			Doc:  "The shortest chain of edges between two knowledge-graph nodes: {definition, schema_version, from, to, found, steps}, each step {from, to, relation, forward}, the record `magus path -o json` prints. Edges are walked in both directions. A resolved pair with no connection returns found false; only an endpoint that resolves to nothing raises. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "The shortest chain of edges between two knowledge-graph nodes: {definition, schemaVersion, from, to, found, steps}. Annotate the result `> PathResult`. Edges are walked in both directions. A resolved pair with no connection returns found false; only an endpoint that resolves to nothing raises. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "node", Type: TypeString},
 				{Name: "to", Type: TypeString},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "PathResult"}},
 			Raises:  true,
 			Impl:    MagusPath,
 		},
 		{
 			Name: "refs",
-			Doc:  "Where a code symbol is defined and every file that references it: {definition, schema_version, symbol, label, file_count, ref_count, defs, refs, answer}, each site {file, count, lines}, the record `magus refs -o json` prints. symbol is a symbol node ID or a name that resolves to one, drawn from the workspace's declared SCIP indexes. A symbol nothing defines is an answer, not a raise: answer.verdict says whether that is a verified absence or a blind spot. opts.limit and opts.offset window refs while file_count and ref_count stay the totals. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "Where a code symbol is defined and every file that references it: {definition, schemaVersion, symbol, label, fileCount, refCount, defs, refs, answer}. Annotate the result `> RefsResult`. symbol is a symbol node ID or a name that resolves to one, drawn from the workspace's declared SCIP indexes. A symbol nothing defines is an answer, not a raise: answer.verdict says whether that is a verified absence or a blind spot. opts.limit and opts.offset window refs while fileCount and refCount stay the totals. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "symbol", Type: TypeString},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "RefsResult"}},
 			Raises:  true,
 			Impl:    MagusRefs,
 		},
 		{
 			Name: "stats",
-			Doc:  "The knowledge graph's shape: {definition, node_count, edge_count, gods, orphans, coverage, isolated_count, component_count, largest_component_size}, the record `magus graph stats -o json` prints. gods are the most connected nodes, where structural risk concentrates; orphans are docs that document nothing and spells no target uses. kind scopes every section to one node kind (spell, target, doc, ...); omit it for the whole graph. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "The knowledge graph's shape: {definition, nodeCount, edgeCount, gods, orphans, coverage, isolatedCount, componentCount, largestComponentSize}. Annotate the result `> KnowledgeStats`. gods are the most connected nodes, where structural risk concentrates; orphans are docs that document nothing and spells no target uses. kind scopes every section to one node kind (spell, target, doc, ...); omit it for the whole graph. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "kind", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "KnowledgeStats"}},
 			Raises:  true,
 			Impl:    MagusStats,
 		},
 		{
 			Name: "output",
-			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, duration_ms, output}, the bytes `magus query output <ref>` prints with the run's identity beside them. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "ref", Type: TypeString},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "OutputRecord"}},
 			Raises:  true,
 			Impl:    MagusOutput,
 		},
 		{
-			Name: "affected_impact",
-			Doc:  "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script. opts.commits caps the commits scanned; opts.since bounds the window (90d, 12w, 6mo, 1y).",
+			Name: "impact",
+			Doc:  "The blast radius of a changeset: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}. Each affected project carries whether it was a seed and, for a seed, the changed files in it. Annotate the result `> Impact`. This is `magus affected --impact`: the report, with no target run. opts.commits caps the commits scanned; opts.since bounds the window (90d, 12w, 6mo, 1y).",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Impact"}},
 			Raises:  true,
-			Impl:    MagusAffectedImpact,
+			Impl:    MagusImpact,
 		},
 		{
 			Name: "describe_file",
@@ -290,6 +289,17 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "DoctorReport"}},
 			Raises:  true,
 			Impl:    MagusDoctor,
+		},
+		{
+			Name: "clean",
+			Doc:  "Remove the declared outputs of the selected projects: {removed, tracked, dryRun}. Arguments are `magus clean`'s: project paths, `--cache`, `--dry-run`. With no projects, the cwd project is selected, or the whole workspace from the root. Tracked outputs stay, because they are committed. Annotate the result `> CleanReport`. opts.root and opts.dir as on doctor.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "CleanReport"}},
+			Raises:  true,
+			Impl:    MagusClean,
 		},
 		{
 			Name: "attention",
@@ -487,12 +497,6 @@ var Magus = Module{
 					Extern: true,
 				},
 				{
-					Name:   "bash",
-					Doc:    "Deprecated alias for guard.shell that defaults dialect to bash.",
-					Args:   []Arg{{Name: "rule", Type: TypeAnyMap}},
-					Extern: true,
-				},
-				{
 					Name: "spawn",
 					Doc: "Register the one function the agent guard calls on every agent spawn and every " +
 						"continuation of an existing subagent: fun(req: SpawnRequest) > GuardVerdict. " +
@@ -651,7 +655,7 @@ var Magus = Module{
 				"guard is what reads them to grade a write, and register's verdict is a fact it " +
 				"returns rather than a gate. The one thing the store DOES refuse is a write to a " +
 				"row the caller does not own. See the field docs on " +
-				"types.Job. This namespace, the magus_job MCP tool and `magus job` " +
+				"types.Job. This namespace, the client MCP tool (magus\\job) and `magus job` " +
 				"(fork, exec, exit, wait) are the three WRITE doors onto it. Bound by " +
 				"hand in internal/interp/bindings (buildJob), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
@@ -662,7 +666,7 @@ var Magus = Module{
 					Doc: "Every row as one typed report: {jobs, overlaps}. jobs are in the order " +
 						"they were declared; overlaps are derived on this read - every pair of live " +
 						"(non-terminal) jobs whose declared write_paths intersect: the same " +
-						"derivation the magus_job MCP tool's \"list\" op and the console's " +
+						"derivation magus\\job.list and the console's " +
 						"JobService.ListJobs use, so the three cannot disagree about a collision. " +
 						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
@@ -785,7 +789,7 @@ var Magus = Module{
 			Name: "memory",
 			Doc: "The per-repository memory: named decisions, plans, pointers and ruled-out " +
 				"hypotheses, kept outside the checkout so every worktree of one repository reads " +
-				"the same entries. The same store `magus memory`, the magus_memory MCP tool and " +
+				"the same entries. The same store `magus memory`, the client MCP tool (magus\\memory) and " +
 				"the console read. Records are the snake_case JSON `magus memory -o json` prints. " +
 				"Read straight off the workspace on the context; raises MGS1022 outside one. " +
 				"Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\\job is.",
@@ -866,113 +870,47 @@ var Magus = Module{
 // literal rather than inside it because the descriptions are agent-facing prose and
 // dwarf the declarations they sit next to.
 //
-// Six tools name a Member today. query, explain, path, refs, stats, output, memory and
-// vcs_checkpoint have members their tools do not name yet; the rest wrap state a member cannot reach (the
-// run engine's Options, the server's live review session). Naming a Member on each is
-// what closes the gap.
+// client is the magus\ surface: a Buzz program calls the typed members and
+// returns a value. magus\cmd is not on this surface. The tools beside client
+// are the operations no member covers.
 var magusMCPTools = []MCPTool{
 	{
-		Name:   hint.ToolDescribe.String(),
-		Member: "describe",
-		Doc:    "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
+		Name: hint.ToolClient.String(),
+		Doc: "Run a Buzz program against the magus client and return its value. " +
+			"Define `main(args: [str])` and return a JSON-encodable value; the result is under `json`, and std.print text under `stdout`. " +
+			"`import \"magus\"` is required to call the workspace. Also importable: std, math, crypto, serialize, buffer, and the pure host modules (those marked WASM) except env. " +
+			"File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. " +
+			"Call `magus\\describeModule(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. " +
+			"Variables do not persist between calls; filter a large result in the script before returning it. " +
+			"Each call runs in a separate process. Bounded at 10 minutes when called directly; a host that supports MCP tasks can run it as a task without that bound. " +
+			"Example: `import \"magus\"; fun main(args: [str]) > any !> str { return magus\\query(\"kind=spell\"); }`",
 		Params: []MCPParam{
-			{Name: "kind", Type: TypeString, Required: true, Doc: "One of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools."},
-			{Name: "name", Type: TypeString, Doc: "Optional. Narrow the list to one entity's detail (kinds spells, targets, projects). For targets, a target name optionally followed by a project path (e.g. \"build\", \"lint:rw\", or \"build api\"); omit the project to evaluate every project. For spells, a spell name; for projects, a project path. Unknown name returns the valid values."},
-		},
-	},
-	{
-		Name:   hint.ToolDescribeFile.String(),
-		Member: "describe_file",
-		Doc:    "Classify paths against the workspace's declared globs: the owning project, whether each path is a declared output (generated: regenerate it, never hand-edit) or a declared source (feeds cache keys and the affected set), and which projects claim it. Answers \"can I disregard this changed file\" from the workspace's own declarations - run it over a whole dirty tree before reading diffs or committing.",
-		Params: []MCPParam{
-			{Name: "paths", Type: TypeString, Required: true, Doc: "One or more workspace-relative paths, space-separated (e.g. \"MAGUS.md web/gen/index.html cmd/api/main.go\")."},
-		},
-	},
-	{
-		// No Member: magus\where answers which project contains a DIRECTORY, this
-		// filters project names. Same word, different question.
-		Name: hint.ToolWhere.String(),
-		Doc:  "Resolve a fuzzy project name to its absolute directory path. Useful for navigating to a project or passing a path to another tool.",
-		Params: []MCPParam{
-			{Name: "filter", Type: TypeString, Doc: "One or more space-separated tokens to AND-filter project names (case-insensitive leaf match). Omit to list all."},
-		},
-	},
-	{
-		Name: hint.ToolAffectedExplain.String(),
-		Doc:  "Explain why a project is in the VCS-diff affected set: shows the changed files and dependency chains that caused it to be selected.",
-		Params: []MCPParam{
-			{Name: "project", Type: TypeString, Required: true, Doc: "Project path (e.g. \"api\" or \"web/studio\")."},
-			{Name: "base", Type: TypeString, Doc: "Override the VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-		},
-	},
-	{
-		Name:   hint.ToolInsight.String(),
-		Member: "insight",
-		Doc:    "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). Two lenses read the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names) and duplication (pairs of functions calling the same rare workspace symbols in the same proportions, which is what copied logic looks like; it cannot see logic duplicated entirely in standard-library calls). Read answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
-		Params: []MCPParam{
-			{Name: "lens", Type: TypeString, Doc: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced, duplication."},
-			{Name: "commits", Type: TypeInt, Doc: "Cap on how many recent commits to scan (default 500)."},
-			{Name: "since", Type: TypeString, Doc: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
-		},
-	},
-	{
-		Name:   hint.ToolRunTarget.String(),
-		Member: "run",
-		Doc:    "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Use this INSTEAD of raw language tools (go test, eslint, pytest, tsc): the raw tool bypasses the cache, the sandbox, and affected tracking. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []MCPParam{
-			{Name: "target", Type: TypeString, Required: true, Doc: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
-			{Name: "projects", Type: TypeString, Doc: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},
-			{Name: "dry_run", Type: TypeBool, Doc: "Print what would run without executing (default false)."},
-		},
-	},
-	{
-		Name: hint.ToolRunAffected.String(),
-		Doc:  "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `" + hint.Affected.With("<target>") + "`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []MCPParam{
-			{Name: "target", Type: TypeString, Required: true, Doc: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
-			{Name: "base", Type: TypeString, Doc: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-			{Name: "dry_run", Type: TypeBool, Doc: "Print what would run without executing."},
-		},
-	},
-	{
-		// No Member: the tool is the CLI verb itself, forked, so a script sees exactly
-		// the host surface `magus buzz` gives it and cannot reach the server's stdio.
-		Name: hint.ToolBuzz.String(),
-		Doc: "Run a Buzz program and return its stdout, stderr and exit status; stdout that parses as JSON also comes back parsed under `json`. " +
-			"It is `" + hint.Buzz.String() + "`, forked in the workspace root: the whole magus host surface (fs, encoding/json, encoding/yaml, vcs, strings, the magus namespace's graph and workspace reads) with no dependency install; `" + hint.Describe.With("modules") + "` lists the import paths. " +
-			"Use it to transform another tool's output instead of a shell one-liner: pass that output as stdin and read it with io\\stdin.readAll(). " +
-			"Parsing is upstream-strict, and a top-level fun main(args: [str]) runs automatically with args. " +
-			"A compile or runtime error is a tool error carrying the diagnostic (BZZ code, line:col). " +
-			"`" + hint.Buzz.String() + "` has no read-only mode, so a script reaches whatever its fs, proc and http modules can: every call must pass write=true to accept that, and a call without it is refused before anything runs. " +
-			"Bounded by the workspace target_timeout, or five minutes when that is unset.",
-		Params: []MCPParam{
-			{Name: "script", Type: TypeString, Doc: "Inline Buzz source, run as `magus buzz -e`. Exactly one of script or path."},
+			{Name: "script", Type: TypeString, Doc: "Inline Buzz source. Exactly one of script or path."},
 			{Name: "path", Type: TypeString, Doc: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
-			{Name: "args", Type: TypeString, Doc: "The script's argv, the [str] main receives: space-separated, or a JSON array of strings when an argument holds whitespace."},
-			{Name: "stdin", Type: TypeString, Doc: "Text fed to the script's standard input, e.g. a prior tool's JSON result. Omit for an empty stdin."},
-			{Name: "write", Type: TypeBool, Doc: "Required true: accepts that the script may write, since `magus buzz` cannot confine it to reads. The call is refused without it."},
+			{Name: "args", Type: TypeStringSlice, Doc: "Array of strings passed to main."},
 		},
 	},
 	{
-		Name:   hint.ToolDoctor.String(),
-		Member: "doctor",
-		Doc:    "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
+		// No Member: MCP Buzz transforms supplied data in a forked interpreter.
+		// Workspace queries and effects go through the client tool.
+		Name: hint.ToolBuzz.String(),
+		Doc: "Transform a supplied JSON object with Buzz. Define `transform(input: any, args: [str])` and return a JSON-encodable value; the result is returned under `json`, and std.print text under `stdout`. " +
+			"Only std, math, crypto, serialize and buffer are importable. File imports, native FFI and workspace-changing host modules are unavailable. " +
+			"For workspace queries or actions, use the client tool. `import \"magus\"` returns a diagnostic explaining this boundary. " +
+			"Use the regular `magus buzz` CLI when a script needs the full host surface. Each call runs in a separate process, bounded by the workspace's target_timeout (30 seconds when unset).",
+		Params: []MCPParam{
+			{Name: "script", Type: TypeString, Doc: "Inline Buzz source. Exactly one of script or path."},
+			{Name: "path", Type: TypeString, Doc: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
+			{Name: "args", Type: TypeStringSlice, Doc: "Array of strings passed to transform as its second argument."},
+			{Name: "input", Type: TypeAnyMap, Doc: "JSON object passed to transform as its first argument, typically the result of another MCP tool."},
+		},
 	},
 	{
 		Name: hint.ToolStatus.String(),
 		Doc:  "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
 	},
 	{
-		Name: hint.ToolAffectedPlan.String(),
-		Doc:  "Emit a provider-neutral JSON shard plan for a target's VCS-affected project set. Use for CI fan-out or graph-guided work partitioning: map the matrix entries to parallel jobs, then inspect dependencies and outputs before assigning edits.",
-		Params: []MCPParam{
-			{Name: "target", Type: TypeString, Doc: "Target to plan (default: ci; any affected target is accepted)."},
-			{Name: "base", Type: TypeString, Doc: "Optional VCS base ref override."},
-			{Name: "max_shards", Type: TypeInt, Doc: "Maximum CI shards (default: from config; -1 means unlimited)."},
-		},
-	},
-	{
-		Name: hint.ToolConsolePresent.String(),
+		Name: hint.ToolConsole.String(),
 		Doc:  "Return a tokenless link to a local magus console surface, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []MCPParam{
 			{Name: "surface", Type: TypeString, Doc: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
@@ -980,72 +918,8 @@ var magusMCPTools = []MCPTool{
 		},
 	},
 	{
-		Name: hint.ToolConfigGet.String(),
+		Name: hint.ToolConfig.String(),
 		Doc:  "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
-	},
-	{
-		Name: hint.ToolMemory.String(),
-		Doc:  "A user-owned per-repository memory, shared across worktrees and kept outside the checkout. It is not automatic model memory: create a named entry only for a decision, plan, saved pointer, or ruled-out hypothesis a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision, plan and elimination entries carry a short why. Record an elimination when an investigation kills a hypothesis, so the next session reopens the reasoning; without one it re-derives the search and re-proposes a branch that is already dead. put writes only the fields you send: an entry that exists keeps every field you omit, so updating a status cannot drop the body beside it, and clearing a field means deleting the entry and creating it again. Use verify to surface malformed, stale, broken-linked entries and evidence refs that no longer resolve. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's entry.",
-		Params: []MCPParam{
-			{Name: "op", Type: TypeString, Doc: "One of: list (default; records plus issues), get, put (create by name, or write the fields you send on an entry that exists), delete, verify. cursor is legacy read-only."},
-			{Name: "name", Type: TypeString, Doc: "The record's kebab-slug identity. Required for get, put, delete."},
-			{Name: "type", Type: TypeString, Doc: "put only: one of pointer, decision, plan, elimination. Required to create. On an entry that exists it must match the type already stored - a record cannot be updated into another type, because the type decides which fields it may carry; delete it and create the entry you want."},
-			{Name: "refs", Type: TypeString, Doc: "put only, REQUIRED to create: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc. Sending refs on an entry that exists replaces its whole ref list; omitting them keeps it."},
-			{Name: "allow_missing", Type: TypeBool, Doc: "put only, default true: create the entry when the name is absent. Pass false when you mean to update something that already exists, so a mistyped name is an error instead of a stray second entry."},
-			{Name: "body", Type: TypeString, Doc: "put only: the one-line caption for a decision/plan, or for an elimination the reason the hypothesis is dead. Omit for a pointer; a pointer carries no prose."},
-			{Name: "excerpt", Type: TypeString, Doc: "put only, REQUIRED for an elimination and rejected on every other type: the evidence that ruled the hypothesis out, copied inline. An output ref resolves only from the checkout that minted it, so paste the deciding lines into the record."},
-			{Name: "status", Type: TypeString, Doc: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
-			{Name: "references", Type: TypeString, Doc: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: TypeString, Doc: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
-		},
-	},
-	{
-		Name: hint.ToolQuery.String(),
-		Doc:  "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
-		Params: []MCPParam{
-			{Name: "query", Type: TypeString, Required: true, Doc: "Search terms: free text plus field matchers like kind=spell, project=pkg/foo, relation=uses, id=build, exclusion kind!=op, and a regex id=~build$."},
-			{Name: "budget", Type: TypeInt, Doc: "Max nodes in the returned neighborhood (default 50)."},
-			{Name: "limit", Type: TypeInt, Doc: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
-			{Name: "cursor", Type: TypeString, Doc: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},
-		},
-	},
-	{
-		Name: hint.ToolOutput.String(),
-		Doc:  "Return one target run's exact captured output by its output ref (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
-		Params: []MCPParam{
-			{Name: "ref", Type: TypeString, Required: true, Doc: "An output ref (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
-		},
-	},
-	{
-		Name: hint.ToolExplain.String(),
-		Doc:  "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
-		Params: []MCPParam{
-			{Name: "node", Type: TypeString, Required: true, Doc: "A node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name: hint.ToolRefs.String(),
-		Doc:  "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
-		Params: []MCPParam{
-			{Name: "symbol", Type: TypeString, Required: true, Doc: "A symbol node ID (symbol:...) or a name that resolves to one."},
-			{Name: "limit", Type: TypeInt, Doc: "Page size: max referencing files to return. Omit or 0 for all."},
-			{Name: "cursor", Type: TypeString, Doc: "Opaque cursor from a prior response's next_cursor. Only valid for the same symbol and an unchanged graph."},
-		},
-	},
-	{
-		Name: hint.ToolPath.String(),
-		Doc:  "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
-		Params: []MCPParam{
-			{Name: "from", Type: TypeString, Required: true, Doc: "Start node ID or a name that resolves to one."},
-			{Name: "to", Type: TypeString, Required: true, Doc: "End node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name: hint.ToolStats.String(),
-		Doc:  "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
-		Params: []MCPParam{
-			{Name: "kind", Type: TypeString, Doc: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
-		},
 	},
 	{
 		// No Member: magus\diff reads the WORKING TREE's uncommitted changes. This
@@ -1071,34 +945,6 @@ var magusMCPTools = []MCPTool{
 			{Name: "reason", Type: TypeString, Doc: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
 			{Name: "id", Type: TypeString, Doc: "Comment id (resolve)."},
 			{Name: "agent_name", Type: TypeString, Doc: "Optional label for which agent is speaking; attribution only."},
-		},
-	},
-	{
-		Name: hint.ToolVCSCheckpoint.String(),
-		Doc:  "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
-	},
-	{
-		Name:   hint.ToolJob.String(),
-		Member: "job",
-		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: the criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed goals. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
-		Params: []MCPParam{
-			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row plus derived live-job overlaps), fork (create or replace one row by id), exec (a holder reports its landed base), exit (file a result or record no_return), wait (verify evidence and record pass only if every goal holds), clear (drop every row to start a fresh plan)."},
-			{Name: "reported_base", Type: TypeString, Doc: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: TypeString, Doc: "fork, exec, exit, and wait: the job id. Use the same id in the worker's prompt and result."},
-			{Name: "result", Type: TypeAnyMap, Doc: "exit or wait only: an optional strict JobResult object. It must carry the current schema_version and cite output_ref evidence for every declared check goal; omit it from exit to record no_return, or from wait to verify the result exit filed."},
-			{Name: "parent", Type: TypeString, Doc: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
-			{Name: "criteria", Type: TypeString, Doc: "fork only: what the job is for and what done means, as prose. The machine-checkable half belongs in goals, where it is graded rather than read."},
-			{Name: "goals", Type: TypeString, Doc: "fork only: the job's definition of done that `wait` grades, as a JSON array of goal objects (an array is accepted too). Each has an id, a kind (check, paths or symbol), an expect (check: passed; paths: changed, present or absent; symbol: changed, present, absent or unreferenced) and one subject: check {target, project}, paths [globs] or symbols [names]. Example: [{\"id\":\"migrated\",\"kind\":\"paths\",\"paths\":[\"db/migrations/**\"]},{\"id\":\"gone\",\"kind\":\"symbol\",\"expect\":\"absent\",\"symbols\":[\"LegacyStore\"]}]. A job that writes needs a check or at least one goal."},
-			{Name: "checkpoint", Type: TypeString, Doc: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
-			{Name: "write_paths", Type: TypeString, Doc: "fork only: space-separated paths the job may edit. Empty on a read-only job by design. Shrinking this set IS how a job announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
-			{Name: "deny_paths", Type: TypeString, Doc: "fork only: space-separated paths the job must not touch. Empty on a read-only job by design."},
-			{Name: "read_paths", Type: TypeString, Doc: "fork only: space-separated paths whose projects the job may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen what the job may read: the guard advises on a read outside that boundary and denies one under a bound job, and there is no environment variable that turns it off."},
-			{Name: "depends_on", Type: TypeString, Doc: "fork only: space-separated ids of jobs that must land before this one."},
-			{Name: "model", Type: TypeString, Doc: "fork only: the model or effort tier the work was matched to, e.g. principal, standard, economy."},
-			{Name: "check", Type: TypeString, Doc: "fork only: the one check this job runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},
-			{Name: "validation", Type: TypeString, Doc: "fork only: the check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of check and parsed into it. Sending both is refused."},
-			{Name: "state", Type: TypeString, Doc: "fork only: declared, running, exited, pass, fail, or no_return. no_return is not fail: it means the worker died, stalled, or was cancelled and returned no verdict at all."},
-			{Name: "read_only", Type: TypeBool, Doc: "fork only: mark a job that gathers evidence and writes nothing, so empty write and deny paths read as deliberate rather than forgotten."},
 		},
 	},
 }
@@ -1130,7 +976,7 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "doctor": true, "session": true,
+	"run": true, "describe": true, "doctor": true, "clean": true, "session": true,
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
@@ -1366,10 +1212,14 @@ func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types
 	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
 }
 
-// MagusAffectedImpact reports the affected set through a nested magus. It is the forking
-// counterpart to MagusAffected, and answers the richer question: not just which projects,
-// but which files seeded them.
-func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) (types.ImpactResult, error) {
+// MagusClean forks `magus clean` and returns the paths it removed and the tracked
+// outputs it kept.
+func MagusClean(ctx context.Context, args []string, opts map[string]any) (types.CleanReport, error) {
+	return runMagusJSON[types.CleanReport](ctx, "clean", args, opts)
+}
+
+// MagusImpact forks `magus affected --impact` and returns the blast radius.
+func MagusImpact(ctx context.Context, base string, opts map[string]any) (types.ImpactResult, error) {
 	args := []string{"--impact"}
 	if base != "" {
 		args = append(args, "--base", base)
@@ -1378,8 +1228,8 @@ func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) 
 }
 
 // MagusInsight returns every insight lens as one typed report, read straight off
-// the loaded workspace. Whole-report only: a single lens is the MCP tool's job,
-// which is where an agent asks for one.
+// the loaded workspace. An agent asks for one lens by returning that field from
+// the client tool.
 //
 // This is the one magus\* method that does NOT fork a nested magus, and the difference is
 // the point: analytics are a pure read of a workspace magus has already loaded, so paying
@@ -1552,8 +1402,8 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 // MagusListJob backs magus\job.list (hand-bound in
 // internal/interp/bindings/job_ns.go, since a Namespace method has no Impl for
 // codegen to reflect a trampoline from; see std.Namespace). It answers with one typed
-// report; types.NewJobList is the same constructor the magus_job MCP tool's
-// "list" op and the console's JobService.ListJobs call, so the three doors cannot
+// report; types.NewJobList is the same constructor the console's
+// JobService.ListJobs calls, so the doors cannot
 // disagree about the rows or the overlaps derived from them.
 //
 // Inside a guard rule it answers from the rows the guard pinned, so the rule and the
@@ -1573,13 +1423,13 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	// The same join `magus ls jobs` and the magus_job list op make, from the snapshot
+	// The same join `magus ls jobs` makes, from the snapshot
 	// `magus queue ls` keeps; it never fetches.
 	return queue.JoinInflight(ctx, types.WorkspaceFromContext(ctx).Root(), types.NewJobList(jobs), job.Identity{Lease: store.Actor().Lease})
 }
 
 // MagusPutJob backs magus\job.put. The field merge is decoded by
-// internal/job.ParseMerge, the same decoder the magus_job MCP tool's "fork" op calls, so
+// internal/job.ParseMerge, the same decoder `magus job fork` calls, so
 // a client typing either surface accepts the same fields and rejects the same mistakes.
 func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
@@ -1602,7 +1452,7 @@ func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job
 // MagusRegisterJob backs magus\job.register: a worker reports the base it actually
 // landed on, and learns how that compares with the checkpoint its job was handed. It
 // returns the stored row and internal/job.BaseAdvice's reading of the verdict, the
-// same pair the magus_job tool's "exec" op answers with.
+// same pair `magus job exec` answers with.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
 // reported like any other. See types.Job.
@@ -1618,8 +1468,7 @@ func MagusRegisterJob(ctx context.Context, id, base string) (types.Job, string, 
 	return row, job.BaseAdvice(row), nil
 }
 
-// MagusClearJob backs magus\job.clear, matching the magus_job MCP tool's
-// "clear" op: it reports how many rows it dropped rather than nothing, since a
+// MagusClearJob backs magus\job.clear: it reports how many rows it dropped rather than nothing, since a
 // destructive op should say what it destroyed.
 func MagusClearJob(ctx context.Context) (int, error) {
 	store, err := jobStoreFromContext(ctx, "job.clear")

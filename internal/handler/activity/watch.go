@@ -237,11 +237,11 @@ func fromWire(e *activityv1.ActivityEvent) trail.Event {
 		Origin: types.Origin{
 			User: e.GetUser(), EntryPoint: types.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
 			Session: e.GetSession(), Agent: e.GetAgent(),
-			// The filter matches a credential by class, id and name; the grant is not a filter.
+			// The filter matches a credential by kind, id and name; the grant is not a filter.
 			Credential: types.Credential{
-				Class: types.CredentialClass(e.GetCredential().GetClass()),
-				ID:    e.GetCredential().GetId(),
-				Name:  e.GetCredential().GetName(),
+				Kind: types.CredentialKind(e.GetCredential().GetClass()),
+				ID:   e.GetCredential().GetId(),
+				Name: e.GetCredential().GetName(),
 			},
 		},
 		Action: e.GetAction(),

@@ -3,13 +3,14 @@ package mcp
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/std"
 )
 
@@ -58,11 +59,29 @@ func TestRegistry_EveryToolHasADriver(t *testing.T) {
 	}
 }
 
-// TestRegistry_MemberNamesADescriptorMember checks the link back from a tool to the
-// descriptor member it wraps. std's own validation rejects a Member that names
-// nothing, so this is the assertion that the link SURVIVES generation rather than
-// being dropped on the way through.
-func TestRegistry_MemberNamesADescriptorMember(t *testing.T) {
+// TestMCPToolNamesResolve holds the declared tool names and the catalog to each
+// other in both directions. A Name() returning a string literal satisfies the
+// driver interface and passes every check that only walks the constants.
+func TestMCPToolNamesResolve(t *testing.T) {
+	t.Parallel()
+
+	registered := map[string]bool{}
+	for _, d := range Registry {
+		registered[d.Name] = true
+	}
+	declared := map[string]bool{}
+	for _, tn := range hint.AllToolNames {
+		declared[tn.String()] = true
+		assert.Truef(t, registered[tn.String()], "tool constant %q is not a Registry[].Name", tn)
+	}
+	for _, d := range Registry {
+		assert.Truef(t, declared[d.Name], "Registry tool %q is not a declared hint.ToolName", d.Name)
+	}
+}
+
+// The instructions name magus\ members by their descriptor names, so each must be a
+// member std.Magus declares; a renamed member fails here rather than in an agent.
+func TestServerInstructionsNameRealMembers(t *testing.T) {
 	t.Parallel()
 
 	members := map[string]bool{}
@@ -72,16 +91,24 @@ func TestRegistry_MemberNamesADescriptorMember(t *testing.T) {
 	for _, ns := range std.Magus.Namespaces {
 		members[ns.Name] = true
 	}
-	linked := 0
-	for _, d := range Registry {
-		if d.Member == "" {
-			continue
-		}
-		linked++
-		assert.Truef(t, members[d.Member],
-			"tool %q names member %q, which std.Magus does not declare", d.Name, d.Member)
+	for _, name := range clientMembers {
+		assert.Truef(t, members[name], "the instructions name magus\\%s, which std.Magus does not declare", name)
 	}
-	assert.NotZero(t, linked, "no tool links back to a descriptor member; the catalog stopped deriving")
+}
+
+// A direct client call is bounded by hint.ClientCallBound whatever target_timeout
+// says; the buzz tool keeps following target_timeout.
+func TestClientTimeoutIsItsOwnBound(t *testing.T) {
+	opts := Options{Magus: fixtureMagus(t)}
+	opts.Config.TargetTimeout = time.Hour
+	for _, d := range allToolDrivers(opts) {
+		switch tool := d.(type) {
+		case *clientTool:
+			assert.Equal(t, hint.ClientCallBound, tool.timeout)
+		case *buzzTool:
+			assert.Equal(t, time.Hour, tool.timeout)
+		}
+	}
 }
 
 // TestRegistry_HandlersReadTheDeclaredParams closes the one unenforced half of "the
@@ -106,14 +133,9 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 		require.NoError(t, err)
 		sources = append(sources, b...)
 	}
-	// magus_job decodes its row through types.Job's JSON tags (job.ParseMerge) rather
-	// than reading each key, so that struct is where its param names are bound.
-	jobType, err := os.ReadFile(filepath.Join("..", "..", "..", "types", "job.go"))
-	require.NoError(t, err)
-	sources = append(sources, jobType...)
 	for _, d := range Registry {
 		for _, p := range d.Params {
-			read := bytes.Contains(sources, []byte(`"`+p.Name+`"`)) || bytes.Contains(sources, []byte(`json:"`+p.Name))
+			read := bytes.Contains(sources, []byte(`"`+p.Name+`"`))
 			assert.Truef(t, read,
 				"tool %q declares param %q on std.Magus, but no handler in this package reads that name; the schema advertises a param the driver ignores", d.Name, p.Name)
 		}

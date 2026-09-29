@@ -52,17 +52,17 @@ func graphCoverage(ctx context.Context, g knowledgeGraphs, input string, seeded 
 // MagusQuery backs magus\query: ranked matches for query plus their neighborhood, the
 // record `magus query -o json` prints. A query that seeds the symbol layer reads a graph
 // with the symbol shards merged in; every other query reads the domain graph.
-func MagusQuery(ctx context.Context, query string, opts map[string]any) (map[string]any, error) {
+func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.KnowledgeQueryOutput, error) {
 	if strings.TrimSpace(query) == "" {
-		return nil, errors.New("magus\\query: needs search terms, e.g. \"kind=spell go\"")
+		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, e.g. \"kind=spell go\"")
 	}
 	o, err := intOptions("query", opts, "budget", "limit", "offset")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeQueryOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "query")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeQueryOutput{}, err
 	}
 	seeded := knowledge.SeedsLazyLayer(query)
 	var kg *knowledge.Graph
@@ -72,90 +72,82 @@ func MagusQuery(ctx context.Context, query string, opts map[string]any) (map[str
 		kg, err = g.KnowledgeGraph(ctx, false)
 	}
 	if err != nil {
-		return nil, err
+		return types.KnowledgeQueryOutput{}, err
 	}
 	out := kg.QueryPage(query, o["budget"], o["offset"], o["limit"])
 	// The verdict judges the whole match set, not the page, so every page states the
 	// same coverage.
 	out.Answer = knowledge.Answer(query, out.MatchCount > 0, graphCoverage(ctx, g, query, seeded))
-	return recordMap(out)
+	return out, nil
 }
 
 // MagusExplain backs magus\explain: one node's context card, the record `magus explain
-// -o json` prints. With to set it answers the path between node and to instead, the
-// record magus\path returns, so a caller relating two nodes needs one member.
-func MagusExplain(ctx context.Context, node, to string) (map[string]any, error) {
-	if to != "" {
-		return graphPath(ctx, "explain", node, to)
-	}
+// -o json` prints. A path between two nodes is magus\path.
+func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutput, error) {
 	if node == "" {
-		return nil, errors.New("magus\\explain: needs a node ID or a name that resolves to one")
+		return types.KnowledgeExplainOutput{}, errors.New("magus\\explain: needs a node ID or a name that resolves to one")
 	}
 	g, err := graphsFromContext(ctx, "explain")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeExplainOutput{}, err
 	}
 	kg, err := g.KnowledgeGraph(ctx, false)
 	if err != nil {
-		return nil, err
+		return types.KnowledgeExplainOutput{}, err
 	}
 	out, ok := kg.Explain(node)
 	if !ok {
 		// explain reads the symbol-free graph, so a miss on a name that could be a code
 		// symbol is a blind spot, not an absence.
 		if knowledge.Answer(node, false, graphCoverage(ctx, g, node, false)).Verdict == types.VerdictUnknown {
-			return nil, fmt.Errorf("magus\\explain: no node matches %q in the domain graph; code symbols are not loaded here, so ask magus\\refs", node)
+			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q in the domain graph; code symbols are not loaded here, so ask magus\\refs", node)
 		}
-		return nil, fmt.Errorf("magus\\explain: no node matches %q", node)
+		return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q", node)
 	}
-	return recordMap(out)
+	return out, nil
 }
 
 // MagusPath backs magus\path: the shortest chain of edges between node and to, the
 // record `magus path -o json` prints. A resolved pair with no connection is an answer
 // (found is false); only an endpoint that resolves to nothing raises.
-func MagusPath(ctx context.Context, node, to string) (map[string]any, error) {
-	return graphPath(ctx, "path", node, to)
-}
-
-func graphPath(ctx context.Context, member, node, to string) (map[string]any, error) {
+func MagusPath(ctx context.Context, node, to string) (types.KnowledgePathOutput, error) {
 	if node == "" || to == "" {
-		return nil, fmt.Errorf("magus\\%s: needs both endpoints", member)
+		return types.KnowledgePathOutput{}, errors.New("magus\\path: needs both endpoints")
 	}
-	g, err := graphsFromContext(ctx, member)
+	g, err := graphsFromContext(ctx, "path")
 	if err != nil {
-		return nil, err
+		return types.KnowledgePathOutput{}, err
 	}
 	kg, err := g.KnowledgeGraph(ctx, false)
 	if err != nil {
-		return nil, err
+		return types.KnowledgePathOutput{}, err
 	}
 	out, ok := kg.Path(node, to)
 	if !ok {
-		return nil, fmt.Errorf("magus\\%s: could not resolve %q or %q to a node", member, node, to)
+		return types.KnowledgePathOutput{}, fmt.Errorf("magus\\path: could not resolve %q or %q to a node", node, to)
 	}
-	return recordMap(out)
+	return out, nil
 }
 
 // MagusRefs backs magus\refs: where a code symbol is defined and every file that
 // references it, the record `magus refs -o json` prints. A symbol nothing defines is an
 // answer carrying a verdict, never a raise: absent and unknown are different facts and a
 // caller branches on answer.verdict to tell them apart.
-func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (map[string]any, error) {
+func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
-		return nil, errors.New("magus\\refs: needs a symbol ID or a name that resolves to one")
+		return types.KnowledgeRefsOutput{}, errors.New("magus\\refs: needs a symbol ID or a name that resolves to one")
 	}
 	o, err := intOptions("refs", opts, "limit", "offset")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeRefsOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "refs")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeRefsOutput{}, err
 	}
 	kg, err := g.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
 	if err != nil {
-		return nil, err
+		return types.KnowledgeRefsOutput{}, err
 	}
 	out, ok := kg.Refs(symbol)
 	if !ok {
@@ -166,7 +158,7 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (map[str
 		}
 	}
 	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, graphCoverage(ctx, g, symbol, true))
-	// file_count and ref_count keep describing the whole set; only refs is windowed.
+	// fileCount and refCount keep describing the whole set; only refs is windowed.
 	if o["offset"] >= len(out.Refs) {
 		out.Refs = nil
 	} else {
@@ -175,53 +167,53 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (map[str
 	if o["limit"] > 0 && len(out.Refs) > o["limit"] {
 		out.Refs = out.Refs[:o["limit"]]
 	}
-	return recordMap(out)
+	return out, nil
 }
 
 // MagusStats backs magus\stats: the knowledge graph's shape, the record `magus graph
 // stats -o json` prints. kind scopes every section to one node kind; empty is the whole
 // graph.
-func MagusStats(ctx context.Context, kind string) (map[string]any, error) {
+func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) {
 	g, err := graphsFromContext(ctx, "stats")
 	if err != nil {
-		return nil, err
+		return types.KnowledgeStats{}, err
 	}
 	kg, err := g.KnowledgeGraph(ctx, false)
 	if err != nil {
-		return nil, err
+		return types.KnowledgeStats{}, err
 	}
-	return recordMap(kg.Stats(kind))
+	return kg.Stats(kind), nil
 }
 
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
 // `magus query output <ref>` prints, with the run's identity beside them. It reads this
 // checkout's output store, so a ref minted in another worktree does not resolve here.
-func MagusOutput(ctx context.Context, ref string) (map[string]any, error) {
+func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	if !cache.LooksLikeRef(ref) {
-		return nil, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
+		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return nil, errNoWorkspace("output")
+		return types.OutputRecord{}, errNoWorkspace("output")
 	}
 	cd, ok := ws.(workspaceCacheDir)
 	if !ok {
-		return nil, errors.New("magus\\output: this workspace has no cache directory")
+		return types.OutputRecord{}, errors.New("magus\\output: this workspace has no cache directory")
 	}
 	data, desc, err := cache.NewOutputStore(cd.CacheDir()).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("magus\\output: no stored output for ref %q in this checkout", ref)
+		return types.OutputRecord{}, fmt.Errorf("magus\\output: no stored output for ref %q in this checkout", ref)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("magus\\output: %w", err)
+		return types.OutputRecord{}, fmt.Errorf("magus\\output: %w", err)
 	}
-	return map[string]any{
-		"ref":         desc.Ref,
-		"project":     desc.Project,
-		"target":      desc.Target,
-		"failed":      desc.Failed,
-		"duration_ms": desc.DurationMs,
-		"output":      string(data),
+	return types.OutputRecord{
+		Ref:        desc.Ref,
+		Project:    desc.Project,
+		Target:     desc.Target,
+		Failed:     desc.Failed,
+		DurationMs: desc.DurationMs,
+		Output:     string(data),
 	}, nil
 }
 

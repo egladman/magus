@@ -34,7 +34,7 @@ type Options struct {
 	Build types.BuildInfo
 
 	// Config is the resolved workspace configuration. Used to check the
-	// server address for the magus_status tool.
+	// server address for the status tool.
 	Config config.Config
 
 	// HTTPAddr is the parsed address for server HTTP serving. Defaults to defaultAddrPort
@@ -61,7 +61,7 @@ type Options struct {
 	// the person opens a diff in the console and the agent joins the session they started,
 	// rather than each side holding a private opinion of the changeset.
 	//
-	// Nil disables magus_diff, which is the honest state for a server with no workspace.
+	// Nil disables the diff tool, which is the honest state for a server with no workspace.
 	DiffSessions *changeset.Store
 
 	// Jobs is the server's shared job store, the SAME one JobService reads.
@@ -69,8 +69,9 @@ type Options struct {
 	// anything: two Stores over one file each hold their own lock, so the in-process
 	// serialization the store documents would hold only while nothing wrote concurrently.
 	//
-	// Nil builds a private one, which is correct for a single-door server (the stdio MCP
-	// process) and wrong for the server, where the server sets it.
+	// The MCP tools do not read it. magus\job runs in the client worker, which opens
+	// the store from the workspace cache. Nil is correct for stdio; the server sets
+	// it before the job routes mount.
 	Jobs *job.Store
 
 	// Unavailable, with a nil Magus, is why the workspace is not loaded. Every tool stays

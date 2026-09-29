@@ -5,18 +5,19 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfigGetTool(t *testing.T) {
+func TestConfigTool(t *testing.T) {
 	cfg := config.Defaults()
-	tool := &configGetTool{cfg: cfg}
+	tool := &configTool{cfg: cfg}
 
-	assert.Equal(t, "magus_config_get", tool.Name())
+	assert.Equal(t, hint.ToolConfig.String(), tool.Name())
 
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, cfg, resp.Data, "config_get should echo the resolved config verbatim")
+	assert.Equal(t, cfg, resp.Data, "config echoes the resolved config verbatim")
 }

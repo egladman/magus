@@ -16,13 +16,8 @@ type ParamDescriptor struct {
 
 // ToolDescriptor is a static description of one MCP tool: it registers the tool
 // with the server (registerTools) and populates `magus describe mcp-tools`.
-//
-// Member is the descriptor member the tool wraps, empty when no typed Buzz
-// member covers the verb yet. It is carried through so the gap is readable from
-// the catalog rather than only from the descriptor.
 type ToolDescriptor struct {
 	Name        string            `json:"name"                  yaml:"name"`
-	Member      string            `json:"member,omitempty"      yaml:"member,omitempty"`
 	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
 	Params      []ParamDescriptor `json:"params,omitempty"      yaml:"params,omitempty"`
 }
@@ -30,97 +25,30 @@ type ToolDescriptor struct {
 // Registry is the canonical list of MCP tools the magus server exposes.
 var Registry = []ToolDescriptor{
 	{
-		Name:        "magus_describe",
-		Member:      "describe",
-		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
+		Name:        "client",
+		Description: "Run a Buzz program against the magus client and return its value. Define `main(args: [str])` and return a JSON-encodable value; the result is under `json`, and std.print text under `stdout`. `import \"magus\"` is required to call the workspace. Also importable: std, math, crypto, serialize, buffer, and the pure host modules (those marked WASM) except env. File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. Call `magus\\describeModule(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. Variables do not persist between calls; filter a large result in the script before returning it. Each call runs in a separate process. Bounded at 10 minutes when called directly; a host that supports MCP tasks can run it as a task without that bound. Example: `import \"magus\"; fun main(args: [str]) > any !> str { return magus\\query(\"kind=spell\"); }`",
 		Params: []ParamDescriptor{
-			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools."},
-			{Name: "name", Type: "string", Description: "Optional. Narrow the list to one entity's detail (kinds spells, targets, projects). For targets, a target name optionally followed by a project path (e.g. \"build\", \"lint:rw\", or \"build api\"); omit the project to evaluate every project. For spells, a spell name; for projects, a project path. Unknown name returns the valid values."},
-		},
-	},
-	{
-		Name:        "magus_describe_file",
-		Member:      "describe_file",
-		Description: "Classify paths against the workspace's declared globs: the owning project, whether each path is a declared output (generated: regenerate it, never hand-edit) or a declared source (feeds cache keys and the affected set), and which projects claim it. Answers \"can I disregard this changed file\" from the workspace's own declarations - run it over a whole dirty tree before reading diffs or committing.",
-		Params: []ParamDescriptor{
-			{Name: "paths", Type: "string", Required: true, Description: "One or more workspace-relative paths, space-separated (e.g. \"MAGUS.md web/gen/index.html cmd/api/main.go\")."},
-		},
-	},
-	{
-		Name:        "magus_where",
-		Description: "Resolve a fuzzy project name to its absolute directory path. Useful for navigating to a project or passing a path to another tool.",
-		Params: []ParamDescriptor{
-			{Name: "filter", Type: "string", Description: "One or more space-separated tokens to AND-filter project names (case-insensitive leaf match). Omit to list all."},
-		},
-	},
-	{
-		Name:        "magus_affected_explain",
-		Description: "Explain why a project is in the VCS-diff affected set: shows the changed files and dependency chains that caused it to be selected.",
-		Params: []ParamDescriptor{
-			{Name: "project", Type: "string", Required: true, Description: "Project path (e.g. \"api\" or \"web/studio\")."},
-			{Name: "base", Type: "string", Description: "Override the VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-		},
-	},
-	{
-		Name:        "magus_insight",
-		Member:      "insight",
-		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). Two lenses read the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names) and duplication (pairs of functions calling the same rare workspace symbols in the same proportions, which is what copied logic looks like; it cannot see logic duplicated entirely in standard-library calls). Read answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
-		Params: []ParamDescriptor{
-			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced, duplication."},
-			{Name: "commits", Type: "number", Description: "Cap on how many recent commits to scan (default 500)."},
-			{Name: "since", Type: "string", Description: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
-		},
-	},
-	{
-		Name:        "magus_run_target",
-		Member:      "run",
-		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Use this INSTEAD of raw language tools (go test, eslint, pytest, tsc): the raw tool bypasses the cache, the sandbox, and affected tracking. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
-			{Name: "projects", Type: "string", Description: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},
-			{Name: "dry_run", Type: "boolean", Description: "Print what would run without executing (default false)."},
-		},
-	},
-	{
-		Name:        "magus_run_affected",
-		Description: "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `magus affected <target>`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
-			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-			{Name: "dry_run", Type: "boolean", Description: "Print what would run without executing."},
-		},
-	},
-	{
-		Name:        "magus_buzz",
-		Description: "Run a Buzz program and return its stdout, stderr and exit status; stdout that parses as JSON also comes back parsed under `json`. It is `magus buzz`, forked in the workspace root: the whole magus host surface (fs, encoding/json, encoding/yaml, vcs, strings, the magus namespace's graph and workspace reads) with no dependency install; `magus describe modules` lists the import paths. Use it to transform another tool's output instead of a shell one-liner: pass that output as stdin and read it with io\\stdin.readAll(). Parsing is upstream-strict, and a top-level fun main(args: [str]) runs automatically with args. A compile or runtime error is a tool error carrying the diagnostic (BZZ code, line:col). `magus buzz` has no read-only mode, so a script reaches whatever its fs, proc and http modules can: every call must pass write=true to accept that, and a call without it is refused before anything runs. Bounded by the workspace target_timeout, or five minutes when that is unset.",
-		Params: []ParamDescriptor{
-			{Name: "script", Type: "string", Description: "Inline Buzz source, run as `magus buzz -e`. Exactly one of script or path."},
+			{Name: "script", Type: "string", Description: "Inline Buzz source. Exactly one of script or path."},
 			{Name: "path", Type: "string", Description: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
-			{Name: "args", Type: "string", Description: "The script's argv, the [str] main receives: space-separated, or a JSON array of strings when an argument holds whitespace."},
-			{Name: "stdin", Type: "string", Description: "Text fed to the script's standard input, e.g. a prior tool's JSON result. Omit for an empty stdin."},
-			{Name: "write", Type: "boolean", Description: "Required true: accepts that the script may write, since `magus buzz` cannot confine it to reads. The call is refused without it."},
+			{Name: "args", Type: "string_array", Description: "Array of strings passed to main."},
 		},
 	},
 	{
-		Name:        "magus_doctor",
-		Member:      "doctor",
-		Description: "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
+		Name:        "buzz",
+		Description: "Transform a supplied JSON object with Buzz. Define `transform(input: any, args: [str])` and return a JSON-encodable value; the result is returned under `json`, and std.print text under `stdout`. Only std, math, crypto, serialize and buffer are importable. File imports, native FFI and workspace-changing host modules are unavailable. For workspace queries or actions, use the client tool. `import \"magus\"` returns a diagnostic explaining this boundary. Use the regular `magus buzz` CLI when a script needs the full host surface. Each call runs in a separate process, bounded by the workspace's target_timeout (30 seconds when unset).",
+		Params: []ParamDescriptor{
+			{Name: "script", Type: "string", Description: "Inline Buzz source. Exactly one of script or path."},
+			{Name: "path", Type: "string", Description: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
+			{Name: "args", Type: "string_array", Description: "Array of strings passed to transform as its second argument."},
+			{Name: "input", Type: "object", Description: "JSON object passed to transform as its first argument, typically the result of another MCP tool."},
+		},
 	},
 	{
-		Name:        "magus_status",
+		Name:        "status",
 		Description: "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
 	},
 	{
-		Name:        "magus_affected_plan",
-		Description: "Emit a provider-neutral JSON shard plan for a target's VCS-affected project set. Use for CI fan-out or graph-guided work partitioning: map the matrix entries to parallel jobs, then inspect dependencies and outputs before assigning edits.",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Description: "Target to plan (default: ci; any affected target is accepted)."},
-			{Name: "base", Type: "string", Description: "Optional VCS base ref override."},
-			{Name: "max_shards", Type: "number", Description: "Maximum CI shards (default: from config; -1 means unlimited)."},
-		},
-	},
-	{
-		Name:        "magus_console_present",
+		Name:        "console",
 		Description: "Return a tokenless link to a local magus console surface, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []ParamDescriptor{
 			{Name: "surface", Type: "string", Description: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
@@ -128,75 +56,11 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_config_get",
+		Name:        "config",
 		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
-		Name:        "magus_memory",
-		Description: "A user-owned per-repository memory, shared across worktrees and kept outside the checkout. It is not automatic model memory: create a named entry only for a decision, plan, saved pointer, or ruled-out hypothesis a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision, plan and elimination entries carry a short why. Record an elimination when an investigation kills a hypothesis, so the next session reopens the reasoning; without one it re-derives the search and re-proposes a branch that is already dead. put writes only the fields you send: an entry that exists keeps every field you omit, so updating a status cannot drop the body beside it, and clearing a field means deleting the entry and creating it again. Use verify to surface malformed, stale, broken-linked entries and evidence refs that no longer resolve. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's entry.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create by name, or write the fields you send on an entry that exists), delete, verify. cursor is legacy read-only."},
-			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
-			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan, elimination. Required to create. On an entry that exists it must match the type already stored - a record cannot be updated into another type, because the type decides which fields it may carry; delete it and create the entry you want."},
-			{Name: "refs", Type: "string", Description: "put only, REQUIRED to create: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc. Sending refs on an entry that exists replaces its whole ref list; omitting them keeps it."},
-			{Name: "allow_missing", Type: "boolean", Description: "put only, default true: create the entry when the name is absent. Pass false when you mean to update something that already exists, so a mistyped name is an error instead of a stray second entry."},
-			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan, or for an elimination the reason the hypothesis is dead. Omit for a pointer; a pointer carries no prose."},
-			{Name: "excerpt", Type: "string", Description: "put only, REQUIRED for an elimination and rejected on every other type: the evidence that ruled the hypothesis out, copied inline. An output ref resolves only from the checkout that minted it, so paste the deciding lines into the record."},
-			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
-			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: "string", Description: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
-		},
-	},
-	{
-		Name:        "magus_query",
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
-		Params: []ParamDescriptor{
-			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field matchers like kind=spell, project=pkg/foo, relation=uses, id=build, exclusion kind!=op, and a regex id=~build$."},
-			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
-			{Name: "limit", Type: "number", Description: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
-			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},
-		},
-	},
-	{
-		Name:        "magus_output",
-		Description: "Return one target run's exact captured output by its output ref (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
-		Params: []ParamDescriptor{
-			{Name: "ref", Type: "string", Required: true, Description: "An output ref (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
-		},
-	},
-	{
-		Name:        "magus_explain",
-		Description: "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
-		Params: []ParamDescriptor{
-			{Name: "node", Type: "string", Required: true, Description: "A node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name:        "magus_refs",
-		Description: "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
-		Params: []ParamDescriptor{
-			{Name: "symbol", Type: "string", Required: true, Description: "A symbol node ID (symbol:...) or a name that resolves to one."},
-			{Name: "limit", Type: "number", Description: "Page size: max referencing files to return. Omit or 0 for all."},
-			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor. Only valid for the same symbol and an unchanged graph."},
-		},
-	},
-	{
-		Name:        "magus_path",
-		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
-		Params: []ParamDescriptor{
-			{Name: "from", Type: "string", Required: true, Description: "Start node ID or a name that resolves to one."},
-			{Name: "to", Type: "string", Required: true, Description: "End node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name:        "magus_stats",
-		Description: "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
-		Params: []ParamDescriptor{
-			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
-		},
-	},
-	{
-		Name:        "magus_diff",
+		Name:        "diff",
 		Description: "Join the review session a person already has open and pair with them on it. op=state returns the whole session: every changed file annotated with its role (generated output vs source), how widely its changed symbols are referenced, whether it is public API surface, observed coverage, plus where the person is looking and what they have already read. op=state also returns `patch` (the unified diff) and `hunks` (per file, each hunk's 0-based index and its content digest), which are the coordinates comment and suggest take - so read state first and cite an index from it rather than guessing one. It recomputes when the working tree has moved since the session was attached, and sets `recomputed` when it did. op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. op=resolve closes a comment. Both writing ops REFUSE a path that is not in the change and a hunk index that does not exist. You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
@@ -207,34 +71,6 @@ var Registry = []ToolDescriptor{
 			{Name: "reason", Type: "string", Description: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
 			{Name: "id", Type: "string", Description: "Comment id (resolve)."},
 			{Name: "agent_name", Type: "string", Description: "Optional label for which agent is speaking; attribution only."},
-		},
-	},
-	{
-		Name:        "magus_vcs_checkpoint",
-		Description: "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
-	},
-	{
-		Name:        "magus_job",
-		Member:      "job",
-		Description: "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: the criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed goals. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; every row plus derived live-job overlaps), fork (create or replace one row by id), exec (a holder reports its landed base), exit (file a result or record no_return), wait (verify evidence and record pass only if every goal holds), clear (drop every row to start a fresh plan)."},
-			{Name: "reported_base", Type: "string", Description: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: "string", Description: "fork, exec, exit, and wait: the job id. Use the same id in the worker's prompt and result."},
-			{Name: "result", Type: "object", Description: "exit or wait only: an optional strict JobResult object. It must carry the current schema_version and cite output_ref evidence for every declared check goal; omit it from exit to record no_return, or from wait to verify the result exit filed."},
-			{Name: "parent", Type: "string", Description: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
-			{Name: "criteria", Type: "string", Description: "fork only: what the job is for and what done means, as prose. The machine-checkable half belongs in goals, where it is graded rather than read."},
-			{Name: "goals", Type: "string", Description: "fork only: the job's definition of done that `wait` grades, as a JSON array of goal objects (an array is accepted too). Each has an id, a kind (check, paths or symbol), an expect (check: passed; paths: changed, present or absent; symbol: changed, present, absent or unreferenced) and one subject: check {target, project}, paths [globs] or symbols [names]. Example: [{\"id\":\"migrated\",\"kind\":\"paths\",\"paths\":[\"db/migrations/**\"]},{\"id\":\"gone\",\"kind\":\"symbol\",\"expect\":\"absent\",\"symbols\":[\"LegacyStore\"]}]. A job that writes needs a check or at least one goal."},
-			{Name: "checkpoint", Type: "string", Description: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
-			{Name: "write_paths", Type: "string", Description: "fork only: space-separated paths the job may edit. Empty on a read-only job by design. Shrinking this set IS how a job announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
-			{Name: "deny_paths", Type: "string", Description: "fork only: space-separated paths the job must not touch. Empty on a read-only job by design."},
-			{Name: "read_paths", Type: "string", Description: "fork only: space-separated paths whose projects the job may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen what the job may read: the guard advises on a read outside that boundary and denies one under a bound job, and there is no environment variable that turns it off."},
-			{Name: "depends_on", Type: "string", Description: "fork only: space-separated ids of jobs that must land before this one."},
-			{Name: "model", Type: "string", Description: "fork only: the model or effort tier the work was matched to, e.g. principal, standard, economy."},
-			{Name: "check", Type: "string", Description: "fork only: the one check this job runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},
-			{Name: "validation", Type: "string", Description: "fork only: the check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of check and parsed into it. Sending both is refused."},
-			{Name: "state", Type: "string", Description: "fork only: declared, running, exited, pass, fail, or no_return. no_return is not fail: it means the worker died, stalled, or was cancelled and returned no verdict at all."},
-			{Name: "read_only", Type: "boolean", Description: "fork only: mark a job that gathers evidence and writes nothing, so empty write and deny paths read as deliberate rather than forgotten."},
 		},
 	},
 }

@@ -55,7 +55,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{Code: connect.CodeInternal, Reason: types.TokenRequestInvalid, Message: err.Error()})
 			return
 		}
-		code := types.Credential{Class: types.ClassExchange, ID: auth.TokenID(req.Code), Name: tok.Name, Grant: tok.Grant}
+		code := types.Credential{Kind: types.KindExchange, ID: auth.TokenID(req.Code), Name: tok.Name, Grant: tok.Grant}
 		trail.AppendMint(r.Context(), trailDir, "link.redeem", trail.MintRecord{Minted: tok.Credential(), Expires: tok.Expires, Minter: code})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

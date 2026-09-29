@@ -287,27 +287,15 @@ type Module struct {
 
 // MCPTool is one tool on a module's MCP surface.
 //
-// It hangs off the MODULE and names its member, rather than being a flag on
-// Method, because the two surfaces are not in bijection. An MCP tool can need
-// state a Buzz member never sees (magus_diff wants the server's live review
-// session, magus_run_target the run engine's Options), and a member can mean
-// something a tool of the same name does not (`magus\where(dir)` answers which
-// project contains a directory; magus_where filters project names). A flag on
-// Method could express neither without either lying about a member or declaring
-// one nothing binds.
-//
-// Member is the link back, and it is the drift check: when set, it must name a
-// Method or Namespace on the module, so a rename that misses the tool fails
-// codegen instead of shipping a tool that wraps nothing. Empty means the verb
-// has no typed member YET, which is the remaining gap rather than a decision.
+// It hangs off the MODULE rather than being a flag on Method because the two
+// surfaces are not in bijection: every remaining tool needs state or a process
+// boundary no Buzz member has (the diff tool wants the server's live review
+// session; client runs a script in its own worker).
 type MCPTool struct {
-	// Name is the tool name an MCP client calls, e.g. "magus_query". Bound to a
+	// Name is the tool name an MCP client calls, e.g. "config". Bound to a
 	// hint.ToolName constant on the handler side, which is what keeps the two
 	// spellings from drifting.
 	Name string
-	// Member is the Method or Namespace this tool wraps, by its descriptor Name
-	// ("insight", "job"). Empty when no typed member covers the verb.
-	Member string
 	// Doc is the tool description sent to the client. Agent-facing prose, so it is
 	// authored here rather than inherited from the member: a member's Doc teaches a
 	// Buzz caller about return-type annotations and raising, which is noise in a
@@ -321,7 +309,7 @@ type MCPTool struct {
 
 // MCPParam is one named parameter of an MCPTool. Type is restricted to the
 // JSON-schema shapes the MCP tool builder supports: string, number, boolean,
-// and an untyped object for a strict downstream decoder to validate.
+// an array of strings, and an untyped object for a strict downstream decoder.
 type MCPParam struct {
 	Name     string
 	Type     TypeTag

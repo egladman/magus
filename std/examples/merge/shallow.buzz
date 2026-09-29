@@ -1,0 +1,8 @@
+import "std";
+import "encoding/json";
+import "merge";
+
+final base = { "name": "api", "port": 8080 };
+final overlay = { "port": 9090 };
+std\print(json\stringify(merge\shallow(base, overlay: overlay)) catch "");
+// -> {"name":"api","port":9090}

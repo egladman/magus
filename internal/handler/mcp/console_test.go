@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConsolePresentTool(t *testing.T) {
+func TestConsoleTool(t *testing.T) {
 	t.Parallel()
 
-	tool := &consolePresentTool{host: "127.0.0.1:7391"}
+	tool := &consoleTool{host: "127.0.0.1:7391"}
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
 		"surface": "activity",
 		"reason":  "show the completed run",
@@ -25,10 +25,10 @@ func TestConsolePresentTool(t *testing.T) {
 	assert.Equal(t, "show the completed run", got.Reason)
 }
 
-func TestConsolePresentToolRejectsDisabledConsole(t *testing.T) {
+func TestConsoleToolRejectsDisabledConsole(t *testing.T) {
 	t.Parallel()
 
-	tool := &consolePresentTool{host: "127.0.0.1:7391", unavailable: "console.enabled is false"}
+	tool := &consoleTool{host: "127.0.0.1:7391", unavailable: "console.enabled is false"}
 	_, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.EqualError(t, err, "mcp: console presentation is unavailable because console.enabled is false")
 }

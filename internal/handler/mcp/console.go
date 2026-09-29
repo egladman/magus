@@ -9,15 +9,15 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// consolePresentTool returns a local console link. The MCP client decides how to show it.
-type consolePresentTool struct {
+// consoleTool returns a local console link. The MCP client decides how to show it.
+type consoleTool struct {
 	host        string
 	unavailable string
 }
 
-func (t *consolePresentTool) Name() string { return hint.ToolConsolePresent.String() }
+func (t *consoleTool) Name() string { return hint.ToolConsole.String() }
 
-func (t *consolePresentTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *consoleTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	if t.unavailable != "" {
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: console presentation is unavailable because %s", t.unavailable)
 	}
@@ -28,4 +28,4 @@ func (t *consolePresentTool) Invoke(_ context.Context, req spells.InvokeRequest)
 	return spells.InvokeResponse{Data: p}, nil
 }
 
-var _ spells.Driver = (*consolePresentTool)(nil)
+var _ spells.Driver = (*consoleTool)(nil)

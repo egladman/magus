@@ -169,7 +169,7 @@ func storedInfo(t auth.Token) *tokenv1.TokenInfo {
 	return &tokenv1.TokenInfo{
 		Name:       t.Name,
 		Id:         t.ID,
-		Class:      wireClass(t.Class),
+		Class:      wireKind(t.Kind),
 		Grant:      wireGrant(t.Grant),
 		ExpireTime: timestamppb.New(t.Expires),
 	}
@@ -222,15 +222,15 @@ func fromWireGrant(w *tokenv1.Grant) (types.Grant, error) {
 	return g, err
 }
 
-func wireClass(c types.CredentialClass) tokenv1.CredentialClass {
+func wireKind(c types.CredentialKind) tokenv1.CredentialClass {
 	switch c {
-	case types.ClassOperator:
+	case types.KindOperator:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_OPERATOR
-	case types.ClassStored:
+	case types.KindStored:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_STORED
-	case types.ClassShare:
+	case types.KindShare:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE
-	case types.ClassExchange:
+	case types.KindExchange:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_EXCHANGE
 	}
 	return tokenv1.CredentialClass_CREDENTIAL_CLASS_UNSPECIFIED

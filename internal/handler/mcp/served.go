@@ -89,7 +89,8 @@ func (s *served) annotate(fn handlerFn) handlerFn {
 
 // stamp sets _meta.magus on res and, when the server differs from the caller, appends
 // one text line: hosts do not show _meta to the model, and a skew the model never reads
-// fixes nothing.
+// fixes nothing. The line also drops the structured content, because a host that
+// has it reads it instead of the text blocks and would never show the line.
 func (s *served) stamp(ctx context.Context, res *mcplib.CallToolResult) {
 	info := s.info(ctx)
 	if res.Meta == nil {
@@ -101,12 +102,13 @@ func (s *served) stamp(ctx context.Context, res *mcplib.CallToolResult) {
 	res.Meta.AdditionalFields[servedMetaKey] = info
 	if line := info.skewLine(); line != "" {
 		res.Content = append(res.Content, mcplib.NewTextContent(line))
+		res.StructuredContent = nil
 	}
 }
 
 func (s *served) info(ctx context.Context) servedInfo {
 	info := servedInfo{Root: s.root, Version: s.build.Version, Commit: s.build.Commit, Transport: "http"}
-	stdio := trail.CredentialFromContext(ctx).Class == types.ClassStdio
+	stdio := trail.CredentialFromContext(ctx).Kind == types.KindStdio
 	if stdio {
 		info.Transport = "stdio"
 	}

@@ -1,20 +1,25 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
+	stdjson "encoding/json"
 	"errors"
-	"github.com/egladman/magus/internal/secret"
-	server "github.com/mark3labs/mcp-go/server"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
+
+	server "github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -24,8 +29,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain keeps the variable that re-executes this binary as buzz_test.go's stand-in.
-func TestMain(m *testing.M) { testkit.Main(m, buzzStandInEnv) }
+// TestMain keeps the variables the buzz and client stand-ins re-execute under.
+func TestMain(m *testing.M) {
+	testkit.Main(m, buzzStandInEnv, clientStandInEnv, clientStateEnv, mcpclient.LeaseEnv)
+}
+
+// toolTokenRe matches a declared tool name embedded in prose, as a whole word so
+// it stops at the surrounding punctuation or space.
+var toolTokenRe = func() *regexp.Regexp {
+	names := make([]string, len(hint.AllToolNames))
+	for i, tn := range hint.AllToolNames {
+		names[i] = regexp.QuoteMeta(tn.String())
+	}
+	return regexp.MustCompile(`\b(?:` + strings.Join(names, "|") + `)\b`)
+}()
+
+// fixtureMagus opens a real single-project workspace so a tool that needs a
+// live *magus.Magus can be exercised.
+func fixtureMagus(t *testing.T) *magus.Magus {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module mcptest\n"), 0o644))
+	pkg := filepath.Join(root, "pkg")
+	require.NoError(t, os.MkdirAll(pkg, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"pkg"}`), 0o644))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err)
+	return m
+}
 
 // fakeTel records MCP calls for assertions. It embeds the wide Provider
 // interface so only RecordMCPCall needs an implementation; wrap touches no
@@ -54,7 +85,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Parallel()
 
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
-	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
+	req := callRequest("client", map[string]any{"script": "magus\\query"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel := &fakeTel{}
@@ -69,7 +100,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 		require.Len(t, tel.calls, 1)
 		got := tel.calls[0]
-		assert.Equal(t, "magus_query", got.Tool)
+		assert.Equal(t, "client", got.Tool)
 		assert.Equal(t, "ok", got.Outcome)
 		assert.Positive(t, got.InputBytes)
 		assert.Equal(t, int64(len(out)), got.OutputBytes)
@@ -88,7 +119,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 		require.Len(t, tel.calls, 1)
 		got := tel.calls[0]
-		assert.Equal(t, "magus_query", got.Tool)
+		assert.Equal(t, "client", got.Tool)
 		assert.Equal(t, "error", got.Outcome)
 		assert.Positive(t, got.InputBytes)
 		assert.Zero(t, got.OutputBytes)
@@ -113,7 +144,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	originFn := func(context.Context) origin.Client {
 		return origin.Client{Name: "test-agent", UserAgent: "claude-code/1.2.3"}
 	}
-	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
+	req := callRequest("client", map[string]any{"script": "magus\\query"})
 	const out = "hello world result payload"
 	h := wrap(quietLogger(), originFn, dir, noSecrets, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
@@ -131,7 +162,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	assert.Equal(t, "test-agent", ev.Host, "the MCP client's own name is its host label")
 	assert.Equal(t, types.EntryPointMCP, ev.EntryPoint)
 	assert.Equal(t, "claude-code/1.2.3", ev.UserAgent, "the session User-Agent is recorded on the event")
-	assert.Equal(t, "magus_query", ev.Action)
+	assert.Equal(t, "client", ev.Action)
 	assert.Equal(t, trail.OutcomeOK, ev.Outcome)
 	assert.Equal(t, int64(len(out)), ev.ResponseBytes)
 	assert.Equal(t, out, ev.Preview) // a short response: the preview is the whole body
@@ -144,7 +175,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	assert.Equal(t, out, string(resp))
 	reqBody, err := trail.ReadBlob(dir, ev.RequestRef)
 	require.NoError(t, err)
-	assert.Contains(t, string(reqBody), "kind:target")
+	assert.Contains(t, string(reqBody), "query")
 }
 
 func TestWrapRecordsSoftErrorAsError(t *testing.T) {
@@ -159,7 +190,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
-	_, err := h(context.Background(), callRequest("magus_query", map[string]any{"q": "x"}))
+	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
 	events, err := trail.ReadRecent(dir, 10)
@@ -177,7 +208,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	failure := errors.New("[MGS3016] workspace /repo failed to load")
 	opts := Options{Unavailable: func() error { return failure }}
 	require.NoError(t, opts.validate(), "Unavailable stands in for Magus")
-	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Client { return origin.Client{} }, "")
+	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Client { return origin.Client{} }, "", newTaskRuns())
 
 	tools := srv.ListTools()
 	require.Len(t, tools, len(Registry))
@@ -215,14 +246,6 @@ func TestParamString(t *testing.T) {
 	assert.Equal(t, "def", paramString(nil, "k", "def"))
 }
 
-func TestParamBool(t *testing.T) {
-	t.Parallel()
-	assert.True(t, paramBool(map[string]any{"dry_run": true}, "dry_run", false))
-	assert.False(t, paramBool(map[string]any{"dry_run": false}, "dry_run", true))
-	assert.False(t, paramBool(map[string]any{"dry_run": "yes"}, "dry_run", false)) // wrong type → default
-	assert.True(t, paramBool(nil, "dry_run", true))
-}
-
 func TestParamFloat(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, 3.14, paramFloat(map[string]any{"n": float64(3.14)}, "n", 0))
@@ -230,29 +253,6 @@ func TestParamFloat(t *testing.T) {
 	assert.Equal(t, float64(99), paramFloat(map[string]any{"n": int64(99)}, "n", 0))
 	assert.Equal(t, 1.5, paramFloat(map[string]any{"n": "oops"}, "n", 1.5)) // wrong type → default
 	assert.Equal(t, 2.0, paramFloat(nil, "n", 2.0))
-}
-
-func TestParseRunEvents(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty", func(t *testing.T) {
-		assert.Empty(t, parseRunEvents(bytes.NewBufferString("")))
-	})
-	t.Run("blank lines only", func(t *testing.T) {
-		assert.Empty(t, parseRunEvents(bytes.NewBufferString("\n\n")))
-	})
-	t.Run("single event", func(t *testing.T) {
-		assert.Len(t, parseRunEvents(bytes.NewBufferString(`{"type":"run"}`)), 1)
-	})
-	t.Run("two events", func(t *testing.T) {
-		assert.Len(t, parseRunEvents(bytes.NewBufferString("{\"type\":\"a\"}\n{\"type\":\"b\"}")), 2)
-	})
-	t.Run("whitespace around", func(t *testing.T) {
-		assert.Len(t, parseRunEvents(bytes.NewBufferString("  {\"k\":1}  \n")), 1)
-	})
-	t.Run("invalid json skipped", func(t *testing.T) {
-		assert.Len(t, parseRunEvents(bytes.NewBufferString("not-json\n{\"ok\":true}")), 1)
-	})
 }
 
 func TestOptions_Accessors(t *testing.T) {
@@ -350,12 +350,14 @@ func TestBuildMCPTool(t *testing.T) {
 			{Name: "q", Type: "string", Required: true, Description: "query"},
 			{Name: "dry", Type: "boolean"},
 			{Name: "n", Type: "number"},
+			{Name: "args", Type: "string_array"},
 		},
 	})
 	assert.Equal(t, "demo", tool.Name)
 	assert.Contains(t, tool.InputSchema.Properties, "q")
 	assert.Contains(t, tool.InputSchema.Properties, "dry")
 	assert.Contains(t, tool.InputSchema.Properties, "n")
+	assert.Equal(t, map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, tool.InputSchema.Properties["args"])
 	assert.Equal(t, []string{"q"}, tool.InputSchema.Required)
 
 	// An unknown param type is a programming error, surfaced as a panic at build time.
@@ -364,25 +366,65 @@ func TestBuildMCPTool(t *testing.T) {
 	})
 }
 
+// The structured copy is the text's own bytes, so a host reading either sees the same
+// payload: magus's codec renders a duration as a string, and a re-encode through
+// encoding/json would send integer nanoseconds.
 func TestJSONResult(t *testing.T) {
 	t.Parallel()
 
-	res, err := jsonResult(map[string]any{"a": 1})
+	res, err := jsonResult(struct {
+		Wait time.Duration `json:"wait"`
+	}{time.Second})
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"a":1}`, allText(res))
+	assert.JSONEq(t, `{"wait":"1s"}`, allText(res))
+	wire, err := stdjson.Marshal(res)
+	require.NoError(t, err)
+	var frame struct {
+		StructuredContent stdjson.RawMessage `json:"structuredContent"`
+	}
+	require.NoError(t, stdjson.Unmarshal(wire, &frame))
+	assert.JSONEq(t, `{"wait":"1s"}`, string(frame.StructuredContent))
+
+	// Structured content must be an object; anything else goes out as text alone.
+	for _, v := range []any{(*struct{})(nil), []int{1}, "s"} {
+		res, err := jsonResult(v)
+		require.NoError(t, err)
+		assert.Nil(t, res.StructuredContent, "%#v", v)
+	}
 
 	// A value the JSON codec cannot encode surfaces as an error, not a partial result.
 	_, err = jsonResult(make(chan int))
 	assert.Error(t, err)
 }
 
-func TestToolLogger(t *testing.T) {
+func TestDeclaredParamsRefusesAnUndeclaredParam(t *testing.T) {
 	t.Parallel()
 
-	assert.NotNil(t, toolLogger(context.Background())) // default when none attached
+	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(fakeDriver{resp: spells.InvokeResponse{Text: "ran"}}))
+	res, err := h(context.Background(), callRequest("demo", map[string]any{"script": "x", "input": 1}))
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Equal(t, `demo: unknown parameter "input"`, allText(res))
 
-	custom := slog.New(slog.NewTextHandler(nil, nil))
-	assert.Same(t, custom, toolLogger(withLogger(context.Background(), custom)))
+	res, err = h(context.Background(), callRequest("demo", map[string]any{"script": "x"}))
+	require.NoError(t, err)
+	assert.Equal(t, "ran", allText(res))
+}
+
+// OutputBytes is the agent's context cost, so it counts the structured copy of a
+// payload as well as its text.
+func TestWrapMeasuresEveryByteSent(t *testing.T) {
+	t.Parallel()
+
+	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
+	tel := &fakeTel{}
+	h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return jsonResult(map[string]any{"ok": true})
+	})
+	result, err := h(context.Background(), callRequest(hint.ToolStatus.String(), nil))
+	require.NoError(t, err)
+	require.Len(t, tel.calls, 1)
+	assert.Equal(t, int64(2*len(allText(result))), tel.calls[0].OutputBytes)
 }
 
 // TestToolCallBlobsAreRedacted is the test the trail's ctx parameter always needed.
@@ -410,7 +452,7 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	h := wrapWithResolver(t, base, res, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText("upstream said: " + credential), nil
 	})
-	_, err = h(context.Background(), callRequest("magus_query", map[string]any{"q": credential}))
+	_, err = h(context.Background(), callRequest("client", map[string]any{"q": credential}))
 	require.NoError(t, err)
 
 	var found []string
@@ -446,18 +488,18 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 		return mcplib.NewToolResultText("ran"), nil
 	}
 	req := mcplib.CallToolRequest{}
-	req.Params.Name = "magus_status"
+	req.Params.Name = "status"
 
 	cases := map[string]struct {
 		cred    types.Credential
 		allowed bool
 	}{
 		"socket peer":   {types.CredentialSocketPeer, true},
-		"connector":     {types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}, true},
-		"operator":      {types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}, true},
-		"console token": {types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, false},
+		"connector":     {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, true},
+		"operator":      {types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}, true},
+		"console token": {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, false},
 		"no credential": {types.Credential{}, false},
-		"viewer grant":  {types.Credential{Class: types.ClassSocketPeer, Grant: types.GrantViewer}, false},
+		"viewer grant":  {types.Credential{Kind: types.KindSocketPeer, Grant: types.GrantViewer}, false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -471,7 +513,7 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 			}
 			assert.True(t, res.IsError)
 			assert.Contains(t, text, string(types.GrantInsufficient))
-			assert.Contains(t, text, "magus_status needs mcp=write")
+			assert.Contains(t, text, "status needs mcp=write")
 		})
 	}
 }

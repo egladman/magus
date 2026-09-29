@@ -363,7 +363,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 		StatusBase: buildStatusBase(),
 		// ONE diff-session store for the whole server, constructed here because this is
 		// where the server's dependencies are assembled. The console's /api/v1/diff routes
-		// and the magus_diff MCP tool both read it, and that sharing IS the pairing: a
+		// and the diff MCP tool both read it, and that sharing IS the pairing: a
 		// person opens a diff, an agent joins the session they started.
 		DiffSessions: changeset.NewStore(m.CacheDir()),
 		// The same store the OnJobDone callback completes rows in, so the server's own

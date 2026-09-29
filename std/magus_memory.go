@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// memoryRoot names the store `magus memory` and the magus_memory tool also read: it is
+// memoryRoot names the store `magus memory` and magus\memory also read: it is
 // keyed by repository, so every worktree of one repository shares it.
 func memoryRoot(ctx context.Context, member string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)

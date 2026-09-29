@@ -424,7 +424,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 }
 
 // TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
-// internal/job.ParseMerge with the magus_job MCP tool: a later put naming only
+// internal/job.ParseMerge with magus\job.put: a later put naming only
 // `state` must not erase the goal an earlier put declared.
 // Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
 // "" hashes to the same state directory in every checkout, so these rows would land in
@@ -498,11 +498,11 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	assert.Equal(t, "fleet/bound", store.Actor().Lease)
 }
 
-// TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_job MCP
-// tool are two doors onto the same file: a row put through one is visible through the
-// other, and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
+// TestLedgerBindingAndStoreAgree pins that magus\job.put and the store are two doors
+// onto the same file: a row put through the binding is visible through the store,
+// and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
 // is what makes that true without either side naming the other.
-func TestLedgerAndTheMCPToolAgree(t *testing.T) {
+func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	stateBase := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateBase)
 
@@ -596,35 +596,32 @@ func TestGraphMembersAreServedInProcess(t *testing.T) {
 
 	q, err := MagusQuery(ctx, "kind=target", map[string]any{"limit": int64(1)})
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), q["match_count"], "the total survives the window, as an int rather than a double")
-	assert.Len(t, q["matches"], 1)
-	assert.Equal(t, string(types.VerdictFound), q["answer"].(map[string]any)["verdict"])
+	assert.Equal(t, 2, q.MatchCount, "the total survives the window")
+	assert.Len(t, q.Matches, 1)
+	assert.Equal(t, types.VerdictFound, q.Answer.Verdict)
 
-	x, err := MagusExplain(ctx, "target:pkg/a:build", "")
+	x, err := MagusExplain(ctx, "target:pkg/a:build")
 	require.NoError(t, err)
-	assert.Equal(t, "target:pkg/a:build", x["node"].(map[string]any)["id"])
+	assert.Equal(t, "target:pkg/a:build", x.Node.ID)
 
 	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test")
 	require.NoError(t, err)
-	assert.Equal(t, true, p["found"])
-	viaExplain, err := MagusExplain(ctx, "target:pkg/a:build", "target:pkg/a:test")
-	require.NoError(t, err)
-	assert.Equal(t, p, viaExplain, "explain with to is the path member's answer")
+	assert.True(t, p.Found)
 
 	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b")
 	require.NoError(t, err, "a resolved pair with no connection is an answer")
-	assert.Equal(t, false, unlinked["found"])
+	assert.False(t, unlinked.Found)
 
 	s, err := MagusStats(ctx, "")
 	require.NoError(t, err)
-	assert.Equal(t, int64(5), s["node_count"])
+	assert.Equal(t, 5, s.NodeCount)
 }
 
 func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
 	t.Parallel()
 	ctx := graphContext(t)
 
-	_, err := MagusExplain(ctx, "target:pkg/z:nope", "")
+	_, err := MagusExplain(ctx, "target:pkg/z:nope")
 	require.Error(t, err)
 	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope")
 	require.Error(t, err)
@@ -638,12 +635,12 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 
 	r, err := MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(1), "limit": int64(1)})
 	require.NoError(t, err)
-	assert.Equal(t, int64(3), r["file_count"])
-	assert.Equal(t, []any{map[string]any{"file": "pkg/b.go", "count": int64(1), "lines": []any{int64(3)}}}, r["refs"])
+	assert.Equal(t, 3, r.FileCount)
+	assert.Equal(t, []types.KnowledgeRefSite{{File: "pkg/b.go", Count: 1, Lines: []int{3}}}, r.Refs)
 
 	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", nil)
 	require.NoError(t, err, "a symbol nothing defines is an answer, not a raise")
-	assert.Equal(t, string(types.VerdictAbsent), absent["answer"].(map[string]any)["verdict"])
+	assert.Equal(t, types.VerdictAbsent, absent.Answer.Verdict)
 }
 
 // A mistyped option would otherwise answer a different question than the one asked.
@@ -665,7 +662,7 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 
 	calls := map[string]func() error{
 		"query":          func() error { _, err := MagusQuery(ctx, "x", nil); return err },
-		"explain":        func() error { _, err := MagusExplain(ctx, "x", ""); return err },
+		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
 		"path":           func() error { _, err := MagusPath(ctx, "x", "y"); return err },
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
@@ -689,9 +686,9 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 
 	got, err := MagusOutput(ctx, desc.Ref)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{
-		"ref": desc.Ref, "project": "pkg/a", "target": "build",
-		"failed": false, "duration_ms": int64(7), "output": "ok\n",
+	assert.Equal(t, types.OutputRecord{
+		Ref: desc.Ref, Project: "pkg/a", Target: "build",
+		Failed: false, DurationMs: 7, Output: "ok\n",
 	}, got)
 
 	_, err = MagusOutput(ctx, "build")

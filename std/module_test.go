@@ -210,9 +210,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 }
 
 // TestValidateModuleRejectsMalformedMCPTools covers the agent-surface half of
-// validation. The Member case is the one worth the test: a tool wrapping a member
-// that was renamed still registers and still answers, so nothing observable breaks
-// and only this refusal says the catalog stopped deriving from the descriptor.
+// validation.
 func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 	base := Method{Name: "look", Doc: "d", Impl: covImplStrStr, Args: []Arg{{Name: "s", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}}
 	tests := []struct {
@@ -220,12 +218,11 @@ func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 		tool MCPTool
 		want string
 	}{
-		{"member must exist", MCPTool{Name: "m_a", Doc: "d", Member: "nosuch"}, `member "nosuch" is not a method or namespace`},
 		{"name is required", MCPTool{Doc: "d"}, "empty Name"},
 		{"doc is required", MCPTool{Name: "m_a"}, "empty Doc"},
 		{
-			"param type must be a schema scalar",
-			MCPTool{Name: "m_a", Doc: "d", Params: []MCPParam{{Name: "p", Type: TypeStringSlice}}},
+			"param type must have a schema shape",
+			MCPTool{Name: "m_a", Doc: "d", Params: []MCPParam{{Name: "p", Type: TypeStringSliceSlice}}},
 			"has no supported JSON schema shape",
 		},
 		{
@@ -241,17 +238,6 @@ func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
-
-	t.Run("a namespace is a valid member", func(t *testing.T) {
-		ns := Namespace{Name: "grp", Methods: []Method{{Name: "one", Doc: "d", Extern: true}}}
-		err := ValidateModule(Module{
-			Name:       "covmcp",
-			Methods:    []Method{base},
-			Namespaces: []Namespace{ns},
-			MCPTools:   []MCPTool{{Name: "m_a", Doc: "d", Member: "grp"}, {Name: "m_b", Doc: "d", Member: "look"}},
-		})
-		assert.NoError(t, err)
-	})
 
 	t.Run("duplicate tool names are refused", func(t *testing.T) {
 		err := ValidateModule(Module{

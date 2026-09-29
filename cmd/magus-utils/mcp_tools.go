@@ -5,8 +5,8 @@
 // The catalog was hand-written (22 descriptors, ~22 KB of prose) and was the one
 // magus surface that did not derive from the descriptor every other surface does:
 // the runtime bindings, the checker declarations, and the reference docs all come
-// from std. A hand-written twenty-third copy is how magus_tail_log lived on as a
-// duplicate of magus_output long after the duplication was admitted in writing.
+// from std. A hand-written twenty-third copy is how the tail_log tool lived on as a
+// duplicate of the output tool long after the duplication was admitted in writing.
 
 package main
 
@@ -54,7 +54,7 @@ func runMCPTools(args []string) error {
 	return nil
 }
 
-// mcpParamType maps a declared param type to the JSON schema scalar name
+// mcpParamType maps a declared param type to the type name
 // internal/handler/mcp's buildMCPTool switches on. std's validation already
 // rejects every other tag, so an unmapped one here is a programmer error rather
 // than a shape a descriptor can reach.
@@ -68,6 +68,8 @@ func mcpParamType(t std.TypeTag) (string, error) {
 		return "number", nil
 	case std.TypeAnyMap:
 		return "object", nil
+	case std.TypeStringSlice:
+		return "string_array", nil
 	default:
 		return "", fmt.Errorf("param type %s has no JSON schema scalar", t.GoType())
 	}
@@ -92,13 +94,8 @@ func renderMCPTools(tools []std.MCPTool) ([]byte, error) {
 
 	b.WriteString("// ToolDescriptor is a static description of one MCP tool: it registers the tool\n")
 	b.WriteString("// with the server (registerTools) and populates `magus describe mcp-tools`.\n")
-	b.WriteString("//\n")
-	b.WriteString("// Member is the descriptor member the tool wraps, empty when no typed Buzz\n")
-	b.WriteString("// member covers the verb yet. It is carried through so the gap is readable from\n")
-	b.WriteString("// the catalog rather than only from the descriptor.\n")
 	b.WriteString("type ToolDescriptor struct {\n")
 	b.WriteString("\tName        string            `json:\"name\"                  yaml:\"name\"`\n")
-	b.WriteString("\tMember      string            `json:\"member,omitempty\"      yaml:\"member,omitempty\"`\n")
 	b.WriteString("\tDescription string            `json:\"description,omitempty\" yaml:\"description,omitempty\"`\n")
 	b.WriteString("\tParams      []ParamDescriptor `json:\"params,omitempty\"      yaml:\"params,omitempty\"`\n")
 	b.WriteString("}\n\n")
@@ -108,9 +105,6 @@ func renderMCPTools(tools []std.MCPTool) ([]byte, error) {
 	for _, t := range tools {
 		b.WriteString("\t{\n")
 		fmt.Fprintf(&b, "\t\tName: %q,\n", t.Name)
-		if t.Member != "" {
-			fmt.Fprintf(&b, "\t\tMember: %q,\n", t.Member)
-		}
 		fmt.Fprintf(&b, "\t\tDescription: %q,\n", t.Doc)
 		if len(t.Params) > 0 {
 			b.WriteString("\t\tParams: []ParamDescriptor{\n")

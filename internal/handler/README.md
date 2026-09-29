@@ -64,7 +64,11 @@ Two subpackages mirror neither a proto package nor a route:
   descriptor catalog in `registry.go`, the dispatch pipeline in `mcp.go`, and the
   transports in `transport.go`: the streamable-HTTP handler builder + stdio). It
   mirrors the agent-facing MCP tool surface. Its bearer
-  token store lives in `internal/auth`; the guards in `internal/httpx`.
+  token store lives in `internal/auth`; the guards in `internal/httpx`. The
+  handlers adapt existing Magus operations; they do not own copies of the graph,
+  runner or stores. The `buzz` tool forks a JSON transform worker, while other MCP
+  tools own workspace access. See the
+  [MCP boundary](../../docs/guides/integrations/mcp.md#the-boundary-and-the-fallback).
 - `internal/handler/trailrpc` - the audit interceptor for the Connect services, which
   records mutating unary RPCs to the activity trail by construction.
 

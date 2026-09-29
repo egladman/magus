@@ -42,21 +42,8 @@ func validateModule(m Module) error {
 }
 
 // validateMCPTools checks the module's agent surface: unique tool names, unique
-// parameter names within a tool, a schema-representable type on every parameter,
-// and a Member that names a real Method or Namespace.
-//
-// The Member check is the one worth having. A tool whose member was renamed still
-// registers and still answers, so nothing observable breaks; what breaks is the
-// claim that the MCP surface derives from the descriptor. Failing at init makes
-// the rename a build error at the descriptor rather than a divergence found later.
+// parameter names within a tool, and a schema-representable type on every parameter.
 func validateMCPTools(m Module) error {
-	members := make(map[string]bool, len(m.Methods)+len(m.Namespaces))
-	for _, meth := range m.Methods {
-		members[meth.Name] = true
-	}
-	for _, ns := range m.Namespaces {
-		members[ns.Name] = true
-	}
 	seen := map[string]bool{}
 	for _, tool := range m.MCPTools {
 		if tool.Name == "" {
@@ -69,9 +56,6 @@ func validateMCPTools(m Module) error {
 		if tool.Doc == "" {
 			return fmt.Errorf("mcp tool %q: empty Doc; the description is what an agent picks the tool by", tool.Name)
 		}
-		if tool.Member != "" && !members[tool.Member] {
-			return fmt.Errorf("mcp tool %q: member %q is not a method or namespace on this module", tool.Name, tool.Member)
-		}
 		params := map[string]bool{}
 		for _, p := range tool.Params {
 			if p.Name == "" {
@@ -82,7 +66,7 @@ func validateMCPTools(m Module) error {
 			}
 			params[p.Name] = true
 			switch p.Type {
-			case TypeString, TypeInt, TypeFloat, TypeBool, TypeAnyMap:
+			case TypeString, TypeInt, TypeFloat, TypeBool, TypeStringSlice, TypeAnyMap:
 			default:
 				return fmt.Errorf("mcp tool %q: param %q has type %s, which has no supported JSON schema shape", tool.Name, p.Name, p.Type.GoType())
 			}

@@ -46,7 +46,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	frames := []string{
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cmd-test","version":"1"}}}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"magus_describe","arguments":{"kind":"mcp_tools"}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"config","arguments":{}}}`,
 	}
 	for i, frame := range frames {
 		_, err := io.WriteString(inW, frame+"\n")

@@ -201,10 +201,10 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 
-	// ONE job store for the whole server, built before the MCP handler so the magus_job
-	// tool and the JobService below hold the same object. Two stores over one file each
-	// take their own mutex, and the merge Update performs under a single acquisition then
-	// serializes against nothing.
+	// ONE job store for the server's own readers, the activity feed and the JobService
+	// below. Two stores over one file each take their own mutex, and the merge Update
+	// performs under a single acquisition then serializes against nothing. The client
+	// tool's magus\job runs in a forked worker and opens the store itself.
 	if opts.Jobs == nil && opts.Magus != nil {
 		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
@@ -301,7 +301,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The server-wide session store, constructed by the caller so the console routes
-			// below and the magus_diff MCP tool read the SAME object: that sharing is the
+			// below and the diff MCP tool read the SAME object: that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
 			diffSessions := opts.DiffSessions
@@ -547,8 +547,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
 			// Memory management service: the typed surface the console Settings UI uses to LIST,
-			// READ, EDIT, and DELETE the durable magus_memory files (status, progress, decisions).
-			// It is a second door onto the EXACT on-disk files the magus_memory MCP tool writes,
+			// READ, EDIT, and DELETE the durable magus memory files (status, progress, decisions).
+			// It is a second door onto the EXACT on-disk files the client tool's magus\memory writes,
 			// never a second store: the human edit/delete surface is the safety valve against agent
 			// memory growing unbounded (it is append-heavy and never rotated by default). Mounted on
 			// the loopback listener behind the standard bearer guard and deliberately NOT in

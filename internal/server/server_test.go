@@ -800,14 +800,14 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	session := resp.Header.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
 
-	resp, out = call(client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"magus_config_get","arguments":{}}}`)
+	resp, out = call(client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config","arguments":{}}}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, out)
 	assert.Contains(t, out, `"result"`)
 	assert.NotContains(t, out, `"isError":true`, "the socket peer's grant reaches every tool")
 
 	events, err := os.ReadFile(filepath.Join(m.CacheDir(), "activity", "events.jsonl"))
 	require.NoError(t, err)
-	assert.Contains(t, string(events), `"action":"magus_config_get"`)
+	assert.Contains(t, string(events), `"action":"config"`)
 	assert.Contains(t, string(events), `"class":"socket-peer"`, "the call is attributed to the socket peer")
 
 	status := statusv1alpha1connect.NewStatusServiceClient(client, "http://magus")

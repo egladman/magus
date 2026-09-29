@@ -1,5 +1,5 @@
 // Package memory is the console-facing MemoryService handler: an observable, editable view
-// over the durable memory entries the MCP magus_memory tool writes. It is a second
+// over the durable memory entries the client MCP tool's magus\memory writes. It is a second
 // door onto the EXACT on-disk store that tool maintains (internal/memory, aliased `store`
 // here), never a second store of its own, so the browser edit surface and the agent-facing
 // tool share one set of records. Its reason to exist: an agent can accumulate stale or
