@@ -173,7 +173,7 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 	assert.Empty(t, out, "a current block is not reprinted")
 
 	// A stale one is, with the replace-in-place instruction rather than the add-it one.
-	stale := strings.Replace(agentSkills.AgentsBlock(false),"skill-content: ", "skill-content: 0", 1)
+	stale := strings.Replace(agentSkills.AgentsBlock(false), "skill-content: ", "skill-content: 0", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+stale), 0o644))
 	out = captureStderr(t, func() { printAgentsBlockToPaste(dir) })
 	assert.Contains(t, out, "older copy")
