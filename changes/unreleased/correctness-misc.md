@@ -28,5 +28,7 @@
 - **A top-level raising call in `magus buzz` names the fix.** BZZ1006 says to put
   the call in `fun main(args: [str]) > void !> any { ... }`, which `magus buzz` calls
   after the top level, and which `-e` takes too.
-- **`MAGUS_OFFLINE` and `http` document what they do.** The variable does not stop a
-  script's own `http\` calls, and `http` no longer claims its requests are audited.
+- **`MAGUS_OFFLINE` refuses every `http\` request a script sends,** by name and before
+  it leaves the process, as it already did for remote-spell fetches; `http\serve`, which
+  only listens on localhost, is unaffected. `http` no longer claims its requests are
+  audited: they are not recorded.

@@ -145,7 +145,7 @@ func resolveSlot(ctx context.Context, ref Ref, opts Options, root, slot string) 
 	}
 	_, statErr := os.Stat(slot)
 	stale := statErr == nil
-	if offline() {
+	if config.Offline() {
 		if stale {
 			return "", types.WrapDiagnostic(types.RemoteSpellDigestMismatch, verr,
 				"remote spell %s: the cached copy does not match the pin and MAGUS_OFFLINE forbids a fresh pull: %v", ref.Import, verr)
@@ -753,10 +753,4 @@ func (o Options) client(ctx context.Context) (*oci.Client, error) {
 		return o.Connect(ctx)
 	}
 	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}, nil
-}
-
-// offline reports whether MAGUS_OFFLINE is set to anything but 0 or false.
-func offline() bool {
-	v := os.Getenv("MAGUS_OFFLINE")
-	return v != "" && v != "0" && v != "false"
 }

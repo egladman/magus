@@ -3,10 +3,10 @@ package bindings
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -26,10 +26,11 @@ const lifecycleDeadline = 15 * time.Second
 // runLifecycleProvider invokes spellName's list_lifecycles contract for keys and decodes
 // what it returns.
 //
-// MAGUS_OFFLINE is checked HERE, before the VM runs, because std/http does not honor it: a
-// provider spell asked while offline would send its requests anyway.
+// MAGUS_OFFLINE is checked HERE, before the VM runs: std/http would refuse the provider's
+// requests anyway, but answering ErrLifecycleOffline up front is what lets describe tools
+// replay its stored answer instead of reporting the provider unreached.
 func runLifecycleProvider(ctx context.Context, spellName, root string, keys []string) ([]spells.Lifecycle, error) {
-	if v := os.Getenv("MAGUS_OFFLINE"); v != "" && v != "0" && v != "false" {
+	if config.Offline() {
 		return nil, workspace.ErrLifecycleOffline
 	}
 	drv, ok := project.DefaultSpellRegistry().Lookup(spellName)

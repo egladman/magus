@@ -427,7 +427,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 
 **MAGUS_OFFLINE**
-: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch fails with a named error instead of sending a request, and the lifecycle provider is not asked: \`magus describe tools\` replays its stored answer or reads unknown (offline). It does not reach a script's own http calls, which still go out (default: false)
+: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: \`magus describe tools\` replays its stored answer or reads unknown (offline) (default: false)
 
 **MAGUS_DIFFTOOL**
 : Env-only, no magus.yaml equivalent: the command, taking two paths, that \`--then file \<path\> diff\` compares a cached artifact with (default: $DIFFTOOL, then git diff --no-index)

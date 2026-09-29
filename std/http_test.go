@@ -165,18 +165,29 @@ func TestHTTPFail(t *testing.T) {
 	assert.Contains(t, err.Error(), "nope", "fail_with_body: want body in error")
 }
 
-// MAGUS_OFFLINE stops the fetches magus makes on its own behalf, not the ones a
-// magusfile asks for; the variable's description and HTTP's doc both say so.
-func TestHTTPIgnoresMagusOffline(t *testing.T) {
-	t.Setenv("MAGUS_OFFLINE", "1")
+// MAGUS_OFFLINE refuses every request a script sends, by name, before it leaves the
+// process; 0 and false leave it off, as for a remote-spell fetch.
+func TestHTTPRefusesUnderMagusOffline(t *testing.T) {
+	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
 		_, _ = w.Write([]byte("online"))
 	}))
 	defer srv.Close()
 
-	res, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
-	require.NoError(t, err)
-	assert.Equal(t, "online", res.Body)
+	t.Setenv("MAGUS_OFFLINE", "1")
+	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+	require.ErrorContains(t, err, "MAGUS_OFFLINE")
+	_, err = HTTPDownload(context.Background(), srv.URL, filepath.Join(t.TempDir(), "out"), nil, nil, nil)
+	require.ErrorContains(t, err, "MAGUS_OFFLINE")
+	assert.Zero(t, hits, "no request may leave the process")
+
+	for _, off := range []string{"0", "false"} {
+		t.Setenv("MAGUS_OFFLINE", off)
+		res, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+		require.NoError(t, err, off)
+		assert.Equal(t, "online", res.Body, off)
+	}
 }
 
 // TestHTTPFailCarriesTheStatus is what lets a Buzz caller tell a 404 from a 500.
