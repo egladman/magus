@@ -47,6 +47,14 @@ inputs:
       has to act on before they can load the workspace at all.
     required: false
     default: 'true'
+  trusted-script-moved:
+    description: >
+      Comment when the pull request renames or deletes a script that a workflow job runs
+      after checking out the default branch. Such a job runs the base's copy, so a move
+      breaks it until the pull request merges, and a delete breaks it for good unless the
+      workflow changes too.
+    required: false
+    default: 'true'
   blast-radius:
     description: >
       Comment when a change reaches a large share of the workspace, naming the dependency
