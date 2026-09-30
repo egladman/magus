@@ -147,7 +147,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 				Path: []string{"hooks", "before"},
 				Entries: []map[string]any{{
 					"match":    "run",
-					"commands": []any{map[string]any{"type": "command", "command": "sh magus-command.sh"}},
+					"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
 				}},
 			}},
 		}, "spell:brief-host", true, nil
@@ -159,12 +159,12 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}}`), 0o644))
-	// VerifyHarness now actually runs the wired command (internal/agent's
+		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`), 0o644))
+	// VerifyHarness actually runs the wired command (internal/agent's
 	// harness_probe.go) instead of trusting its mere presence in the config, so
-	// the brief's guard-wiring section needs something real behind it.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	// the brief's guard-wiring section needs something real behind it: a stand-in
+	// for magus running the command glue, answering as a working guard would.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

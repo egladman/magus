@@ -75,7 +75,7 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 // collectOrderNodes builds one TargetNode per distinct (project, target) the
 // batch executes: the steps' own targets and, transitively, every chain member
 // their bodies compose (ctx.needs, extracted statically). Globs are
-// workspace-rooted the same way the cache keys them (joinGlob).
+// workspace-rooted the same way the cache keys them.
 func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 	byKey := map[string]*cache.TargetNode{}
 	var order []string
@@ -295,11 +295,11 @@ func (m *Magus) hashNodeWrites(n cache.TargetNode) string {
 	fsys := os.DirFS(root)
 	var files []string
 	for _, glob := range n.Writes {
-		matches, err := doublestar.Glob(fsys, glob)
+		matches, err := doublestar.Glob(fsys, glob.Pattern)
 		if err != nil {
 			continue
 		}
-		files = append(files, matches...)
+		files = append(files, slices.DeleteFunc(matches, glob.Excludes)...)
 	}
 	slices.Sort(files)
 	files = slices.Compact(files)

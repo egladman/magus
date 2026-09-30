@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
@@ -33,8 +34,8 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 	outRel := filepath.Join("myservice", "out.bin")
 	step := Step{
 		ProjectPath:   "myservice",
-		Sources:       []string{"myservice/*.go"},
-		Outputs:       []string{outRel},
+		Sources:       types.MustParseGlobs("myservice/*.go"),
+		Outputs:       types.MustParseGlobs(outRel),
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
@@ -178,15 +179,15 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 
 	buildStep := Step{
 		ProjectPath:   "svc",
-		Sources:       []string{"svc/*.go"},
-		Outputs:       []string{"svc/build.out"},
+		Sources:       types.MustParseGlobs("svc/*.go"),
+		Outputs:       types.MustParseGlobs("svc/build.out"),
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
 	testStep := Step{
 		ProjectPath:   "svc",
-		Sources:       []string{"svc/*.go"},
-		Outputs:       []string{"svc/test.out"},
+		Sources:       types.MustParseGlobs("svc/*.go"),
+		Outputs:       types.MustParseGlobs("svc/test.out"),
 		WorkspaceRoot: root,
 		Target:        "test",
 	}

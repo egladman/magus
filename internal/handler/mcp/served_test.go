@@ -45,7 +45,7 @@ func callStamped(t *testing.T, s *served, ctx context.Context, session server.Cl
 	t.Helper()
 	srv := server.NewMCPServer("magus", "test", server.WithToolCapabilities(false))
 	srv.AddTool(mcplib.NewTool("probe"), server.ToolHandlerFunc(s.annotate(func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-		return mcplib.NewToolResultText(`{"ok":true}`), nil
+		return jsonResult(map[string]any{"ok": true})
 	})))
 	msg := srv.HandleMessage(srv.WithContext(ctx, session), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"probe"}}`))
 	reply, ok := msg.(mcplib.JSONRPCResponse)
@@ -96,6 +96,7 @@ func TestServedNamesTheServedRootAndBuildOnEveryResult(t *testing.T) {
 	res := callStamped(t, s, context.Background(), session)
 	assert.Equal(t, servedInfo{Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "http"}, servedMeta(t, res))
 	assert.Equal(t, []string{`{"ok":true}`}, textParts(res), "no skew adds no line")
+	assert.NotNil(t, res.StructuredContent, "no skew keeps the structured payload")
 }
 
 func TestServedReportsRootSkewFromTheCallersRoots(t *testing.T) {
@@ -119,6 +120,7 @@ func TestServedReportsRootSkewFromTheCallersRoots(t *testing.T) {
 		`{"ok":true}`,
 		"magus skew: this server serves " + root + " and your session is in " + other + "; register `./magus mcp` per checkout (magus describe harness)",
 	}, textParts(res))
+	assert.Nil(t, res.StructuredContent, "a host reading structured content would never show the skew line")
 }
 
 func TestServedReportsNoRootSkewWithoutTheRootsCapability(t *testing.T) {

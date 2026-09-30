@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -40,18 +41,26 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
 			" and exec what it prints", errNoBase)
 	}
+	// Resolved before the lock, since resolving runs the VCS; the row is read again under it.
+	var checkpoint string
+	if f, err := s.read(); err == nil {
+		if i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+			checkpoint = f.Jobs[i].Checkpoint
+		}
+	}
+	full := s.fullRevisions(ctx, checkpoint, base)
 	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to exec against."+
-				" Check the declared ids with `magus_job list` and exec under the id the"+
-				" orchestrator handed you", ErrUnknownJob, id)
+				" Check the declared ids with `%s` and exec under the id the"+
+				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
 		}
 		if cur.State.Terminal() {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take;"+
 				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
 		}
 		cur.ReportedBase = base
-		cur.BaseVerdict = compareBase(cur.Checkpoint, base)
+		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))
 		cur.Registered = now
 		// Relative would be resolved against whichever process sweeps the row later.
 		cur.CheckoutRoot = ""
@@ -62,6 +71,48 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 		}
 		return nil
 	})
+}
+
+// fullRevisions maps the revision half of each token to the full revision this checkout's
+// VCS resolves it to, so an abbreviated revision and the full one it abbreviates compare
+// equal. Asked only when the two halves differ as strings; a revision the VCS cannot
+// place, or a checkout with none, maps to nothing and is compared as written.
+func (s *Store) fullRevisions(ctx context.Context, tokens ...string) map[string]string {
+	revs := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		if rev := checkpointRevision(t); rev != "" && !slices.Contains(revs, rev) {
+			revs = append(revs, rev)
+		}
+	}
+	if s.root == "" || len(revs) < 2 {
+		return nil
+	}
+	driver, _ := resolveDriver(ctx, s.root)
+	if driver == nil {
+		return nil
+	}
+	full := map[string]string{}
+	for _, rev := range revs {
+		if c, err := driver.FindCommit(ctx, s.root, rev); err == nil && c.ID != "" {
+			full[rev] = c.ID
+		}
+	}
+	return full
+}
+
+// withFullRevision is token with its revision half replaced by the full revision full
+// names for it, the dirty-tree digest kept.
+func withFullRevision(token string, full map[string]string) string {
+	rev, digest, dirty := strings.Cut(strings.TrimSpace(token), "+")
+	id, ok := full[rev]
+	switch {
+	case !ok:
+		return token
+	case dirty:
+		return id + "+" + digest
+	default:
+		return id
+	}
 }
 
 // compareBase compares the checkpoint a lease was handed with the base its worker

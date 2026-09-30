@@ -144,6 +144,19 @@ one that had been missed: `Marshal` failed outright on it, which silently barred
 program using `typeof` from ever being a built-in spell. [Bytecode version](#bytecode-version) records what each format bump changed and why an older
 VM must reject a newer blob.
 
+Three embedding supersets sit beside it, none of which changes what a program means:
+
+- **A persistent bytecode cache.** `Session.SetBytecodeStore` saves each compiled
+  chunk with the files it was compiled against, including the files its imports
+  imported and how each import resolved, and reruns the chunk while every one still
+  resolves to the same bytes.
+- **An entry filter.** `Session.SetEntryFilter` edits the entry program between
+  parse and import resolution, so a host can load part of a file; the files the
+  filter reads join the cached chunk's closure.
+- **Restricted sessions.** `WithoutFileImports`, `WithoutFFI` and
+  `Session.RejectImport` narrow what a script can reach, for a host that runs
+  scripts it did not write.
+
 Read that list as "the shape parses and runs", not as "matches upstream in every
 detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, a compound assign
 evaluates its target twice, and generics are erased.

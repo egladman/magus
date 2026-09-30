@@ -149,8 +149,8 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 }
 
 var (
-	console1 = types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
-	operator = types.Credential{Class: types.ClassOperator, ID: "0badf00d", Grant: types.GrantOperator}
+	console1 = types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	operator = types.Credential{Kind: types.KindOperator, ID: "0badf00d", Grant: types.GrantOperator}
 )
 
 // subjectService answers a revoke with a named token, so the WithSubject test can show the

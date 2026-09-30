@@ -41,7 +41,7 @@ var allowMode = map[filesystem.Access]string{filesystem.Write: "rw", filesystem.
 func denyHint(lease string, access filesystem.Access, target string) string {
 	if lease != "" {
 		return fmt.Sprintf("sandbox blocked access to %s: it is outside the paths lease %s was given. "+
-			"Report it to the orchestrator, which can widen the row's write_paths with the magus_job tool; do not edit sandbox.allow yourself.",
+			"Report it to the orchestrator, which can widen the row's write_paths with the client tool (magus\\job); do not edit sandbox.allow yourself.",
 			target, lease)
 	}
 	label := allowLabel(target)

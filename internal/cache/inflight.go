@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 )
@@ -176,25 +177,9 @@ func (i *inflight) flushLocked() {
 	if err != nil {
 		return
 	}
-	// A unique temp name: a fixed one is shared by every writer in the directory, and
-	// two renames over it interleave into a truncated file that parses as nothing.
-	tmp, err := os.CreateTemp(i.dir, inflightPrefix+"*.tmp")
-	if err != nil {
-		return
-	}
-	name := tmp.Name()
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		_ = os.Remove(name)
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(name)
-		return
-	}
-	if err := os.Rename(name, i.path); err != nil {
-		_ = os.Remove(name)
-	}
+	// Not synced: the death this reports is a killed process, and the kernel keeps a
+	// killed process's writes; only a power loss drops one.
+	_ = file.ReplaceFile(i.path, b, 0o600)
 }
 
 // Running reports what this tracker currently has in flight. [InFlight] is the
@@ -288,10 +273,13 @@ const staleAfter = time.Hour
 
 // isStale reports whether e is litter a killed run left in the cache root: an inflight
 // temp file its rename never consumed, or a remote-tier staging directory it never
-// removed.
+// removed. The temp name is [file.ReplaceFile]'s: a dot, the target's name, ".tmp.".
 func isStale(dir string, e os.DirEntry, now time.Time) bool {
 	name := e.Name()
-	temp := strings.HasPrefix(name, inflightPrefix) && strings.HasSuffix(name, ".tmp")
+	temp := (strings.HasPrefix(name, "."+inflightPrefix) && strings.Contains(name, ".json.tmp.")) ||
+		// compat(until: the oldest magus release still in use names its inflight temp
+		// file through file.ReplaceFile): older binaries leave inflight-*.tmp behind.
+		(strings.HasPrefix(name, inflightPrefix) && strings.HasSuffix(name, ".tmp"))
 	staging := e.IsDir() && strings.HasPrefix(name, stagingPrefix)
 	if !temp && !staging {
 		return false

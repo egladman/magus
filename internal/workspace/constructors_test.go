@@ -12,7 +12,36 @@ func TestWithOutputs(t *testing.T) {
 	p := &types.Project{Path: "."}
 	opt := WithOutputs("dist/**", "bin/**")
 	require.NoError(t, opt(p))
-	assert.Equal(t, []string{"dist/**", "bin/**"}, p.Outputs)
+	assert.Equal(t, []types.Glob{{Pattern: "dist/**"}, {Pattern: "bin/**"}}, p.Outputs)
+}
+
+// TestWithOutputsIsOneDeclaration pins that a call's exclusions narrow its own globs and
+// no earlier call's.
+func TestWithOutputsIsOneDeclaration(t *testing.T) {
+	p := &types.Project{Path: "."}
+	require.NoError(t, WithOutputs("gen/runtime.go")(p))
+	require.NoError(t, WithOutputs("!gen/runtime.go", "gen/*.go")(p))
+	assert.Equal(t, []types.Glob{
+		{Pattern: "gen/runtime.go"},
+		{Pattern: "gen/*.go", Except: []string{"gen/runtime.go"}},
+	}, p.Outputs)
+	assert.True(t, types.MatchGlobs(p.Outputs, "gen/runtime.go"), "the first call still declares it")
+
+	err := WithOutputs("!gen/fs.go")(p)
+	require.ErrorContains(t, err, `exclusion "!gen/fs.go" has no glob to narrow`)
+}
+
+// TestPlainGlobKeysRefuseAnExclusion covers the keys whose globs take no exclusions: read
+// literally, "!x" would match nothing while the author believes it carves x out.
+func TestPlainGlobKeysRefuseAnExclusion(t *testing.T) {
+	for name, opt := range map[string]ProjectOption{
+		"review_required": WithReviewRequired("src/**", "!src/gen/**"),
+		"gate_low_risk":   WithGateLowRisk("!docs/**"),
+		"merge_low_risk":  WithMergeLowRisk("!x.go"),
+	} {
+		err := opt(&types.Project{Path: "."})
+		require.ErrorContains(t, err, name+" takes no exclusions", name)
+	}
 }
 
 // TestWithSources pins the STORED form. A glob is cleaned where it is written, so one
@@ -22,8 +51,8 @@ func TestWithSources(t *testing.T) {
 	p := &types.Project{Path: "docs"}
 	opt := WithSources("./guides/**", "../proto/**/*.proto")
 	require.NoError(t, opt(p))
-	assert.Equal(t, []string{"guides/**", "../proto/**/*.proto"}, p.Sources)
-	assert.Equal(t, "proto/**/*.proto", types.RootGlob(p.Path, p.Sources[1]),
+	assert.Equal(t, []types.Glob{{Pattern: "guides/**"}, {Pattern: "../proto/**/*.proto"}}, p.Sources)
+	assert.Equal(t, "proto/**/*.proto", p.Sources[1].Root(p.Path).Pattern,
 		"the reaching glob roots at the workspace, which is the frame the source walk yields")
 }
 

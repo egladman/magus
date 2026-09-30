@@ -3,16 +3,22 @@ package main
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/settle"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -299,4 +305,100 @@ func magusfilePresent(dir string) bool {
 		return true
 	}
 	return false
+}
+
+// installMergeDriverForInit wires the VCS merge driver during `magus init`.
+// Missing workspace, no declared outputs, aborted picker, or no --vcs in non-interactive shell
+// are all non-fatal: init still succeeds.
+func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		slog.WarnContext(ctx, "init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
+		return nil
+	}
+
+	globs, err := settle.DriverGlobs(ctx, m)
+	if err != nil {
+		slog.WarnContext(ctx, "init: skipping merge-driver setup; could not list the files output exclusions carve out", slog.String("error", err.Error()))
+		return nil
+	}
+	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
+		slog.InfoContext(ctx, "init: no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
+		return nil
+	}
+
+	name, err := chooseInitVCS(ctx, root, m, vcsFlag)
+	if err != nil {
+		if errors.Is(err, tty.ErrAborted) {
+			slog.InfoContext(ctx, "init: merge-driver setup skipped")
+			return nil
+		}
+		return err
+	}
+	if name == "" {
+		slog.WarnContext(ctx, "init: non-interactive shell; re-run with --vcs to wire the merge driver",
+			slog.String("choices", strings.Join(vcs.InstallableVCSes(), "|")))
+		return nil
+	}
+
+	installer, ok := vcs.Installer(name)
+	if !ok {
+		return fmt.Errorf("init: %q does not support merge-driver setup (choose one of: %s)", name, strings.Join(vcs.InstallableVCSes(), ", "))
+	}
+
+	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
+		return fmt.Errorf("init: install %s merge driver: %w", name, err)
+	}
+	// The hooks are the driver's second half, and this is the one place that writes
+	// them (see settle.EnsureDriver for why a workspace load does not).
+	if hooks, ok := installer.(types.RegenHookInstaller); ok {
+		installed, err := hooks.InstallRegenHook(ctx, m.Root(), hint.VCSResolve.With("--hook"))
+		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
+			return fmt.Errorf("init: install %s settle hooks: %w", name, err)
+		}
+		if len(installed) > 0 {
+			slog.InfoContext(ctx, "init: wrote the settle hooks; a merge now regenerates what it changed", slog.String("hooks", strings.Join(installed, ", ")))
+		}
+	}
+
+	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
+	switch name {
+	case "git":
+		slog.InfoContext(ctx, "init: wired git merge driver (.gitattributes + .git/config)", n)
+	case "hg":
+		slog.InfoContext(ctx, "init: wired hg merge driver (.hg/hgrc)", n)
+	default:
+		slog.InfoContext(ctx, "init: wired merge driver", slog.String("vcs", name), n)
+	}
+	return nil
+}
+
+// chooseInitVCS returns the VCS to wire: --vcs flag → interactive picker → "" (skip).
+func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag string) (string, error) {
+	choices := vcs.InstallableVCSes()
+	if vcsFlag != "" {
+		for _, c := range choices {
+			if c == vcsFlag {
+				return vcsFlag, nil
+			}
+		}
+		return "", fmt.Errorf("init: unknown --vcs %q (choose one of: %s)", vcsFlag, strings.Join(choices, ", "))
+	}
+	if !isInteractiveTTY() {
+		return "", nil
+	}
+	initial := 0
+	if res, err := resolveVCS(ctx, root, m); err == nil {
+		for i, c := range choices {
+			if c == res.Name {
+				initial = i
+				break
+			}
+		}
+	}
+	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, choices, tty.PickOptions{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
+	if err != nil {
+		return "", err
+	}
+	return choices[idx], nil
 }

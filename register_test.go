@@ -287,7 +287,7 @@ func TestProvidedProjectIsAFullProject(t *testing.T) {
 	assert.Equal(t, types.ProvidedBy("nx"), foo.Origin)
 	assert.Equal(t, []string{"ts"}, foo.Spells)
 	assert.Equal(t, []string{"libs/shared"}, foo.DependsOn)
-	assert.Equal(t, []string{"dist/**"}, foo.Outputs)
+	assert.Equal(t, []types.Glob{{Pattern: "dist/**"}}, foo.Outputs)
 	assert.Equal(t, filepath.Join(ws.Root(), "libs", "foo"), foo.Dir)
 
 	g, err := ws.Graph()
@@ -313,7 +313,7 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 
 	foo := ws.Get("libs/foo")
 	require.NotNil(t, foo)
-	assert.Equal(t, []string{"**/*.ts", "schema/**/*.json"}, foo.Sources,
+	assert.Equal(t, []types.Glob{{Pattern: "**/*.ts"}, {Pattern: "schema/**/*.json"}}, foo.Sources,
 		"the magusfile's sources are layered after the provider's, never instead of them")
 }
 

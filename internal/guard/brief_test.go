@@ -36,8 +36,16 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"clean", "Run `./magus run go::go-test . -s -- -count=1 ./internal/guard/...` and report.", ""},
 		{"not shell", "Example:\n```go\nfunc main() { exec(\"git add -A\") }\n```", ""},
 		{"prose", "The file lives at `internal/guard/shell.go`.", ""},
+		// A lone word in a span names a program; it teaches no command line.
+		{"single word", "The script pipes the list into `cat`, then `grep`.", ""},
+		// Judged as the worker's fresh tree meets it, which has no binary yet.
+		{"bootstrap span", "Bootstrap with `go run -trimpath ./cmd/magus run go-build --no-cache .` first.", ""},
+		{"bootstrap block", "Setup:\n```bash\ngo run -trimpath ./cmd/magus run go-build --no-cache .\n./magus run go-build . -s\n```\n", ""},
+		{"bootstrap sharing its line", "Run `go run -trimpath ./cmd/magus run go-build --no-cache . && ls`.", denyRuleRawTool},
+		{"bootstrap beside a denied line", "Setup:\n```bash\ngo run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
+		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := denyBriefCommand(Dependencies{}, tt.brief)
+		v := denyBriefCommand(testDependencies(), tt.brief)
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue

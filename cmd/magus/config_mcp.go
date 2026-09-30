@@ -273,7 +273,7 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	operator := types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}
+	operator := types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}
 	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
 	return secret, rec, nil
 }
@@ -306,7 +306,7 @@ func tokenTable(toks []auth.Token) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tID\tCLASS\tGRANT\tCREATED\tEXPIRES")
 	for _, t := range toks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Class, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Kind, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
 	}
 	return tw.Flush()
 }

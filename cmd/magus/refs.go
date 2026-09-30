@@ -786,7 +786,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 // the whole file, which is what lets the guard place every changed line in its declaration.
 // Under a dry run the guard records nothing, so a preview leaves no trace.
 func renameGrade(ctx context.Context, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
-	deps := guardDependencies()
+	deps := guardDependencies(ctx)
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
 		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {

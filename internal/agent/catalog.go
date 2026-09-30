@@ -121,8 +121,8 @@ import (
 // 58: magus-query says every result names its own next step, and that following it is
 // optional. The breadcrumb is a field on the result now, so a reader that never meets
 // the text still meets the suggestion.
-// 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
-// onto the bytes magus_output already returns, keyed by project instead of by ref.
+// 59: magus-run stops naming the tail_log tool, which is gone. It was a second door
+// onto the bytes magus\output already returns, keyed by project instead of by ref.
 // 60: magus-buzz-write says `magus` is a host module and the import is what makes the
 // namespace exist. It used to read as "also available in a script", from when the
 // namespace was a session global an import never had to name.
@@ -236,7 +236,25 @@ import (
 // magus-context-audit and magus-workspace-rules point at the harness's own memory
 // where they pointed at the store; the evidence a rule cites is an output ref, a trail
 // timestamp or a graph query.
-const SkillVersion = 94
+// 95: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
+// and the member (`magus\query`, `magus\run`, ...). `{{tool}}` resolves a bare
+// tool name, and `{{buzz}}` resolves a top-level method.
+// 96: where, run_affected, affected_plan, and affected_explain fold into client
+// (`magus\where`, `magus\affected`, `magus\cmd`). config_get is config
+// and console_present is console. The blast radius member is magus\impact.
+// 97: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
+// 98: `magus agent harness apply` and `remove` are gone; magus-workspace-rules sends a
+// forked harness through `magus describe harness`. magus-run says a direct `client`
+// call is bounded at 10 minutes and names `magus affected list`. magus-query pages
+// with limit and offset, and insight names a `magus buzz` fallback where it has no
+// CLI verb.
+// 99: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
+// from an exported main, and it points at hack/README.md. magus-run names hack/on-actions
+// and hack/on-linux for proving a command on Linux without a pull request.
+// 100: magus-multi-agent teaches `magus job edit` for widening or revoking a job's write
+// paths; magus-vcs-hygiene says vcs\ref() is null when no name points at the revision;
+// magus-workspace-rules forks a harness spell with `magus spell pull`.
+const SkillVersion = 100
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -480,9 +498,9 @@ var skillFuncs = template.FuncMap{
 		return c.StringAs(hint.DefaultBinaryName), nil
 	},
 	"tool": func(verb string) (string, error) {
-		t, ok := hint.LookupTool("magus_" + verb)
+		t, ok := hint.LookupTool(verb)
 		if !ok {
-			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", "magus_"+verb)
+			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", verb)
 		}
 		return t.String(), nil
 	},
@@ -515,21 +533,26 @@ var skillFuncs = template.FuncMap{
 		}
 		return "[" + code + "](" + types.CodeURL(c) + ")", nil
 	},
-	// buzz renders a call into the magus host module from "namespace.method":
-	// magus\harness.provider. These are the load-bearing lines in magus-workspace-rules,
-	// the calls a workspace makes to wire a host or strengthen the guard, so a renamed
-	// method would teach a call that errors in the one place a reader cannot check it.
+	// buzz renders a call into the magus host module: "query" is magus\query, and
+	// "harness.provider" is magus\harness.provider. These are the load-bearing lines
+	// a skill teaches, so a renamed method fails install rather than teaching a call
+	// that errors in the one place a reader cannot check it.
 	//
 	// The backslash is namespace access and the dot is member access on the object the
 	// namespace resolves to, which is why this walks Namespaces rather than Methods.
 	"buzz": func(call string) (string, error) {
-		space, method, ok := strings.Cut(call, ".")
-		if !ok {
-			return "", fmt.Errorf("buzz call %q must be \"namespace.method\"", call)
-		}
+		space, method, nested := strings.Cut(call, ".")
 		for _, m := range hostmodules.All() {
 			if m.Name != magusModule {
 				continue
+			}
+			if !nested {
+				for _, decl := range m.Methods {
+					if buzzSurfaceName(decl) == call {
+						return magusModule + `\` + call, nil
+					}
+				}
+				return "", fmt.Errorf(`no method %q on the %s module`, call, magusModule)
 			}
 			for _, ns := range m.Namespaces {
 				if ns.Name != space {

@@ -134,10 +134,10 @@ leaves all three empty, which a rule should take as unknown rather than as an em
 
 Keep the rules in their own file, import it from the root magusfile, and register one
 function per seam. magus's own repository does this in
-[`tools/policy/guard.buzz`](https://github.com/egladman/magus/blob/main/tools/policy/guard.buzz):
+[`hack/policy/guard.buzz`](https://github.com/egladman/magus/blob/main/hack/policy/guard.buzz):
 
 ```buzz
-import "./tools/policy/guard" as agentpolicy;
+import "./hack/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);

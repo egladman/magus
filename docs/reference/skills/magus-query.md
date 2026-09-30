@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 14573
-skill_short_bytes: 11868
+skill_full_bytes: 15082
+skill_short_bytes: 12315
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `e4ec3e242888` |
+| `skill-content` | `df2ed44cf6fc` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -75,21 +75,25 @@ only: no server AND no CLI, or a human asking what the committed index says.
    `magus ls` (every project with its spell, sources, outputs, depends_on),
    `magus describe spells`, `magus describe projects`.
 
-2. Then reach for the verbs. Prefer the MCP tools. At session start, or after an
-   MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
-   the user once that `magus server start` restores the full agent surface, then
-   use the CLI equivalent from the same row below. Do not stop or grep.
+2. Then reach for the verbs. Prefer an MCP tool when this host exposes it. Call
+   the tool itself to check availability: `magus status --probe=mcp` tests the
+   loopback HTTP listener, so it can fail while stdio or Unix-socket MCP works.
+   If the tool is missing or its call fails, use the CLI equivalent from the same
+   row below. Do not stop or grep. For server-socket diagnosis,
+   `magus status --probe=readiness` checks that this workspace is loaded there;
+   it does not test the host's MCP registration. Do not start a server merely
+   to unlock a tool.
 
-   | question                                      | MCP tool        | CLI                                |
-   | --------------------------------------------- | --------------- | ---------------------------------- |
-   | find and relate entities                      | `magus_query`   | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>`             |
-   | how do two nodes relate                       | `magus_path`    | `magus path <a> <b>`               |
-   | where risk concentrates                       | `magus_stats`   | `magus graph stats`                |
-   | where a code symbol is defined and used       | `magus_refs`    | `magus refs <symbol>`              |
+   | question                                      | MCP                                              | CLI                                |
+   | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
+   | find and relate entities                      | `client` (`magus\query`)         | `magus query "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `client` (`magus\explain`)       | `magus explain <node>`             |
+   | how do two nodes relate                       | `client` (`magus\path`)          | `magus path <a> <b>`               |
+   | where risk concentrates                       | `client` (`magus\stats`)         | `magus graph stats`                |
+   | where a code symbol is defined and used       | `client` (`magus\refs`)          | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
-   Prefer these over grep and glob for anything in the magus domain. `magus_refs`
+   Prefer these over grep and glob for anything in the magus domain. `magus\refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); Every empty result carries a verdict: `absent` means magus
    searched every symbol index this workspace declares and the thing is not there;
    `unknown` names the projects it could not search, and building those with
@@ -180,8 +184,8 @@ are `=` (match), `!=` (exclude), `=~` (regex):
 The `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50). Over MCP, page with `limit` plus the returned
-`next_cursor`.
+(default 50). Over MCP, page with `{limit, offset}`
+in `magus\query`'s options; `matchCount` stays the total.
 
 ## Retrieving prose from the docs
 
@@ -251,7 +255,7 @@ this workspace declares no adapter, which is the common case.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `client` (`magus\insight`), and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment.
@@ -310,24 +314,28 @@ unavailable too, or when a human explicitly asks what the committed index says.
    `magus describe spells`, `magus describe projects`. These are live, so they
    are right even mid-change, and they take a `-o json` for machine reading.
 
-2. Then reach for the verbs. Prefer the MCP tools. At session start, or after an
-   MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
-   the user once that `magus server start` restores the full agent surface, then
-   use the CLI equivalent from the same row below. Do not stop or grep. CLI
+2. Then reach for the verbs. Prefer an MCP tool when this host exposes it. Call
+   the tool itself to check availability: `magus status --probe=mcp` tests the
+   loopback HTTP listener, so it can fail while stdio or Unix-socket MCP works.
+   If the tool is missing or its call fails, use the CLI equivalent from the same
+   row below. Do not stop or grep. For server-socket diagnosis,
+   `magus status --probe=readiness` checks that this workspace is loaded there;
+   it does not test the host's MCP registration. Do not start a server merely
+   to unlock a tool. CLI
    fallback remains correct, but has no tool discovery or warm server graph.
 
-   | question                                      | MCP tool        | CLI                                |
-   | --------------------------------------------- | --------------- | ---------------------------------- |
-   | find and relate entities                      | `magus_query`   | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>`             |
-   | how do two nodes relate                       | `magus_path`    | `magus path <a> <b>`               |
-   | where risk concentrates                       | `magus_stats`   | `magus graph stats`                |
-   | where a code symbol is defined and used       | `magus_refs`    | `magus refs <symbol>`              |
+   | question                                      | MCP                                              | CLI                                |
+   | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
+   | find and relate entities                      | `client` (`magus\query`)         | `magus query "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `client` (`magus\explain`)       | `magus explain <node>`             |
+   | how do two nodes relate                       | `client` (`magus\path`)          | `magus path <a> <b>`               |
+   | where risk concentrates                       | `client` (`magus\stats`)         | `magus graph stats`                |
+   | where a code symbol is defined and used       | `client` (`magus\refs`)          | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
-   Prefer these over grep and glob for anything in the magus domain. `magus_refs`
+   Prefer these over grep and glob for anything in the magus domain. `magus\refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
-   is the occurrence-shaped def/references answer, so use it over `magus_query` for a
+   is the occurrence-shaped def/references answer, so use it over `magus\query` for a
    symbol's fan-in. Every empty result carries a verdict: `absent` means magus
    searched every symbol index this workspace declares and the thing is not there;
    `unknown` names the projects it could not search, and building those with
@@ -425,8 +433,9 @@ The `:` grammar (`kind:spell`) and dash negation (`-kind:op`) are the pre-`=`
 spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`/`=~`.
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50). For a large match set over MCP, pass `limit` and echo the returned
-`next_cursor` to fetch the next page.
+(default 50). For a large match set over MCP, pass `{limit, offset}` in the
+options of `magus\query` and raise `offset` by `limit` for the next page; `matchCount`
+stays the total, so you know when you have them all.
 
 ## Retrieving prose from the docs
 
@@ -505,7 +514,7 @@ this workspace declares no adapter, which is the common case.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `client` (`magus\insight`), and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -128,8 +129,10 @@ const (
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"
+	denyRuleGrepReader        denyRuleName = "grep-reader"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleChainedRun        denyRuleName = "chained-run"
+	denyRuleMagusTimeout      denyRuleName = "magus-timeout"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
 	denyRuleBacktickSubstitution denyRuleName = "backtick-substitution"
@@ -157,6 +160,17 @@ const (
 	// Both surfaces, like cache-dir-write: a file write and a shell line; see
 	// internal/guard/credential.go.
 	denyRuleTokenState denyRuleName = "token-state"
+	// The acting lease's boundaries, as the job store declares them; see
+	// internal/guard/lease.go and internal/guard/write.go.
+	denyRuleLeaseUndeclared denyRuleName = "lease-undeclared"
+	denyRuleLeaseWrite      denyRuleName = "lease-write"
+	denyRuleLeaseGate       denyRuleName = "lease-gate"
+	denyRuleLeaseVCS        denyRuleName = "lease-vcs"
+	denyRuleLeaseRebind     denyRuleName = "lease-rebind"
+	denyRuleLeaseHarness    denyRuleName = "lease-harness"
+	denyRuleFocusRead       denyRuleName = "focus-read"
+	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
+	denyRuleHookWiringWrite denyRuleName = "hook-wiring-write"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
@@ -1740,11 +1754,6 @@ var (
 	// `time go test` be judged as `go test` would erase the very token this rule is
 	// about.
 	timedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
-	// `timeout 300 magus run ci .`, read off the raw line for the same reason as the
-	// rule above: `timeout` is a peeled wrapper. Narrowed to run and affected, the
-	// only two subcommands carrying --timeout: naming it on `magus graph build`
-	// would advise a flag that does not exist there.
-	timeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1826,7 +1835,7 @@ var (
 		"A regex writes before anyone reads a diff, and it cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
 
 	denySedInPlace = "Use your editor tool: it reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
-		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed is untouched."
+		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
 	denyBusyWait = "Do not poll for work you started; you are told when it finishes. Start it and do something else.\n" +
 		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
@@ -2223,12 +2232,6 @@ var (
 	// Advise, not deny: timing a command is legitimate, and the point is that magus
 	// already answered the question better than the shell can.
 	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
-
-	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies;
-	// nothing is unrecoverable, nothing is written, and the equivalent is close but
-	// not exact.
-	timeoutMagusAdvice = "magus has its own: `" + hint.Run.With("<target>", "<project>", "--timeout", "5m") + "` (and the same flag on `" + hint.Affected.String() + "`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
-		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
 // denySharedStash refuses an unqualified stash restore. The verb it names in the
@@ -2389,6 +2392,9 @@ func precedentIdent(cmds []hint.Invocation) string {
 func Evaluate(deps Dependencies, command string) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
 	builtin := evaluateRules(deps, command, d)
+	if builtin.Deny != "" {
+		builtin.Deny += referenceScriptNote(deps.scope.root, builtin.Rule.Name)
+	}
 	// Here rather than in gitGuard, which answers for every backend and names no paths.
 	if builtin.Rule.Name == denyRuleStageAll {
 		lead, next := stageAllRemedy(command, d)
@@ -2420,6 +2426,45 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 		v.Deny += nothingRanNote(command, d)
 	}
 	return v
+}
+
+// referenceScript is a Buzz script under hack/ that does, the sanctioned way, what a line a
+// rule refused was reaching for.
+type referenceScript struct {
+	lead string   // the question the reader was answering, ending in "?"
+	argv []string // the script's path, then how it is run
+}
+
+var (
+	renameScript = referenceScript{
+		lead: "Renaming a symbol from a script?",
+		argv: []string{"hack/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"},
+	}
+	typedResultScript = referenceScript{
+		lead: "Reading magus output in a script?",
+		argv: []string{"hack/example-typed-results.buzz"},
+	}
+	referenceScripts = map[denyRuleName]referenceScript{
+		denyRuleSedInPlace:         renameScript,
+		denyRuleScriptedRewrite:    renameScript,
+		denyRuleInterpreterRewrite: renameScript,
+		denyRuleOutputPipe:         typedResultScript,
+		denyRuleOutputRedirect:     typedResultScript,
+	}
+)
+
+// referenceScriptNote is the line naming rule's reference script, or "" when the workspace at
+// root does not carry it: hack/ is one repository's own, and a pointer to a file that is not
+// there is advice nobody can take.
+func referenceScriptNote(root string, rule denyRuleName) string {
+	s, ok := referenceScripts[rule]
+	if !ok || root == "" {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {
+		return ""
+	}
+	return "\n" + s.lead + " `" + hint.Buzz.With(s.argv...) + "`"
 }
 
 // changesDirectory reports a cd or pushd anywhere on the line, or a line that does not parse.
@@ -2465,7 +2510,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if credentialVerbFires(cmds, parsed, command) {
 		return ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}
 	}
-	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
+	// Both rewrite rules promise to leave a scratch file alone, and the promise has to hold
+	// however the path was spelled, including relative to a scratch directory cd'd into.
+	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) && !rewriteStaysOutside(deps.scope, command, d) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if busyWaitFires(command, d) {
@@ -2502,7 +2549,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if parsed && captureFilterFires(cmds, command, d) {
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
-	if scriptedRewriteFires(command, d, deps.scope) {
+	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory, chained ShellVerdict
@@ -2586,10 +2633,22 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}
 	}
+	// Below the rules that name what the magus call does, whose remedies keep the
+	// wrapper: the next call is judged here once they are fixed.
+	var timeoutAdvice ShellVerdict
+	if v, ok := magusTimeoutVerdict(command, d); ok {
+		if v.Deny != "" {
+			return v
+		}
+		timeoutAdvice = v
+	}
 	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
 		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	}
+	if timeoutAdvice.Context != "" {
+		return timeoutAdvice
 	}
 	if captureAdvice.Context != "" {
 		return captureAdvice
@@ -2601,12 +2660,15 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		if v, ok := readVerdict(deps, command, d); ok {
 			return v
 		}
+		if v, ok := grepReaderVerdict(deps, cmds); ok {
+			return v
+		}
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):
-		return ShellVerdict{Context: updateGuardContext}
+		return ShellVerdict{Context: updateGuardContext, Rule: denyRule{Name: advisoryDependencyUpdate}}
 	case parsed && slices.ContainsFunc(work, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
-		return ShellVerdict{Context: installGuardContext}
+		return ShellVerdict{Context: installGuardContext, Rule: denyRule{Name: advisoryDependencyInstall}}
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
@@ -2618,11 +2680,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	switch {
 	case echoOnSuccessRe.MatchString(command):
-		return ShellVerdict{Context: echoOnSuccessAdvice}
+		return ShellVerdict{Context: echoOnSuccessAdvice, Rule: denyRule{Name: advisoryEchoOnSuccess}}
 	case timedMagusRe.MatchString(command):
-		return ShellVerdict{Context: timedMagusAdvice}
-	case timeoutMagusRe.MatchString(command):
-		return ShellVerdict{Context: timeoutMagusAdvice}
+		return ShellVerdict{Context: timedMagusAdvice, Rule: denyRule{Name: advisoryTimedMagus}}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

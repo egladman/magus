@@ -19,6 +19,7 @@ type fakeRunner struct {
 	started  int
 	stopped  int
 	startErr error
+	adopt    bool // answer as if the service was already up
 }
 
 type fakeHandle struct{ id int }
@@ -28,6 +29,9 @@ func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) 
 	defer f.mu.Unlock()
 	if f.startErr != nil {
 		return nil, f.startErr
+	}
+	if f.adopt {
+		return Adopted, nil
 	}
 	f.started++
 	return fakeHandle{id: f.started}, nil
@@ -65,6 +69,41 @@ func TestAcquireSharesOneInstance(t *testing.T) {
 	assert.Equal(t, 1, started, "shared instance starts once")
 	assert.Equal(t, 0, stopped)
 	assert.Equal(t, 1, r.Held())
+}
+
+// TestKeyScopesOnlyCommandServices pins that a start service is shared machine-wide:
+// two workspaces asking for the same VM get one entry, so neither's idle reap can stop
+// it under the other, while a Command service stays per workspace.
+func TestKeyScopesOnlyCommandServices(t *testing.T) {
+	machine := spells.Service{
+		Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},
+		Readiness: spells.Command{Bin: "podman", Args: []string{"info"}},
+		Stop:      spells.Command{Bin: "podman", Args: []string{"machine", "stop"}},
+	}
+	other := machine
+	other.Start = spells.Command{Bin: "podman", Args: []string{"machine", "start", "dev"}}
+
+	assert.Equal(t, Key("/a", machine), Key("/b", machine))
+	assert.NotEqual(t, Key("/a", machine), Key("/a", other), "different start commands are different services")
+	assert.NotEqual(t, Key("/a", svc()), Key("/b", svc()))
+}
+
+// TestAdoptedIsNeverStopped pins that the Registry hands an Adopted service back to no
+// Runner.Stop, on release, idle reap or Shutdown alike.
+func TestAdoptedIsNeverStopped(t *testing.T) {
+	f := &fakeRunner{adopt: true}
+	r := New(f, 0)
+	ctx := context.Background()
+
+	_, _ = r.Acquire(ctx, "machine", svc())
+	r.Release("machine")
+	_, _ = r.Acquire(ctx, "machine", svc())
+	r.Shutdown(ctx)
+
+	started, stopped := f.counts()
+	assert.Equal(t, 0, started)
+	assert.Equal(t, 0, stopped, "an adopted service is never stopped")
+	assert.Equal(t, 0, r.Held())
 }
 
 func TestRefCountKeepsRunningUntilLastRelease(t *testing.T) {
@@ -317,9 +356,9 @@ func TestSessionRoutesToBrokerWhenPresent(t *testing.T) {
 	f := &fakeRunner{}
 	var acquired, released []string
 	sess := NewSession(New(f, time.Hour),
-		func(_ context.Context, key string, _ spells.Service) error {
+		func(_ context.Context, key string, _ spells.Service) (bool, error) {
 			acquired = append(acquired, key)
-			return nil
+			return true, nil
 		},
 		func(_ context.Context, key string) { released = append(released, key) },
 	)
@@ -346,9 +385,9 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 	f := &fakeRunner{}
 	var acquireCount, releaseCount int
 	sess := NewSession(New(f, time.Hour),
-		func(context.Context, string, spells.Service) error {
+		func(context.Context, string, spells.Service) (bool, error) {
 			acquireCount++
-			return nil
+			return true, nil
 		},
 		func(context.Context, string) { releaseCount++ },
 	)
@@ -371,7 +410,7 @@ func TestSessionReleaseAllPassesItsContextToTheBroker(t *testing.T) {
 	f := &fakeRunner{}
 	var got context.Context
 	sess := NewSession(New(f, time.Hour),
-		func(context.Context, string, spells.Service) error { return nil },
+		func(context.Context, string, spells.Service) (bool, error) { return true, nil },
 		func(ctx context.Context, _ string) { got = ctx },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
@@ -392,7 +431,7 @@ func TestSessionFallsBackToInProcessOnBrokerFailure(t *testing.T) {
 	f := &fakeRunner{}
 	var released []string
 	sess := NewSession(New(f, time.Hour),
-		func(context.Context, string, spells.Service) error { return errors.New("broker gone") },
+		func(context.Context, string, spells.Service) (bool, error) { return false, errors.New("broker gone") },
 		func(_ context.Context, key string) { released = append(released, key) },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))

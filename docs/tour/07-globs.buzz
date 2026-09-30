@@ -63,10 +63,9 @@ export fun generate_fast(ctx: magus\Context, args: [str]) > void {
 //      subtract nothing, which is the one thing an exclusion must never do
 //      silently.
 //
-//   3. Only-negations select nothing. glob("!snapshot-generate") yields no
-//      handles rather than "everything else": a pattern list whose last positive
-//      entry got deleted should collapse to nothing, not silently widen to the
-//      whole project.
+//   3. Only-negations are refused. glob("!snapshot-generate") is an error
+//      rather than "everything else" or nothing: a pattern list whose last
+//      positive entry got deleted is a mistake to report, not a selection.
 //
 // The surface is glob, not regex. Patterns are escaped before "*" is translated,
 // so a regex like "^(?!x-).*-generate$" matches a target with that literal name,

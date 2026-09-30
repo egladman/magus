@@ -117,7 +117,7 @@ func TestLine(t *testing.T) {
 		{`cursor := paramString(req.Params, "cursor", "")`, false},
 		{`// Cursor reports where the cursor is, in 1-based terminal coordinates.`, false},
 		{"\tCursor DiffCursor `json:\"cursor\" yaml:\"cursor\"`", false},
-		{`"cursor-hook.sh",`, false},
+		{`"cursor-hook.buzz",`, false},
 		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
 		{`filepath.Join(root, ".claude", "settings.json"),`, false},
 		{`case "claude":`, false},

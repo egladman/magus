@@ -3,8 +3,7 @@
 //
 // It sits under internal/sys because that is what it is: the layer that asks the
 // operating system about itself, in the sense golang.org/x/sys and syscall use the
-// word. Not to be confused with internal/memory, which is magus's own durable
-// memory store, or with the host modules in std/, which are "host" in the
+// word. Not to be confused with the host modules in std/, which are "host" in the
 // language-embedding sense.
 //
 // TotalBytes is a property of the machine class and is what the CI shard planner

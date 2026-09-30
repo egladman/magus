@@ -330,7 +330,7 @@ func declaresRoutingIndex(ctx context.Context, dir string) bool {
 		return false
 	}
 	p := ws.Get(".")
-	return p != nil && slices.Contains(p.AllOutputs(), "MAGUS.md")
+	return p != nil && slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Pattern == "MAGUS.md" })
 }
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a

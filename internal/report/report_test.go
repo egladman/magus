@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -307,8 +308,8 @@ func TestCacheRunOptions(t *testing.T) {
 	out := filepath.Join(root, "pkg", "out.bin")
 	spec := cache.Step{
 		ProjectPath:   "pkg",
-		Sources:       []string{"pkg/*.go"},
-		Outputs:       []string{"pkg/out.bin"},
+		Sources:       types.MustParseGlobs("pkg/*.go"),
+		Outputs:       types.MustParseGlobs("pkg/out.bin"),
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
@@ -367,7 +368,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
 	spec := cache.Step{
 		ProjectPath:   "pkg",
-		Sources:       []string{"pkg/*.go"},
+		Sources:       types.MustParseGlobs("pkg/*.go"),
 		WorkspaceRoot: root,
 		Target:        "test",
 	}

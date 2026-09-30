@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -80,6 +82,91 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")
+}
+
+// ----------------------------------------------------------- vcs merge-driver
+
+// mergeDriverCmd dispatches `magus vcs merge-driver %O %A %B %L %P`, which settles one
+// conflicted file (settle.File). Args: ancestor result other markerSize path (git and
+// hg), plus output when the VCS reads the result from a file of its own (jj). A non-zero
+// exit leaves the file conflicted, with markers. Per-clone wiring is installed by `magus
+// init`, not here.
+func mergeDriverCmd(ctx context.Context, root string, args []string) error {
+	if len(args) == 0 {
+		_ = mergeDriverUsage()
+		// git only ever calls this with all five placeholders, so a bare invocation is
+		// a human typing it. Exiting 0 said "merge resolved" for a run that did nothing,
+		// and disagreed with the 1-argument case, which already errored.
+		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		return mergeDriverUsage()
+	}
+	if len(args) < 5 {
+		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+	}
+	if len(args) > 6 {
+		return usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
+	}
+	f := settle.Files{Base: args[0], Ours: args[1], Theirs: args[2], Output: args[1], MarkerSize: args[3]}
+	if len(args) == 6 {
+		f.Output = args[5]
+	}
+
+	relPath, err := mergeDriverRelPath(root, args[4])
+	if err != nil {
+		return err
+	}
+	// Loading the workspace must not re-wire the merge driver: EnsureMergeDriver writes the
+	// TRACKED .gitattributes, and doing that here (inside the VCS's index manipulation, once
+	// per conflicted file) is the same dirty-tree failure this driver was changed to stop
+	// causing.
+	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
+	if err != nil {
+		return fmt.Errorf("merge-driver: load workspace: %w", err)
+	}
+	return settle.File(ctx, m, f, relPath)
+}
+
+// mergeDriverUsage prints usage for the merge-driver subcommand.
+func mergeDriverUsage() error {
+	fmt.Fprintln(os.Stderr, "Usage: magus vcs merge-driver %O %A %B %L %P")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files and the files magus.yaml's")
+	fmt.Fprintln(os.Stderr, "vcs.auto_resolve opts in. git, hg and Sapling invoke it during a merge, and")
+	fmt.Fprintln(os.Stderr, "`"+hint.VCSResolve.String()+"` runs it through `jj resolve` on jj. An opted-in file")
+	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
+	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
+	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
+	fmt.Fprintln(os.Stderr, "and the settle hooks `"+hint.Init.With("--vcs", "git")+"` writes beside it (`"+hint.VCSResolve.With("--hook")+"`)")
+	fmt.Fprintln(os.Stderr, "run it once the merge, rebase, cherry-pick or revert has the whole tree.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
+	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
+	fmt.Fprintln(os.Stderr, "hg calls it as:   magus vcs merge-driver $base $local $other 0 $local")
+	fmt.Fprintln(os.Stderr, "jj calls it as:   magus vcs merge-driver $base $left $right $marker_length $path $output")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "To settle a conflicted merge yourself, run `"+hint.VCSResolve.String()+"`: it decides")
+	fmt.Fprintln(os.Stderr, "every conflicted path at once, regenerates once, and stages the result -")
+	fmt.Fprintln(os.Stderr, "including the files one side deleted, which no VCS calls a driver for.")
+	return nil
+}
+
+// mergeDriverRelPath normalizes the driver's path argument to a workspace-relative slash
+// path. git passes it repo-relative; hg passes an absolute workspace path.
+func mergeDriverRelPath(root, pathArg string) (string, error) {
+	if !filepath.IsAbs(pathArg) {
+		return filepath.ToSlash(pathArg), nil
+	}
+	wsRoot, err := magus.FindRoot(root)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
+	}
+	rel, err := filepath.Rel(wsRoot, pathArg)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // ---------------------------------------------------------------- vcs resolve
@@ -197,7 +284,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		}
 	}
 
-	plan, err := planResolution(ctx, m, res.VCS, conflicts)
+	plan, err := settle.PlanConflicts(ctx, m, res.VCS, conflicts)
 	if err != nil {
 		return err
 	}
@@ -245,7 +332,7 @@ func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriv
 // whole point and stays in progress for the caller to commit.
 //
 // A real merge rather than `git merge-tree`: merge-tree reports conflicted PATHS only,
-// while planResolution decides on the conflict KIND, and a modify/delete is the shape no
+// while settle.PlanConflicts decides on the conflict KIND, and a modify/delete is the shape no
 // merge driver is ever invoked for. (The read-only PR advisor uses merge-tree because it
 // needs only the names.)
 //
@@ -287,26 +374,26 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 // markers and recording paths are decisions ABOUT the conflicts, which either side's
 // declarations answer the same way, while regenerating PRODUCES bytes, and a merge that
 // touched a generator would have this produce output matching neither side.
-func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, plan resolutionPlan, staleDecls bool) error {
-	if err := driver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.keep, plan.rederive)); err != nil {
+func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, plan settle.Plan, staleDecls bool) error {
+	if err := driver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.Keep, plan.Rederive)); err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	if err := driver.RemoveConflicts(ctx, m.Root(), plan.gone); err != nil {
+	if err := driver.RemoveConflicts(ctx, m.Root(), plan.Gone); err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "the conflict markers were already cleared"))
 	}
 	if staleDecls {
 		fmt.Println("vcs resolve: not regenerating - the magusfile is still mid-merge, and a " +
 			"generator it changes would produce bytes matching neither side. Resolve the " +
 			"magusfile, then `" + hint.Run.With("generate:rw") + "` to finish.")
-	} else if err := runRebuildTargets(ctx, root, rc, plan.rebuild); err != nil {
+	} else if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
 		return fmt.Errorf("vcs resolve: regenerate: %w\n%s", err, resolveTreeState(plan,
 			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"))
 	}
 	// The registration is derived from the declared outputs, so a conflict in the file
 	// holding it is settled by re-deriving. First point the file has no markers.
-	ensureMergeDriver(ctx, m)
+	settle.EnsureDriver(ctx, m)
 
-	settled, err := settledPaths(ctx, m, driver, plan)
+	settled, err := plan.Paths(ctx, m, driver)
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
@@ -365,130 +452,11 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 }
 
 // resolveTreeState describes how far the resolve got, for an error message.
-func resolveTreeState(plan resolutionPlan, reached string) string {
+func resolveTreeState(plan settle.Plan, reached string) string {
 	return fmt.Sprintf("the working tree has been modified: %s. "+
 		"To start over, abort the merge (`git rebase --abort` or `git merge --abort`); "+
 		"to inspect it, `git status` now shows %d kept and %d removed path(s).",
-		reached, len(plan.keep)+len(plan.rederive), len(plan.gone))
-}
-
-// resolutionPlan is what resolve decided for each conflicted path, before it acts.
-type resolutionPlan struct {
-	// keep are generated paths settled by taking a side and regenerating over it.
-	keep []string
-	// gone are paths whose deletion is the answer: both sides deleted them, or one did
-	// and the workspace now ignores them.
-	gone []string
-	// rederive are paths magus maintains whose content is a function of the workspace, so
-	// they are rebuilt rather than merged. Split from keep so the report can say which.
-	rederive []string
-	// manual are the conflicts magus has no claim over; a human resolves them.
-	manual []string
-	// rebuild maps a target name to the projects that must run it to rebuild the kept
-	// paths. Keyed by target so one `magus run generate` covers every project at once
-	// instead of one run per file.
-	rebuild map[string][]string
-}
-
-// rebuiltProjects returns every project any rebuild target will run over, keyed by
-// projectKey.
-func (p resolutionPlan) rebuiltProjects() map[string]bool {
-	out := map[string]bool{}
-	for _, projects := range p.rebuild {
-		for _, key := range projects {
-			out[key] = true
-		}
-	}
-	return out
-}
-
-// projectKey is the one spelling of a project used to key the rebuild set, on BOTH the
-// filling and the reading side.
-//
-// The PATH, never the label. Every nested project agrees on both spellings, so filling
-// with paths and reading back with types.ProjectLabel looked correct, but the ROOT can
-// never agree: ProjectLabel rejects "" and ".", resolving the root to its directory
-// basename while the set holds ".". The lookup missed every time, leaving every
-// root-owned regenerated output unstaged, which is the dirty tree settledPaths exists to
-// prevent. One helper on both sides makes that divergence unrepresentable.
-func projectKey(p *types.Project) string {
-	if p.Path == "" {
-		return "."
-	}
-	return p.Path
-}
-
-// planResolution classifies every conflict without touching the tree.
-//
-// A path is settled automatically only when magus can name the target that rebuilds it.
-// A VCS reports a conflict when BOTH sides changed a path, so taking a side always
-// discards a real change: safe when a later run rewrites the file from source, data loss
-// when nothing does.
-func planResolution(ctx context.Context, m *magus.Magus, resolver types.ConflictResolver, conflicts []types.Conflict) (resolutionPlan, error) {
-	paths := make([]string, len(conflicts))
-	for i, c := range conflicts {
-		paths[i] = c.Path
-	}
-	// A generated file that is now ignored was removed from version control on purpose;
-	// the other side carries a mechanical regeneration of it. Without this check both
-	// sides look like declared outputs and the delete gets reverted every merge.
-	ignored, err := resolver.IgnoredPaths(ctx, m.Root(), paths)
-	if err != nil {
-		return resolutionPlan{}, fmt.Errorf("vcs resolve: %w", err)
-	}
-
-	plan := resolutionPlan{rebuild: map[string][]string{}}
-	for _, c := range conflicts {
-		abs := filepath.Join(m.Root(), filepath.FromSlash(c.Path))
-		p := m.FindOutputProducer(abs)
-		if p == nil {
-			// Not a declared output. The merge-driver registration is the exception:
-			// magus writes it, no target declares it, and it is re-derived.
-			if types.IsMagusMaintained(c.Path) && c.Kind == types.ConflictKindContent {
-				plan.rederive = append(plan.rederive, c.Path)
-				continue
-			}
-			plan.manual = append(plan.manual, c.Path)
-			continue
-		}
-		target, ok := settleTarget(p, abs)
-		if !ok {
-			plan.manual = append(plan.manual, c.Path)
-			continue
-		}
-		switch {
-		case c.Kind == types.ConflictKindBothDeleted:
-			// Neither side has content. Record the removal and stop.
-			plan.gone = append(plan.gone, c.Path)
-			continue
-		case c.Kind == types.ConflictKindDeleted && ignored[c.Path]:
-			plan.gone = append(plan.gone, c.Path)
-			continue
-		case c.Kind == types.ConflictKindDeleted:
-			// One side deleted a file that is STILL a tracked declared output. Keeping it
-			// resurrects a deletion someone meant; dropping it loses an output the
-			// workspace declares. Neither is magus's call.
-			plan.manual = append(plan.manual, c.Path)
-			continue
-		}
-		plan.keep = append(plan.keep, c.Path)
-		// The project PATH, not its display label: this string becomes an argument to
-		// `magus run <target> <project>`, and ProjectRef.Display renders the root as its
-		// directory BASENAME so a bare "." never reaches a human-facing log. In a git
-		// worktree that basename is the worktree's own directory name, which is not a
-		// project any workspace knows, so resolve regenerated nothing and died with
-		// `unknown project: "<worktree-dir>"`. Display's own doc draws this line: labels
-		// for reading, the path for anything the user (or this code) feeds back to magus.
-		proj := projectKey(p)
-		if !slices.Contains(plan.rebuild[target], proj) {
-			plan.rebuild[target] = append(plan.rebuild[target], proj)
-		}
-	}
-	slices.Sort(plan.keep)
-	slices.Sort(plan.gone)
-	slices.Sort(plan.rederive)
-	slices.Sort(plan.manual)
-	return plan, nil
+		reached, len(plan.Keep)+len(plan.Rederive), len(plan.Gone))
 }
 
 // runRebuildTargets runs each target ONCE over every project that needs it. Grouping by
@@ -506,63 +474,31 @@ func runRebuildTargets(ctx context.Context, root string, rc runConfig, rebuild m
 	return nil
 }
 
-// settledPaths returns everything to record: the kept paths, plus any OTHER declared
-// output the regeneration rewrote.
-//
-// The second half is the normal case. A generate target writes every output its project
-// declares, so recording only the conflicted paths leaves the rest modified and
-// unrecorded: the dirty tree that makes `git rebase --continue` refuse.
-//
-// Limited to outputs of the projects that were rebuilt, so a file you had already
-// modified elsewhere is not swept in.
-func settledPaths(ctx context.Context, m *magus.Magus, driver types.VCSDriver, plan resolutionPlan) ([]string, error) {
-	settled := map[string]bool{}
-	for _, p := range slices.Concat(plan.keep, plan.rederive) {
-		settled[p] = true
-	}
-	dirty, err := driver.DirtyFiles(ctx, m.Root(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("list regenerated files: %w", err)
-	}
-	rebuilt := plan.rebuiltProjects()
-	for _, path := range dirty {
-		if settled[path] {
-			continue
-		}
-		producer := m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(path)))
-		if producer == nil || !rebuilt[projectKey(producer)] {
-			continue
-		}
-		settled[path] = true
-	}
-	return slices.Sorted(maps.Keys(settled)), nil
-}
-
-func reportResolution(plan resolutionPlan, dryRun bool) {
+func reportResolution(plan settle.Plan, dryRun bool) {
 	verb, goneVerb, rederiveVerb := "resolved", "recorded the deletion of", "re-derived"
 	if dryRun {
 		verb, goneVerb, rederiveVerb = "would resolve", "would record the deletion of", "would re-derive"
 	}
-	if len(plan.keep) > 0 {
-		fmt.Printf("%s %d generated file(s), then regenerating them:\n", verb, len(plan.keep))
-		printPaths(plan.keep)
+	if len(plan.Keep) > 0 {
+		fmt.Printf("%s %d generated file(s), then regenerating them:\n", verb, len(plan.Keep))
+		printPaths(plan.Keep)
 	}
-	if len(plan.gone) > 0 {
-		fmt.Printf("%s %d generated file(s) this workspace no longer tracks:\n", goneVerb, len(plan.gone))
-		printPaths(plan.gone)
+	if len(plan.Gone) > 0 {
+		fmt.Printf("%s %d generated file(s) this workspace no longer tracks:\n", goneVerb, len(plan.Gone))
+		printPaths(plan.Gone)
 	}
-	if len(plan.rederive) > 0 {
+	if len(plan.Rederive) > 0 {
 		// Reported because it is not a merge. The managed section is rebuilt from the
 		// declared outputs; anything outside it comes from the incoming side, so a
 		// hand-written rule only the other side has does not survive.
 		fmt.Printf("%s %d file(s) magus maintains, from the workspace rather than by merging:\n",
-			rederiveVerb, len(plan.rederive))
-		printPaths(plan.rederive)
+			rederiveVerb, len(plan.Rederive))
+		printPaths(plan.Rederive)
 		fmt.Println("  any hand-written rules in these files are taken from the incoming side")
 	}
-	if len(plan.manual) > 0 {
-		fmt.Printf("left for you: %d conflict(s) magus cannot settle:\n", len(plan.manual))
-		printPaths(plan.manual)
+	if len(plan.Manual) > 0 {
+		fmt.Printf("left for you: %d conflict(s) magus cannot settle:\n", len(plan.Manual))
+		printPaths(plan.Manual)
 	}
 }
 
@@ -574,11 +510,148 @@ func printPaths(paths []string) {
 
 // unresolvedError exits non-zero when conflicts remain, so `magus vcs resolve && git
 // rebase --continue` cannot skip past one you still have to read.
-func unresolvedError(plan resolutionPlan) error {
-	if len(plan.manual) == 0 {
+func unresolvedError(plan settle.Plan) error {
+	if len(plan.Manual) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.manual))
+	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.Manual))
+}
+
+// vcsResolveHook is `magus vcs resolve --hook <name>`, the settle hooks' half of the
+// merge driver: once git has the whole tree it regenerates what the operation changed
+// (settle.Hook) and stages the result. Which hooks fire when, and what each sees, is
+// vcs.SettleHooks.
+//
+// What happens to the staged output follows the hook. A commit git has not made yet
+// carries it. For a clean merge, whose commit git makes on its own, the hook stops that
+// commit instead: git leaves the merge in progress, prints "use 'git commit' to complete
+// the merge", and the commit the person then makes is the merge commit, regenerated,
+// with no amend and no stale commit ever written. After a rebase, cherry-pick, revert or
+// am the commits already exist, so the output is staged and the line says how to fold
+// it in; magus never amends.
+//
+// Failure is loud and never leaves stale output behind quietly: the exact command to
+// run is printed, a commit not yet made is stopped, and the regeneration stays owed in
+// the git dir, where `magus doctor` reports it.
+func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string, args []string) error {
+	// A hook runs in the repository's top level, where the workspace root is too; the
+	// merge driver relies on the same. Read git's state before loading anything, since
+	// most commits are not merge-shaped and load nothing.
+	wsRoot, err := magus.FindRoot(root)
+	if err != nil {
+		return settleFailed(hook, vcs.HookOperation{}, settle.Outcome{}, err)
+	}
+	op, ok, err := vcs.GitHookOperation(ctx, wsRoot, vcs.HookEvent{Hook: hook, Args: args, IndexFile: hookIndexFile()})
+	if err != nil {
+		return settleFailed(hook, op, settle.Outcome{}, err)
+	}
+	if !ok || len(op.Changed) == 0 {
+		return nil
+	}
+	if op.CommitPending {
+		// The pre-merge-commit stop below leads to a `git commit` whose pre-commit hook
+		// lands here again with the very tree that was just settled.
+		if settled, err := vcs.HookTreeSettled(ctx, wsRoot, op); err != nil {
+			return settleFailed(hook, op, settle.Outcome{}, err)
+		} else if settled {
+			return nil
+		}
+	}
+
+	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
+	if err != nil {
+		return settleFailed(hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
+	}
+	run := func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }
+	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
+	if err != nil {
+		return settleFailed(hook, op, out, err)
+	}
+	if len(out.Ran) == 0 {
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, out.Notice(hook, settle.FoldCommand(ctx, m)))
+	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
+		return errSilent{exitCode: 1}
+	}
+	return nil
+}
+
+// settleOwedByHand is `magus vcs resolve` with nothing conflicted: it runs what the
+// merge driver left owed, which a settle hook that failed or was bypassed with
+// --no-verify leaves behind and `magus doctor` reports, stages the result and clears the
+// record. With nothing owed it says so.
+func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
+	owed, err := vcs.OwedRegenerations(ctx, m.Root())
+	if err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	ran := settle.Invocations(nil, owed, buildDefinesTarget(ctx, m))
+	if len(ran) == 0 {
+		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
+		return nil
+	}
+	plan := settle.Plan{Rebuild: map[string][]string{}}
+	for _, inv := range ran {
+		plan.Rebuild[strings.TrimSuffix(inv[0], ":rw")] = inv[1:]
+	}
+	if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
+		return fmt.Errorf("vcs resolve: regenerate: %w", err)
+	}
+	settled, err := plan.Paths(ctx, m, driver)
+	if err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	staged, _, err := stagePaths(ctx, m.Root(), driver, settled)
+	if err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	fmt.Printf("settled what the merge driver left owed; staged %d path(s): %s\n", len(staged), driver.ReviewCommand())
+	return nil
+}
+
+// hookIndexFile is the index git exported to this hook, absolute; "" when it exported
+// none. git spells the default one relative to the hook's working directory.
+func hookIndexFile() string {
+	index := os.Getenv("GIT_INDEX_FILE")
+	if index == "" || filepath.IsAbs(index) {
+		return index
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return index
+	}
+	return filepath.Join(wd, index)
+}
+
+// settleFailed prints what did not happen and the command that does it, then fails
+// the hook. A commit git has not made yet is stopped by that failure; one it has made
+// carries stale output, and the line says so.
+func settleFailed(hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
+	regenerate := hint.VCSResolve.With("--hook", hook)
+	if len(out.Ran) > 0 {
+		regenerate = out.Command()
+	}
+	fmt.Fprintf(os.Stderr, "magus: could not regenerate after this %s: %v\n", cmp.Or(op.Kind, "operation"), err)
+	switch {
+	case op.CommitPending:
+		fmt.Fprintf(os.Stderr, "magus: the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)\n", regenerate)
+	case op.Kind != "":
+		fmt.Fprintf(os.Stderr, "magus: HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`\n", regenerate)
+	}
+	return errSilent{exitCode: 1}
+}
+
+// resolveVCS returns the active VCS resolution for the workspace.
+func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSResolution, error) {
+	wsRoot := m.Root()
+	if wsRoot == "" {
+		wsRoot = root
+	}
+	return vcs.Resolve(ctx, wsRoot, "", m.VCSOptions())
 }
 
 // ------------------------------------------------------------- vcs checkpoint

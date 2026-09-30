@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestHashFileKnownVector pins hashFile to the stdlib SHA256 of a known input.
@@ -149,7 +151,7 @@ func TestExpandSourcesSkipsSymlinks(t *testing.T) {
 	require.NoError(t, os.WriteFile(real, []byte("package main"), 0o644))
 	require.NoError(t, os.Symlink("real.go", filepath.Join(root, "alias.go")))
 
-	out, err := expandSources([]string{"*.go"}, root, nil, nil)
+	out, err := expandSources(types.MustParseGlobs("*.go"), root, nil, nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -167,7 +169,7 @@ func TestExpandSourcesExcludesOutputs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "keep.js"), []byte("k"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "bundle.js"), []byte("b"), 0o644))
 
-	out, err := expandSources([]string{"**/*.js"}, root, []string{"dist/**"}, nil)
+	out, err := expandSources(types.MustParseGlobs("**/*.js"), root, types.MustParseGlobs("dist/**"), nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -191,7 +193,7 @@ func TestExpandSourcesPrunesSpellDirs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "zig-cache", "stale.zig"), []byte("s"), 0o644))
 
 	// Without the spell dir declared, both .zig files are hashed.
-	out, err := expandSources([]string{"**/*.zig"}, root, nil, nil)
+	out, err := expandSources(types.MustParseGlobs("**/*.zig"), root, nil, nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range out {
@@ -200,7 +202,7 @@ func TestExpandSourcesPrunesSpellDirs(t *testing.T) {
 	assert.Equal(t, []string{"src/main.zig", "zig-cache/stale.zig"}, rels, "no spell dirs: both hashed")
 
 	// With zig-cache declared, only the real source survives.
-	out, err = expandSources([]string{"**/*.zig"}, root, nil, []string{"zig-cache"})
+	out, err = expandSources(types.MustParseGlobs("**/*.zig"), root, nil, []string{"zig-cache"})
 	require.NoError(t, err)
 	rels = nil
 	for _, ra := range out {
@@ -280,7 +282,7 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 		h, err := c.hashStep(ctx, &Step{
 			ProjectPath:   ".",
 			WorkspaceRoot: root,
-			Sources:       []string{"**/*.go"},
+			Sources:       types.MustParseGlobs("**/*.go"),
 			IgnoreDirs:    ignore,
 		})
 		require.NoError(t, err)
@@ -318,7 +320,7 @@ func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {
 	step := &Step{
 		ProjectPath:   ".",
 		WorkspaceRoot: root,
-		Sources:       []string{"**/*.go"},
+		Sources:       types.MustParseGlobs("**/*.go"),
 	}
 
 	memo := NewSourceMemo()
@@ -641,7 +643,7 @@ func BenchmarkHashStep(b *testing.B) {
 func BenchmarkExpandSourcesJSWorkspace(b *testing.B) {
 	root := buildSyntheticJSWorkspace(b, 50, 100)
 	// Scoped globs matching the javascript spell's declared Sources
-	// after joinGlob scoping (workspaceRoot-relative).
+	// after rooting at the workspace.
 	globs := make([]string, 0, 50*8)
 	for i := 0; i < 50; i++ {
 		proj := fmt.Sprintf("pkg-%03d", i)
@@ -660,7 +662,7 @@ func BenchmarkExpandSourcesJSWorkspace(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = expandSources(globs, root, nil, nil)
+		_, _ = expandSources(types.MustParseGlobs(globs...), root, nil, nil)
 	}
 	b.Logf("target: <15 ms/op (measured: ~15 ms after single-walk+compiled-glob opt)")
 }
@@ -698,13 +700,13 @@ func BenchmarkIsIgnoreDir(b *testing.B) {
 // (extension globs → HasSuffix, exact paths → string compare) the match is
 // zero-alloc. The hard alloc gate is enforced by TestCompiledGlobAllocsBudget.
 func BenchmarkCompiledGlobMatchHot(b *testing.B) {
-	pats := compileGlobs([]string{
+	pats := compileGlobs(types.MustParseGlobs(
 		"web/studio/**/*.ts",
 		"web/studio/**/*.tsx",
 		"web/studio/**/*.js",
 		"web/studio/package.json",
 		"web/studio/pnpm-lock.yaml",
-	})
+	))
 	paths := []string{
 		"web/studio/src/components/Button.tsx",
 		"web/studio/src/lib/utils.ts",
@@ -741,7 +743,7 @@ func FuzzHashStep(f *testing.F) {
 			Target:        target,
 		}
 		if source != "" {
-			s.Sources = []string{source}
+			s.Sources = types.MustParseGlobs(source)
 		}
 		if envKey != "" {
 			s.EnvAllow = []string{envKey}
@@ -777,7 +779,7 @@ func TestExpandSourcesResolvesExactPathInsidePrunedDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "descriptor.binpb"), []byte("d"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "other.binpb"), []byte("o"), 0o644))
 
-	out, err := expandSources([]string{"gen/descriptor.binpb"}, root, nil, nil)
+	out, err := expandSources(types.MustParseGlobs("gen/descriptor.binpb"), root, nil, nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range out {
@@ -787,7 +789,7 @@ func TestExpandSourcesResolvesExactPathInsidePrunedDir(t *testing.T) {
 		"an exact path names one file deliberately; a pruned dir must not swallow it")
 
 	// A glob that reaches the same dir without naming it stays pruned.
-	out, err = expandSources([]string{"**/*.binpb"}, root, nil, nil)
+	out, err = expandSources(types.MustParseGlobs("**/*.binpb"), root, nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, out, "a pattern must not reach into a pruned dir it does not name")
 }
@@ -810,7 +812,7 @@ func TestExpandSourcesWalksAPrunedDirAPatternNames(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, f), []byte("x"), 0o644))
 	}
 
-	out, err := expandSources([]string{"**/*.go", "internal/spell/gen/types/**/*.buzz"}, root, nil, nil)
+	out, err := expandSources(types.MustParseGlobs("**/*.go", "internal/spell/gen/types/**/*.buzz"), root, nil, nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range out {
@@ -822,7 +824,7 @@ func TestExpandSourcesWalksAPrunedDirAPatternNames(t *testing.T) {
 		"internal/spell/y.go",
 	}, rels, "**/*.go stays out of gen/; the named pattern reaches in and prunes below itself")
 
-	out, err = expandSources([]string{"internal/spell/gen/types/*.buzz"}, root, []string{"internal/spell/gen/types/*.buzz"}, nil)
+	out, err = expandSources(types.MustParseGlobs("internal/spell/gen/types/*.buzz"), root, types.MustParseGlobs("internal/spell/gen/types/*.buzz"), nil)
 	require.NoError(t, err)
 	assert.Empty(t, out, "a target's own outputs are never its inputs")
 }
@@ -835,7 +837,7 @@ func TestExpandSourcesDeduplicatesExactAndPattern(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "main.go"), []byte("m"), 0o644))
 
-	out, err := expandSources([]string{"**/*.go", "cmd/main.go"}, root, nil, nil)
+	out, err := expandSources(types.MustParseGlobs("**/*.go", "cmd/main.go"), root, nil, nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range out {
@@ -872,8 +874,8 @@ func TestExpandSourcesPrefixWalkMatchesTheFullWalk(t *testing.T) {
 	}
 	require.NoError(t, os.Symlink("real", filepath.Join(root, "link")))
 
-	out, err := expandSources([]string{"web/**/*.ts", "web/src/*.ts", "link/*.ts", "missing/*.ts"},
-		root, []string{"web/dist/**"}, nil)
+	out, err := expandSources(types.MustParseGlobs("web/**/*.ts", "web/src/*.ts", "link/*.ts", "missing/*.ts"),
+		root, types.MustParseGlobs("web/dist/**"), nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range out {

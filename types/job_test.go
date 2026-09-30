@@ -3,6 +3,7 @@ package types
 import (
 	"strings"
 	"testing"
+	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
@@ -494,6 +495,22 @@ func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
 	})
+}
+
+func TestJobListFlagsAQueuedJobStaleOnlyOnceItsDependenciesEnd(t *testing.T) {
+	t.Parallel()
+
+	const now, hour = int64(100_000), int64(3600)
+	rows := []Job{
+		{ID: "dep", State: StateRunning, Registered: now, Updated: now},
+		{ID: "queued", State: StateDeclared, DependsOn: []string{"dep"}, Updated: now - 3*hour},
+		{ID: "lone", State: StateDeclared, Updated: now - 3*hour},
+	}
+	assert.Equal(t, []string{"lone"}, NewJobList(rows).Flag(now, 2*time.Hour).Stale, "a live dependency keeps its waiter queued")
+
+	rows[0].State, rows[0].Updated = StatePass, now-hour
+	assert.Equal(t, []string{"lone"}, NewJobList(rows).Flag(now, 2*time.Hour).Stale, "the waiter's clock starts at its dependency's end")
+	assert.Equal(t, []string{"queued", "lone"}, NewJobList(rows).Flag(now+2*hour, 2*time.Hour).Stale)
 }
 
 // A footprint that is not known still says so on the wire: footprint_known is never

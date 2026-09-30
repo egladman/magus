@@ -79,7 +79,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	routes := map[string]share.Route{"/api/v1/events": {Handler: http.NotFoundHandler(), Format: rpcerr.FormatJSON, Needs: apiNeedsFor("/api/v1/events")}}
 	h := (&Server{}).newShareHandler(mgr, consoleDir, routes, trailDir, slog.New(slog.DiscardHandler))
 
-	minter := types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "laptop", Grant: types.GrantConsole}
+	minter := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: types.GrantConsole}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
 	req = req.WithContext(trail.ContextWithCredential(req.Context(), minter))
 	rr := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord
 	require.NoError(t, json.Unmarshal(blob, &rec))
-	assert.Equal(t, types.ClassShare, rec.Minted.Class)
+	assert.Equal(t, types.KindShare, rec.Minted.Kind)
 	assert.Equal(t, types.GrantViewer, rec.Minted.Grant)
 	assert.Len(t, rec.Minted.ID, 8)
 	assert.Equal(t, minter, rec.Minter)

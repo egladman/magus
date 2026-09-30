@@ -110,7 +110,8 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
-	combined := append(slices.Clone(rows), candidate)
+	// A re-fork replaces its stored row, so the pair is ordered by what it declares now.
+	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == id }), candidate)
 	for _, mine := range candidate.WritePaths {
 		file, ok := literalClaimableFile(store.root, mine)
 		if !ok {

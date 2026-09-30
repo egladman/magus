@@ -32,6 +32,9 @@ type WorkspaceRegistry struct {
 	// providers that report the same path must resolve deterministically: the first
 	// one wired owns it.
 	providers []string
+	// lifecycleProvider is the spell a magusfile wired via magus\lifecycle.provider;
+	// empty when none was.
+	lifecycleProvider string
 	// shellRules are additive agent-guard rules a magusfile declared via
 	// magus\guard.shell, in declaration order. They strengthen only: the guard
 	// merges them after compiled built-ins.
@@ -153,6 +156,28 @@ func (r *WorkspaceRegistry) Providers() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.providers)
+}
+
+// SetLifecycleProvider records the spell a magusfile wired as its lifecycle provider.
+// Wiring the same spell again is a no-op; wiring a second one is an error, because
+// Tool.Lifecycle is one vocabulary and two providers would read a key two ways. Safe to
+// call concurrently.
+func (r *WorkspaceRegistry) SetLifecycleProvider(spellName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lifecycleProvider != "" && r.lifecycleProvider != spellName {
+		return fmt.Errorf("a workspace has one lifecycle provider, and %q is already wired; drop one of the two magus\\lifecycle.provider calls (wiring %q)",
+			r.lifecycleProvider, spellName)
+	}
+	r.lifecycleProvider = spellName
+	return nil
+}
+
+// LifecycleProvider returns the lifecycle-provider spell name, or "" when none was wired.
+func (r *WorkspaceRegistry) LifecycleProvider() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lifecycleProvider
 }
 
 // AddShellRule appends an additive shell-guard rule. Safe to call concurrently.

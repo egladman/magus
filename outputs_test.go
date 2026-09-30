@@ -96,6 +96,36 @@ func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "per-target output should be deleted")
 }
 
+// TestCleanOutputsKeepsAnExcludedFile: a hand-maintained file inside a generated tree is
+// carved out of the declaration, so clean leaves it and the merge driver finds no target
+// to regenerate it from, while the generated file beside it goes.
+func TestCleanOutputsKeepsAnExcludedFile(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	generated := filepath.Join(root, "gen", "fs.go")
+	hand := filepath.Join(root, "gen", "runtime.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(generated), 0o755))
+	for _, f := range []string{generated, hand} {
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0o644))
+	}
+
+	assert.Equal(t, ".", findProducer(t, m, "gen/fs.go"))
+	assert.Empty(t, findProducer(t, m, "gen/runtime.go"), "an excluded file has no producer")
+
+	cleaned, err := m.CleanOutputs(context.Background(), m.All(), false)
+	require.NoError(t, err, "CleanOutputs")
+	require.Len(t, cleaned.Removed, 1)
+	assert.NoFileExists(t, generated)
+	assert.FileExists(t, hand)
+}
+
 // TestCleanOutputsDryRunDoesNotDelete verifies that --dry-run lists matched
 // files without deleting them.
 func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {
@@ -322,9 +352,9 @@ func TestInboundOutputsLandOnTheOwner(t *testing.T) {
 	require.NotNil(t, site)
 	require.NotNil(t, producer)
 
-	assert.Equal(t, map[string][]string{"producer": {"generated.txt"}}, site.InboundOutputs,
+	assert.Equal(t, map[string][]types.Glob{"producer": types.MustParseGlobs("generated.txt")}, site.InboundOutputs,
 		"the owner records the glob under the writer that produces it")
-	assert.Equal(t, []string{"generated.txt"}, site.AllOutputs(),
+	assert.Equal(t, types.MustParseGlobs("generated.txt"), site.AllOutputs(),
 		"the owner's complete view carries it, relative to ITS root")
 	assert.Empty(t, producer.AllOutputs(),
 		"the writer must not claim a glob that is relative to another project's root")
@@ -358,7 +388,7 @@ func TestOutputReadsAreConcurrencySafe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			assert.Equal(t, []string{"generated.txt"}, site.AllOutputs())
+			assert.Equal(t, types.MustParseGlobs("generated.txt"), site.AllOutputs())
 			assert.Equal(t, "producer", m.FindOutputProducer(generated).Path)
 			_, err := m.CleanOutputs(context.Background(), m.All(), true /* dryRun */)
 			assert.NoError(t, err)
@@ -367,18 +397,48 @@ func TestOutputReadsAreConcurrencySafe(t *testing.T) {
 	wg.Wait()
 }
 
+// TestCarvedOutputsNamesTrackedHandFilesAmongOutputs: a VCS attribute file lists output
+// patterns without their exclusions, so it needs the tracked files those exclusions carve
+// out named one by one. An untracked hand file, and one another declaration claims, are
+// not carved.
+func TestCarvedOutputsNamesTrackedHandFilesAmongOutputs(t *testing.T) {
+	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".magus/\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go", "!gen/runtime.go", "!gen/claimed.go", "!gen/scratch.go");
+}
+export fun other(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/claimed.go");
+}
+`), 0o644))
+	for _, rel := range []string{"gen/fs.go", "gen/runtime.go", "gen/claimed.go"} {
+		writeCommit(t, root, rel, rel)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "scratch.go"), nil, 0o644))
+
+	m, err := Open(t.Context(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	carved, err := m.CarvedOutputs(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gen/runtime.go"}, carved)
+}
+
 // TestAllOutputsNeverAliasesProjectOutputs guards the exported result against a caller
 // that appends to it. p.Outputs carries spare capacity from AttachSpell, so returning the
 // live backing array would let one append reach into the project record, and the hazard
 // would be invisible in any workspace whose content happened to take a copying branch.
 func TestAllOutputsNeverAliasesProjectOutputs(t *testing.T) {
-	p := &types.Project{Path: "api", Outputs: make([]string, 1, 8)}
-	p.Outputs[0] = "dist/**"
+	p := &types.Project{Path: "api", Outputs: make([]types.Glob, 1, 8)}
+	p.Outputs[0] = types.Glob{Pattern: "dist/**"}
 
 	got := p.AllOutputs()
-	_ = append(got, "scribbled")
+	_ = append(got, types.Glob{Pattern: "scribbled"})
 
-	assert.Equal(t, []string{"dist/**"}, p.Outputs, "appending to the result must not reach the project")
+	assert.Equal(t, types.MustParseGlobs("dist/**"), p.Outputs, "appending to the result must not reach the project")
 }
 
 // TestCrossOutputMutualRefIsRejectedAtLoad covers the shape this feature most invites:
@@ -499,7 +559,7 @@ func TestDistinctPathsIntoOneTreeAreAllowed(t *testing.T) {
 
 	site := m.Get("site")
 	require.NotNil(t, site)
-	assert.Equal(t, map[string][]string{"p1": {"from-p1.txt"}, "p2": {"from-p2.txt"}}, site.InboundOutputs)
+	assert.Equal(t, map[string][]types.Glob{"p1": types.MustParseGlobs("from-p1.txt"), "p2": types.MustParseGlobs("from-p2.txt")}, site.InboundOutputs)
 	assert.Equal(t, []string{"p1", "p2"}, site.DependsOn, "the owner waits on every writer")
 }
 

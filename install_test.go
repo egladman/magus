@@ -4,11 +4,16 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -88,7 +93,7 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	step := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw"})
 	assert.Equal(t, "pnpm-install", step.Target)
 	assert.Equal(t, "typescript", step.Spell)
-	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml", "web/.npmrc"}, step.Sources)
+	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml", "web/.npmrc"), step.Sources)
 	assert.Equal(t, []string{"web/node_modules/.pnpm/lock.yaml"}, step.Stamps)
 	assert.Equal(t, []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0"}, step.ToolVersions)
 	assert.Empty(t, step.Charms)
@@ -100,9 +105,46 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	update := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw", types.CharmUpdate})
 	assert.Equal(t, []string{types.CharmUpdate}, update.Charms)
 	assert.True(t, update.NoCache, "a replayed update is an update that never happened")
-	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml"}, update.Updates)
+	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml"), update.Updates)
 
 	choice.Install.Stamps = nil
 	assert.True(t, m.installStep(p, "typescript", "pnpm-install", choice, tools, nil).NoCache,
 		"with no stamp nothing could notice a deleted tree, so the install always runs")
+}
+
+// TestInstallReachedThroughNeedsRunsAtWidthOne pins `textsearch\test` needing
+// `install` at --concurrency 1: the Buzz pool takes the only slot for the needed
+// target, and the install inside it runs as its own step that wants one too. The body
+// has to see the slot the pool took for it and yield it, or the step queues behind its
+// own caller. The deadline turns that hang into a failure.
+func TestInstallReachedThroughNeedsRunsAtWidthOne(t *testing.T) {
+	m, _ := openTempWorkspace(t, "web", nil)
+	web := m.Get("web")
+	require.NotNil(t, web)
+	lim := cache.NewLimiter(1)
+	runner := m.installRunner(installKeying{prober: m.newToolProber(), opts: []cache.RunOption{cache.WithLimiter(lim)}})
+	choice := spells.InstallChoice{
+		Manifest: filepath.Join(web.Dir, "package.json"),
+		Lock:     filepath.Join(web.Dir, "pnpm-lock.yaml"),
+	}
+	require.NoError(t, os.WriteFile(choice.Manifest, []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(choice.Lock, []byte("lockfileVersion: '9.0'\n"), 0o644))
+
+	var installed atomic.Bool
+	pool := m.buzzPoolRegistry().Get(t.Name(), func(ctx context.Context) (*buzz.WorkerSession, error) {
+		return &buzz.WorkerSession{Session: buzz.NewSession(ctx), Targets: map[string]vm.Callable{
+			"install": func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+				return vm.Null, runner(ctx, web.Dir, "typescript", "install", choice, func(context.Context) error {
+					installed.Store(true)
+					return nil
+				})
+			},
+		}}, nil
+	})
+
+	ctx, cancel := context.WithTimeout(cache.ContextWithLimiter(t.Context(), lim), 20*time.Second)
+	defer cancel()
+	require.NoError(t, pool.Dispatch(ctx, []string{"install"}, nil))
+	assert.True(t, installed.Load())
+	assert.Equal(t, cache.LimiterStats{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
 }

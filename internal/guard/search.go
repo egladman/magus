@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -83,6 +84,213 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		Kind:    advisoryPrecedent,
 		Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
 	}, true
+}
+
+// grepReaderVerdict denies a search that reads a declaration's body through a context
+// flag, `grep -A40 'func X' f.go`, and serves the command that prints that declaration
+// whole: refs where the index vouches for the name, the declaration's own lines from a
+// live parse where it does not. It fires even on one named file, the case symbol-search
+// lets run: with -A the search is the read, and the read has a better command. Silent when
+// any alternative is not a definition lookup, the search ignores case, or no declaration
+// of the name can be found.
+func grepReaderVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
+	dir, ok := deps.workingDir()
+	if !ok || deps.scope.root == "" {
+		return ShellVerdict{}, false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return ShellVerdict{}, false
+	}
+	for i, c := range cmds {
+		c = asSearch(c)
+		if !hint.IsSearchTool(c.Name) || !readsContext(c) || hasFlag(c.Args, 'i', "ignore-case") {
+			continue
+		}
+		idents, ok := definitionLookups(c)
+		if !ok {
+			continue
+		}
+		routes, ok := declarationRoutes(deps, root, dir, c, idents)
+		if !ok {
+			continue
+		}
+		v := ShellVerdict{Deny: denyGrepReader(routes) + pipeNote(pipedInto(cmds[i+1:])), Rule: denyRule{Name: denyRuleGrepReader, Arg: strings.Join(idents, ",")}}
+		next := make([]hint.Next, 0, len(routes))
+		for _, r := range routes {
+			if argv := servedArgv(r.run); len(argv) > 0 {
+				next = append(next, hint.NextForDenyRemedy(string(denyRuleGrepReader), argv, "prints the whole declaration, where a context count guesses at its length."))
+			}
+		}
+		if len(next) == len(routes) {
+			v = v.withRemedy(printClause(routes)+" the declaration whole.", next...)
+		}
+		return v, true
+	}
+	return ShellVerdict{}, false
+}
+
+// contextValueShorts are the short flags that take a value, per search family, so a
+// cluster's value is never read as more flags.
+var contextValueShorts = map[string]string{"grep": "efmDd", "rg": "efgmtTEM", "ag": "gGm"}
+
+// readsContext reports a context flag: -A, -B or -C with a count, grep's bare -NUM, or the
+// long spellings.
+func readsContext(c hint.Invocation) bool {
+	family := path.Base(c.Name)
+	if family != "rg" && family != "ag" {
+		family = "grep"
+	}
+	values := contextValueShorts[family]
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		switch {
+		case a == "--":
+			return false
+		case strings.HasPrefix(a, "--"):
+			name, _, _ := strings.Cut(a[2:], "=")
+			if name == "after-context" || name == "before-context" || name == "context" {
+				return true
+			}
+		case len(a) > 1 && a[0] == '-':
+			cluster := a[1:]
+			if family == "grep" && strings.Trim(cluster, "0123456789") == "" {
+				return true
+			}
+			for j := 0; j < len(cluster); j++ {
+				if strings.IndexByte("ABC", cluster[j]) >= 0 {
+					return true
+				}
+				if strings.IndexByte(values, cluster[j]) >= 0 {
+					if j == len(cluster)-1 {
+						i++
+					}
+					break
+				}
+			}
+		}
+	}
+	return false
+}
+
+// typeKindRe is a type lookup that names its kind, `type X struct`, which reads its body
+// the way `type X` does.
+var typeKindRe = regexp.MustCompile(`^type ([A-Za-z_][A-Za-z0-9_]*) (?:struct|interface)\b`)
+
+// definitionLookups is the name every alternative of c's patterns looks up a definition
+// of (`func X`, `func (r *T) X`, `type X`), reporting false when any alternative is
+// something else.
+func definitionLookups(c hint.Invocation) ([]string, bool) {
+	patterns := hint.Patterns(c)
+	if len(patterns) == 0 {
+		return nil, false
+	}
+	var idents []string
+	for _, p := range patterns {
+		for _, alt := range splitAlternation(p, searchMode(c)) {
+			alt = normalizeAlternative(alt)
+			if m := typeKindRe.FindStringSubmatch(alt); m != nil {
+				alt = "type " + m[1]
+			}
+			m := definitionLookupRe.FindStringSubmatch(alt)
+			if len(m) < 2 || !hint.IsIdentifier(m[1]) {
+				return nil, false
+			}
+			if !slices.Contains(idents, m[1]) {
+				idents = append(idents, m[1])
+			}
+		}
+	}
+	return idents, true
+}
+
+// declarationRoutes answers each name with the command that prints its declaration, or
+// reports false when one of them has none.
+func declarationRoutes(deps Dependencies, root, dir string, c hint.Invocation, idents []string) ([]searchRoute, bool) {
+	var routes []searchRoute
+	for _, ident := range idents {
+		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
+			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source")})
+			continue
+		}
+		found := liveDeclarations(deps, root, dir, c, ident)
+		if len(found) == 0 {
+			return nil, false
+		}
+		routes = append(routes, found...)
+	}
+	return routes, len(routes) > 0
+}
+
+// liveDeclarations finds ident's declarations by parsing the Go files the search reads:
+// its named files and globs, and under a directory the files the index last saw name it,
+// since walking a tree is past the hook's budget.
+func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, ident string) []searchRoute {
+	operands := invocationPaths(c)
+	if len(operands) == 0 {
+		operands = []string{"."}
+	}
+	var files []string
+	for _, p := range operands {
+		matches := []string{p}
+		if strings.ContainsAny(p, "*?[") {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			matches, _ = filepath.Glob(p)
+		}
+		for _, m := range matches {
+			abs, rel, ok := workspacePath(root, dir, m)
+			if !ok {
+				continue
+			}
+			if info, err := os.Stat(abs); err == nil && info.IsDir() {
+				sites, _ := deps.symbolSites(ident)
+				for _, s := range sites {
+					if underAny([]string{rel}, s.File) && path.Ext(s.File) == ".go" {
+						files = append(files, s.File)
+					}
+				}
+				continue
+			}
+			if path.Ext(rel) == ".go" {
+				files = append(files, rel)
+			}
+		}
+	}
+	slices.Sort(files)
+	var routes []searchRoute
+	for _, rel := range slices.Compact(files) {
+		entries, _, ok := goDecls(filepath.Join(root, filepath.FromSlash(rel)))
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			if e.name[strings.LastIndexByte(e.name, '.')+1:] == ident {
+				routes = append(routes, searchRoute{name: ident, run: sedRangeCommand(rel, e.first, e.last)})
+			}
+		}
+	}
+	return routes
+}
+
+// printClause is the commands, one per declaration, and the verb that agrees with them.
+func printClause(routes []searchRoute) string {
+	runs := make([]string, len(routes))
+	for i, r := range routes {
+		runs[i] = "`" + r.run + "`"
+	}
+	if len(routes) == 1 {
+		return runs[0] + " prints"
+	}
+	return strings.Join(runs, ", ") + " print"
+}
+
+// denyGrepReader leads with the commands, since they are the whole correction.
+func denyGrepReader(routes []searchRoute) string {
+	return printClause(routes) + " the declaration whole, numbered, where a context count only guesses at its length.\n" +
+		"With -A, -B or -C this search is a read, so the single-file allowance a plain search gets does not apply. " +
+		"A search for where a name is USED, without a context flag, runs as before."
 }
 
 // fileSymbolVerdict advises refs for a search of named Go files for names the index

@@ -334,19 +334,19 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.NotNil(t, p, "root project")
 
 	buildStep := m.buildStep(p, "build")
-	assert.Subset(t, buildStep.Sources, []string{"src/**", "tsconfig.json"},
+	assert.Subset(t, buildStep.Sources, []types.Glob{{Pattern: "src/**"}, {Pattern: "tsconfig.json"}},
 		"build's declared inputs must be in its cache-key sources")
-	assert.NotContains(t, buildStep.Sources, "**/*.go",
+	assert.NotContains(t, buildStep.Sources, types.Glob{Pattern: "**/*.go"},
 		"explicit inputs narrow the project-wide source baseline")
-	assert.Contains(t, buildStep.Outputs, "dist/**",
+	assert.Contains(t, buildStep.Outputs, types.Glob{Pattern: "dist/**"},
 		"build's declared output must be in its snapshot/replay set")
-	assert.NotContains(t, buildStep.Outputs, "legacy/**",
+	assert.NotContains(t, buildStep.Outputs, types.Glob{Pattern: "legacy/**"},
 		"explicit outputs narrow the project-wide replay baseline")
 
 	testStep := m.buildStep(p, "test")
-	assert.NotContains(t, testStep.Sources, "src/**",
+	assert.NotContains(t, testStep.Sources, types.Glob{Pattern: "src/**"},
 		"a sibling target must not inherit build's per-target inputs")
-	assert.NotContains(t, testStep.Outputs, "dist/**",
+	assert.NotContains(t, testStep.Outputs, types.Glob{Pattern: "dist/**"},
 		"a sibling target must not inherit build's per-target outputs")
 }
 
@@ -375,7 +375,7 @@ func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	assert.Contains(t, m.buildStep(p, "build").Sources, "magusfile.buzz",
+	assert.Contains(t, m.buildStep(p, "build").Sources, types.Glob{Pattern: "magusfile.buzz"},
 		"a target that declares its inputs must still key on the magusfile defining it, "+
 			"or editing the target body cannot invalidate its cache")
 }
@@ -408,11 +408,12 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	// The chain and the writesFiles footprint are static, and come from the magusfile.
 	p.TargetPolicies = map[string]types.Target{"index-generate": {SkipCache: true}}
 
-	assert.Contains(t, m.buildStep(p, "lint").Sources, "MAGUS.md",
+	magusMD := types.Glob{Pattern: "MAGUS.md"}
+	assert.Contains(t, m.buildStep(p, "lint").Sources, magusMD,
 		"lint composes index-generate two hops down; a stale MAGUS.md must move its key")
-	assert.NotContains(t, m.buildStep(p, "index-generate").Sources, "MAGUS.md",
+	assert.NotContains(t, m.buildStep(p, "index-generate").Sources, magusMD,
 		"the skip_cache target's own step never replays, so keying it on its own output says nothing")
-	assert.NotContains(t, m.buildStep(p, "test").Sources, "MAGUS.md",
+	assert.NotContains(t, m.buildStep(p, "test").Sources, magusMD,
 		"a target composing nothing must not inherit another target's artifact")
 }
 
@@ -439,9 +440,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	assert.Contains(t, m.buildStep(p, "generate").Updates, "CHANGELOG.md",
+	changelog := types.Glob{Pattern: "CHANGELOG.md"}
+	assert.Contains(t, m.buildStep(p, "generate").Updates, changelog,
 		"the composer runs the edit inside its own window, so the declaration covers it")
-	assert.Contains(t, m.buildStep(p, "changelog-generate").Updates, "CHANGELOG.md",
+	assert.Contains(t, m.buildStep(p, "changelog-generate").Updates, changelog,
 		"the declaring target keeps its own declaration")
 	assert.NotContains(t, m.buildStep(p, "test").Updates, "CHANGELOG.md",
 		"a target composing nothing must not inherit another target's declared write")
@@ -465,7 +467,7 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 		}
 		return nil
 	}
-	assert.Equal(t, []string{"libs/gb/MAGUS.md"}, types.ChainSkipCacheOutputs(root, "ci", lookup),
+	assert.Equal(t, types.MustParseGlobs("libs/gb/MAGUS.md"), types.ChainSkipCacheOutputs(root, "ci", lookup),
 		"a cross-project step's output is rooted at the project that declares it")
 	assert.Equal(t, []types.ChainStep{{Project: "libs/gb", Target: "index-generate"}},
 		types.ChainSkipCacheSteps(root, "ci", lookup),
@@ -477,7 +479,7 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 		TargetOutputs:  map[string][]types.OutputRef{"b": {{Glob: "out.txt"}}},
 		TargetChains:   map[string][]types.ChainStep{"a": {{Target: "b"}}, "b": {{Target: "a"}}},
 	}
-	assert.Equal(t, []string{"out.txt"}, types.ChainSkipCacheOutputs(looped, "a", nil))
+	assert.Equal(t, types.MustParseGlobs("out.txt"), types.ChainSkipCacheOutputs(looped, "a", nil))
 	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "b"}},
 		types.ChainSkipCacheSteps(looped, "a", nil))
 }
@@ -502,7 +504,7 @@ func TestChainSkipCacheStepsDropsAGateItsCallerAlreadyCovers(t *testing.T) {
 	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "generate"}},
 		types.ChainSkipCacheSteps(p, "lint", nil),
 		"descending past generate would run index-generate a second time")
-	assert.Equal(t, []string{"MAGUS.md"}, types.ChainSkipCacheOutputs(p, "lint", nil),
+	assert.Equal(t, types.MustParseGlobs("MAGUS.md"), types.ChainSkipCacheOutputs(p, "lint", nil),
 		"the artifact lives on the inner target, so keying stops at neither")
 }
 
@@ -782,7 +784,7 @@ func gateDriftFixture(t *testing.T) (*Magus, *types.Project) {
 func driftingFixture(t *testing.T) (*Magus, *types.Project, func() error) {
 	t.Helper()
 	m, p := gateDriftFixture(t)
-	p.Outputs = []string{"out.txt"}
+	p.Outputs = types.MustParseGlobs("out.txt")
 	path := filepath.Join(p.Dir, "out.txt")
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o644))
 	return m, p, func() error { return os.WriteFile(path, []byte("after"), 0o644) }
@@ -805,7 +807,7 @@ func TestDeclaresOutputFollowsTheChain(t *testing.T) {
 	assert.True(t, declaresOutput(p, "generate"), "a composed writer makes its composer write")
 	assert.True(t, declaresOutput(p, "index-generate"))
 	assert.False(t, declaresOutput(p, "ci"), "a chain that reaches no writer declares nothing")
-	assert.True(t, declaresOutput(&types.Project{Outputs: []string{"gen/**"}}, "ci"),
+	assert.True(t, declaresOutput(&types.Project{Outputs: types.MustParseGlobs("gen/**")}, "ci"),
 		"project-wide outputs cover every target")
 }
 
@@ -871,7 +873,7 @@ func TestGateDriftIgnoresUntrackedOutput(t *testing.T) {
 func TestGateDriftIgnoresBrokenVCSWhenNothingMoved(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
 	m, p := gateDriftFixture(t)
-	p.Outputs = []string{"out.txt"}
+	p.Outputs = types.MustParseGlobs("out.txt")
 	require.NoError(t, os.WriteFile(filepath.Join(p.Dir, "out.txt"), []byte("stable"), 0o644))
 
 	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return nil })
@@ -1130,8 +1132,8 @@ func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutpu
 // "build", which is what this test now asserts.
 func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 	steps := []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "build", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
 	}
 
 	evs := recordOutputOverlapEvents(t, steps)
@@ -1150,8 +1152,8 @@ func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 // alone is "the" target; both must be visible in the report.
 func TestCheckOutputOverlap_DifferingTargetsReportsBoth(t *testing.T) {
 	steps := []cache.Step{
-		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
-		{ProjectPath: "b", Target: "test", Outputs: []string{"dist/**"}},
+		{ProjectPath: "a", Target: "build", Outputs: types.MustParseGlobs("dist/**")},
+		{ProjectPath: "b", Target: "test", Outputs: types.MustParseGlobs("dist/**")},
 	}
 
 	evs := recordOutputOverlapEvents(t, steps)
@@ -1178,7 +1180,7 @@ type recordedMissingDependency struct {
 // label (the value genuinely available), so a caller reading it is not left with an
 // empty field.
 func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
-	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: []string{"**/*.go"}}
+	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: types.MustParseGlobs("**/*.go")}
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
@@ -1500,7 +1502,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {}
 
 	step := m.buildStep(rootProject, "ci")
 
-	assert.Contains(t, step.OwnedOutputs, "leaf/INDEX.md",
+	assert.Contains(t, step.OwnedOutputs, types.Glob{Pattern: "leaf/INDEX.md"},
 		"the root step must exempt a nested project's declared output, or running its generate reports MGS4007")
 }
 

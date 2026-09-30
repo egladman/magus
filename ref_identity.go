@@ -150,7 +150,7 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 // sync with the *Magus that produced the match in the first place.
 //
 // Shared by cmd/magus/query.go's ref-lookup suggestion and internal/handler/mcp's
-// magus_output not-found fallback, so the CLI and the MCP surface render the exact
+// magus\output not-found fallback, so the CLI and the MCP surface render the exact
 // same reproduce command instead of two copies that can drift. It renders the
 // "magus run" prefix via hint.Run so the command path itself stays
 // single-sourced with every other canonical command reference.

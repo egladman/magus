@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/encoding/csv"
@@ -17,23 +18,23 @@ func RegisterCsv(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("csv.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		delimiter := Str(bzArgs, 1)
-		comment := Str(bzArgs, 2)
+		s := ffi.Str(bzArgs, 0)
+		delimiter := ffi.Str(bzArgs, 1)
+		comment := ffi.Str(bzArgs, 2)
 		ret0, err := csv.CSVParse(ctx, s, delimiter, comment)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceSliceVal(ret0), nil
+		return ffi.StrSliceSliceVal(ret0), nil
 	}))
 	m.MapSet("stringify", vm.DirectValue("csv.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		rows := StrSliceSlice(bzArgs, 0)
-		delimiter := Str(bzArgs, 1)
+		rows := ffi.StrSliceSlice(bzArgs, 0)
+		delimiter := ffi.Str(bzArgs, 1)
 		ret0, err := csv.CSVStringify(ctx, rows, delimiter)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

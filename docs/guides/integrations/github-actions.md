@@ -205,7 +205,8 @@ The plan's `outputs` array is the full set of job outputs, each a `name` and a `
 the template writes the array rather than naming its members. Keep that loop rather than
 listing the outputs you use today: a magus release that adds one reaches your workflow
 without an edit, and no output can go missing because a translator forgot to mention it.
-`summary` is the job summary as markdown, rendered by the plan for the same reason.
+`summary` is the job summary as markdown, rendered from the saved plan's typed fields by
+`magus run --stdin --dry-run -o template=...` for the same reason.
 
 `count` guards the matrix: when nothing is affected, or the plan inherited a green run's
 verdict, there is no job to run, and a matrix of zero shards is an error rather than a skip.
@@ -431,7 +432,7 @@ jobs:
           queue-app-client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
         env:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
-      - run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
+      - run: magus buzz hack/ci/merge-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
@@ -443,7 +444,7 @@ jobs:
 
 With neither the variable nor the secret, `setup-magus` mints nothing and its outputs are
 empty; this repository's apply job then fails before the queue starts, and
-`gha-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
+`merge-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
 other `setup-magus` fails the job. The token is an output, never an environment
 variable, because `setup-magus` also runs in jobs that execute pull-request code. The app
 reaches the queue as explicit flags; nothing reads the runner's environment to guess.

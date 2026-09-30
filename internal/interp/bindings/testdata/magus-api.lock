@@ -1,5 +1,4 @@
 affected
-affectedImpact
 attention
 bustCache
 cache
@@ -7,6 +6,7 @@ cache.remote
 canonicalName
 ci
 ci.provider
+clean
 cmd
 describe
 describeFile
@@ -19,7 +19,6 @@ fatal
 guard
 guard.advise
 guard.allow
-guard.bash
 guard.binary
 guard.command
 guard.count
@@ -31,6 +30,7 @@ guard.write
 harness
 harness.provider
 hasCharm
+impact
 insight
 job
 job.clear
@@ -39,6 +39,8 @@ job.list
 job.put
 job.register
 job.wait
+lifecycle
+lifecycle.provider
 log
 log.debug
 log.error
@@ -61,9 +63,13 @@ secret
 secret.endpoint
 secret.provider
 secret.read
+service
+service.acquire
+service.release
 skills
 stats
 targets
+tools
 vcs
 vcs.checkpoint
 where

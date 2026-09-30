@@ -18,7 +18,7 @@ import (
 // (internal/interp/bindings/hostvsbuzz_bench_test.go)), and the wrong one for
 // everything else:
 //
-//   - POLICY that should be readable by the people it governs. tools/toolchain.buzz
+//   - POLICY that should be readable by the people it governs. hack/toolchain.buzz
 //     says so in its own header: "NOTHING HERE IS IN THE MAGUS BINARY, and that is
 //     the point ... it lives in the workspace so its trust decisions are yours to
 //     read and revise."

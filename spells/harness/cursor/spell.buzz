@@ -30,11 +30,12 @@ fun cursor_config_defaults() > {str: int} {
 
 fun cursor_skills_form() > str { return "short"; }
 
-// The script reads the host from `--agent-name` and nowhere else, and refuses a call
+// The Buzz port reads the host from `--agent-name` and nowhere else, and refuses a call
 // without it (MGS3024), so the name is this spell's own mgs_getName(), rendered from the
-// declaration rather than written into the script.
+// declaration rather than written into the file. The command is an argv: Cursor splits
+// it and runs magus itself, the same way Claude Code runs its glue, so there is no shell.
 fun cursor_guard_command() > str {
-    return "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name {mgs_getName()}";
+    return "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name {mgs_getName()}";
 }
 
 fun cursor_event_names() > [str] {
@@ -48,11 +49,14 @@ fun cursor_event_names() > [str] {
 }
 
 fun cursor_pretool_matcher() > str {
-    return "Write|StrReplace|Delete|Edit|NotebookEdit";
+    // Grep, Glob and Read are restated as shell and gated here. A deny has to land
+    // before the tool runs; postToolUse can only advise, and an advise after a
+    // log read or a terminals read is the call that already undermined magus.
+    return "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read";
 }
 
 fun cursor_posttool_matcher() > str {
-    return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|WebSearch|WebFetch";
+    return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch";
 }
 
 // cursor_entries is the managed_entries list merged into .cursor/hooks.json.
@@ -155,12 +159,12 @@ test "harness_skills is skills-empty short form for Cursor" {
     assert\equal("{skills["form"]}", "short", "skills map carries the form");
 }
 
-test "guard command is the shipped Cursor script, not agent hook" {
+test "guard command is the shipped Cursor Buzz port, not a shell script" {
     final cmd = cursor_guard_command();
-    assert\isTrue(cmd.startsWith("sh "), "host runs the script via sh");
-    assert\isTrue(cmd.indexOf("cursor-hook.sh") != null, "names the Cursor guard template");
+    assert\isTrue(cmd.startsWith("magus buzz -s "), "host runs the Buzz port, with no shell");
+    assert\isTrue(cmd.indexOf("cursor-hook.buzz") != null, "names the Cursor guard template");
     assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
-    assert\isTrue(cmd.endsWith(" --agent-name {mgs_getName()}"), "names this host on its argv");
+    assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
 }
 
 test "harness_entries covers every Cursor event magus uses" {
@@ -188,13 +192,16 @@ test "harness_entries covers every Cursor event magus uses" {
     }
 }
 
-test "preToolUse matcher covers edit tools Cursor exposes" {
+test "preToolUse matcher gates edits and the tools restated as shell" {
     final matcher = cursor_pretool_matcher();
     assert\isTrue(matcher.indexOf("Write") != null, "Write");
     assert\isTrue(matcher.indexOf("StrReplace") != null, "StrReplace");
     assert\isTrue(matcher.indexOf("Delete") != null, "Delete");
     assert\isTrue(matcher.indexOf("Edit") != null, "Edit");
     assert\isTrue(matcher.indexOf("NotebookEdit") != null, "NotebookEdit");
+    assert\isTrue(matcher.indexOf("Grep") != null, "Grep");
+    assert\isTrue(matcher.indexOf("Glob") != null, "Glob");
+    assert\isTrue(matcher.indexOf("Read") != null, "Read");
 }
 
 test "postToolUse matcher covers shell and search tools for advise" {
@@ -202,6 +209,7 @@ test "postToolUse matcher covers shell and search tools for advise" {
     assert\isTrue(matcher.indexOf("Shell") != null, "Shell");
     assert\isTrue(matcher.indexOf("Grep") != null, "Grep");
     assert\isTrue(matcher.indexOf("Glob") != null, "Glob");
+    assert\isTrue(matcher.indexOf("Read") != null, "Read");
     assert\isTrue(matcher.indexOf("WebSearch") != null, "WebSearch");
     assert\isTrue(matcher.indexOf("WebFetch") != null, "WebFetch");
 }

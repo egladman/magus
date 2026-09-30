@@ -297,16 +297,18 @@ func TestDispatchCancelledContextRunsNothing(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
-// chanSemaphore is a capacity-bounded Semaphore standing in for cache.Limiter, with
-// the same contract: Yield releases the caller's slot for the duration of fn and
-// re-acquires it with a non-cancellable context, so the caller always returns holding
-// what it held.
+// chanSemaphore is a capacity-bounded Semaphore standing in for a host limiter, with
+// the same contract: Acquire marks the context it hands back, and Yield releases a
+// marked caller's slot for the duration of fn and re-acquires it with a
+// non-cancellable context, so the caller always returns holding what it held.
 type chanSemaphore struct {
 	slots  chan struct{}
 	yields atomic.Int32
 }
 
-func (s *chanSemaphore) Acquire(ctx context.Context) error {
+type chanSlotKey struct{}
+
+func (s *chanSemaphore) take(ctx context.Context) error {
 	select {
 	case s.slots <- struct{}{}:
 		return nil
@@ -315,13 +317,21 @@ func (s *chanSemaphore) Acquire(ctx context.Context) error {
 	}
 }
 
-func (s *chanSemaphore) Release() { <-s.slots }
+func (s *chanSemaphore) Acquire(ctx context.Context, _ string) (context.Context, func(), error) {
+	if err := s.take(ctx); err != nil {
+		return ctx, nil, err
+	}
+	return context.WithValue(ctx, chanSlotKey{}, true), func() { <-s.slots }, nil
+}
 
-func (s *chanSemaphore) Yield(ctx context.Context, fn func() error) error {
+func (s *chanSemaphore) Yield(ctx context.Context, fn func(context.Context) error) error {
+	if held, _ := ctx.Value(chanSlotKey{}).(bool); !held {
+		return fn(ctx)
+	}
 	s.yields.Add(1)
-	s.Release()
-	defer func() { _ = s.Acquire(context.WithoutCancel(ctx)) }()
-	return fn()
+	<-s.slots
+	defer func() { _ = s.take(context.WithoutCancel(ctx)) }()
+	return fn(context.WithValue(ctx, chanSlotKey{}, false))
 }
 
 // TestDispatchNestedYieldsSlotAtCapacityOne is the deadlock-freedom property the Pool
@@ -360,5 +370,36 @@ func TestDispatchNestedYieldsSlotAtCapacityOne(t *testing.T) {
 
 	assert.True(t, childRan.Load(), "the nested target never ran")
 	assert.Equal(t, int32(1), sem.yields.Load(), "the nested dispatch should yield exactly once")
+	assert.Empty(t, sem.slots, "every acquired slot was released")
+}
+
+// TestTargetBodyRunsUnderTheContextAcquireReturned pins the hook a host relies on to
+// run its own slot-taking work inside a pooled body. The body stands in for host code
+// that takes a second slot aside, yielding first if its context says it holds one. At
+// capacity 1 that works only when the body runs under the context the semaphore
+// marked; under any other it queues behind its own slot until the deadline.
+func TestTargetBodyRunsUnderTheContextAcquireReturned(t *testing.T) {
+	sem := &chanSemaphore{slots: make(chan struct{}, 1)}
+	p := newPool(func(ctx context.Context) (*WorkerSession, error) {
+		targets := map[string]vmpackage.Callable{
+			"install": func(ctx context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+				return vmpackage.Null, sem.Yield(ctx, func(ctx context.Context) error {
+					_, release, err := sem.Acquire(ctx, "install aside")
+					if err != nil {
+						return err
+					}
+					release()
+					return nil
+				})
+			},
+		}
+		return &WorkerSession{Session: NewSession(ctx), Targets: targets}, nil
+	}, func(context.Context) Semaphore { return sem }, 1)
+	defer func() { _ = p.Close() }()
+
+	ctx, cancel := context.WithTimeout(WithTargetMemo(t.Context(), NewTargetMemo()), 5*time.Second)
+	defer cancel()
+	require.NoError(t, p.Dispatch(ctx, []string{"install"}, nil))
+	assert.Equal(t, int32(1), sem.yields.Load(), "the body yielded the slot the pool took for it")
 	assert.Empty(t, sem.slots, "every acquired slot was released")
 }

@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"log/slog"
@@ -8,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spell"
@@ -32,7 +35,33 @@ const (
 // byte-level companions) and layers it onto the stdlib module of the same name,
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
-func magusModules(modules bindinggen.Set) []buzz.Module {
+func magusModules(modules ffi.Set) []buzz.Module {
+	mods := hostModuleBinds(modules)
+	// Buzz-implemented modules bind through the SAME list, so a session sees one
+	// surface and nothing downstream can tell which language implemented what.
+	// They need no trampoline and no native value: SetModuleDecls on a path with no
+	// native module is executed by resolveImport, which is how magus/spell and
+	// upstream's own assert/suite/testing already ship.
+	for _, sm := range std.AllSource() {
+		mods = append(mods, buzz.Module{
+			Name: sm.ImportPath(),
+			// No WASM label: a Buzz module may import any host module, and whether
+			// its imports are browser-safe is not knowable from here. Marking one
+			// WASM-capable is a decision for whoever can vouch for its imports.
+			Labels: []string{labelMagus},
+			Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+				s.SetModuleDecls(sm.ImportPath(), sm.Source)
+				return nil
+			},
+		})
+	}
+	return mods
+}
+
+// hostModuleBinds is the native half of magusModules: one buzz.Module per registry
+// entry, ordered by name. The MCP client surface uses it alone, because the
+// Buzz-implemented spell modules import the wider host and do not belong there.
+func hostModuleBinds(modules ffi.Set) []buzz.Module {
 	names := make([]string, 0, len(modules))
 	for name := range modules {
 		names = append(names, name)
@@ -43,7 +72,7 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 	for _, name := range names {
 		reg := modules[name]
 		labels := []string{labelMagus}
-		if reg.Capabilities.Has(bindinggen.WASM) {
+		if reg.Capabilities.Has(ffi.WASM) {
 			labels = append(labels, labelWASM)
 		}
 		// The registry key is the identifier the module BINDS as; reg.Path is what
@@ -93,25 +122,88 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 			},
 		})
 	}
-	// Buzz-implemented modules bind through the SAME list, so a session sees one
-	// surface and nothing downstream can tell which language implemented what.
-	// They need no trampoline and no native value: SetModuleDecls on a path with no
-	// native module is executed by resolveImport, which is how magus/spell and
-	// upstream's own assert/suite/testing already ship.
-	for _, sm := range std.AllSource() {
-		mods = append(mods, buzz.Module{
-			Name: sm.ImportPath(),
-			// No WASM label: a Buzz module may import any host module, and whether
-			// its imports are browser-safe is not knowable from here. Marking one
-			// WASM-capable is a decision for whoever can vouch for its imports.
-			Labels: []string{labelMagus},
-			Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-				s.SetModuleDecls(sm.ImportPath(), sm.Source)
-				return nil
-			},
-		})
-	}
 	return mods
+}
+
+// pureStdlib names the Buzz stdlib modules both MCP Buzz tools provide: pure
+// compute, with no filesystem, process, reflection, FFI or test harness.
+var pureStdlib = []string{"std", "math", "crypto", "serialize", "buffer"}
+
+// PureStdlib splits the Buzz stdlib for the MCP Buzz tools. provide is what both
+// install. withheld is every other stdlib module name, which each tool refuses
+// with its own reason rather than letting it read as a missing file import.
+func PureStdlib() (provide []buzz.Module, withheld []string) {
+	for _, module := range buzzstd.Modules {
+		if slices.Contains(pureStdlib, module.Name) {
+			provide = append(provide, module)
+		} else {
+			withheld = append(withheld, module.Name)
+		}
+	}
+	return provide, withheld
+}
+
+// clientWithheld are the magus\ members the MCP client does not offer: cmd runs an
+// arbitrary magus command line, and pry reads stdin and writes stdout, which in the
+// worker are the request and response channels.
+var clientWithheld = []string{"cmd", "pry"}
+
+// clientHostModules is the host-module set the MCP client tool provides: every
+// module marked WASM (pure compute) except env, which reads the process environment.
+func clientHostModules() ffi.Set {
+	out := make(ffi.Set, len(bindinggen.Modules))
+	for name, reg := range bindinggen.Modules {
+		if name == "env" || !reg.Capabilities.Has(ffi.WASM) {
+			continue
+		}
+		out[name] = reg
+	}
+	return out
+}
+
+// ClientDeniedImportPaths are the import paths the MCP client tool refuses, with
+// a reason, rather than leaving them to read as a missing file import: every host
+// and stdlib module outside magus\, PureStdlib and clientHostModules.
+func ClientDeniedImportPaths() []string {
+	allowed := map[string]bool{"magus": true}
+	provide, withheld := PureStdlib()
+	for _, module := range provide {
+		allowed[module.Name] = true
+	}
+	for name, reg := range clientHostModules() {
+		allowed[cmp.Or(reg.Path, name)] = true
+	}
+	var denied []string
+	for name, reg := range bindinggen.Modules {
+		if path := cmp.Or(reg.Path, name); !allowed[path] {
+			denied = append(denied, path)
+		}
+	}
+	for _, name := range withheld {
+		if !allowed[name] {
+			denied = append(denied, name)
+		}
+	}
+	slices.Sort(denied)
+	return slices.Compact(denied)
+}
+
+// InstallClient binds the MCP client surface into sess: magus\ without the
+// clientWithheld members, PureStdlib, and clientHostModules. Nothing that touches
+// the filesystem, process, network or environment is installed. out receives
+// std.print.
+func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error {
+	env := buzz.ModuleEnv{Ctx: ctx, Out: out}
+	stdlib, _ := PureStdlib()
+	if err := sess.Provide(env, stdlib...); err != nil {
+		return err
+	}
+	if err := sess.Provide(env, hostModuleBinds(clientHostModules())...); err != nil {
+		return err
+	}
+	finishDeclareMagusTypes(sess, clientWithheld...)
+	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface, clientWithheld...))
+	return nil
 }
 
 // mergeModuleMap copies all keys from src into dst. On a key both define, src
@@ -126,7 +218,7 @@ func mergeModuleMap(dst, src vm.Value) {
 
 // moduleSurfaceConfig is the resolved options for one RegisterModuleSurface call.
 type moduleSurfaceConfig struct {
-	modules bindinggen.Set
+	modules ffi.Set
 	// scriptOut is where std.print goes. Defaults to STDERR: under `magus run` a
 	// magusfile's print is human output like every other thing magus says, and
 	// stdout carries the structured answer (-o json|yaml|jsonl|template) alone. A
@@ -142,7 +234,7 @@ type ModuleSurfaceOption func(*moduleSurfaceConfig)
 // WithModules replaces the default host-module set for one session. It is the
 // test seam for a fake fs/http/vcs module; callers use registry.Modules.With to
 // replace only the capability they need without mutating global state.
-func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
+func WithModules(modules ffi.Set) ModuleSurfaceOption {
 	return func(c *moduleSurfaceConfig) { c.modules = modules }
 }
 
@@ -234,11 +326,27 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
 func RegisterSpellSourceModules(sess *buzz.Session) {
+	RegisterSpellDecls(sess)
+	DeclareMagusTypes(sess)
+}
+
+// RegisterSpellDecls stores the spell, charm, and lint declaration source.
+// Storing it does not parse it: a declaration module is parsed when something
+// imports it. DeclareMagusTypes is the parse, and it is separate because a
+// closed script (a guard hook) never imports magus and should not pay for the
+// mirrors on every tool call.
+func RegisterSpellDecls(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
+}
+
+// DeclareMagusTypes parses the generated magus\ mirrors into the session now,
+// before any file import, so a program's own type of the same name still wins.
+// See RegisterSpellSourceModules.
+func DeclareMagusTypes(sess *buzz.Session) {
 	// The same generated source every other module gets (object mirrors plus an extern
-	// per method), which is what types magus\\affectedImpact and friends at a call site
+	// per method), which is what types magus\\impact and friends at a call site
 	// instead of leaving them Unknown.
 	//
 	// Declared EAGERLY rather than registered with SetModuleDecls beside the native
@@ -248,11 +356,32 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	// libs/diagram's own Node for every file the docs render imported after
 	// engine/page, and the diagram chain stopped compiling. Eager keeps them lowest,
 	// so a program's own type of that name still wins.
+	finishDeclareMagusTypes(sess)
+}
+
+func finishDeclareMagusTypes(sess *buzz.Session, omit ...string) {
 	decls, ok := spell.ModuleDecls("magus")
 	if !ok {
 		panic("bindings: generated magus declarations are missing; run `magus run generate`")
 	}
+	for _, name := range omit {
+		decls = omitExtern(decls, name)
+	}
 	sess.DeclareModuleTypes("magus", decls+"\n"+magusUndeclaredTypeSource)
+}
+
+// omitExtern drops one `export extern fun name(...)` line from generated decls.
+func omitExtern(decls, name string) string {
+	prefix := "export extern fun " + name + "("
+	var b strings.Builder
+	for line := range strings.SplitSeq(decls, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes

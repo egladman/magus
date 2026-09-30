@@ -54,7 +54,7 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 			}
 		case "advise":
 			if advise.Context == "" {
-				advise = ShellVerdict{Context: r.Reason}
+				advise = ShellVerdict{Context: r.Reason, Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)}}
 			}
 		}
 	}

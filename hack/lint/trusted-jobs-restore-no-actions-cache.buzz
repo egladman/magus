@@ -1,0 +1,234 @@
+// trusted-jobs-restore-no-actions-cache: a job holding a secret, a write token or
+// id-token restores no Actions cache. main's cache scope is writable by any main-scoped
+// run, and the merge queue validates pull-request code in one; a hook that escapes can
+// read the runtime token and plant an entry every branch and tag run restores. See
+// docs/concepts/merge-queue.md, Trust model.
+namespace trustedcache;
+
+import "assert";
+import "encoding/yaml";
+import "fs";
+import "serialize";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// RestoreSwitch is the input that turns an action's cache restore off, and whether off
+// is its default.
+export object RestoreSwitch {
+    input: str,
+    offByDefault: bool = false,
+}
+
+// RESTORE_SWITCHES are the actions that restore an Actions cache unless told not to,
+// keyed by the prefix of their `uses`.
+export final RESTORE_SWITCHES = {
+    "jdx/mise-action@": RestoreSwitch{ input = "cache" },
+    "./.github/actions/setup-magus": RestoreSwitch{ input = "restore-history", offByDefault = true },
+    "docker/setup-qemu-action@": RestoreSwitch{ input = "cache-image" },
+    "docker/setup-buildx-action@": RestoreSwitch{ input = "cache-binary" },
+    "msys2/setup-msys2@": RestoreSwitch{ input = "cache" },
+    "actions/setup-go@": RestoreSwitch{ input = "cache" },
+};
+
+// ALWAYS_UNTRUSTED are workflows that restore nothing whatever they hold: their verdicts
+// decide merges.
+export final ALWAYS_UNTRUSTED = {
+    "queue.yaml": "validates pull-request code, and its verdicts decide merges",
+};
+
+// EXEMPTIONS are trusted jobs allowed to restore, keyed <workflow file>/<job>, each with
+// its reason. An exemption that no longer matches a restoring trusted job is a finding.
+export final EXEMPTIONS = {<str: str>};
+
+// A restore that happens only on a pull request, where a secret gated off pull requests
+// is absent.
+final prOnly = "$\{\{ github.event_name == 'pull_request' }}";
+final prOnlyIf = "github.event_name == 'pull_request'";
+final offPR = "github.event_name != 'pull_request'";
+
+final expression = std\pattern(`\$\{\{(.*?)\}\}`);
+final secret = std\pattern(`secrets\.(\w+)`);
+
+export fun reads() > [str] {
+    return [".github/workflows/*.yaml"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    return findings(files, exemptions: EXEMPTIONS);
+}
+
+// SecretUse is whether YAML values name a secret other than GITHUB_TOKEN, and whether
+// every such mention sits in an expression that is empty on a pull request.
+object SecretUse {
+    found: bool = false,
+    gated: bool = true,
+}
+
+fun scanSecrets(b: serialize\Boxed, use: mut SecretUse) > void {
+    final s = b.string();
+    if (s != null) {
+        foreach (m in expression.matchAll(s!) ?? [<[str]>]) {
+            foreach (name in secret.matchAll(m[1]) ?? [<[str]>]) {
+                if (name[1] == "GITHUB_TOKEN") {
+                    continue;
+                }
+                use.found = true;
+                if (m[1].indexOf(offPR) == null) {
+                    use.gated = false;
+                }
+            }
+        }
+        return;
+    }
+    foreach (_, v in b.mapValue()) {
+        scanSecrets(v, use: use);
+    }
+    foreach (v in b.listValue()) {
+        scanSecrets(v, use: use);
+    }
+}
+
+// grantsWrite reports whether the permissions entry of doc can write. Undeclared means
+// the repository default, which can be write.
+fun grantsWrite(doc: serialize\Boxed) > bool {
+    if (!support\has(doc, key: "permissions")) {
+        return true;
+    }
+    final perms = doc.q(["permissions"]);
+    if (perms.string() != null) {
+        return perms.string()! == "write-all";
+    }
+    foreach (_, v in perms.mapValue()) {
+        if (support\scalar(v) == "write") {
+            return true;
+        }
+    }
+    return false;
+}
+
+export fun findings(files: [Path], exemptions: {str: str}) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final used = mut {<str: bool>};
+    foreach (f in files) {
+        final raw = support\read(f);
+        final wf = serialize\Boxed.init(yaml\parse(raw));
+        final at = yaml\positions(raw);
+        final file = fs\basename(f.value);
+        final jobs = wf.q(["jobs"]).mapValue();
+        foreach (name in support\sorted(jobs.keys())) {
+            final job = jobs[name]!;
+            final jobPointer = "/jobs/" + support\pointer(name);
+            final use = mut SecretUse{};
+            scanSecrets(job, use: use);
+            scanSecrets(wf.q(["env"]), use: use);
+            final writes = if (support\has(job, key: "permissions")) grantsWrite(job) else grantsWrite(wf);
+            final always = ALWAYS_UNTRUSTED[file] != null or writes or (use.found and !use.gated);
+            if (!always and !use.found) {
+                continue;
+            }
+            // Trusted off pull requests only: a secret every mention of which is gated.
+            final prAllowed = !always;
+
+            final violations = mut [<Finding>];
+            final steps = job.q(["steps"]).listValue();
+            foreach (i in 0..steps.len()) {
+                final step = steps[i];
+                final uses = support\scalar(step.q(["uses"]));
+                final line = at.lines["{jobPointer}/steps/{i}"] ?? 0;
+                var what: str? = null;
+                if (uses.startsWith("actions/cache@") or uses.startsWith("actions/cache/restore@")) {
+                    if (!(prAllowed and support\scalar(step.q(["if"])) == prOnlyIf)) {
+                        what = uses;
+                    }
+                } else {
+                    foreach (prefix in support\sorted(RESTORE_SWITCHES.keys())) {
+                        if (!uses.startsWith(prefix)) {
+                            continue;
+                        }
+                        final sw = RESTORE_SWITCHES[prefix]!;
+                        final set = support\has(step.q(["with"]), key: sw.input);
+                        final v = support\scalar(step.q(["with", sw.input]));
+                        final restores = if (set) v != "false" else !sw.offByDefault;
+                        if (restores and !(prAllowed and v == prOnly)) {
+                            what = "{uses} ({sw.input}: \"{v}\")";
+                        }
+                    }
+                }
+                if (what != null) {
+                    violations.append(Finding{ path = f.value, line = line,
+                        message = "{file}/{name} holds a secret, a write token or id-token (or is the queue), and restores an Actions cache: {what!}",
+                        fix = "Turn the restore off (mise-action cache: false, setup-magus restore-history unset)." });
+                }
+            }
+
+            final key = file + "/" + name;
+            if (exemptions[key] != null) {
+                used[key] = true;
+                if (violations.len() == 0) {
+                    found.append(Finding{ path = f.value, line = at.lines[jobPointer] ?? 0,
+                        message = key + " no longer restores a cache",
+                        fix = "Delete its entry from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
+                }
+                continue;
+            }
+            foreach (v in violations) {
+                found.append(v);
+            }
+        }
+    }
+    foreach (key in support\sorted(exemptions.keys())) {
+        if (used[key] == null) {
+            found.append(Finding{ path = ".github/workflows", message = "exemption " + key + " names no trusted job",
+                fix = "Delete it from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
+        }
+    }
+    return found;
+}
+
+// trusted is a workflow whose one job holds a write token and restores through step.
+fun trusted(step: str) > [Path] !> any {
+    return support\fixture({".github/workflows/release.yaml":
+        "on: push\npermissions:\n  contents: write\njobs:\n  build:\n    runs-on: x\n    steps:\n" + step});
+}
+
+test "a trusted job that restores nothing passes" {
+    foreach (step in [
+        "      - uses: jdx/mise-action@v3\n        with:\n          cache: false\n",
+        "      - uses: ./.github/actions/setup-magus\n",
+        "      - run: echo hi\n",
+        "",
+    ]) {
+        assert\equal(findings(trusted(step), exemptions: {}).len(), want: 0, message: step);
+    }
+}
+
+test "an untrusted job, or a secret gated off pull requests, may restore" {
+    final readOnly = support\fixture({".github/workflows/pr.yaml":
+        "on: pull_request\npermissions:\n  contents: read\njobs:\n  test:\n    steps:\n      - uses: actions/cache@v4\n"});
+    assert\equal(findings(readOnly, exemptions: {}).len(), want: 0, message: "read-only, no secret");
+    final gated = support\fixture({".github/workflows/ci.yaml":
+        "on: [push, pull_request]\npermissions:\n  contents: read\njobs:\n  test:\n    env:\n"
+        + "      TOKEN: $\{\{ github.event_name != 'pull_request' && secrets.CODECOV || '' }}\n    steps:\n"
+        + "      - uses: jdx/mise-action@v3\n        with:\n          cache: $\{\{ github.event_name == 'pull_request' }}\n"});
+    assert\equal(findings(gated, exemptions: {}).len(), want: 0, message: "gated secret, pull-request-only restore");
+}
+
+test "a trusted job that restores is reported at its step" {
+    final got = findings(trusted("      - uses: jdx/mise-action@v3\n"), exemptions: {});
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: ".github/workflows/release.yaml", message: "path");
+    assert\equal(got[0].line, want: 8, message: "line");
+    assert\equal(got[0].message, want: "release.yaml/build holds a secret, a write token or id-token (or is the queue), and restores an Actions cache: jdx/mise-action@v3 (cache: \"\")", message: "message");
+    final queue = support\fixture({".github/workflows/queue.yaml":
+        "on: push\npermissions:\n  contents: read\njobs:\n  validate:\n    steps:\n      - uses: actions/cache/restore@v4\n"});
+    assert\equal(findings(queue, exemptions: {}).len(), want: 1, message: "the queue restores nothing whatever it holds");
+}
+
+test "an exemption holds to its job, and a stale one is reported" {
+    assert\equal(findings(trusted("      - uses: jdx/mise-action@v3\n"), exemptions: {"release.yaml/build": "a reason"}).len(), want: 0, message: "exempt");
+    assert\equal(support\messages(findings(trusted("      - run: echo hi\n"), exemptions: {"release.yaml/build": "a reason"})),
+        want: ["release.yaml/build no longer restores a cache"], message: "no longer restores");
+    assert\equal(support\messages(findings(trusted("      - run: echo hi\n"), exemptions: {"gone.yaml/build": "a reason"})),
+        want: ["exemption gone.yaml/build names no trusted job"], message: "names no job");
+}

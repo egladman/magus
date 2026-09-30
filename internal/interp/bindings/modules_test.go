@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -95,13 +96,13 @@ func TestRegisterModuleSurfaceWithModules(t *testing.T) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 
-	modules := bindinggen.Modules.With("json", bindinggen.ModuleReg{
+	modules := bindinggen.Modules.With("json", ffi.Registration{
 		Register: func(context.Context, *buzz.Session) vm.Value {
 			m := vm.NewMap()
 			m.MapSet("mocked", vm.StrValue("json"))
 			return m
 		},
-		Capabilities: bindinggen.Capabilities(bindinggen.WASM),
+		Capabilities: ffi.Capabilities(ffi.WASM),
 	})
 	RegisterModuleSurface(ctx, sess, WithModules(modules))
 
@@ -152,7 +153,6 @@ func TestScriptWithholdsDeclaringMembers(t *testing.T) {
 		`magus\cache.remote({"name": "s3"})`,
 		`magus\ci.provider({"name": "actions"})`,
 		`magus\guard.shell({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
-		`magus\guard.bash({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
 		`magus\harness.provider({"name": "cursor"})`,
 	} {
 		t.Run(call, func(t *testing.T) {
@@ -274,7 +274,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := bindinggen.ValueToAny(bindinggen.ObjectSlice(core, bindinggen.ObjectModuleEntry)).([]any)
+	got, ok := ffi.ValueToAny(ffi.ObjectSlice(core, bindinggen.ObjectModuleEntry)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -1654,7 +1654,7 @@ func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	} {
 		t.Run(tc.object, func(t *testing.T) {
 			t.Parallel()
-			encoded, ok := bindinggen.ValueToAny(tc.encoded).(map[string]any)
+			encoded, ok := ffi.ValueToAny(tc.encoded).(map[string]any)
 			require.True(t, ok, "%s encoded as something other than a map", tc.object)
 			for key := range encoded {
 				assertMirrorReadsField(t, tc.object, key)

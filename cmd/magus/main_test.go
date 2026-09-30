@@ -76,7 +76,7 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected target still forwards", "affected", []string{"ci"}, full},
 		// A forensic mode runs nothing, so a forward buys no pool and costs the report:
 		// the server prints it on its own stdout and the client exits 0 with an empty one.
-		// That is what made magus\affectedImpact (which forks `affected --impact -o json`
+		// That is what made magus\impact (which forks `affected --impact -o json`
 		// and decodes the child's stdout) fail with "decode report:" and an empty stderr
 		// whenever the caller had a server to forward to.
 		{"affected --impact stays local", "affected", []string{"--impact"}, usageOnly},
@@ -500,7 +500,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "self",
 			print: selfCmdUsage,
-			want:  []string{"Usage: magus self", "update", "refresh", "registry", "install-shorthand", "magus init"},
+			want:  []string{"Usage: magus self", "update", "install-shorthand", "magus init"},
 		},
 		{
 			name:  "install-shorthand",

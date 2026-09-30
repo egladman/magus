@@ -16,7 +16,24 @@ const (
 	defaultReadyTimeout  = 30 * time.Second
 	defaultReadyInterval = 200 * time.Millisecond
 	defaultStopGrace     = 5 * time.Second
+	// A start service's start and stop commands boot and halt whatever outlives them
+	// (a VM, a system unit), which takes far longer than signaling a process.
+	startCommandTimeout = 2 * time.Minute
+	stopCommandTimeout  = time.Minute
 )
+
+// Adopted is the Handle a Runner returns for a start service whose readiness probe
+// already passed: something else started it, so the Registry shares it with
+// dependents but never stops it.
+var Adopted Handle = adopted{}
+
+type adopted struct{}
+
+// startedHandle is a start service magus brought up. No process of its is left to
+// watch, so stopping it is running its Stop command.
+type startedHandle struct {
+	stop spells.Command
+}
 
 // DefaultShutdownTimeout bounds a [Registry.Shutdown] call for a caller whose own ctx
 // may already be cancelled (e.g. Ctrl-C) by the time it tears down services; such a
@@ -31,8 +48,9 @@ const DefaultShutdownTimeout = 40 * time.Second
 // process group, waits for an optional readiness probe to pass, and stops it via
 // its graceful Stop command or a signal, escalating to a group kill. It supervises
 // the process in the background (the Registry, not this Runner, decides when to stop
-// it), which is why a service must run in the foreground and not detach; the
-// MGS5002 ward enforces that.
+// it), which is why a Command service must run in the foreground and not detach; the
+// MGS5002 ward enforces that. A service that outlives its starter declares Start
+// instead, and is known only through its readiness probe and stop command.
 //
 // Process control (group setup, graceful terminate, hard group-kill) is delegated to
 // internal/proc/run's platform primitives so grandchildren of a wrapper like `docker run`
@@ -78,7 +96,14 @@ type execHandle struct {
 // Start forks the service and returns once its readiness probe passes (or
 // immediately if it declares none). A readiness failure stops the just-started
 // process and returns an error, so a failed Start leaves nothing running.
+//
+// A start service (Service.Start) is probed first: already ready, it is [Adopted].
+// Otherwise its start command must exit 0 and its probe then pass; a probe that never
+// passes runs its stop command before Start returns the error.
 func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error) {
+	if s.Start.Bin != "" {
+		return r.bringUp(ctx, s)
+	}
 	if s.Command.Bin == "" {
 		return nil, fmt.Errorf("service: no command to run")
 	}
@@ -114,11 +139,41 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 // process was reaped (the Start goroutine still reaps it in the background, so
 // nothing is left a zombie; Stop just stops waiting to hear about it).
 func (ExecRunner) Stop(ctx context.Context, h Handle) {
-	eh, ok := h.(*execHandle)
-	if !ok || eh == nil {
-		return
+	switch h := h.(type) {
+	case *execHandle:
+		if h != nil {
+			stopProc(ctx, h)
+		}
+	case *startedHandle:
+		if h != nil {
+			runStopCommand(ctx, h.stop, stopCommandTimeout)
+		}
 	}
-	stopProc(ctx, eh)
+}
+
+// bringUp runs a start service's lifecycle up to ready; see Start.
+func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, r.readyTimeout())
+	err := exec.CommandContext(probeCtx, s.Readiness.Bin, s.Readiness.Args...).Run()
+	cancel()
+	if err == nil {
+		return Adopted, nil
+	}
+	startCtx, cancel := context.WithTimeout(ctx, startCommandTimeout)
+	defer cancel()
+	c := exec.CommandContext(startCtx, s.Start.Bin, s.Start.Args...)
+	// Stderr for both: what a start command prints is progress, never the product of
+	// the run or script that needed the service.
+	c.Stdout, c.Stderr = os.Stderr, os.Stderr
+	if err := c.Run(); err != nil {
+		return nil, fmt.Errorf("service: start %q: %w", s.Start.Bin, err)
+	}
+	h := &startedHandle{stop: s.Stop}
+	if err := r.waitReady(ctx, s.Readiness); err != nil {
+		runStopCommand(ctx, s.Stop, stopCommandTimeout)
+		return nil, fmt.Errorf("service: %q not ready: %w", s.Start.Bin, err)
+	}
+	return h, nil
 }
 
 // stopProc shuts a service down: prefer its graceful Stop command, else SIGTERM the

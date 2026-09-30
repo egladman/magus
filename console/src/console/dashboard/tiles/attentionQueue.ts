@@ -40,7 +40,17 @@ export interface AttentionRequest {
   // re-partitioning does not re-key the row a person was about to close. Empty when the
   // raiser claimed none, which is not an error.
   readonly lease: string;
+  // Paths the raising event named. Empty when it named none, and the message
+  // stays the only line.
+  readonly files: readonly AttentionFile[];
   readonly message: string;
+}
+
+// AttentionFile is one path on the event. is_dir is false when the route omitted
+// it, which is the ordinary file.
+export interface AttentionFile {
+  readonly value: string;
+  readonly is_dir: boolean;
 }
 
 function str(v: unknown): string {
@@ -49,6 +59,33 @@ function str(v: unknown): string {
 
 function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function filesOf(v: unknown): AttentionFile[] {
+  if (!Array.isArray(v)) return [];
+  const out: AttentionFile[] = [];
+  for (const item of v) {
+    if (typeof item !== "object" || item === null) continue;
+    const value = str((item as Record<string, unknown>).value);
+    if (!value) continue;
+    out.push({ value, is_dir: (item as Record<string, unknown>).is_dir === true });
+  }
+  return out;
+}
+
+// subjectLine is what a row leads with: the paths the event named, in order.
+// Empty when it named none, and the caller keeps the message as the line.
+export function subjectLine(files: readonly AttentionFile[]): string {
+  return files
+    .map((f) => (f.is_dir && !f.value.endsWith("/") ? f.value + "/" : f.value))
+    .join(", ");
+}
+
+// disposeStartsHidden is true for a permission. The close control appears after
+// the row is opened, so the paths and the message have been on screen. Waiting
+// is a bookmark the person just answered in the host, and it starts with the control.
+export function disposeStartsHidden(outcome: string): boolean {
+  return outcome === "permission";
 }
 
 // parseRequests normalizes the response body into rows this module's model can be TOTAL over:
@@ -74,6 +111,7 @@ export function parseRequests(body: unknown): AttentionRequest[] {
       source: str(r.source),
       where: str(r.where),
       lease: str(r.lease),
+      files: filesOf(r.files),
       message: str(r.message),
     });
   }

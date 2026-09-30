@@ -45,6 +45,16 @@ PY`,
 		// The append form of the same redirect.
 		`awk '{print >> "internal/ledger/store.go"}' f`,
 		"cat f | python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY",
+		// The destination named through a variable, a pathlib receiver, or argv.
+		"python3 - <<'PY'\np = 'internal/ledger/store.go'\ns = open(p).read()\nopen(p, 'w').write(s)\nPY",
+		`python3 -c "from pathlib import Path; Path('internal/ledger/store.go').write_text(x)"`,
+		"python3 - internal/ledger/store.go <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write(x)\nPY",
+		// A JavaScript binding names its destination behind a declaring keyword.
+		`node -e "const p = 'internal/ledger/store.go'; require('fs').writeFileSync(p, out)"`,
+		// Buzz carried on the line: an -e snippet, or a heredoc on stdin.
+		`./magus buzz -e 'fs\writeFile("internal/ledger/store.go", content: out);'`,
+		"magus buzz - <<'BZ'\nfinal p: str = \"internal/ledger/store.go\";\nfs\\writeFileAtomic(p, content: out);\nBZ",
+		"magus buzz --embedded <<'BZ'\nfs\\writeLines(\"internal/ledger/store.go\", lines: rows);\nBZ",
 	} {
 		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
 	}
@@ -80,6 +90,25 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 
 		// A quoted mention of the act is not the act.
 		`echo "python3 -c \"open('internal/ledger/store.go','w')\""`,
+
+		// A tracked path the program carries as DATA, while it writes elsewhere: to a
+		// scratch file by literal or by variable, or to its own stdout.
+		"python3 - <<'PY'\nimport json, subprocess\npaths = ['internal/ledger/store.go', 'CLAUDE.md']\n" +
+			"job = subprocess.run(['./magus', 'describe', 'job', 'x', '-o', 'json'], capture_output=True).stdout\n" +
+			"open('/private/tmp/claude-501/scratchpad/job.json', 'w').write(json.dumps({'paths': paths}))\nPY",
+		"python3 - <<'PY'\nimport json, os\nSCRATCH = '/private/tmp/claude-501/scratchpad'\nrows = {'internal/ledger/store.go': 1}\n" +
+			"with open(os.path.join(SCRATCH, 'rows.json'), 'w') as f:\n    f.write(json.dumps(rows))\nPY",
+		"python3 - <<'PY' > /private/tmp/claude-501/scratchpad/out.json\nimport json, sys\nsys.stdout.write(json.dumps(['internal/ledger/store.go']))\nPY",
+
+		// The same relative name, after a cd into scratch, is the scratch copy.
+		`cd /tmp/x/scratchpad && python3 -c "open('internal/ledger/store.go','w').write(x)"`,
+		`S=/private/tmp/c/scratchpad; cd "$S" && ./magus buzz -e 'fs\writeFile("internal/ledger/store.go", content: x);'`,
+
+		// Buzz that appends, creates, reads, or names its file for the content judge.
+		`magus buzz -e 'fs\appendFile("internal/ledger/store.go", content: x);'`,
+		`magus buzz -e 'fs\writeFile("internal/ledger/fresh.go", content: x);'`,
+		`magus buzz -e 'std\print(fs\readFile("internal/ledger/store.go"));'`,
+		"magus buzz hack/rewrite.buzz",
 	} {
 		assert.Empty(t, denyInterpreterRewrite(at, command, DialectBash), "%q", command)
 	}

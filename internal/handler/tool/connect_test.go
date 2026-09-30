@@ -256,3 +256,101 @@ func TestBoundsNilWhenUnconstrained(t *testing.T) {
 	require.NotNil(t, b)
 	assert.Equal(t, "25", b.Below)
 }
+
+// lifecycleWS is a workspace that answers its lifecycle provider from a function, counting
+// how often it was asked.
+type lifecycleWS struct {
+	fakeWS
+	calls  *int
+	answer func() (types.LifecycleStatus, []spells.Lifecycle, error)
+}
+
+func (w lifecycleWS) Lifecycles(context.Context, ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error) {
+	*w.calls++
+	return w.answer()
+}
+
+func goProject(version string) *types.Project {
+	sp := spells.NewSpell("go",
+		spells.WithTools(map[string]spells.Tool{"go": {Probe: spells.Command{Bin: "go"}, Lifecycle: "go"}}),
+		spells.WithVersionProber(func(context.Context, spells.Command, string) (string, error) { return version, nil }),
+	)
+	return &types.Project{Path: ".", Name: "root", Dir: "/tmp/root", ResolvedSpells: []*spells.Spell{sp}}
+}
+
+var liveGo = types.LifecycleStatus{
+	Provider: "endoflife-date", State: types.LifecycleLive,
+	Sources: []string{"https://endoflife.date/api/v1/products/go"},
+	AsOf:    "2026-09-24T07:44:41Z", FetchedAt: "2026-09-29T10:00:00Z",
+}
+
+func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
+	calls := 0
+	s := NewService(lifecycleWS{
+		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.25.3 darwin/arm64")}},
+		calls:  &calls,
+		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
+			return liveGo, []spells.Lifecycle{{Key: "go", Cycles: []spells.ReleaseCycle{{Cycle: "1.25", EOL: "2026-08-19"}}}}, nil
+		},
+	})
+
+	msg := list(t, s, "")
+	row := msg.Projects[0].Tools[0]
+	assert.Equal(t, "go", row.Lifecycle)
+	assert.Equal(t, "1.25", row.Cycle)
+	assert.Equal(t, "2026-08-19", row.Eol)
+	assert.Equal(t, toolv1.Support_SUPPORT_EOL, row.Support)
+	assert.Equal(t, toolv1.LifecycleState_LIFECYCLE_STATE_LIVE, msg.Lifecycle.State)
+	assert.Equal(t, "endoflife-date", msg.Lifecycle.Provider)
+	assert.Equal(t, liveGo.Sources, msg.Lifecycle.Sources, "the reads are named, never silent")
+	assert.Equal(t, "2026-09-24T07:44:41Z", msg.Lifecycle.AsOf.AsTime().Format(time.RFC3339))
+
+	list(t, s, "")
+	assert.Equal(t, 1, calls, "a live answer is reused; a dashboard refresh is not a fetch")
+}
+
+// An answer that did not arrive is reused only briefly, so a host that comes back is seen.
+func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
+	calls := 0
+	s := NewService(lifecycleWS{
+		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
+		calls:  &calls,
+		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
+			return types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleUnreached, Detail: "no route to host"}, nil, nil
+		},
+	})
+	s.ttl = 0
+
+	msg := list(t, s, "")
+	assert.Equal(t, toolv1.LifecycleState_LIFECYCLE_STATE_UNREACHED, msg.Lifecycle.State, "the tile shows the state, not a blank")
+	assert.Equal(t, "no route to host", msg.Lifecycle.Detail)
+	assert.Equal(t, toolv1.Support_SUPPORT_UNKNOWN, msg.Projects[0].Tools[0].Support)
+	list(t, s, "")
+	assert.Equal(t, 2, calls)
+}
+
+func TestListToolsSurfacesAMalformedAnswer(t *testing.T) {
+	calls := 0
+	s := NewService(lifecycleWS{
+		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
+		calls:  &calls,
+		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
+			return types.LifecycleStatus{}, nil, errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is ""`)
+		},
+	})
+	_, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), `key "go"`)
+}
+
+// A workspace that cannot ask reads as one with nothing wired: empty columns, no unknowns.
+func TestListToolsWithNoProviderLeavesTheColumnsEmpty(t *testing.T) {
+	s := NewService(fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}})
+	msg := list(t, s, "")
+	assert.Equal(t, toolv1.LifecycleState_LIFECYCLE_STATE_UNWIRED, msg.Lifecycle.State)
+	row := msg.Projects[0].Tools[0]
+	assert.Equal(t, "go", row.Lifecycle)
+	assert.Empty(t, row.Cycle)
+	assert.Equal(t, toolv1.Support_SUPPORT_UNSPECIFIED, row.Support)
+}

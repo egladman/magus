@@ -215,8 +215,8 @@ func embeddedShadow(im *remotespell.Imports, name, dir string) error {
 		return nil
 	}
 	return types.DiagnosticErrorf(types.SpellShadowed,
-		"spell %q at %s has the name of the embedded spell %s; declare `spells: {%s: {path: <dir>}}` in magus.yaml to replace the embedded one, or rename it",
-		name, dir, module, module)
+		"spell %q at %s has the name of the embedded spell %s; declare `spells: {%s: {path: <dir>}}` in magus.yaml to replace it (`magus spell pull %s <dir>` writes a copy to start from), or rename it",
+		name, dir, module, module, module)
 }
 
 // importFailed claims an import the resolver could not bind, reporting err to the load

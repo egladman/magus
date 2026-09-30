@@ -15,44 +15,10 @@ export object Affected {
     undeclaredBySeed: {str: [str]} = {},
 }
 
-export object ImpactProject {
-    path: str = "",
-    seed: bool = false,
-    files: [str] = [],
-    undeclaredFiles: [str] = [],
-    spells: [str] = [],
-    targets: [str] = [],
-}
-
-export object ImpactCoverage {
-    ratio: double = 0.0,
-    covered: int = 0,
-    total: int = 0,
-}
-
-export object ImpactSymbol {
-    file: str = "",
-    symbol: str = "",
-    label: str = "",
-    refCount: int = 0,
-    fileCount: int = 0,
-    coverage: ImpactCoverage = ImpactCoverage{},
-}
-
-export object ImpactFileCoverage {
-    file: str = "",
-    coverage: ImpactCoverage = ImpactCoverage{},
-}
-
-export object Impact {
-    base: str = "",
-    changedFileCount: int = 0,
-    changedFiles: [str] = [],
-    seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
-    changedSymbols: [ImpactSymbol] = [],
-    changedFileCoverage: [ImpactFileCoverage] = [],
-    notes: [str] = [],
+export object CleanReport {
+    removed: [str] = [],
+    tracked: [str] = [],
+    dryRun: bool = false,
 }
 
 export object ExecResult {
@@ -124,6 +90,12 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object ImpactCoverage {
+    ratio: double = 0.0,
+    covered: int = 0,
+    total: int = 0,
+}
+
 export object Check {
     name: str = "",
     status: CheckStatus = CheckStatus.none,
@@ -178,6 +150,15 @@ export object DiffFile {
     churn: DiffChurn? = null,
     noHistory: bool = false,
     reach: int? = null,
+}
+
+export object ImpactProject {
+    path: str = "",
+    seed: bool = false,
+    files: [str] = [],
+    undeclaredFiles: [str] = [],
+    spells: [str] = [],
+    targets: [str] = [],
 }
 
 export object DiffAPI {
@@ -239,6 +220,59 @@ export object DoctorReport {
     workspace: str = "",
     checks: [Check] = [],
     summary: DoctorSummary = DoctorSummary{},
+}
+
+export object KnowledgeNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    doc: str = "",
+    source: str = "",
+    attrs: {str: str} = {},
+}
+
+export object EdgeRef {
+    relation: str = "",
+    direction: str = "",
+    other: str = "",
+    otherKind: str = "",
+    otherLabel: str = "",
+    provenance: str = "",
+}
+
+export object ExplainResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    node: KnowledgeNode = KnowledgeNode{},
+    blastRadius: int = 0,
+    @"out": [EdgeRef] = [],
+    @"in": [EdgeRef] = [],
+    docsURL: str = "",
+}
+
+export object ImpactSymbol {
+    file: str = "",
+    symbol: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    coverage: ImpactCoverage = ImpactCoverage{},
+}
+
+export object ImpactFileCoverage {
+    file: str = "",
+    coverage: ImpactCoverage = ImpactCoverage{},
+}
+
+export object Impact {
+    base: str = "",
+    changedFileCount: int = 0,
+    changedFiles: [str] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    changedSymbols: [ImpactSymbol] = [],
+    changedFileCoverage: [ImpactFileCoverage] = [],
+    notes: [str] = [],
 }
 
 export object Node {
@@ -424,6 +458,31 @@ export object InsightReport {
     duplication: Duplication = Duplication{},
 }
 
+export object OutputRecord {
+    ref: str = "",
+    project: str = "",
+    target: str = "",
+    failed: bool = false,
+    durationMs: int = 0,
+    output: str = "",
+}
+
+export object PathStep {
+    @"from": str = "",
+    to: str = "",
+    relation: str = "",
+    forward: bool = false,
+}
+
+export object PathResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    @"from": str = "",
+    to: str = "",
+    found: bool = false,
+    steps: [PathStep] = [],
+}
+
 export object Graph {
     nodes: [str] = [],
     dependsOn: {str: [str]} = {},
@@ -450,6 +509,55 @@ export object Projects {
     projects: [ProjectEntry] = [],
 }
 
+export object Match {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    score: int = 0,
+    staleness: str = "",
+    outrunDays: int = 0,
+}
+
+export object KnowledgeEdge {
+    source: str = "",
+    target: str = "",
+    relation: str = "",
+    confidence: str = "",
+    score: double = 0.0,
+    provenance: str = "",
+}
+
+export object QueryResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    query: str = "",
+    budget: int = 0,
+    matchCount: int = 0,
+    offset: int = 0,
+    matches: [Match] = [],
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object RefSite {
+    file: str = "",
+    count: int = 0,
+    lines: [int] = [],
+}
+
+export object RefsResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    symbol: str = "",
+    label: str = "",
+    fileCount: int = 0,
+    refCount: int = 0,
+    defs: [RefSite] = [],
+    refs: [RefSite] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object Skill {
     name: str = "",
     description: str = "",
@@ -457,6 +565,42 @@ export object Skill {
     form: str = "",
     body: str = "",
     current: bool = false,
+}
+
+export object KnowledgeGodNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    degree: int = 0,
+    @"in": int = 0,
+    @"out": int = 0,
+}
+
+export object KnowledgeOrphan {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    reason: str = "",
+}
+
+export object KnowledgeDocCoverage {
+    kind: str = "",
+    total: int = 0,
+    documented: int = 0,
+    percent: int = 0,
+    undocumented: [str] = [],
+}
+
+export object KnowledgeStats {
+    definition: str = "",
+    nodeCount: int = 0,
+    edgeCount: int = 0,
+    gods: [KnowledgeGodNode] = [],
+    orphans: [KnowledgeOrphan] = [],
+    coverage: [KnowledgeDocCoverage] = [],
+    isolatedCount: int = 0,
+    componentCount: int = 0,
+    largestComponentSize: int = 0,
 }
 
 export object TargetSpellUse {
@@ -478,16 +622,19 @@ export object ChainStep {
 export object InputRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object OutputRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object UpdateRef {
     project: str = "",
     glob: str = "",
+    except: [str] = [],
 }
 
 export object TargetGraphNode {
@@ -523,6 +670,39 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
+export object LifecycleStatus {
+    provider: str = "",
+    state: str = "",
+    sources: [str] = [],
+    asOf: str = "",
+    fetchedAt: str = "",
+    detail: str = "",
+}
+
+export object ToolRow {
+    project: str = "",
+    bin: str = "",
+    spell: str = "",
+    installedVersion: str = "",
+    probeError: str = "",
+    spellBounds: str = "",
+    workspaceBounds: str = "",
+    effective: str = "",
+    verdict: str = "",
+    diagnosticCode: str = "",
+    lifecycle: str = "",
+    cycle: str = "",
+    eol: str = "",
+    support: str = "",
+}
+
+export object ToolReport {
+    workspace: str = "",
+    count: int = 0,
+    lifecycle: LifecycleStatus = LifecycleStatus{},
+    tools: [ToolRow] = [],
+}
+
 export object GuardVerdict {
     decision: str = "",
     reason: str = "",
@@ -554,6 +734,7 @@ export object JobRelease {
     path: str = "",
     digest: str = "",
     releasedAt: int = 0,
+    revoked: bool = false,
 }
 
 export object JobUnattributedWrite {
@@ -863,11 +1044,18 @@ export object JobStatus {
     entries: [JobEntry] = [],
 }
 
+export object ServiceLease {
+    key: str = "",
+    owned: bool = false,
+    brokered: bool = false,
+    idle: str = "",
+}
+
 export extern fun affected(base: str = "") > Affected !> any;
-export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
 export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
+export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
@@ -875,23 +1063,25 @@ export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
-export extern fun explain(node: str, to: str = "") > {str: any} !> any;
+export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
+export extern fun impact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
 export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
-export extern fun output(ref: str) > {str: any} !> any;
-export extern fun path(node: str, to: str) > {str: any} !> any;
+export extern fun output(ref: str) > OutputRecord !> any;
+export extern fun path(node: str, to: str) > PathResult !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun projects() > Projects !> any;
 export extern fun pry() > void;
-export extern fun query(query: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
+export extern fun query(query: str, opts: {str: any} = {<str: any>}) > QueryResult !> any;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
-export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > {str: any} !> any;
+export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > RefsResult !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
-export extern fun stats(kind: str = "") > {str: any} !> any;
+export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
+export extern fun tools() > ToolReport !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
 export object log {
@@ -916,7 +1106,6 @@ export object ci {
 export object guard {
     static extern fun advise(text: str) > GuardVerdict;
     static extern fun allow() > GuardVerdict;
-    static extern fun bash(rule: {str: any}) > void;
     static extern fun binary() > GuardBinary;
     static extern fun command(rule: Function) > void;
     static extern fun count(key: str) > int;
@@ -944,12 +1133,17 @@ export object review {
     static extern fun provider(spell: {str: any}) > void;
 }
 
+// Where this workspace learns when its tools' release cycles reach end of life. The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers for the products the spells' tools name (Tool.lifecycle); magus\tools() and `magus describe tools` carry the answer, and nothing it says fails a build. One provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.
+export object lifecycle {
+    static extern fun provider(spell: {str: any}) > void;
+}
+
 // Workspace-level declarations made from the root magusfile.
 export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJob), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the client MCP tool (magus\job) and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJob), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
 export object job {
     static extern fun clear() > int !> any;
     static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
@@ -957,6 +1151,12 @@ export object job {
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
+}
+
+// Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.
+export object service {
+    static extern fun acquire(spell: str, op: str) > ServiceLease !> any;
+    static extern fun release(lease: ServiceLease) > void !> any;
 }
 
 // Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).

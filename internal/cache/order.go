@@ -32,8 +32,8 @@ type TargetNode struct {
 	// DependsOn edge from them: within one batch, ordering a reader after an
 	// in-place editor can only over-order, and the motivating chain
 	// (changelog-generate -> content-generate) is declared exactly that way.
-	Reads  []string
-	Writes []string
+	Reads  []types.Glob
+	Writes []types.Glob
 	// DeclaredReads is false when Reads fell back to the project baseline because the
 	// target names no ctx.readsFiles. Edges into such a reader are weak: the baseline
 	// is a whole-project over-approximation, so a cycle through a weak edge is an
@@ -219,18 +219,32 @@ func (d *DerivedOrder) TopoNodes() []int {
 // recomputing the pair in the message would be a second answer to the same question.
 // For a fallback reader, writes confined to the reader's pruned dirs are invisible to
 // it and derive nothing.
+//
+// Exclusions are never a side of the pair. They rule a pair out only where that is
+// decidable: a literal side one of the two globs excludes.
 func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
 	for _, wg := range n.Writes {
-		if !r.DeclaredReads && underIgnoredDir(wg, r.IgnoreDirs) {
+		if !r.DeclaredReads && underIgnoredDir(wg.Pattern, r.IgnoreDirs) {
 			continue
 		}
 		for _, rg := range r.Reads {
-			if globsOverlap(wg, rg) {
-				return wg, rg, true
+			if globsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
+				return wg.Pattern, rg.Pattern, true
 			}
 		}
 	}
 	return "", "", false
+}
+
+// excludedLiteral reports whether a literal side of an overlapping pair is excluded by
+// either glob, so the one path the pair can share is declared by neither.
+func excludedLiteral(wg, rg types.Glob) bool {
+	for _, lit := range []string{wg.Pattern, rg.Pattern} {
+		if !isMetaSegment(lit) && (wg.Excludes(lit) || rg.Excludes(lit)) {
+			return true
+		}
+	}
+	return false
 }
 
 // sharedStep returns the first step key (in n's order) that runs both nodes.
@@ -914,23 +928,23 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 // workspace-rooted reads, writes and in-place updates, and its ctx.needs calls resolved
 // through lookup.
 func DeclaredNode(proj *types.Project, target, step string, lookup func(path string) *types.Project) TargetNode {
-	updates := make([]string, 0, len(proj.TargetUpdates[target]))
+	updates := make([]types.Glob, 0, len(proj.TargetUpdates[target]))
 	for _, ref := range proj.TargetUpdates[target] {
-		updates = append(updates, types.RootGlob(ref.Project, ref.Glob))
+		updates = append(updates, ref.Rooted(proj.Path))
 	}
-	var reads []string
+	var reads []types.Glob
 	declaredReads := len(proj.TargetInputs[target]) > 0
 	if declaredReads {
 		for _, ref := range proj.TargetInputs[target] {
-			reads = append(reads, types.RootGlob(ref.Project, ref.Glob))
+			reads = append(reads, ref.Rooted(proj.Path))
 		}
-		reads = append(reads, updates...)
+		reads = types.CompactGlobs(append(reads, updates...))
 	}
-	writes := make([]string, 0, len(proj.TargetOutputs[target])+len(updates))
+	writes := make([]types.Glob, 0, len(proj.TargetOutputs[target]))
 	for _, ref := range proj.TargetOutputs[target] {
-		writes = append(writes, types.RootGlob(ref.Project, ref.Glob))
+		writes = append(writes, ref.Rooted(proj.Path))
 	}
-	writes = append(writes, updates...)
+	writes = types.CompactGlobs(append(writes, updates...))
 	return TargetNode{
 		Project: proj.Path, Target: target, Steps: []string{step},
 		Reads: reads, Writes: writes,

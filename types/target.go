@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -652,24 +651,18 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 // sources, an artifact that moved turns the parent's hit into a miss, so the parent
 // re-runs against what the gate below actually produced instead of replaying an
 // entry recorded against different bytes.
-func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []string {
-	var out []string
+func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []Glob {
+	var out []Glob
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
 			return nil
 		}
 		for _, ref := range v.Project.TargetOutputs[v.Target] {
-			owner := ref.Project
-			if owner == "" {
-				owner = v.Project.Path
-			}
-			if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
-				out = append(out, g)
-			}
+			out = append(out, ref.Rooted(v.Project.Path))
 		}
 		return nil
 	})
-	return out
+	return CompactGlobs(out)
 }
 
 // ChainUpdates is the ctx.modifiesExistingFiles declaration of every target a target
@@ -678,24 +671,18 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 // A composed target's in-place edit lands inside the composing step's run window, so
 // without these globs in the parent's Step.Updates the mutation check (MGS4007) blames
 // the parent for a write a constituent declared.
-func ChainUpdates(p *Project, target string, lookup func(path string) *Project) []string {
-	var out []string
+func ChainUpdates(p *Project, target string, lookup func(path string) *Project) []Glob {
+	var out []Glob
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 {
 			return nil
 		}
 		for _, ref := range v.Project.TargetUpdates[v.Target] {
-			owner := ref.Project
-			if owner == "" {
-				owner = v.Project.Path
-			}
-			if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
-				out = append(out, g)
-			}
+			out = append(out, ref.Rooted(v.Project.Path))
 		}
 		return nil
 	})
-	return out
+	return CompactGlobs(out)
 }
 
 // chainReaches is every target reachable from name through ctx.needs, keyed the way

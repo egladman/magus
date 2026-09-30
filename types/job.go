@@ -771,7 +771,7 @@ type Job struct {
 // the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. The magus_job tool's fork deliberately does the opposite,
+// is cleared rather than kept. magus\job\put deliberately does the opposite,
 // since an agent advancing one field of a live row must not erase the rest (see
 // job.ParseMerge).
 //
@@ -1035,6 +1035,36 @@ func (u Job) StaleAt(now int64, after time.Duration) bool {
 	return after > 0 && now-u.Updated >= int64(after/time.Second)
 }
 
+// JobIdleSince is when row's jobs.stale_after clock started, in unix seconds, reading its
+// dependencies from rows. A declared row nobody took is QUEUED while a job it depends on is
+// live, so waiting is true and it has no clock; once the last one ends, the clock starts at
+// the later of that end and the row's own last update. Every other row's clock is its last
+// update. A dependency no row declares never ends, so it holds nothing back.
+func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
+	since = row.Updated
+	if row.State != StateDeclared || row.Registered != 0 {
+		return since, false
+	}
+	for _, dep := range row.DependsOn {
+		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
+		switch {
+		case i < 0:
+		case rows[i].State.Live():
+			return 0, true
+		default:
+			since = max(since, rows[i].Updated)
+		}
+	}
+	return since, false
+}
+
+// JobStaleAt is [Job.StaleAt] with row's clock read by [JobIdleSince]: a queued row is
+// never stale.
+func JobStaleAt(rows []Job, row Job, now int64, after time.Duration) bool {
+	since, waiting := JobIdleSince(rows, row)
+	return !waiting && after > 0 && now-since >= int64(after/time.Second)
+}
+
 // quoteJoin renders a closed set for an error that has to list what it would accept.
 func quoteJoin[T ~string](items []T, sep string) string {
 	out := make([]string, len(items))
@@ -1186,6 +1216,9 @@ type JobRelease struct {
 	Digest string `json:"digest" yaml:"digest"`
 	// ReleasedAt is unix seconds, stamped by the store on the put that dropped the path.
 	ReleasedAt int64 `json:"released_at" yaml:"released_at"`
+	// Revoked is a path taken from a job a holder had taken, by a writer other than that
+	// holder: the orchestrator revoking it rather than the worker giving it up.
+	Revoked bool `json:"revoked,omitempty" yaml:"revoked,omitempty"`
 }
 
 // JobUnattributedWrite is one path a lease owns that somebody outside it wrote, and
@@ -1426,8 +1459,8 @@ func (b JobBlock) String() string {
 
 // Flag fills Overdue, Orphans and Stale as of now, in unix seconds. Overdue is past its
 // deadline; an orphan is live while an ancestor has ended (pass, fail or no_return), so
-// nobody is left to wait on it; stale was not updated within staleAfter, and a zero
-// staleAfter flags nothing.
+// nobody is left to wait on it; stale was not updated within staleAfter, read by
+// [JobStaleAt], and a zero staleAfter flags nothing.
 func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 	l.Overdue, l.Orphans, l.Stale = nil, nil, nil
 	for _, row := range l.Jobs {
@@ -1440,7 +1473,7 @@ func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 		if _, ended := EndedAncestor(l.Jobs, row.ID); ended {
 			l.Orphans = append(l.Orphans, row.ID)
 		}
-		if row.StaleAt(now, staleAfter) {
+		if JobStaleAt(l.Jobs, row, now, staleAfter) {
 			l.Stale = append(l.Stale, row.ID)
 		}
 	}
@@ -1495,7 +1528,7 @@ func JobDescendants(rows []Job, id string) []Job {
 // The registration facts take the opposite route and are NOT derived here. ReportedBase,
 // BaseVerdict and Registered describe one row against the checkpoint that row was handed,
 // so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus_job's list op, JobService's ListJobs) by riding
+// reader of this list (magus\job\list, JobService's ListJobs) by riding
 // the leases. Deriving a second copy at read time would be a duplicate to keep true, which
 // is exactly what the overlap rule above avoids in the other direction.
 //

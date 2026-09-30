@@ -26,10 +26,12 @@ const DefaultIdleExit = 10 * time.Minute
 const helloTimeout = 10 * time.Second
 
 // ServiceHost runs the shared services a broker hosts. Acquire returns once the
-// service is ready and adds one dependent; Release drops one. The broker calls Release
-// once per Acquire a connection made when that connection closes, however it closed.
+// service is ready and adds one dependent, reporting whether the host started it and
+// so stops it at idle (false: it was already running and is left alone); Release drops
+// one. The broker calls Release once per Acquire a connection made when that
+// connection closes, however it closed.
 type ServiceHost interface {
-	Acquire(ctx context.Context, key string, spec ServiceSpec) error
+	Acquire(ctx context.Context, key string, spec ServiceSpec) (owned bool, err error)
 	Release(key string)
 	// StopAll stops every hosted service, returning how many, and leaves the host usable.
 	StopAll() int
@@ -427,8 +429,8 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 
 	case typeServiceAcquire:
 		var req serviceAcquireRequest
-		if err := decodeBody(f, &req); err != nil || req.Key == "" || len(req.Service.Command) == 0 {
-			fail(CodeMalformed, "broker: a service acquire needs a key and a command")
+		if err := decodeBody(f, &req); err != nil || req.Key == "" || (len(req.Service.Command) == 0 && len(req.Service.Start) == 0) {
+			fail(CodeMalformed, "broker: a service acquire needs a key and a command or start")
 			return
 		}
 		if s.opts.services == nil {
@@ -441,14 +443,15 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		}
 		// The broker's own context, not the request's: the service outlives the run
 		// that asked for it.
-		if err := s.opts.services.Acquire(s.ctx, req.Key, req.Service.spec()); err != nil {
+		owned, err := s.opts.services.Acquire(s.ctx, req.Key, req.Service.spec())
+		if err != nil {
 			fail(CodeService, "%v", err)
 			return
 		}
 		s.mu.Lock()
 		sess.services[req.Key]++
 		s.mu.Unlock()
-		_ = w.write(typeServiceReply, f.ID, serviceReply{})
+		_ = w.write(typeServiceReply, f.ID, serviceReply{Owned: owned})
 
 	case typeServiceRelease:
 		var req serviceReleaseRequest

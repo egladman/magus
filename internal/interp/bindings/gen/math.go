@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,71 +18,71 @@ func RegisterMath(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("round", vm.DirectValue("math.round", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		x := Float(bzArgs, 0, 0)
-		places := Int(bzArgs, 1, 0)
+		x := ffi.Float(bzArgs, 0, 0)
+		places := ffi.Int(bzArgs, 1, 0)
 		ret0, err := std.MathRound(ctx, x, places)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("trunc", vm.DirectValue("math.trunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		x := Float(bzArgs, 0, 0)
+		x := ffi.Float(bzArgs, 0, 0)
 		ret0, err := std.MathTrunc(ctx, x)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("clamp", vm.DirectValue("math.clamp", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		x := Float(bzArgs, 0, 0)
-		lo := Float(bzArgs, 1, 0)
-		hi := Float(bzArgs, 2, 0)
+		x := ffi.Float(bzArgs, 0, 0)
+		lo := ffi.Float(bzArgs, 1, 0)
+		hi := ffi.Float(bzArgs, 2, 0)
 		ret0, err := std.MathClamp(ctx, x, lo, hi)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("sum", vm.DirectValue("math.sum", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		nums := FloatSlice(bzArgs, 0)
+		nums := ffi.FloatSlice(bzArgs, 0)
 		ret0, err := std.MathSum(ctx, nums)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("mean", vm.DirectValue("math.mean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		nums := FloatSlice(bzArgs, 0)
+		nums := ffi.FloatSlice(bzArgs, 0)
 		ret0, err := std.MathMean(ctx, nums)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("median", vm.DirectValue("math.median", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		nums := FloatSlice(bzArgs, 0)
+		nums := ffi.FloatSlice(bzArgs, 0)
 		ret0, err := std.MathMedian(ctx, nums)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("min", vm.DirectValue("math.min", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		nums := FloatSlice(bzArgs, 0)
+		nums := ffi.FloatSlice(bzArgs, 0)
 		ret0, err := std.MathMin(ctx, nums)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("max", vm.DirectValue("math.max", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		nums := FloatSlice(bzArgs, 0)
+		nums := ffi.FloatSlice(bzArgs, 0)
 		ret0, err := std.MathMax(ctx, nums)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return FloatVal(ret0), nil
+		return ffi.FloatVal(ret0), nil
 	}))
 	return m
 }

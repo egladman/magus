@@ -1,0 +1,180 @@
+// Cost: needs the code index.
+//
+// Counts one project's code symbols by kind (function, method, type, ...) and by the first
+// word of their names, the census a naming or consolidation review starts from. With
+// --kind it lists the names of that kind instead, each with its file and line.
+//
+//	magus buzz hack/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]
+//
+// The project defaults to the root one (.); --top bounds the name-prefix table (15). A
+// stale or missing index is refused rather than counted: its numbers would be last
+// week's tree.
+namespace countsymbols;
+
+import "flags";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]";
+final HELP = "cost: needs the code index\n{USAGE}";
+
+export object Symbol {
+    name: str,
+    kind: str,
+    source: str,
+}
+
+// namePrefix is the first word of a camelCase or PascalCase name: `deny` of denyScriptWrite,
+// `New` of NewClient, and an acronym whole, `HTTP` of HTTPServer.
+export fun namePrefix(name: str) > str {
+    if (name.len() < 2) {
+        return name;
+    }
+    final upper = std\pattern(`^[A-Z]{2,}`).match(name);
+    if (upper != null) {
+        final run = upper![0];
+        // The last capital of a run followed by lowercase starts the next word.
+        if (run.len() < name.len()) {
+            return run.sub(0, len: run.len() - 1);
+        }
+        return run;
+    }
+    final word = std\pattern(`^.[a-z0-9]*`).match(name);
+    return if (word != null) word![0] else name;
+}
+
+// Row is one line of a count table.
+export object Row {
+    key: str,
+    count: int,
+}
+
+// tally counts each key, largest count first, ties by key.
+export fun tally(keys: [str]) > [Row] {
+    final counts = mut {<str: int>};
+    foreach (k in keys) {
+        counts[k] = (counts[k] ?? 0) + 1;
+    }
+    final rows = mut [<Row>];
+    foreach (k, n in counts) {
+        rows.append(Row{ key = k, count = n });
+    }
+    return rows.sort(fun (a: Row, b: Row) > bool => a.count > b.count or (a.count == b.count and a.key < b.key));
+}
+
+export fun symbols(project: str) > [Symbol] !> any {
+    final terms = "kind=symbol project={project}";
+    final probe: magus\QueryResult = magus\query(terms, opts: {"limit": 1, "budget": 1});
+    final answer = probe.answer;
+    if (answer.verdict == "unknown" or answer.staleIndexes.len() > 0) {
+        throw "count-symbols: the code index cannot answer for {project} ({answer.verdict}{answer.reason}); rebuild it with `magus graph build`, then run this again";
+    }
+    if (probe.matchCount == 0) {
+        return [<Symbol>];
+    }
+    // One read of every match: each query call loads the index again, so paging costs a
+    // load per page.
+    final all: magus\QueryResult = magus\query(terms, opts: {"limit": probe.matchCount, "budget": probe.matchCount});
+    final matched = mut {<str: bool>};
+    foreach (m in all.matches) {
+        matched[m.id] = true;
+    }
+    final found = mut [<Symbol>];
+    foreach (n in all.nodes) {
+        if (matched[n.id] != null) {
+            found.append(Symbol{ name = n.label, kind = n.attrs["symbol_kind"] ?? "", source = n.source });
+        }
+    }
+    return found;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--project", "--kind", "--top"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "count-symbols: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final top = std\parseInt(parsed.values["--top"] ?? "15");
+    if (top == null or top! < 1) {
+        throw "count-symbols: --top takes a positive integer\n{USAGE}";
+    }
+    final project = parsed.values["--project"] ?? ".";
+    final all = symbols(project);
+    std\print("read-only");
+    std\print("{all.len()} symbols in {project}");
+
+    final kind = parsed.values["--kind"];
+    if (kind != null) {
+        final named = ofKind(all, kind: kind!);
+        std\print("{named.len()} of kind {kind!}");
+        foreach (s in named) {
+            std\print("  {s.name}  {s.source}");
+        }
+        return;
+    }
+    std\print("by kind");
+    foreach (r in byKind(all)) {
+        std\print("  {r.count}  {r.key}");
+    }
+    std\print("by the first word of the name");
+    foreach (i, r in byPrefix(all)) {
+        if (i >= top!) {
+            break;
+        }
+        std\print("  {r.count}  {r.key}");
+    }
+}
+
+export fun byKind(all: [Symbol]) > [Row] {
+    final kinds = mut [<str>];
+    foreach (s in all) {
+        kinds.append(s.kind);
+    }
+    return tally(kinds);
+}
+
+// byPrefix counts names by their first word. A package's name is its import path's last
+// element, not a word anyone chose, so packages are left out.
+export fun byPrefix(all: [Symbol]) > [Row] {
+    final prefixes = mut [<str>];
+    foreach (s in all) {
+        if (s.kind != "Package") {
+            prefixes.append(namePrefix(s.name));
+        }
+    }
+    return tally(prefixes);
+}
+
+// ofKind is every symbol of kind, in name order.
+export fun ofKind(all: [Symbol], kind: str) > [Symbol] {
+    final named = mut [<Symbol>];
+    foreach (s in all) {
+        if (s.kind == kind) {
+            named.append(s);
+        }
+    }
+    return named.sort(fun (a: Symbol, b: Symbol) > bool => a.name < b.name or (a.name == b.name and a.source < b.source));
+}
+
+test "a name's first word keeps an acronym whole" {
+    assert\equal(namePrefix("denyScriptWrite"), want: "deny", message: "camel");
+    assert\equal(namePrefix("NewClient"), want: "New", message: "pascal");
+    assert\equal(namePrefix("HTTPServer"), want: "HTTP", message: "acronym then word");
+    assert\equal(namePrefix("ID"), want: "ID", message: "acronym alone");
+    assert\equal(namePrefix("x"), want: "x", message: "one letter");
+    assert\equal(namePrefix("sha256Sum"), want: "sha256", message: "digits stay with their word");
+}
+
+test "a tally runs largest first, ties by name" {
+    final rows = tally(["Method", "Function", "Method", "Type", "Function", "Method"]);
+    final got = mut [<str>];
+    foreach (r in rows) {
+        got.append("{r.count} {r.key}");
+    }
+    assert\equal(got, want: ["3 Method", "2 Function", "1 Type"], message: "order");
+}

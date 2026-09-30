@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6820
-skill_short_bytes: 5519
+skill_full_bytes: 6903
+skill_short_bytes: 5602
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `03ebc3e37b01` |
+| `skill-content` | `299f056cb252` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -67,14 +67,17 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus_insight lens=hotspots  # churn x complexity per project, with blast radius
-magus_insight lens=affinity  # projects that change together: hidden coupling
-magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
-MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground. Weight affinity most: changing
+MCP: `client` covers the same ground through `magus\stats`, `magus\insight`
+(read hotspots, affinity, and ownership on the one report), and `magus\query`.
+Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
+
+```sh
+magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
+```
+ Weight affinity most: changing
 together with no declared edge is back-door coupling.
 
 ## Then survey the opposite: what is too THIN to justify a boundary
@@ -200,14 +203,17 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus_insight lens=hotspots  # churn x complexity per project, with blast radius
-magus_insight lens=affinity  # projects that change together: hidden coupling
-magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
-MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground. Affinity deserves special weight: two projects that keep changing
+MCP: `client` covers the same ground through `magus\stats`, `magus\insight`
+(read hotspots, affinity, and ownership on the one report), and `magus\query`.
+Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
+
+```sh
+magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
+```
+ Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.
 

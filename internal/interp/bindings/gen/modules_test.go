@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +81,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 
 	checked := 0
 	for _, m := range hostmodules.All() {
-		var reg RegisterFunc
+		var reg ffi.RegisterFunc
 		if m.Name == "magus" {
 			reg = RegisterMagus // the magus.* namespace has no Modules entry
 		} else if mr, ok := Modules[m.Name]; ok {
@@ -124,7 +125,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 func TestWASMRegistryMatchesCompatibleSubset(t *testing.T) {
 	want := map[string]bool{}
 	for name, reg := range Modules {
-		if reg.Capabilities.Has(WASM) {
+		if reg.Capabilities.Has(ffi.WASM) {
 			want[name] = true
 		}
 	}
@@ -133,14 +134,6 @@ func TestWASMRegistryMatchesCompatibleSubset(t *testing.T) {
 	got := parseModulesMapKeys(t, "modules_wasm.go")
 	assert.Equal(t, want, got,
 		"modules_wasm.go must mirror exactly the WASM-capable entries of modules.go")
-}
-
-func TestSetWithDoesNotMutateSource(t *testing.T) {
-	original := Set{"fs": {Capabilities: Capabilities(WASM)}}
-	replaced := original.With("fs", ModuleReg{})
-
-	assert.True(t, original["fs"].Capabilities.Has(WASM))
-	assert.False(t, replaced["fs"].Capabilities.Has(WASM))
 }
 
 // parseModulesMapKeys parses filename as Go source (build constraints are ignored

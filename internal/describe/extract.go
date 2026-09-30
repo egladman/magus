@@ -22,6 +22,8 @@
 package describe
 
 import (
+	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -167,7 +169,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 											patterns = append(patterns, lit.Val)
 										}
 									}
-									for _, m := range types.MatchTargetPatterns(names, patterns) {
+									// A refused list draws no edge; the run raises the refusal.
+									matched, _ := types.MatchTargetPatterns(names, patterns)
+									for _, m := range matched {
 										if m != node.Name {
 											node.Dependencies = appendUniq(node.Dependencies, m)
 											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: callIndex})
@@ -210,38 +214,28 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
-						case "readsFiles":
-							// One representation for every input: a bare-literal glob is a
-							// same-project input (empty Project, meaning "this target's own
-							// project", filled at resolution); a <alias>.file("lit") arg is a
-							// cross-project input (Project = the raw import path). Same-project
-							// entries land first (in arg order), cross entries after, matching
-							// the fold order buildStep produced before the two were unified.
-							for _, g := range globs {
-								node.ReadsFiles = appendUniq(node.ReadsFiles, types.InputRef{Glob: g})
+						case "readsFiles", "writesFiles", "modifiesExistingFiles":
+							refs, crossed, err := footprintCall(globs, e.Args, projectAliases)
+							// A cross-project file counts as recognized (so it does NOT trip
+							// DynamicIO); a computed rel is not recognized and trips it.
+							recognized += crossed
+							if err != nil && node.FootprintErr == nil {
+								node.FootprintErr = fmt.Errorf("ctx.%s: %w", kind, err)
 							}
-							// A cross-project file input counts as recognized (so it does NOT
-							// trip DynamicIO); a computed rel is not recognized and trips it.
-							for _, a := range e.Args {
-								if ref, ok := crossFileArg(a, projectAliases); ok {
-									recognized++
-									node.ReadsFiles = appendUniq(node.ReadsFiles, ref)
-								}
-							}
-						case "writesFiles":
-							for _, g := range globs {
-								node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef{Glob: g})
-							}
-							for _, a := range e.Args {
-								if ref, ok := crossFileArg(a, projectAliases); ok {
-									recognized++
-									// InputRef and OutputRef are deliberately distinct types (see
-									// types/describe.go) despite the identical shape, so this
-									// conversion is the one place that boundary is explicitly and
-									// visibly crossed. If OutputRef ever grows a field InputRef
-									// lacks, this fails to compile instead of silently zeroing it;
-									// do not collapse it back into a field-by-field struct literal.
-									node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef(ref))
+							for _, ref := range refs {
+								// InputRef, OutputRef and UpdateRef are deliberately distinct
+								// types (see types/describe.go) despite the identical shape, so
+								// these conversions are the one place that boundary is visibly
+								// crossed. If one grows a field InputRef lacks, this fails to
+								// compile instead of silently zeroing it; do not collapse it
+								// into a field-by-field struct literal.
+								switch kind {
+								case "readsFiles":
+									node.ReadsFiles = types.AppendRef(node.ReadsFiles, ref)
+								case "writesFiles":
+									node.WritesFiles = types.AppendRef(node.WritesFiles, types.OutputRef(ref))
+								default:
+									node.ModifiesExistingFiles = types.AppendRef(node.ModifiesExistingFiles, types.UpdateRef(ref))
 								}
 							}
 						case "withCwd":
@@ -315,16 +309,6 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// ctx.observes in the same target keeps what it recorded.
 							for _, p := range pairs {
 								node.Observations = appendUniq(node.Observations, p)
-							}
-						case "modifiesExistingFiles":
-							for _, g := range globs {
-								node.ModifiesExistingFiles = appendUniq(node.ModifiesExistingFiles, types.UpdateRef{Glob: g})
-							}
-							for _, a := range e.Args {
-								if ref, ok := crossFileArg(a, projectAliases); ok {
-									recognized++
-									node.ModifiesExistingFiles = appendUniq(node.ModifiesExistingFiles, types.UpdateRef(ref))
-								}
 							}
 						}
 						if recognized < len(e.Args) {
@@ -728,6 +712,42 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 		return types.InputRef{}, false
 	}
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
+}
+
+// footprintCall reads one ctx.readsFiles/writesFiles/modifiesExistingFiles call into
+// refs, given the literal globs ioCall collected from it. Each glob carries the "!"
+// exclusions this call declares against the same project (types.ParseGlobs): a
+// cross-project exclusion narrows only that project's globs, and nothing narrows
+// another call's. Same-project refs come first, in argument order, then each crossed
+// project's. crossed counts the <alias>.file arguments recognized.
+func footprintCall(globs []string, args []ast.Node, aliases map[string]string) (refs []types.InputRef, crossed int, err error) {
+	owners := []string{""}
+	declared := map[string][]string{"": globs}
+	for _, a := range args {
+		ref, ok := crossFileArg(a, aliases)
+		if !ok {
+			continue
+		}
+		crossed++
+		if _, seen := declared[ref.Project]; !seen {
+			owners = append(owners, ref.Project)
+		}
+		declared[ref.Project] = append(declared[ref.Project], ref.Glob)
+	}
+	for _, owner := range owners {
+		parsed, perr := types.ParseGlobs(declared[owner])
+		if perr != nil {
+			if owner != "" {
+				perr = fmt.Errorf("files of %q: %w", owner, perr)
+			}
+			err = cmp.Or(err, perr)
+			continue
+		}
+		for _, g := range parsed {
+			refs = append(refs, types.InputRef{Project: owner, Glob: g.Pattern, Except: g.Except})
+		}
+	}
+	return refs, crossed, err
 }
 
 // secretUseCall reports whether e reaches for a credential (`magus\secret.read(...)` or

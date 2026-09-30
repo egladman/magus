@@ -74,6 +74,11 @@ func blockedEvent(message string) types.Event {
 	}
 }
 
+func fileBlock(root string, ev types.Event) error {
+	_, err := fileAttention(root, ev)
+	return err
+}
+
 // captureWarnings installs a slog handler for the duration of fn and returns what it
 // logged. The producers here report a request they could NOT open through slog rather
 // than an error (a non-zero exit from an agent hook interrupts the very session the
@@ -103,7 +108,7 @@ func openRequestIDs(t *testing.T, root string) []string {
 
 func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
@@ -121,10 +126,49 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	assert.Contains(t, out, "Nothing here closes on its own.")
 }
 
+func TestAttentionListLeadsWithTheFilesTheEventNamed(t *testing.T) {
+	root := attentionTestRoot(t)
+	ev := blockedEvent("needs a decision on the schema")
+	ev.Where.Files = []types.FileRef{{Value: ""}, {Value: "cmd/magus/notify.go"}, {Value: "cmd/magus/attention.go"}}
+	require.NoError(t, fileBlock(root, ev))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
+	})
+
+	assert.Contains(t, out, "FILES")
+	assert.Contains(t, out, "cmd/magus/notify.go, cmd/magus/attention.go")
+	assert.Contains(t, out, "needs a decision on the schema", "the message stays on the row, after the paths")
+}
+
+// Files are the subject, not a second identity. A re-fire that names a different
+// path re-uses the id, and the row keeps the paths from the open that created it.
+func TestFileAttentionKeepsTheIDWhenTheFilesChange(t *testing.T) {
+	root := attentionTestRoot(t)
+	first := blockedEvent("needs a decision")
+	first.Where.Files = []types.FileRef{{Value: "cmd/magus/notify.go"}}
+	require.NoError(t, fileBlock(root, first))
+	ids := openRequestIDs(t, root)
+	require.Len(t, ids, 1)
+
+	again := blockedEvent("needs a decision")
+	again.Where.Files = []types.FileRef{{Value: "some/other.go"}}
+	held, err := fileAttention(root, again)
+	require.NoError(t, err)
+	assert.True(t, held)
+	assert.Equal(t, ids, openRequestIDs(t, root))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
+	})
+	assert.Contains(t, out, "cmd/magus/notify.go")
+	assert.NotContains(t, out, "some/other.go", "a re-fire must not replace the subject of the open row")
+}
+
 func TestAttentionListShowsTheRaisingLease(t *testing.T) {
 	root := attentionTestRoot(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
@@ -136,13 +180,13 @@ func TestAttentionListShowsTheRaisingLease(t *testing.T) {
 
 func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 
-	// ID, AGE, OUTCOME, SOURCE, LEASE, WHERE, MESSAGE...
+	// ID, AGE, OUTCOME, SOURCE, LEASE, WHERE, FILES, MESSAGE...
 	var cells []string
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "att-") {
@@ -156,15 +200,15 @@ func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 
 // The lease is attribution, so changing it must not move the row a person is about to dispose of.
 // Re-raising the same block under a new lease re-uses the id, and the queue still holds one row.
-func TestRecordAttentionOpenKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
+func TestFileAttentionKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 	root := attentionTestRoot(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	first := openRequestIDs(t, root)
 	require.Len(t, first, 1)
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f9")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
 }
@@ -172,7 +216,7 @@ func TestRecordAttentionOpenKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 // The store carries the lease and the source that answered it, not just the rendering: the
 // console reads these records too. The checkout's binding outranks the BAGGAGE claim, as it
 // does for every lease magus resolves.
-func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
+func TestFileAttentionStoresTheLease(t *testing.T) {
 	type answer struct {
 		Lease string
 		From  types.LeaseSource
@@ -195,7 +239,7 @@ func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
 			if tc.claim != "" {
 				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
 			}
-			require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+			require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
@@ -210,10 +254,10 @@ func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
 
 // An id that fails the rule attributes nothing rather than smuggling free text into a field the
 // trail carries unredacted. internal/trail asserts the note that explains the drop.
-func TestRecordAttentionOpenDropsAnInvalidLease(t *testing.T) {
+func TestFileAttentionDropsAnInvalidLease(t *testing.T) {
 	root := attentionTestRoot(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
@@ -239,7 +283,7 @@ func TestAttentionListEmptyStateNamesTheProducer(t *testing.T) {
 
 func TestAttentionListJSONCarriesTheRecordsAndTheStore(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
@@ -256,7 +300,7 @@ func TestAttentionListJSONCarriesTheRecordsAndTheStore(t *testing.T) {
 
 func TestAttentionListNameFormatPrintsIDsOnly(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	ids := openRequestIDs(t, root)
 	require.Len(t, ids, 1)
 
@@ -280,7 +324,7 @@ func TestAttentionDisposeUnknownIDNamesTheMechanismAndTheNextStep(t *testing.T) 
 
 func TestAttentionDisposeClosesOnceAndRefusesASecondTime(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs approval to push")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs approval to push")))
 	ids := openRequestIDs(t, root)
 	require.Len(t, ids, 1)
 
@@ -317,28 +361,28 @@ func TestAttentionRejectsAnUnknownSubcommand(t *testing.T) {
 	require.ErrorContains(t, err, "want ls, show, hints, load, checkpoint, attention, dispose, or notify")
 }
 
-func TestRecordAttentionOpenOnlyForBlockedOutcomes(t *testing.T) {
+func TestFileAttentionOnlyForBlockedOutcomes(t *testing.T) {
 	root := attentionTestRoot(t)
 
 	for _, outcome := range []types.EventOutcome{types.OutcomeFailed, types.OutcomeFinished, types.OutcomeDiagnostic, types.OutcomeUpdate, types.OutcomeOther} {
 		ev := blockedEvent("something happened")
 		ev.Outcome = outcome
-		require.NoError(t, recordAttentionOpen(root, ev))
+		require.NoError(t, fileBlock(root, ev))
 	}
 	assert.Empty(t, openRequestIDs(t, root), "only a stopped agent queues for a person; news does not")
 
 	permission := blockedEvent("needs approval to push")
 	permission.Outcome = types.OutcomePermission
-	require.NoError(t, recordAttentionOpen(root, permission))
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, permission))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	assert.Len(t, openRequestIDs(t, root), 2)
 }
 
-func TestRecordAttentionOpenDedupesARefiredBlock(t *testing.T) {
+func TestFileAttentionDedupesARefiredBlock(t *testing.T) {
 	root := attentionTestRoot(t)
 
 	for range 3 {
-		require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+		require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	}
 	assert.Len(t, openRequestIDs(t, root), 1, "a hook that fires on every prompt must not queue one request per prompt")
 
@@ -347,20 +391,22 @@ func TestRecordAttentionOpenDedupesARefiredBlock(t *testing.T) {
 	// is waiting.
 	other := blockedEvent("needs a decision")
 	other.Source.ID = "sess-2"
-	require.NoError(t, recordAttentionOpen(root, other))
+	require.NoError(t, fileBlock(root, other))
 	assert.Len(t, openRequestIDs(t, root), 2)
 }
 
 // The request id keys on the agent session that raised the block. An event with none
 // would key every such producer on "", folding unrelated blocks into one row that a
 // single dispose closes.
-func TestRecordAttentionOpenRefusesAnEventWithNoSourceID(t *testing.T) {
+func TestFileAttentionRefusesAnEventWithNoSourceID(t *testing.T) {
 	root := attentionTestRoot(t)
 
 	ev := blockedEvent("needs a decision")
 	ev.Source.ID = ""
 	logged := captureWarnings(t, func() {
-		assert.NoError(t, recordAttentionOpen(root, ev), "a missing source.id must not fail the notification")
+		held, err := fileAttention(root, ev)
+		assert.NoError(t, err, "a missing source.id must not fail the notification")
+		assert.False(t, held, "no row holds it, so the notification must still fire")
 	})
 
 	assert.Empty(t, openRequestIDs(t, root))
@@ -368,12 +414,14 @@ func TestRecordAttentionOpenRefusesAnEventWithNoSourceID(t *testing.T) {
 	assert.Contains(t, logged, "wrapper", "and who has to send it")
 }
 
-func TestRecordAttentionOpenSkipsWhenThereIsNoRepository(t *testing.T) {
+func TestFileAttentionSkipsWhenThereIsNoRepository(t *testing.T) {
 	testkit.Isolate(t)
 	// An empty root with no discoverable workspace: notify still notifies, and the
 	// request has nowhere durable to live rather than landing in a store keyed on "".
 	t.Chdir(t.TempDir())
-	assert.NoError(t, recordAttentionOpen("", blockedEvent("needs a decision")))
+	held, err := fileAttention("", blockedEvent("needs a decision"))
+	assert.NoError(t, err)
+	assert.False(t, held)
 }
 
 func TestNotifyOpensARequestThatAttentionLists(t *testing.T) {
@@ -414,7 +462,7 @@ func TestAttentionWhereNarrowsToTheProject(t *testing.T) {
 func TestAttentionSourceLabelsTheProducer(t *testing.T) {
 	root := attentionTestRoot(t)
 	ev := blockedEvent("needs a decision")
-	require.NoError(t, recordAttentionOpen(root, ev))
+	require.NoError(t, fileBlock(root, ev))
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
@@ -445,7 +493,7 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 	})
 	assert.Empty(t, out, "-q prints nothing")
 
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 	global.quiet = true
 	out = captureStdout(t, func() {
@@ -456,7 +504,7 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 
 func TestAttentionDisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 	id := openRequestIDs(t, root)[0]
 
 	out := captureStdout(t, func() {
@@ -471,8 +519,8 @@ func TestAttentionDisposeRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testin
 	first := blockedEvent("one")
 	second := blockedEvent("two")
 	second.Source.ID = "sess-2"
-	require.NoError(t, recordAttentionOpen(root, first))
-	require.NoError(t, recordAttentionOpen(root, second))
+	require.NoError(t, fileBlock(root, first))
+	require.NoError(t, fileBlock(root, second))
 	ids := openRequestIDs(t, root)
 	require.Len(t, ids, 2)
 
@@ -486,7 +534,7 @@ func TestAttentionDisposeRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testin
 
 func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 
 	err := sessionCmd(context.Background(), root, []string{"dispose", "att-zzzz"})
 	require.Error(t, err)
@@ -501,7 +549,7 @@ func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
 // is unwired, the same gap `diff --ack` closed this way first.
 func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 	root := attentionTestRoot(t)
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs approval to push")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs approval to push")))
 	id := openRequestIDs(t, root)[0]
 
 	withoutInteractiveTTY(t)
@@ -522,7 +570,7 @@ func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 // able to close a request the fix does not exist to block.
 func TestAttentionDisposeSucceedsWithATerminal(t *testing.T) {
 	root := attentionTestRoot(t) // interactive by default, see withInteractiveTTY
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs approval to push")))
+	require.NoError(t, fileBlock(root, blockedEvent("needs approval to push")))
 	id := openRequestIDs(t, root)[0]
 
 	out := captureStdout(t, func() {

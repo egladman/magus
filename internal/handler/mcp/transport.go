@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,8 +79,8 @@ func callerActor(ctx context.Context) (actor job.Actor, ok bool) {
 		}
 		return job.Actor{Lease: lease}, true
 	}
-	switch trail.CredentialFromContext(ctx).Class {
-	case "", types.ClassStdio:
+	switch trail.CredentialFromContext(ctx).Kind {
+	case "", types.KindStdio:
 		return job.Actor{}, false
 	}
 	return job.Actor{Unstamped: true}, true
@@ -112,6 +113,25 @@ func toolLine(t hint.ToolName, desc string) string {
 	return fmt.Sprintf("  %-*s- %s", toolColumn, t, desc)
 }
 
+// clientMembers are the magus\ members the instructions name, by their std
+// descriptor names; member renders them as Buzz spells them.
+// TestServerInstructionsNameRealMembers holds each to a declared member.
+var clientMembers = []string{
+	"projects", "targets", "query", "explain", "path", "refs", "stats", "describe_file", "where",
+	"affected", "impact", "run", "clean", "output", "insight", "doctor", "job", "vcs",
+}
+
+// member renders one magus\ member as a script calls it.
+func member(name string) string { return `magus\` + std.CamelCase(name) }
+
+func members(names ...string) string {
+	out := make([]string, len(names))
+	for i, name := range names {
+		out[i] = member(name)
+	}
+	return strings.Join(out, ", ")
+}
+
 // serverInstructions is the system-level hint sent to the client during
 // the initialize handshake. Every tool name is rendered from a hint.ToolName
 // constant rather than spelled out, so a rename is a compile error here instead
@@ -120,48 +140,20 @@ var serverInstructions = strings.Join([]string{
 	"You are connected to a magus workspace.",
 	"magus is a build orchestrator for multi-language monorepos.",
 	"",
-	"Discover:",
-	toolLine(hint.ToolDescribe, "list spells, targets, projects, workspaces, or mcp_tools"),
-	toolLine(hint.ToolDescribeFile, "classify changed paths: generated output, declared source, or unclaimed"),
-	toolLine(hint.ToolWhere, "resolve a fuzzy project name to its absolute path"),
-	toolLine(hint.ToolConfigGet, "view the resolved workspace config (read-only)"),
+	"The workspace is the " + hint.ToolClient.String() + " tool: a Buzz program that imports \"magus\" and calls its members (" + members(clientMembers...) + "). " +
+		"Call magus\\describeModule(\"magus\") for the signatures. The tools below are the operations that module does not cover.",
 	"",
-	"Run:",
-	toolLine(hint.ToolRunTarget, "run build/test/lint/format/generate/ci"),
-	toolLine(hint.ToolRunAffected, "run a target on only VCS-changed projects"),
-	toolLine(hint.ToolAffectedPlan, "emit a CI shard plan for the affected set"),
-	toolLine(hint.ToolAffectedExplain, "explain why a project is affected by VCS changes"),
-	toolLine(hint.ToolBuzz, "run a Buzz script over another tool's output (stdin) instead of a shell one-liner"),
-	"",
-	"Inspect:",
-	toolLine(hint.ToolDoctor, "validate the workspace health"),
+	toolLine(hint.ToolClient, "run Buzz against the magus client and return its value"),
+	toolLine(hint.ToolBuzz, "transform JSON with Buzz; no workspace access"),
 	toolLine(hint.ToolStatus, "inspect the live concurrency pool"),
-	toolLine(hint.ToolOutput, "fetch a target-output blob by its reference id"),
-	toolLine(hint.ToolInsight, "VCS history lenses (hotspots, ownership, trend)"),
-	"",
-	"Knowledge graph:",
-	toolLine(hint.ToolQuery, "search the target/spell/symbol graph"),
-	toolLine(hint.ToolExplain, "explain a single node and its relationships"),
-	toolLine(hint.ToolPath, "find a path between two graph nodes"),
-	toolLine(hint.ToolRefs, "list files that reference a symbol"),
-	toolLine(hint.ToolStats, "summarize graph composition"),
-	"",
-	"Work with people and other agents:",
+	toolLine(hint.ToolConfig, "view the resolved workspace config (read-only)"),
 	toolLine(hint.ToolDiff, "join the review session a person has open: state, comment, suggest, resolve"),
-	toolLine(hint.ToolVCSCheckpoint, "record the working state's identity (revision, branch, patch digest)"),
-	toolLine(hint.ToolJob, "declare the job plan an orchestrator hands out: criteria, paths, states"),
-	toolLine(hint.ToolConsolePresent, "return a local console link when a person asks to see it"),
+	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
 	"",
 	"Typical flow:",
-	"  Discover first: " + hint.ToolDescribe.String() + " (list spells/targets/projects/workspaces), " +
-		hint.ToolWhere.String() + " (resolve a fuzzy project name to a path).",
-	"  Then act: " + hint.ToolRunTarget.String() + " / " + hint.ToolRunAffected.String() + "; " +
-		hint.ToolAffectedPlan.String() + " (CI shard plan), " + hint.ToolAffectedExplain.String() + " (why a project is affected).",
-	"  After a run: " + hint.ToolOutput.String() + " (fetch a target's captured output by its ref).",
-	"  Understand the graph: " + hint.ToolQuery.String() + " (search) -> " + hint.ToolExplain.String() +
-		" (a node's edges and provenance) -> " + hint.ToolPath.String() + " (shortest path); " +
-		hint.ToolRefs.String() + " (symbol defs and refs); " + hint.ToolStats.String() + " (graph shape).",
-	"  Health and meta: " + hint.ToolStatus.String() + ", " + hint.ToolDoctor.String() + ", " + hint.ToolConfigGet.String() + ".",
+	"  Discover through " + hint.ToolClient.String() + " with the typed members (" + members("projects", "targets", "query", "describe_file") + "); they return records, not CLI text.",
+	"  Run through " + hint.ToolClient.String() + " (" + members("affected", "run") + "); " + member("output") + " fetches a captured log by its ref.",
+	"  Health: " + hint.ToolClient.String() + " (" + member("doctor") + "), " + hint.ToolStatus.String() + ", " + hint.ToolConfig.String() + ".",
 	"",
 	"Config mutation is intentionally not exposed. Use the magus CLI for that.",
 }, "\n")
@@ -184,10 +176,15 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 // and tool set live in one place. The caller supplies only the transport-specific
 // hooks (agent tracking) and the originFn used at tool-call time.
 func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Client) *mcpserver.MCPServer {
+	tasks := newTaskRuns()
+	taskHooks := &mcpserver.TaskHooks{}
+	tasks.hook(hooks, taskHooks)
 	srv := mcpserver.NewMCPServer(
 		"magus", opts.Version,
 		mcpserver.WithInstructions(serverInstructions),
 		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithTaskCapabilities(true, true, true),
+		mcpserver.WithTaskHooks(taskHooks),
 		mcpserver.WithHooks(hooks),
 		mcpserver.WithRecovery(),
 	)
@@ -203,7 +200,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 		cacheDir = opts.Magus.CacheDir()
 	}
 	trail.Rotate(cacheDir)
-	registerTools(srv, opts, log, originFn, cacheDir)
+	registerTools(srv, opts, log, originFn, cacheDir, tasks)
 	return srv
 }
 

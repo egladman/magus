@@ -275,15 +275,15 @@ func TestMintedTokenLooksUpAsItsCredential(t *testing.T) {
 	store := isolatedStore(t)
 	secret, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	class, ok := classOf(secret)
+	kind, ok := kindOf(secret)
 	require.True(t, ok)
-	assert.Equal(t, types.ClassStored, class)
+	assert.Equal(t, types.KindStored, kind)
 	assert.Len(t, secret, tokenLen)
 
 	got, ok := reopen(t).Lookup(secret)
 	require.True(t, ok)
 	assert.Equal(t, rec, got)
-	assert.Equal(t, types.Credential{Class: types.ClassStored, ID: rec.ID, Name: "laptop", Grant: types.GrantConnector}, got.Credential())
+	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: rec.ID, Name: "laptop", Grant: types.GrantConnector}, got.Credential())
 
 	info, err := os.Stat(filepath.Join(store.dir, "laptop.json"))
 	require.NoError(t, err)
@@ -377,12 +377,12 @@ func TestRevokeRefusesATokenOutsideTheRevokersGrant(t *testing.T) {
 // secret, and returns the secret: what a process writing tokens.d by hand could do.
 func plant(t *testing.T, dir, file string, edit func(*tokenRecord)) string {
 	t.Helper()
-	secret, err := mintSecret(types.ClassStored)
+	secret, err := mintSecret(types.KindStored)
 	require.NoError(t, err)
 	sum := digest(secret)
 	now := time.Now().UTC()
 	rec := tokenRecord{Version: storeVersion, Token: Token{
-		ID: sum[:8], Name: file, Class: types.ClassStored, SHA256: sum,
+		ID: sum[:8], Name: file, Kind: types.KindStored, SHA256: sum,
 		Grant: types.GrantViewer, Created: now.Add(-time.Minute), Expires: now.Add(time.Hour),
 	}}
 	edit(&rec)
@@ -411,11 +411,11 @@ func TestAPlantedRecordCannotExceedWhatMintWrites(t *testing.T) {
 		"mcp=read":               func(r *tokenRecord) { r.Grant = types.Grant{MCP: types.LevelRead} },
 		"id not its hash":        func(r *tokenRecord) { r.ID = "bbbbbbbb" },
 		"hash malformed":         func(r *tokenRecord) { r.SHA256 = strings.Repeat("z", 64) },
-		"operator class":         func(r *tokenRecord) { r.Class = types.ClassOperator },
-		"share class":            func(r *tokenRecord) { r.Class = types.ClassShare },
-		"code past a minute":     func(r *tokenRecord) { r.Class, r.TokenTTL = types.ClassExchange, time.Hour },
+		"operator kind":          func(r *tokenRecord) { r.Kind = types.KindOperator },
+		"share kind":             func(r *tokenRecord) { r.Kind = types.KindShare },
+		"code past a minute":     func(r *tokenRecord) { r.Kind, r.TokenTTL = types.KindExchange, time.Hour },
 		"code for a year+": func(r *tokenRecord) {
-			r.Class, r.TokenTTL, r.Expires = types.ClassExchange, 400*24*time.Hour, r.Created.Add(30*time.Second)
+			r.Kind, r.TokenTTL, r.Expires = types.KindExchange, 400*24*time.Hour, r.Created.Add(30*time.Second)
 		},
 		"too new": func(r *tokenRecord) { r.Version = storeVersion + 1 },
 	}
@@ -473,7 +473,7 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(code, prefixExchange))
-	assert.Equal(t, types.ClassExchange, rec.Class)
+	assert.Equal(t, types.KindExchange, rec.Kind)
 	assert.WithinDuration(t, time.Now().Add(ExchangeCodeTTL), rec.Expires, time.Second)
 	_, ok := store.Lookup(code)
 	assert.False(t, ok, "a code is no bearer")
@@ -482,7 +482,7 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 
 	secret, tok, err := store.Redeem(code)
 	require.NoError(t, err)
-	assert.Equal(t, types.ClassStored, tok.Class)
+	assert.Equal(t, types.KindStored, tok.Kind)
 	assert.Equal(t, types.GrantConsole, tok.Grant)
 	assert.Equal(t, rec.Name, tok.Name)
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), tok.Expires, time.Second)
@@ -607,7 +607,7 @@ func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
 
 	cred, ok := Verify(op)
 	require.True(t, ok)
-	assert.Equal(t, types.ClassOperator, cred.Class)
+	assert.Equal(t, types.KindOperator, cred.Kind)
 	dir, err := StoreDir()
 	require.NoError(t, err)
 	_, err = LoadStore(dir)

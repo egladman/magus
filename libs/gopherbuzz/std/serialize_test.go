@@ -91,3 +91,32 @@ func TestSerializeSerializeCircular(t *testing.T) {
 		t.Fatal("serializeSerialize did not return within bound on a cyclic list")
 	}
 }
+
+// JSONEncode is what an embedder returns a script's value through, so a Boxed
+// value (serialize.jsonDecode's result) must encode as its data at any depth,
+// not as the method values a Boxed map also carries.
+func TestJSONEncodeUnwrapsBoxedAtAnyDepth(t *testing.T) {
+	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StrValue(`{"n":2}`)})
+	require.NoError(t, err)
+
+	top, err := JSONEncode(boxed)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"n":2}`, top)
+
+	nested, err := JSONEncode(vm.ListValue([]vm.Value{boxed}))
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"n":2}]`, nested)
+}
+
+func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
+	v, err := JSONDecodeValue([]byte(`{"n":2,"f":1.5}`))
+	require.NoError(t, err)
+	n, ok := v.MapGet("n")
+	require.True(t, ok)
+	assert.True(t, n.IsInt(), "2 decodes as %s", n.Kind())
+	f, ok := v.MapGet("f")
+	require.True(t, ok)
+	assert.True(t, f.IsFloat())
+	_, boxed := v.MapGet(boxedRawKey)
+	assert.False(t, boxed, "the value is plain, not Boxed")
+}

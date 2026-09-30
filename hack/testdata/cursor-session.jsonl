@@ -1,0 +1,4 @@
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nRun the guard tests and fix what fails.\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Running the guard tests through magus first."},{"type":"tool_use","name":"run_terminal_cmd","input":{"command":"magus run test . -s"}}]}}
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nOnly the guard package.\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Narrowing to the guard package with -run."}]}}

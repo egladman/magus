@@ -13,7 +13,7 @@
 // split a change whose fan-out is structural is advice that cannot be followed.
 //
 // Why each project is in the set is the ANSWER - a reader here is asking "why is docs in
-// my build". magus\affectedImpact carries it: whether the project was edited directly (a
+// my build". magus\impact carries it: whether the project was edited directly (a
 // seed) and, when it was not, the files that pulled it in. One typed call for the whole
 // set, where this used to run `magus affected --explain` once per project and parse the
 // output. The diagram follows, for the reader who wants the shape rather than the rows.
@@ -104,7 +104,7 @@ fun main() > void !> any {
     // One typed call for the whole set. --impact is the FORENSIC mode: it reports the
     // set without running a target, unlike `magus affected list`, which dispatches one
     // across every affected project to answer the same question.
-    final impact = magus\affectedImpact("origin/" + base);
+    final impact = magus\impact("origin/" + base);
     var reached = mut [];
     var why = mut [];
     foreach (p in impact.affectedProjects) {

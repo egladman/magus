@@ -15,7 +15,7 @@ and a generator overwrites without asking.{{end}}
 | a local skill (`magus-local-development`) | this workspace | YES - this is the prose layer |
 | the repo instruction file (`CLAUDE.md`, `AGENTS.md`) outside managed markers | this workspace | for ALWAYS-ON rules only, and it costs context every session |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
-| `{{buzz "guard.shell"}}(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
+| `{{buzz "guard.shell"}}(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only |
 | `{{buzz "harness.provider"}}(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
@@ -118,7 +118,7 @@ guard rule.
    `{{cmd "agent harness verify"}}` answers this for wiring{{if .Full}}. The two differ more
    often than anyone expects: a skill directory this repo does not install into
    receives nothing, and a forked harness spell reaches the host only once a person
-   merges what `{{cmd "describe harness"}}` prints into its config{{end}}.
+   runs the merge command `{{cmd "describe harness"}}` prints{{end}}.
 2. Re-run the command the evidence cites and read the verdict.{{if .Full}} A change that
    does not move the verdict on the command that motivated it changed nothing,
    and nothing else in the loop would have said so.{{end}}
@@ -144,10 +144,10 @@ tag each one tracks and `magus.lock` pins its digest, so a harness versions apar
 from the binary:
 
 ```buzz
-import "ghcr.io/egladman/magus/spells/cursor";
-import "ghcr.io/egladman/magus/spells/codex";
-import "ghcr.io/egladman/magus/spells/claude-code" as claude;
-import "ghcr.io/egladman/magus/spells/opencode";
+import "ghcr.io/egladman/magus/spells/harness/cursor";
+import "ghcr.io/egladman/magus/spells/harness/codex";
+import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;
+import "ghcr.io/egladman/magus/spells/harness/opencode";
 {{buzz "harness.provider"}}(cursor)
 {{buzz "harness.provider"}}(codex)
 {{buzz "harness.provider"}}(claude)
@@ -156,15 +156,15 @@ import "ghcr.io/egladman/magus/spells/opencode";
 
 Workspace-owned adaptation: declare an override, change no import and no provider call.
 
-1. Copy the shipped spell tree into the workspace (for example
-   `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
+1. Copy the shipped spell into the workspace with
+   `magus spell pull magus/spell/harness/cursor harness/cursor`. Keep `mgs_getName()` as the host id
    (`cursor`, `claude-code`, ...) so describe and verify still resolve that id.
 2. In `magus.yaml`, replace the registry path with that directory, as Go's
    `replace` does:
 
    ```yaml
    spells:
-     ghcr.io/egladman/magus/spells/cursor:
+     ghcr.io/egladman/magus/spells/harness/cursor:
        path: harness/cursor
    ```
 

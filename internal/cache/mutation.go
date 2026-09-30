@@ -34,8 +34,8 @@ func (c *Cache) fingerprintSources(ctx context.Context, s *Step) (sourceFingerpr
 // A source that DISAPPEARED counts: deleting an input is a write, and the key then
 // describes a file that is not there. One that appeared does not: a target may
 // produce a file a broad source glob would have matched, which is MGS1028's question.
-func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []string) []string {
-	declared := compileGlobs(append(slices.Clone(updates), ownedOutputs...))
+func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []types.Glob) []string {
+	declared := compileGlobs(slices.Concat(updates, ownedOutputs))
 	claimed := func(rel string) bool {
 		for _, g := range declared {
 			if g.Match(rel) {
@@ -68,7 +68,7 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []str
 // misbehave" and so ignores every declared output to keep MGS4007 from accusing a target of
 // writing a generated file. This answers "does the key still describe the tree it was
 // computed from", where a peer rewriting a generated file mid-hash is the whole danger.
-func movedInputs(before, after sourceFingerprint, updates []string) []string {
+func movedInputs(before, after sourceFingerprint, updates []types.Glob) []string {
 	return mutatedSources(before, after, updates, nil)
 }
 

@@ -2,22 +2,16 @@
 // (one markdown file per note, YAML frontmatter carrying the structured fields) that
 // attach to graph entities without being derived from any of them.
 //
-// It is the counterpart to internal/memory, and the two differ on every axis that
-// matters:
-//
 //   - WHO WRITES. A note is written by a person in their editor. Nothing here is an
 //     agent-facing write path, and there is deliberately no Put: `magus notes edit`
 //     opens $EDITOR and gets out of the way.
-//   - WHERE IT LIVES. In the CHECKOUT, at a path the workspace declares, not in XDG
-//     state like memory, whose package doc explains that "a developer's working memory
-//     does not belong in a shared checkout". A note inverts exactly that clause: a
-//     team's shared understanding does belong there. Being in the checkout is also what
-//     buys per-author attribution for free, since the @vcs shard already mints author
-//     nodes for files it can see, and nothing outside the checkout can ever have that.
-//   - WHAT IT MAY SAY. memory REQUIRES a ref, because an agent-written claim has to be
-//     anchored to something checkable. A note is the class that cannot be checked that
-//     way: its only provenance is a person. So anchors are required for FINDABILITY,
-//     but prose is the payload rather than a caption.
+//   - WHERE IT LIVES. In the CHECKOUT, at a path the workspace declares: a team's
+//     shared understanding belongs there. Being in the checkout is also what buys
+//     per-author attribution for free, since the @vcs shard already mints author nodes
+//     for files it can see, and nothing outside the checkout can ever have that.
+//   - WHAT IT MAY SAY. A note cannot be checked against anything: its only provenance
+//     is a person. So anchors are required for FINDABILITY, but prose is the payload
+//     rather than a caption.
 //
 // Everything in the graph other than a note is DERIVED from workspace content: docs
 // from markdown, rationale from comments, symbols from an index, authors from git.

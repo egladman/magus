@@ -1,0 +1,307 @@
+// host-schemas.buzz refreshes the agent-host schemas vendored under
+// testdata/hosts, and says when one has moved upstream.
+//
+// The schemas are what internal/agent's tests grade this repository's hook configs and
+// rendered verdicts against. Vendoring them is what keeps that test off the network;
+// this script is the other half, because a vendored copy with nothing that re-fetches
+// it is a snapshot that quietly ages into a claim about a host that no longer exists.
+//
+// Two steps, because reading upstream and WRITING from it are different acts, and only
+// one of them should be able to change the tree.
+//
+//	magus buzz hack/host-schemas.buzz -- verify   re-fetch, report drift, write nothing
+//	magus buzz hack/host-schemas.buzz -- fetch    re-fetch and write the moved files
+//
+// Neither is the default: a bare run prints the usage line and fails, like every hack/
+// script whose steps differ in what they write.
+//
+// Only the rows the provenance table marks `published` can be refreshed. A `derived` or
+// `derived-from-binary` row is ours, transcribed by hand from a host that publishes no
+// schema for that surface, and its URL serves prose or a shipped artifact rather than
+// bytes to diff, so this names it and moves on rather than pretending to have checked it.
+//
+// Run from the workspace root: every path here is relative to it, the way `magus buzz`
+// resolves them.
+namespace hosts;
+
+import "std";
+import "fs";
+import "http";
+import "crypto";
+import "archive";
+
+import "assert";
+
+final SOURCES = "testdata/hosts/SOURCES.md";
+final DIR = "testdata/hosts";
+
+// code reads a column the table quotes in backticks, which is every path and URL.
+// Split rather than replace because this file runs WITHOUT --embedded, so strict mode
+// applies and a two-argument method call is the form that does not parse.
+fun code(cells: [str], index: int) > str {
+    return cells[index].split("`")[1];
+}
+
+// plain reads an unquoted column.
+fun plain(cells: [str], index: int) > str {
+    return cells[index].trim();
+}
+
+// Bundle is one row of the Upstream artifacts table: a file inside a pinned npm package,
+// the digest the table records for it, and the digest the registry serves now.
+export object Bundle {
+    pkg: str,
+    version: str,
+    inner: str,
+    recorded: str,
+    digest: str,
+}
+
+// bundles digests the bundles the `derived` rows were transcribed FROM.
+//
+// It is the half the first table cannot cover. Those rows hash OUR transcription, so they
+// answer "has anyone edited our file" and never "has the host changed the thing we copied".
+// A derived schema with no watch on its source is a snapshot that ages into a claim about a
+// host that no longer exists, which is the same failure vendoring was adopted to prevent.
+//
+// REPORTS, never writes. The bundle is minified JavaScript and the schema is a reading of
+// it, so there is nothing to regenerate: a moved digest means a person re-reads the
+// validator. That is why this has no fetch arm while the published rows above do.
+export fun bundles() > [Bundle] !> any {
+    final rows = mut [<Bundle>];
+    var inTable = false;
+    foreach (line in fs\readFile(SOURCES).split("\n")) {
+        if (line.startsWith("## Upstream artifacts")) { inTable = true; continue; }
+        // Any later heading ends the table; without this the parser walks the rest of the
+        // file and reads a prose backtick as a row.
+        if (inTable and line.startsWith("## ")) { break; }
+        if (!inTable or !line.startsWith("| `")) { continue; }
+        final cells = line.split("|");
+        if (cells.len() < 7) { continue; }
+
+        final pkg = code(cells, index: 1);
+        // plain, not code: a version is a bare number in the table, and reading it as a
+        // backticked cell indexes past the end of a split that found no backtick.
+        final version = plain(cells, index: 2);
+        final inner = code(cells, index: 3);
+        final marker = code(cells, index: 4);
+        final recorded = code(cells, index: 5);
+
+        // The registry's own tarball URL, which is immutable per version: the point of
+        // pinning here rather than at a vendor download that rebuilds under its own URL.
+        // A scoped name (@cursor/sdk) puts only the unscoped half in the filename, while
+        // the path keeps the scope. An if rather than a ternary: this file runs without
+        // --embedded, where upstream-strict parsing rejects the compact form.
+        final scope = pkg.split("/");
+        var name = scope[0];
+        if (scope.len() > 1) {
+            name = scope[1];
+        }
+        final tarball = "https://registry.npmjs.org/" + pkg + "/-/" + name + "-" + version + ".tgz";
+        rows.append(Bundle{ pkg = pkg, version = version, inner = inner, recorded = recorded,
+            digest = digestInsideTarball(tarball, inner: inner, marker: marker) });
+    }
+    if (rows.len() == 0) {
+        throw "host-schemas: {SOURCES} has no Upstream artifacts table, so no derived row's source is watched";
+    }
+    return rows;
+}
+
+// SLICE is how much of the file after the marker gets digested.
+//
+// It has to be STABLE and big enough to cover the declaration a schema was read from.
+// "Big enough" is the half that was got wrong: this was 512 bytes on the claim that it
+// "holds SyncHookJSONOutput's whole body", and it does not. Measured in sdk.d.ts, the body's
+// scalar fields end around marker+490 and the hookSpecificOutput union runs to marker+1187,
+// so a 512-byte window stopped at the literal text `hookSpecificOutput?: ` and digested none
+// of the twenty arms after it. Adding an arm -- the exact upstream change this tripwire was
+// built to catch -- moved nothing inside the window and reported `same`.
+//
+// 2048 covers that declaration with headroom and still fails closed, because a marker the
+// tool cannot find is an error. When a new row's declaration is longer than this, raise it
+// rather than trimming the row: a window that ends mid-declaration is a tripwire that
+// reports success for the change it exists to see.
+//
+// Changing it invalidates every recorded digest at once, so it is a constant rather than a
+// per-row column nobody would tune correctly.
+final SLICE = 2048;
+
+// digestInsideTarball fetches an npm tarball and returns the sha256 of a WINDOW of one file
+// inside it, starting at marker.
+//
+// archive\readFile rather than uncompress: only one entry is wanted, and unpacking a whole
+// package to read it costs the disk and leaves a tree to clean up. The tarball still lands
+// on disk because the archive module works on paths, and it is removed before returning.
+//
+// `package/` is the prefix npm gives every entry, so the recorded path stays the one a
+// reader sees in the published package rather than carrying that prefix around.
+fun digestInsideTarball(url: str, inner: str, marker: str) > str !> any {
+    final tgz = fs\tempFile("magus-upstream");
+    fs\writeFile(tgz, content: http\get(url, opts: {"fail": true}).body);
+    final body = archive\readFile(tgz, name: "package/" + inner);
+    fs\remove(tgz);
+
+    final at = body.indexOf(marker);
+    // Loud, because this is the one way a slice can go quietly wrong. A renamed
+    // declaration or a reordered chunk leaves the marker absent, and digesting some other
+    // window would report a match against a region nobody chose.
+    if (at == null) {
+        throw "host-schemas: {url} carries {inner} but not \"{marker}\"; the declaration moved, so the recorded marker is stale and nothing was checked";
+    }
+    var end = at + SLICE;
+    if (end > body.len()) {
+        end = body.len();
+    }
+    return crypto\sha256Hex(body.sub(at, len: end - at));
+}
+
+// Schema is one row of the provenance table. recorded and digest, what the table records
+// and what upstream serves now, are empty for a row that is not `published`, which has no
+// bytes to diff. wrote says the moved bytes replaced the vendored file.
+export object Schema {
+    file: str,
+    origin: str,
+    url: str,
+    recorded: str,
+    digest: str,
+    wrote: bool,
+}
+
+// schemas re-fetches every `published` row and, when write holds, replaces each vendored
+// file whose bytes moved. It never edits SOURCES; the new digest is on the returned row.
+export fun schemas(write: bool) > [Schema] !> any {
+    final rows = mut [<Schema>];
+    var checked = 0;
+    foreach (line in fs\readFile(SOURCES).split("\n")) {
+        // The upstream table below has the same row shape and different columns, so this
+        // loop has to stop where it starts or it reads a package name as a file path.
+        if (line.startsWith("## Upstream artifacts")) { break; }
+        // Every data row opens with a backticked file path; the header and the
+        // separator do not, which is what keeps this from parsing them as rows.
+        if (!line.startsWith("| `")) { continue; }
+        final cells = line.split("|");
+        if (cells.len() < 7) { continue; }
+
+        final file = code(cells, index: 1);
+        final origin = plain(cells, index: 2);
+        final url = code(cells, index: 3);
+        if (origin != "published") {
+            rows.append(Schema{ file = file, origin = origin, url = url, recorded = "", digest = "", wrote = false });
+            continue;
+        }
+
+        final recorded = code(cells, index: 5);
+        final body = http\get(url, opts: {"fail": true}).body;
+        final digest = crypto\sha256Hex(body);
+        checked = checked + 1;
+        final moved = digest != recorded;
+        if (moved and write) {
+            fs\writeFile(DIR + "/" + file, content: body);
+        }
+        rows.append(Schema{ file = file, origin = origin, url = url, recorded = recorded, digest = digest, wrote = moved and write });
+    }
+
+    // A table that matched no row means the format changed under this parser, and a
+    // silent zero would read exactly like a clean run.
+    if (checked == 0) {
+        throw "host-schemas: {SOURCES} named no published row, so nothing was checked";
+    }
+    return rows;
+}
+
+final usage = "usage: magus buzz hack/host-schemas.buzz -- <step>\n"
+    + "  verify   re-fetch and report drift; writes nothing\n"
+    + "  fetch    re-fetch and write the vendored schemas that moved";
+
+// parse returns the step args name. Neither step is a default, and neither takes a flag.
+export fun parse(args: [str]) > str !> any {
+    if (args.len() == 0) {
+        throw "host-schemas: no step given\n{usage}";
+    }
+    final step = args[0];
+    if (step != "verify" and step != "fetch") {
+        throw "host-schemas: unknown step \"{step}\"\n{usage}";
+    }
+    if (args.len() > 1) {
+        throw "host-schemas: {step} does not take {args.sub(1).join(" ")}\n{usage}";
+    }
+    return step;
+}
+
+export fun main(args: [str]) > void !> any {
+    final step = parse(args);
+    final write = step == "fetch";
+
+    var checked = 0;
+    var moved = 0;
+    foreach (s in schemas(write)) {
+        if (s.origin != "published") {
+            std\print("skip {s.file}: {s.origin}, so {s.url} has no bytes to diff; re-read it by hand");
+            continue;
+        }
+        checked = checked + 1;
+        if (s.digest == s.recorded) {
+            std\print("same {s.file}");
+            continue;
+        }
+        moved = moved + 1;
+        if (s.wrote) {
+            std\print("wrote {s.file}: sha256 is now {s.digest}, so put that and today's date in {SOURCES}");
+        } else {
+            std\print("MOVED {s.file}: upstream hashes {s.digest}, the table records {s.recorded}");
+        }
+    }
+
+    // Counted apart from `moved`, because the two have different remedies and one message
+    // covering both sends a reader to a step that cannot help them: fetch rewrites a
+    // published schema from upstream bytes, and an upstream bundle has none to rewrite
+    // from. A moved bundle is read by a person.
+    var upstreamMoved = 0;
+    foreach (b in bundles()) {
+        if (b.digest == b.recorded) {
+            std\print("same {b.pkg}@{b.version} {b.inner}");
+            continue;
+        }
+        upstreamMoved = upstreamMoved + 1;
+        std\print("MOVED {b.pkg}@{b.version} {b.inner}: upstream hashes {b.digest}, the table records {b.recorded}; re-read the validator by hand");
+    }
+    if (write) {
+        std\print("fetched {checked} published schema(s); {moved} changed");
+        return;
+    }
+    // verify only. A moved schema is a finding, not an error to swallow: the tree still
+    // holds the old bytes, and whoever refreshes them owns the test failures that follow.
+    if (moved > 0) {
+        throw "host-schemas: {moved} of {checked} vendored schema(s) moved upstream. Re-run with the fetch step, then update the sha256 and read date in {SOURCES} in the same commit as whatever had to change with them";
+    }
+    // Its own arm, and deliberately no fetch instruction: the bundle is minified
+    // JavaScript, our schema is a READING of it, and no step here can redo that reading.
+    if (upstreamMoved > 0) {
+        throw "host-schemas: {upstreamMoved} upstream bundle(s) changed since the derived schemas were read. Re-read the validator in the named file, update the derived schemas and both digests in {SOURCES}, and record today as the read date";
+    }
+    std\print("checked {checked} published schema(s) and every upstream bundle; all match what {SOURCES} records");
+}
+
+// refusal is the message parse throws for args, or "" when it accepts them.
+fun refusal(args: [str]) > str {
+    try {
+        parse(args);
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "a bare run names no step, so it neither verifies nor writes" {
+    assert\equal(refusal([<str>]), want: "host-schemas: no step given\n" + usage, message: "no default step");
+}
+
+test "an unknown step is refused with the usage line" {
+    assert\equal(refusal(["refresh"]), want: "host-schemas: unknown step \"refresh\"\n" + usage, message: "unknown step");
+}
+
+test "verify and fetch are the steps, and neither takes a flag" {
+    assert\equal(parse(["verify"]), want: "verify", message: "verify");
+    assert\equal(parse(["fetch"]), want: "fetch", message: "fetch");
+    assert\equal(refusal(["fetch", "--force"]), want: "host-schemas: fetch does not take --force\n" + usage, message: "a flag");
+}

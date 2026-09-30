@@ -68,9 +68,9 @@ func globWorkspace(t *testing.T, rootSources ...string) *types.Workspace {
 	return &types.Workspace{
 		Root: "/fake",
 		Projects: map[string]*types.Project{
-			".": {Path: ".", Dir: "/fake", Spell: "go", Sources: rootSources},
+			".": {Path: ".", Dir: "/fake", Spell: "go", Sources: types.MustParseGlobs(rootSources...)},
 			"api": {
-				Path: "api", Dir: "/fake/api", Spell: "go", Sources: []string{"**/*.go"},
+				Path: "api", Dir: "/fake/api", Spell: "go", Sources: types.MustParseGlobs("**/*.go"),
 				TargetInputs: map[string][]types.InputRef{
 					"build": {{Project: "proto", Glob: "**/*.proto"}},
 				},
@@ -121,7 +121,7 @@ func TestSeedsForFileProjectWideReachingGlobRedirects(t *testing.T) {
 			".": {Path: ".", Dir: "/fake", Spell: "go"},
 			"api": {
 				Path: "api", Dir: "/fake/api", Spell: "go",
-				Sources: []string{"**/*.go", "../proto/**"},
+				Sources: types.MustParseGlobs("**/*.go", "../proto/**"),
 			},
 		},
 	})
@@ -140,8 +140,8 @@ func reachedProtoWorkspace(protoSources ...string) *types.Workspace {
 		Root: "/fake",
 		Projects: map[string]*types.Project{
 			".":     {Path: ".", Dir: "/fake", Spell: "go"},
-			"docs":  {Path: "docs", Dir: "/fake/docs", Spell: "markdown", Sources: []string{"**/*.md", "../proto/**"}},
-			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: protoSources},
+			"docs":  {Path: "docs", Dir: "/fake/docs", Spell: "markdown", Sources: types.MustParseGlobs("**/*.md", "../proto/**")},
+			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: types.MustParseGlobs(protoSources...)},
 		},
 	}
 }
@@ -181,7 +181,7 @@ func TestSeedsForFileContainmentOnlyStillFlags(t *testing.T) {
 		Root: "/fake",
 		Projects: map[string]*types.Project{
 			".":     {Path: ".", Dir: "/fake", Spell: "go"},
-			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: []string{"**/*.go"}},
+			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: types.MustParseGlobs("**/*.go")},
 		},
 	})
 

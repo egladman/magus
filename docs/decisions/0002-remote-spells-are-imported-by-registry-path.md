@@ -61,7 +61,7 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    - a dot in the first element (`ghcr.io/...`) is a **remote** spell;
    - the `magus/` prefix (`magus/spell/go`) is **embedded**, provided by the binary, and keeps
      its current spelling;
-   - anything else (`spells/harness/cursor`, `./tools/drift`) is a **workspace** path.
+   - anything else (`spells/harness/cursor`, `./hack/drift`) is a **workspace** path.
 
    Go reserves dotless paths for its standard library because all other Go code is imported
    by a dotted module path. A magusfile also imports workspace files by dotless paths, so

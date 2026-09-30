@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -349,12 +348,6 @@ func TestFmtBytes(t *testing.T) {
 	assert.Equal(t, "1.0 KiB", fmtBytes(1<<10))
 	assert.Equal(t, "1.5 MiB", fmtBytes(3<<19))
 	assert.Equal(t, "2.0 GiB", fmtBytes(2<<30))
-}
-
-func TestRoughAge(t *testing.T) {
-	assert.Equal(t, "under an hour", roughAge(59*time.Minute))
-	assert.Equal(t, "3h", roughAge(3*time.Hour))
-	assert.Equal(t, "2d", roughAge(48*time.Hour))
 }
 
 func TestFirstLine(t *testing.T) {

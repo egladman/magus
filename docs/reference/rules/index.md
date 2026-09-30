@@ -27,8 +27,18 @@ name is the entry below. `magus describe rules` prints the same list.
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
 | [filter-without-input](filter-without-input.md)   | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                        |
+| [focus-read](focus-read.md)                       | a read outside the paths a focus lease was given                                                  |
+| [grep-reader](grep-reader.md)                     | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body  |
+| [hook-wiring-write](hook-wiring-write.md)         | a leased or agent-attributed write to the hook wiring the guard is installed by                   |
 | [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                |
 | [interpreter-rewrite](interpreter-rewrite.md)     | an inline interpreter rewriting a file this tree already carries                                  |
+| [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                             |
+| [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                   |
+| [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                  |
+| [lease-undeclared](lease-undeclared.md)           | a call graded under a well-formed lease id the job store has no row for                           |
+| [lease-vcs](lease-vcs.md)                         | a worker lease committing, pushing, stashing or reverting the tree it is landed from              |
+| [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns        |
+| [magus-timeout](magus-timeout.md)                 | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside            |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                          |
 | [output-pipe](output-pipe.md)                     | magus output piped into a filter, when magus projects the record itself                           |
@@ -36,7 +46,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [process-poll](process-poll.md)                   | a process table inspected to wait on magus work the lock already reports                          |
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused               |
 | [raw-tool](raw-tool.md)                           | a toolchain command a spell already wraps, run outside the cache                                  |
-| [read-navigation](read-navigation.md)             | a whole read of a mapped Go or Markdown file over 120 lines                                       |
+| [read-navigation](read-navigation.md)             | a whole read of a Go, Buzz or Markdown file over 120 lines                                        |
 | [scripted-rewrite](scripted-rewrite.md)           | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                |
 | [search-translation](search-translation.md)       | a text search whose pattern a graph query provably answers with the same entities                 |
 | [sed-in-place](sed-in-place.md)                   | `sed -i`, whose two spellings destroy each other's work across platforms                          |
@@ -54,31 +64,37 @@ name is the entry below. `magus describe rules` prints the same list.
 
 ## Explains
 
-| Rule                                      | Catches                                                                                        |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [capture-filter](capture-filter.md)       | a filter over a run capture or log, which cuts the failure block apart                         |
-| [checkpoint-state](checkpoint-state.md)   | a command reaching for a tree's identity, which a revision alone cannot give                   |
-| [focus](focus.md)                         | a read or write outside the paths the running job declared                                     |
-| [gate-repeat](gate-repeat.md)             | the gate run again soon after it passed, repeating work already done                           |
-| [generated-write](generated-write.md)     | a hand edit to a declared output, which the next run overwrites                                |
-| [graph-pipe](graph-pipe.md)               | a read-only graph verb piped into a text filter, when magus projects the record itself         |
-| [graph-stale](graph-stale.md)             | a graph read while the index is older than the sources it describes                            |
-| [hook-wiring](hook-wiring.md)             | a write to the host wiring that decides whether these rules run at all                         |
-| [installed-skill](installed-skill.md)     | a write to an installed skill copy, which re-installing discards                               |
-| [instruction-write](instruction-write.md) | a write to a cross-host instruction file, which every session loads whole                      |
-| [lease-invalid](lease-invalid.md)         | a call naming a lease this workspace's job store does not declare                              |
-| [lease-terminal](lease-terminal.md)       | a call naming a lease whose row has already finished                                           |
-| [leased-path](leased-path.md)             | a write into paths a running lease owns, by a caller that names no lease                       |
-| [new-file](new-file.md)                   | a new file in a directory whose naming has settled                                             |
-| [new-source-dir](new-source-dir.md)       | a new file that opens a directory, which is a boundary rather than a file                      |
-| [precedent-search](precedent-search.md)   | a hunt for one distinctive name, which refs answers with verified sites                        |
-| [push-gate](push-gate.md)                 | a push the run log does not prove ungated, which names the gate and lets it through            |
-| [read-symbol](read-symbol.md)             | a bounded read inside one indexed declaration, which refs --definition --source prints checked |
-| [regen-source](regen-source.md)           | a hand edit to a file a target regenerates                                                     |
-| [revert-classify](revert-classify.md)     | a revert that has not classified what it is reverting                                          |
-| [scope-drift](scope-drift.md)             | a write into a project this session has no dependency edge to                                  |
-| [skill-source](skill-source.md)           | a write to an installed skill copy rather than to its source                                   |
-| [source-read](source-read.md)             | an unbounded source read the symbol index has already answered                                 |
-| [split-run](split-run.md)                 | the same target run again on a different project set, as a separate call                       |
-| [stage-classify](stage-classify.md)       | staging without classifying, when generated and source differ                                  |
-| [unleased-write](unleased-write.md)       | a write magus cannot attribute while a fleet is running                                        |
+| Rule                                        | Catches                                                                                        |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [capture-filter](capture-filter.md)         | a filter over a run capture or log, which cuts the failure block apart                         |
+| [checkpoint-state](checkpoint-state.md)     | a command reaching for a tree's identity, which a revision alone cannot give                   |
+| [dependency-install](dependency-install.md) | a raw package install that the cached install target already runs                              |
+| [dependency-update](dependency-update.md)   | a raw dependency update outside a target's update charm                                        |
+| [echo-on-success](echo-on-success.md)       | an `&& echo` that restates what the exit status already says                                   |
+| [focus](focus.md)                           | a read or write outside the paths the running job declared                                     |
+| [gate-repeat](gate-repeat.md)               | the gate run again soon after it passed, repeating work already done                           |
+| [generated-write](generated-write.md)       | a hand edit to a declared output, which the next run overwrites                                |
+| [graph-pipe](graph-pipe.md)                 | a read-only graph verb piped into a text filter, when magus projects the record itself         |
+| [graph-stale](graph-stale.md)               | a graph read while the index is older than the sources it describes                            |
+| [hook-wiring](hook-wiring.md)               | a write to the host wiring that decides whether these rules run at all                         |
+| [installed-skill](installed-skill.md)       | a write to an installed skill copy, which re-installing discards                               |
+| [instruction-write](instruction-write.md)   | a write to a cross-host instruction file, which every session loads whole                      |
+| [lease-invalid](lease-invalid.md)           | a call naming a lease this workspace's job store does not declare                              |
+| [lease-state](lease-state.md)               | a leased write while its row reports a diverged base, a re-entered path, or a bad pattern      |
+| [lease-terminal](lease-terminal.md)         | a call naming a lease whose row has already finished                                           |
+| [leased-path](leased-path.md)               | a write into paths a running lease owns, by a caller that names no lease                       |
+| [new-file](new-file.md)                     | a new file in a directory whose naming has settled                                             |
+| [new-source-dir](new-source-dir.md)         | a new file that opens a directory, which is a boundary rather than a file                      |
+| [precedent-search](precedent-search.md)     | a hunt for one distinctive name, which refs answers with verified sites                        |
+| [push-gate](push-gate.md)                   | a push the run log does not prove ungated, which names the gate and lets it through            |
+| [read-symbol](read-symbol.md)               | a bounded read inside one indexed declaration, which refs --definition --source prints checked |
+| [regen-source](regen-source.md)             | a hand edit to a file a target regenerates                                                     |
+| [revert-classify](revert-classify.md)       | a revert that has not classified what it is reverting                                          |
+| [scope-drift](scope-drift.md)               | a write into a project this session has no dependency edge to                                  |
+| [skill-source](skill-source.md)             | a write to an installed skill copy rather than to its source                                   |
+| [source-read](source-read.md)               | an unbounded source read the symbol index has already answered                                 |
+| [split-run](split-run.md)                   | the same target run again on a different project set, as a separate call                       |
+| [stage-classify](stage-classify.md)         | staging without classifying, when generated and source differ                                  |
+| [stdin-closed](stdin-closed.md)             | shell commands run with stdin at end-of-file, said once per session                            |
+| [timed-magus](timed-magus.md)               | `time` around a silent magus run, which already reports its own durations                      |
+| [unleased-write](unleased-write.md)         | a write magus cannot attribute while a fleet is running                                        |

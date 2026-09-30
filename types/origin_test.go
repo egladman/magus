@@ -20,9 +20,9 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 		{Origin{User: "eli", EntryPoint: EntryPointCLI}, "eli"},
 		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1"}, "eli via claude-code"},
 		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1", Agent: "a1b2"}, "eli via claude-code via agent a1b2"},
-		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
-		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Class: ClassOperator, ID: "0badf00d"}}, "eli via claude-code via the operator token"},
-		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassShare, ID: "9b2e04aa"}}, "eli via share link 9b2e04aa"},
+		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
+		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Kind: KindOperator, ID: "0badf00d"}}, "eli via claude-code via the operator token"},
+		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Kind: KindShare, ID: "9b2e04aa"}}, "eli via share link 9b2e04aa"},
 		{Origin{User: "eli", EntryPoint: EntryPointServer}, "server"},
 		{Origin{Host: "codex"}, "codex"},
 		{Origin{}, "unattributed"},
@@ -37,7 +37,7 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
 	t.Parallel()
 	o := Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Agent: "a1b2",
-		Credential: Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "laptop", Grant: GrantConnector}}
+		Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: GrantConnector}}
 	for _, name := range []string{"eli", "claude-code", "a1b2", "stored", "3fa9c1d2", "laptop", "mcp"} {
 		assert.True(t, o.Names(name), name)
 	}

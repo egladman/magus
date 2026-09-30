@@ -1,23 +1,23 @@
 import "magus";
-// The shared toolchain windows; see tools/toolchain-policy.buzz for why they are a
+// The shared toolchain windows; see hack/toolchain-policy.buzz for why they are a
 // module rather than an export on this file.
-import "./tools/toolchain-policy" as policy;
-import "./tools/drift" as drift;
+import "./hack/toolchain-policy" as policy;
+import "./hack/drift" as drift;
 // The optional half of toolchain observation: the `tools` window above is the gate
 // that can fail a build and makes no network calls; this reports when a declared
 // window has gone stale. Aliased `toolchains` because a module and a target function
 // cannot share a name - the alias would shadow and the call fails with "null is not
 // callable" at run time.
-import "./tools/toolchain" as toolchains;
+import "./hack/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
-import "./tools/commits" as commits;
-import "./tools/changelog" as changelog;
+import "./hack/commits" as commits;
+import "./hack/changelog" as changelog;
 // The advisory verdict `security` reaches; console/ and docs/ share it.
-import "./tools/advisories" as advisories;
-// This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
+import "./hack/advisories" as advisories;
+// This repository's own git hooks, hack/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
-// This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
-import "./tools/policy/guard" as agentpolicy;
+// This repository's rules for the agents that work on it; see hack/policy/guard.buzz.
+import "./hack/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
@@ -80,10 +80,11 @@ import "project/libs/testlayout";
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
-// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/cursor";`,
-// declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
-// the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
-// would leave magus.lock with nothing to pin and every load of this magusfile failing.
+// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/harness/cursor";`,
+// declared in magus.yaml and pinned by spell-lock:update) once a release's spell-publish
+// has published them and the GHCR packages are public (docs/reference/remote-spells.md).
+// Until then a switch would leave magus.lock with nothing to pin and every load of this
+// magusfile failing.
 import "spells/harness/cursor";
 import "spells/harness/codex";
 import "spells/harness/claude-code" as claude;
@@ -115,6 +116,12 @@ if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
 if (os\env("CI_PROVIDER") == "github-actions") {
     magus\ci.provider(github);
 }
+// endoflife.date answers when each installed toolchain's release cycle ends. Asked only by
+// `magus describe tools` and magus\tools(), never by a build, and not at all under
+// MAGUS_OFFLINE; doctor reads the answer describe tools stored.
+import "spells/endoflife-date" as eol;
+magus\lifecycle.provider(eol);
+
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);
@@ -134,6 +141,10 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
+    // The handlers import proto/gen/go. **/*.go keys on the stubs' bytes, but only this
+    // edge puts a .proto edit in this project's affected set, orders proto's generate
+    // first, and keeps proto inside a lease focused here.
+    "depends_on": ["proto"],
     "spells": [go, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no
@@ -157,7 +168,7 @@ magus\project({
     //     agent-bench-report, both skip_cache, so the LICENSE argument holds for all of
     //     them at once. The one exception is declared above: the bench package's own
     //     testdata, which `go test ./...` reads.
-    //   - tools/testdata-upstream/*.json, which arrived with the registry and which
+    //   - hack/testdata-upstream/*.json, which arrived with the registry and which
     //     nothing in the tree references today.
     //
     // The root .gitattributes is a fifth case and never appears: magus writes it FROM
@@ -213,15 +224,13 @@ magus\project({
         // make a project read its own product as a source.
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
-        "internal/registry/testdata/*",
         // benchmarks/agent carries no go.mod, so it is part of THIS module and
         // `go test ./...` runs the package that reads these.
         "benchmarks/agent/internal/bench/testdata/*",
-        // Go embeds both key rings INTO the binary, so rotating a key changes what
+        // Go embeds the release key ring INTO the binary, so rotating a key changes what
         // every build produces while matching no glob above: an embedded JSON is
         // neither *.go nor *.txtar. This is MGS1028's silent half at its worst - the
         // artifact differs and the cache cannot tell.
-        "internal/registry/registry-keys.json",
         "internal/selfupdate/release-keys.json",
     ],
     "targets": {
@@ -258,8 +267,7 @@ magus\project({
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
-        "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},
-        // NO skip_cache, and the reason it used to carry is now an input instead. The
+        "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},        // NO skip_cache, and the reason it used to carry is now an input instead. The
         // answer still depends on trivy's vulnerability database rather than on this tree
         // alone, which is why a hit once reported yesterday's CVEs against today's image;
         // the docker spell now declares an observe probe on trivy, so the database's own
@@ -466,16 +474,12 @@ fun ld_flags() > str !> any {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
-    // The compiled built-in spells are go:embed'd into this binary, so the link has to
-    // happen AFTER they are regenerated. The cache key cannot express that on its own:
-    // spells/**/*.buzz is a project source, so editing a spell does invalidate this
-    // target, but the .bo it produces is an OUTPUT and never enters the key. Build before
-    // regenerating and the unchanged key then replays that binary - which is how a magus
-    // came out missing two tools its typescript spell had just been given. Ordering the
-    // dependency is the fix; declaring the .bo as an input is not, because ctx.readsFiles
+    // The spell type mirrors (internal/spell/gen/types) are go:embed'd into this binary
+    // and are an OUTPUT, so they never enter this key: the link has to happen AFTER they
+    // are regenerated. Declaring them as an input is not the fix, because ctx.readsFiles
     // REPLACES a target's footprint rather than adding to it, and would drop **/*.go.
     ctx.needs(spells_generate);
-    // The stamp is read AFTER spells_generate, so it records the bytecode this link embeds.
+    // The stamp is read AFTER spells_generate, so it records the declarations this link embeds.
     // The guard policy compares it with the checkout to say when ./magus is stale.
     final stamp = agentpolicy\buildStamp(".");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
@@ -1046,7 +1050,7 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // On a change it fails only on what the change introduced, unless args carry
-    // `--inherited=fatal` (tools/advisories.buzz). Read first so a bad argument fails
+    // `--inherited=fatal` (hack/advisories.buzz). Read first so a bad argument fails
     // before generate runs.
     final inheritedFatal = advisories\inheritedFatal(args);
     // govulncheck loads PACKAGES, so it parses every .go file this target's sources
@@ -1101,7 +1105,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
               mcp_tools_generate, config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
@@ -1134,7 +1138,7 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
 
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
-// tools/commits.buzz. Pass a title after `--` to check one by hand.
+// hack/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problem = commits\problem(title);
@@ -1146,7 +1150,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 
 // Fails a feat, fix, perf or breaking pull request that changes shipped code without adding
 // a changelog fragment under changes/unreleased/, and any pull request whose fragment is
-// malformed. tools/changelog.buzz holds the rule and decides which paths ship. The title
+// malformed. hack/changelog.buzz holds the rule and decides which paths ship. The title
 // comes from the event under gha; to check a branch by hand, pass the title after `--`.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-changelog");
@@ -1174,17 +1178,17 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
 }
 
-// Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the
+// Installs a shim in git's hooks directory for every hack/git-hooks/<hook>.buzz, so the
 // hooks are reviewed and versioned like any other source. Without rw it only reports what
 // it would change. To add a hook, add the Buzz file and rerun this; spells/git/hooks.buzz
 // has the contract.
 export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\install(ctx, dir: "tools/git-hooks");
+    githooks\install(ctx, dir: "hack/git-hooks");
 }
 
 // Deletes the shims git_hooks_install wrote, and no hook anything else wrote.
 export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\remove(ctx, dir: "tools/git-hooks");
+    githooks\remove(ctx, dir: "hack/git-hooks");
 }
 
 // Regenerates everything derived from the boundary registry: the runtime boundary list
@@ -1198,12 +1202,19 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
+//
+// gen/ also holds the package's hand-written tests and types_generate's boundary files;
+// the exclusions keep both out of this target's outputs, so the tests read as sources
+// and replay never touches either. The hand-maintained VM runtime the trampolines call
+// lives beside gen/, in a package of its own.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("internal/interp/bindings/gen/*.go");
+    ctx.writesFiles("internal/interp/bindings/gen/*.go",
+        "!internal/interp/bindings/gen/*_test.go",
+        "!internal/interp/bindings/gen/boundary_*.go");
     proc\exec("go", ["generate", "./std/..."]);
 }
 
@@ -1258,7 +1269,7 @@ export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("internal/handler/mcp/gen/registry.go");
     proc\exec("go", ["generate", "./internal/handler/mcp"]);
@@ -1281,29 +1292,29 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
     // of the two has to go first.
     ctx.needs(types_generate, spells_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz");
     ctx.writesFiles("internal/job/gen/*.json");
     proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen),
-// the Buzz value-type mirrors (internal/spell/gen/types) and the per-module
-// host declarations (internal/spell/gen/decls), all driven by the
-// go:generate directives in internal/spell.
+// Regenerates the Buzz value-type mirrors (internal/spell/gen/types) and the
+// per-module host declarations (internal/spell/gen/decls), both driven by the
+// go:generate directives in internal/spell. The built-in spells themselves need no
+// generation: they ship as their spells/<dir> source.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 //
-// internal/spell go:embeds all three trees, and cmd/magus-utils imports internal/spell,
+// internal/spell go:embeds both trees, and cmd/magus-utils imports internal/spell,
 // so every generator that runs magus-utils compiles them. Each declares the trees as reads
 // and needs this target, and MGS4008 refuses a run where one does not. A compile beside a
 // replay of these files failed with "pattern gen/types/<name>.buzz: no matching files
 // found".
 export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
-    ctx.writesFiles("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+    ctx.writesFiles("internal/spell/gen/types/*.buzz",
                     "internal/spell/gen/decls/*.buzz");
     proc\exec("go", ["generate", "./internal/spell/..."]);
 }
@@ -1317,7 +1328,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
               bindings_generate, config_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
     ctx.writesFiles("**/gen/mocks/*.go");
@@ -1356,7 +1367,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // pattern built at run time - from a loop, or even from string interpolation - is
 // invisible to it, flagged as a computed footprint argument rather than silently
 // accepted. So the name list is written out per destination, and lint-files
-// (tools/lint/skills-generate-declares-every-shipped-skill.buzz) keeps it in step with
+// (hack/lint/skills-generate-declares-every-shipped-skill.buzz) keeps it in step with
 // internal/agent/skills: adding a skill without touching this fails there rather than
 // shipping an installed file magus calls hand-editable.
 //
@@ -1431,7 +1442,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
     ctx.writesFiles("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
@@ -1511,36 +1522,49 @@ fun publish_graph(ctx: magus\Context) > void !> any {
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
-// Publishes each spell below as an OCI artifact, so a workspace imports it by registry
-// path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml
-// and pinned in its magus.lock) and it versions apart from the binary. It packs only
-// tracked files, so an unchanged spell republishes to the digest it already had. The
-// key is the repository name under GHCR_SPELLS.
+// Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged
+// with the release version, so a workspace imports it by registry path
+// (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml and
+// pinned in its magus.lock) and `spell pull magus/spell/<name>`'s origin stamp names a
+// digest that exists. The list and each artifact come from the binary (`spell ls
+// magus/spell`), never from a map kept here, and an artifact's digest follows its files
+// alone, so an unchanged spell republishes to the digest it already had.
 //
-// cd is the deliver switch: without it each spell is built and its digest printed, and
-// nothing leaves the machine. The spell sources are declared inputs, so a change under
-// spells/harness selects this target through the graph and no workflow names it.
+// cd is the deliver switch: without it each spell's pinned reference is printed and
+// nothing leaves the machine. release.yaml runs it with cd on a release tag; nothing
+// else selects it.
 export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
-    final dirs = {
-        "claude-code": "spells/harness/claude-code",
-        "codex": "spells/harness/codex",
-        "cursor": "spells/harness/cursor",
-        "opencode": "spells/harness/opencode",
-    };
-    ctx.readsFiles("spells/harness/**/*");
+    final listed = json\parse(magus\cmd("spell", args: ["ls", "magus/spell", "-o", "json"],
+        opts: {"quiet": true}).stdout);
+    final reg = GHCR_SPELLS;
+    var shipped = mut {<str: str>};
+    foreach (s in listed["spells"]) {
+        final name = "{s["name"]}";
+        final ref = "{s["reference"]}";
+        // The binary stamps ejected copies with its own repository; publishing anywhere
+        // else would leave every stamp naming an artifact nobody pushed.
+        if (!ref.startsWith(reg.repository + "/" + name + "@")) {
+            throw "spell-publish: magus ships " + name + " as " + ref + ", outside GHCR_SPELLS ("
+                + reg.repository + "); the two must name one repository";
+        }
+        shipped[name] = ref;
+    }
     if (!ctx.hasCharm("cd")) {
-        foreach (_, dir in dirs) {
-            magus\cmd("spell", args: ["build", dir]);
+        foreach (_, ref in shipped) {
+            magus\log.info(ref);
         }
         return;
     }
-    final reg = GHCR_SPELLS;
-    final tag = commit();
+    final tag = exact_release_tag();
+    if (tag == "") {
+        throw "spell-publish: HEAD is not on a release tag, and each spell is published under "
+            + "the release version. Tag the release first; without cd this prints what would publish.";
+    }
     final user = magus\secret.read(reg.user_ref);
     final token = magus\secret.read(reg.token_ref);
-    foreach (name, dir in dirs) {
-        magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
-            opts: {"stdin": token});
+    foreach (name, _ in shipped) {
+        magus\cmd("spell", args: ["push", "magus/spell/" + name, reg.repository + "/" + name + ":" + tag,
+            "--username", user], opts: {"stdin": token});
     }
 }
 
@@ -1595,7 +1619,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // longer hides the answer.
     var dirtyBefore: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
-    final before = drift\hashes(dirtyBefore);
+    // VCS deliberately collapses a pre-existing untracked directory to one path. Keep
+    // that boundary: recursive drift hashing belongs to declared generated directories,
+    // not to arbitrary user trees such as evals/node_modules.
+    final before = drift\vcsHashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.hasCharm("rw")) { return; }
@@ -1608,7 +1635,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // compare it always lands on the dev-build verdict.
     var dirtyNow: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
-    final changed = drift\changedSince(before, dirtyNow);
+    final changed = drift\vcsChangedSince(before, dirtyNow);
     if (changed.len() > 0) {
         final detail = ": " + changed.join(", ");
         // Print the diff, not just the names. This gate fires where its reader has a
@@ -2790,7 +2817,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //   */testdata/*                      hand-authored corpora and goldens the tests
     //                                     beside them read; *.go and *.txtar do not cover
     //                                     a .txt, .jsonl, .golden or a fixture .json
-    //   internal/{registry,selfupdate}    the two go:embed'd key rings, which are a
+    //   internal/selfupdate               the go:embed'd release key ring, which is a
     //                                     compile-time input exactly as the skills
     //                                     directory above is
     //   **/*.lock                         conventions_test holds every line-per-entry
@@ -2802,9 +2829,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "internal/agent/skills/**", "internal/agent/agents-section.md",
                    "docs/reference/codes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
-                   "internal/registry/testdata/*", "internal/queue/testdata/**",
+                   "internal/queue/testdata/**",
                    "benchmarks/agent/internal/bench/testdata/*",
-                   "internal/registry/registry-keys.json",
                    "internal/selfupdate/release-keys.json");
     // The benchmark's embedded price table, named for the same reason go:embed'd key
     // rings are: undeclared, a price edit leaves this key unmoved.
@@ -2815,7 +2841,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
     // The hook templates a reader installs and the site stylesheet: conventions_test and
     // internal/agent's tests read them as code (coverage lines, wiring, the landing palette), never as prose.
-    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.json",
+    ctx.readsFiles("docs/guides/integrations/agents/*.buzz",
+                   "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
@@ -3012,8 +3039,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 //
 // The stronger middle claim - "every spells/<dir>/spell.buzz by the registry compile
 // that doctor's spell-contract check exercises" - is false in both halves. The
-// built-in compile in cmd/magus-utils only sees one directory level and skips anything in
-// its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
+// built-in load compiles only the spells/<dir> directories magus ships, and only those
+// that import no host module; doctor only ever observes spells that REGISTERED, which a
 // spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
@@ -3035,8 +3062,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz",
-        "tools/lint/*.buzz", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/*.buzz", "hack/ci/*.buzz", "hack/policy/*.buzz",
+        "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
@@ -3062,7 +3089,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // releaser.buzz carries the version and release-name rules `release` decides on, and no
     // target ran its test blocks: the two hand-named modules above were the whole root list,
     // so those tests passed for as long as they existed without being run. --embedded
-    // because it is a magusfile import, the same reason tools/advisories.buzz is.
+    // because it is a magusfile import, the same reason hack/advisories.buzz is.
     cover_for("releaser.buzz", ["--embedded"], {});
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
@@ -3072,34 +3099,34 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   `import "assert";`, so they failed the moment anything ran them.
     //                   An embedded stdlib module, so --embedded like the spells.
     //
-    //   tools/*.buzz    registry.buzz did not PARSE. Three steps of
-    //                   .github/workflows/registry.yaml invoke it as
-    //                   `magus buzz tools/registry.buzz`, so the registry workflow was
-    //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
+    //   hack/*.buzz     a script a scheduled workflow ran with `magus buzz` did not
+    //                   PARSE, so that workflow was dead with nothing saying so.
     //
-    // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz and gha-queue.buzz are invoked bare by workflows, gha-run.buzz by a
-    // person, pull-requests.buzz and labels.buzz the same way (workflows and the shepherd
-    // skill run them directly), and lint.buzz by lint-files, so those are the ones that
-    // have to survive strict (lint.buzz imports every tools/lint rule, so its run is
-    // theirs); advisories, drift and toolchain-policy are magusfile imports and therefore
-    // always embedded, and running THEM strict would fail a top-level `if` or an unlabeled
+    // The MODE is per file, not per directory, because hack/ is not uniform. A script
+    // there is run bare, by a workflow, a person or lint-files, so strict is the default
+    // and a new script is gated the way it runs (lint.buzz imports every hack/lint rule,
+    // so its run is theirs). The named exceptions are magusfile imports and therefore
+    // always embedded; running THEM strict would fail a top-level `if` or an unlabeled
     // second argument that is legal everywhere they actually load - a red for a defect
-    // that does not exist. (toolchain.buzz has no importer and no invoker at all; it is
-    // gated embedded on the assumption it is meant to be one.)
+    // that does not exist.
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
-    foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz" or mod.value == "tools/gha-run.buzz" or mod.value == "tools/lint.buzz"
-            or mod.value == "tools/pull-requests.buzz" or mod.value == "tools/labels.buzz") {
-            cover_for(mod.value, [], {});
-        } else {
+    final embedded = ["hack/advisories.buzz", "hack/changelog.buzz", "hack/commits.buzz",
+        "hack/drift.buzz", "hack/index.buzz", "hack/toolchain-policy.buzz", "hack/toolchain.buzz"];
+    foreach (mod in fs\glob("hack/*.buzz")) {
+        if (embedded.indexOf(mod.value) != null) {
             cover_for(mod.value, ["--embedded"], {});
+        } else {
+            cover_for(mod.value, [], {});
         }
     }
-    // The agent policy is a magusfile import like the tools above it.
-    foreach (mod in fs\glob("tools/policy/*.buzz")) {
+    // Workflow steps run bare, so they are gated strict.
+    foreach (mod in fs\glob("hack/ci/*.buzz")) {
+        cover_for(mod.value, [], {});
+    }
+    // The agent policy is a magusfile import like the embedded scripts above it.
+    foreach (mod in fs\glob("hack/policy/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
@@ -3116,9 +3143,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // to name three spell sources by hand, which silently left `spells/aws/s3-cache` and
     // `spells/onepassword` under NO gate at all: neither is imported by any magusfile, so
     // neither ever registers for doctor's spell-contract check, and neither reaches the
-    // built-in compile in cmd/magus-utils either - that scanner reads `spells/<dir>/spell.buzz`
-    // one level deep, so a nested `aws/s3-cache` is invisible to it, and `onepassword` is
-    // named in its workspaceLocalSpells skip list. A hand-maintained list reproduces exactly
+    // built-in load either - that reads only the `spells/<dir>` directories magus ships, so
+    // a nested `aws/s3-cache` is invisible to it, and `onepassword` imports a host module,
+    // so it ships as source and never loads as a built-in. A hand-maintained list reproduces exactly
     // that failure on the next spell someone adds, so match every source instead and let a
     // new spell be covered by existing.
     //
@@ -3209,19 +3236,21 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // Holds the repository's non-Go files to the conventions no off-the-shelf linter
 // checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the
 // installed-skill declarations and the landing page's headline rotator. Each rule and
-// its exemptions live in tools/lint/<rule>.buzz, and tools/lint.buzz runs them.
+// its exemptions live in hack/lint/<rule>.buzz, and hack/lint.buzz runs them.
 //
 // The footprint is exactly what the rules read plus the linter's own source, and
-// tools/lint.buzz reports any drift between the two. Nested-project files are named by
+// hack/lint.buzz reports any drift between the two. Nested-project files are named by
 // path, because a tree glob here stops at a nested project's directory; the magusfile
 // rules read every project's magusfile through magus\targets().
 export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    ctx.readsFiles("tools/lint.buzz", "tools/lint/*.buzz",
+    ctx.readsFiles("hack/lint.buzz", "hack/lint/*.buzz",
                    // provider-io-is-buzz's own reads(): the Buzz files the boundary's
                    // table names or this project owns near them, not "**/*.buzz",
                    // which would reach into every nested project's own magusfile.
-                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "tools/**/*.buzz",
+                   "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
+                   // hack-scripts-start-with-a-verb checks every script is listed here.
+                   "hack/README.md",
                    ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
@@ -3241,7 +3270,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
                    "docs/site/landing.buzz", "docs/src/styles/site.css");
-    magus\cmd("buzz", args: ["tools/lint.buzz"]);
+    magus\cmd("buzz", args: ["hack/lint.buzz"]);
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,

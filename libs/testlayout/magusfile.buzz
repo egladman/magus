@@ -13,8 +13,8 @@
 // `golangci-lint custom`, which reads the .custom-gcl.yml beside this magusfile.
 
 import "magus";
-import "../../tools/drift" as drift;
-import "../../tools/index" as index;
+import "../../hack/drift" as drift;
+import "../../hack/index" as index;
 
 // go spell claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration - magus binds the magusfile driver to every project.
@@ -43,7 +43,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in tools/index.buzz.
+// body and the reasons for them are in hack/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",

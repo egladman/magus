@@ -111,6 +111,21 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 		"the watermark was lost because the save wanted one fixed temp path")
 }
 
+// Two Stores over one state dir (the server and a check-review job) each attach before
+// the other saves. The one saving second holds a set that never saw the first one's
+// thread, and saving it must not mark that thread new again: the watermark only grows.
+func TestSessionSeenWatermarkNeverRegresses(t *testing.T) {
+	dir := t.TempDir()
+	a, b := NewStore(dir), NewStore(dir)
+	a.Attach("/w", "working", types.Diff{}, "")
+	b.Attach("/w", "working", types.Diff{}, "")
+
+	a.MarkThreadsSeen("/w", []string{"t1"})
+	b.MarkThreadsSeen("/w", []string{"t2"})
+
+	assert.Equal(t, []string{"t1", "t2"}, NewStore(dir).LoadSeenThreads())
+}
+
 func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, mkdirAllWrite(filepath.Join(dir, "review", "viewed.json"), "{not json"))

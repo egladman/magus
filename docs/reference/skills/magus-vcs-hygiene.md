@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9855
-skill_short_bytes: 7017
+skill_full_bytes: 9989
+skill_short_bytes: 7210
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `c36be70dcba2` |
+| `skill-content` | `fd9d88e57422` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -68,7 +68,7 @@ Feed every changed or conflicting path to magus in one call:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -131,7 +131,7 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\ref() + " " + vcs\commit().short); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
 
 Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
@@ -144,8 +144,9 @@ Annotate it `> Commit` for compile-checked field access.
 
 `vcs\ref()` is the movable name pointing at the current revision, and it is
 deliberately not called `branch`: it is a git branch, a Mercurial named branch,
-or a Jujutsu bookmark depending on the backend, and jj's working copy is usually
-an anonymous change, so `""` is an ordinary answer there rather than a failure.
+or a Jujutsu bookmark depending on the backend. It is `null` when no name points
+at the revision: a detached git HEAD, or jj's working copy, which is usually an
+anonymous change, so `null` is an ordinary answer there rather than a failure.
 Run `magus describe module vcs` for the current method list before reaching for
 anything not named here.
 
@@ -193,8 +194,9 @@ Then, whatever the backend:
    agent's untracked work.
 2. Restore PER FILE, never whole-tree.
 
-`magus_affected_explain` {project} answers why a specific project is in the
-affected set.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set. `client`
+(`magus\impact`) lists the changed files per seed project.
 ````
 
 
@@ -223,7 +225,7 @@ each against the workspace's declared globs:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -300,7 +302,7 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\ref() + " " + vcs\commit().short); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
 
 Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
@@ -313,8 +315,9 @@ Annotate it `> Commit` for compile-checked field access.
 
 `vcs\ref()` is the movable name pointing at the current revision, and it is
 deliberately not called `branch`: it is a git branch, a Mercurial named branch,
-or a Jujutsu bookmark depending on the backend, and jj's working copy is usually
-an anonymous change, so `""` is an ordinary answer there rather than a failure.
+or a Jujutsu bookmark depending on the backend. It is `null` when no name points
+at the revision: a detached git HEAD, or jj's working copy, which is usually an
+anonymous change, so `null` is an ordinary answer there rather than a failure.
 Run `magus describe module vcs` for the current method list before reaching for
 anything not named here.
 
@@ -380,9 +383,9 @@ Then, whatever the backend:
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.
 
-`magus_affected_explain` {project} answers why a specific project is in the
-affected set (the changed files and dependency chains that pulled it in) when
-the result surprises you.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set, when the result surprises you. `client`
+(`magus\impact`) lists the changed files per seed project.
 ````
 
 

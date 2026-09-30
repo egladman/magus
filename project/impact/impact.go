@@ -102,7 +102,7 @@ func fromGraphCoverage(c *knowledge.CoverageFacts) *Coverage {
 // overlays are appended, and absent data degrades to a Note. A nil store or nil res is a
 // no-op.
 //
-// The report shape is a DOMAIN type (types.ImpactResult and friends): magus.affectedImpact
+// The report shape is a DOMAIN type (types.ImpactResult and friends): magus\impact
 // hands it to a magusfile, so a caller reads the affected set as values rather than
 // decoding JSON.
 func Enrich(res *types.ImpactResult, store SymbolStore) {

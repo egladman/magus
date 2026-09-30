@@ -4,7 +4,7 @@
 # `magus run <target>` settles the result afterwards. Users never type this command
 # themselves - `magus init` wires it into .git/config (or .hgrc) once per clone - so
 # what is worth pinning here is the usage/argument contract. The resolution itself is
-# unit-tested in merge_driver_test.go, which needs a workspace whose target declares
+# unit-tested in internal/settle/driver_test.go, which needs a workspace whose target declares
 # the conflicted path as its own output.
 
 # Bare `magus merge-driver` is a usage error (exit 2). It used to exit 0, which for a

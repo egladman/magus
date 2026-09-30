@@ -6,7 +6,7 @@
 //   import "spells/git/hooks" as githooks;
 //
 //   export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
-//       githooks\install(ctx, dir: "tools/git-hooks");
+//       githooks\install(ctx, dir: "hack/git-hooks");
 //   }
 //
 // A module beside a future git spell rather than a spell: a spell op is one forked
@@ -228,8 +228,8 @@ export fun remove(ctx: magus\Context, dir: str) > void !> any {
 }
 
 test "a shim names its script on the marker line" {
-    final body = shim("commit-msg", script: "tools/git-hooks/commit-msg.buzz", include: "");
-    std\assert(scriptOf(body) == "tools/git-hooks/commit-msg.buzz", message: "marker round trip");
+    final body = shim("commit-msg", script: "hack/git-hooks/commit-msg.buzz", include: "");
+    std\assert(scriptOf(body) == "hack/git-hooks/commit-msg.buzz", message: "marker round trip");
     std\assert(scriptOf("#!/bin/sh\necho mine\n") == null, message: "a person's hook is not ours");
     std\assert(scriptOf("") == null, message: "an empty hook is not ours");
 }
@@ -251,7 +251,7 @@ test "the shim runs the checkout's copy with the project as the include path" {
 
 test "a dir must stay inside the project" {
     final at = Layout{hooksDir = "/repo/.git/hooks", prefix = "sub/"};
-    std\assert(scriptDir(at, dir: "tools/git-hooks/") == "sub/tools/git-hooks", message: "prefix joined, slash trimmed");
+    std\assert(scriptDir(at, dir: "hack/git-hooks/") == "sub/hack/git-hooks", message: "prefix joined, slash trimmed");
     foreach (bad in ["", "/etc", "../up", "a/../../up"]) {
         final got = scriptDir(at, dir: bad) catch "refused";
         std\assert(got == "refused", message: "refuses `{bad}`");

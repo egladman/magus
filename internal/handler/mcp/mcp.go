@@ -5,24 +5,23 @@ package mcp
 // per-tool files) and mounts them on the mark3labs MCP server: allToolDrivers builds
 // the drivers, registerTools pairs each with its descriptor, adapt bridges the
 // unified SpellDriver signature to the server's handler shape, and wrap layers the
-// per-call origin marker, request-scoped logger, stderr banner, and audit record.
+// per-call origin marker, stderr banner, and audit record.
 
 import (
+	"bytes"
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
-	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
@@ -30,32 +29,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type ctxKey int
-
-const keyLogger ctxKey = iota
-
-// withLogger attaches a request-scoped slog.Logger to ctx. toolLogger retrieves it.
-func withLogger(ctx context.Context, log *slog.Logger) context.Context {
-	return context.WithValue(ctx, keyLogger, log)
-}
-
-// toolLogger returns the request-scoped logger when present, falling back to
-// slog.Default(). Call this in tool handlers when surfacing sub-step errors
-// so they appear within the agent-request's visual bracket in stderr.
-func toolLogger(ctx context.Context) *slog.Logger {
-	if log, ok := ctx.Value(keyLogger).(*slog.Logger); ok && log != nil {
-		return log
-	}
-	return slog.Default()
-}
-
-// jsonResult marshals v as compact JSON and wraps it in a text CallToolResult.
+// jsonResult sends v as structured MCP content with a JSON text fallback for
+// clients that only read content blocks. Both carry the same bytes: structured
+// content is the already-encoded JSON, not v handed to mcp-go's own encoder. A
+// payload that is not a JSON object goes out as text alone, since the spec
+// requires structured content to be an object.
 func jsonResult(v any) (*mcplib.CallToolResult, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: marshal result: %w", err)
 	}
-	return mcplib.NewToolResultText(string(b)), nil
+	if t := bytes.TrimSpace(b); len(t) == 0 || t[0] != '{' {
+		return mcplib.NewToolResultText(string(b)), nil
+	}
+	return mcplib.NewToolResultStructured(json.RawMessage(b), string(b)), nil
 }
 
 // paramString reads a string parameter from a InvokeRequest.Params map.
@@ -63,16 +50,6 @@ func paramString(params map[string]any, key, def string) string {
 	if v, ok := params[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
-		}
-	}
-	return def
-}
-
-// paramBool reads a bool parameter from a InvokeRequest.Params map.
-func paramBool(params map[string]any, key string, def bool) bool {
-	if v, ok := params[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
 		}
 	}
 	return def
@@ -98,9 +75,8 @@ func paramFloat(params map[string]any, key string, def float64) float64 {
 type handlerFn func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error)
 
 // adapt converts a SpellDriver into the MCP server's handler signature.
-// Soft errors from Invoke are surfaced as IsError tool results, mirroring the
-// pre-refactor behavior where validation failures returned via
-// NewToolResultError rather than transport errors.
+// Soft errors from Invoke are surfaced as IsError tool results rather than
+// transport errors, so the agent reads the diagnostic.
 func adapt(t spells.Driver) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		resp, err := t.Invoke(ctx, spells.InvokeRequest{Params: req.GetArguments()})
@@ -111,6 +87,23 @@ func adapt(t spells.Driver) handlerFn {
 			return jsonResult(resp.Data)
 		}
 		return mcplib.NewToolResultText(resp.Text), nil
+	}
+}
+
+// declaredParams refuses a call that passes a parameter the tool's descriptor
+// does not declare, which the handler would otherwise ignore without a word.
+func declaredParams(d ToolDescriptor, fn handlerFn) handlerFn {
+	declared := make(map[string]bool, len(d.Params))
+	for _, p := range d.Params {
+		declared[p.Name] = true
+	}
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		for name := range req.GetArguments() {
+			if !declared[name] {
+				return mcplib.NewToolResultError(fmt.Sprintf("%s: unknown parameter %q", d.Name, name)), nil
+			}
+		}
+		return fn(ctx, req)
 	}
 }
 
@@ -139,9 +132,19 @@ func authorize(fn handlerFn) handlerFn {
 	}
 }
 
+// taskSupport is the MCP task support a tool declares. Only client runs long
+// enough to need it: a host that supports tasks runs it without the direct-call
+// bound (hint.ClientCallBound) and cancels it instead.
+var taskSupport = map[string]mcplib.TaskSupport{
+	hint.ToolClient.String(): mcplib.TaskSupportOptional,
+}
+
 // buildMCPTool turns a static ToolDescriptor into an mcplib.Tool.
 func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 	opts := []mcplib.ToolOption{mcplib.WithDescription(d.Description)}
+	if ts, ok := taskSupport[d.Name]; ok {
+		opts = append(opts, mcplib.WithTaskSupport(ts))
+	}
 	for _, p := range d.Params {
 		var propOpts []mcplib.PropertyOption
 		if p.Required {
@@ -159,6 +162,8 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 			opts = append(opts, mcplib.WithNumber(p.Name, propOpts...))
 		case "object":
 			opts = append(opts, mcplib.WithObject(p.Name, propOpts...))
+		case "string_array":
+			opts = append(opts, mcplib.WithArray(p.Name, append(propOpts, mcplib.WithStringItems())...))
 		default:
 			panic(fmt.Sprintf("mcp: tool %q param %q has unknown type %q", d.Name, p.Name, p.Type))
 		}
@@ -169,17 +174,6 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 // allToolDrivers constructs every MCP tool the server exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
 func allToolDrivers(opts Options) []spells.Driver {
-	wsCfg := types.WorkspaceConfig{
-		CacheDir:    opts.Config.Cache.Dir,
-		Concurrency: opts.Config.Concurrency,
-	}
-	// A private job store only when the caller supplied none. The server supplies one
-	// so its two doors (this tool and the console's read route) share a mutex.
-	jobStore := opts.Jobs
-	if jobStore == nil {
-		jobStore = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
-	}
-	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: jobStore}
 	consoleUnavailable := ""
 	if opts.Config.Console.Enabled != nil && !*opts.Config.Console.Enabled {
 		consoleUnavailable = "console.enabled is false"
@@ -187,52 +181,16 @@ func allToolDrivers(opts Options) []spells.Driver {
 		consoleUnavailable = "mcp.address is not loopback"
 	}
 	return []spells.Driver{
-		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
-		&describeFileTool{ws: opts.Magus, next: next},
-		&whereTool{ws: opts.Magus},
-		&affectedExplainTool{ws: opts.Magus},
-		&insightTool{ws: opts.Magus},
-		&runTargetTool{opts: opts},
-		&runAffectedTool{opts: opts},
+		&clientTool{root: opts.Magus.Root(), timeout: hint.ClientCallBound},
 		&buzzTool{root: opts.Magus.Root(), timeout: cmp.Or(opts.Config.TargetTimeout, buzzDefaultTimeout)},
-		&doctorTool{opts: opts},
 		&statusTool{opts: opts},
-		&affectedPlanTool{opts: opts, next: next},
-		&configGetTool{cfg: opts.Config},
-		&queryTool{graph: opts.Magus, next: next},
-		&outputTool{reader: opts.Magus},
-		&explainTool{graph: opts.Magus, next: next},
-		&pathTool{graph: opts.Magus},
-		&statsTool{graph: opts.Magus},
-		&refsTool{graph: opts.Magus},
+		&consoleTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
+		&configTool{cfg: opts.Config},
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
-		&vcsCheckpointTool{ws: opts.Magus},
-		&consolePresentTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
-		&jobTool{store: jobStore, root: opts.Magus.Root(), limits: opts.Config.Jobs, symbols: symbolReader(opts.Magus), observe: job.CheckpointObserver(opts.Magus.Root(), symbolReader(opts.Magus)), resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
-			if strings.TrimSpace(ref) == "" {
-				return types.JobAttempt{}, nil
-			}
-			desc, err := opts.Magus.OutputDescriptorByRef(ref)
-			switch {
-			case err == nil:
-				return types.JobAttempt{Found: true, Ref: ref, Project: desc.Project, Target: desc.Target, Spell: desc.Spell, Failed: desc.Failed, TimestampMs: desc.TimestampMs}, nil
-			case errors.Is(err, fs.ErrNotExist):
-				return types.JobAttempt{}, nil
-			default:
-				return types.JobAttempt{}, err
-			}
-		}},
 	}
 }
 
-// *magus.Magus satisfies the narrow reader interfaces the read-tools depend on,
-// structurally and with no changes to the magus package.
-var (
-	_ outputReader  = (*magus.Magus)(nil)
-	_ graphResolver = (*magus.Magus)(nil)
-)
-
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string, tasks *taskRuns) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -268,7 +226,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, stamp.annotate(authorize(adapt(t)))))
+		srv.AddTool(buildMCPTool(d), tasks.detach(wrap(log, originFn, trailDir, withSecrets, tel, stamp.annotate(authorize(declaredParams(d, adapt(t)))))))
 	}
 	// The loop above only checks Registry -> driver; a driver built into allToolDrivers but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
@@ -292,6 +250,123 @@ func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
 		}
 	}
 	return missing
+}
+
+// taskRunKey marks a context whose call a host runs as an MCP task.
+type taskRunKey struct{}
+
+// runsAsTask reports whether the call on ctx runs as an MCP task, which the host
+// bounds and cancels itself.
+func runsAsTask(ctx context.Context) bool {
+	return ctx.Value(taskRunKey{}) != nil
+}
+
+// taskRuns keeps a call a host runs as an MCP task alive past the request that
+// started it, and cancellable by tasks/cancel.
+//
+// mcp-go derives a task's context from its tools/call request's context, and
+// that one ends when the request returns the task id, so the handler would see
+// a cancelled context almost at once. detach runs the call on a context of its
+// own instead. tasks/cancel names the task by id, which the handler never sees,
+// so the hooks below join the two: the request's tools/call hook and its
+// task-created hook share the request's context, and the handler shares the
+// request's task params.
+type taskRuns struct {
+	mu        sync.Mutex
+	byRequest map[context.Context]*taskRun
+	byParams  map[*mcplib.TaskParams]*taskRun
+	byID      map[string]*taskRun
+}
+
+type taskRun struct {
+	params    *mcplib.TaskParams
+	id        string
+	cancel    context.CancelFunc
+	cancelled bool
+}
+
+func newTaskRuns() *taskRuns {
+	return &taskRuns{
+		byRequest: map[context.Context]*taskRun{},
+		byParams:  map[*mcplib.TaskParams]*taskRun{},
+		byID:      map[string]*taskRun{},
+	}
+}
+
+// hook registers the joins on the server's hooks and task hooks.
+func (r *taskRuns) hook(hooks *server.Hooks, taskHooks *server.TaskHooks) {
+	hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcplib.CallToolRequest) {
+		if req.Params.Task == nil {
+			return
+		}
+		run := &taskRun{params: req.Params.Task}
+		r.mu.Lock()
+		r.byRequest[ctx] = run
+		r.byParams[run.params] = run
+		r.mu.Unlock()
+	})
+	taskHooks.AddOnTaskCreated(func(ctx context.Context, m server.TaskMetrics) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if run, ok := r.byRequest[ctx]; ok {
+			delete(r.byRequest, ctx)
+			run.id = m.TaskID
+			r.byID[m.TaskID] = run
+		}
+	})
+	taskHooks.AddOnTaskCancelled(func(_ context.Context, m server.TaskMetrics) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if run, ok := r.byID[m.TaskID]; ok {
+			run.cancelled = true
+			if run.cancel != nil {
+				run.cancel()
+			}
+		}
+	})
+	// A request that never created a task (refused, or a tool without task support)
+	// leaves nothing behind.
+	forget := func(ctx context.Context) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if run, ok := r.byRequest[ctx]; ok {
+			delete(r.byRequest, ctx)
+			delete(r.byParams, run.params)
+		}
+	}
+	hooks.AddAfterCallTool(func(ctx context.Context, _ any, _ *mcplib.CallToolRequest, _ any) { forget(ctx) })
+	hooks.AddOnError(func(ctx context.Context, _ any, _ mcplib.MCPMethod, _ any, _ error) { forget(ctx) })
+}
+
+// detach runs a task call on a context that outlives its request and ends on
+// tasks/cancel. A direct call passes through unchanged.
+func (r *taskRuns) detach(fn server.ToolHandlerFunc) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if req.Params.Task == nil {
+			return fn(ctx, req)
+		}
+		r.mu.Lock()
+		run := r.byParams[req.Params.Task]
+		delete(r.byParams, req.Params.Task)
+		r.mu.Unlock()
+		if run == nil {
+			return fn(ctx, req)
+		}
+		ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer cancel()
+		r.mu.Lock()
+		run.cancel = cancel
+		if run.cancelled {
+			cancel()
+		}
+		r.mu.Unlock()
+		defer func() {
+			r.mu.Lock()
+			delete(r.byID, run.id)
+			r.mu.Unlock()
+		}()
+		return fn(context.WithValue(ctx, taskRunKey{}, true), req)
+	}
 }
 
 // wrap injects origin markers and emits banner log lines around every tool
@@ -338,16 +413,11 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		if o.UserAgent != "" {
 			reqLog = reqLog.With(slog.String("user_agent", o.UserAgent))
 		}
-		ctx = withLogger(ctx, reqLog)
 
 		reqLog.InfoContext(ctx, "[AGENT] tool called")
 		start := time.Now()
 
 		result, err := fn(ctx, req)
-
-		// Cross-link the result before measuring: a hint is output the agent
-		// reads, so its bytes belong in the output-size metric (its context cost).
-		decorateResult(result, toolName)
 
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
@@ -389,14 +459,14 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		}
 		trail.Append(ctx, trailDir, ev)
 		if tel != nil {
-			// INPUT = the serialized tool arguments; OUTPUT = the response text length
-			// (same bytes captured above). Attribute by tool + outcome only to keep
-			// metric cardinality bounded.
+			// INPUT = the serialized tool arguments; OUTPUT = every byte the agent is
+			// sent, the structured copy of the payload included. Attribute by tool +
+			// outcome only to keep metric cardinality bounded.
 			tel.RecordMCPCall(ctx, observability.MCPCall{
 				Tool:        toolName,
 				Outcome:     ev.Outcome,
 				InputBytes:  reqBytes,
-				OutputBytes: respBytes,
+				OutputBytes: respBytes + structuredBytes(result),
 				Duration:    dur.Seconds(),
 			})
 		}
@@ -434,6 +504,19 @@ func allText(result *mcplib.CallToolResult) string {
 		}
 	}
 	return b.String()
+}
+
+// structuredBytes is the encoded size of a result's structured content, which a
+// client receives beside the text blocks.
+func structuredBytes(result *mcplib.CallToolResult) int64 {
+	if result == nil || result.StructuredContent == nil {
+		return 0
+	}
+	b, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		return 0
+	}
+	return int64(len(b))
 }
 
 // preview returns the first n runes of s, appending an ellipsis marker when it had to cut.

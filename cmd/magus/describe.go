@@ -251,7 +251,7 @@ func declareIndexes(ws types.WorkspaceReader, projects []types.TargetGraphProjec
 	indexes := map[string]string{}
 	for i := range projects {
 		p := ws.Get(projects[i].Path)
-		if p == nil || !slices.Contains(p.AllOutputs(), indexFile) {
+		if p == nil || !slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Pattern == indexFile }) {
 			continue
 		}
 		projects[i].Index = indexFile

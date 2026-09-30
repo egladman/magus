@@ -320,7 +320,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
 				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: go build -o ./magus ./cmd/magus",
+				"  - if that cannot load the tree either: mv magus magus.old, then go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// A release build cannot be the one a checkout outgrew, so it is never told to
 		// bootstrap; the checkout's own build is still a fix.
@@ -347,7 +347,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
 				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: go build -o ./magus ./cmd/magus",
+				"  - if that cannot load the tree either: mv magus magus.old, then go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// The loader is never told the version, and neither side is invented.
 		"a single unknown key with nothing known": {

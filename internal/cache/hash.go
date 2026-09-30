@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -254,13 +255,11 @@ func NewSourceMemo() *SourceMemo {
 	return &SourceMemo{entries: make(map[string]sourceMemoEntry)}
 }
 
-// sourceMemoKey canonicalizes the inputs expandSources depends on. Sorting each
-// list is safe even though hashStepInputs preserves s.Sources' declared order for
-// the KEY LINES it writes elsewhere: expandSources' result is a membership test per
-// file, so two glob lists differing only in order always expand to the same file
-// set, and this key is used only to detect that repetition, never written to the
-// hash itself.
-func sourceMemoKey(root string, sources, outputs, ignoreDirs []string) string {
+// sourceMemoKey canonicalizes the inputs expandSources depends on. Sorting each list is
+// safe because every glob carries its own exclusions: expandSources' result is a
+// membership test per file, so two lists differing only in order expand to the same
+// file set. The key only detects that repetition and is never written to the hash.
+func sourceMemoKey(root string, sources, outputs []types.Glob, ignoreDirs []string) string {
 	var b strings.Builder
 	write := func(ss []string) {
 		sorted := append([]string(nil), ss...)
@@ -271,10 +270,17 @@ func sourceMemoKey(root string, sources, outputs, ignoreDirs []string) string {
 		}
 		b.WriteByte(0)
 	}
+	flat := func(globs []types.Glob) []string {
+		out := make([]string, len(globs))
+		for i, g := range globs {
+			out[i] = strings.Join(append([]string{g.Pattern}, g.Except...), "\x01")
+		}
+		return out
+	}
 	b.WriteString(root)
 	b.WriteByte(0)
-	write(sources)
-	write(outputs)
+	write(flat(sources))
+	write(flat(outputs))
 	write(ignoreDirs)
 	return b.String()
 }
@@ -484,10 +490,21 @@ type relAbs struct{ rel, abs string }
 // rather than a second one is what makes that op inherit root's declared ignore dirs
 // instead of drifting from the set the key was built from.
 //
+// globs and outputGlobs are each one declaration, "!" exclusions and all (see
+// types.ParseGlobs), and a malformed one is an error.
+//
 // Returns root-relative paths only, sorted: a caller building argv for a subprocess that
 // runs IN root wants paths relative to it.
 func ExpandSources(globs []string, root string, outputGlobs, ignoreDirs []string) ([]string, error) {
-	files, err := expandSources(globs, root, outputGlobs, ignoreDirs)
+	sources, err := types.ParseGlobs(globs)
+	if err != nil {
+		return nil, fmt.Errorf("sources: %w", err)
+	}
+	outputs, err := types.ParseGlobs(outputGlobs)
+	if err != nil {
+		return nil, fmt.Errorf("outputs: %w", err)
+	}
+	files, err := expandSources(sources, root, outputs, ignoreDirs)
 	if err != nil {
 		return nil, err
 	}
@@ -503,13 +520,9 @@ func ExpandSources(globs []string, root string, outputGlobs, ignoreDirs []string
 // Output globs are excluded from the walk (output tree is never an input).
 // spellDirs are the non-source directory names the project's resolved spells declare
 // (vendor, node_modules, ...); they extend the core ignore set for this walk.
-func expandSources(globs []string, root string, outputGlobs, spellDirs []string) ([]relAbs, error) {
+func expandSources(globs []types.Glob, root string, outputGlobs []types.Glob, spellDirs []string) ([]relAbs, error) {
 	if len(globs) == 0 {
 		return nil, nil
-	}
-	normalized := make([]string, len(globs))
-	for i, g := range globs {
-		normalized[i] = filepath.ToSlash(g)
 	}
 
 	// A wildcard-free glob names ONE file, so resolve it by stat rather than by the walk
@@ -527,13 +540,14 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// A pattern whose literal prefix NAMES a pruned dir is the same deliberate choice
 	// (internal/spell/gen/types/*.buzz), so it walks that dir alone and matches only
 	// itself; **/*.js still never reaches node_modules.
-	var exact, named []string
-	patterns := normalized[:0:0]
-	for _, g := range normalized {
+	//
+	// Every glob keeps its exclusions whichever route it takes.
+	var exact, named, patterns []types.Glob
+	for _, g := range globs {
 		switch {
-		case !strings.ContainsAny(g, "*?[{"):
+		case types.IsLiteralGlob(g.Pattern):
 			exact = append(exact, g)
-		case namesPrunedDir(g, spellDirs):
+		case namesPrunedDir(g.Pattern, spellDirs):
 			named = append(named, g)
 		default:
 			patterns = append(patterns, g)
@@ -541,17 +555,16 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	}
 	pats := compileGlobs(patterns)
 
-	var exclPats []compiledGlob
+	// An output tree is pruned from the walk wholesale, unless the output's own
+	// exclusions reach into it: an excluded file there is a source like any other.
+	exclPats := compileGlobs(outputGlobs)
 	var prunePrefixes []string
-	if len(outputGlobs) > 0 {
-		exclNorm := make([]string, len(outputGlobs))
-		for i, g := range outputGlobs {
-			exclNorm[i] = filepath.ToSlash(g)
-			if p := staticDirPrefix(exclNorm[i]); p != "" {
-				prunePrefixes = append(prunePrefixes, p)
-			}
+	for _, g := range outputGlobs {
+		if p := staticDirPrefix(g.Pattern); p != "" && !slices.ContainsFunc(g.Except, func(e string) bool {
+			return mayMatchUnder(e, p)
+		}) {
+			prunePrefixes = append(prunePrefixes, p)
 		}
-		exclPats = compileGlobs(exclNorm)
 	}
 
 	// rootLen is the number of bytes to strip from WalkDir paths to get the
@@ -567,26 +580,28 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// dominate allocs there) but a free win on the common small-Sources case.
 	out := make([]relAbs, 0, len(globs))
 
-	for _, rel := range exact {
+	// A literal naming a directory claims its whole tree (types.Glob.Match), so it joins
+	// the walks below, from itself, as deliberately named as a pruned-dir prefix.
+	var literalDirs []types.Glob
+	for _, g := range exact {
+		rel := g.Pattern
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		// Lstat, not Stat: the walk below skips symlinks, and an exact path must not be
 		// the one way a link slips into the hash.
 		fi, err := os.Lstat(abs)
-		if err != nil || fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
+		if err != nil || fi.Mode()&os.ModeSymlink != 0 {
 			// A declared source that does not exist is not an error here: globs are
 			// declared per project and may name a file a given workspace never has.
 			continue
 		}
-		var excluded bool
-		for _, ep := range exclPats {
-			if ep.Match(rel) {
-				excluded = true
-				break
-			}
+		if fi.IsDir() {
+			literalDirs = append(literalDirs, g)
+			continue
 		}
-		if !excluded {
-			out = append(out, relAbs{rel: rel, abs: abs})
+		if g.Excludes(rel) || slices.ContainsFunc(exclPats, func(ep compiledGlob) bool { return ep.Match(rel) }) {
+			continue
 		}
+		out = append(out, relAbs{rel: rel, abs: abs})
 	}
 
 	// walkEntry matches one entry of a walk from start against pats. start itself is
@@ -643,7 +658,11 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// Only a pattern can match during the walk, and each pattern can match only under
 	// its static prefix: console/**/*.ts has no reason to list the rest of the
 	// workspace, and doing so was most of a warm replay's CPU.
-	for _, base := range walkBases(patterns) {
+	bases := make([]string, len(patterns))
+	for i, g := range patterns {
+		bases[i] = g.Pattern
+	}
+	for _, base := range walkBases(bases) {
 		start := root
 		if base != "" {
 			if !walkableBase(root, base, spellDirs, prunePrefixes, false) {
@@ -655,12 +674,19 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 			return nil, err
 		}
 	}
-	for _, g := range named {
-		base := staticDirPrefix(g)
+	walkOwn := func(base string, g types.Glob) error {
 		if !walkableBase(root, base, spellDirs, prunePrefixes, true) {
-			continue
+			return nil
 		}
-		if err := walk(filepath.Join(root, filepath.FromSlash(base)), compileGlobs([]string{g})); err != nil {
+		return walk(filepath.Join(root, filepath.FromSlash(base)), compileGlobs([]types.Glob{g}))
+	}
+	for _, g := range named {
+		if err := walkOwn(staticDirPrefix(g.Pattern), g); err != nil {
+			return nil, err
+		}
+	}
+	for _, g := range literalDirs {
+		if err := walkOwn(g.Pattern, g); err != nil {
 			return nil, err
 		}
 	}
@@ -670,6 +696,17 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// key for a declaration that added no information.
 	out = slices.CompactFunc(out, func(a, b relAbs) bool { return a.rel == b.rel })
 	return out, nil
+}
+
+// mayMatchUnder reports whether pattern can match a path inside dir: every match starts
+// with the pattern's text before its first metacharacter, so it can reach dir's tree
+// only when that text and dir+"/" agree as far as the shorter runs.
+func mayMatchUnder(pattern, dir string) bool {
+	lead := pattern
+	if i := strings.IndexAny(pattern, `*?[{\`); i >= 0 {
+		lead = pattern[:i]
+	}
+	return strings.HasPrefix(dir+"/", lead) || strings.HasPrefix(lead, dir+"/")
 }
 
 // staticDirPrefix returns the static directory prefix of glob before the first

@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -160,19 +161,26 @@ func TestInflightSameTargetTwiceKeepsBothRecords(t *testing.T) {
 	assert.Empty(t, i.Running())
 }
 
-// A killed run's inflight temp file and remote-tier staging directory are collected once
-// stale; a fresh one may belong to a live writer and stays.
+// A killed run's inflight temp file, under its current name or an older binary's, and a
+// remote-tier staging directory are collected once stale; a fresh one may belong to a
+// live writer and stays.
 func TestInflightCollectsStaleLitter(t *testing.T) {
 	dir := t.TempDir()
 	old := time.Now().Add(-2 * staleAfter)
-	tmp := filepath.Join(dir, inflightPrefix+"1.tmp")
-	require.NoError(t, os.WriteFile(tmp, nil, 0o644))
+	tmp := filepath.Join(dir, "."+inflightPrefix+"1.json.tmp.123")
+	olderTmp := filepath.Join(dir, inflightPrefix+"3.tmp")
+	for _, p := range []string{tmp, olderTmp} {
+		require.NoError(t, os.WriteFile(p, nil, 0o644))
+	}
 	staging := filepath.Join(dir, stagingPrefix+"old")
 	require.NoError(t, os.MkdirAll(filepath.Join(staging, "cas"), 0o755))
-	for _, p := range []string{tmp, staging} {
+	for _, p := range []string{tmp, olderTmp, staging} {
 		require.NoError(t, os.Chtimes(p, old, old))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, inflightPrefix+"2.tmp"), nil, 0o644))
+	fresh := []string{"." + inflightPrefix + "2.json.tmp.456", inflightPrefix + "4.tmp"}
+	for _, name := range fresh {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), nil, 0o644))
+	}
 
 	newInflight(dir).takeAbandoned()
 	entries, err := os.ReadDir(dir)
@@ -181,5 +189,19 @@ func TestInflightCollectsStaleLitter(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Equal(t, []string{inflightPrefix + "2.tmp"}, names)
+	assert.Equal(t, fresh, names)
+}
+
+// The record names projects and targets a run is building, so it stays private to its
+// owner on a shared machine.
+func TestInflightRecordIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	i := newInflight(t.TempDir())
+	defer i.start("docs", "generate")()
+
+	fi, err := os.Stat(i.path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }

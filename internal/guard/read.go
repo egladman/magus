@@ -62,22 +62,32 @@ var wholeReaders = map[string]bool{"cat": true, "bat": true, "less": true, "more
 // sedRangeRe is a quiet sed's line-address print: `10,40p`, `10p`, `10,$p`, `10,+5p`.
 var sedRangeRe = regexp.MustCompile(`^(\d+)(?:,(\$|\+?\d+))?p$`)
 
-// parseReadCall reads one invocation as a read of one file. Byte counts, a follow, an
+// parseReadCalls reads one invocation as the files it prints. A whole reader prints every
+// operand, so each is its own read; head, tail and sed are judged only on one file, since
+// their counts and addresses read differently across several. Byte counts, a follow, an
 // in-place flag, a regex address and stdin are shapes this rule does not judge.
-func parseReadCall(c hint.Invocation) (readCall, bool) {
+func parseReadCalls(c hint.Invocation) []readCall {
 	name := path.Base(c.Name)
 	var rc readCall
 	var files []string
 	switch {
 	case wholeReaders[name]:
 		if name == "bat" && hasFlag(c.Args, 'r', "line-range") {
-			return readCall{}, false
+			return nil
 		}
 		files = operands(c.Args, "")
+		if slices.Contains(files, "-") {
+			return nil
+		}
+		out := make([]readCall, len(files))
+		for i, f := range files {
+			out[i] = readCall{path: f}
+		}
+		return out
 	case name == "head" || name == "tail":
 		n, fromLine, rest, ok := lineCountFlag(c.Args)
 		if !ok {
-			return readCall{}, false
+			return nil
 		}
 		files = rest
 		switch {
@@ -88,22 +98,22 @@ func parseReadCall(c hint.Invocation) (readCall, bool) {
 		case name == "tail":
 			rc.tail = n
 		default:
-			return readCall{}, false
+			return nil
 		}
 	case name == "sed":
 		first, last, rest, ok := sedRange(c.Args)
 		if !ok {
-			return readCall{}, false
+			return nil
 		}
 		rc.first, rc.last, files = first, last, rest
 	default:
-		return readCall{}, false
+		return nil
 	}
 	if len(files) != 1 || files[0] == "-" {
-		return readCall{}, false
+		return nil
 	}
 	rc.path = files[0]
-	return rc, true
+	return []readCall{rc}
 }
 
 // lineCountFlag reads head's and tail's count: `-n 30`, `-n30`, `-30`, `--lines=30`, and
@@ -242,9 +252,7 @@ func readCalls(command string, d Dialect) []readCall {
 			return true
 		}
 		for _, c := range peelWrappers(literalWords(call.Args), d) {
-			if rc, ok := parseReadCall(c); ok {
-				out = append(out, rc)
-			}
+			out = append(out, parseReadCalls(c)...)
 		}
 		return true
 	})
@@ -282,15 +290,16 @@ func redirectsStdout(r *syntax.Redirect) bool {
 	return false
 }
 
-// fileMap is what the graph holds for one file: its declarations or headings, in file
-// order, each with the lines it spans.
+// fileMap is one file's declarations or headings, in file order, each with the lines it
+// spans, parsed from the file itself so it holds whether or not the index is current.
 type fileMap struct {
 	rel     string
 	lines   int
 	entries []mapEntry
-	// one prints a single entry's body, or "" when magus has no verb for that yet.
-	one func(name string) string
-	// list prints the whole map.
+	// indexed is true when the symbol index vouches for every entry, so refs prints one
+	// checked against it; otherwise an entry is read by its lines.
+	indexed bool
+	// list prints the whole map from the graph, "" when the graph cannot vouch for it.
 	list string
 	noun string
 }
@@ -298,9 +307,31 @@ type fileMap struct {
 type mapEntry struct {
 	name        string
 	first, last int
-	// symbol is what fileMap.one takes, "" for a method: refs resolves bare names only, so
-	// a method's command would print every same-named method.
+	// symbol is what refs takes, "" for a method or an entry refs cannot print: refs
+	// resolves bare names only, so a method's command would print every same-named method.
 	symbol string
+}
+
+// read is the command that prints one entry: refs where the index vouches for it, its
+// line range otherwise.
+func (m fileMap) read(e mapEntry) string {
+	if m.indexed && e.symbol != "" {
+		return hint.Refs.With(e.symbol, "--definition", "--source")
+	}
+	return sedRangeCommand(m.rel, e.first, e.last)
+}
+
+// sedRangeCommand prints lines first..last of rel, the one read every file kind has.
+func sedRangeCommand(rel string, first, last int) string {
+	return "sed -n " + strconv.Itoa(first) + "," + strconv.Itoa(last) + "p " + shellWord(rel)
+}
+
+// shellWord quotes s for a shell only when it needs it, so a plain path reads as typed.
+func shellWord(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"$`\\*?[]{}()&;|<>!#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // covering is the one entry whose span holds first..last.
@@ -325,28 +356,41 @@ func closeSpans(entries []mapEntry, lines int) []mapEntry {
 	return entries
 }
 
-// goFileMap maps a Go file's top-level declarations, each span running from its doc
-// comment to its closing brace or paren, and each member of a grouped var, const or type
-// its own entry. Every name must be one the index vouches for, or the map is no map.
+// goFileMap maps a Go file's top-level declarations from a live parse. It is indexed, and
+// lists through the graph, only when the index vouches for every name; a stale index
+// still gets the map, read by line ranges.
 func goFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
+	entries, lines, ok := goDecls(abs)
+	if !ok || len(entries) == 0 {
+		return fileMap{}, false
+	}
+	indexed := !slices.ContainsFunc(entries, func(e mapEntry) bool {
+		defined, definitive := deps.symbolDefined(e.name[strings.LastIndexByte(e.name, '.')+1:])
+		return !defined || !definitive
+	})
+	m := fileMap{rel: rel, lines: lines, entries: entries, indexed: indexed, noun: "declaration"}
+	if indexed {
+		m.list = hint.Explain.With(types.KindFile + ":" + rel)
+	}
+	return m, true
+}
+
+// goDecls parses a Go file's top-level declarations, each span running from its doc
+// comment to its closing brace or paren, each member of a grouped var, const or type its
+// own entry, and a method named `Type.Method`. lines is the file's length.
+func goDecls(abs string) (entries []mapEntry, lines int, ok bool) {
 	src, err := os.ReadFile(abs)
 	if err != nil {
-		return fileMap{}, false
+		return nil, 0, false
 	}
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, abs, src, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
-		return fileMap{}, false
+		return nil, 0, false
 	}
-	var entries []mapEntry
-	vouched := true
 	add := func(name, symbol string, doc *ast.CommentGroup, from, to token.Pos) {
-		bare := name[strings.LastIndexByte(name, '.')+1:]
-		if bare == "_" {
+		if name[strings.LastIndexByte(name, '.')+1:] == "_" {
 			return
-		}
-		if defined, definitive := deps.symbolDefined(bare); !defined || !definitive {
-			vouched = false
 		}
 		if doc != nil {
 			from = doc.Pos()
@@ -387,21 +431,16 @@ func goFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 			}
 		}
 	}
-	if !vouched || len(entries) == 0 {
-		return fileMap{}, false
-	}
+	return entries, lineCount(src), true
+}
+
+// lineCount counts a file's lines, a last line without its newline included.
+func lineCount(src []byte) int {
 	lines := bytes.Count(src, []byte("\n"))
 	if len(src) > 0 && src[len(src)-1] != '\n' {
 		lines++
 	}
-	return fileMap{
-		rel:     rel,
-		lines:   lines,
-		entries: entries,
-		one:     func(name string) string { return hint.Refs.With(name, "--definition", "--source") },
-		list:    hint.Explain.With(types.KindFile + ":" + rel),
-		noun:    "declaration",
-	}, true
+	return lines
 }
 
 // receiverType is a method receiver's type name, pointer and type arguments dropped.
@@ -428,8 +467,8 @@ func receiverType(recv *ast.FieldList) string {
 
 var headingRe = regexp.MustCompile(`^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$`)
 
-// markdownFileMap maps a Markdown file's headings, fenced ones skipped, and holds only
-// when the graph carries exactly one section node per heading found.
+// markdownFileMap maps a Markdown file's headings, fenced ones skipped. It lists through
+// the graph only when the graph carries exactly one section node per heading found.
 func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 	f, err := os.Open(abs)
 	if err != nil {
@@ -463,36 +502,36 @@ func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 	if s.Err() != nil || len(entries) == 0 {
 		return fileMap{}, false
 	}
-	ids, definitive := deps.graphIDs(context.Background(), types.KindDocSection)
-	if !definitive {
-		return fileMap{}, false
-	}
+	m := fileMap{rel: rel, lines: lines, entries: closeSpans(entries, lines), noun: "heading"}
 	prefix := types.KindDocSection + ":" + rel + "#"
-	held := 0
-	for _, id := range ids {
-		if strings.HasPrefix(id, prefix) {
-			held++
+	if ids, definitive := deps.graphIDs(context.Background(), types.KindDocSection); definitive {
+		held := 0
+		for _, id := range ids {
+			if strings.HasPrefix(id, prefix) {
+				held++
+			}
+		}
+		if held == len(entries) {
+			m.list = hint.Query.With("kind="+types.KindDocSection, "'id=~^"+regexp.QuoteMeta(prefix)+"'", "-o", "name")
 		}
 	}
-	if held != len(entries) {
-		return fileMap{}, false
-	}
-	return fileMap{
-		rel:     rel,
-		lines:   lines,
-		entries: closeSpans(entries, lines),
-		list:    hint.Query.With("kind="+types.KindDocSection, "'id=~^"+regexp.QuoteMeta(prefix)+"'", "-o", "name"),
-		noun:    "heading",
-	}, true
+	return m, true
 }
 
-// mapFor maps rel by its kind, or reports false for a kind the graph does not map.
+// wholeReadFiles are the files written to be read whole: an agent's instructions and a
+// skill, whose every section applies at once.
+var wholeReadFiles = map[string]bool{"SKILL.md": true, "AGENTS.md": true, "CLAUDE.md": true}
+
+// mapFor maps rel by its kind, or reports false for a kind with no parser here. TypeScript
+// has none, so it stays silent.
 func mapFor(deps Dependencies, abs, rel string) (fileMap, bool) {
 	switch path.Ext(rel) {
 	case ".go":
 		return goFileMap(deps, abs, rel)
 	case ".md":
 		return markdownFileMap(deps, abs, rel)
+	case ".buzz":
+		return buzzFileMap(abs, rel)
 	}
 	return fileMap{}, false
 }
@@ -530,7 +569,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 	}
 	for _, rc := range readCalls(command, d) {
 		abs, rel, ok := workspacePath(root, dir, rc.path)
-		if !ok {
+		if !ok || wholeReadFiles[path.Base(rel)] {
 			continue
 		}
 		m, ok := mapFor(deps, abs, rel)
@@ -543,7 +582,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			}
 			return ShellVerdict{Deny: denyReadNavigation(m), Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}, true
 		}
-		if m.one == nil {
+		if !m.indexed {
 			continue
 		}
 		first, last := rc.span(m.lines)
@@ -556,16 +595,30 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 
 func denyReadNavigation(m fileMap) string {
 	var b strings.Builder
-	b.WriteString("`" + m.list + "` maps this file, and the map is below: " + strconv.Itoa(m.lines) + " lines, " + countNoun(len(m.entries), m.noun) + ", each with its lines.\n")
-	if m.one != nil {
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; `" + m.one("<name>") + "` prints that one, numbered and checked against the index.\n")
+	if m.list != "" {
+		b.WriteString("`" + m.list + "` maps this file, and the map is below: ")
 	} else {
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one section; read that section by its line range.\n")
+		b.WriteString("The map below is parsed from the file itself: ")
+	}
+	b.WriteString(strconv.Itoa(m.lines) + " lines, " + countNoun(len(m.entries), m.noun) + ", each with its lines.\n")
+	byLines := "`sed -n <first>,<last>p " + shellWord(m.rel) + "`"
+	switch {
+	case m.indexed && slices.ContainsFunc(m.entries, func(e mapEntry) bool { return e.symbol == "" }):
+		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; `" + hint.Refs.With("<name>", "--definition", "--source") +
+			"` prints that one, numbered and checked against the index, and " + byLines + " prints a method by its lines.\n")
+	case m.indexed:
+		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; `" + hint.Refs.With("<name>", "--definition", "--source") +
+			"` prints that one, numbered and checked against the index.\n")
+	default:
+		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + byLines + " prints that one by its lines.\n")
 	}
 	b.WriteString("What the file holds (" + countNoun(len(m.entries), m.noun) + "):")
 	for i, e := range m.entries {
 		if i == mapCap {
-			b.WriteString("\n  ... " + strconv.Itoa(len(m.entries)-mapCap) + " more; `" + m.list + "` lists them all")
+			b.WriteString("\n  ... " + strconv.Itoa(len(m.entries)-mapCap) + " more")
+			if m.list != "" {
+				b.WriteString("; `" + m.list + "` lists them all")
+			}
 			break
 		}
 		b.WriteString("\n  " + strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + ": " + e.name)
@@ -575,5 +628,5 @@ func denyReadNavigation(m fileMap) string {
 
 func adviseReadSymbol(m fileMap, e mapEntry, first, last int) string {
 	return "magus workspace: lines " + strconv.Itoa(first) + "-" + strconv.Itoa(last) + " of " + m.rel + " sit inside `" + e.name + "` (" +
-		strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "). `" + m.one(e.symbol) + "` prints that body with its line numbers, checked against the index, and finds it again after the file moves."
+		strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "). `" + m.read(e) + "` prints that body with its line numbers, checked against the index, and finds it again after the file moves."
 }

@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"cmp"
 	"context"
@@ -170,7 +171,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 // internally, which is what keeps it to one fork per branch rather than two.
 func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) ([]types.BranchChange, error) {
 	if limit <= 0 {
-		return nil, nil
+		return []types.BranchChange{}, nil
 	}
 	if err := checkRev(base); err != nil {
 		return nil, err
@@ -617,6 +618,10 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 	// a clean tree (that would stamp a dirty build as clean).
 	if err := errs[4]; err != nil {
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
+	}
+	// --abbrev-ref names a detached HEAD "HEAD", which no caller can tell from a branch.
+	if branch == "HEAD" {
+		branch = ""
 	}
 	return types.VCSMeta{
 		Short:      shortHash,
@@ -1488,24 +1493,38 @@ func (v gitVCS) gitAttrsState(ctx context.Context, root string, globs types.Merg
 // merge=magus from its glob line and takes diff=golang from `*.go`, whichever line comes
 // first.
 //
-// An auto-resolve glob sets merge=magus alone: the file is source, and linguist-generated
-// would collapse it in review. One without a slash is anchored at the root, since git
-// matches a slashless pattern at every depth and magus.yaml's globs are rooted.
+// Output lines carry only the positive patterns: gitattributes has no exclusion, and a
+// later line wins. So each carved file (a tracked hand-maintained file an output pattern
+// covers but its declaration excludes) follows them as `!merge !linguist-generated`,
+// which returns both attributes to unspecified: git's default text merge. `-merge` would
+// UNSET merge, which git treats as binary, conflicting on every divergent change.
+//
+// An auto-resolve glob sets merge=magus alone, after the carve-outs so it can still opt a
+// carved file in: the file is source, and linguist-generated would collapse it in review.
 func gitAttrsBody(globs types.MergeDriverGlobs) string {
 	var body strings.Builder
 	for _, d := range gitDiffDrivers {
 		body.WriteString(d.line() + "\n")
 	}
 	for _, glob := range globs.Outputs {
-		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", glob)
+		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", anchorAttrPattern(glob))
+	}
+	for _, path := range globs.Carved {
+		fmt.Fprintf(&body, "%s !merge !linguist-generated\n", anchorAttrPattern(path))
 	}
 	for _, glob := range globs.AutoResolve {
-		if !strings.Contains(glob, "/") {
-			glob = "/" + glob
-		}
-		fmt.Fprintf(&body, "%s merge=magus\n", glob)
+		fmt.Fprintf(&body, "%s merge=magus\n", anchorAttrPattern(glob))
 	}
 	return body.String()
+}
+
+// anchorAttrPattern anchors a slashless pattern at the root: git matches one at every
+// depth, and magus's globs are rooted.
+func anchorAttrPattern(pattern string) string {
+	if strings.Contains(pattern, "/") {
+		return pattern
+	}
+	return "/" + pattern
 }
 
 // gitDiffDriver routes paths matching glob to a git diff driver. The driver's hunk-header
@@ -1837,7 +1856,7 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 		return nil, err
 	}
 	if !ok {
-		return nil, nil
+		return []string{}, nil
 	}
 	if err := os.MkdirAll(paths.hooksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("vcs: mkdir %s: %w", paths.hooksDir, err)
@@ -1856,7 +1875,13 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 		}
 		return nil
 	})
-	return installed, err
+	if err != nil {
+		return nil, err
+	}
+	if installed == nil {
+		return []string{}, nil
+	}
+	return installed, nil
 }
 
 // gitHookBody is the shell a hook runs. post-checkout also fires on file checkouts (git
@@ -2355,6 +2380,7 @@ func gitExec(ctx context.Context, dir string, o gitOpts, args ...string) *exec.C
 			cmd.Err = err
 		}
 	}
+	noteToolVersion(ctx, cmd, "git")
 	if o.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(o.Stdin)
 	}
@@ -2370,6 +2396,7 @@ func gitUserCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd.Dir = dir
 	cmd.Env = gitEnviron()
 	cmd.WaitDelay = gitWaitDelay
+	noteToolVersion(ctx, cmd, "git")
 	return cmd
 }
 
@@ -2407,8 +2434,13 @@ func gitOutput(ctx context.Context, dir string, o gitOpts, args ...string) (stri
 // config. That is the whole reason this prepends a flag rather than scrubbing an env.
 //
 // The switch goes FIRST because it is a global option that must precede the subcommand.
+//
+// A binary older than toolFloors fails here, before the subcommand runs. The
+// floor is the release that added the flag this driver passes on that command.
 func vcsExec(ctx context.Context, name string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, name, append([]string{"--color=never"}, args...)...)
+	cmd := exec.CommandContext(ctx, name, append([]string{"--color=never"}, args...)...)
+	noteToolVersion(ctx, cmd, name)
+	return cmd
 }
 
 // vcsOutput runs an hg, Sapling or jj subcommand in dir and returns its trimmed stdout.
@@ -2476,6 +2508,133 @@ func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, e
 	}
 	return revFileOutput(gitExec(ctx, root, gitOpts{}, "show", rev+":"+path),
 		fmt.Sprintf("git show %s:%s", rev, path))
+}
+
+// ErrObjectMissing is an object batch's answer that the revision has no such path.
+var ErrObjectMissing = errors.New("vcs: object missing")
+
+// ObjectBatch is one process serving many revision reads. Close finishes it.
+type ObjectBatch interface {
+	Read(rel string) (string, error)
+	Close() error
+}
+
+// ObjectBatchOpener is a driver that can open an ObjectBatch. Drivers without
+// it are read one path at a time through ReadFileAt.
+type ObjectBatchOpener interface {
+	OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error)
+}
+
+// CheckoutIDReader is a driver that can name the checked-out revision from the
+// checkout's own files, without starting the tool. ok is false when it cannot,
+// and the caller asks the tool. The id is whatever a commit moves and a status
+// of an unchanged tree leaves alone: status rewrites its own stat cache, so a
+// timestamp of that cache would change on the read itself.
+type CheckoutIDReader interface {
+	CheckoutID(dir string) (string, bool)
+}
+
+// CheckoutID is headOID for the guard's reuse of a previous status.
+func (gitVCS) CheckoutID(dir string) (string, bool) { return headOID(dir) }
+
+// OpenObjectBatch starts one `git cat-file --batch` for every approved source a
+// guard load reads. git show per path measured about 75ms across the policy set
+// on one hook; the process startup is the cost, and one process serves the set.
+func (gitVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	if err := checkRev(rev); err != nil {
+		return nil, err
+	}
+	cmd := gitExec(ctx, root, gitOpts{}, "cat-file", "--batch")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return nil, err
+	}
+	b := &objectBatch{rev: rev, cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout)}
+	cmd.Stderr = &b.stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("git cat-file: %w", err)
+	}
+	return b, nil
+}
+
+// objectBatch speaks git cat-file --batch: one object name per request line,
+// then "<oid> <type> <size>\n<bytes>\n" or "<object> missing\n".
+type objectBatch struct {
+	rev    string
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Reader
+	stderr bytes.Buffer
+	// err is the failure that left the stream out of step with its requests.
+	// Every later Read returns it: the next reply would answer an earlier request.
+	err error
+}
+
+func (b *objectBatch) Read(rel string) (string, error) {
+	if b.err != nil {
+		return "", b.err
+	}
+	// A request is one line, so a newline in rel would ask for two objects and
+	// every later reply would belong to the request before it.
+	if strings.ContainsAny(rel, "\n\r") {
+		return "", fmt.Errorf("git cat-file: path %q contains a newline", rel)
+	}
+	content, err := b.read(rel)
+	if err != nil && !errors.Is(err, ErrObjectMissing) {
+		b.err = err
+	}
+	return content, err
+}
+
+func (b *objectBatch) read(rel string) (string, error) {
+	spec := b.rev + ":" + rel
+	if _, err := fmt.Fprintln(b.stdin, spec); err != nil {
+		return "", fmt.Errorf("git cat-file: %w", err)
+	}
+	header, err := b.stdout.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("git cat-file: %w", err)
+	}
+	header = strings.TrimSuffix(header, "\n")
+	if strings.HasSuffix(header, " missing") {
+		return "", fmt.Errorf("git cat-file: %s: %w", spec, ErrObjectMissing)
+	}
+	fields := strings.Fields(header)
+	if len(fields) != 3 {
+		return "", fmt.Errorf("git cat-file: malformed header %q", header)
+	}
+	size, err := strconv.Atoi(fields[2])
+	if err != nil || size < 0 {
+		return "", fmt.Errorf("git cat-file: malformed header %q", header)
+	}
+	buf := make([]byte, size+1)
+	if _, err := io.ReadFull(b.stdout, buf); err != nil {
+		return "", fmt.Errorf("git cat-file: %w", err)
+	}
+	return string(buf[:size]), nil
+}
+
+func (b *objectBatch) Close() error {
+	err := b.stdin.Close()
+	waitErr := b.cmd.Wait()
+	if err != nil {
+		return err
+	}
+	if waitErr != nil {
+		if msg := strings.TrimSpace(b.stderr.String()); msg != "" {
+			return fmt.Errorf("git cat-file: %w: %s", waitErr, msg)
+		}
+		return fmt.Errorf("git cat-file: %w", waitErr)
+	}
+	return nil
 }
 
 // ExportRevision implements types.RevisionExporter. `git -C dir archive <rev> -- .`
@@ -2820,6 +2979,8 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 	switch code := exitCode(err); {
 	case err == nil, code == 1:
 	case code == 129:
+		// The floor already rejects git older than 2.40. 129 is a binary that
+		// reports a new enough version and still has no merge-tree --write-tree.
 		return types.TreeMergeResult{}, errors.New("git merge-tree --write-tree needs git 2.40 or newer")
 	default:
 		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w: %s", m.Ours, m.Theirs, err, strings.TrimSpace(stderr.String()))

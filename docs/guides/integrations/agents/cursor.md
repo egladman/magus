@@ -59,10 +59,10 @@ start Magus solely to obtain tools.
 ## Guard hook
 
 Prefer wiring the Cursor harness from the root magusfile when you bounce between
-hosts; apply then covers every wired provider:
+hosts; `magus describe harness` then covers every wired provider:
 
 ```buzz
-import "ghcr.io/egladman/magus/spells/cursor";
+import "ghcr.io/egladman/magus/spells/harness/cursor";
 magus\harness.provider(cursor);
 ```
 
@@ -95,23 +95,23 @@ magus agent harness verify --id cursor
 ```
 
 That prints opaque fragments naming
-`sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor`. The script
-takes the host's name from that argument and nowhere else, and refuses a call without it
-([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). A portable install copies the
-script to `.cursor/hooks/cursor-hook.sh`, makes it executable, and points every event at
-that copy, name included:
+`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor`.
+The script takes the host's name from that argument and nowhere else, and refuses a call
+without it ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). It needs neither a
+POSIX shell nor `jq`. A portable install copies the script to `.cursor/hooks/cursor-hook.buzz`
+and points every event at that copy, name included:
 
 ```json
 {
   "version": 1,
   "hooks": {
-    "beforeShellExecution": [{ "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor" }],
-    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor" }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
+    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
     "postToolUse": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor" }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }
     ],
-    "subagentStart": [{ "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor" }],
-    "sessionEnd": [{ "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor" }]
+    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }]
   }
 }
 ```
@@ -141,411 +141,433 @@ the string must compile). One entry per event is enough: the script is the same
 file on every arm by design, and it branches on payload shape. Scope the regex
 to tools that carry a command, a path, a Grep/Glob pattern, a Read path, or a
 WebSearch / WebFetch query; a postToolUse with none of those returns `{}`. Grep,
-Glob, and Read never reach `beforeShellExecution`, so they ride `postToolUse`
-and are restated as the shell shapes those rules already know (`rg …`,
-`find . -name …`, `cat …` for an unbounded Read, `sed -n 'a,bp'` when Read
-already carries a limit). WebSearch and WebFetch also ride `postToolUse`: when
+Glob, and Read never reach `beforeShellExecution`. They are restated as the
+shell shapes the rules already know (`rg …`, `find <dir> -name …`, `cat …` for
+an unbounded Read, `sed -n 'a,bp'` when Read already carries a limit) and gated
+on `preToolUse`, because a deny has to land before the tool runs. `postToolUse`
+still carries the advise for a search the graph answers better. WebSearch and
+WebFetch ride `postToolUse`: when
 `kind=link` has citations matching the query, the script injects those URLs as
 `additional_context` so the next open-web look prefers package/docs hosts this
 tree already depends on. Cursor Agent tools spell the path field `path`; the
 script also accepts `file_path`.
 
-```sh
-#!/usr/bin/env sh
-# magus guard for Cursor. ONE file, every event; download only this.
-#
-# Cursor runs a hook as a PROGRAM with the event as JSON on stdin. Its events carry
-# different payloads, so this reads the event once and branches on the
-# hook_event_name every one of them carries:
-#
-#   beforeShellExecution  {"command": "...", "cwd": "...", "sandbox": false}
-#   preToolUse            {"tool_name": "...", "tool_input": {"path": "..."}}
-#   postToolUse           the same, plus tool_output
-#   subagentStart         {"subagent_type": "...", "task": "...", ...}
-#   sessionEnd            {"session_id": "...", "reason": "..."}
-#
-# Save to .cursor/hooks/cursor-hook.sh, chmod +x, and point them at it:
-#
-#   {"version": 1, "hooks": {
-#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
-#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
-#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
-#     "subagentStart": [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
-#     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}]}}
-#
-# Self-contained on purpose. The other hosts' templates delegate to
-# magus-command.sh, but Cursor would then need three files downloaded to
-# work, and a guard nobody finishes installing guards nothing.
-#
-# WHICH EVENT CARRIES WHICH HALF of a verdict is the thing to read here, because
-# Cursor splits across two events what every other host delivers from one:
-#
-#   - A DENY needs a gating event. beforeShellExecution gates a command;
-#     preToolUse gates a write and blocks it BEFORE it lands, which afterFileEdit,
-#     the event this file used to read, could never do.
-#   - An ADVISE needs a context channel, and a gating event has none: Cursor
-#     delivers user_message and agent_message only on a deny, so an advisory sent
-#     there collapses into a plain allow. postToolUse's additional_context is the
-#     channel, and it arrives after the call rather than before it. For the rules
-#     that advise (generated files, a search the graph answers better) reporting
-#     after the fact is the intended behavior on every host, and what Cursor shapes
-#     is only which event carries it.
-#
-# So a judged call runs magus TWICE here: once to gate it, once to explain it. That
-# is the price of the split, and it is why the activity trail carries two rows per
-# call on this host and one everywhere else.
-#
-# Every call passes on the --agent-name this script was given (`--agent-name cursor`, from
-# the configuration `magus describe harness` prints) so the observation magus records
-# says which host produced it; a config that names none is refused (MGS3024). Cursor carries conversation_id on every hook and session_id on
-# the session ones, so the session is attributable too; neither can change a verdict.
-#
-# Coverage declarations, machine-read by the host-parity gate - see the longer
-# note in magus-command.sh. Both surfaces now reach the model on both
-# decisions, which is what moving the write gate to preToolUse and the advisory to
-# postToolUse bought; the two lines are what says so.
-# magus-guard-template: 18
-# magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
-# magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
-# magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
-# NOT because the transport is missing: testdata/hosts/cursor/hooks.schema.json DOES
-# declare beforeMCPExecution and afterMCPExecution, the MCP-call twins of beforeShellExecution
-# and preToolUse/postToolUse above. What is missing is the PAYLOAD: no vendored source (Cursor
-# ships no schema for it, only the config-shape validator the rows above are transcribed from)
-# says what field carries the tool name and params on those two events, and this script does
-# not guess at one - wiring a guard against an unverified field name is the exact silent-failure
-# class this whole contract exists to catch (see subagentStart's own "unverified live" note
-# below). Flip this the day Cursor documents, or this file verifies, that payload.
+```buzz
+// magus guard for Cursor. One file, every event.
+//
+// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor`. `-s` is
+// load-bearing: without it a BZZ advisory on stderr reads to the host as a hook
+// error. The command is an argv. Cursor splits it and runs magus itself, so there
+// is no shell and no jq. Flags after `--` are this file's argv.
+//
+// It imports no magus module. A script that reads a workspace member opens the
+// workspace, and that costs roughly 700ms on every tool call; this file starts
+// in about 10ms and asks the binary to judge.
+//
+// The host name is `--agent-name` and nowhere else: never the event's shape,
+// never the environment, never a default. Without it the gating events are
+// denied (MGS3024).
+//
+// Cursor splits across two events what every other host delivers from one.
+// A deny needs a gating event, because user_message and agent_message arrive
+// only with a denial. An advise needs postToolUse.additional_context, which
+// arrives after the call. So a judged call runs magus twice here.
+//
+// Grep, Glob, and Read never reach beforeShellExecution. They are restated as
+// the shell commands the guard already judges, and gated on preToolUse, because
+// a deny has to land before the tool runs.
+//
+// magus-guard-template: 19
+// magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
+// The mcp row is none because beforeMCPExecution and afterMCPExecution name no
+// field for the tool. This file does not guess one.
 
-# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
-# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
-# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
-# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
-# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
-# the knowledge.notes key while `magus doctor` reported the guard as fine.
-#
-# Found by walking UP to the magusfile, not by testing ./magus alone. A hook runs in the
-# host's session directory, and that is not always the workspace root: a session opened in
-# a subdirectory, or opened in one checkout while the work happens in another, tests a
-# ./magus that is not there and falls through to PATH. Where PATH's copy cannot load the
-# workspace at all, that is the entire guard failing open - measured 2026-08-27, when a
-# piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
-# project root that every other ecosystem's runner does.
-guard_root=$PWD
-while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
-  if [ -f "$guard_root/magusfile.buzz" ]; then
-    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
-    break
-  fi
-  guard_root=${guard_root%/*}
-done
-[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
+import "std";
+import "flags";
+import "io";
+import "encoding/json";
+import "math";
+import "proc";
+import "lib/hook" as hook;
 
-# The host this entry is wired into, from the entry's own argv and nowhere else; the
-# configuration `magus describe harness` prints passes `--agent-name cursor`.
-agent_name=
-while [ $# -gt 0 ]; do
-  case $1 in
-    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
-    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
-    *) shift ;;
-  esac
-done
+// Cursor's gating reply. An ask is Cursor's own approval prompt. Pass and advise
+// both allow, because a gating event has no context field: an advise sent here
+// would collapse into a bare allow and drop the text. A decision this file does
+// not know is refused, so a copy older than the guard contract cannot read a new
+// verdict as consent.
+final PERMISSION_DENY = `{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}`;
+final PERMISSION_ASK = `{"permission":"ask","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}`;
+final PERMISSION_ALLOW = `{"permission":"allow"}`;
+final GATE_UNKNOWN = `{{else}}{"permission":"deny","user_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.")}},"agent_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it.")}}}{{end}}`;
+final GATE = `{{if eq .decision "deny"}}` + PERMISSION_DENY
+    + `{{else if eq .decision "ask"}}` + PERMISSION_ASK
+    + `{{else if eq .decision "pass"}}` + PERMISSION_ALLOW
+    + `{{else if eq .decision "advise"}}` + PERMISSION_ALLOW
+    + GATE_UNKNOWN;
 
-# stdin is a pipe and drains once, so the event is read into a variable and every
-# field is selected from that. `// empty` keeps a hook without a field at the empty
-# string rather than at the literal "null".
-event=$(cat)
-event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
-session=$(printf '%s' "$event" | jq -r '.session_id // .conversation_id // empty' 2>/dev/null)
-transcript=$(printf '%s' "$event" | jq -r '.transcript_path // empty' 2>/dev/null)
-shell_command=$(printf '%s' "$event" | jq -r '.command // empty' 2>/dev/null)
-tool_command=$(printf '%s' "$event" | jq -r '.tool_input.command // empty' 2>/dev/null)
-path=$(printf '%s' "$event" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
-# Cursor's Grep/Glob/Read tools never reach beforeShellExecution, so the search-
-# and source-read family guard rules would miss them unless we restate them as the
-# shell shapes those rules already judge. Scoped Grep stays a narrow read
-# (rg pattern file); a workspace-wide Grep becomes bare rg. An unbounded Read
-# becomes cat; a Read that already carries offset/limit becomes sed -n so the
-# source-read advisory stays quiet for a bounded range.
-# Cursor Agent tools spell the path field `path`; older hook docs said file_path.
-search_command=$(printf '%s' "$event" | jq -r '
-  if .tool_name == "Grep" and (.tool_input.pattern // "") != "" then
-    ( .tool_input.path // .tool_input.file_path // "" ) as $p |
-    if $p != "" and $p != "." then
-      "rg \(.tool_input.pattern | @sh) \($p | @sh)"
-    else
-      "rg \(.tool_input.pattern | @sh)"
-    end
-  elif .tool_name == "Glob" and ((.tool_input.glob_pattern // .tool_input.glob // "") != "") then
-    "find . -name \((.tool_input.glob_pattern // .tool_input.glob) | @sh)"
-  elif .tool_name == "Read" and ((.tool_input.path // .tool_input.file_path // "") != "") then
-    ( .tool_input.path // .tool_input.file_path ) as $p |
-    ( .tool_input.offset // 0 | tonumber ) as $o |
-    ( .tool_input.limit // 0 | tonumber ) as $l |
-    if $l > 0 then
-      (if $o > 0 then $o else 1 end) as $start |
-      ($start + $l - 1) as $end |
-      "sed -n \("\($start),\($end)p" | @sh) \($p | @sh)"
-    else
-      "cat \($p | @sh)"
-    end
-  else empty end
-' 2>/dev/null)
-# WebSearch/WebFetch: bias the NEXT open-web look toward kind=link citations this
-# workspace already depends on (package docs URLs, upstream references). Not a
-# deny and not magus's own site: prefer site:<host> / those URLs so results stay
-# on packages the tree cites. Empty match stays silent.
-link_bias_query=$(printf '%s' "$event" | jq -r '
-  if .tool_name == "WebSearch" then
-    (.tool_input.search_term // .tool_input.query // .tool_input.search_query // empty)
-  elif .tool_name == "WebFetch" then
-    (.tool_input.url // empty)
-  else empty end
-' 2>/dev/null)
+// postToolUse is the advise channel. Anything else renders an empty object,
+// which Cursor accepts as no opinion.
+final ADVISE = `{{if eq .decision "advise"}}{"additional_context":{{toJson .context}}}{{else}}{}{{end}}`;
 
-# A payload naming no event is judged by SHAPE instead. Branching on the name is
-# what lets one file serve five events, and a Cursor that stopped sending the field
-# would otherwise take every arm below to the silent default, which is the one
-# failure this guard cannot afford, since it looks exactly like a clean session.
-if [ -z "$event_name" ]; then
-  if [ -n "$shell_command" ]; then
-    event_name=beforeShellExecution
-  elif [ -n "$path" ]; then
-    event_name=preToolUse
-  fi
-fi
+final ALLOW = `{"permission":"allow"}`;
+final EMPTY = `{}`;
 
-# A config that names no host is refused, never defaulted: the gating events are denied,
-# and every event says why on stderr. The write and shell gates are where an unguarded
-# call would slip through, so they fail closed here rather than allowing.
-if [ -z "$agent_name" ]; then
-  unnamed="[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what \`magus describe harness\` prints into the host's hook configuration; the commands it prints name the host."
-  printf 'cursor-hook.sh: %s\n' "$unnamed" >&2
-  case $event_name in
-  beforeShellExecution | preToolUse)
-    printf '{"permission":"deny","user_message":"%s","agent_message":"%s"}' "$unnamed" "$unnamed"
-    ;;
-  subagentStart)
-    printf '%s' '{"permission":"allow"}'
-    ;;
-  esac
-  exit 0
-fi
+final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
+final UNREADABLE = "magus guard is NOT running for this call: the hook event on stdin was not JSON, so its deny and advise rules were not applied. Check the Cursor hook configuration and version.";
+final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
-# The two replies Cursor reads. A deny carries BOTH messages: user_message is shown
-# to the person and agent_message reaches the model. Neither is delivered on an
-# allow, which is why the advisory lives on a different event.
-#
-# An ask is Cursor's own approval prompt: the person sees user_message and decides. Only pass
-# and advise allow. Anything else, including a decision this file does not know, is refused,
-# because a copy older than the guard contract must not read a new verdict as consent.
-gate_template='{{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else if eq .decision "ask"}}{"permission":"ask","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else if eq .decision "pass"}}{"permission":"allow"}{{else if eq .decision "advise"}}{"permission":"allow"}{{else}}{"permission":"deny","user_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know. Update .cursor/hooks/cursor-hook.sh from the magus docs.")}},"agent_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it.")}}}{{end}}'
-advise_template='{{if eq .decision "advise"}}{"additional_context":{{toJson .context}}}{{else}}{}{{end}}'
+final AGENT_NAME = "--agent-name";
 
-# guard_notice_once succeeds the first time $1 fires in this session and fails on every
-# repeat, so a caller writes `guard_notice_once <family> && printf ...`. See
-# magus-command.sh for the full reasoning; the short version is that these notices
-# report a broken installation, which is a fact for the person with nothing in it an agent
-# can act on, so a repeat is noise.
-#
-# The marker lives under TMPDIR because this runs when magus is missing or too broken to
-# judge, so it cannot ask magus for anything. An event that reports no session shares a
-# marker aged out after __MAGUS_NOTICE_WINDOW minutes rather than going quiet forever.
-guard_notice_once() {
-  notice_dir=${TMPDIR:-/tmp}/magus-guard-notices
-  notice_key=$(printf '%s' "${session:-anon}" | cksum | cut -d' ' -f1)
-  notice_marker=$notice_dir/$notice_key.$1
-  mkdir -p "$notice_dir" 2>/dev/null || return 0
-  if [ -f "$notice_marker" ]; then
-    [ -n "$session" ] && return 1
-    find "$notice_marker" -mmin +"${__MAGUS_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
-  fi
-  : > "$notice_marker" 2>/dev/null
-  return 0
+// One judgment. The attributed call and the unattributed retry share it, so the
+// payload cannot differ between them.
+object Guard {
+    bin: str,
+    payload: str,
 }
 
-# guard pipes its first argument into `magus session hook` with the rest as flags. The
-# thing being judged goes in on STDIN, never in argv: a command is arbitrary text, and
-# one passed as an argument is a quoting mistake away from being re-parsed.
-guard() {
-  guard_input=$1
-  shift
-  printf '%s' "$guard_input" | "$__MAGUS_BIN" shell --agent-name "$agent_name" \
-    --session "$session" --transcript "$transcript" "$@"
+
+fun firstField(node: any?, keys: [str]) > str {
+    foreach (key in keys) {
+        final value = hook\field(node, dotPath: key);
+        if (value != "") { return value; }
+    }
+    return "";
 }
 
-# link_bias_context prints a Cursor additional_context JSON object when kind=link
-# has citations matching $1, or prints nothing and fails when it does not. Caps
-# at eight URLs so a broad query does not dump the whole citation index.
-link_bias_context() {
-  terms=$1
-  [ -n "$terms" ] || return 1
-  [ -n "$__MAGUS_BIN" ] && [ -x "$__MAGUS_BIN" ] || return 1
-  links=$("$__MAGUS_BIN" query kind=link "$terms" -o name 2>/dev/null) || return 1
-  [ -n "$links" ] || return 1
-  printf '%s\n' "$links" | jq -R -s -c --arg q "$terms" '
-    (split("\n") | map(select(length > 0) | sub("^link:"; "")) | .[0:8]) as $urls
-    | if ($urls | length) == 0 then empty else
-      {
-        additional_context: (
-          "This workspace already cites related docs (kind=link). Prefer these over a broad web search so results stay on packages and references this tree depends on:\n"
-          + ($urls | map("  - " + .) | join("\n"))
-          + "\nRefine the next search with site:<host> from those URLs, or WebFetch one directly. List them again: ./magus query kind=link "
-          + ($q | @sh)
-          + " -o name"
-        )
-      }
-    end
-  ' 2>/dev/null
+fun count(node: any?, key: str) > double {
+    return std\parseDouble(hook\field(node, dotPath: key)) ?? 0.0;
 }
 
-# guard_failure_notice states WHICH binary went silent, what version it is, and what it
-# actually said, the three facts a reader otherwise spends a session collecting. It takes
-# the same arguments the failed call did, and re-runs it to capture the stderr the verdict
-# path discards: one extra process, only on the path that is already broken. WARN lines are
-# dropped because a config the binary is too old to parse warns BEFORE it fails, and that
-# warning is a symptom of the same staleness rather than the error.
-#
-# Held to one firing per session, and printed on stderr, which Cursor surfaces: a broken
-# installation is a fact for the person, and there is nothing in it a model can act on.
-guard_failure_notice() {
-  guard_notice_once failed || return 0
-  ver=$("$__MAGUS_BIN" version 2>/dev/null | head -n 1)
-  [ -n "$ver" ] || ver='version unreadable'
-  why=$(guard "$@" 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
-  [ -n "$why" ] || why='it printed no error'
-  printf 'magus guard is NOT running: %s (%s) could not judge this call, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.\n' \
-    "$__MAGUS_BIN" "$ver" "$why" >&2
+// quote makes one shell word. The restatement is judged as a command line, and a
+// pattern that contains a space or a quote has to stay one argument.
+fun quote(s: str) > str {
+    return "'" + s.replace("'", with: "'\\''") + "'";
 }
 
-# jq is the only reader of the event: without it every field selected above came back
-# empty, the shape fallback had nothing to infer from, and every arm below would reach
-# the silent default, which looks exactly like a guarded session. Announce it and answer
-# the gating shape explicitly rather than infer an event this cannot read.
-if ! command -v jq >/dev/null 2>&1; then
-  guard_notice_once nojq && printf '%s\n' "magus guard is NOT running: jq is not on PATH, so this hook cannot read the event and its deny and advise rules are unenforced right now. Install jq to restore the guard." >&2
-  printf '%s' '{"permission":"allow"}'
-  exit 0
-fi
+fun argv(name: str, args: [str]) > str {
+    final parts = mut [name];
+    foreach (arg in args) { parts.append(quote(arg)); }
+    return parts.join(" ");
+}
 
-# One availability check for every arm. Cursor already fails open on a hook crash or
-# malformed JSON unless the hook sets failClosed, so allowing here matches the
-# surrounding contract rather than pretending to be stricter than it; for strict
-# behavior, set failClosed on the hook and answer deny instead. What was missing was
-# saying so: a silent fail-open is the one outcome nobody can tell from a guarded
-# session. The gating events need an explicit allow, and the rest read an empty reply
-# as no opinion.
-if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
-  guard_notice_once unavailable && printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard." >&2
-  case $event_name in
-  beforeShellExecution | preToolUse | subagentStart)
-    printf '%s' '{"permission":"allow"}'
-    ;;
-  esac
-  exit 0
-fi
 
-# Every verdict below is captured and printed rather than piped straight through,
-# because `magus session hook` exits non-zero on a deny and Cursor reads a non-zero
-# hook as a CRASH, which it fails open on unless failClosed is set. Letting that
-# status escape would turn every block into an allow, silently, which is the one
-# outcome worse than not installing the guard. Cursor's channel is the JSON on
-# stdout, and this exits 0 so that JSON is what it acts on.
-#
-# An empty verdict is a BROKEN guard, never a pass: the templates above render a
-# reply for every decision, so nothing but a magus that could not run leaves one
-# empty: too old for `session hook`, unable to load the workspace, half-written by
-# a concurrent build. Allowing is still right; announcing it is what was missing.
-case $event_name in
-sessionEnd)
-  # Not a guard. It records the revision, branch and dirtiness of the tree when a
-  # session ends, so whoever comes back reads `magus session` instead of
-  # reconstructing where the work stopped. It prints nothing and judges nothing.
-  "$__MAGUS_BIN" session checkpoint --agent-name "$agent_name" \
-    --session "$session" --transcript "$transcript" >/dev/null 2>&1
-  exit 0
-  ;;
-subagentStart)
-  # Lease capture, reshaped rather than piped: magus recognizes a spawn by a
-  # tool_input carrying a prompt, and Cursor spells the handed work `task` at the
-  # top level. The parent is parent_conversation_id, since conversation_id here is
-  # the child's. Nothing judges a lease: a prompt is prose, so the verdict is
-  # always a pass, the output is discarded, and this arm always allows.
-  printf '%s' "$event" | jq -c '{
-      hook_event_name: (.hook_event_name // ""),
-      session_id: (.parent_conversation_id // .conversation_id // ""),
-      transcript_path: (.transcript_path // ""),
-      tool_input: {prompt: (.task // ""), subagent_type: (.subagent_type // "")}
-    }' 2>/dev/null | "$__MAGUS_BIN" shell --agent-name "$agent_name" >/dev/null 2>&1
-  printf '%s' '{"permission":"allow"}'
-  exit 0
-  ;;
-postToolUse)
-  # The advise channel, for whichever surface the payload names. It renders {} on
-  # anything that is not an advise, so Cursor always gets a reply it can parse.
-  # Grep/Glob/Read land here (not beforeShellExecution): see search_command above.
-  # WebSearch/WebFetch land here too: see link_bias_query above.
-  if [ -n "$tool_command" ]; then
-    verdict=$(guard "$tool_command" -o "template=$advise_template" 2>/dev/null)
-    if [ -z "$verdict" ]; then
-      guard_failure_notice "$tool_command"
-      verdict='{}'
-    fi
-  elif [ -n "$search_command" ]; then
-    verdict=$(guard "$search_command" -o "template=$advise_template" 2>/dev/null)
-    if [ -z "$verdict" ]; then
-      guard_failure_notice "$search_command"
-      verdict='{}'
-    fi
-  elif [ -n "$link_bias_query" ]; then
-    verdict=$(link_bias_context "$link_bias_query")
-    [ -n "$verdict" ] || verdict='{}'
-  elif [ -n "$path" ]; then
-    verdict=$(guard "$path" --path -o "template=$advise_template" 2>/dev/null)
-    if [ -z "$verdict" ]; then
-      guard_failure_notice "$path" --path
-      verdict='{}'
-    fi
-  else
-    verdict='{}'
-  fi
-  printf '%s' "$verdict"
-  exit 0
-  ;;
-preToolUse)
-  # The write gate. Cursor's preToolUse fires for every tool, so this answers on the
-  # SHAPE of the payload rather than on a tool name: a tool_input carrying a
-  # file_path is a write. The shell tool reaches this hook too, carrying
-  # tool_input.command, and is deliberately left to beforeShellExecution, because
-  # judging it here as well would record two verdicts for one command.
-  if [ -z "$path" ]; then
-    printf '%s' '{"permission":"allow"}'
-    exit 0
-  fi
-  # --renders-ask on the gating events only: gate_template answers an ask with Cursor's
-  # own prompt, and advise_template has no ask arm, so a postToolUse call makes no claim.
-  verdict=$(guard "$path" --path --renders-ask -o "template=$gate_template" 2>/dev/null)
-  if [ -z "$verdict" ]; then
-    guard_failure_notice "$path" --path
-    verdict='{"permission":"allow"}'
-  fi
-  ;;
-beforeShellExecution)
-  verdict=$(guard "$shell_command" --renders-ask -o "template=$gate_template" 2>/dev/null)
-  if [ -z "$verdict" ]; then
-    guard_failure_notice "$shell_command"
-    verdict='{"permission":"allow"}'
-  fi
-  ;;
-*)
-  # An event this file does not serve. An empty reply is no opinion.
-  exit 0
-  ;;
-esac
+fun warn(message: str) > void {
+    io\stderr.write("cursor-hook.buzz: {message}\n") catch void;
+}
 
-printf '%s' "$verdict"
-exit 0
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
+    if (parsed == null) { return ""; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument {word}; this call was judged WITHOUT it");
+    }
+    return parsed!.values[AGENT_NAME] ?? "";
+}
+
+fun unavailableNotice(text: str) > str {
+    return hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: text);
+}
+
+fun denyBoth(message: str) > str {
+    return json\stringify({
+        "permission": "deny",
+        "user_message": message,
+        "agent_message": message,
+    }) catch ALLOW;
+}
+
+fun grepLine(input: any?) > str {
+    final pattern = hook\field(input, dotPath: "pattern");
+    if (pattern == "") { return ""; }
+    final file = firstField(input, keys: ["path", "file_path"]);
+    if (file != "" and file != ".") { return argv("rg", args: [pattern, file]); }
+    return argv("rg", args: [pattern]);
+}
+
+fun globLine(input: any?) > str {
+    final pattern = firstField(input, keys: ["glob_pattern", "glob"]);
+    if (pattern == "") { return ""; }
+    final dir = firstField(input, keys: ["target_directory", "path"]);
+    if (dir != "" and dir != ".") { return argv("find", args: [dir, "-name", pattern]); }
+    return argv("find", args: [".", "-name", pattern]);
+}
+
+fun readLine(input: any?) > str {
+    final file = firstField(input, keys: ["path", "file_path"]);
+    if (file == "") { return ""; }
+    final limit = count(input, key: "limit");
+    if (limit <= 0.0 or limit > 300.0) { return argv("cat", args: [file]); }
+    var start = count(input, key: "offset");
+    if (start <= 0.0) { start = 1.0; }
+    final range = "{math\trunc(start)},{math\trunc(start + limit - 1.0)}p";
+    return argv("sed", args: ["-n", range, file]);
+}
+
+// searchCommand is the shell line a Grep, Glob, or Read would have been, or ""
+// for every other tool. A scoped Grep names its file. A Glob names the directory
+// it is rooted at, so a search of a directory the policy refuses is visible.
+// A Read with no limit, or a limit past 300 lines, is cat; any other limit is a sed
+// range, matching the Claude Code and Codex hook.
+fun searchCommand(event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    final input = hook\dig(event, dotPath: "tool_input");
+    if (tool == "Grep") { return grepLine(input); }
+    if (tool == "Glob") { return globLine(input); }
+    if (tool == "Read") { return readLine(input); }
+    return "";
+}
+
+fun linkTerms(event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    final input = hook\dig(event, dotPath: "tool_input");
+    if (tool == "WebSearch") { return firstField(input, keys: ["search_term", "query", "search_query"]); }
+    if (tool == "WebFetch") { return hook\field(input, dotPath: "url"); }
+    return "";
+}
+
+fun citations(stdout: str) > [str] {
+    final urls = mut [<str>];
+    foreach (line in stdout.split("\n")) {
+        if (line == "" or urls.len() >= 8) { continue; }
+        var url = line;
+        if (url.startsWith("link:")) { url = url.sub(5, len: url.len() - 5); }
+        if (url != "") { urls.append(url); }
+    }
+    return urls;
+}
+
+// linkBias names kind=link citations this workspace already depends on, so the
+// next open-web look prefers those hosts. Empty when nothing matches.
+fun linkBias(bin: str, terms: str) > str {
+    if (terms == "") { return ""; }
+    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    final urls = citations(result!.stdout);
+    if (urls.len() == 0) { return ""; }
+    final rows = mut [<str>];
+    foreach (url in urls) { rows.append("  - {url}"); }
+    final text = "This workspace already cites related docs (kind=link). Prefer these over a broad web search so results stay on packages and references this tree depends on:\n"
+        + rows.join("\n") + "\n"
+        + "Refine the next search with site:<host> from those URLs, or WebFetch one directly. List them again: ./magus query kind=link "
+        + quote(terms) + " -o name";
+    return json\stringify({"additional_context": text}) catch "";
+}
+
+fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
+    final args = mut ["shell"];
+    foreach (arg in extra) { args.append(arg); }
+    return proc\exec(guard.bin, args: args, opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": guard.payload,
+    }) catch null;
+}
+
+fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
+    var version = "";
+    final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (probe != null) { version = hook\firstLine(probe!.stdout); }
+    if (version == "") { version = "version unreadable"; }
+    var why = "";
+    if (failed != null) {
+        foreach (line in failed!.stderr.split("\n")) {
+            if (why == "" and line != "" and line.indexOf("WARN") == null) { why = line; }
+        }
+    }
+    if (why == "") { why = "it printed no error"; }
+    return "magus guard is NOT running: {guard.bin} ({version}) could not judge this call, "
+        + "so its deny and advise rules are unenforced. It said: {why}. "
+        + "Rebuild or update THAT binary to restore the guard.";
+}
+
+// judged returns the rendered reply, or "" when the binary could not answer.
+// A non-zero status with a reply is a deny, which Cursor reads from stdout;
+// retrying that would judge the call twice. Empty stdout with a non-zero status
+// is a binary that rejected a flag, and the retry drops the attribution so an
+// older binary can still answer.
+fun judged(guard: Guard, extra: [str], family: str, session: str) > str {
+    var result = judge(guard, extra: extra);
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+        result = judge(guard, extra: [<str>]) catch null;
+    }
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+        if (hook\noticeOnce(session, family: family, file: "cursor-hook.buzz")) {
+            io\stderr.write(failureNotice(guard, failed: result) + "\n") catch void;
+        }
+        return "";
+    }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun shellArgs(agent: str, session: str, transcript: str, template: str, ask: bool, asPath: bool) > [str] {
+    final extra = mut [<str>];
+    if (asPath) { extra.append("--path"); }
+    if (ask) { extra.append("--renders-ask"); }
+    extra.append("-o");
+    extra.append("template={template}");
+    foreach (word in [AGENT_NAME, agent, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
+        extra.append(word);
+    }
+    return extra;
+}
+
+// Scope is the attribution one event shares across every judgment it makes.
+object Scope {
+    bin: str,
+    agent: str,
+    session: str,
+    transcript: str,
+}
+
+fun verdict(scope: Scope, payload: str, template: str, ask: bool, asPath: bool, family: str) > str {
+    final guard = Guard{ bin = scope.bin, payload = payload };
+    return judged(guard, extra: shellArgs(scope.agent, session: scope.session, transcript: scope.transcript, template: template, ask: ask, asPath: asPath), family: family, session: scope.session);
+}
+
+fun gates(eventName: str) > bool {
+    return eventName == "beforeShellExecution" or eventName == "preToolUse" or eventName == "subagentStart";
+}
+
+fun eventNameOf(event: any?) > str {
+    final named = hook\field(event, dotPath: "hook_event_name");
+    if (named != "") { return named; }
+    // A payload naming no event is judged by shape, so a Cursor that stopped
+    // sending the field cannot take every arm to the silent default.
+    if (hook\field(event, dotPath: "command") != "") { return "beforeShellExecution"; }
+    if (firstField(hook\dig(event, dotPath: "tool_input"), keys: ["file_path", "path"]) != "") { return "preToolUse"; }
+    return "";
+}
+
+fun toolPath(event: any?) > str {
+    return firstField(hook\dig(event, dotPath: "tool_input"), keys: ["file_path", "path"]);
+}
+
+fun checkpoint(bin: str, agent: str, session: str, transcript: str) > void {
+    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch void;
+}
+
+// recordSpawn reshapes Cursor's task into the prompt magus recognizes a spawn by.
+// The parent is parent_conversation_id: conversation_id on this event is the child.
+fun recordSpawn(bin: str, agent: str, event: any?) > void {
+    final body = {
+        "hook_event_name": hook\field(event, dotPath: "hook_event_name"),
+        "session_id": firstField(event, keys: ["parent_conversation_id", "conversation_id"]),
+        "transcript_path": hook\field(event, dotPath: "transcript_path"),
+        "tool_input": {
+            "prompt": hook\field(event, dotPath: "task"),
+            "subagent_type": hook\field(event, dotPath: "subagent_type"),
+        },
+    };
+    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": json\stringify(body) catch "",
+    }) catch void;
+}
+
+fun unnamed(eventName: str) > void {
+    warn(UNNAMED);
+    if (eventName == "beforeShellExecution" or eventName == "preToolUse") {
+        io\stdout.write(denyBoth(UNNAMED)) catch void;
+        return;
+    }
+    if (eventName == "subagentStart") { io\stdout.write(ALLOW) catch void; }
+}
+
+fun sessionOf(event: any?) > str {
+    return firstField(event, keys: ["session_id", "conversation_id"]);
+}
+
+fun gate(scope: Scope, payload: str, asPath: bool, family: str) > str {
+    final got = verdict(scope, payload: payload, template: GATE, ask: true, asPath: asPath, family: family);
+    if (got == "") { return ALLOW; }
+    return got;
+}
+
+fun advise(scope: Scope, payload: str, asPath: bool, family: str) > str {
+    final got = verdict(scope, payload: payload, template: ADVISE, ask: false, asPath: asPath, family: family);
+    if (got == "") { return EMPTY; }
+    return got;
+}
+
+fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
+    final scope = Scope{
+        bin = bin,
+        agent = agent,
+        session = sessionOf(event),
+        transcript = hook\field(event, dotPath: "transcript_path"),
+    };
+    if (eventName == "sessionEnd") {
+        checkpoint(scope.bin, agent: scope.agent, session: scope.session, transcript: scope.transcript);
+        return "";
+    }
+    if (eventName == "subagentStart") {
+        recordSpawn(scope.bin, agent: scope.agent, event: event);
+        return ALLOW;
+    }
+    if (eventName == "beforeShellExecution") {
+        return gate(scope, payload: hook\field(event, dotPath: "command"), asPath: false, family: "failed-command");
+    }
+    if (eventName == "preToolUse") {
+        final search = searchCommand(event);
+        if (search != "") { return gate(scope, payload: search, asPath: false, family: "failed-search"); }
+        final writePath = toolPath(event);
+        if (writePath == "") { return ALLOW; }
+        return gate(scope, payload: writePath, asPath: true, family: "failed-path");
+    }
+    if (eventName == "postToolUse") {
+        final command = hook\field(event, dotPath: "tool_input.command");
+        if (command != "") { return advise(scope, payload: command, asPath: false, family: "failed-command"); }
+        final search = searchCommand(event);
+        if (search != "") { return advise(scope, payload: search, asPath: false, family: "failed-search"); }
+        final terms = linkTerms(event);
+        if (terms != "") {
+            final bias = linkBias(scope.bin, terms: terms);
+            if (bias != "") { return bias; }
+            return EMPTY;
+        }
+        final writePath = toolPath(event);
+        if (writePath != "") { return advise(scope, payload: writePath, asPath: true, family: "failed-path"); }
+        return EMPTY;
+    }
+    return "";
+}
+
+fun main(args: [str]) > void {
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    if (event == null) {
+        // No event name to gate on, so this answers with an explicit allow, said
+        // out loud.
+        if (hook\noticeOnce("", family: "unreadable", file: "cursor-hook.buzz")) {
+            io\stderr.write(UNREADABLE + "\n") catch void;
+        }
+        io\stdout.write(ALLOW) catch void;
+        return;
+    }
+    final eventName = eventNameOf(event);
+    final agent = agentNameOf(args);
+    if (agent == "") {
+        unnamed(eventName);
+        return;
+    }
+    final bin = hook\resolveBin();
+    if (bin == "" or !hook\isExecutable(bin)) {
+        if (hook\noticeOnce(sessionOf(event), family: "unavailable", file: "cursor-hook.buzz")) {
+            io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
+        }
+        if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }
+        return;
+    }
+    io\stdout.write(dispatch(event, eventName: eventName, bin: bin, agent: agent)) catch void;
+}
 ```
 
 ## Notifications
@@ -558,7 +580,7 @@ canonical envelope and pipe it to `magus session notify`; see [Attention hooks](
 The `sessionEnd` entry in the wiring above records the revision, branch and
 dirtiness of the tree when a session ends; `magus session` lists it. The script
 handles that arm itself, calling `magus session checkpoint` rather than the
-shared [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh), so this
+shared [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz), so this
 host stays a one-file install; the shared template does the identical job if you
 would rather point `sessionEnd` at it with `--agent-name cursor` on the command.
 
@@ -622,6 +644,12 @@ when nothing has been lost yet.
 
 **A tool failure carries no hint.** `postToolUseFailure` has no response fields at
 all, so the one place a host could explain a failing command is closed here.
+
+**Shell commands keep their stdin.** On Claude Code the guard hands the command
+back with stdin closed, so a stray stdin reader cannot hang the call. Cursor
+takes a rewrite (`updated_input`) only at `preToolUse`; `beforeShellExecution`,
+where this script gates a shell command, answers `permission` and messages only.
+So no rewrite is sent here; give a reader its input explicitly.
 
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
 `failClosed`. The script above matches that stance instead of pretending to be

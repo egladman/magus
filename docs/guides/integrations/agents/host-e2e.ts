@@ -69,10 +69,11 @@ const repository = path.resolve(here, "../../../..");
 const templates = path.join(repository, "docs/guides/integrations/agents");
 
 // The probe is disposable-harness-only. It proves that the configured command
-// was invoked, then passes the exact hook response back to the host. The template
-// is told its host on its argv, the only place it reads one: $1 is the provider id.
+// was invoked, then passes the exact hook response back to the host. The Buzz
+// template runs under the workspace's magus and is told its host on its argv, the
+// only place it reads one: $1 is the provider id.
 export const probeScript = `#!/usr/bin/env sh
-sh "$2" --agent-name "$1" > "$MAGUS_HOST_E2E_RESPONSE"
+"$__MAGUS_BIN" buzz -s "$2" -- --agent-name "$1" > "$MAGUS_HOST_E2E_RESPONSE"
 status=$?
 printf '{"provider":"%s","scenario":"%s","transport":"shell","exitCode":%s,"responseFile":"hook-response.json"}\\n' \\\
   "$1" "$MAGUS_HOST_E2E_SCENARIO" "$status" >> "$MAGUS_HOST_E2E_TRACE"

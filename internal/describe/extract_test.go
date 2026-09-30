@@ -160,6 +160,47 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 	assert.Empty(t, plain.WritesFiles)
 }
 
+// TestFootprintExclusionsStayWithTheirCall pins the one meaning of "!": every exclusion
+// in a call narrows every glob of that call, in any order, and none of another call's.
+// Deduplicating the flat list across calls folded the second call's exclusion onto the
+// first call's glob, so a/x.go read as excluded though the first call declared it.
+func TestFootprintExclusionsStayWithTheirCall(t *testing.T) {
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("a/x.go");
+    ctx.writesFiles("!a/x.go", "a/*.go");
+}
+`)
+	build, _ := nodeByName(g, "build")
+	assert.Equal(t, []types.OutputRef{
+		{Glob: "a/x.go"},
+		{Glob: "a/*.go", Except: []string{"a/x.go"}},
+	}, build.WritesFiles)
+	require.NoError(t, build.FootprintErr)
+}
+
+// TestFootprintExclusionNarrowsOnlyItsOwnProject: a cross-project exclusion is checked
+// against the globs the call declares in THAT project, so one with none there is refused
+// even though the call declares globs of its own.
+func TestFootprintExclusionNarrowsOnlyItsOwnProject(t *testing.T) {
+	g := Extract(`import "project/site";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**", site.file("gen/*.html"), site.file("!gen/hand.html"));
+}
+export fun bad(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**", site.file("!gen/hand.html"));
+}
+`)
+	build, _ := nodeByName(g, "build")
+	assert.Equal(t, []types.OutputRef{
+		{Glob: "gen/**"},
+		{Project: "site", Glob: "gen/*.html", Except: []string{"gen/hand.html"}},
+	}, build.WritesFiles)
+	require.NoError(t, build.FootprintErr)
+
+	bad, _ := nodeByName(g, "bad")
+	require.EqualError(t, bad.FootprintErr, `ctx.writesFiles: files of "site": exclusion "!gen/hand.html" has no glob to narrow`)
+}
+
 // TestReadsWritesDynamic pins the loud-rejection signal: a ctx.readsFiles/writesFiles
 // argument that is not a string literal sets DynamicIO (the load path turns that into
 // an error), while any literal args in the same call are still collected.

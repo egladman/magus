@@ -160,6 +160,19 @@ func TestGateGetsExactlyItsWordsAndUnitsAndNoQueueEnvironment(t *testing.T) {
 	assert.NotContains(t, log.String(), "MERGEQUEUE_")
 }
 
+// A hook line's `--` ends its own options and starts what it forwards, so the units
+// go ahead of it. Appended after, the change's projects became arguments forwarded to
+// every step, and the gate ran over every project instead of them.
+func TestAHooksUnitsGoAheadOfItsForwardedArgs(t *testing.T) {
+	dir := t.TempDir()
+	var log bytes.Buffer
+	g := CommandGate(Command{"printf", `[%s]\n`, "run", "--", "--inherited=fatal", "--"}, HookEnv{}, NewHookLog(&log))
+	res, err := g.Validate(context.Background(), boxed(t, types.Candidate{Commit: "s1", Change: "7", Dir: dir}), []string{"libs/a", "docs"})
+	require.NoError(t, err)
+	assert.True(t, res.Green)
+	assert.Equal(t, []string{"[s1 #7] [run]", "[s1 #7] [libs/a]", "[s1 #7] [docs]", "[s1 #7] [--]", "[s1 #7] [--inherited=fatal]", "[s1 #7] [--]"}, lines(&log))
+}
+
 func TestGateIsGreenOnExitZeroAndRedOtherwise(t *testing.T) {
 	dir := t.TempDir()
 	g := CommandGate(script(`test -f ok`), HookEnv{}, nil)

@@ -17,6 +17,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -516,45 +517,9 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	if err := checkSchemaDowngrade(path); err != nil {
 		return err
 	}
-	// The temporary file has to live in the SAME directory as the destination:
-	// rename is only atomic within one filesystem, and os.TempDir is routinely a
-	// different mount (tmpfs on Linux, a separate volume on macOS). Staging there
-	// would turn the final step into a cross-device copy: the exact partial-write
-	// window this method exists to close.
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
-	}
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp")
-	if err != nil {
-		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
-	}
-	tmp := f.Name()
-	// Any failure past this point leaves the temp file behind; remove it so a
-	// failed write does not litter the output directory with dotfiles that later
-	// glob into a target's sources.
-	defer func() { _ = os.Remove(tmp) }()
-
-	if _, err := f.WriteString(content); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
-	}
-	// Flush to disk before the rename. Without it the rename can land while the
-	// contents are still only in the page cache, so a crash yields an empty file
-	// where the point was to never see one.
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("fs.write_file_atomic %q: sync: %w", path, err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
-	}
-	// CreateTemp makes the file 0600; match write_file's 0644 so an atomically
-	// written file is not readable by a narrower set of users than a plain one.
-	if err := os.Chmod(tmp, 0o644); err != nil {
-		return fmt.Errorf("fs.write_file_atomic %q: chmod: %w", path, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	// 0644, matching write_file, so an atomically written file is not readable by a
+	// narrower set of users than a plain one.
+	if err := file.WriteFileAtomic(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
 	}
 	return nil

@@ -3,14 +3,14 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|exec|exit|wait|watch|run|rm|prune> [flags]"
+.RI "job <fork|exec|exit|wait|watch|run|edit|rm|prune> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: `magus run` executes a target with no job involved,
 while a job's check and the server's maintenance each cause runs.
 .PP
-Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+Two channels write the job store. The client MCP tool (magus\(rsjob) is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own
@@ -59,6 +59,10 @@ write. Whether the work is GOOD stays the reading of whoever forked it.
 run submits one of the server's own jobs, the housekeeping magus does for itself,
 and returns. It is a no\-op when no server is running, so a VCS hook can
 call it unconditionally.
+.PP
+edit adds write paths to a live job and revokes others in one write that keeps
+its state, where a re\-fork would hand a taken job out again. It previews until
+\-\-apply, and only the orchestrator widens.
 .PP
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
@@ -131,6 +135,18 @@ Print the JSON schema a result must satisfy, and exit
 \fB\-\-stdin\fR
 Read the result from stdin instead of from the job, for one that was never filed
 .RE
+.SS job edit options
+.RS
+.TP
+\fB\-\-add\-write\-path\fR \fIstring\fR
+A path to add to the job's write paths; repeatable or comma\-separated
+.TP
+\fB\-\-apply\fR
+Write the edit; without it the edit is previewed and nothing is written
+.TP
+\fB\-\-remove\-write\-path\fR \fIstring\fR
+A path to revoke from the job's write paths; repeatable or comma\-separated
+.RE
 .SS job rm options
 .RS
 .TP
@@ -163,6 +179,9 @@ Follow what a job's holder is doing, until interrupted
 .TP
 \fBrun\fR
 Submit one of the server's own jobs and return
+.TP
+\fBedit\fR
+Add write paths to a live job or revoke them, keeping its state
 .TP
 \fBrm\fR
 Remove one job from the plan
@@ -211,6 +230,12 @@ magus job exit --schema
 .PP
 .EX
 magus job run sync-graph
+.EE
+.PP
+\fIWiden a live job and write it\fR
+.PP
+.EX
+magus job edit session-load/core --add-write-path internal/sessions/load.go --apply
 .EE
 .PP
 \fISee which jobs a prune would end\fR

@@ -2,9 +2,16 @@ package guard
 
 import (
 	"context"
+	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus"
@@ -17,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -137,9 +145,9 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 	// A field arriving with an unexpected type still reaches the MCP arm. Typed, it
 	// failed the unmarshal outright and the raw JSON was judged as a shell line, which is
 	// the one outcome the default arm of the decoder exists to prevent.
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__magus_job","tool_input":{"op":123,"id":"a/b"}}`)
+	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__buzz","tool_input":{"path":123}}`)
 	require.True(t, ok)
-	assert.Equal(t, "magus_job op=123 id=a/b", req.Value)
+	assert.Equal(t, "magus buzz 123", req.Value)
 }
 
 // TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
@@ -226,7 +234,7 @@ func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	assert.Empty(t, hookAttribution{Host: "test-host"}.factsKey(), "neither leaves the gate its anonymous window")
 }
 
-// policyRule matches a rule's line in tools/policy/guard.buzz's header: `//   name (`.
+// policyRule matches a rule's line in hack/policy/guard.buzz's header: `//   name (`.
 var policyRule = regexp.MustCompile(`(?m)^//   ([a-z][a-z-]+) \(`)
 
 // policyCase is one real hook input and the verdict this repository's policy owes it.
@@ -255,7 +263,7 @@ func bash(command string) map[string]any {
 	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}}
 }
 
-// The Buzz tests in tools/policy/*.buzz pin each rule against argvs they build by hand.
+// The Buzz tests in hack/policy/*.buzz pin each rule against argvs they build by hand.
 // This pins the other half: the policy the root magusfile actually registers, reached
 // through the Go guard from the shell line or tool call a host sends, so a parse the Go
 // side changes, or a request field it stops filling, fails here and not in a session.
@@ -305,6 +313,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
+		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "A directory named terminals is not a run"},
 	}
 
 	covered := map[string]bool{}
@@ -486,8 +496,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
-		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
-			"the bootstrap link into a checkout with no binary passes")
+		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
+			"the bootstrap into a checkout with no binary passes")
+		assert.Equal(t, "deny", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
+			"a bare link is not the bootstrap")
 	})
 
 	// The binary answering this hook is the test binary, so a workspace whose ./magus is it
@@ -519,7 +531,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
 
-	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))
+	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))
 	require.NoError(t, err)
 	listed := policyRule.FindAllStringSubmatch(string(source), -1)
 	require.NotEmpty(t, listed, "the header still lists its rules as `//   name (`")
@@ -730,4 +742,179 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	unbound := Judge(ctx, deps, Request{Input: piped})
 	require.Len(t, unbound.Next, 1)
 	assert.Equal(t, "magus affected ci -s", unbound.Next[0].Run)
+}
+
+// TestEveryJudgedDecisionNamesItsRule reads Judge itself: a statement setting a verdict to
+// deny, advise or ask must sit where a verdict.Rule assignment covers it, in its own block
+// or one around it. Measured 2026-09-29: 22,081 recorded verdicts carried no rule name, and
+// the recent ones all came from a site that set the decision and not the name.
+func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
+	t.Parallel()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "guard.go", nil, 0)
+	require.NoError(t, err)
+	var judge *ast.FuncDecl
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "Judge" {
+			judge = fn
+		}
+	}
+	require.NotNil(t, judge, "Judge moved out of guard.go and this gate stopped reading it")
+
+	verdictField := func(e ast.Expr, field string) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != field {
+			return false
+		}
+		id, ok := sel.X.(*ast.Ident)
+		return ok && id.Name == "verdict"
+	}
+	assignsRule := func(s ast.Stmt) bool {
+		as, ok := s.(*ast.AssignStmt)
+		return ok && slices.ContainsFunc(as.Lhs, func(e ast.Expr) bool { return verdictField(e, "Rule") })
+	}
+	decides := func(s ast.Stmt) bool {
+		as, ok := s.(*ast.AssignStmt)
+		if !ok || len(as.Lhs) != len(as.Rhs) {
+			return false
+		}
+		for i, e := range as.Lhs {
+			lit, ok := as.Rhs[i].(*ast.BasicLit)
+			if verdictField(e, "Decision") && ok && lit.Kind == token.STRING && lit.Value != `"pass"` {
+				return true
+			}
+		}
+		return false
+	}
+	checked := 0
+	var walk func(list []ast.Stmt, named bool)
+	walk = func(list []ast.Stmt, named bool) {
+		named = named || slices.ContainsFunc(list, assignsRule)
+		for _, s := range list {
+			if decides(s) {
+				checked++
+				assert.True(t, named, "%s sets a decision no verdict.Rule assignment names", fset.Position(s.Pos()))
+			}
+			ast.Inspect(s, func(n ast.Node) bool {
+				switch b := n.(type) {
+				case *ast.BlockStmt:
+					walk(b.List, named)
+					return false
+				case *ast.CaseClause:
+					walk(b.Body, named)
+					return false
+				}
+				return true
+			})
+		}
+	}
+	walk(judge.Body.List, false)
+	assert.Greater(t, checked, 10, "found too few decisions; the walk stopped reaching Judge's arms")
+}
+
+// TestJudgeClosesStdinForAShellCommand: an agent's command inherits a stdin nobody writes
+// to, and a reader of it waits forever. Where the wiring can hand the host a rewrite, the
+// guard closes it, says so once per session, and records that it did.
+func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	dir := t.TempDir()
+	ctx := WithLocation(t.Context(), dir, "/repo", "")
+	judge := func(input string, rewrites bool) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
+	}
+
+	first := judge("ls -la", true)
+	assert.Equal(t, Verdict{
+		SchemaVersion:  agent.GuardSchemaVersion,
+		Decision:       "advise",
+		Context:        stdinClosedNotice,
+		Rule:           string(advisoryStdinClosed),
+		UpdatedCommand: "exec </dev/null; ls -la",
+	}, first, "the first rewrite of a session says so")
+
+	again := judge("ls", true)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}, again,
+		"once per session, then the rewrite alone")
+
+	assert.Empty(t, judge("exec </dev/null; ls", true).UpdatedCommand, "a command that closes stdin itself is never prefixed twice")
+	assert.Empty(t, judge("ls", false).UpdatedCommand, "a wiring that cannot hand the host a rewrite gets none")
+
+	denied := judge("git add -A", true)
+	assert.Equal(t, "deny", denied.Decision)
+	assert.Empty(t, denied.UpdatedCommand, "a refused call is never rewritten")
+
+	events := trailEvents(t, dir, trail.KindAgentCommand)
+	require.Len(t, events, 5)
+	var closed []bool
+	for _, e := range events {
+		raw, err := trail.ReadBlob(dir, e.ResponseRef)
+		require.NoError(t, err)
+		var resp struct {
+			StdinClosed bool `json:"stdin_closed"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &resp))
+		closed = append(closed, resp.StdinClosed)
+	}
+	assert.Equal(t, []bool{true, true, false, false, false}, closed, "the trail records each rewrite and nothing else")
+}
+
+// TestClosedStdinLineRunsAsWritten runs each rewritten line in bash with a stdin that has
+// bytes waiting, which is the case the prefix exists for: every reader must see
+// end-of-file, and the line must otherwise behave exactly as the agent wrote it.
+func TestClosedStdinLineRunsAsWritten(t *testing.T) {
+	t.Parallel()
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	for _, tc := range []struct {
+		name, line, out string
+		code            int
+	}{
+		{"a reader of stdin", `read -r x; echo "[$x] $?"`, "[] 1\n", 0},
+		{"a filter with no operand", "wc -c", "0\n", 0},
+		{"a heredoc", "cat <<'EOF'\nhello\nEOF", "hello\n", 0},
+		{"a pipe", "echo piped | cat", "piped\n", 0},
+		{"an explicit redirect", "cat < /dev/null; echo done", "done\n", 0},
+		{"a trailing comment", "echo hi # read this", "hi\n", 0},
+		{"a trailing ampersand", "echo bg &", "bg\n", 0},
+		{"several lines", "echo a\necho b", "a\nb\n", 0},
+		{"an exit status", "echo out; exit 3", "out\n", 3},
+	} {
+		line, closed := closeStdin(tc.line)
+		require.True(t, closed, tc.name)
+		again, rewrapped := closeStdin(line)
+		assert.False(t, rewrapped, "%s: a wrapped line is never wrapped twice", tc.name)
+		assert.Equal(t, line, again, tc.name)
+
+		cmd := exec.Command(bash, "-c", line)
+		cmd.Stdin = strings.NewReader("LEAKED\n")
+		out, err := cmd.Output()
+		code := 0
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			code = exitErr.ExitCode()
+		} else {
+			require.NoError(t, err, tc.name)
+		}
+		assert.Equal(t, tc.out, strings.TrimLeft(string(out), " "), "%s: %q", tc.name, line)
+		assert.Equal(t, tc.code, code, "%s: the line's own exit status", tc.name)
+	}
+}
+
+// The shell advisories that spoke with no name, each now naming a catalogued rule.
+func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
+	t.Parallel()
+	for command, want := range map[string]denyRuleName{
+		"./magus run lint . && echo done": advisoryEchoOnSuccess,
+		"time ./magus run test . -s":      advisoryTimedMagus,
+		"npm update":                      advisoryDependencyUpdate,
+		"pnpm install":                    advisoryDependencyInstall,
+	} {
+		v := Evaluate(testDependencies(), command)
+		require.NotEmpty(t, v.Context, command)
+		assert.Equal(t, string(want), v.advisoryName(), command)
+		_, ok := Rule(v.advisoryName())
+		assert.True(t, ok, "%q names %q, which the catalog does not list", command, v.advisoryName())
+	}
 }

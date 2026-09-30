@@ -28,7 +28,8 @@ import (
 // lifecycle policy (dedup, ref-count, idle keep-warm); the Runner owns the process.
 type Runner interface {
 	// Start launches the service and returns once it is ready (Runner-defined), or
-	// an error if it could not be started or never became ready.
+	// an error if it could not be started or never became ready. It returns [Adopted]
+	// for a service it found already running, which the Registry never stops.
 	Start(ctx context.Context, s spells.Service) (Handle, error)
 	// Stop terminates a running service. It is called at most once per Handle. ctx
 	// bounds how long Stop may take (e.g. a graceful-stop command or the wait for the
@@ -124,8 +125,11 @@ func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (H
 		r.mu.Unlock()
 		return nil, e.startErr
 	}
-	// Record how to stop it so a later broker can reap it if this one crashes.
-	r.journal.record(key, s.Stop)
+	// Record how to stop it so a later broker can reap it if this one crashes. An
+	// adopted service is not this broker's to stop, alive or dead.
+	if e.handle != Adopted {
+		r.journal.record(key, s.Stop)
+	}
 	return e.handle, nil
 }
 
@@ -183,7 +187,7 @@ func (r *Registry) stop(ctx context.Context, e *entry) {
 	case <-ctx.Done():
 		return
 	}
-	if e.handle != nil {
+	if e.handle != nil && e.handle != Adopted {
 		r.runner.Stop(ctx, e.handle)
 	}
 }
@@ -265,7 +269,7 @@ func (r *Registry) Snapshot() []ServiceStatus {
 		st := ServiceStatus{
 			ID:         shortServiceID(key),
 			Label:      serviceLabel(e.svc),
-			Command:    commandString(e.svc.Command),
+			Command:    commandString(runs(e.svc)),
 			Ports:      identity.Parse(e.svc.Command).Ports,
 			Dependents: e.refs,
 			StartedAt:  e.startedAt,
@@ -305,13 +309,23 @@ func shortServiceID(key string) string {
 // serviceLabel derives a human name for a service: image[:tag] for a recognized
 // container run, else the process binary's basename.
 func serviceLabel(s spells.Service) string {
-	if id := identity.Parse(s.Command); id.IsContainer() {
+	c := runs(s)
+	if id := identity.Parse(c); id.IsContainer() {
 		if id.Tag != "" {
 			return id.Image + ":" + id.Tag
 		}
 		return id.Image
 	}
-	return identity.Basename(s.Command.Bin)
+	return identity.Basename(c.Bin)
+}
+
+// runs is the command a service is known by: its Start for a start service, else its
+// Command.
+func runs(s spells.Service) spells.Command {
+	if s.Start.Bin != "" {
+		return s.Start
+	}
+	return s.Command
 }
 
 // commandString renders a Command as its space-joined bin and args, for display.
@@ -320,6 +334,17 @@ func commandString(c spells.Command) string {
 		return c.Bin
 	}
 	return c.Bin + " " + strings.Join(c.Args, " ")
+}
+
+// Key returns the key a running service is shared under. A Command service is scoped
+// to the workspace at root (see identity.InstanceKey). A start service is not: what it
+// brings up (a VM, a system unit) is one per machine whichever workspace asks, and
+// keying it per workspace would let one workspace's idle reap stop it under another.
+func Key(root string, s spells.Service) string {
+	if s.Start.Bin == "" {
+		return identity.InstanceKey(root, s)
+	}
+	return "start\x00" + identity.Fingerprint(spells.Service{Command: s.Start})
 }
 
 // idleWindow resolves a service's idle window: its own Service.Idle override when it

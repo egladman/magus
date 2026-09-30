@@ -115,9 +115,12 @@ type Stats struct {
 }
 
 // Step is the hashable description of a cached build step.
+//
+// Every glob list here is a union of declared globs, each carrying its own exclusions
+// (types.Glob), relative to WorkspaceRoot.
 type Step struct {
-	ProjectPath string   // repo-relative project directory
-	Sources     []string // doublestar globs (relative to WorkspaceRoot) for the cache key
+	ProjectPath string       // repo-relative project directory
+	Sources     []types.Glob // for the cache key
 	// IgnoreDirs are the non-source dir names this project's resolved spells generate
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
 	// The field itself is not written into the key; only the resulting file set is, so
@@ -136,7 +139,7 @@ type Step struct {
 	// line class rather than reusing exec:. The value is opaque here: magus compares it
 	// and never interprets it.
 	Observations []string
-	Outputs      []string // globs snapshotted into cache and replayed on hit
+	Outputs      []types.Glob // snapshotted into cache and replayed on hit
 	// RequiredOutputs is the subset of Outputs that must each match at least one file,
 	// rather than the whole set merely matching something. It carries the globs another
 	// project's build order depends on (a cross-project output), where producing nothing
@@ -144,7 +147,7 @@ type Step struct {
 	// and later cache hits would replay a partial output set into a tree this target does
 	// not own. Ordinary outputs stay lenient: a glob that legitimately matches nothing
 	// is common, and only a total miss is suspicious.
-	RequiredOutputs []string
+	RequiredOutputs []types.Glob
 	// NestedDirs are the workspace-relative dirs of the projects nested under this one.
 	// A file inside one belongs to that project, so an output glob stops at its boundary
 	// unless the glob itself is rooted inside it (a declared cross-project output).
@@ -165,11 +168,11 @@ type Step struct {
 	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
 	// Outputs, and hashing either would change every existing key. They exist so
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
-	Updates []string // ctx.modifiesExistingFiles globs
+	Updates []types.Glob // ctx.modifiesExistingFiles globs
 	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
 	// target does the same across projects.
-	OwnedOutputs []string
+	OwnedOutputs []types.Glob
 
 	Deps      []string // upstream project hashes folded into the key
 	DependsOn []string // upstream project paths for scheduling (not hashed)

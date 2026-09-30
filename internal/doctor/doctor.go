@@ -117,7 +117,7 @@ type runner struct {
 	root string
 	ws   types.WorkspaceReader
 	// ctx bounds the checks that touch the world: a git probe, a socket dial, an HTTP
-	// GET. Each used to invent its own context.Background(), so a `magus_doctor` an
+	// GET. Each used to invent its own context.Background(), so a `magus\doctor` an
 	// agent cancelled kept dialing and walking regardless.
 	ctx context.Context
 	// wsErr is the workspace load error, held on the runner so checkWorkspace can be a

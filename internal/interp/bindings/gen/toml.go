@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/encoding/toml"
@@ -17,20 +18,20 @@ func RegisterToml(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("toml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := Str(bzArgs, 0)
+		source := ffi.Str(bzArgs, 0)
 		ret0, err := toml.TOMLParse(ctx, source)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("stringify", vm.DirectValue("toml.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		value := Any(bzArgs, 0)
+		value := ffi.Any(bzArgs, 0)
 		ret0, err := toml.TOMLStringify(ctx, value)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

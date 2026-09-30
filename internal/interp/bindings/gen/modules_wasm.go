@@ -5,37 +5,40 @@
 
 package gen
 
+import "github.com/egladman/magus/internal/interp/bindings/ffi"
+
 // Modules is the wasm build's view: only the modules std marks WASM, which the browser
 // playground can install. modules.go holds the full set but is //go:build !wasm
 // because it references the IO trampolines.
 //
 // The `magus` namespace is intentionally absent. It is not a bare import; it is
 // wired onto the magus.* namespace with a magusfile's target context.
-var Modules = Set{
-	"base64":   {Register: RegisterBase64, Capabilities: Capabilities(WASM), Path: "encoding/base64"},
-	"charm":    {Register: RegisterCharm, Capabilities: Capabilities(WASM)},
-	"crypto":   {Register: RegisterCrypto, Capabilities: Capabilities(WASM)},
-	"csv":      {Register: RegisterCsv, Capabilities: Capabilities(WASM), Path: "encoding/csv"},
-	"diff":     {Register: RegisterDiff, Capabilities: Capabilities(WASM)},
-	"env":      {Register: RegisterEnv, Capabilities: Capabilities(WASM)},
-	"flags":    {Register: RegisterFlags, Capabilities: Capabilities(WASM)},
-	"fmt":      {Register: RegisterFmt, Capabilities: Capabilities(WASM)},
-	"hex":      {Register: RegisterHex, Capabilities: Capabilities(WASM), Path: "encoding/hex"},
-	"ini":      {Register: RegisterIni, Capabilities: Capabilities(WASM), Path: "encoding/ini"},
-	"json":     {Register: RegisterJson, Capabilities: Capabilities(WASM), Path: "encoding/json"},
-	"log":      {Register: RegisterLog, Capabilities: Capabilities(WASM)},
-	"markdown": {Register: RegisterMarkdown, Capabilities: Capabilities(WASM)},
-	"math":     {Register: RegisterMath, Capabilities: Capabilities(WASM)},
-	"path":     {Register: RegisterPath, Capabilities: Capabilities(WASM)},
-	"platform": {Register: RegisterPlatform, Capabilities: Capabilities(WASM)},
-	"semver":   {Register: RegisterSemver, Capabilities: Capabilities(WASM)},
-	"sort":     {Register: RegisterSort, Capabilities: Capabilities(WASM)},
-	"strings":  {Register: RegisterStrings, Capabilities: Capabilities(WASM)},
-	"template": {Register: RegisterTemplate, Capabilities: Capabilities(WASM)},
-	"time":     {Register: RegisterTime, Capabilities: Capabilities(WASM)},
-	"toml":     {Register: RegisterToml, Capabilities: Capabilities(WASM), Path: "encoding/toml"},
-	"url":      {Register: RegisterUrl, Capabilities: Capabilities(WASM), Path: "encoding/url"},
-	"uuid":     {Register: RegisterUuid, Capabilities: Capabilities(WASM)},
-	"xml":      {Register: RegisterXml, Capabilities: Capabilities(WASM), Path: "encoding/xml"},
-	"yaml":     {Register: RegisterYaml, Capabilities: Capabilities(WASM), Path: "encoding/yaml"},
+var Modules = ffi.Set{
+	"base64":   {Register: RegisterBase64, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/base64"},
+	"charm":    {Register: RegisterCharm, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"crypto":   {Register: RegisterCrypto, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"csv":      {Register: RegisterCsv, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/csv"},
+	"diff":     {Register: RegisterDiff, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"env":      {Register: RegisterEnv, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"flags":    {Register: RegisterFlags, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"fmt":      {Register: RegisterFmt, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"hex":      {Register: RegisterHex, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/hex"},
+	"ini":      {Register: RegisterIni, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/ini"},
+	"json":     {Register: RegisterJson, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/json"},
+	"log":      {Register: RegisterLog, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"markdown": {Register: RegisterMarkdown, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"math":     {Register: RegisterMath, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"merge":    {Register: RegisterMerge, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"path":     {Register: RegisterPath, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"platform": {Register: RegisterPlatform, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"semver":   {Register: RegisterSemver, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"sort":     {Register: RegisterSort, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"strings":  {Register: RegisterStrings, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"template": {Register: RegisterTemplate, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"time":     {Register: RegisterTime, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"toml":     {Register: RegisterToml, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/toml"},
+	"url":      {Register: RegisterUrl, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/url"},
+	"uuid":     {Register: RegisterUuid, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"xml":      {Register: RegisterXml, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/xml"},
+	"yaml":     {Register: RegisterYaml, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/yaml"},
 }

@@ -98,15 +98,18 @@ func TestMatchBuzzTargets(t *testing.T) {
 		// A negation is exact, never suffix shorthand: "!build" must NOT read as
 		// "^.*-build$" here, or this would subtract both -build targets.
 		{"negate bare name is exact", []string{"*-build", "!build"}, []string{"go-build", "rust-build"}},
-		// Subtracting from nothing is nothing, never "everything else".
-		{"only negation selects nothing", []string{"!go-build"}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchBuzzTargets(targets, tt.patterns)
+			got, err := matchBuzzTargets(targets, tt.patterns)
+			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
 	}
+
+	// Nothing to subtract from is refused, never read as "everything else" or as nothing.
+	_, err := matchBuzzTargets(targets, []string{"!go-build"})
+	require.EqualError(t, err, `negation "!go-build" has no pattern to narrow`)
 }
 
 // TestResolveTargetFun pins how magus.needs maps a passed function value to its

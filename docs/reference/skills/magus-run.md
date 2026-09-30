@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 12722
-skill_short_bytes: 8517
+skill_full_bytes: 13682
+skill_short_bytes: 9336
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `03d4e6f94f87` |
+| `skill-content` | `a0c231272f99` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -83,15 +83,24 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.
 ## Rules
 
 1. Prefer the MCP tools.
-   At session start, or after an MCP call fails, check `magus status --probe=mcp`.
-   If it is unavailable, continue with the CLI fallback below. Hosts manage
-   their own MCP connection; do not manually start a server for an agent.
-   - `magus_run_target` {target, projects} - run named projects.
-   - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
-     touched.
+   Call an exposed MCP tool directly. If it is missing or its call fails, use
+   the CLI fallback below. Do not gate that choice on `magus status --probe=mcp`:
+   it tests loopback HTTP, while a host may use stdio or the server's Unix socket.
+   For server-socket diagnosis, `magus status --probe=readiness` checks that this
+   workspace is loaded there; it does not test the host's MCP registration.
+   Hosts manage their own connection; do not manually start a server for an agent.
+   - `client` (`magus\run`) - run named projects, with the same arguments as `magus run`.
+   - `client` (`magus\affected`) - the projects a VCS change
+     touched. It returns the set and does not run it.
 
-   If the MCP tool errors or no server is connected, run the CLI equivalent
-   (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
+   `client` is bounded at 10 minutes when called directly; a host that
+   supports MCP tasks can run it as a task without that bound. So a long run (a full
+   `ci`, a gate) goes to the CLI unless your host runs `client` as a
+   task.
+
+   If the MCP tool errors or is absent, run the CLI equivalent
+   (`magus run <target>`; `magus affected list` for the set, `magus affected <target>`
+   to run it). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`).
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one
    target name magus enforces.
@@ -133,6 +142,10 @@ WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `magus run lint`, `format`, `test` to check your own work.
 CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
+
+To prove a command on Linux without opening a pull request, magus's own repository
+runs it on a GitHub Actions runner, `magus buzz hack/on-actions.buzz -- <command>`, or
+in a local Podman container, `magus buzz hack/on-linux.buzz -- <command>`.
 
 ## Output control: silence runs, read structure
 
@@ -191,7 +204,7 @@ Re-run the top-level target before you call the work done.
 
 Each target's result line mints an output reference id (`out1a2b3c`).
 
-1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
+1. Fetch the exact captured output: `client` (`magus\output`) over MCP, or
    `magus query output out1a2b3c` on the CLI. Never re-run just to see the error again.
 2. With no ref in hand, the ref is in the run that minted it: every `magus run`
    prints one per target, and `magus session` lists recent invocations with the
@@ -251,7 +264,7 @@ magus is CWD-relative: a bare `magus run`/`ls`/`describe` acts on the project ho
 your current directory, or the whole workspace from the root. Do not assume the root.
 Scope explicitly so a command means the same anywhere: name the project (`magus run
 test web`), or let `magus affected` compute the set from the diff. `magus where <name>`
-resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the CWD.
+resolves a name to its path; over MCP, `client` (`magus\where`, the project that contains a directory) ignores the CWD.
 
 `--root <path>`, or `-C` after make's idiom, sets where that walk STARTS. Its argument
 is a plain path and nothing more: any directory, one file in it or none, nested or not.
@@ -272,17 +285,26 @@ VCS.
 ## Rules
 
 1. Prefer the MCP tools; they return structured content with nothing to silence.
-   At session start, or after an MCP call fails, check `magus status --probe=mcp`.
-   If it is unavailable, continue with the CLI fallback below. Hosts manage
-   their own MCP connection; do not manually start a server for an agent.
+   Call an exposed MCP tool directly. If it is missing or its call fails, use
+   the CLI fallback below. Do not gate that choice on `magus status --probe=mcp`:
+   it tests loopback HTTP, while a host may use stdio or the server's Unix socket.
+   For server-socket diagnosis, `magus status --probe=readiness` checks that this
+   workspace is loaded there; it does not test the host's MCP registration.
+   Hosts manage their own connection; do not manually start a server for an agent.
    Do not make the connection a prerequisite for completing the work.
-   - `magus_run_target` {target, projects} - run named projects (or the cwd
+   - `client` (`magus\run`) - run named projects, with the same arguments as `magus run` (or the cwd
      project). Use when you know which projects to run.
-   - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
-     touched; magus computes the set. Use for a pre-commit/CI gate.
+   - `client` (`magus\affected`) - the projects a VCS change
+     touched. It returns the set and does not run it. The gate is `magus affected ci`.
 
-   If the MCP tool errors or no server is connected, run the CLI equivalent
-   (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
+   `client` is bounded at 10 minutes when called directly; a host that
+   supports MCP tasks can run it as a task without that bound. So a long run (a full
+   `ci`, a gate) goes to the CLI unless your host runs `client` as a
+   task.
+
+   If the MCP tool errors or is absent, run the CLI equivalent
+   (`magus run <target>`; `magus affected list` for the set, `magus affected <target>`
+   to run it). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`) so a
    passing run costs a few lines, not a scroll of progress.
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one
@@ -304,7 +326,7 @@ VCS.
    rerunning one failing target is cheaper than the pipeline while you fix it,
    and `ci` afterwards proves the change. `magus describe targets` lists every
    target (`-o name` for bare names) and classifies each as canonical, spell,
-   or custom; `magus_describe` (kind=targets) is the MCP equivalent. Ask the
+   or custom; `client` (`magus\describe`, the same arguments as `magus describe targets`) is the MCP equivalent. Ask the
    workspace rather than reading `MAGUS.md`: that file is a generated index
    for humans, true only as of its last regeneration.
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
@@ -328,14 +350,17 @@ magus run test web                # iterate on the one failing target ci named
 magus affected test               # only projects affected by the VCS diff
 ```
 
-MCP equivalents: `magus_run_target` {target, projects, dry_run} and
-`magus_run_affected` {target, base, dry_run}. Use `magus_where` to resolve a
-fuzzy project name first.
+MCP equivalents: `client` (`magus\run`) with the arguments of `magus run`.
+`magus\affected` returns the affected project set and does not run it. `magus\impact` is why each project is in that set. `magus\where` answers which project contains a directory.
 
 WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `magus run lint`, `format`, `test` to check your own work.
 CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
+
+To prove a command on Linux without opening a pull request, magus's own repository
+runs it on a GitHub Actions runner, `magus buzz hack/on-actions.buzz -- <command>`, or
+in a local Podman container, `magus buzz hack/on-linux.buzz -- <command>`.
 
 ## Output control: silence runs, read structure
 
@@ -436,7 +461,7 @@ composition, so the full composition is what has to pass.
 
 Each target's result line mints an output reference id (`out1a2b3c`).
 
-1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
+1. Fetch the exact captured output: `client` (`magus\output`) over MCP, or
    `magus query output out1a2b3c` on the CLI. Do this instead of re-running the
    target to see the error again.
 2. With no ref in hand, the ref is in the run that minted it: every `magus run`

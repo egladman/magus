@@ -310,6 +310,8 @@ type landing struct {
 //  2. a holder took it with `magus job exec` and that checkout's directory is gone;
 //  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
 //     and no live child hangs under it, so a root outlives the children still working;
+//     a row queued on a live dependency is waiting, and its clock starts when the last
+//     one ends (see [types.JobIdleSince]);
 //  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it.
 //
@@ -376,11 +378,12 @@ func (w *sweeper) reason(rows []types.Job, row types.Job) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !row.StaleAt(w.now, window) {
+	if !types.JobStaleAt(rows, row, w.now, window) {
 		return "", nil
 	}
+	since, _ := types.JobIdleSince(rows, row)
 	return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)",
-		time.Duration(w.now-row.Updated)*time.Second, window), nil
+		time.Duration(w.now-since)*time.Second, window), nil
 }
 
 // checkoutGone reports whether root names a directory that provably does not exist.
@@ -412,11 +415,8 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	if err != nil || len(dead) == 0 {
 		return f, err
 	}
-	err = s.withFileLock(context.Background(), func() error {
-		cur, err := s.read()
-		if err != nil {
-			return err
-		}
+	err = s.update(context.Background(), func(cur *jobsFile) error {
+		var err error
 		if dead, err = w.dead(cur.Jobs); err != nil {
 			return err
 		}
@@ -426,12 +426,10 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 			cur.Jobs[i].EndReason = e.reason
 			cur.Jobs[i].Updated = w.now
 		}
-		if len(dead) > 0 {
-			if err := s.write(cur); err != nil {
-				return err
-			}
+		f = *cur
+		if len(dead) == 0 {
+			return file.SkipWrite
 		}
-		f = cur
 		return nil
 	})
 	if err != nil {
@@ -467,7 +465,7 @@ type PruneOptions struct {
 //   - a reason the read sweep ends rows for (see [sweeper.dead]);
 //   - its holder exited and nobody collected the result with `magus job wait`;
 //   - it is overdue ([types.Job.Overdue]);
-//   - it is stale ([types.Job.StaleAt] against jobs.stale_after) and nobody took it, or
+//   - it is stale ([types.JobStaleAt] against jobs.stale_after) and nobody took it, or
 //     opts.All is set.
 //
 // A declared or running row a holder took and touched within jobs.stale_after is never
@@ -500,13 +498,13 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 	w.landed = s.landings(f.Jobs, w.now)
 
 	var out []Ending
-	err = s.withFileLock(ctx, func() error {
-		cur, err := s.read()
-		if err != nil {
+	err = s.update(ctx, func(cur *jobsFile) error {
+		var err error
+		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
 			return err
 		}
-		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil || opts.DryRun || len(out) == 0 {
-			return err
+		if opts.DryRun || len(out) == 0 {
+			return file.SkipWrite
 		}
 		for _, e := range out {
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
@@ -514,7 +512,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 			cur.Jobs[i].EndReason = e.Reason
 			cur.Jobs[i].Updated = w.now
 		}
-		return s.write(cur)
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -588,7 +586,8 @@ func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.
 	case !slices.Contains(flagged.Stale, row.ID):
 		return ""
 	case row.Registered == 0:
-		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", idle, window)
+		since, _ := types.JobIdleSince(flagged.Jobs, row)
+		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", time.Duration(w.now-since)*time.Second, window)
 	default:
 		return fmt.Sprintf("taken, then untouched for %s (jobs.stale_after is %s)", idle, window)
 	}

@@ -118,6 +118,9 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		"internal/json/json_v2.go":                  true,
 		"libs/gopherbuzz/internal/codec/json.go":    true,
 		"libs/gopherbuzz/internal/codec/json_v2.go": true,
+		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
+		// with the codec the binary actually ships to prove structured content survives it.
+		"internal/handler/mcp/mcp_test.go": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)

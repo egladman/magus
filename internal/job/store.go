@@ -7,8 +7,8 @@
 //
 // The INTENT layer of three, flat stores joined by job id at render time rather than a
 // hierarchy: intent is this package, actions are internal/trail, and effects are the run
-// itself. internal/journal (one invocation's events) and internal/memory and
-// internal/notes (prose for a later reader) model no leased work and are not siblings.
+// itself. internal/journal (one invocation's events) and internal/notes (prose for a
+// later reader) model no leased work and are not siblings.
 package job
 
 import (
@@ -29,10 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -53,7 +52,7 @@ var ErrNoID = errors.New("job: a lease needs an id")
 //
 //   - The mutex serializes writers within one process while they share a Store, which is
 //     why the server builds exactly one and hands it to both of its doors (the
-//     magus_job MCP tool and the console's read route).
+//     client MCP tool's magus\job and the console's read route).
 //   - An OS file lock beside jobs.json serializes writers across PROCESSES. The CLI, the
 //     server, and an MCP client each hold their own Store on the same file, from any
 //     worktree or clone of the repository, and workers now register and heartbeat against
@@ -65,9 +64,9 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // List and writing back the whole row takes them twice, and two such merges on one id
 // then lose whichever field the second one read before the first wrote. [Store.Update] is
 // that merge done under a single acquisition, and it is what a field-at-a-time writer (the
-// magus_job MCP tool) has to use.
+// client MCP tool's magus\job\put) has to use.
 //
-// READS take neither. write replaces the file by rename, so a reader either sees the
+// READS take neither. Every write replaces the file by rename, so a reader either sees the
 // whole previous ledger or the whole next one; blocking List behind a writer in another
 // process would buy nothing and would let a wedged writer stall the console.
 type Store struct {
@@ -81,7 +80,7 @@ type Store struct {
 	root string
 	// actor pins who this Store writes as; nil resolves the acting party at every write
 	// from cacheDir and the environment. The server builds ONE Store at startup and serves
-	// every magus_job caller from it, so an actor frozen at construction grades all of
+	// every MCP job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
 	actor    *Actor
 	cacheDir string
@@ -136,7 +135,7 @@ type Location struct {
 // resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
 // worktree were invisible to a worker in another, and a lease-scoped guard rule could
 // not bind across the two. The rows describe a repository's plan, so they key on
-// repository identity exactly as internal/sessions and internal/memory do.
+// repository identity exactly as internal/sessions does.
 //
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
@@ -376,6 +375,97 @@ func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
 	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 }
 
+// EditOptions is the change [Store.Edit] makes to a live job's write paths.
+type EditOptions struct {
+	// AddWritePaths widens the job. A path it already holds is left where it is.
+	AddWritePaths []string
+	// RemoveWritePaths revokes paths the job holds.
+	RemoveWritePaths []string
+	// DryRun returns the row the edit would write, releases included, and writes nothing.
+	DryRun bool
+}
+
+// Edit merges opts into live job id's write paths in one write, and keeps everything else
+// the row carries, its state and registration included, where a re-fork hands a taken job
+// out again as declared. A removed path is released as a worker's own shrink releases one,
+// with the digest of what it left, and marked revoked when someone other than the holder of
+// a taken job removed it, so the holder's next write there is refused naming that.
+//
+// Who may do what is [authorizeRow]'s: an unbound writer widens, and a bound worker only
+// removes its own paths. An added path is held to the rules a fork's write paths are (see
+// [RefuseAddedWritePaths]). Naming no path, one path both ways, a path the job does not
+// hold, a job nobody declared or one that ended is an error, and nothing is written.
+func (s *Store) Edit(ctx context.Context, id string, opts EditOptions) (types.Job, error) {
+	if len(opts.AddWritePaths)+len(opts.RemoveWritePaths) == 0 {
+		return types.Job{}, fmt.Errorf("job: an edit of %s names no write path to add or remove", id)
+	}
+	for _, p := range opts.AddWritePaths {
+		if slices.Contains(opts.RemoveWritePaths, p) {
+			return types.Job{}, fmt.Errorf("job: %q is both added and removed", p)
+		}
+	}
+	if err := RefuseAddedWritePaths(ctx, s, id, opts.AddWritePaths); err != nil {
+		return types.Job{}, err
+	}
+	if !opts.DryRun {
+		return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, exists bool, _ int64) error {
+			return editWritePaths(cur, id, exists, opts)
+		})
+	}
+	rows, err := s.List()
+	if err != nil {
+		return types.Job{}, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	var prev types.Job
+	if i >= 0 {
+		prev = rows[i]
+		if err := readOnly(prev); err != nil {
+			return types.Job{}, err
+		}
+	}
+	next := prev.Clone()
+	if err := editWritePaths(&next, id, i >= 0, opts); err != nil {
+		return types.Job{}, err
+	}
+	actor := s.Actor()
+	if err := authorizeRow(actor, id, prev, next, true, rows); err != nil {
+		return types.Job{}, err
+	}
+	next.Releases = s.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != id)
+	return next, nil
+}
+
+// editWritePaths applies opts to cur, the stored row id, or says why it cannot.
+func editWritePaths(cur *types.Job, id string, exists bool, opts EditOptions) error {
+	switch {
+	case !exists:
+		return fmt.Errorf("job: there is no job %q to edit", id)
+	case cur.State.Terminal():
+		return fmt.Errorf("job: %s already ended %s, and an edit changes a live job", id, cur.State)
+	}
+	for _, p := range opts.RemoveWritePaths {
+		if !slices.Contains(cur.WritePaths, p) {
+			return fmt.Errorf("job: %s does not hold %q, so there is nothing to revoke; its write paths are %s",
+				id, p, strings.Join(cur.WritePaths, ", "))
+		}
+	}
+	paths := slices.DeleteFunc(slices.Clone(cur.WritePaths), func(p string) bool { return slices.Contains(opts.RemoveWritePaths, p) })
+	for _, p := range opts.AddWritePaths {
+		if !slices.Contains(paths, p) {
+			paths = append(paths, p)
+		}
+	}
+	// An empty write set is no boundary at all (the guard scopes nothing by it), so taking
+	// the last path would free the job rather than stop it.
+	if len(paths) == 0 {
+		return fmt.Errorf("job: that revokes every write path %s holds, which leaves it bounded by nothing;"+
+			" end the job with `%s` instead", id, hint.JobExit.With(id))
+	}
+	cur.WritePaths = paths
+	return nil
+}
+
 // entryPath cleans the path an entry names, refusing one that is not workspace-relative.
 func entryPath(rel string) (string, error) {
 	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
@@ -520,11 +610,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 	actor := s.Actor()
 	var stored types.Job
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
 		var prev types.Job
 		if i >= 0 {
@@ -599,7 +685,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
-		row.Releases = s.releases(ctx, prev, row, now)
+		row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
 		if i >= 0 {
 			row.Created = prev.Created
 			row.RegisteredBy = prev.RegisteredBy
@@ -607,9 +693,6 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		} else {
 			row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
 			f.Jobs = append(f.Jobs, row)
-		}
-		if werr := s.write(f); werr != nil {
-			return werr
 		}
 		stored = row.Clone()
 		return nil
@@ -669,18 +752,15 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 	defer s.mu.Unlock()
 
 	var dropped int
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		if len(f.Jobs) > 0 {
-			if err := s.archive(f); err != nil {
+			if err := s.archive(*f); err != nil {
 				return err
 			}
 		}
 		dropped = len(f.Jobs)
-		return s.write(jobsFile{Schema: f.Schema})
+		*f = jobsFile{Schema: f.Schema}
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -707,8 +787,9 @@ func (s *Store) archive(f jobsFile) error {
 // A path that is owned again drops OUT of the list: a row saying it both owns and has
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
-// inherits is the one left behind last.
-func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) []types.JobRelease {
+// inherits is the one left behind last. revoked marks what this write gave up as taken from
+// its holder rather than given up by it.
+func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
 		return slices.Contains(next.WritePaths, r.Path)
 	})
@@ -716,7 +797,7 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) [
 		if slices.Contains(next.WritePaths, p) {
 			continue
 		}
-		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
+		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
 		if at := slices.IndexFunc(out, func(r types.JobRelease) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue
@@ -853,107 +934,67 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 // is from the reader's side.
 const maxDigestBytes = 32 << 20
 
+// doc is the ledger file. Every rewrite goes through its Update, under the OS file lock
+// beside jobs.json, so a read-modify-write cannot interleave with one from another magus
+// process. The lock wait is BOUNDED, where the workspace project locks (magus/lock.go)
+// wait forever with a heartbeat: their holder is a build that may run for hours, and a
+// ledger write is a small file rewrite, so a longer wait means a stuck holder.
+func (s *Store) doc() file.Doc[jobsFile] {
+	return file.Doc[jobsFile]{Path: s.path, Decode: s.decode, Encode: encodeJobs}
+}
+
+// update runs fn over the ledger as it stands under the file lock and writes what fn
+// leaves. fn returning an error, file.SkipWrite included, writes nothing.
+func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.doc().Update(ctx, fn)
+}
+
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet for this repository.
+func (s *Store) read() (jobsFile, error) {
+	if s.err != nil {
+		return jobsFile{}, s.err
+	}
+	return s.doc().Load()
+}
+
+// decode parses the ledger.
 //
 // A row newer than this magus is read like any other: the members it does not declare
 // ride in the row's Schema.Unknown and go back out on the next write, and authorizeRow and
 // jobOverlaps need only fields every version carries. A row requiring a feature this magus
 // lacks is read too, and only a write to it is refused (see readOnly).
-func (s *Store) read() (jobsFile, error) {
-	if s.err != nil {
-		return jobsFile{}, s.err
-	}
-	raw, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return jobsFile{}, nil
-	}
-	if err != nil {
-		return jobsFile{}, err
-	}
-	var f jobsFile
-	if err := json.Unmarshal(raw, &f); err != nil {
-		return jobsFile{}, err
+func (s *Store) decode(raw []byte, f *jobsFile) error {
+	if err := json.Unmarshal(raw, f); err != nil {
+		return err
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return jobsFile{}, fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks; update magus",
+		return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks; update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	if err := foldStoredNames(f.Jobs); err != nil {
-		return jobsFile{}, fmt.Errorf("job: %s: %w", s.path, err)
+		return fmt.Errorf("job: %s: %w", s.path, err)
 	}
-	return f, nil
+	return nil
 }
 
-// withFileLock runs fn while this process holds the ledger's exclusive OS file lock, so a
-// read-modify-write cannot interleave with one from another magus process.
-//
-// The same idiom the workspace project locks use (magus/lock.go): gofrs/flock, TryLock
-// first and TryLockContext to poll while contended. An OS lock rather than a lockfile
-// because the kernel drops it when the holder exits, so a killed worker never leaves the
-// ledger wedged. Advisory, like that one: it serializes the code that takes it and
-// nothing else, so a hand-edit of leases.json ignores it entirely.
-//
-// The wait is BOUNDED, which is where this parts company with the project locks. Those
-// wait forever with a heartbeat because the holder is a build that may legitimately run
-// for hours; a ledger write is a small file rewrite, so a wait past lockWait means the
-// holder is stuck rather than busy, and blocking a worker's registration on it forever
-// hides that. ctx shortens the wait and never lengthens it.
-func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
-	if s.err != nil {
-		return s.err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
-	fl := flock.New(s.path + lockSuffix)
-	got, err := fl.TryLock()
-	if err != nil {
-		return fmt.Errorf("job: lock %s: %w", fl.Path(), err)
-	}
-	if !got {
-		wait, cancel := context.WithTimeout(ctx, lockWait)
-		defer cancel()
-		if got, err = fl.TryLockContext(wait, lockRetryDelay); err != nil || !got {
-			// Whose deadline ended the wait decides which of two different problems the
-			// caller has, and blaming a stuck holder for their own cancellation would send
-			// them looking for a process that is working fine.
-			if ctx.Err() != nil {
-				return fmt.Errorf("job: the caller was cancelled while waiting for the lease ledger lock at %s,"+
-					" so this write was not applied: %w", fl.Path(), ctx.Err())
-			}
-			return fmt.Errorf("job: another process has held the lease ledger lock at %s for more than %s,"+
-				" so this write was not applied. Look for a stuck magus process with `magus status`, then retry;"+
-				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
-		}
-	}
-	defer func() { _ = fl.Unlock() }()
-	return fn()
-}
-
-// The file lock's shape. lockWait bounds one acquisition and lockRetryDelay is how often a
-// blocked one re-polls, matching the project locks' cadence in magus/lock.go.
-const (
-	lockSuffix     = ".lock"
-	lockWait       = 10 * time.Second
-	lockRetryDelay = 20 * time.Millisecond
-)
-
-// write replaces the file atomically, so a reader never sees a half-written job store.
-// Every row, touched this call or not, carries its Schema.Unknown back out, and the
-// file's stamp never drops below what it read.
-func (s *Store) write(f jobsFile) error {
+// encodeJobs serializes the ledger. Every row, touched this call or not, carries its
+// Schema.Unknown back out, and the file's stamp never drops below what it read.
+func encodeJobs(f jobsFile) ([]byte, error) {
 	f.Version = max(f.Version, types.JobSchemaVersion)
 	rows, err := mirrorLegacyGoals(f.Jobs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f.Jobs = rows
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
+	return append(raw, '\n'), nil
 }
 
 // mirrorLegacyGoals writes each row's goals under their old name too, on a copy.
@@ -1002,11 +1043,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 	defer s.mu.Unlock()
 
 	var dropped types.Job
-	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
-		if err != nil {
-			return err
-		}
+	err := s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(row types.Job) bool { return row.ID == id })
 		if i < 0 {
 			return fmt.Errorf("job: there is no job %q", id)
@@ -1020,11 +1057,11 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" Delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if err := s.archive(f); err != nil {
+		if err := s.archive(*f); err != nil {
 			return err
 		}
 		f.Jobs = slices.Delete(f.Jobs, i, i+1)
-		return s.write(f)
+		return nil
 	})
 	if err != nil {
 		return types.Job{}, err

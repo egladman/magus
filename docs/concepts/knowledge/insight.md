@@ -23,7 +23,7 @@ magus\log.info(magus\insightMarkdown()); // the INSIGHT.md page
 ```
 
 ```text
-magus_insight lens=hotspots   # over MCP, for an agent
+# over the client tool, for an agent: return magus\insight().hotspots
 ```
 
 ## Design intent

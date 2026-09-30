@@ -486,7 +486,15 @@ const (
 	// recorded: the file has one owner unless a claim, a dependency, or a fold says
 	// otherwise, and none of the three costs the fork anything a whole-file lease does not
 	// already pay.
-	WritePathFileShared       DiagnosticCode = "MGS3032"
+	WritePathFileShared DiagnosticCode = "MGS3032"
+	// MCPBuzzFailed is a rejected or failed buzz tool transform. The message
+	// names the input to fix or the script failure; the CLI remains available
+	// when the script needs workspace effects.
+	MCPBuzzFailed DiagnosticCode = "MGS3033"
+	// MCPClientFailed is a rejected or failed client tool program. The message
+	// names the import the tool refuses or the script failure. Workspace work
+	// goes through magus\; the CLI remains available for the full host surface.
+	MCPClientFailed           DiagnosticCode = "MGS3034"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -654,7 +662,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
 	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
-	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared,
+	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

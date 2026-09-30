@@ -146,7 +146,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Manage skills, harnesses, and agent feedback. See [**magus-agent**(1)](magus-agent.md).
 
 **self**
-: Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print the client and server versions. See [**magus-version**(1)](magus-version.md).
@@ -426,11 +426,8 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_NO_BOOTSTRAP_EXEC**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 
-**MAGUS_REGISTRY_URL**
-: Env-only, no magus.yaml equivalent: override the built-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
-
 **MAGUS_OFFLINE**
-: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote-spell fetch fails with a named error instead of sending a request (default: false)
+: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: \`magus describe tools\` replays its stored answer or reads unknown (offline) (default: false)
 
 **MAGUS_DIFFTOOL**
 : Env-only, no magus.yaml equivalent: the command, taking two paths, that \`--then file \<path\> diff\` compares a cached artifact with (default: $DIFFTOOL, then git diff --no-index)
@@ -446,6 +443,21 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_MCP_TOKEN**
 : Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
+
+**MAGUS_MCP_BUZZ_PURE**
+: Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
+
+**MAGUS_MCP_CLIENT**
+: Set internally by the client MCP tool for its forked worker; never set it by hand
+
+**MAGUS_MCP_CLIENT_HOST**
+: Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
+
+**MAGUS_MCP_CLIENT_LEASE**
+: Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
+
+**MAGUS_STAMPED_LEASE**
+: Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand
 
 **MAGUS_S3_BUCKET**
 : Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in

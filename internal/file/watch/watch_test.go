@@ -10,6 +10,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // awaitEventFor re-invokes trigger on a ticker until a debounced batch containing wantPath
@@ -166,7 +168,7 @@ func TestWatcherContextCancellation(t *testing.T) {
 func TestOutputsIgnoreDoublestar(t *testing.T) {
 	t.Parallel()
 	const wsRoot = "/repo"
-	ignore := OutputsIgnore(wsRoot, []string{"dist/**", "build/output/**"})
+	ignore := OutputsIgnore(wsRoot, types.MustParseGlobs("dist/**", "build/output/**"))
 
 	cases := []struct {
 		path    string
@@ -186,6 +188,18 @@ func TestOutputsIgnoreDoublestar(t *testing.T) {
 	for _, tc := range cases {
 		assert.Equal(t, tc.ignored, ignore(tc.path), "OutputsIgnore(%q)", tc.path)
 	}
+}
+
+// TestOutputsIgnoreWatchesAnExcludedFile pins the rebuild-loop guard to the declaration:
+// a hand-maintained file an output carves out is a source, so editing it must trigger a
+// rebuild, and the directory holding it must not be pruned from the watch.
+func TestOutputsIgnoreWatchesAnExcludedFile(t *testing.T) {
+	t.Parallel()
+	ignore := OutputsIgnore("/repo", types.MustParseGlobs("gen/**", "!gen/runtime.go"))
+
+	assert.True(t, ignore("/repo/gen/fs.go"), "a generated file is still ignored")
+	assert.False(t, ignore("/repo/gen/runtime.go"), "the excluded file fires a rebuild")
+	assert.False(t, ignore("/repo/gen"), "the directory holding it stays watched")
 }
 
 // TestWatcherCloseNoGoroutineLeak verifies that calling Close on a Watcher

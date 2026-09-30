@@ -1,4 +1,4 @@
-# TRANSPORT PARITY: the shipped guard templates, executed against real host events.
+# TRANSPORT: the shipped guard templates, executed against real host events.
 #
 # The sibling gate in internal/agent/guard_test.go checks that every host DECLARES a stance for
 # every decision and surface. A declaration can be sincere and still wrong, because
@@ -12,55 +12,41 @@
 # a host would receive. `magus` here is the CLI under test, resolved off PATH the
 # same way the templates resolve it in a session.
 #
-# Each shipped template exists in two forms: the POSIX sh copy the codex, cursor and
-# any-host wirings invoke, and the Buzz port a `magus buzz` wiring names. Every case
-# below runs BOTH through $WORK/parity.sh and refuses any byte of difference, so the
-# port is graded against the arms these cases already exercise rather than against a
-# second block of cases that could fall behind them. The sh reply is what reaches the
-# assertions, so the cases read exactly as they did when one form existed.
-#
-# The two forms take their PER-ENTRY knobs by different routes, on purpose: a case sets
-# HOST_EVENT_RAW and __MAGUS_SHELL_FLAGS in the environment, where the sh copy reads them
-# because sh is what runs it, and parity.sh clears the first and re-spells the second as
-# argv for the Buzz port, which is wired as a plain `magus buzz -s <file> [-- flags]` and
-# works the raw-event question out of the event itself. Comparing the replies is what
-# proves the routes agree; a case that set only one would grade only one.
+# Every template is Buzz, run the way a host config wires it: a plain
+# `magus buzz -s <file> [-- flags]` argv. The per-entry knobs ride that argv: the host
+# name, and the `magus shell` flags an entry declares about itself. Whether to forward
+# the whole event is worked out from the event.
 #
 # Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
 # in internal/agent/guard_test.go fails when the guard contract grows a cell no case covers.
 
-# jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
-# dependency of the TEMPLATES a user installs into their host, not of building magus,
-# so pinning it in this repo's toolchain would assert something false. CI runs on
-# ubuntu-latest, which ships jq, so these cases execute there. Do not "fix" this skip
-# by adding jq to mise.toml - mise.toml is a root-level source, and touching it puts
-# every project in the workspace into the affected set.
-[!exec:jq] skip 'the guard templates pipe events through jq, which is not installed'
-[windows] skip 'POSIX sh templates; Windows hosts wire the same verdict differently'
+# The glue itself runs anywhere magus does; the fixtures do not. The stale binary below is
+# a POSIX sh script, and the push cases write their run log with sh.
+[windows] skip 'the fixtures stand in a POSIX sh script for a stale magus'
 
-# The host every case below names on its argv, through parity.sh, unless it says
-# otherwise. The name is opaque to magus; codex is the one the templates read.
+# The host every case below names on its argv unless it says otherwise. The name is
+# opaque to magus; codex is the one the templates read.
 env HOST_NAME=testscript
 
 # The shared templates serve these two hosts with the same documented envelope
-# fields and reply dialect. Keep the hosts explicit: TestShellTransportCasesCover-
+# fields and reply dialect. Keep the hosts explicit: TestTransportCasesCover-
 # TheHostContract reads this marker and refuses a coverage claim that no executed
 # fixture reaches. A shared fixture is intentional here; copying the identical
 # JSON would create two opportunities for the recorded contract to drift.
 # hosts: claude-code,codex
 
-# --- magus-command.sh: the shared Claude Code / Codex shape ------------
+# --- magus-command.buzz: the shared Claude Code / Codex shape ----------
 
 # case: command/deny
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout '"permissionDecisionReason":"Verify in place'
 stdout 'whole-tree git stash'
 
 # case: command/advise
 stdin advise-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
 ! stdout 'permissionDecision'
 
@@ -74,13 +60,13 @@ stdout '"additionalContext":"'
 # empty envelope, which is still a key the host would parse.
 env __MAGUS_NO_ADVISE=1
 stdin advise-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/deny
 # Suppression must not touch the deny arm, which is the whole point of splitting it.
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 env __MAGUS_NO_ADVISE=
 
@@ -89,10 +75,74 @@ env __MAGUS_NO_ADVISE=
 # a template that emitted an envelope here would turn every benign command into a
 # decision the host has to interpret.
 stdin pass-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
-# --- magus-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
+# case: command/advise
+# A PreToolUse shell command comes back rewritten to run with stdin at end-of-file: the
+# whole tool_input returns (updatedInput replaces it), with the command prefixed
+# `exec </dev/null; ` and every other field kept. No permissionDecision rides with it, so
+# the host's own permission rules still judge the call. The first rewrite of a session
+# says so, once.
+stdin rewrite-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"updatedInput":'
+stdout '"command":"exec \\u003c/dev/null; ls -la"'
+stdout '"description":"list it"'
+stdout '"timeout":60000'
+stdout '"additionalContext":"magus runs your shell commands with stdin at end-of-file'
+! stdout 'permissionDecision'
+
+# case: command/pass
+# A command that already closes stdin is never prefixed twice, so a pass is nothing again.
+stdin rewrite-wrapped.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+
+# case: command/deny
+# A refused call is never rewritten.
+stdin rewrite-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+! stdout 'updatedInput'
+
+# case: command/pass
+# Codex applies updatedInput only beside permissionDecision "allow", which would turn a
+# pass into an approval, so it is never handed one.
+stdin rewrite-command-codex.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
+! stdout .
+
+# --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
+#
+# The Read tool never reaches a shell, so the glue restates it: a whole Read as a whole-file
+# print (`cat`), a ranged one as a ranged print (`sed -n`). The read rules then judge it as
+# the command it replaces. These run the Buzz glue alone, the form the wirings name; the
+# fixture is a Go file over the 120-line threshold, so the whole print is refused and the
+# ranged one is not.
+cd read-ws
+
+# case: command/deny
+# No offset and no limit: the whole file.
+stdin $WORK/read-whole.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'big.go'
+
+# case: command/deny
+# A limit past 300 lines counts as whole.
+stdin $WORK/read-huge-limit.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+
+# case: command/pass
+# An offset and a limit inside the threshold is the bounded read the deny points to.
+stdin $WORK/read-range.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+cd $WORK
+
+# --- magus-command.buzz: MCP tool calls, forwarded whole -------------------
 
 # Both MCP cases run under a BOUND lease, in the one fixture workspace this archive
 # carries, because the rule that reads an MCP call is lease-scoped. The row is declared
@@ -109,34 +159,32 @@ env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
-# Both MCP cases forward the WHOLE event, and the two forms reach that by different
-# routes: the sh copy is told, through HOST_EVENT_RAW, and the Buzz port works it out,
-# because an MCP call carries no tool_input.command for HOST_EVENT_PATH to select. Parity
-# is what grades the second against the first. parity.sh clears the variable before running
-# the Buzz form, so a derivation that regressed to selecting `null` would judge text
-# instead of a tool call and the deny below would vanish on one side only.
-env HOST_EVENT_RAW=1
+# Both MCP cases forward the WHOLE event, which the glue works out from the event: an MCP
+# call carries no tool_input.command for HOST_EVENT_PATH to select. A derivation that
+# regressed to selecting `null` would judge text instead of a tool call, and the deny below
+# would vanish.
 
 # case: mcp/pass
-# A judged MCP call that no rule refuses. `magus describe` reads, and a bound worker
+# A judged MCP call that no rule refuses. `magus\describe` reads, and a bound worker
 # reading its own workspace is the ordinary case, so this must render NOTHING. Paired with
 # the deny below it pins both directions of the raw arm: that the envelope reaches the
 # rules at all, and that arriving there is not itself a refusal.
 stdin $WORK/mcp-read.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: mcp/deny
-# `op=clear` would drop every job, which is the one thing a bound worker may never do, so
-# leaseRebind refuses it and the same hookSpecificOutput reply this file renders for the
-# command surface carries the deny here.
+# A client script calling magus\job\clear() would drop every job, which is the one thing a
+# bound worker may never do, so leaseRebind refuses it and the same hookSpecificOutput reply
+# this file renders for the command surface carries the deny here. The job door is the
+# client tool's script: magus serves no per-verb job tool, so a call naming one is not a
+# call to magus at all.
 stdin $WORK/mcp-call.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'leave your own job alone'
-env HOST_EVENT_RAW=
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -148,92 +196,75 @@ rm $WORK/home/state
 
 # --- the edges of the whole-event derivation --------------------------------
 #
-# The Buzz port works out which payload to send from the event, so these are the shapes
-# where working it out could go wrong. Each says which branch it must take and proves the
-# sh copy answers the same, and the last one is the one that would be SILENT: a params
-# object carrying a `command` key, where selecting the field judges a string that was never
-# a command line.
+# The glue works out which payload to send from the event, so these are the shapes where
+# working it out could go wrong. Each says which branch it must take, and the last one is
+# the one that would be SILENT: a params object carrying a `command` key, where selecting
+# the field judges a string that was never a command line.
 
 # case: command/pass
 # An empty command is still a STRING, so it takes the field branch and magus judges an
 # empty command line. It must not be read as an absent field and turned into an envelope.
 stdin $WORK/empty-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
-# Present but NULL. jq prints the literal `null` for the sh copy; the Buzz port cannot tell
-# a JSON null from an absent key and sends the envelope, where the decoder finds no command,
-# no path and no prompt and says there is nothing to judge. Both render nothing, which is
-# what the comparison below asserts: the two roads meet.
+# Present but NULL. The glue cannot tell a JSON null from an absent key and sends the
+# envelope, where the decoder finds no command, no path and no prompt and says there is
+# nothing to judge.
 stdin $WORK/null-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
 # No command field at all, and no other shape magus reads either. The envelope goes whole
 # and the decoder answers that it holds nothing to judge.
 stdin $WORK/no-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
 # The silent one. `magus shell` reads an MCP call off the TOOL NAME, ahead of any `command`
 # in its params, so this whole event has to reach it: reduced to its `command` key it would
 # be judged as a shell line and DENIED on a rule about `git stash`, which is a refusal of a
-# read-only describe call for words in a parameter. The sh copy is told with HOST_EVENT_RAW;
-# the Buzz port recognizes the MCP namespace. Both must pass.
-env HOST_EVENT_RAW=1
+# read-only describe call for words in a parameter. The glue recognizes the MCP namespace.
 stdin $WORK/mcp-command-param.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
-env HOST_EVENT_RAW=
 
-# --- the per-entry flag route: sh reads a variable, Buzz reads its argv ------
+# --- the per-entry flag route: the argv after `--` ---------------------------
 #
 # A spawn carries a prompt and a subagent type rather than one string, so it takes the same
 # whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
 # an entry declares about itself. Only a wiring that also matches its host's skill tool may
 # pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
-# exactly where loads are reported, and this pair is what proves the two forms agree on
-# where the flag comes from: the sh copy word-splits __MAGUS_SHELL_FLAGS, the Buzz port
-# reads the argv after `--`, and parity refuses any difference in what magus was told.
+# exactly where loads are reported.
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
 # per-session marker on: that is the same fail-open the flag itself exists for, and a case
 # run at $WORK would pass both ways and pin nothing.
 cd push-ws
 
-# A spawn's payload is a prompt and a subagent type, so it takes the whole-event route too:
-# the sh copy is told with HOST_EVENT_RAW, the Buzz port derives it. What varies between the
-# two cases below is only the flag.
-env HOST_EVENT_RAW=1
+# What varies between the two cases below is only the flag.
 
 # case: command/pass
 # Unflagged: the wiring reports no skill loads, so the rule stands down rather than denying
 # every spawn on a host that cannot satisfy it.
 stdin $WORK/spawn-call.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/deny
-# A SUPPORTED flag, both forms: the sh copy word-splits it out of the variable, the Buzz
-# port matches it against the set it publishes, and the verdict is the same.
-env __MAGUS_SHELL_FLAGS=--observes-skill-loads
+# A SUPPORTED flag: the glue matches it against the set it publishes and passes it on.
 stdin $WORK/spawn-call.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 stdout '"permissionDecision":"deny"'
 stdout 'magus-multi-agent'
-env __MAGUS_SHELL_FLAGS=
-env HOST_EVENT_RAW=
 
 # case: command/deny
-# An argument the Buzz port does not know. It is the ONE case here that cannot go through
-# parity.sh, and the reason is the point of the whole arrangement: the sh copy has no argv
-# to parse, so there is no second answer to compare this one against. What it forwards is
-# whatever the variable held, which `magus shell` rejects with a usage error, losing the
-# verdict. The Buzz port refuses the argument, says which one on stderr, and judges the call
-# anyway. A misconfigured entry must not block work, and must not be silent: both halves are
+# An argument the glue does not know. Forwarded, `magus shell` would reject it with a usage
+# error, losing the verdict. The glue refuses the argument, says which one on stderr, and
+# judges the call anyway. A misconfigured entry must not block work, and must not be silent: both halves are
 # asserted below, because either one alone is a shape somebody would settle for.
 stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
@@ -269,11 +300,11 @@ cd $WORK
 # cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
 # binary. A case here would pass for a reason that is not this transport.
 
-# --- magus-path.sh: the same hosts, their file-writing tool -------------
+# --- magus-path.buzz: the same hosts, their file-writing tool -----------
 
 # case: path/advise
 stdin advise-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
 stdout 'every session'
 
@@ -282,7 +313,7 @@ stdout 'every session'
 # on both rather than half-silenced.
 env __MAGUS_NO_ADVISE=1
 stdin advise-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
 env __MAGUS_NO_ADVISE=
 
@@ -292,7 +323,7 @@ env __MAGUS_NO_ADVISE=
 # forwarded; selecting one dot-path handed the guard the literal "null" and every write
 # rule went unrun, on a matcher both shipped configs wire.
 stdin notebook-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
 stdout 'every session'
 
@@ -301,13 +332,13 @@ stdout 'every session'
 # is the one silent failure on this surface: the intact event advises, and a byte short of
 # it said nothing at all.
 stdin truncated-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'nothing was judged'
 
 # case: path/pass
 stdin pass-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: path/deny
@@ -316,18 +347,18 @@ exec sh $WORK/parity.sh path
 # case judged against a tree with no notes store at all.
 #
 # This case is why the deny arm exists. Before it, HOST_RESPONSE rendered only `advise`,
-# so a deny produced EMPTY stdout while magus exited 2, and the tail below read
-# empty-plus-nonzero as a broken guard and exited 0 - which every host takes as allow. The
+# so a deny produced EMPTY stdout while magus exited 2, and the glue read
+# empty-plus-nonzero as a broken guard and exited 0, which every host takes as allow. The
 # rule looked enforced and blocked nothing.
 cd notes-ws
 stdin $WORK/deny-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'NOTES store'
 stdout 'magus notes edit'
 cd $WORK
 
-# --- cursor-hook.sh: one file, five events, a different response dialect -----
+# --- cursor-hook.buzz: one file, five events, a different response dialect ---
 #
 # Cursor splits a verdict across two events: a gating event carries a deny and no
 # message on an allow, so the advisory has to ride the post-tool event. These cases
@@ -337,7 +368,7 @@ cd $WORK
 
 # case: command/deny
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
 stdout '"agent_message":"Verify in place'
 stdout 'whole-tree git stash'
@@ -345,14 +376,14 @@ stdout 'whole-tree git stash'
 # case: command/pass
 # Cursor is the one host that must answer on an allow rather than stay silent.
 stdin cursor-shell-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 # case: command/deny
 # The same call under an entry that names no host is refused on the gating event rather
 # than allowed, and says why on both channels (MGS3024).
 stdin cursor-shell-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz
 stdout '"permission":"deny"'
 stdout 'MGS3024'
 stderr 'MGS3024'
@@ -361,18 +392,18 @@ stderr 'MGS3024'
 # The gating event allows and says nothing, which is all it can do; the same call's
 # postToolUse is what carries the explanation.
 stdin cursor-shell-advise.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'additional_context'
 
 stdin cursor-post-command.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"'
 
 # A postToolUse on a command the rules pass renders a reply Cursor can parse and
 # nothing else. An empty stdout would be a second thing for the host to interpret.
 stdin cursor-post-command-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '\{\}'
 ! stdout 'additional_context'
 
@@ -381,25 +412,25 @@ stdout '\{\}'
 # verdict arrives before the file changes, so a deny is a block rather than a report.
 cd notes-ws
 stdin $WORK/cursor-pre-write-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'NOTES store'
 cd $WORK
 
 # case: path/pass
 stdin cursor-pre-write-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 # case: path/advise
 # The declared-output rule advises rather than denies, so the gate lets it through
 # and postToolUse delivers the explanation to the model.
 stdin cursor-pre-write-advise.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 stdin cursor-post-write.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"'
 stdout 'every session'
 
@@ -407,27 +438,27 @@ stdout 'every session'
 # anything. Cursor's preToolUse fires for every tool, and the shell tool in
 # particular is beforeShellExecution's to judge, and twice would record two verdicts.
 stdin cursor-pre-other.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 # sessionEnd records where the work stopped and says nothing at all. A checkpoint
 # is not a verdict, so any reply here would be one the host has to interpret.
 stdin cursor-session-end.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 ! stdout .
 
 # subagentStart records the handed work and always allows. A lease prompt is prose,
 # so nothing judges it; the reshape is what makes Cursor's `task` field legible as
 # the spawn magus records.
 stdin cursor-subagent.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'deny'
 
-# --- magus-observe.sh: the verdict-free one ------------------------------
+# --- magus-observe.buzz: the verdict-free one ----------------------------
 #
 # It declares no guard coverage, so the contract gate above owes it no case and
-# would never have asked for one. That exemption is exactly how an untested shell
+# would never have asked for one. That exemption is exactly how an untested
 # artifact ships: the OpenCode plugin in the header note declared a correct stance
 # and was still broken, because nothing ran it. These cases run it.
 #
@@ -438,31 +469,25 @@ stdout '"permission":"allow"'
 # It records a read and says NOTHING to the host. A read is not a decision, so any
 # stdout here would be a response the host has to interpret on every file it opens.
 stdin observe-read.json
-exec sh $WORK/parity.sh observe
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
-# A payload it cannot parse is dropped silently. Under `set -e` this exited non-zero
-# with jq's parse error on stderr, on EVERY read - and some hosts read a non-zero
+# A payload it cannot parse is dropped silently, and exits 0: some hosts read a non-zero
 # pre-tool hook as "block this call", which would stop the agent reading anything.
 stdin observe-garbage.json
-exec sh $WORK/parity.sh observe
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
 # A search event names no read path, so there is nothing to record and nothing to
 # say. Recording the event whole here would put the query text in the trail.
 stdin observe-search.json
-exec sh $WORK/parity.sh observe
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
-# An entry that names no host records nothing and says why, coded, in both forms. Run
-# directly rather than through parity.sh, which refuses any stderr from the Buzz form.
-stdin observe-read.json
-exec sh $__MAGUS_TEMPLATES/magus-observe.sh
-! stdout .
-stderr 'MGS3024'
+# An entry that names no host records nothing and says why, coded.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz
 ! stdout .
@@ -473,8 +498,7 @@ stderr 'MGS3024'
 # They carry no verdict either, so the contract gate owes them no case and, until this
 # block, none existed: the Stop and SessionStart hooks this repository wires were the
 # only shipped glue nothing ever ran. That is precisely the exemption the OpenCode
-# plugin in the header note shipped behind, and porting them to Buzz is what made the
-# gap worth closing rather than merely noticing.
+# plugin in the header note shipped behind.
 #
 # No `# case: <surface>/<decision>` label, for the reason the observe block carries
 # none: a checkpoint and a brief are not verdicts on a surface.
@@ -487,7 +511,7 @@ cd notes-ws
 # The Stop wrapper forwards the event whole and says NOTHING. Anything on either stream
 # would reach the host as this hook's reply at the end of every session.
 stdin $WORK/stop-event.json
-exec sh $WORK/parity.sh checkpoint
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
@@ -496,29 +520,23 @@ exec sh $WORK/parity.sh checkpoint
 # wrapper's to choke on - and a Stop hook that exits non-zero is a session-ending error
 # notice in every host that shows one.
 stdin $WORK/observe-garbage.json
-exec sh $WORK/parity.sh checkpoint
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
-# An entry that names no host records no checkpoint and says why, coded, in both forms.
-stdin $WORK/stop-event.json
-exec sh $__MAGUS_TEMPLATES/magus-checkpoint.sh
-! stdout .
-stderr 'MGS3024'
+# An entry that names no host records no checkpoint and says why, coded.
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz
 ! stdout .
 stderr 'MGS3024'
 
 # It reached magus rather than being silent because it resolved nothing: the checkpoints
-# both forms just recorded are in the session the wrapper named.
+# just recorded are in the session the wrapper named.
 exec magus session
 stdout 'testscript'
 
 # The brief cases move to a workspace nothing above has touched, with a state dir of
-# their own. A brief reports how long ago the last tool call here was, and both forms are
-# graded byte for byte against the same one, so running them where the guard cases left a
-# trail would make the comparison turn on which second each of the two started in.
+# their own, so the brief reads a checkout no guard case above left a trail in.
 cd $WORK/brief-ws
 env HOME=$WORK/brief-home
 env XDG_STATE_HOME=$WORK/brief-home/state
@@ -526,7 +544,7 @@ env XDG_STATE_HOME=$WORK/brief-home/state
 # The SessionStart wrapper reads no event at all and hands back the brief. The rules line
 # is the one host-shaped part, and it prints only because this fixture carries the file.
 stdin $WORK/session-start.json
-exec sh $WORK/parity.sh rehydrate
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz
 stdout 'standing rules: CLAUDE.md'
 ! stderr .
 
@@ -534,22 +552,31 @@ stdout 'standing rules: CLAUDE.md'
 # The envelope is asserted whole: a host that got the text without the wrapper would drop
 # it silently, which looks exactly like a hook that never fired. The brief's own line
 # breaks arrive as the two characters a JSON string spells one with.
-env REHYDRATE_FORMAT=json
 stdin $WORK/session-start.json
-exec sh $WORK/parity.sh rehydrate
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":"magus brief: '
 stdout 'standing rules: CLAUDE.md; re-read it, the summary above is not it\\n"\}\}$'
 ! stderr .
-env REHYDRATE_FORMAT=
 
 # A host naming an instruction file this checkout does not carry gets the brief without
 # the line, rather than a sentence pointing at nothing.
-env REHYDRATE_RULES=NOT-HERE.md
 stdin $WORK/session-start.json
-exec sh $WORK/parity.sh rehydrate
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --rules NOT-HERE.md
 stdout 'magus brief: '
 ! stdout 'standing rules'
-env REHYDRATE_RULES=
+
+# Both flags at once, as the codex wiring passes them.
+stdin $WORK/session-start.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --rules CLAUDE.md --format json
+stdout '^\{"hookSpecificOutput":'
+stdout 'standing rules: CLAUDE.md; re-read it'
+! stderr .
+
+# A flag this surface does not declare is reported, and the brief still arrives.
+stdin $WORK/session-start.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --agent-name testscript
+stderr 'magus-rehydrate.buzz: unsupported argument "--agent-name"'
+stdout 'magus brief: '
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -562,7 +589,7 @@ env __MAGUS_BIN=$WORK/nonexistent-magus
 # enforces nothing, so an announcement per read would report only that an optional
 # record was skipped.
 stdin observe-read.json
-exec sh $WORK/parity.sh observe
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
@@ -570,19 +597,19 @@ exec sh $WORK/parity.sh observe
 # enforces anything, so a notice would interrupt the end of every session, or open every
 # compacted one, to report that an optional record was not written.
 stdin $WORK/stop-event.json
-exec sh $WORK/parity.sh checkpoint
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
 stdin $WORK/session-start.json
-exec sh $WORK/parity.sh rehydrate
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz
 ! stdout .
 ! stderr .
 
 # The command template announces itself. An unguarded session you know about beats
 # one you do not.
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'magus guard is NOT running'
 
 # The path template stays silent by default: for most hosts an empty response means
@@ -591,13 +618,13 @@ stdout 'magus guard is NOT running'
 # edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
 # would rather hear about it.
 stdin advise-path.json
-exec sh $WORK/parity.sh path
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
 # pretending otherwise would give false assurance.
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 # --- found, but cannot judge: the notice carries its own evidence -------------
@@ -615,7 +642,7 @@ chmod 0755 $WORK/stale-magus
 # make each case assert on whether the case above it had already spoken.
 env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'magus guard is NOT running'
 stdout 'stale-magus'
 stdout 'v0.0.1-stale'
@@ -628,7 +655,7 @@ stdout 'unknown subcommand'
 # Cursor's template is self-contained, so it carries the same evidence or none at all.
 env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 stderr 'stale-magus'
 stderr 'v0.0.1-stale'
@@ -639,7 +666,7 @@ stderr 'unknown subcommand'
 env TMPDIR=$WORK/n-stale-host
 env __MAGUS_FAILED_RESPONSE=host-chose-this
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
@@ -653,36 +680,36 @@ env __MAGUS_FAILED_RESPONSE=
 # A second call in the SAME session says nothing at all, and the verdict still fails open.
 env TMPDIR=$WORK/n-once
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'magus guard is NOT running'
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # A DIFFERENT session is owed the fact once, or the first session of the day would
 # silence every session after it.
 stdin deny-command-s2.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'magus guard is NOT running'
 
 # The families are independent: a spent could-not-judge marker must not silence the
 # missing-binary notice, which reports a different broken installation.
 env __MAGUS_BIN=$WORK/does-not-exist
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout 'magus is not on PATH'
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 env __MAGUS_BIN=$WORK/stale-magus
 
 # Cursor holds its own notices the same way, on the stderr channel it uses.
 env TMPDIR=$WORK/n-once-cursor
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stderr 'magus guard is NOT running'
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 ! stderr 'magus guard is NOT running'
 
 # --- a DENY never goes quiet, whatever any marker says -----------------------
@@ -696,20 +723,20 @@ env __MAGUS_BIN=
 env TMPDIR=$WORK/n-deny
 
 stdin advise-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
 
 stdin advise-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
 
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
 stdin deny-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -735,7 +762,7 @@ mkdir .magus/runs
 
 # case: command/ask
 stdin $WORK/push-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"ask"'
 stdout 'Approving publishes'
 
@@ -755,7 +782,7 @@ stdout 'magus describe harness'
 # assembled claims the flag.
 env HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
 stdin $WORK/push-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'predates approval prompts'
 env HOST_RESPONSE=
@@ -768,7 +795,7 @@ env HOST_NAME=codex
 # sends it. With no prompt rule in the project nothing would ask the person either: the
 # push is refused, naming their own terminal.
 stdin $WORK/push-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'own terminal'
 stdout 'magus describe harness codex'
@@ -780,14 +807,14 @@ cp $WORK/push-rules.rules .codex/rules/magus.rules
 # case: command/ask
 # The rule prompts, so PreToolUse lets the call reach it and hands the model the reason.
 stdin $WORK/push-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 
 # case: command/ask
 # A permission mode that never prompts would skip the rule, so the push is refused.
 stdin $WORK/push-command-bypass.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'never prompts'
 ! stdout '"permissionDecision":"ask"'
@@ -795,14 +822,14 @@ stdout 'never prompts'
 # case: command/ask
 # A push no prefix rule matches would run unprompted, so it is refused too.
 stdin $WORK/push-command-dir.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'only a plain git push'
 
 # case: command/ask
 # The approval request Codex raises before its prompt gets no decision: the person decides.
 stdin $WORK/push-approval.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 
 # case: command/ask
@@ -811,16 +838,15 @@ stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 # is what the configuration says, never what the event looks like.
 env HOST_NAME=testscript
 stdin $WORK/push-command-turn.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"ask"'
 ! stdout '"additionalContext":"pushing'
 
 # case: command/deny
 # An entry that names no host is refused with MGS3024, never defaulted to one host and never
-# inferred from the event. Both forms agree on the reply, so it goes through parity.sh.
-env HOST_NAME=
+# inferred from the event.
 stdin $WORK/push-command-turn.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz
 stdout '"permissionDecision":"deny"'
 stdout 'MGS3024'
 stdout 'magus describe harness'
@@ -830,7 +856,7 @@ env HOST_NAME=codex
 # case: command/pass
 # A request magus did not configure is never approved on the guard's say-so.
 stdin $WORK/other-approval.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 ! stdout 'allow'
 
@@ -838,23 +864,23 @@ stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 # A push a passing gate covers is approved, so nobody is asked.
 exec sh -c 'printf "{\"ts\":1,\"inv\":\"g\",\"kind\":\"started\",\"command\":{\"arguments\":[\"affected\",\"ci\"]},\"magus_version\":\"v0.0.0-1-g%s\"}\n{\"ts\":2,\"inv\":\"g\",\"kind\":\"finished\",\"status\":\"pass\"}\n" "$(git rev-parse HEAD)" > .magus/runs/gate.jsonl'
 stdin $WORK/push-approval.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-command.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout 'permissionDecision'
 
 # case: command/pass
 # Every backend magus drives publishes through its own verb, and each plain push a gate
 # covers is approved the same way.
 stdin $WORK/push-approval-hg.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-approval-sl.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-approval-jj.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"decision":\{"behavior":"allow"\}'
 rm .magus/runs/gate.jsonl
 
@@ -862,15 +888,15 @@ rm .magus/runs/gate.jsonl
 # An ungated push on each of them reaches its own prompt rule, so PreToolUse lets it through
 # to that prompt rather than refusing it.
 stdin $WORK/push-command-hg.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 stdin $WORK/push-command-sl.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 stdin $WORK/push-command-jj.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 
@@ -882,9 +908,9 @@ env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus job fork harness/push-worker --criteria 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"behavior":"deny"'
 stdout 'workers do not publish'
 
@@ -895,9 +921,9 @@ env HOST_NAME=testscript
 # A leased worker runs as its own session, so this refusal is its first and explains itself
 # in full, whatever the orchestrator's session was told above.
 stdin $WORK/exec-push-worker-s-worker.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-command-worker.json
-exec sh $WORK/parity.sh command
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'workers do not publish'
 
@@ -905,9 +931,9 @@ stdout 'workers do not publish'
 
 # case: command/deny
 stdin $WORK/cursor-exec-push-worker.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-push.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'workers do not publish'
 rm $WORK/home/state
@@ -916,93 +942,11 @@ env XDG_STATE_HOME=
 
 # case: command/ask
 stdin $WORK/cursor-push.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"ask"'
 stdout 'Approving publishes'
 cd $WORK
 
--- parity.sh --
-#!/bin/sh
-# Runs BOTH shipped forms of one template against the same event and refuses any
-# difference: the POSIX sh copy, and the Buzz port a `magus buzz` wiring names.
-#
-# Every case above goes through this rather than naming one form, so parity is not a
-# separate block of cases that could fall behind the ones that matter. The arms a case
-# exercises are the arms the comparison covers, and a port that drifts on the ask arm,
-# the fire-once markers or the evidence in a failure notice fails the case that pins
-# that behavior rather than a case somebody remembered to add.
-#
-# The sh reply is what reaches the assertions, so every existing case reads unchanged.
-#
-# $1 is the surface; the event arrives on stdin, and is read once because a pipe drains
-# once. Each form gets its own TMPDIR, because the fire-once notices are keyed per
-# implementation and sharing one would make the second form's silence depend on the
-# first form having already spoken.
-surface=$1
-event=$(cat)
-
-# A guard surface is one of three files named for it; the two verdict-free wrappers are
-# named for themselves. Resolving the stem here rather than at every call site keeps the
-# sixty cases above reading as they did when only the hook templates had a Buzz port.
-case $surface in
-  command|path|observe) stem=magus-$surface ;;
-  *) stem=magus-$surface ;;
-esac
-
-sh_tmp=${TMPDIR:-/tmp}/parity-sh
-bz_tmp=${TMPDIR:-/tmp}/parity-buzz
-mkdir -p "$sh_tmp" "$bz_tmp"
-
-# The host is named on the argv of both forms, as a host config writes it: HOST_NAME is
-# this archive's stand-in for the harness spell's own name. rehydrate reads no host, and
-# the Buzz port would report the argument as unsupported, so it gets none.
-host_args=
-if [ "$surface" != rehydrate ] && [ -n "$HOST_NAME" ]; then
-  host_args="--agent-name $HOST_NAME"
-fi
-
-# Both forms answer the same event, session included, and each declares its own
-# --transport. magus keeps a deny's full text per host, transport and session, so the
-# two are two callers and each hears a rule in full the first time, as two forms wired
-# into one real session would.
-printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" $host_args \
-  >"$sh_tmp/out" 2>"$sh_tmp/err"
-sh_status=$?
-
-# The two forms take their PER-ENTRY knobs by different routes, and the comparison is
-# what proves the routes agree. sh is run by sh, so a case sets HOST_EVENT_RAW and
-# __MAGUS_SHELL_FLAGS in the environment and the copy reads them there. The Buzz port is
-# wired as a plain argv: it reads the raw-event question off the event itself, so the
-# variable is cleared rather than passed, and takes its shell flags after `--`, which is
-# where a hook command carries them. A case that sets neither runs the same comparison
-# with an empty tail.
-printf '%s' "$event" |
-  TMPDIR=$bz_tmp HOST_EVENT_RAW= __MAGUS_SHELL_FLAGS= \
-  magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" -- $host_args $__MAGUS_SHELL_FLAGS \
-  >"$bz_tmp/out" 2>"$bz_tmp/err"
-bz_status=$?
-
-if ! cmp -s "$sh_tmp/out" "$bz_tmp/out"; then
-  echo "PARITY: $stem.buzz replied differently from $stem.sh" >&2
-  echo "  sh  : $(cat "$sh_tmp/out")" >&2
-  echo "  buzz: $(cat "$bz_tmp/out")" >&2
-  exit 1
-fi
-if [ "$sh_status" -ne "$bz_status" ]; then
-  echo "PARITY: $stem exited $sh_status as sh and $bz_status as Buzz" >&2
-  exit 1
-fi
-# The Buzz form is run with -s, so anything on its stderr is a diagnostic the host would
-# show as a hook error. The sh form's stderr passes through, since the cases already
-# assert on it.
-if [ -s "$bz_tmp/err" ]; then
-  echo "PARITY: $stem.buzz wrote to stderr: $(cat "$bz_tmp/err")" >&2
-  exit 1
-fi
-
-cat "$sh_tmp/out"
-cat "$sh_tmp/err" >&2
-exit "$sh_status"
 -- push-ws/magusfile.buzz --
 import "magus";
 
@@ -1079,12 +1023,20 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- rewrite-command.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "ls -la", "description": "list it", "timeout": 60000}}
+-- rewrite-wrapped.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "exec </dev/null; ls -la"}}
+-- rewrite-deny.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
+-- rewrite-command-codex.json --
+{"hook_event_name": "PreToolUse", "session_id": "rewrite-codex", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
 -- exec-mcp-worker.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --
-{"session_id": "s1", "tool_name": "mcp__magus__magus_job", "tool_input": {"op": "clear"}}
+{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\job\\clear();"}}
 -- mcp-read.json --
-{"session_id": "s1", "tool_name": "mcp__magus__magus_describe", "tool_input": {"kind": "targets"}}
+{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")"}}
 -- spawn-call.json --
 {"session_id": "s1", "tool_name": "Agent", "tool_input": {"prompt": "find every caller", "subagent_type": "explore"}}
 -- empty-command.json --
@@ -1094,7 +1046,7 @@ exit 2
 -- no-command.json --
 {"session_id": "s1", "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "git stash the tree", "status": "pending"}]}}
 -- mcp-command-param.json --
-{"session_id": "s1", "tool_name": "mcp__magus__magus_describe", "tool_input": {"command": "git stash"}}
+{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")", "command": "git stash"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- notebook-path.json --
@@ -1127,6 +1079,147 @@ magus:
 ---
 
 Prose a person wrote.
+-- read-whole.json --
+{"session_id": "s-read-whole", "tool_name": "Read", "tool_input": {"file_path": "big.go"}}
+-- read-huge-limit.json --
+{"session_id": "s-read-huge", "tool_name": "Read", "tool_input": {"file_path": "big.go", "limit": 400}}
+-- read-range.json --
+{"session_id": "s-read-range", "tool_name": "Read", "tool_input": {"file_path": "big.go", "offset": 10, "limit": 20}}
+-- read-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.go"],
+    "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
+});
+-- read-ws/big.go --
+package fixture
+
+func f001() {}
+func f002() {}
+func f003() {}
+func f004() {}
+func f005() {}
+func f006() {}
+func f007() {}
+func f008() {}
+func f009() {}
+func f010() {}
+func f011() {}
+func f012() {}
+func f013() {}
+func f014() {}
+func f015() {}
+func f016() {}
+func f017() {}
+func f018() {}
+func f019() {}
+func f020() {}
+func f021() {}
+func f022() {}
+func f023() {}
+func f024() {}
+func f025() {}
+func f026() {}
+func f027() {}
+func f028() {}
+func f029() {}
+func f030() {}
+func f031() {}
+func f032() {}
+func f033() {}
+func f034() {}
+func f035() {}
+func f036() {}
+func f037() {}
+func f038() {}
+func f039() {}
+func f040() {}
+func f041() {}
+func f042() {}
+func f043() {}
+func f044() {}
+func f045() {}
+func f046() {}
+func f047() {}
+func f048() {}
+func f049() {}
+func f050() {}
+func f051() {}
+func f052() {}
+func f053() {}
+func f054() {}
+func f055() {}
+func f056() {}
+func f057() {}
+func f058() {}
+func f059() {}
+func f060() {}
+func f061() {}
+func f062() {}
+func f063() {}
+func f064() {}
+func f065() {}
+func f066() {}
+func f067() {}
+func f068() {}
+func f069() {}
+func f070() {}
+func f071() {}
+func f072() {}
+func f073() {}
+func f074() {}
+func f075() {}
+func f076() {}
+func f077() {}
+func f078() {}
+func f079() {}
+func f080() {}
+func f081() {}
+func f082() {}
+func f083() {}
+func f084() {}
+func f085() {}
+func f086() {}
+func f087() {}
+func f088() {}
+func f089() {}
+func f090() {}
+func f091() {}
+func f092() {}
+func f093() {}
+func f094() {}
+func f095() {}
+func f096() {}
+func f097() {}
+func f098() {}
+func f099() {}
+func f100() {}
+func f101() {}
+func f102() {}
+func f103() {}
+func f104() {}
+func f105() {}
+func f106() {}
+func f107() {}
+func f108() {}
+func f109() {}
+func f110() {}
+func f111() {}
+func f112() {}
+func f113() {}
+func f114() {}
+func f115() {}
+func f116() {}
+func f117() {}
+func f118() {}
+func f119() {}
+func f120() {}
+func f121() {}
+func f122() {}
+func f123() {}
+func f124() {}
+func f125() {}
 -- brief-ws/magusfile.buzz --
 import "magus";
 

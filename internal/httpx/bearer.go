@@ -115,7 +115,7 @@ func admit(verify Verifier, presented string, r *http.Request) (types.Credential
 	if !ok {
 		return types.Credential{}, false
 	}
-	if cred.Class == types.ClassOperator && !isLoopbackAddr(r.RemoteAddr) {
+	if cred.Kind == types.KindOperator && !isLoopbackAddr(r.RemoteAddr) {
 		return types.Credential{}, false
 	}
 	return cred, true

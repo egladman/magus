@@ -1,0 +1,8 @@
+import "std";
+import "merge";
+
+// The integer is past 2^53. Merging the text keeps those digits;
+// parsing both sides to values first would not.
+final base = "\{\"large\": 9007199254740993, \"hooks\": \{\"after\": [\"theirs\"]\}\}";
+final overlay = "\{\"hooks\": \{\"before\": [\"magus\"]\}\}";
+std\print(merge\json(base, overlay: overlay) catch "");

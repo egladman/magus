@@ -55,6 +55,28 @@ func TestLoadSpell_services(t *testing.T) {
 	}
 }
 
+// TestRunSpell_startService pins that a start service's op renders its start command:
+// its `command` is the empty default, so reading only `command` shows nothing.
+func TestRunSpell_startService(t *testing.T) {
+	src := `
+import "magus/spell";
+export fun mgs_getName() > str { return "vm"; }
+fun machine(t: Target) > Service {
+    return Service{
+        start     = Command{bin = "podman", args = ["machine", "start"]},
+        readiness = Command{bin = "podman", args = ["info"]},
+        stop      = Command{bin = "podman", args = ["machine", "stop"]},
+    };
+}
+export fun mgs_listTargets() > any { return {"machine": machine}; }
+`
+	r := Run(context.Background(), src, "machine", nil)
+	require.True(t, r.OK, "dry-run of machine failed: %+v", r.Diag)
+	require.NotEmpty(t, r.Trace)
+	assert.Equal(t, "service", r.Trace[0].Kind)
+	assert.Equal(t, "podman machine start", r.Trace[0].Detail)
+}
+
 // TestLoadSpell_wardMGS5002 loads the ward fixture (10-wards.buzz, a service whose
 // `docker run -d` detaches) and asserts a `run serve` dry-run surfaces the MGS5002
 // kind-coherence diagnostic. The op still loads and lists (a ward is not a load

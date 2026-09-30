@@ -46,6 +46,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -59,6 +60,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -714,8 +716,9 @@ type LoadResult struct {
 // start supplies the fields a start record carries beyond the events themselves;
 // Host and Session are overwritten per session from the events, since that is the
 // join this store exists to record. Events are written in the order given, so a
-// caller that wants them ordered orders them first.
-func LoadEvents(dir string, events []LoadEvent, start InvocationStart) (LoadResult, error) {
+// caller that wants them ordered orders them first. ctx bounds the wait for another
+// loader's lock and nothing else.
+func LoadEvents(ctx context.Context, dir string, events []LoadEvent, start InvocationStart) (LoadResult, error) {
 	// The one operation in this package that is NOT append-only, and therefore the one
 	// that needs a lock. Everything else appends a line, which POSIX makes atomic on a
 	// local filesystem; this reads the whole store to build a dedup set and then appends
@@ -728,12 +731,17 @@ func LoadEvents(dir string, events []LoadEvent, start InvocationStart) (LoadResu
 	// graph build every six hours: the store is keyed by repository IDENTITY, so every
 	// worktree and every clone on the machine shares one, and each of their servers ticks
 	// on its own schedule.
-	unlock, err := lockStore(dir)
-	if err != nil {
-		return LoadResult{}, err
-	}
-	defer unlock()
+	var result LoadResult
+	err := file.WithLock(ctx, filepath.Join(dir, loadLockName), loadLockTimeout, func() error {
+		var err error
+		result, err = loadEvents(dir, events, start)
+		return err
+	})
+	return result, err
+}
 
+// loadEvents is LoadEvents' body, run under the store's load lock.
+func loadEvents(dir string, events []LoadEvent, start InvocationStart) (LoadResult, error) {
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return LoadResult{}, err

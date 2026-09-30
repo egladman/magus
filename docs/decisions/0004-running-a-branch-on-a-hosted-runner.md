@@ -30,7 +30,7 @@ queue gates a candidate in, and `ci.yaml`'s shards run inside it. `setup-magus` 
 magus from the checked-out tree. `.github/actions/magus` passes an argv through its
 environment, so a word-split argv never reaches a shell as code. GitHub's dispatch API
 returns the run it created (changelog 2026-02-19), and `gh workflow run` prints its URL
-since v2.87.0. `tools/gha-queue.buzz` already dispatches `queue.yaml` with `gh`.
+since v2.87.0. `hack/ci/merge-queue.buzz` already dispatches `queue.yaml` with `gh`.
 
 ## Options
 
@@ -56,10 +56,10 @@ remote.
 ### D. One workflow and one repository script (decided)
 
 ```sh
-magus buzz tools/gha-run.buzz -- dispatch --ref <branch> -- run test .
-magus buzz tools/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
-magus buzz tools/gha-run.buzz -- result --run <id>
-magus buzz tools/gha-run.buzz -- forget --run <id>
+magus buzz hack/gha-run.buzz -- dispatch --ref <branch> -- run test .
+magus buzz hack/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
+magus buzz hack/gha-run.buzz -- result --run <id>
+magus buzz hack/gha-run.buzz -- forget --run <id>
 ```
 
 ## Decision
@@ -72,7 +72,8 @@ magus buzz tools/gha-run.buzz -- forget --run <id>
    and runs `queue gate --sandbox=<mode> --cache .magus -- magus <argv>` through
    `.github/actions/magus`. It reads main's signed remote tier and writes no shared tier.
    It uploads `.magus/logs/` as `magus-logs` on every outcome, kept 7 days.
-2. **`tools/gha-run.buzz`**, three steps, none of which waits:
+2. **A repository script, since replaced by `hack/on-actions.buzz`**, three steps, none of
+   which waits:
    - `dispatch` needs exactly one of `--ref <branch>` and `--push`. With `--ref` it asks
      GitHub for the branch tip and refuses unless it is HEAD. With `--push` it pushes
      HEAD to `run-<sha12>`, a branch named for the commit. It refuses a dirty tree unless
@@ -114,7 +115,7 @@ published.
 
 Anyone with write access can read every repository secret, and a dispatch at any branch
 runs that branch's copy of the file with those secrets in reach. `run.yaml` names no
-`secrets.*` beyond the job's token, and `tools/gha-run.buzz` dispatches `run.yaml` alone.
+`secrets.*` beyond the job's token, and `hack/on-actions.buzz` starts `run.yaml` alone.
 The guard should prove the rest: deny a dispatch of any workflow whose file at the ref
 reads a secret beyond `GITHUB_TOKEN` (`release.yaml` and `release-index.yaml` carry
 `workflow_dispatch` and read `MAGUS_SIGNING_KEY`).
@@ -160,3 +161,26 @@ laptop.
 3. The secrets rule above, as a guard rule over `gh workflow run` and `gh api .../dispatches`.
 4. A laptop-side `spells/github/workflows` speaking HTTP, beside `review`, if the
    measurement says the loop earns it. No engine verb is proposed.
+
+## Amendment, 2026-09-29
+
+The script is `hack/on-actions.buzz`, a prefix in front of the command you would run
+here, like `sudo` or `nice`:
+
+```sh
+magus buzz hack/on-actions.buzz -- magus affected ci
+```
+
+Its own options come first; the first word that is not one starts the command, which must
+be `magus` and passes through untouched. By default it pushes HEAD to `run-<sha12>`,
+dispatches `run.yaml`, waits, prints the command's output, exits with its exit code, and
+then deletes the run and the branch unless `--keep`. Its first line says where the command
+runs, that it spends CI minutes, and the run URL. That replaces decision 4 for the default;
+`--detach` prints the run id and returns without waiting, as `dispatch` did. `--ref`,
+`--head` and `--sandbox` keep their meaning, and `--push` is the default. `--result <run>`
+replaces `result`, `--delete <run>` replaces `forget`, whose name hid a remote deletion, and
+`--ls` lists every run and pushed branch left behind. Every refusal above still holds.
+
+`run.yaml` runs `queue gate` itself instead of through `.github/actions/magus`, which
+returns neither the output nor the exit code, and uploads both as the `command-output`
+artifact the script reads.

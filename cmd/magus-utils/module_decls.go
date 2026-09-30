@@ -2,7 +2,7 @@
 // an `export extern fun` per method, carrying the parameter and return types the
 // checker needs. Registered alongside the native implementation under the same
 // import path (SetModuleDecls beside SetNativeModule), it is what turns
-// `magus\affectedImpact(base)` from an Unknown-typed call into a checked one.
+// `magus\impact(base)` from an Unknown-typed call into a checked one.
 //
 // Without it every host call typed as Unknown, so a magusfile could read a field
 // no return carries and only find out at run time, which is the gap Ret.Object was
@@ -209,9 +209,9 @@ func externDecl(m std.Method) (string, error) {
 		return "", err
 	}
 	// A raising Method emits `!> any`, not a specific error type: every host error
-	// crosses the VM boundary through gen.HostError, which wraps it in a map
+	// crosses the VM boundary through ffi.Error, which wraps it in a map
 	// (StructuredError.BuzzError()) rather than a plain str; see
-	// internal/interp/bindings/gen/runtime.go. `any` is the honest declared shape,
+	// internal/interp/bindings/ffi/convert.go. `any` is the honest declared shape,
 	// and it is also what an untyped `catch (e)` already binds to, so it costs
 	// existing call sites nothing.
 	raises := ""
@@ -382,6 +382,12 @@ func buzzReturnType(m std.Method) (string, error) {
 		return "[" + first + "]", nil
 	}
 	r := m.Returns[0]
+	if r.Nullable {
+		if r.Type != std.TypeString || r.Object != "" {
+			return "", fmt.Errorf("a nullable return is a str?, not %s", r.Type.GoType())
+		}
+		return "str?", nil
+	}
 	if r.Object != "" {
 		return r.Object, nil
 	}

@@ -38,10 +38,16 @@ func WithDependsOn(paths ...string) ProjectOption {
 	}
 }
 
-// WithOutputs declares the file globs this project produces (project-relative).
+// WithOutputs declares the file globs this project produces (project-relative), as one
+// declaration: a "!pattern" entry excludes from every glob of this call and no other
+// (types.ParseGlobs).
 func WithOutputs(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
-		p.Outputs = append(p.Outputs, paths...)
+		globs, err := types.ParseGlobs(paths)
+		if err != nil {
+			return fmt.Errorf("magus: project %q: outputs: %w", p.Path, err)
+		}
+		p.Outputs = append(p.Outputs, globs...)
 		return nil
 	}
 }
@@ -67,19 +73,39 @@ func WithOutputs(paths ...string) ProjectOption {
 // workspace-relative paths, so a glob outside it can never match a file, never move a
 // cache key, and never mark this project affected; accepting one would record a
 // declaration magus has no way to honor.
+//
+// The call is one declaration: a "!pattern" entry excludes from every glob of this call
+// and no other (types.ParseGlobs).
 func WithSources(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
-		cleaned := make([]string, 0, len(paths))
-		for _, raw := range paths {
-			glob := path.Clean(raw)
-			rooted := types.RootGlob(p.Path, glob)
-			if rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q); "+
-					"a path outside the workspace can never key a cache entry", p.Path, raw, rooted)
-			}
-			cleaned = append(cleaned, glob)
+		globs, err := types.ParseGlobs(paths)
+		if err != nil {
+			return fmt.Errorf("magus: project %q: sources: %w", p.Path, err)
 		}
-		p.Sources = append(p.Sources, cleaned...)
+		clean := func(glob string) (string, error) {
+			glob = path.Clean(glob)
+			if rooted := types.RootGlob(p.Path, glob); rooted == ".." || strings.HasPrefix(rooted, "../") {
+				return "", fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q); "+
+					"a path outside the workspace can never key a cache entry", p.Path, glob, rooted)
+			}
+			return glob, nil
+		}
+		for i, g := range globs {
+			if globs[i].Pattern, err = clean(g.Pattern); err != nil {
+				return err
+			}
+			if len(g.Except) == 0 {
+				continue
+			}
+			except := make([]string, len(g.Except))
+			for j, e := range g.Except {
+				if except[j], err = clean(e); err != nil {
+					return err
+				}
+			}
+			globs[i].Except = except
+		}
+		p.Sources = append(p.Sources, globs...)
 		return nil
 	}
 }
@@ -105,6 +131,9 @@ func WithReviewRequired(globs ...string) ProjectOption {
 	return func(p *types.Project) error {
 		cleaned := make([]string, 0, len(globs))
 		for _, raw := range globs {
+			if err := refuseExclusion(p, "review_required", raw); err != nil {
+				return err
+			}
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
@@ -127,6 +156,9 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 	return func(p *types.Project) error {
 		cleaned := make([]string, 0, len(globs))
 		for _, raw := range globs {
+			if err := refuseExclusion(p, "gate_low_risk", raw); err != nil {
+				return err
+			}
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
@@ -147,6 +179,9 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 func WithMergeLowRisk(globs ...string) ProjectOption {
 	return func(p *types.Project) error {
 		for _, raw := range globs {
+			if err := refuseExclusion(p, "merge_low_risk", raw); err != nil {
+				return err
+			}
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
@@ -157,6 +192,16 @@ func WithMergeLowRisk(globs ...string) ProjectOption {
 		}
 		return nil
 	}
+}
+
+// refuseExclusion refuses a "!" entry in a key whose globs have no exclusions: read as
+// a literal name it would match nothing while the author believes it carves one out.
+func refuseExclusion(p *types.Project, key, raw string) error {
+	if strings.HasPrefix(raw, "!") {
+		return fmt.Errorf("magus: project %q: %s takes no exclusions, so %q would match nothing (a literal leading ! is written \\!)",
+			p.Path, key, raw)
+	}
+	return nil
 }
 
 // WithGateInheritOff declares that this workspace's CI plan never inherits a
@@ -257,10 +302,14 @@ func WithRegisteredSpell(name string, opts ...BindingOption) ProjectOption {
 		if p.Spell == "" && !l.Internal() {
 			p.Spell = name
 		}
+		sources, outputs, err := types.SpellGlobs(l)
+		if err != nil {
+			return fmt.Errorf("magus: project %q: %w", p.Path, err)
+		}
 		p.Spells = append(p.Spells, name)
 		p.Bindings = append(p.Bindings, b)
-		p.Sources = append(p.Sources, l.Sources()...)
-		p.Outputs = append(p.Outputs, l.Outputs()...)
+		p.Sources = append(p.Sources, sources...)
+		p.Outputs = append(p.Outputs, outputs...)
 		return nil
 	}
 }

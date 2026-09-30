@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
@@ -305,15 +306,11 @@ func PipeExport(ctx context.Context, artifact map[string]any, dest string) (stri
 	return dest, nil
 }
 
-// exportArtifact copies src to dst through a temporary file beside dst renamed into
-// place. Writing dst in place destroyed data three ways: dst == src truncated the source
-// before the read, a failed read left half a file where a valid artifact had been, and
-// a symlink planted at dst was written through. The mode is set on the temp file because
-// O_CREATE applies one only when it creates, and an exported binary lost +x.
+// exportArtifact copies src to dst by replacing dst whole. Writing dst in place
+// destroyed data three ways: dst == src truncated the source before the read, a failed
+// read left half a file where a valid artifact had been, and a symlink planted at dst was
+// written through. The source's mode is carried, or an exported binary loses +x.
 func exportArtifact(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -323,24 +320,7 @@ func exportArtifact(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".magus-export-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }()
-	if _, err := io.Copy(tmp, in); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, dst)
+	return file.WriteFrom(dst, in, info.Mode().Perm())
 }
 
 // PipeHistory implements pipe.history.

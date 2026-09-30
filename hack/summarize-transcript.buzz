@@ -1,0 +1,248 @@
+// Cost: grows with transcript size.
+//
+// Summarizes one Claude Code session transcript (.jsonl): calls per tool, guard refusals by
+// rule, how often a refusal was retried into the same rule, how often the agent then ran
+// the command the refusal suggested, and the tokens the session spent. With --match it
+// counts, per tool, the calls whose input matches a pattern instead.
+//
+//	magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...
+//
+// A retry is a refused call whose next call of the same tool is refused by the same rule.
+// A refusal suggests a command on the first indented line under its `next:`. Tokens count
+// each assistant message once, however many lines the host wrote for it.
+namespace summarizetranscript;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...";
+final HELP = "cost: grows with transcript size\n{USAGE}";
+
+// RULE_URL and DENIED_AGAIN name a refusal's rule: the docs link a full refusal ends
+// with, and the short form a repeat carries.
+final RULE_URL = std\pattern(`/rules/([a-z0-9-]+)/`);
+final DENIED_AGAIN = std\pattern(`denied again \[([a-z0-9-]+)\]`);
+
+export object Call {
+    tool: str,
+    // text is what the call was asked to do: a shell command, else its whole input as JSON.
+    text: str,
+    // rule is the guard rule that refused it, "(unnamed)" for a refusal naming none, "" for
+    // a call that ran.
+    rule: str = "",
+    suggestion: str = "",
+}
+
+export object Tokens {
+    input: int = 0,
+    output: int = 0,
+    cacheRead: int = 0,
+    cacheWrite: int = 0,
+}
+
+export object Session {
+    calls: [Call],
+    tokens: Tokens,
+}
+
+fun blockText(content: any) > str {
+    if (content is str) {
+        return content;
+    }
+    final parts = mut [<str>];
+    foreach (block in content ?? []) {
+        if (block["type"] == "text") {
+            parts.append(block["text"] ?? "");
+        }
+    }
+    return parts.join("\n");
+}
+
+// refusalRule is the rule a hook refusal names, or "" when the text is not a refusal.
+export fun refusalRule(text: str) > str {
+    if (!text.startsWith("PreToolUse:") or text.indexOf("hook error") == null) {
+        return "";
+    }
+    final again = DENIED_AGAIN.match(text);
+    if (again != null) {
+        return again![1];
+    }
+    final url = RULE_URL.match(text);
+    return if (url != null) url![1] else "(unnamed)";
+}
+
+// suggestedCommand is the first indented line under a refusal's `next:`, or "".
+export fun suggestedCommand(text: str) > str {
+    final lines = text.split("\n");
+    foreach (i, line in lines) {
+        if (line.trim() == "next:" and i + 1 < lines.len() and lines[i + 1].startsWith("  ")) {
+            return lines[i + 1].trim();
+        }
+    }
+    return "";
+}
+
+// read folds a transcript into its calls, in the order they were made, and its tokens.
+export fun read(file: str) > Session !> any {
+    final calls = mut [<mut Call>];
+    final byId = mut {<str: int>};
+    final counted = mut {<str: bool>};
+    final tokens = mut Tokens{};
+    foreach (line in fs\readLines(file)) {
+        var rec: any = null;
+        try {
+            rec = json\parse(line);
+        } catch {
+            continue;
+        }
+        final msg = rec["message"];
+        if (msg == null or msg["content"] is str) {
+            continue;
+        }
+        final id = msg["id"] ?? "";
+        if (rec["type"] == "assistant" and msg["usage"] != null and id != "" and counted[id] == null) {
+            counted[id] = true;
+            final u = msg["usage"];
+            tokens.input = tokens.input + std\toInt(u["input_tokens"] ?? 0);
+            tokens.output = tokens.output + std\toInt(u["output_tokens"] ?? 0);
+            tokens.cacheRead = tokens.cacheRead + std\toInt(u["cache_read_input_tokens"] ?? 0);
+            tokens.cacheWrite = tokens.cacheWrite + std\toInt(u["cache_creation_input_tokens"] ?? 0);
+        }
+        foreach (block in msg["content"] ?? []) {
+            if (block["type"] == "tool_use") {
+                final input = block["input"];
+                final text = if (input["command"] is str) input["command"] else json\stringify(input);
+                byId[block["id"] ?? ""] = calls.len();
+                calls.append(mut Call{ tool = block["name"] ?? "", text = text });
+            } else if (block["type"] == "tool_result" and block["is_error"] == true) {
+                final at = byId[block["tool_use_id"] ?? ""];
+                final text = blockText(block["content"]);
+                if (at != null and refusalRule(text) != "") {
+                    calls[at!].rule = refusalRule(text);
+                    calls[at!].suggestion = suggestedCommand(text);
+                }
+            }
+        }
+    }
+    return Session{ calls = calls, tokens = tokens };
+}
+
+// countLines renders a count per key, largest first, ties by key.
+fun countLines(counts: {str: int}) > [str] {
+    final keys = mut [<str>];
+    foreach (k, _ in counts) {
+        keys.append(k);
+    }
+    final ordered = keys.sort(fun (a: str, b: str) > bool => counts[a]! > counts[b]! or (counts[a]! == counts[b]! and a < b));
+    final lines = mut [<str>];
+    foreach (k in ordered) {
+        lines.append("  {counts[k]!}  {k}");
+    }
+    return lines;
+}
+
+export fun summarize(s: Session) > [str] {
+    final perTool = mut {<str: int>};
+    final perRule = mut {<str: int>};
+    var refusals = 0;
+    var retries = 0;
+    var suggested = 0;
+    var followed = 0;
+    foreach (i, c in s.calls) {
+        perTool[c.tool] = (perTool[c.tool] ?? 0) + 1;
+        if (c.rule == "") {
+            continue;
+        }
+        refusals = refusals + 1;
+        perRule[c.rule] = (perRule[c.rule] ?? 0) + 1;
+        for (var j = i + 1; j < s.calls.len(); j = j + 1) {
+            if (s.calls[j].tool == c.tool) {
+                if (s.calls[j].rule == c.rule) {
+                    retries = retries + 1;
+                }
+                break;
+            }
+        }
+        if (c.suggestion != "") {
+            suggested = suggested + 1;
+            if (i + 1 < s.calls.len() and s.calls[i + 1].text.startsWith(c.suggestion)) {
+                followed = followed + 1;
+            }
+        }
+    }
+    final t = s.tokens;
+    return ["{s.calls.len()} tool calls"] + countLines(perTool)
+        + ["{refusals} refused by the guard"] + countLines(perRule)
+        + [
+            "{retries} retried into the same rule",
+            "{followed} of {suggested} ran the command the refusal suggested next",
+            "tokens: {t.input} input, {t.output} output, {t.cacheRead} cache read, {t.cacheWrite} cache write",
+        ];
+}
+
+// matches counts, per tool, the calls whose text matches pattern.
+export fun matches(s: Session, pattern: str) > [str] !> any {
+    final p = std\pattern(pattern);
+    final perTool = mut {<str: int>};
+    var total = 0;
+    foreach (c in s.calls) {
+        if (p.match(c.text) != null) {
+            perTool[c.tool] = (perTool[c.tool] ?? 0) + 1;
+            total = total + 1;
+        }
+    }
+    return ["{total} of {s.calls.len()} tool calls match {pattern}"] + countLines(perTool);
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--match"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() == 0) {
+        throw "summarize-transcript: name each transcript after a second `--`; unknown {parsed.unknown.join(" ")}\n{USAGE}";
+    }
+    std\print("read-only");
+    foreach (file in parsed.positionals) {
+        final s = read(file);
+        std\print("");
+        std\print(file);
+        final lines = if (parsed.values["--match"] != null) matches(s, pattern: parsed.values["--match"]!) else summarize(s);
+        foreach (line in lines) {
+            std\print(line);
+        }
+    }
+}
+
+test "a transcript folds into calls per tool, refusals by rule, retries, and tokens" {
+    assert\equal(summarize(read("hack/testdata/transcript.jsonl")), want: [
+        "5 tool calls",
+        "  4  Bash",
+        "  1  Read",
+        "3 refused by the guard",
+        "  2  output-pipe",
+        "  1  sed-in-place",
+        "1 retried into the same rule",
+        "1 of 1 ran the command the refusal suggested next",
+        "tokens: 145 input, 117 output, 8000 cache read, 50 cache write",
+    ], message: "summary");
+}
+
+test "--match counts the matching calls per tool" {
+    assert\equal(matches(read("hack/testdata/transcript.jsonl"), pattern: `magus (ls|refs)`), want: [
+        "3 of 5 tool calls match magus (ls|refs)",
+        "  3  Bash",
+    ], message: "matches");
+}
+
+test "a refusal's rule comes from its docs link or its repeat form" {
+    assert\equal(refusalRule("PreToolUse:Bash hook error: x\nsee: https://h/rules/raw-tool/"), want: "raw-tool", message: "link");
+    assert\equal(refusalRule("PreToolUse:Bash hook error: denied again [busy-wait]: x"), want: "busy-wait", message: "repeat");
+    assert\equal(refusalRule("PreToolUse:Bash hook error: no rule named"), want: "(unnamed)", message: "unnamed");
+    assert\equal(refusalRule("exit status 1"), want: "", message: "an ordinary failure is not a refusal");
+}

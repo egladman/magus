@@ -140,6 +140,37 @@ func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	return review
 }
 
+// buildLifecycle assembles magus\lifecycle for a magusfile. provider() wires an imported
+// spell as the one place this workspace learns when its tools' release cycles end:
+//
+//	import "spells/endoflife-date" as eol
+//	magus\lifecycle.provider(eol)
+//
+// The spell exports list_lifecycles (see spells/lifecycle.go), which lifecycle_provider.go
+// runs. ONE per workspace, recorded on the per-Open registry like cache.remote, because
+// Tool.Lifecycle is one vocabulary and a second provider would read "go" as a different
+// product. Wiring none is the ordinary state, as for review: the lifecycle columns of
+// `magus describe tools` read "-".
+func buildLifecycle(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	lifecycle := vm.NewMap()
+	lifecycle.MapSet("provider", directVal(obs, "magus.lifecycle.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: expected an imported spell handle`)
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: argument is not a spell handle (no name)`)
+		}
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+			if err := reg.SetLifecycleProvider(nv.AsString()); err != nil {
+				return vm.Null, fmt.Errorf(`magus\lifecycle.provider: %w`, err)
+			}
+		}
+		return vm.Null, nil
+	}))
+	return lifecycle
+}
+
 // buildSecret assembles magus\secret for a magusfile. provider() wires an imported
 // spell as this workspace's secret backend; read() reads one credential through it:
 //
@@ -597,8 +628,12 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 		if len(patterns) == 0 {
 			return vm.Null, fmt.Errorf("ctx.glob: requires at least one glob pattern")
 		}
+		matched, err := matchBuzzTargets(targets, patterns)
+		if err != nil {
+			return vm.Null, fmt.Errorf("ctx.glob: %w", err)
+		}
 		var handles []vm.Value
-		for _, name := range matchBuzzTargets(targets, patterns) {
+		for _, name := range matched {
 			if h, ok := exports[name]; ok {
 				handles = append(handles, h)
 			}
@@ -726,25 +761,22 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 	return nil
 }
 
-// buzzDispatchViaPool fans names out via the Buzz pool, yielding the RunAll
+// buzzDispatchViaPool fans names out via the Buzz pool, which yields the caller's
 // limiter slot (if held) for the duration so pool workers can acquire it.
+//
+// The slot is handed back and the isolation lease deliberately is not: the children
+// run inside the caller's region and take no lease of their own, so there is nothing
+// for the dispatcher to release and nothing to re-acquire behind a queued peer (see
+// cache.runIsolation).
 func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) error {
-	lim := cache.LimiterFromContext(ctx)
-	ancestors := buzz.AncestorsFromContext(ctx)
-	return proc.RunChildSync(ctx, lim, func() error {
-		// The slot is handed back here and the isolation lease deliberately is not: the
-		// children run inside the caller's region and take no lease of their own, so
-		// there is nothing for the dispatcher to release and nothing to re-acquire
-		// behind a queued peer (see cache.runIsolation).
-		return p.Dispatch(cache.WithoutSlotHeld(ctx), names, ancestors)
-	})
+	return p.Dispatch(ctx, names, buzz.AncestorsFromContext(ctx))
 }
 
 // matchBuzzTargets matches registered Buzz target names against ctx.glob's patterns
 // (suffix shorthand, "*" globs, and "!" negation). types.MatchTargetPatterns owns the
 // semantics so this dispatch set, the dry-run tracer's, and describe's static edge set
 // cannot drift apart.
-func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []string {
+func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) ([]string, error) {
 	names := make([]string, 0, len(targets))
 	for name := range targets {
 		names = append(names, name)

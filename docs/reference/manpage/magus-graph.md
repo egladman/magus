@@ -52,7 +52,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            share of diagnostics, spells, and modules with a doc). --kind scopes
            every section to one node kind. The VCS-history lenses (hotspots,
            affinity, ownership, trend, unreferenced) are a separate view, served
-           by the magus_insight MCP tool and the console's Insight page - not by
+           by the client MCP tool (magus\\insight) and the console's Insight page - not by
            this command.
   diff     Nodes and edges added, removed, or changed relative to a baseline
            export or a git revision (--rev): the PR-review blast-radius

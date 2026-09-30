@@ -63,6 +63,9 @@ func returnSuffix(m Method) string {
 		default:
 			rets[i] = r.Type.GoType()
 		}
+		if r.Nullable {
+			rets[i] += "?"
+		}
 	}
 	return " -> " + strings.Join(rets, ", ")
 }

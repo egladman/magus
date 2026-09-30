@@ -53,20 +53,39 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	dryRun := globalCfg.DryRun
+	// Empty lists, never null, so -o json has the same shape whatever was selected.
+	report := types.CleanReport{Removed: []string{}, Tracked: []string{}, DryRun: dryRun}
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "clean: no projects selected")
-		return nil
+	} else {
+		projects := m.ResolveProjects(targets)
+		cleaned, err := m.CleanOutputs(ctx, projects, dryRun)
+		if err != nil {
+			return fmt.Errorf("clean: %w", err)
+		}
+		if cf.Cache && !dryRun {
+			if err := m.CleanCache(ctx, projects...); err != nil {
+				return fmt.Errorf("clean --cache: %w", err)
+			}
+			slog.InfoContext(ctx, "clean: invalidated cache", slog.Int("projects", len(projects)))
+		}
+		report.Removed = append(report.Removed, cleaned.Removed...)
+		report.Tracked = append(report.Tracked, cleaned.Tracked...)
 	}
 
-	projects := m.ResolveProjects(targets)
-
-	dryRun := globalCfg.DryRun
-	cleaned, err := m.CleanOutputs(ctx, projects, dryRun)
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
-		return fmt.Errorf("clean: %w", err)
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, report)
+	case outputName:
+		return emitNames(report.Removed)
 	}
 
-	for _, path := range cleaned.Removed {
+	for _, path := range report.Removed {
 		if dryRun {
 			fmt.Printf("[dry-run] would remove %s\n", path)
 		} else {
@@ -74,20 +93,12 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if dryRun {
-		for _, path := range cleaned.Tracked {
+		for _, path := range report.Tracked {
 			fmt.Printf("[dry-run] would keep %s (tracked)\n", path)
 		}
 	}
-	if len(cleaned.Tracked) > 0 {
-		slog.InfoContext(ctx, "clean: kept outputs the VCS tracks", slog.Int("files", len(cleaned.Tracked)))
+	if len(report.Tracked) > 0 {
+		slog.InfoContext(ctx, "clean: kept outputs the VCS tracks", slog.Int("files", len(report.Tracked)))
 	}
-
-	if cf.Cache && !dryRun {
-		if err := m.CleanCache(ctx, projects...); err != nil {
-			return fmt.Errorf("clean --cache: %w", err)
-		}
-		slog.InfoContext(ctx, "clean: invalidated cache", slog.Int("projects", len(projects)))
-	}
-
 	return nil
 }

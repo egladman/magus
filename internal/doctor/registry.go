@@ -308,13 +308,6 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkReleaseIndexExpiry() },
 	},
 	{
-		Name:           "registry-freshness",
-		Doc:            "how long ago the tool registry was synced",
-		Evidence:       types.EvidenceMeasured,
-		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkRegistryFreshness() },
-	},
-	{
 		Name:           "symlinks",
 		Doc:            "symlinks whose resolved target escapes the workspace root",
 		Evidence:       types.EvidenceMeasured,
@@ -520,12 +513,29 @@ var allChecks = []checkDef{
 		run:            (*runner).checkReadinessProbes,
 	},
 	{
+		Name: "toolchain-lifecycle",
+		// Measured by the provider, not by doctor: it reads the answer `magus describe
+		// tools` stored and never fetches, so a workspace with no stored answer reports
+		// unknown rather than fine.
+		Doc:            "an installed tool, or a workspace window floor, in a release cycle past its end of life",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkToolchainLifecycle,
+	},
+	{
 		Name:           "stale-spell-shadow-acknowledgments",
 		Doc:            "a spells.allow_shadow entry whose shadow no longer exists, so the reason is dead config",
 		Code:           types.SpellShadowed,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkStaleShadowAcks() },
+	},
+	{
+		Name:           "spell-overrides",
+		Doc:            "a workspace copy of a built-in spell, against the built-in this binary ships and the one the copy was pulled from",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSpellOverrides() },
 	},
 	{
 		Name:           "vcs-base-ref",

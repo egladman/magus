@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/types/gen/mocks"
 )
 
-func TestParseReadCall(t *testing.T) {
+func TestParseReadCalls(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		command string
@@ -41,8 +41,11 @@ func TestParseReadCall(t *testing.T) {
 		{`sed -n '10,+5p' a.go`, readCall{path: "a.go", first: 10, last: 15}, true},
 		{`sed --quiet '10,40p' a.go`, readCall{path: "a.go", first: 10, last: 40}, true},
 
-		// Two files, stdin, bytes, a follow, a regex address, an unquiet or in-place sed.
-		{`cat a.go b.go`, readCall{}, false},
+		// Two files to a ranged reader, stdin, bytes, a follow, a regex address, an unquiet
+		// or in-place sed.
+		{`head -n 5 a.go b.go`, readCall{}, false},
+		{`sed -n 1,5p a.go b.go`, readCall{}, false},
+		{`cat a.go -`, readCall{}, false},
 		{`cat -`, readCall{}, false},
 		{`cat`, readCall{}, false},
 		{`head -c 100 a.go`, readCall{}, false},
@@ -55,10 +58,15 @@ func TestParseReadCall(t *testing.T) {
 		{`grep -n func a.go`, readCall{}, false},
 	} {
 		cmds := parseForTest(t, tt.command)
-		got, ok := parseReadCall(cmds[0])
-		assert.Equal(t, tt.ok, ok, tt.command)
-		assert.Equal(t, tt.want, got, tt.command)
+		got := parseReadCalls(cmds[0])
+		if !tt.ok {
+			assert.Empty(t, got, tt.command)
+			continue
+		}
+		assert.Equal(t, []readCall{tt.want}, got, tt.command)
 	}
+	// A whole reader prints every operand, so each is judged.
+	assert.Equal(t, []readCall{{path: "a.go"}, {path: "b.md"}}, parseReadCalls(parseForTest(t, `cat -n a.go b.md`)[0]))
 }
 
 // TestReadCallsSkipConsumedOutput pins that only a read whose output reaches the reader
@@ -100,11 +108,16 @@ func readFixture(t *testing.T) string {
 	small := "package store\n\nfunc helper() {}\n"
 	// 1 Alpha, 4 Beta, a fenced # on 6, filler, 131 Gamma.
 	page := "# Alpha\n\nintro\n## Beta\n```sh\n# not a heading\n```\n" + strings.Repeat("text\n", 123) + "## Gamma\ntext\n"
+	// 1-2 run, 4-133 the gate test.
+	spell := "fun run() > void {\n}\n\ntest \"gate\" {\n" + strings.Repeat("    run();\n", 128) + "}\n"
 	root := writeTree(t, map[string]string{
-		"internal/store/store.go": store,
-		"internal/store/small.go": small,
-		"docs/a.md":               page,
-		"tools/x.buzz":            strings.Repeat("fun f() {}\n", 130),
+		"internal/store/store.go":           store,
+		"internal/store/small.go":           small,
+		"docs/a.md":                         page,
+		"tools/x.buzz":                      spell,
+		"console/x.ts":                      strings.Repeat("export const a = 1;\n", 130),
+		"CLAUDE.md":                         page,
+		".claude/skills/magus-run/SKILL.md": page,
 	})
 	require.Equal(t, 130, strings.Count(store, "\n"))
 	require.Equal(t, 132, strings.Count(page, "\n"))
@@ -126,40 +139,72 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
 	deps := readDeps(root)
+	stale := readDeps(root)
+	stale.SymbolDefined = func(name string) (bool, bool) { return true, false }
+	stale.GraphIDs = func(context.Context, string) ([]string, bool) { return nil, false }
+	partial := readDeps(root)
+	partial.SymbolDefined = func(name string) (bool, bool) { return name == "Open", true }
+	partial.GraphIDs = graphOf(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}})
+	storeMap := "What the file holds (3 declarations):\n  3-4: Store\n  6-30: Open\n  32-130: Store.Close"
+	pageMap := "What the file holds (3 headings):\n  1-3: # Alpha\n  4-130: ## Beta\n  131-132: ## Gamma"
 
 	for _, tt := range []struct {
 		command string
+		deps    Dependencies
 		answer  []string
+		// absent is text the deny must not carry: a graph command the graph cannot vouch for.
+		absent []string
 	}{
-		{`cat internal/store/store.go`, []string{
+		{`cat internal/store/store.go`, deps, []string{
 			"`" + hint.Explain.With("file:internal/store/store.go") + "` maps this file",
 			"130 lines, 3 declarations",
 			hint.Refs.With("<name>", "--definition", "--source"),
-			"What the file holds (3 declarations):\n  3-4: Store\n  6-30: Open\n  32-130: Store.Close",
-		}},
-		{`cat -n internal/store/store.go`, nil},
-		{`head -n 500 internal/store/store.go`, nil},
-		{`sed -n '1,$p' internal/store/store.go`, nil},
-		{`sed -n 1,200p internal/store/store.go`, nil},
-		{`cat ./internal/store/store.go`, nil},
-		{`cat ` + root + `/internal/store/store.go`, nil},
-		{`cat docs/a.md`, []string{
+			"`sed -n <first>,<last>p internal/store/store.go` prints a method by its lines",
+			storeMap,
+		}, nil},
+		{`cat -n internal/store/store.go`, deps, nil, nil},
+		{`head -n 500 internal/store/store.go`, deps, nil, nil},
+		{`sed -n '1,$p' internal/store/store.go`, deps, nil, nil},
+		{`sed -n 1,200p internal/store/store.go`, deps, nil, nil},
+		{`cat ./internal/store/store.go`, deps, nil, nil},
+		{`cat ` + root + `/internal/store/store.go`, deps, nil, nil},
+		{`cat docs/a.md`, deps, []string{
 			"query kind=docsection 'id=~^docsection:docs/a\\.md#' -o name` maps this file",
 			"132 lines, 3 headings",
-			"read that section by its line range",
-			"What the file holds (3 headings):\n  1-3: # Alpha\n  4-130: ## Beta\n  131-132: ## Gamma",
-		}},
+			"`sed -n <first>,<last>p docs/a.md` prints that one by its lines",
+			pageMap,
+		}, []string{"refs"}},
+		// A stale index, or a graph that disagrees with the file, still gets the map parsed
+		// from the file itself, read by line ranges and listed by no graph command.
+		{`cat internal/store/store.go`, stale, []string{
+			"The map below is parsed from the file itself: 130 lines, 3 declarations",
+			"`sed -n <first>,<last>p internal/store/store.go` prints that one by its lines",
+			storeMap,
+		}, []string{"refs", "explain"}},
+		{`cat internal/store/store.go`, partial, []string{storeMap}, []string{"refs", "explain"}},
+		{`cat docs/a.md`, stale, []string{"The map below is parsed from the file itself", pageMap}, []string{"query"}},
+		{`cat docs/a.md`, partial, []string{pageMap}, []string{"query"}},
+		// Buzz, which nothing indexes for refs.
+		{`cat tools/x.buzz`, deps, []string{
+			"133 lines, 2 declarations",
+			"`sed -n <first>,<last>p tools/x.buzz` prints that one by its lines",
+			"What the file holds (2 declarations):\n  1-2: fun run\n  4-133: test \"gate\"",
+		}, []string{"refs"}},
+		// Several files: each is judged, and the first mapped one over the threshold answers.
+		{`cat internal/store/small.go docs/a.md`, deps, []string{pageMap}, nil},
+		{`cat CLAUDE.md internal/store/store.go`, deps, []string{storeMap}, nil},
 	} {
-		v, ok := readVerdictAt(deps, root, tt.command, DialectBash)
+		v, ok := readVerdictAt(tt.deps, root, tt.command, DialectBash)
 		require.True(t, ok, tt.command)
 		assert.Equal(t, denyRuleReadNavigation, v.Rule.Name, tt.command)
 		assert.Empty(t, v.Context, tt.command)
 		for _, want := range tt.answer {
 			assert.Contains(t, v.Deny, want, tt.command)
 		}
+		for _, not := range tt.absent {
+			assert.NotContains(t, v.Deny, not, tt.command)
+		}
 	}
-	v, _ := readVerdictAt(deps, root, `cat docs/a.md`, DialectBash)
-	assert.NotContains(t, v.Deny, "refs", "no verb prints one section yet, so none is named")
 }
 
 func TestReadNavigationStaysSilent(t *testing.T) {
@@ -168,10 +213,6 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 	deps := readDeps(root)
 	stale := readDeps(root)
 	stale.SymbolDefined = func(name string) (bool, bool) { return true, false }
-	stale.GraphIDs = func(context.Context, string) ([]string, bool) { return nil, false }
-	partial := readDeps(root)
-	partial.SymbolDefined = func(name string) (bool, bool) { return name == "Open", true }
-	partial.GraphIDs = graphOf(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}})
 	noRoot := readDeps(root)
 	noRoot.scope = workspaceScope{}
 
@@ -181,8 +222,11 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 	}{
 		// Under the threshold.
 		{`cat internal/store/small.go`, deps},
-		// A kind no index maps.
-		{`cat tools/x.buzz`, deps},
+		// A kind with no parser here.
+		{`cat console/x.ts`, deps},
+		// Written to be read whole.
+		{`cat CLAUDE.md`, deps},
+		{`cat .claude/skills/magus-run/SKILL.md`, deps},
 		// Outside the workspace, absent, a glob, unresolved.
 		{`cat /etc/hosts`, deps},
 		{`cat ../store.go`, deps},
@@ -192,12 +236,9 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 		// The output feeds something else.
 		{`cat internal/store/store.go | grep Open`, deps},
 		{`cat internal/store/store.go > /tmp/copy.go`, deps},
-		// A stale index or a page the graph disagrees with proves nothing.
-		{`cat internal/store/store.go`, stale},
-		{`cat docs/a.md`, stale},
-		{`cat internal/store/store.go`, partial},
-		{`cat docs/a.md`, partial},
 		{`cat internal/store/store.go`, noRoot},
+		// A bounded read on a stale index: nothing vouches for refs.
+		{`sed -n 7,30p internal/store/store.go`, stale},
 		// A bounded read across two declarations, or before the first.
 		{`sed -n 1,5p internal/store/store.go`, deps},
 		{`sed -n 6,40p internal/store/store.go`, deps},

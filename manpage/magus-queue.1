@@ -103,7 +103,7 @@ Version control `backend` of the checkout at \-\-root
 `command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
 .TP
 \fB\-\-gate\fR \fIcommand\fR
-`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green
+`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `\-\-`; exit 0 is green
 .TP
 \fB\-\-only\fR \fIchange\fR
 Validate this one `change`; the changes beneath it in its partition are merged under it but not gated
@@ -112,7 +112,7 @@ Validate this one `change`; the changes beneath it in its partition are merged u
 Candidates built or gated at once across every partition; 0 is one per CPU
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin
+`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `\-\-` and the generated files to rewrite listed on stdin
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
@@ -172,7 +172,7 @@ Apply what <source> holds now and stop, rather than following it until it is com
 `provider`: a built\-in name (github) or a .buzz file
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
+The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `\-\-` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from

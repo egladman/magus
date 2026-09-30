@@ -9,131 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestFollowUpError and TestFollowUpSuccess pin the exact line each
-// tool+outcome earns, byte for byte: these strings are appended verbatim to MCP
-// results, so a drifted word here is a drifted agent surface.
-func TestFollowUpError(t *testing.T) {
+// The sentence is quoted verbatim by the tool description, the MCP guide and the
+// changelog; the minutes come from the bound the handler enforces.
+func TestClientBoundSentence(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		tool ToolName
-		want string
-	}{
-		{
-			name: "run_target error points at describe",
-			tool: ToolRunTarget,
-			want: "next: list valid targets with magus_describe (kind=targets)",
-		},
-		{
-			name: "run_affected error points at describe",
-			tool: ToolRunAffected,
-			want: "next: list valid targets with magus_describe (kind=targets)",
-		},
-		{
-			name: "where error points at describe projects",
-			tool: ToolWhere,
-			want: "next: list projects with magus_describe (kind=projects)",
-		},
-		{
-			name: "output error explains where refs come from",
-			tool: ToolOutput,
-			want: "next: output refs come from magus_run_target or magus_run_affected",
-		},
-		{
-			name: "explain error recovers via query",
-			tool: ToolExplain,
-			want: "next: locate a node with magus_query, then explain it",
-		},
-		{
-			name: "path error recovers via query",
-			tool: ToolPath,
-			want: "next: locate the endpoints with magus_query",
-		},
-		{
-			name: "refs error recovers via query",
-			tool: ToolRefs,
-			want: "next: locate a symbol with magus_query",
-		},
-		{
-			name: "unmapped tool error gets no hint",
-			tool: ToolStats,
-			want: "",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, FollowUpError(tt.tool))
-		})
-	}
-}
-
-func TestFollowUpSuccess(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		tool      ToolName
-		mintedRef string
-		want      string
-	}{
-		{
-			name: "affected_plan success chains into run_affected",
-			tool: ToolAffectedPlan,
-			want: "next: run the affected set with magus_run_affected",
-		},
-		{
-			name:      "run success carrying a ref chains into output naming the ref",
-			tool:      ToolRunTarget,
-			mintedRef: "out1a2b3c4d",
-			want:      "next: fetch the captured output with magus_output (ref=out1a2b3c4d)",
-		},
-		{
-			name: "run success with no ref gets no chain hint",
-			tool: ToolRunAffected,
-			want: "",
-		},
-		{
-			name:      "ref on a non-minting tool earns nothing",
-			tool:      ToolQuery,
-			mintedRef: "out1a2b3c4d",
-			want:      "",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, FollowUpSuccess(tt.tool, tt.mintedRef))
-		})
-	}
-
-	// A plain success from a read tool earns nothing: output bytes are the
-	// agent's context cost, so silent successes stay lean.
-	for _, tool := range []ToolName{ToolQuery, ToolExplain, ToolStats, ToolDescribe, ToolWhere} {
-		assert.Empty(t, FollowUpSuccess(tool, ""), "no follow-up for a plain %s success", tool)
-	}
-}
-
-// TestFollowUpEmpty pins the line a successful-but-empty result earns. Only
-// query has one: it is the tool every other recovery hint points AT, so a query
-// that finds nothing was the end of the chain until this line existed.
-func TestFollowUpEmpty(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t,
-		"next: no match; code symbols are a separate layer - try magus_refs, or list what exists with magus_describe",
-		FollowUpEmpty(ToolQuery))
-	assert.True(t, WantsEmptyCheck(ToolQuery))
-
-	// Every other tool: no empty-result line, and no reason to inspect a payload
-	// looking for one.
-	for _, tool := range []ToolName{ToolExplain, ToolRefs, ToolStats, ToolDescribe, ToolWhere, ToolRunTarget} {
-		assert.Empty(t, FollowUpEmpty(tool), "no empty-result line for %s", tool)
-		assert.False(t, WantsEmptyCheck(tool), "no empty-result check for %s", tool)
-	}
+	assert.Equal(t, "Bounded at 10 minutes when called directly; a host that supports MCP tasks can run it as a task without that bound.", ClientBoundSentence())
 }
 
 // TestAllDeclaredToolsAreRegistered fails if a ToolName is declared but left out
-// of AllToolNames, so TestMCPToolHintsResolve keeps walking the full set.
+// of AllToolNames, so the drift tests keep walking the full set.
 //
 // It reads the declarations out of the source rather than comparing AllToolNames
 // against a second hand-written list: the hand-written version is forgotten in
@@ -196,13 +81,4 @@ func declaredToolNames(t *testing.T) []string {
 		t.Fatal("found no tool-name consts; the test is reading the wrong file")
 	}
 	return out
-}
-
-func TestMintsRef(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, MintsRef(ToolRunTarget))
-	assert.True(t, MintsRef(ToolRunAffected))
-	assert.False(t, MintsRef(ToolQuery))
-	assert.False(t, MintsRef(ToolAffectedPlan))
 }

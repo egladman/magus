@@ -52,8 +52,8 @@ var Vcs = Module{
 		},
 		{
 			Name:    "ref",
-			Doc:     "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
-			Returns: []Ret{{Type: TypeString}},
+			Doc:     "The movable name pointing at the current revision, or null when none names it: a detached git HEAD, or jj's working copy, which is usually an anonymous change, so null is an ordinary answer there, not a failure. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
+			Returns: []Ret{{Type: TypeString, Nullable: true}},
 			Raises:  true,
 			Impl:    VcsRef,
 		},
@@ -283,13 +283,14 @@ func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 }
 
 // VcsRef returns the movable name at the current revision (a git branch, an hg named
-// branch, a jj bookmark); raises when no VCS or metadata is available.
-func VcsRef(ctx context.Context) (string, error) {
+// branch, a jj bookmark), or nil when none names it; raises when no VCS or metadata is
+// available.
+func VcsRef(ctx context.Context) (*string, error) {
 	meta, err := vcsMetadata(ctx)
-	if err != nil {
-		return "", err
+	if err != nil || meta.Ref == "" {
+		return nil, err
 	}
-	return meta.Ref, nil
+	return &meta.Ref, nil
 }
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.

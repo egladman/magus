@@ -15,22 +15,17 @@ import "lib/conventions" as _;   // ConventionFinding
 // would download. Its keys are the shipped set: internal/agent/guard_test.go holds them equal to
 // hookTemplates, which is what makes a new template owe a page here.
 export final TEMPLATE_PAGES = {
-    "magus-command.sh": "guard-templates.md",
-    "magus-path.sh": "guard-templates.md",
-    "magus-observe.sh": "guard-templates.md",
-    "magus-checkpoint.sh": "guard-templates.md",
-    "magus-rehydrate.sh": "guard-templates.md",
     "magus-command.buzz": "guard-templates.md",
     "magus-path.buzz": "guard-templates.md",
     "magus-observe.buzz": "guard-templates.md",
     "magus-checkpoint.buzz": "guard-templates.md",
     "magus-rehydrate.buzz": "guard-templates.md",
     "codex-hooks.json": "codex.md",
-    "cursor-hook.sh": "cursor.md",
+    "cursor-hook.buzz": "cursor.md",
     "opencode-plugin.ts": "opencode.md",
-    "magus-session-load-claude-code.sh": "session-load.md",
-    "magus-session-load-codex.sh": "session-load.md",
-    "magus-session-load-opencode.sh": "session-load.md",
+    "magus-session-load-claude-code.buzz": "session-load.md",
+    "magus-session-load-codex.buzz": "session-load.md",
+    "magus-session-load-opencode.buzz": "session-load.md",
 };
 
 // ENVIRONMENT_DETECTION_VARS are the variables that say WHERE magus runs. A page that
@@ -337,7 +332,6 @@ export fun hostWiringFindings(config: str, configFile: str, page: str, doc: str)
                 final command = h.q("command").stringValue();
                 foreach (name, _ in TEMPLATE_PAGES) {
                     if (command.indexOf(name) == null) { continue; }
-                    if (name.endsWith(".sh")) { stems[name.sub(0, len: name.len() - 3)] = true; }
                     if (name.endsWith(".buzz")) { stems[name.sub(0, len: name.len() - 5)] = true; }
                 }
             }
@@ -420,7 +414,7 @@ test "sessionParityFindings compares cells to declarations" {
 }
 
 test "hostWiringFindings wants each wired event and template named" {
-    final config = `{"hooks": {"Stop": [{"hooks": [{"command": "sh magus-checkpoint.sh"}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "sh magus-command.sh"}]}]}}`;
+    final config = `{"hooks": {"Stop": [{"hooks": [{"command": "magus buzz -s magus-checkpoint.buzz"}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}]}}`;
     assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").len(), 0, "all named");
     assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").len(), 2, "Stop and its template unnamed");
 }

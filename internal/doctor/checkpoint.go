@@ -71,8 +71,9 @@ func checkCheckpointWiring(root string, wired ...string) types.Check {
 
 // configRecordsCheckpoint reports whether a host hook config (or a workspace script
 // it names) actually records a session checkpoint. Cursor embeds the call inside
-// cursor-hook.sh rather than spelling "checkpoint" in hooks.json; looking only at
-// the JSON body falsely grades that host as silent.
+// cursor-hook.buzz rather than spelling "checkpoint" in hooks.json; looking only at
+// the JSON body falsely grades that host as silent. The Buzz glue spells the call as
+// an argv list, so the two words never sit side by side there.
 func configRecordsCheckpoint(root string, body []byte) bool {
 	if bytes.Contains(body, []byte("checkpoint")) {
 		return true
@@ -85,12 +86,13 @@ func configRecordsCheckpoint(root string, body []byte) bool {
 		if strings.Contains(cmd, "checkpoint") {
 			return true
 		}
-		for _, rel := range shellScriptPaths(cmd) {
+		for _, rel := range hookScriptPaths(cmd) {
 			script, err := os.ReadFile(filepath.Join(root, rel))
 			if err != nil {
 				continue
 			}
 			if bytes.Contains(script, []byte("session checkpoint")) ||
+				bytes.Contains(script, []byte(`"session", "checkpoint"`)) ||
 				bytes.Contains(script, []byte(checkpointTemplate)) {
 				return true
 			}
@@ -119,13 +121,14 @@ func collectJSONStringFields(v any, key string) []string {
 	return out
 }
 
-// shellScriptPaths returns workspace-relative .sh operands from a hook command line
-// (e.g. `sh docs/guides/integrations/agents/cursor-hook.sh`).
-func shellScriptPaths(cmd string) []string {
+// hookScriptPaths returns workspace-relative hook-script operands from a command
+// line: the shipped Buzz glue (e.g. `magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz`)
+// or a shell script of the reader's own.
+func hookScriptPaths(cmd string) []string {
 	var out []string
 	for _, field := range strings.Fields(cmd) {
 		clean := strings.Trim(field, `"'`)
-		if strings.HasSuffix(clean, ".sh") && !filepath.IsAbs(clean) {
+		if (strings.HasSuffix(clean, ".sh") || strings.HasSuffix(clean, ".buzz")) && !filepath.IsAbs(clean) {
 			out = append(out, filepath.Clean(clean))
 		}
 	}
@@ -134,4 +137,4 @@ func shellScriptPaths(cmd string) []string {
 
 // checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
 // config that runs it. A path, which is the one host-specific shape magus owns.
-const checkpointTemplate = "magus-checkpoint.sh"
+const checkpointTemplate = "magus-checkpoint.buzz"

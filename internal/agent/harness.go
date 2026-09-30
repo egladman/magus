@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/std"
 )
 
 const harnessSchemaVersion = 2
@@ -106,7 +107,7 @@ type HarnessPlan struct {
 	Files map[string]HarnessFile `json:"files,omitempty"`
 	// Merge is one POSIX shell command that brings every file in Files current, empty when
 	// none is missing anything. It reads this plan back through `magus describe harness
-	// <id> -o json` and needs jq.
+	// <id> -o json` and pipes it into `magus buzz`, which merges each file with merge\json.
 	Merge   string `json:"merge,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
 }
@@ -114,10 +115,10 @@ type HarnessPlan struct {
 // Current reports whether every host file already carries what the descriptor declares.
 func (p HarnessPlan) Current() bool { return len(p.Files) == 0 }
 
-// HarnessFile is what one host file needs: Fragment merged into the JSON document with jq's
-// `*` (objects merge key by key, any other value replaces the one on disk), or Content as the
-// whole file. A managed array appears in Fragment whole, with the entries a person added kept
-// in place, so replacing the array on disk is exactly the merge.
+// HarnessFile is what one host file needs: Fragment merged into the JSON document the way
+// merge\deep does (objects merge key by key, any other value replaces the one on disk), or
+// Content as the whole file. A managed array appears in Fragment whole, with the entries a
+// person added kept in place, so replacing the array on disk is exactly the merge.
 type HarnessFile struct {
 	Exists   bool            `json:"exists"`
 	Fragment map[string]any  `json:"fragment,omitempty"`
@@ -437,57 +438,35 @@ func (p *HarnessPlan) addFile(path string, file HarnessFile) error {
 	if have.Content != "" || file.Content != "" {
 		return fmt.Errorf("%s: a descriptor may own a whole file or keys inside it, not both", path)
 	}
-	if have.Fragment == nil {
-		have.Fragment = map[string]any{}
-	}
-	mergeFragment(have.Fragment, file.Fragment)
+	have.Fragment = mergeFragment(have.Fragment, file.Fragment)
 	have.Changes = append(have.Changes, file.Changes...)
 	p.Files[path] = have
 	return nil
 }
 
-// mergeFragment folds src into dst with the semantics of jq's `*`, so two fragments for one
-// file merge the way the printed command merges each into the file.
-func mergeFragment(dst, src map[string]any) {
-	for key, value := range src {
-		if sub, ok := value.(map[string]any); ok {
-			if have, ok := dst[key].(map[string]any); ok {
-				mergeFragment(have, sub)
-				continue
-			}
-		}
-		dst[key] = value
-	}
+// mergeFragment folds src into dst with merge\deep's rules, so two fragments for one file
+// merge the way the printed command merges each into the file. Neither input is modified.
+func mergeFragment(dst, src map[string]any) map[string]any {
+	// MergeDeep never fails, and two objects always merge into an object.
+	merged, _ := std.MergeDeep(context.Background(), dst, src)
+	return merged.(map[string]any)
 }
 
-// harnessMergeCommand renders the one command a person runs to bring files current. Each
-// step reads the plan back from `magus describe harness`, so the command stays short enough
-// to read before running, and re-running it after a partial failure redoes only what is
-// still missing.
+// harnessMergeScript reads a `describe harness -o json` plan on stdin and writes every
+// file it names. It merges text with merge\json, so a key outside the fragment keeps the
+// digits of an integer past 2^53. The fragment itself arrives through json\parse, so an
+// integer that large inside it, a person's own entry in a managed array included, does
+// not. No single quotes: the command wraps this in one POSIX single-quoted word.
+const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }`
+
+// harnessMergeCommand renders the one command a person runs to bring files current.
+// It reads the plan back from `magus describe harness`, so re-running it after a
+// partial failure redoes only what is still missing.
 func harnessMergeCommand(id string, files map[string]HarnessFile) string {
 	if len(files) == 0 {
 		return ""
 	}
-	read := "magus describe harness " + id + " -o json | jq"
-	steps := make([]string, 0, len(files))
-	for _, path := range slices.Sorted(maps.Keys(files)) {
-		file := files[path]
-		q := posixQuote(path)
-		mkdir := ""
-		if dir := filepath.Dir(path); dir != "." {
-			mkdir = "mkdir -p " + posixQuote(dir) + " && "
-		}
-		switch {
-		case file.Content != "":
-			steps = append(steps, mkdir+read+" -j --arg p "+q+" '.files[$p].content' > "+q)
-		case file.Exists:
-			next := posixQuote(path + ".new")
-			steps = append(steps, read+" --arg p "+q+" --slurpfile cur "+q+" '$cur[0] * .files[$p].fragment' > "+next+" && mv "+next+" "+q)
-		default:
-			steps = append(steps, mkdir+read+" --arg p "+q+" '.files[$p].fragment' > "+q)
-		}
-	}
-	return strings.Join(steps, " && ")
+	return "magus describe harness " + id + " -o json | magus buzz -e " + posixQuote(harnessMergeScript)
 }
 
 func posixQuote(s string) string {
@@ -735,8 +714,7 @@ func dropSupersededEntries(entries []any, wanted []map[string]any) (kept []any, 
 }
 
 // runsAShippedTemplate reports whether any command inside entry names a template
-// this repository ships, in either form: the POSIX sh copies and the Buzz ports
-// beside them.
+// this repository ships.
 func runsAShippedTemplate(entry map[string]any) bool {
 	var commands []string
 	collectCommands(entry, &commands)
@@ -822,7 +800,7 @@ func invokesMagus(command string) bool {
 		strings.Contains(command, "magus-path"),
 		strings.Contains(command, "magus-observe"):
 		return true
-	case strings.Contains(command, "cursor-hook.sh"):
+	case strings.Contains(command, "cursor-hook."):
 		return true
 	case strings.Contains(command, "magus-checkpoint"):
 		return true

@@ -15,7 +15,7 @@
 // It is NOT a spell. A spell adapts an external tool and hands a project type its ops; this
 // adapts nothing and is called as a library, so libs/ is the honest home.
 import "magus";
-import "../../tools/index" as index;
+import "../../hack/index" as index;
 
 magus\project({
     // The renderer is one self-contained file; its tests live in it as `test "..."` blocks.
@@ -33,7 +33,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in tools/index.buzz.
+// body and the reasons for them are in hack/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",

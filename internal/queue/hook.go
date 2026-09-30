@@ -160,7 +160,8 @@ func pattern(lit string, leads bool) string {
 	return ""
 }
 
-// hookCommand is one hook invocation: Command run with Args appended.
+// hookCommand is one hook invocation: Command run with Args appended, ahead of
+// Command's first `--` when it has one.
 type hookCommand struct {
 	Command Command
 	Args    []string
@@ -212,7 +213,16 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 		stderr = io.Discard
 	}
 	ctx = procrun.WithOutputWriters(sandbox.WithPolicy(ctx, policy), stdout, stderr)
-	return procrun.Exec(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args), procrun.ExecOptions{
+	// A `--` ends the line's own options and starts what it forwards, and the units are
+	// operands of the line itself: after it, `magus run ci -- --x` forwarded them to
+	// every step and selected no project.
+	words := c.Command[1:]
+	if i := slices.Index(words, "--"); i >= 0 {
+		words = slices.Concat(words[:i], c.Args, words[i:])
+	} else {
+		words = slices.Concat(words, c.Args)
+	}
+	return procrun.Exec(ctx, c.Command[0], words, procrun.ExecOptions{
 		Dir:         c.Dir,
 		Env:         c.Env,
 		Stdin:       c.Stdin,

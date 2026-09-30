@@ -1,10 +1,10 @@
 import "magus";
 import "proc";
-// The shared advisory gate. See tools/advisories.buzz for why an exit code is the wrong
+// The shared advisory gate. See hack/advisories.buzz for why an exit code is the wrong
 // question and what this asks instead.
-import "../tools/advisories" as advisories;
-import "../tools/toolchain-policy" as policy;
-import "../tools/index" as index;
+import "../hack/advisories" as advisories;
+import "../hack/toolchain-policy" as policy;
+import "../hack/index" as index;
 // Modules the targets use: fs (lcov reads), os (pnpm/esbuild), vcs (the gen/ drift gate).
 import "fs";
 import "os";
@@ -104,7 +104,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in tools/index.buzz.
+// body and the reasons for them are in hack/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",

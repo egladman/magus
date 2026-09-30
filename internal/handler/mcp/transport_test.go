@@ -29,44 +29,19 @@ import (
 const wantServerInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-Discover:
-  magus_describe          - list spells, targets, projects, workspaces, or mcp_tools
-  magus_describe_file     - classify changed paths: generated output, declared source, or unclaimed
-  magus_where             - resolve a fuzzy project name to its absolute path
-  magus_config_get        - view the resolved workspace config (read-only)
+The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\projects, magus\targets, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\describeFile, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\insight, magus\doctor, magus\memory, magus\job, magus\vcs). Call magus\describeModule("magus") for the signatures. The tools below are the operations that module does not cover.
 
-Run:
-  magus_run_target        - run build/test/lint/format/generate/ci
-  magus_run_affected      - run a target on only VCS-changed projects
-  magus_affected_plan     - emit a CI shard plan for the affected set
-  magus_affected_explain  - explain why a project is affected by VCS changes
-  magus_buzz              - run a Buzz script over another tool's output (stdin) instead of a shell one-liner
-
-Inspect:
-  magus_doctor            - validate the workspace health
-  magus_status            - inspect the live concurrency pool
-  magus_output            - fetch a target-output blob by its reference id
-  magus_insight           - VCS history lenses (hotspots, ownership, trend)
-
-Knowledge graph:
-  magus_query             - search the target/spell/symbol graph
-  magus_explain           - explain a single node and its relationships
-  magus_path              - find a path between two graph nodes
-  magus_refs              - list files that reference a symbol
-  magus_stats             - summarize graph composition
-
-Work with people and other agents:
-  magus_diff              - join the review session a person has open: state, comment, suggest, resolve
-  magus_vcs_checkpoint    - record the working state's identity (revision, branch, patch digest)
-  magus_job               - declare the job plan an orchestrator hands out: criteria, paths, states
-  magus_console_present   - return a local console link when a person asks to see it
+  client                  - run Buzz against the magus client and return its value
+  buzz                    - transform JSON with Buzz; no workspace access
+  status                  - inspect the live concurrency pool
+  config                  - view the resolved workspace config (read-only)
+  diff                    - join the review session a person has open: state, comment, suggest, resolve
+  console                 - return a local console link when a person asks to see it
 
 Typical flow:
-  Discover first: magus_describe (list spells/targets/projects/workspaces), magus_where (resolve a fuzzy project name to a path).
-  Then act: magus_run_target / magus_run_affected; magus_affected_plan (CI shard plan), magus_affected_explain (why a project is affected).
-  After a run: magus_output (fetch a target's captured output by its ref).
-  Understand the graph: magus_query (search) -> magus_explain (a node's edges and provenance) -> magus_path (shortest path); magus_refs (symbol defs and refs); magus_stats (graph shape).
-  Health and meta: magus_status, magus_doctor, magus_config_get.
+  Discover through client with the typed members (magus\projects, magus\targets, magus\query, magus\describeFile); they return records, not CLI text.
+  Run through client (magus\affected, magus\run); magus\output fetches a captured log by its ref.
+  Health: client (magus\doctor), status, config.
 
 Config mutation is intentionally not exposed. Use the magus CLI for that.`
 
@@ -78,8 +53,8 @@ func TestServerInstructionsRenderUnchanged(t *testing.T) {
 
 // TestServerInstructionsToolNamesResolve is the drift half: the golden above
 // only pins what is there today, so a tool renamed on both sides would sail
-// through it. Every magus_* token in the rendered block must also be a declared
-// hint.ToolName bound to a real Registry entry.
+// through it. Every declared tool name in the rendered block must be bound to a
+// real Registry entry, and every Registry entry must appear.
 func TestServerInstructionsToolNamesResolve(t *testing.T) {
 	t.Parallel()
 
@@ -122,13 +97,14 @@ type toolResult struct {
 	Content []struct {
 		Text string `json:"text"`
 	} `json:"content"`
+	StructuredContent json.RawMessage `json:"structuredContent"`
 }
 
 const (
 	initializeFrame  = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"stdio-test","version":"1.0"}}}`
 	initializedFrame = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
 	toolsListFrame   = `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`
-	toolCallFrame    = `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"magus_describe","arguments":{"kind":"mcp_tools"}}}`
+	toolCallFrame    = `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"config","arguments":{}}}`
 )
 
 // A host launches `magus mcp` and speaks line-delimited JSON-RPC on its pipes. The whole
@@ -189,7 +165,8 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(call.Result, &result))
 	require.Len(t, result.Content, 1)
 	assert.False(t, result.IsError, result.Content[0].Text)
-	assert.Contains(t, result.Content[0].Text, "magus_config_get")
+	assert.Contains(t, result.Content[0].Text, "cache")
+	assert.JSONEq(t, result.Content[0].Text, string(result.StructuredContent), "a host reading either copy sees the same payload")
 
 	require.NoError(t, inW.Close())
 	require.NoError(t, <-served, "EOF on stdin is a clean stop")
@@ -200,7 +177,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	events, err := trail.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, "magus_describe", events[0].Action)
+	assert.Equal(t, hint.ToolConfig.String(), events[0].Action)
 	assert.Equal(t, types.CredentialStdio, events[0].Credential)
 	assert.Equal(t, types.EntryPointMCP, events[0].EntryPoint)
 	assert.Equal(t, "stdio-test/1.0", events[0].Host)
@@ -242,18 +219,18 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		ran++
 		return mcplib.NewToolResultText("ran"), nil
 	})
-	req := callRequest("magus_run_target", nil)
+	req := callRequest(hint.ToolConfig.String(), nil)
 	with := func(c types.Credential) context.Context { return trail.ContextWithCredential(context.Background(), c) }
 
 	for name, tc := range map[string]struct {
 		ctx  context.Context
 		want string
 	}{
-		"no credential":   {context.Background(), "[MGS9015] magus_run_target needs mcp=write and the caller holds nothing"},
-		"console grant":   {with(types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}), "[MGS9015] magus_run_target needs mcp=write and the caller holds console=write"},
+		"no credential":   {context.Background(), "[MGS9015] config needs mcp=write and the caller holds nothing"},
+		"console grant":   {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
 		"stdio":           {with(types.CredentialStdio), "ran"},
-		"connector token": {with(types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}), "ran"},
-		"operator token":  {with(types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}), "ran"},
+		"connector token": {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}), "ran"},
+		"operator token":  {with(types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}), "ran"},
 	} {
 		res, err := h(tc.ctx, req)
 		require.NoError(t, err, name)
@@ -264,10 +241,12 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 }
 
 // Over HTTP the caller's lease comes off the request's baggage header, the HTTP form of the
-// BAGGAGE a local process reads, and the job tool writes as it rather than as the server.
+// BAGGAGE a local process reads, and the client tool's magus\job.put writes as that caller.
 func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	jobs := job.NewStore(job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{}})
+	useClientStandIn(t)
+	m := fixtureMagus(t)
+	jobs := job.NewStore(job.Location{CacheDir: m.CacheDir(), Root: m.Root()})
 	for _, row := range []types.Job{
 		{ID: "root/worker", WritePaths: []string{"internal/job"}, State: types.StateRunning},
 		{ID: "root/other", WritePaths: []string{"internal/guard", "internal/hint"}, State: types.StateRunning},
@@ -275,9 +254,9 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	h, err := HTTPHandler(Options{Magus: fixtureMagus(t), Logger: quietLogger(), Jobs: jobs})
+	h, err := HTTPHandler(Options{Magus: m, Logger: quietLogger()})
 	require.NoError(t, err)
-	connector := types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}
+	connector := types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
 	}))
@@ -309,7 +288,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	hdr, _ := post("", "", initializeFrame)
 	session := hdr.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
-	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"magus_job","arguments":{"op":"fork","id":"root/other","write_paths":"internal/guard"}}}`
+	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\job\\put(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
 
 	for name, tc := range map[string]struct {
 		baggage, want string
@@ -326,7 +305,13 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	require.False(t, result.IsError, result.Content)
 	rows, err := jobs.List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/guard"}, rows[1].WritePaths, "the row's own holder released a path")
+	var paths []string
+	for _, row := range rows {
+		if row.ID == "root/other" {
+			paths = row.WritePaths
+		}
+	}
+	assert.Equal(t, []string{"internal/guard"}, paths, "the row's own holder released a path")
 }
 
 // Over HTTP the credential reaches authorize on the request context, where the server's
@@ -340,8 +325,8 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 		cred      types.Credential
 		wantError bool
 	}{
-		"connector": {types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}, false},
-		"console":   {types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, true},
+		"connector": {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, false},
+		"console":   {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))

@@ -28,3 +28,14 @@ func TestCollectMirrorsVisitsNamespaceObjects(t *testing.T) {
 	})
 	assert.ErrorContains(t, err, `object "NoSuchObject" is not declared in boundaryTypes`)
 }
+
+// A nullable return declares `str?`, so the checker makes a caller handle null. Only a
+// string takes it: a nullable of any other tag has no caller and is refused.
+func TestBuzzReturnTypeDeclaresANullableString(t *testing.T) {
+	got, err := buzzReturnType(std.Method{Returns: []std.Ret{{Type: std.TypeString, Nullable: true}}})
+	require.NoError(t, err)
+	assert.Equal(t, "str?", got)
+
+	_, err = buzzReturnType(std.Method{Returns: []std.Ret{{Type: std.TypeInt, Nullable: true}}})
+	assert.ErrorContains(t, err, "a nullable return is a str?")
+}

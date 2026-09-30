@@ -96,11 +96,19 @@ var denyRuleDocs = []RuleDoc{
 			"A recursive grep with no path passes: GNU grep, macOS's BSD grep 2.6 and the ugrep a host may put behind `grep` all search the working directory then, measured 2026-09-26, and those were all five of the rule's measured denies. " +
 			"What the guard cannot classify passes, because it refuses only what it can prove: an unknown flag, an unquoted expansion that may split into several words, `jq -n`, an awk program with a BEGIN block, a command inside a function body. " +
 			"ripgrep with no path passes for the same reason: it searches the working directory unless stdin is a pipe or a file, which a hook cannot see."},
+	{Name: string(denyRuleGrepReader), Decision: "deny",
+		Catches: "a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body",
+		Why: "A context count guesses at a declaration's length: too short cuts the body off and costs another call, too long spends lines on whatever follows. " +
+			"`magus refs X --definition --source` prints the declaration whole, numbered and checked against the index. Where the index cannot vouch for the name, the deny serves `sed -n <first>,<last>p <file>` instead, the declaration's own lines from a parse of the file the search reads (a named file or glob, or under a directory the files the index last saw name it). " +
+			"The single-file allowance symbol-search gives `grep -n 'func X' f.go` does not apply: with -A, -B or -C the search is the read. " +
+			"It fires only when every alternative is a definition lookup (`func X`, `func (r *T) X`, `type X`, `type X struct`) and a declaration of each name is found; a search for uses, a case-insensitive one, or one with any text alternative is left to the search rules. A pipe after it is named as not reproduced. " +
+			"Measured 2026-09-29 over the audit's Claude, Codex and Cursor transcripts: 1,456 context-flag definition lookups, 16 of them denied by any rule. A hand-read sample of 39 held 33 (85%) where the served command answered what the grep asked; the 6 misses filtered the body through a second grep for a few lines, which the served command answers at a higher cost."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
 		Catches: "an inline interpreter rewriting a file this tree already carries",
 		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +
 			"The editor tool reads the file first and reports what it changed, which is the same edit with a record of itself. " +
-			"It fires on the WRITE, not the interpreter: a one-liner that computes something, prints it, or creates a file the tree does not carry is untouched, and so is anything under a scratch path."},
+			"It fires on the WRITE, not the interpreter: a one-liner that computes something, prints it, or creates a file the tree does not carry is untouched, and so is anything under a scratch path. " +
+			"Only a write's destination counts: the path an `open(..., 'w')`, a pathlib or `writeFile` writer, an in-place flag or an awk redirect names, a variable read through its assignment. A tracked path the program carries as data, in a list it prints to stdout or a report it writes to scratch, is not one. A destination spelled from no literal at all, such as argv, is read as the interpreter's operands."},
 	{Name: string(denySpawnUnbriefed), Decision: "deny",
 		Catches: "a subagent spawned before the multi-agent skill loaded",
 		Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +
@@ -124,6 +132,14 @@ var denyRuleDocs = []RuleDoc{
 			"The guard refuses the line rather than judging it as every destructive verb at once: the arguments those rules read come from the alias body too, and `--config-env` or an inline `include.path`, which loads a file that may define aliases, keeps the body off the line altogether. " +
 			"The other backends are held to the same bar: hg's and sl's `--config alias.x=...`, jj's `--config aliases.x=...`, and the options that load config from a file or a TOML string (`--config-file`, sl's `--configfile`, jj's `--config-toml`). " +
 			"Spell out the command the alias stands for. Any other config setting is untouched, and each tool's global options (`git -C`, `hg -R`, `jj --at-op`, `--no-pager`) are read past the way the tool reads them."},
+	{Name: string(denyRuleMagusTimeout), Decision: "deny",
+		Catches: "a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside",
+		Why: "A timeout wrapper ends magus with a signal from outside, so the run log records no cause, a target's tools can outlive the process that started them, and the next reader sees a run that stopped rather than one that timed out. " +
+			"magus bounds a run itself: `--timeout <dur>` bounds the whole run and cancels its own process tree, `--target-timeout <dur>` caps each target, and `--stall-timeout <dur>` stops a run making no progress. " +
+			"A `run` or `affected` is served the same argv with `--timeout` and the wrapper's duration (600 becomes 10m). Any other verb is served bare: it holds no lock worth waiting on, since a held lock refuses at once (MGS3009). " +
+			"`magus buzz` has no bound of its own, so a wrapped script is advised rather than refused. " +
+			"It reads every flag the wrapper takes and the launchers around it (`env`, `nice`, `nohup`, `sh -c`, `eval`). " +
+			"A wrapper sending QUIT or ABRT is left alone, since that is how a goroutine dump is taken from a hung run, and so is a verb that runs until interrupted: `watch`, `events`, `job watch` and `--version`."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +
@@ -168,8 +184,9 @@ var denyRuleDocs = []RuleDoc{
 			"The guard reads the command being RUN, so a wrapper, a `VAR=value` prefix or `bash -c` reaches the same verdict, and `go -C <dir> <verb>` reads the same as `go <verb> -C <dir>`. " +
 			"Asking a tool for its usage or version runs nothing over the tree and passes: `go clean --help`, `gofmt -h`, `go help clean`, `govulncheck -V`. The help flag has to be the tool's own, last on the line, after a subcommand a spell renders; one handed to a program is work, so `go run main.go --help` and `go test ./... -args --help` are refused. " +
 			"`gofmt -l` and `gofmt -d` pass too, without `-w`: they list or diff and write nothing, so they leave no drift for the format target to report. `go list` passes because no spell renders it. " +
-			"One build is exempt, in a checkout of magus itself: `go build -o magus ./cmd/magus`, alone on its line, into a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
-			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
+			"One command is exempt, in a checkout of magus itself: `go run -trimpath ./cmd/magus run go-build --no-cache .`, alone on its line, in a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
+			"It runs the real go-build target (its generate steps and stamped link) instead of a bare link, so the first binary is the one every later build would make. `--no-cache` because that target's key cannot express the embedded-spell ordering and once replayed a binary missing tools; Go's content-addressed build cache stays on, and `-trimpath` matches the target's own build so packages compile once. " +
+			"Every other raw go command in that root, a bare `go build -o magus ./cmd/magus` included, is refused and served the bootstrap. Once the binary exists the deny applies again and names `./magus run go-build .`. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
 	{Name: string(denyRuleAgentSignOff), Decision: "deny",
 		Catches: "an agent stamping a read receipt or closing an attention request, which only a person may do",
@@ -211,7 +228,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "It fires only when the graph can VOUCH for every name the pattern looks for: each symbol is defined here and no project's index is older than its sources, and each diagnostic code is one the graph carries a node for. " +
 			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses, and `magus explain diagnostic:<code>` knows the code's page and what documents and emits it. " +
 			"An alternation (`A\\|B`, `-e A -e B`, `A|B` under -E) is answered with one command per name, and a definition lookup (`func X`, `func (r *T) X`, `type X`) with `magus refs X --definition --source`, which prints the body in place of the grep-then-sed pair. " +
-			"A search naming Go files (`grep -n Foo file.go`, measured 2026-09-26 as the commonest symbol lookup) runs, with refs advised: a deny could only hand back the lines grep prints, so it would cost a turn and save nothing. " +
+			"A search naming Go files (`grep -n Foo file.go`, measured 2026-09-26 as the commonest symbol lookup) runs, with refs advised: a deny could only hand back the lines grep prints, so it would cost a turn and save nothing. A definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
 			"A search of the tree carries the index's own answer when it can give one within the hook's budget: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. It is refs' answer, not grep's: comments, strings and prose are not in it. " +
 			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it, and the deny would then state the wrong output as fact. " +
 			"A stale index or a diagnostic code keeps the routing deny without the answer. " +
@@ -247,6 +264,17 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. " +
 			"Measured 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable. " +
 			"Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect."},
+	{Name: string(denyRuleFocusRead), Decision: "deny", Catches: "a read outside the paths a focus lease was given"},
+	{Name: string(denyRuleHookWiringWrite), Decision: "deny", Catches: "a leased or agent-attributed write to the hook wiring the guard is installed by"},
+	{Name: string(denyRuleLeaseGate), Decision: "deny", Catches: "a leased worker running the gate instead of the check it was assigned"},
+	{Name: string(denyRuleLeaseHarness), Decision: "deny", Catches: "a leased worker rewriting the harness skill trees that steer it"},
+	{Name: string(denyRuleLeaseRebind), Decision: "deny", Catches: "a leased worker rewriting who it is or what its own job row says"},
+	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a well-formed lease id the job store has no row for"},
+	{Name: string(denyRuleLeaseVCS), Decision: "deny", Catches: "a worker lease committing, pushing, stashing or reverting the tree it is landed from"},
+	{Name: string(denyRuleLeaseWrite), Decision: "deny",
+		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
+		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back on both surfaces, a file write and a shell line, in the same words. " +
+			"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to."},
 	{Name: string(denyRuleWholeTree), Decision: "deny",
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
 		Why: "These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. " +
@@ -280,12 +308,27 @@ var advisoryDocs = []RuleDoc{
 			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(advisoryDependencyInstall), Decision: "advise", Catches: "a raw package install that the cached install target already runs"},
+	{Name: string(advisoryDependencyUpdate), Decision: "advise", Catches: "a raw dependency update outside a target's update charm"},
+	{Name: string(advisoryEchoOnSuccess), Decision: "advise", Catches: "an `&& echo` that restates what the exit status already says"},
+	{Name: string(advisoryLeaseState), Decision: "advise", Catches: "a leased write while its row reports a diverged base, a re-entered path, or a bad pattern"},
+	{Name: string(advisoryStdinClosed), Decision: "advise",
+		Catches: "shell commands run with stdin at end-of-file, said once per session",
+		Why: "An agent's shell command inherits an open stdin nobody writes to, so anything that reads it (grep or cat with no operand, read, a prompt, ssh, a pager) waits forever, and a host that times the call out backgrounds it rather than killing it. " +
+			"Measured 2026-09-29: a grep whose file operands expanded to nothing read that stdin for 3.5 hours. " +
+			"Where the host lets a hook rewrite the call, the guard prefixes the command with `exec </dev/null;`, never on a refused call and never twice. A heredoc, a pipe or a `<` still give a command its input, since each sets stdin for its own command. " +
+			"A prefix rather than a `{ <command>` ... `} </dev/null` group: Claude Code's isolation check for worktree agents judges the rewritten line, and measured 2026-09-29 it refused the group as too complex even around `stat` or `git status`, where it refuses the prefix only on a line it already found borderline (runtime-computed values beside a redirect)."},
+	{Name: string(advisoryTimedMagus), Decision: "advise", Catches: "`time` around a silent magus run, which already reports its own durations"},
 	{Name: string(denyRuleReadNavigation), Decision: "deny",
-		Catches: "a whole read of a mapped Go or Markdown file over 120 lines",
+		Catches: "a whole read of a Go, Buzz or Markdown file over 120 lines",
 		Why: "The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. " +
-			"A Go declaration spans its doc comment to its closing brace, each member of a grouped var, const or type is its own entry, and a method is named `Type.Method`. " +
+			"The map is parsed from the file itself, so a stale index still gets one: where the index vouches for every name, `magus refs <name> --definition --source` prints one checked against it and the graph lists the map; where it does not, and for Buzz, which nothing indexes for refs, `sed -n <first>,<last>p <file>` prints one by its lines. " +
+			"A Go declaration spans its doc comment to its closing brace, each member of a grouped var, const or type is its own entry, and a method is named `Type.Method`. A Buzz entry is a top-level fun, test, object or enum, from its doc comment to the line before the next statement. " +
+			"Every file a `cat` or `nl` prints is judged, so `cat a.go b.go` is refused for whichever mapped file is over the threshold. A host's read tool is restated as the same line (`cat <file>`, or `sed -n` over its offset and limit, a limit over 300 counting as whole) and judged the same way. " +
 			"120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 8,394 dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by an edit of that file. " +
-			"Silent on a short file, Buzz (no symbol index), a generated output, a path outside the workspace, a stale index, a heading count the graph disagrees with, and a read feeding a pipe or redirect."},
+			"Measured 2026-09-29 over the audit's transcripts: 657 whole reads of Go or Markdown files over 120 lines ran, 3 denied, most of them on a stale index or a multi-file cat (63); about 90% were reads a map serves, the rest a read before an edit (~38), the reader's own new file (2) and a skill read whole (~17). 299 of them came through the host read tool, which nothing judged. " +
+			"Buzz: 125 whole reads over 120 lines, 5 denied by any rule; a hand-read sample of 35 held 29 (83%), the misses a read right before an edit and a review of the reader's own diff. " +
+			"Silent on a short file, TypeScript (no parser here), SKILL.md, AGENTS.md and CLAUDE.md (written to be read whole), a generated output, a path outside the workspace, a file that does not parse, and a read feeding a pipe or redirect."},
 	{Name: string(advisoryReadSymbol), Decision: "advise",
 		Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked",
 		Why:     "Silent inside a method: refs resolves bare names, so its command would print every method of that name."},
@@ -374,7 +417,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryInstruction,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
-	advisoryGraphPipe,
+	advisoryGraphPipe, advisoryStdinClosed,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the
@@ -383,8 +426,19 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
-	advisoryReadSymbol,
+	advisoryReadSymbol, advisoryLeaseState, advisoryDependencyUpdate, advisoryDependencyInstall,
+	advisoryEchoOnSuccess, advisoryTimedMagus,
 }
+
+// Advisories that spoke on every match with no name, so their verdicts recorded none.
+// Named without enrolling: a kind would hold each to one firing, which none asked for.
+const (
+	advisoryLeaseState        denyRuleName = "lease-state"
+	advisoryDependencyUpdate  denyRuleName = "dependency-update"
+	advisoryDependencyInstall denyRuleName = "dependency-install"
+	advisoryEchoOnSuccess     denyRuleName = "echo-on-success"
+	advisoryTimedMagus        denyRuleName = "timed-magus"
+)
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.
 func advisoryNames() []string {

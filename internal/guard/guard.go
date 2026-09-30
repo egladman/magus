@@ -256,6 +256,11 @@ type Request struct {
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
 	ObservesSkillLoads bool
+	// RewritesInput is the third capability: the input is a shell command the host runs,
+	// and the wiring's reply hands the host Verdict.UpdatedCommand to run in its place.
+	// Without it the guard closes no stdin, since a host that never receives the
+	// rewrite would run the command with stdin open while the trail says otherwise.
+	RewritesInput bool
 	// RendersAsk is the second capability: the wiring puts an ask verdict in front of the
 	// person through the host's own prompt. Without it an ask is returned as a deny,
 	// because a glue that predates the decision renders it as nothing and its host reads
@@ -273,14 +278,11 @@ type Verdict struct {
 	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
-	// Rule names the stable rule or advisory that produced this verdict, when it can
-	// identify itself. Host adapters still render Reason and Context; this is what a
-	// PERSON looks up, reports as a false positive, or greps a trail for, and the text
-	// arm prints it beside the decision for exactly that reason.
-	//
-	// Empty is an honest answer, not a gap to paper over: several path advisories are
-	// heuristics with no marker kind of their own, and inventing a slug for one would
-	// promise a catalog entry that does not exist.
+	// Rule names the catalogued rule or advisory that produced this verdict, and is set on
+	// every deny, advise and ask (a workspace rule's carries its workspace prefix). Host
+	// adapters still render Reason and Context; this is what a PERSON looks up, reports
+	// as a false positive, or greps a trail for, and the text arm prints it beside the
+	// decision for exactly that reason. Empty on a pass.
 	Rule string `json:"rule,omitempty"`
 	// Lease is the row this verdict was graded under, empty when the call named none.
 	//
@@ -294,6 +296,35 @@ type Verdict struct {
 	// Next is a deny's remedy, served only when it passes the guard for the acting
 	// lease, and pre-authorized for the calls after it. Reason renders it too.
 	Next []hint.Next `json:"next,omitempty"`
+	// UpdatedCommand is the command the host should run instead of the one it asked
+	// about: that command with stdin closed. Set only on a pass or advise for a request
+	// with RewritesInput, and never on a line that already starts by closing it.
+	UpdatedCommand string `json:"updated_command,omitempty"`
+}
+
+// stdinClosedPrefix makes every command in the line read end-of-file from stdin. An agent's
+// shell inherits a stdin nobody writes to, so a stray reader (grep with no file operand,
+// read, a prompt, ssh, a pager) waits forever, and a host that times the call out
+// backgrounds it instead of killing it. A heredoc, a pipe or a `<` still feed their own
+// command, since each sets stdin for that command alone.
+//
+// A prefix rather than a `{ <line>\n} </dev/null` group. Claude Code's isolation check for
+// worktree agents judges the rewritten line; measured 2026-09-29, it refused the group as
+// too complex even around `stat` or `git status`, and refuses the prefix only on a line it
+// already found borderline (runtime-computed values beside a redirect).
+const stdinClosedPrefix = "exec </dev/null; "
+
+// advisoryStdinClosed tells a session once that its commands run with stdin closed.
+const advisoryStdinClosed hint.MarkerKind = "stdin-closed"
+
+const stdinClosedNotice = "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly."
+
+// closeStdin is line with stdin closed, and false when line already starts by closing it.
+func closeStdin(line string) (string, bool) {
+	if strings.HasPrefix(line, stdinClosedPrefix) {
+		return line, false
+	}
+	return stdinClosedPrefix + line, true
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -447,6 +478,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if reason := denyUndeclaredLease(standing, actingLease, command); reason != "" {
 			verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+			verdict.Rule = string(denyRuleLeaseUndeclared)
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -497,7 +529,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// a worker whose write paths happen to cover the dir must not be told it owns the
 		// dir: what it is editing is whether the boundary was checked.
 		if reason := denyCacheDirPath(location, input); reason != "" {
-			verdict.Decision, verdict.Reason = "deny", reason
+			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleCacheDirWrite)
 		}
 		if reason := denyTokenStatePath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleTokenState)
@@ -508,9 +540,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			case "deny":
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
-				verdict.Rule = g.Rule
+				verdict.Rule = cmp.Or(g.Rule, string(denyRuleLeaseWrite))
 			case "advise":
-				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), g.Kind, true
+				// Held by its own key when it has one; lease-state only names the rest.
+				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState)), true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -521,7 +554,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if verdict.Decision != "deny" {
 			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
 			case "deny":
-				verdict.Decision, verdict.Reason = "deny", g.Reason
+				verdict.Decision, verdict.Reason, verdict.Rule = "deny", g.Reason, string(denyRuleHookWiringWrite)
 			case "advise":
 				if !spoken {
 					advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
@@ -558,6 +591,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if reason := denyNotesWrite(deps, input); reason != "" {
 				verdict.Decision = "deny"
 				verdict.Reason = reason
+				verdict.Rule = string(denyRuleNotesAuthor)
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
@@ -669,8 +703,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
-			if reason := rule(ctx, deps, actingLease, input); reason != "" {
+			if reason := rule.judge(ctx, deps, actingLease, input); reason != "" {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+				verdict.Rule = string(rule.name)
 			}
 		}
 		// The focus rule. Its DENY outranks any advisory above it, because that one is
@@ -682,6 +717,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			switch {
 			case focus.Decision == "deny":
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
+				verdict.Rule = string(denyRuleFocusRead)
 			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.MarkFired(advisoryFocusPath(focus.Rel)):
 				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
 					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
@@ -781,6 +817,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(kind)
 	}
+	// The one rewrite the guard makes, after every rule has spoken and never on a deny or
+	// an ask: a refused call does not run, and a person approves the command as typed.
+	if req.RewritesInput && tool == hookToolCommand && hasInput && (verdict.Decision == "pass" || verdict.Decision == "advise") {
+		if line, closed := closeStdin(input); closed {
+			verdict.UpdatedCommand = line
+			if notice := markers.Once(advisoryStdinClosed, stdinClosedNotice); notice != "" {
+				if verdict.Decision == "advise" {
+					verdict.Context += "\n\n" + notice
+				} else {
+					verdict.Decision, verdict.Context, verdict.Rule = "advise", notice, string(advisoryStdinClosed)
+				}
+			}
+		}
+	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a
 	// full explanation per session. An ask is never shortened: it waits on a person.
 	verdictRef := ""
@@ -835,11 +885,22 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	return rankTokenState(v, denyTokenStateCommand(at, line, d))
 }
 
+// roleScopedRule is a command rule that reads the acting lease's row, with the name its
+// refusal is recorded under.
+type roleScopedRule struct {
+	name  denyRuleName
+	judge func(context.Context, Dependencies, string, string) string
+}
+
 // roleScopedCommandRules are the command rules a served next stands down, so each is
 // asked of a remedy before it is served.
-func roleScopedCommandRules() []func(context.Context, Dependencies, string, string) string {
-	return []func(context.Context, Dependencies, string, string) string{
-		denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease,
+func roleScopedCommandRules() []roleScopedRule {
+	return []roleScopedRule{
+		{denyRuleLeaseGate, denyLeaseScopedGate},
+		{denyRuleLeaseVCS, denyLeaseScopedVCS},
+		{denyRuleLeaseRebind, denyLeaseScopedRebind},
+		{denyRuleLeaseHarness, denyLeaseScopedHarness},
+		{denyRuleLeaseWrite, denyWriteOutsideLease},
 	}
 }
 
@@ -857,8 +918,8 @@ func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir
 		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run) != "" {
 			continue
 		}
-		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule func(context.Context, Dependencies, string, string) string) bool {
-			return rule(ctx, deps, actingLease, n.Run) != ""
+		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule roleScopedRule) bool {
+			return rule.judge(ctx, deps, actingLease, n.Run) != ""
 		})
 		if refused || gradeFocusRead(ctx, deps, actingLease, n.Run).Decision == "deny" {
 			continue
@@ -1027,9 +1088,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// rule here reads: a command line. It is the SAME work the CLI verbs do, through
 		// a different transport, so a rule that held on one channel would move the
 		// traffic rather than stop it. Judged on the TOOL NAME rather than on a param
-		// being present: requiring `op` left nineteen of magus's twenty-one tools,
-		// magus_run_target and magus_run_affected among them, reaching no rule at all.
-		req.Value = renderMCPCall(tool, env.ToolInput)
+		// being present: requiring `op` left the tools that do not carry one,
+		// client and status among them, reaching no rule at all.
+		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
@@ -1426,6 +1487,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Reason:          verdict.Reason,
 		Context:         verdict.Context,
 		Rule:            verdict.Rule,
+		StdinClosed:     verdict.UpdatedCommand != "",
 		VerdictRef:      verdictRef,
 	}
 	if tool == hookToolCommand {

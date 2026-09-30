@@ -276,9 +276,8 @@ type InstallChoice struct {
 }
 
 // Descriptor is a spell's static description. For built-ins it is produced by
-// compiling each spells/<name>/spell.buzz to bytecode (go:generate
-// magus-utils spells), embedding the blob, and resolving its mgs_ functions at load
-// time.
+// compiling each embedded spells/<name>/spell.buzz (Shipped) at load time and
+// resolving its mgs_ functions.
 type Descriptor struct {
 	Name     string   `json:"name"`
 	Needs    []string `json:"needs,omitempty"`

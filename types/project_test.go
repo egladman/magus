@@ -2,9 +2,11 @@ package types
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
-	"testing"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAttachSpellSkipsInternalForThePrimarySlot pins the rule that keeps
@@ -43,18 +45,18 @@ func TestAttachSpellLeavesNoPrimaryWhenOnlyInternal(t *testing.T) {
 
 func TestProjectAllOutputs(t *testing.T) {
 	// No per-target outputs: AllOutputs is exactly the project-wide set.
-	p := &Project{Outputs: []string{"dist/**"}}
-	assert.Equal(t, []string{"dist/**"}, p.AllOutputs())
+	p := &Project{Outputs: MustParseGlobs("dist/**")}
+	assert.Equal(t, MustParseGlobs("dist/**"), p.AllOutputs())
 
 	// Per-target outputs union in, deduped against project-wide, sorted for determinism.
 	p = &Project{
-		Outputs: []string{"dist/**"},
+		Outputs: MustParseGlobs("dist/**"),
 		TargetOutputs: map[string][]OutputRef{
 			"docs":     {{Glob: "docs/*.md"}, {Glob: "dist/**"}}, // dist/** duplicates project-wide -> dropped
 			"generate": {{Glob: "MAGUS.md"}},
 		},
 	}
-	assert.Equal(t, []string{"dist/**", "MAGUS.md", "docs/*.md"}, p.AllOutputs())
+	assert.Equal(t, MustParseGlobs("MAGUS.md", "dist/**", "docs/*.md"), p.AllOutputs())
 }
 
 func TestProjectLabel(t *testing.T) {
@@ -104,11 +106,118 @@ func TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate(t *testing.T)
 	t.Parallel()
 	p := &Project{
 		Path:         "api",
-		Sources:      []string{"**/*.go", "../proto/**"},
+		Sources:      MustParseGlobs("**/*.go", "../proto/**"),
 		TargetInputs: map[string][]InputRef{"build": {{Project: "proto", Glob: "**"}}},
 	}
 
-	assert.Equal(t, []string{"api/**/*.go", "proto/**"}, p.DeclaredGlobs())
+	assert.Equal(t, MustParseGlobs("api/**/*.go", "proto/**"), p.DeclaredGlobs())
+}
+
+func TestGlobMatch(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		glob Glob
+		path string
+		want bool
+	}{
+		{"an exclusion narrows the pattern", Glob{"gen/*.go", []string{"gen/runtime.go"}}, "gen/runtime.go", false},
+		{"the rest of the pattern still matches", Glob{"gen/*.go", []string{"gen/runtime.go"}}, "gen/fs.go", true},
+		{"an exclusion is a glob too", Glob{"gen/*.go", []string{"gen/*_test.go"}}, "gen/fs_test.go", false},
+		{"a literal directory claims what is beneath it", Glob{Pattern: "dist"}, "dist/app/main.js", true},
+		{"a literal directory is not a prefix match", Glob{Pattern: "dist"}, "distro/a.js", false},
+		{"a literal directory exclusion carves out what is beneath it", Glob{"dist", []string{"dist/vendor"}}, "dist/vendor/lib.js", false},
+		{"a literal directory exclusion keeps its siblings", Glob{"dist", []string{"dist/vendor"}}, "dist/app.js", true},
+		{"an escaped bang is a literal leading bang", Glob{Pattern: `\!gen.go`}, "!gen.go", true},
+		{"an unparsable pattern matches nothing", Glob{Pattern: "[bad"}, "[bad", false},
+	} {
+		assert.Equal(t, tc.want, tc.glob.Match(tc.path), tc.name)
+	}
+}
+
+// TestParseGlobsIsOrderFreeWithinOneCall pins the one meaning of "!": every exclusion in
+// a call narrows every pattern in that call, whichever comes first.
+func TestParseGlobsIsOrderFreeWithinOneCall(t *testing.T) {
+	t.Parallel()
+	want := []Glob{
+		{Pattern: "a/*", Except: []string{"*/x", "*/y"}},
+		{Pattern: "b/*", Except: []string{"*/x", "*/y"}},
+	}
+	for _, call := range [][]string{
+		{"a/*", "b/*", "!*/x", "!*/y"},
+		{"!*/y", "a/*", "!*/x", "b/*"},
+	} {
+		got, err := ParseGlobs(call)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "%q", call)
+	}
+
+	got, err := ParseGlobs([]string{"*.go", `\!x.go`})
+	require.NoError(t, err)
+	assert.Equal(t, []Glob{{Pattern: "*.go"}, {Pattern: `\!x.go`}}, got, "an escaped bang is a pattern, not an exclusion")
+}
+
+func TestParseGlobsRefusesADeclarationOfNothing(t *testing.T) {
+	t.Parallel()
+	_, err := ParseGlobs([]string{"!gen/runtime.go", "!gen/*_test.go"})
+	require.EqualError(t, err, `exclusion "!gen/runtime.go" has no glob to narrow`)
+	_, err = ParseGlobs([]string{"gen/*.go", "!"})
+	require.EqualError(t, err, `glob "!" names no pattern`)
+	_, err = ParseGlobs([]string{""})
+	require.EqualError(t, err, `glob "" names no pattern`)
+
+	got, err := ParseGlobs(nil)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestGlobRootRootsItsExclusions(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, Glob{"api/gen/*.go", []string{"api/gen/runtime.go"}},
+		Glob{"gen/*.go", []string{"gen/runtime.go"}}.Root("api"))
+	assert.Equal(t, Glob{"proto/**", []string{"proto/x"}}, Glob{"../proto/**", []string{"../proto/x"}}.Root("docs"))
+	assert.Equal(t, Glob{Pattern: "gen/x"}, Glob{Pattern: "./gen/x"}.Root("."))
+}
+
+func TestInvalidGlobsJudgesExclusionsToo(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []string{"[bad"}, InvalidGlobs([]Glob{{"gen/*", []string{"gen/x", "[bad"}}, {Pattern: "[bad"}}))
+}
+
+// TestAGlobsExclusionsNeverReachAnotherDeclaration pins why a union of declarations is a
+// plain union: one declaration's exclusion carves nothing out of another's pattern.
+func TestAGlobsExclusionsNeverReachAnotherDeclaration(t *testing.T) {
+	t.Parallel()
+	outputs, err := ParseGlobs([]string{"gen/*.go", "!gen/runtime.go"})
+	require.NoError(t, err)
+	union := append(MustParseGlobs("**/*.go"), outputs...)
+
+	assert.True(t, MatchGlobs(union, "gen/runtime.go"))
+	assert.False(t, MatchGlobs(outputs, "gen/runtime.go"))
+	assert.Equal(t, []Glob{{Pattern: "a"}, {Pattern: "b"}}, CompactGlobs([]Glob{{Pattern: "b"}, {Pattern: "a"}, {Pattern: "b"}}),
+		"a union dedups")
+}
+
+func TestDeclaredGlobsAndAllOutputsKeepAnExclusionWithItsDeclaration(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:    "api",
+		Sources: MustParseGlobs("**/*.go"),
+		Outputs: MustParseGlobs("dist/**"),
+		TargetOutputs: map[string][]OutputRef{
+			"bindings": {{Glob: "gen/*.go", Except: []string{"gen/runtime.go"}}},
+			"docs":     {{Glob: "MAGUS.md"}},
+		},
+	}
+
+	bindings := Glob{"gen/*.go", []string{"gen/runtime.go"}}
+	assert.Equal(t, []Glob{{Pattern: "MAGUS.md"}, {Pattern: "dist/**"}, bindings}, p.AllOutputs())
+	declared := p.DeclaredGlobs()
+	assert.Equal(t, []Glob{
+		{Pattern: "api/**/*.go"}, {Pattern: "api/MAGUS.md"}, {Pattern: "api/dist/**"}, bindings.Root("api"),
+	}, declared, "the declaration AllOutputs and TargetOutputs both carry appears once")
+	assert.True(t, MatchGlobs(declared, "api/gen/runtime.go"), "the project's sources still declare it")
+	assert.False(t, MatchGlobs(p.AllOutputs(), "gen/runtime.go"), "but no output does")
 }
 
 func TestProject_AttachSpell(t *testing.T) {
@@ -160,7 +269,7 @@ func TestProjectDisplayNamePrefersDeclaredName(t *testing.T) {
 func benchProject(nOwn, nTarget, nInbound int) *Project {
 	p := &Project{Path: "api"}
 	for i := 0; i < nOwn; i++ {
-		p.Outputs = append(p.Outputs, fmt.Sprintf("dist/own-%d/**", i))
+		p.Outputs = append(p.Outputs, Glob{Pattern: fmt.Sprintf("dist/own-%d/**", i)})
 	}
 	if nTarget > 0 {
 		p.TargetOutputs = map[string][]OutputRef{}
@@ -170,10 +279,10 @@ func benchProject(nOwn, nTarget, nInbound int) *Project {
 		}
 	}
 	if nInbound > 0 {
-		p.InboundOutputs = map[string][]string{}
+		p.InboundOutputs = map[string][]Glob{}
 		for i := 0; i < nInbound; i++ {
 			w := fmt.Sprintf("writer-%d", i%2)
-			p.InboundOutputs[w] = append(p.InboundOutputs[w], fmt.Sprintf("src/gen/in-%d.ts", i))
+			p.InboundOutputs[w] = append(p.InboundOutputs[w], Glob{Pattern: fmt.Sprintf("src/gen/in-%d.ts", i)})
 		}
 	}
 	return p
@@ -182,8 +291,8 @@ func benchProject(nOwn, nTarget, nInbound int) *Project {
 // BenchmarkProjectAllOutputs measures the per-project view every output consumer reads:
 // `magus clean` calls it once per project, watch calls it once per project at startup,
 // the merge driver calls it once per project per conflicted file, and FindOutputProducer
-// calls it inside its own scan over all projects. The dedup is membership-tested against
-// two growing slices, so cost is quadratic in the glob count: these sizes are what say
+// calls it inside its own scan over all projects. The dedup sorts, so cost is n log n in
+// the glob count: these sizes are what say
 // whether that matters at realistic and pathological widths.
 func BenchmarkProjectAllOutputs(b *testing.B) {
 	cases := []struct {

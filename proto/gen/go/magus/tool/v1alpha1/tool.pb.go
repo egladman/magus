@@ -10,12 +10,11 @@
 // this repo says it supports", which the CLI answers one op at a time (MGS3005/MGS3006)
 // and which nothing could answer for the workspace as a whole.
 //
-// Everything here is a READ of state magus already builds: the probe is a cache-key input
-// that runs on every build regardless, and the window comes from a spell's `supported`
-// plus a project's `tools` key. magus does not learn which versions exist upstream, does
-// not select one, and carries no end-of-life data - see docs/scope.md. A future eol field
-// would be an ADDITION to Tool, which proto3 permits without a wire break, so its absence
-// here costs nothing later.
+// The probe is a cache-key input that runs on every build regardless, and the window comes
+// from a spell's `supported` plus a project's `tools` key. End-of-life data is the one
+// thing magus does not already hold: it comes from the lifecycle provider the workspace
+// wires (magus\lifecycle.provider), a spell that reads it upstream. magus never selects a
+// version or installs one, and nothing here fails a build (docs/scope.md).
 //
 // A sibling of magus.status.v1alpha1: status is "what is happening right now", this is "what is
 // this workspace built with". buf-breaking gates this file.
@@ -97,6 +96,213 @@ func (Verdict) EnumDescriptor() ([]byte, []int) {
 	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{0}
 }
 
+// Support is where the installed version's release cycle stands. Mirrors spells.Support.
+type Support int32
+
+const (
+	Support_SUPPORT_UNSPECIFIED Support = 0 // the spell names no lifecycle product, or no provider is wired
+	Support_SUPPORT_SUPPORTED   Support = 1 // before its end-of-life date
+	Support_SUPPORT_EOL         Support = 2 // on or after its end-of-life date
+	Support_SUPPORT_UNANNOUNCED Support = 3 // upstream has named no end date
+	// SUPPORT_UNKNOWN means the provider gave nothing to place the version with: it did not
+	// answer, it does not know the product, or no cycle carries the version. The response's
+	// lifecycle state says which.
+	Support_SUPPORT_UNKNOWN Support = 4
+)
+
+// Enum value maps for Support.
+var (
+	Support_name = map[int32]string{
+		0: "SUPPORT_UNSPECIFIED",
+		1: "SUPPORT_SUPPORTED",
+		2: "SUPPORT_EOL",
+		3: "SUPPORT_UNANNOUNCED",
+		4: "SUPPORT_UNKNOWN",
+	}
+	Support_value = map[string]int32{
+		"SUPPORT_UNSPECIFIED": 0,
+		"SUPPORT_SUPPORTED":   1,
+		"SUPPORT_EOL":         2,
+		"SUPPORT_UNANNOUNCED": 3,
+		"SUPPORT_UNKNOWN":     4,
+	}
+)
+
+func (x Support) Enum() *Support {
+	p := new(Support)
+	*p = x
+	return p
+}
+
+func (x Support) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Support) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_tool_v1alpha1_tool_proto_enumTypes[1].Descriptor()
+}
+
+func (Support) Type() protoreflect.EnumType {
+	return &file_magus_tool_v1alpha1_tool_proto_enumTypes[1]
+}
+
+func (x Support) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Support.Descriptor instead.
+func (Support) EnumDescriptor() ([]byte, []int) {
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{1}
+}
+
+// LifecycleState is where the end-of-life data came from. Mirrors the types.Lifecycle*
+// states `magus describe tools -o json` prints.
+type LifecycleState int32
+
+const (
+	LifecycleState_LIFECYCLE_STATE_UNSPECIFIED LifecycleState = 0
+	LifecycleState_LIFECYCLE_STATE_LIVE        LifecycleState = 1 // asked the provider for this response
+	LifecycleState_LIFECYCLE_STATE_CACHED      LifecycleState = 2 // replayed a stored answer without asking
+	LifecycleState_LIFECYCLE_STATE_OFFLINE     LifecycleState = 3 // MAGUS_OFFLINE forbade asking; a stored answer, or none
+	LifecycleState_LIFECYCLE_STATE_UNREACHED   LifecycleState = 4 // asked and not answered; a stored answer, or none
+	LifecycleState_LIFECYCLE_STATE_UNWIRED     LifecycleState = 5 // the workspace wires no lifecycle provider
+)
+
+// Enum value maps for LifecycleState.
+var (
+	LifecycleState_name = map[int32]string{
+		0: "LIFECYCLE_STATE_UNSPECIFIED",
+		1: "LIFECYCLE_STATE_LIVE",
+		2: "LIFECYCLE_STATE_CACHED",
+		3: "LIFECYCLE_STATE_OFFLINE",
+		4: "LIFECYCLE_STATE_UNREACHED",
+		5: "LIFECYCLE_STATE_UNWIRED",
+	}
+	LifecycleState_value = map[string]int32{
+		"LIFECYCLE_STATE_UNSPECIFIED": 0,
+		"LIFECYCLE_STATE_LIVE":        1,
+		"LIFECYCLE_STATE_CACHED":      2,
+		"LIFECYCLE_STATE_OFFLINE":     3,
+		"LIFECYCLE_STATE_UNREACHED":   4,
+		"LIFECYCLE_STATE_UNWIRED":     5,
+	}
+)
+
+func (x LifecycleState) Enum() *LifecycleState {
+	p := new(LifecycleState)
+	*p = x
+	return p
+}
+
+func (x LifecycleState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LifecycleState) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_tool_v1alpha1_tool_proto_enumTypes[2].Descriptor()
+}
+
+func (LifecycleState) Type() protoreflect.EnumType {
+	return &file_magus_tool_v1alpha1_tool_proto_enumTypes[2]
+}
+
+func (x LifecycleState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LifecycleState.Descriptor instead.
+func (LifecycleState) EnumDescriptor() ([]byte, []int) {
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{2}
+}
+
+// Lifecycle says where every Tool's cycle, eol and support came from.
+type Lifecycle struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Provider string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"` // the spell wired as the lifecycle provider, empty when none is
+	State    LifecycleState         `protobuf:"varint,2,opt,name=state,proto3,enum=magus.tool.v1alpha1.LifecycleState" json:"state,omitempty"`
+	Sources  []string               `protobuf:"bytes,3,rep,name=sources,proto3" json:"sources,omitempty"` // the URLs the provider read
+	// as_of is the OLDEST upstream last-modified among the answers: the data is no fresher
+	// than its stalest source. Unset when nothing was answered.
+	AsOf *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	// fetched_at is when the provider was asked; on a replay, when the replayed answer was.
+	FetchedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=fetched_at,json=fetchedAt,proto3" json:"fetched_at,omitempty"`
+	Detail        string                 `protobuf:"bytes,6,opt,name=detail,proto3" json:"detail,omitempty"` // why the provider was not asked or did not answer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Lifecycle) Reset() {
+	*x = Lifecycle{}
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Lifecycle) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Lifecycle) ProtoMessage() {}
+
+func (x *Lifecycle) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Lifecycle.ProtoReflect.Descriptor instead.
+func (*Lifecycle) Descriptor() ([]byte, []int) {
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Lifecycle) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *Lifecycle) GetState() LifecycleState {
+	if x != nil {
+		return x.State
+	}
+	return LifecycleState_LIFECYCLE_STATE_UNSPECIFIED
+}
+
+func (x *Lifecycle) GetSources() []string {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *Lifecycle) GetAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOf
+	}
+	return nil
+}
+
+func (x *Lifecycle) GetFetchedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FetchedAt
+	}
+	return nil
+}
+
+func (x *Lifecycle) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
 // VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a
 // plain version. Mirrors spells.VersionBounds. Both empty means unconstrained.
 //
@@ -112,7 +318,7 @@ type VersionBounds struct {
 
 func (x *VersionBounds) Reset() {
 	*x = VersionBounds{}
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[0]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -124,7 +330,7 @@ func (x *VersionBounds) String() string {
 func (*VersionBounds) ProtoMessage() {}
 
 func (x *VersionBounds) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[0]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -137,7 +343,7 @@ func (x *VersionBounds) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionBounds.ProtoReflect.Descriptor instead.
 func (*VersionBounds) Descriptor() ([]byte, []int) {
-	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{0}
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *VersionBounds) GetMin() string {
@@ -174,14 +380,21 @@ type Tool struct {
 	// probe_time is when this version was read. A console page has no build to piggyback on,
 	// so the probe behind it may be older than the page; surfacing the age is honest where
 	// implying live is not.
-	ProbeTime     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=probe_time,json=probeTime,proto3" json:"probe_time,omitempty"`
+	ProbeTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=probe_time,json=probeTime,proto3" json:"probe_time,omitempty"`
+	// lifecycle is the product the spell names for this binary (spells.Tool.lifecycle),
+	// empty when it names none. cycle is the release line the installed version belongs
+	// to and eol that line's end date, both empty when nothing matched.
+	Lifecycle     string  `protobuf:"bytes,11,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	Cycle         string  `protobuf:"bytes,12,opt,name=cycle,proto3" json:"cycle,omitempty"`
+	Eol           string  `protobuf:"bytes,13,opt,name=eol,proto3" json:"eol,omitempty"`
+	Support       Support `protobuf:"varint,14,opt,name=support,proto3,enum=magus.tool.v1alpha1.Support" json:"support,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Tool) Reset() {
 	*x = Tool{}
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[1]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +406,7 @@ func (x *Tool) String() string {
 func (*Tool) ProtoMessage() {}
 
 func (x *Tool) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[1]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +419,7 @@ func (x *Tool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tool.ProtoReflect.Descriptor instead.
 func (*Tool) Descriptor() ([]byte, []int) {
-	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{1}
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Tool) GetBin() string {
@@ -272,6 +485,34 @@ func (x *Tool) GetProbeTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Tool) GetLifecycle() string {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return ""
+}
+
+func (x *Tool) GetCycle() string {
+	if x != nil {
+		return x.Cycle
+	}
+	return ""
+}
+
+func (x *Tool) GetEol() string {
+	if x != nil {
+		return x.Eol
+	}
+	return ""
+}
+
+func (x *Tool) GetSupport() Support {
+	if x != nil {
+		return x.Support
+	}
+	return Support_SUPPORT_UNSPECIFIED
+}
+
 // Project groups the tools one project drives, since a window is declared per project and
 // the same binary can be held to different bounds in different projects.
 type Project struct {
@@ -285,7 +526,7 @@ type Project struct {
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[2]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +538,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[2]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +551,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{2}
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Project) GetPath() string {
@@ -346,7 +587,7 @@ type ListToolsRequest struct {
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[3]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +599,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[3]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +612,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{3}
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListToolsRequest) GetParent() string {
@@ -384,13 +625,14 @@ func (x *ListToolsRequest) GetParent() string {
 type ListToolsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Projects      []*Project             `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	Lifecycle     *Lifecycle             `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[4]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -402,7 +644,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[4]
+	mi := &file_magus_tool_v1alpha1_tool_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -415,7 +657,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{4}
+	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListToolsResponse) GetProjects() []*Project {
@@ -425,14 +667,29 @@ func (x *ListToolsResponse) GetProjects() []*Project {
 	return nil
 }
 
+func (x *ListToolsResponse) GetLifecycle() *Lifecycle {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return nil
+}
+
 var File_magus_tool_v1alpha1_tool_proto protoreflect.FileDescriptor
 
 const file_magus_tool_v1alpha1_tool_proto_rawDesc = "" +
 	"\n" +
-	"\x1emagus/tool/v1alpha1/tool.proto\x12\x13magus.tool.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"7\n" +
+	"\x1emagus/tool/v1alpha1/tool.proto\x12\x13magus.tool.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x80\x02\n" +
+	"\tLifecycle\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x129\n" +
+	"\x05state\x18\x02 \x01(\x0e2#.magus.tool.v1alpha1.LifecycleStateR\x05state\x12\x18\n" +
+	"\asources\x18\x03 \x03(\tR\asources\x12/\n" +
+	"\x05as_of\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x129\n" +
+	"\n" +
+	"fetched_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tfetchedAt\x12\x16\n" +
+	"\x06detail\x18\x06 \x01(\tR\x06detail\"7\n" +
 	"\rVersionBounds\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\tR\x03min\x12\x14\n" +
-	"\x05below\x18\x02 \x01(\tR\x05below\"\xdf\x03\n" +
+	"\x05below\x18\x02 \x01(\tR\x05below\"\xdd\x04\n" +
 	"\x04Tool\x12\x10\n" +
 	"\x03bin\x18\x01 \x01(\tR\x03bin\x12\x14\n" +
 	"\x05spell\x18\x02 \x01(\tR\x05spell\x12+\n" +
@@ -443,22 +700,40 @@ const file_magus_tool_v1alpha1_tool_proto_rawDesc = "" +
 	"\averdict\x18\a \x01(\x0e2\x1c.magus.tool.v1alpha1.VerdictR\averdict\x12'\n" +
 	"\x0fdiagnostic_code\x18\b \x01(\tR\x0ediagnosticCode\x129\n" +
 	"\n" +
-	"probe_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tprobeTimeJ\x04\b\n" +
+	"probe_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tprobeTime\x12\x1c\n" +
+	"\tlifecycle\x18\v \x01(\tR\tlifecycle\x12\x14\n" +
+	"\x05cycle\x18\f \x01(\tR\x05cycle\x12\x10\n" +
+	"\x03eol\x18\r \x01(\tR\x03eol\x126\n" +
+	"\asupport\x18\x0e \x01(\x0e2\x1c.magus.tool.v1alpha1.SupportR\asupportJ\x04\b\n" +
 	"\x10\vR\benforced\"b\n" +
 	"\aProject\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
 	"\x05tools\x18\x03 \x03(\v2\x19.magus.tool.v1alpha1.ToolR\x05tools\"*\n" +
 	"\x10ListToolsRequest\x12\x16\n" +
-	"\x06parent\x18\x01 \x01(\tR\x06parent\"M\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\"\x8b\x01\n" +
 	"\x11ListToolsResponse\x128\n" +
-	"\bprojects\x18\x01 \x03(\v2\x1c.magus.tool.v1alpha1.ProjectR\bprojects*u\n" +
+	"\bprojects\x18\x01 \x03(\v2\x1c.magus.tool.v1alpha1.ProjectR\bprojects\x12<\n" +
+	"\tlifecycle\x18\x02 \x01(\v2\x1e.magus.tool.v1alpha1.LifecycleR\tlifecycle*u\n" +
 	"\aVerdict\x12\x17\n" +
 	"\x13VERDICT_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eVERDICT_INSIDE\x10\x01\x12\x13\n" +
 	"\x0fVERDICT_TOO_OLD\x10\x02\x12\x13\n" +
 	"\x0fVERDICT_TOO_NEW\x10\x03\x12\x13\n" +
-	"\x0fVERDICT_UNKNOWN\x10\x042i\n" +
+	"\x0fVERDICT_UNKNOWN\x10\x04*x\n" +
+	"\aSupport\x12\x17\n" +
+	"\x13SUPPORT_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11SUPPORT_SUPPORTED\x10\x01\x12\x0f\n" +
+	"\vSUPPORT_EOL\x10\x02\x12\x17\n" +
+	"\x13SUPPORT_UNANNOUNCED\x10\x03\x12\x13\n" +
+	"\x0fSUPPORT_UNKNOWN\x10\x04*\xc0\x01\n" +
+	"\x0eLifecycleState\x12\x1f\n" +
+	"\x1bLIFECYCLE_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14LIFECYCLE_STATE_LIVE\x10\x01\x12\x1a\n" +
+	"\x16LIFECYCLE_STATE_CACHED\x10\x02\x12\x1b\n" +
+	"\x17LIFECYCLE_STATE_OFFLINE\x10\x03\x12\x1d\n" +
+	"\x19LIFECYCLE_STATE_UNREACHED\x10\x04\x12\x1b\n" +
+	"\x17LIFECYCLE_STATE_UNWIRED\x10\x052i\n" +
 	"\vToolService\x12Z\n" +
 	"\tListTools\x12%.magus.tool.v1alpha1.ListToolsRequest\x1a&.magus.tool.v1alpha1.ListToolsResponseB\xdb\x01\n" +
 	"\x17com.magus.tool.v1alpha1B\tToolProtoP\x01ZGgithub.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1;toolv1alpha1\xa2\x02\x03MTX\xaa\x02\x13Magus.Tool.V1alpha1\xca\x02\x13Magus\\Tool\\V1alpha1\xe2\x02\x1fMagus\\Tool\\V1alpha1\\GPBMetadata\xea\x02\x15Magus::Tool::V1alpha1b\x06proto3"
@@ -475,32 +750,40 @@ func file_magus_tool_v1alpha1_tool_proto_rawDescGZIP() []byte {
 	return file_magus_tool_v1alpha1_tool_proto_rawDescData
 }
 
-var file_magus_tool_v1alpha1_tool_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_tool_v1alpha1_tool_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_magus_tool_v1alpha1_tool_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_magus_tool_v1alpha1_tool_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_magus_tool_v1alpha1_tool_proto_goTypes = []any{
 	(Verdict)(0),                  // 0: magus.tool.v1alpha1.Verdict
-	(*VersionBounds)(nil),         // 1: magus.tool.v1alpha1.VersionBounds
-	(*Tool)(nil),                  // 2: magus.tool.v1alpha1.Tool
-	(*Project)(nil),               // 3: magus.tool.v1alpha1.Project
-	(*ListToolsRequest)(nil),      // 4: magus.tool.v1alpha1.ListToolsRequest
-	(*ListToolsResponse)(nil),     // 5: magus.tool.v1alpha1.ListToolsResponse
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(Support)(0),                  // 1: magus.tool.v1alpha1.Support
+	(LifecycleState)(0),           // 2: magus.tool.v1alpha1.LifecycleState
+	(*Lifecycle)(nil),             // 3: magus.tool.v1alpha1.Lifecycle
+	(*VersionBounds)(nil),         // 4: magus.tool.v1alpha1.VersionBounds
+	(*Tool)(nil),                  // 5: magus.tool.v1alpha1.Tool
+	(*Project)(nil),               // 6: magus.tool.v1alpha1.Project
+	(*ListToolsRequest)(nil),      // 7: magus.tool.v1alpha1.ListToolsRequest
+	(*ListToolsResponse)(nil),     // 8: magus.tool.v1alpha1.ListToolsResponse
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_magus_tool_v1alpha1_tool_proto_depIdxs = []int32{
-	1, // 0: magus.tool.v1alpha1.Tool.spell_bounds:type_name -> magus.tool.v1alpha1.VersionBounds
-	1, // 1: magus.tool.v1alpha1.Tool.workspace_bounds:type_name -> magus.tool.v1alpha1.VersionBounds
-	1, // 2: magus.tool.v1alpha1.Tool.effective:type_name -> magus.tool.v1alpha1.VersionBounds
-	0, // 3: magus.tool.v1alpha1.Tool.verdict:type_name -> magus.tool.v1alpha1.Verdict
-	6, // 4: magus.tool.v1alpha1.Tool.probe_time:type_name -> google.protobuf.Timestamp
-	2, // 5: magus.tool.v1alpha1.Project.tools:type_name -> magus.tool.v1alpha1.Tool
-	3, // 6: magus.tool.v1alpha1.ListToolsResponse.projects:type_name -> magus.tool.v1alpha1.Project
-	4, // 7: magus.tool.v1alpha1.ToolService.ListTools:input_type -> magus.tool.v1alpha1.ListToolsRequest
-	5, // 8: magus.tool.v1alpha1.ToolService.ListTools:output_type -> magus.tool.v1alpha1.ListToolsResponse
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	2,  // 0: magus.tool.v1alpha1.Lifecycle.state:type_name -> magus.tool.v1alpha1.LifecycleState
+	9,  // 1: magus.tool.v1alpha1.Lifecycle.as_of:type_name -> google.protobuf.Timestamp
+	9,  // 2: magus.tool.v1alpha1.Lifecycle.fetched_at:type_name -> google.protobuf.Timestamp
+	4,  // 3: magus.tool.v1alpha1.Tool.spell_bounds:type_name -> magus.tool.v1alpha1.VersionBounds
+	4,  // 4: magus.tool.v1alpha1.Tool.workspace_bounds:type_name -> magus.tool.v1alpha1.VersionBounds
+	4,  // 5: magus.tool.v1alpha1.Tool.effective:type_name -> magus.tool.v1alpha1.VersionBounds
+	0,  // 6: magus.tool.v1alpha1.Tool.verdict:type_name -> magus.tool.v1alpha1.Verdict
+	9,  // 7: magus.tool.v1alpha1.Tool.probe_time:type_name -> google.protobuf.Timestamp
+	1,  // 8: magus.tool.v1alpha1.Tool.support:type_name -> magus.tool.v1alpha1.Support
+	5,  // 9: magus.tool.v1alpha1.Project.tools:type_name -> magus.tool.v1alpha1.Tool
+	6,  // 10: magus.tool.v1alpha1.ListToolsResponse.projects:type_name -> magus.tool.v1alpha1.Project
+	3,  // 11: magus.tool.v1alpha1.ListToolsResponse.lifecycle:type_name -> magus.tool.v1alpha1.Lifecycle
+	7,  // 12: magus.tool.v1alpha1.ToolService.ListTools:input_type -> magus.tool.v1alpha1.ListToolsRequest
+	8,  // 13: magus.tool.v1alpha1.ToolService.ListTools:output_type -> magus.tool.v1alpha1.ListToolsResponse
+	13, // [13:14] is the sub-list for method output_type
+	12, // [12:13] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_magus_tool_v1alpha1_tool_proto_init() }
@@ -513,8 +796,8 @@ func file_magus_tool_v1alpha1_tool_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_tool_v1alpha1_tool_proto_rawDesc), len(file_magus_tool_v1alpha1_tool_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   5,
+			NumEnums:      3,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

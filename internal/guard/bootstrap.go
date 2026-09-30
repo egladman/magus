@@ -69,36 +69,47 @@ func (g goCall) buildRoot(cwd string) string {
 	return filepath.Join(cwd, g.chdir)
 }
 
-// bootstrapsMagus reports the one build the raw-tool rule exempts: `go build -o magus
-// ./cmd/magus` (or `cmd/magus`, with or without a trailing slash) and nothing else, the
-// output landing as `magus` in the root it builds. Any other flag, package or output
-// path is an ordinary build and stays denied.
-func (g goCall) bootstrapsMagus(root string) bool {
+// bootstrapArgv is the one command a checkout of magus with no binary runs to get one: the
+// real go-build target, driven by a magus compiled on the fly. The target's own key cannot
+// express the embedded-spell ordering, so its cache is bypassed; Go's content-addressed
+// build cache stays on, and -trimpath matches the target's build so packages compile once.
+var bootstrapArgv = []string{"go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}
+
+var bootstrapCommand = strings.Join(bootstrapArgv, " ")
+
+const bootstrapWhy = "it runs the real go-build target (generate steps and stamped link) past a magus cache that cannot key it, while Go's build cache stays on."
+
+// bootstrapsMagus reports the one command the raw-tool rule exempts, bootstrapArgv, run in
+// the root it builds. The package may be spelled `cmd/magus` with or without `./` or a
+// trailing slash; any other flag, package or program argument is an ordinary `go run` and
+// stays denied.
+func (g goCall) bootstrapsMagus() bool {
+	want := bootstrapArgv[1:]
+	if len(g.args) != len(want) {
+		return false
+	}
+	for i, a := range g.args {
+		if i == 2 {
+			a = path.Clean(a)
+			if a != "cmd/magus" {
+				return false
+			}
+			continue
+		}
+		if a != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// linksMagus reports a bare `go build` of cmd/magus, which links a binary without the
+// target's generate steps or stamp.
+func (g goCall) linksMagus() bool {
 	if len(g.args) == 0 || g.args[0] != "build" {
 		return false
 	}
-	var out string
-	var pkgs []string
-	for i := 1; i < len(g.args); i++ {
-		switch a := g.args[i]; {
-		case a == "-o" && i+1 < len(g.args):
-			out = g.args[i+1]
-			i++
-		case strings.HasPrefix(a, "-o="):
-			out = strings.TrimPrefix(a, "-o=")
-		case strings.HasPrefix(a, "-"):
-			return false
-		default:
-			pkgs = append(pkgs, a)
-		}
-	}
-	if len(pkgs) != 1 || path.Clean(pkgs[0]) != "cmd/magus" || out == "" {
-		return false
-	}
-	if !filepath.IsAbs(out) {
-		out = filepath.Join(root, out)
-	}
-	return filepath.Clean(out) == filepath.Join(root, "magus")
+	return slices.ContainsFunc(g.args[1:], func(a string) bool { return path.Clean(a) == "cmd/magus" })
 }
 
 // ownSourceRoot reports whether dir is the root of a checkout of this guard's module.
@@ -114,44 +125,61 @@ func hasMagusBinary(root string) bool {
 	return !errors.Is(err, fs.ErrNotExist)
 }
 
-const bootstrapRebuild = "`./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale"
+const ownRebuild = "`./magus run go-build .`"
 
-// ownBuildOutcome is the correction rankOwnBuild applies once bootstrapsMagus holds for
-// the denied call: whether root already has a binary, whether the bootstrap build shared
-// its line with something else, and the verdict to use for neither.
+// ownBuildOutcome is the correction rankOwnBuild applies to a raw-tool deny of a go
+// command in a checkout of magus: whether the call is the bootstrap, whether root already
+// has a binary, whether the call shared its line with something else, and the verdict to
+// use when the bootstrap stands alone in a root with none.
 type ownBuildOutcome struct {
-	root         string
-	hasBinary    bool
-	multipleCmds bool
-	advisory     ShellVerdict
+	root string
+	// bootstrapArgv is the bootstrap as the call's directory runs it: with -C when root
+	// lies elsewhere.
+	bootstrapArgv []string
+	bootstrap     bool
+	link          bool
+	hasBinary     bool
+	multipleCmds  bool
+	advisory      ShellVerdict
 }
 
 // apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
+	case o.hasBinary && (o.bootstrap || o.link):
+		v.Deny += "\nNot a bootstrap: " + o.root + " already has a magus binary. Rebuild with " + ownRebuild + "."
+		return v
 	case o.hasBinary:
-		v.Deny += "\nNot a bootstrap: " + o.root + " already has a magus binary. Rebuild with " + bootstrapRebuild + "."
-	case o.multipleCmds:
-		v.Deny += "\nThe bootstrap build is exempt only alone on its line."
-	default:
+		return v
+	case o.bootstrap && o.multipleCmds:
+		v.Deny += "\nThe bootstrap is exempt only alone on its line."
+		return v
+	case o.bootstrap:
 		return o.advisory
 	}
-	return v
+	v.Deny += "\n" + o.root + " has no magus binary yet. Get one with `" + strings.Join(o.bootstrapArgv, " ") + "`: " + bootstrapWhy
+	v.Next, v.Lead = nil, ""
+	return v.withRemedy("This checkout has no magus binary yet; one command builds it.",
+		hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 }
 
-// ownBuildOutcomeFor builds the outcome rankOwnBuild layers onto the deny for denied,
-// once bootstrapsMagus already holds for it.
-func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hint.Invocation, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
+// ownBuildOutcomeFor builds the outcome rankOwnBuild layers onto the deny for denied.
+func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
+	argv := bootstrapArgv
 	if root != filepath.Clean(cwd) {
 		where = root
+		argv = append([]string{"go", "-C", root}, bootstrapArgv[1:]...)
 	}
 	return &ownBuildOutcome{
-		root:         root,
-		hasBinary:    hasMagusBinary(root),
-		multipleCmds: multipleCmds,
+		root:          root,
+		bootstrapArgv: argv,
+		bootstrap:     call.bootstrapsMagus(),
+		link:          call.linksMagus(),
+		hasBinary:     hasMagusBinary(root),
+		multipleCmds:  multipleCmds,
 		advisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap build allowed, since " + where + " has no magus binary yet. Next run " + bootstrapRebuild + ".",
+			Context: "magus workspace: bootstrap allowed, since " + where + " has no magus binary yet: " + bootstrapWhy + " Use ./magus from then on.",
 			Rule:    denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)},
 		}, matchWorkspaceShell(deps.ShellRules, command, d)),
 	}
@@ -159,13 +187,13 @@ func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hin
 
 // ownBuildVerdict is the BOOTSTRAP correction for a go command aimed at magus's own
 // module: a fresh checkout has no ./magus, and every route to one runs through magus or
-// a raw build. `go build -o magus ./cmd/magus`, alone on its line, into a root with no
-// binary yet, is advised through instead of denied. Nil when the line holds no such
-// build.
+// a raw toolchain command. bootstrapArgv, alone on its line, in a root with no binary
+// yet, is advised through instead of denied, and every other raw go command there is
+// served it. Nil when the line holds no go command denied in a checkout of magus.
 //
 // A -C outside the workspace passes the pure rule, since a foreign tree is not its to
 // funnel; a -C into another checkout of magus is this repository's policy to judge
-// (tools/policy/guard.buzz), bootstrap included.
+// (hack/policy/guard.buzz), bootstrap included.
 //
 // It reads the filesystem, so it lives beside Judge rather than inside Evaluate.
 func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuildOutcome {
@@ -184,8 +212,8 @@ func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuil
 	if !ok {
 		return nil
 	}
-	if root := call.buildRoot(cwd); ownSourceRoot(root) && call.bootstrapsMagus(root) {
-		return ownBuildOutcomeFor(deps, command, d, cmds[i], root, len(cmds) > 1, cwd)
+	if root := call.buildRoot(cwd); ownSourceRoot(root) {
+		return ownBuildOutcomeFor(deps, command, d, cmds[i], call, root, len(cmds) > 1, cwd)
 	}
 	return nil
 }

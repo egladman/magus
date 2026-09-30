@@ -461,18 +461,19 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 	me := narrowLease().ID
 
 	for command, what := range map[string]string{
-		"magus job exec harness/other":                                   "take the lease on another job",
-		"./magus job exec harness/other":                                 "take the lease on another job",
-		"magus -s job exec harness/other":                                "take the lease on another job",
-		"magus --root /tmp/x job exec harness/other":                     "take the lease on another job",
-		"magus job exec --base rev1 harness/other":                       "take the lease on another job",
-		"magus job wait harness/other":                                   "verify a job",
-		"magus job fork":                                                 "declare a job",
-		"magus_job op=clear":                                             "drop every job",
-		"magus_job op=fork id=harness/other write_paths=**":              "write another job",
-		"magus_job op=exec id=harness/other":                             "write another job",
-		"magus_job op=fork id=harness/lease-scoped-deny write_paths=**":  "rewrite the job it holds",
-		"magus_job op=fork id=harness/lease-scoped-deny read_only=false": "rewrite the job it holds",
+		"magus job exec harness/other":                               "take the lease on another job",
+		"./magus job exec harness/other":                             "take the lease on another job",
+		"magus -s job exec harness/other":                            "take the lease on another job",
+		"magus --root /tmp/x job exec harness/other":                 "take the lease on another job",
+		"magus job exec --base rev1 harness/other":                   "take the lease on another job",
+		"magus job wait harness/other":                               "verify a job",
+		"magus job fork":                                             "declare a job",
+		"client op=clear":                                            "drop every job",
+		"client op=unread":                                           "cannot read",
+		"client op=put id=harness/other write_paths=**":              "write another job",
+		"client op=register id=harness/other":                        "write another job",
+		"client op=put id=harness/lease-scoped-deny write_paths=**":  "rewrite the job it holds",
+		"client op=put id=harness/lease-scoped-deny read_only=false": "rewrite the job it holds",
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -489,10 +490,10 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 	child := types.Job{ID: me + "/child", Parent: me, WritePaths: []string{"cmd/magus/x/**"}, State: types.StateDeclared}
 	ctx, _ := fleetFixture(t, narrowLease(), child)
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, "magus_job op=fork id="+child.ID+" enter=cmd/magus/x/a.go"))
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, "client op=put id="+child.ID+" enter=cmd/magus/x/a.go"))
 	for _, command := range []string{
-		"magus_job op=fork id=harness/other enter=a.go",
-		"magus_job op=fork id=" + me + " enter=cmd/magus/a.go",
+		"client op=put id=harness/other enter=a.go",
+		"client op=put id=" + me + " enter=cmd/magus/a.go",
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), "enter a job not forked beneath", "%q", command)
 	}
@@ -509,13 +510,13 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 	me := narrowLease().ID
 
 	for name, command := range map[string]string{
-		"an exec naming no job":     "magus job exec",
-		"reading the plan":          "magus ls jobs",
-		"reading one row":           "magus describe job harness/lease-scoped-deny",
-		"recording its own base":    "magus_job op=exec id=harness/lease-scoped-deny reported_base=abc123",
-		"listing rows over MCP":     "magus_job op=list",
-		"an unrelated magus verb":   "magus run go-build .",
-		"a lease id in an argument": "magus query \"job exec\"",
+		"an exec naming no job":             "magus job exec",
+		"reading the plan":                  "magus ls jobs",
+		"reading one row":                   "magus describe job harness/lease-scoped-deny",
+		"recording its own base":            "client op=register id=harness/lease-scoped-deny reported_base=abc123",
+		"a client script with no job write": "client",
+		"an unrelated magus verb":           "magus run go-build .",
+		"a lease id in an argument":         "magus query \"job exec\"",
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), name)
 	}
@@ -533,28 +534,28 @@ func TestJobToolRebindLetsAWritePathBeGivenBack(t *testing.T) {
 	ctx, _ := fleetFixture(t, wide)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/**"),
+		"client op=put id="+wide.ID+" write_paths=cmd/magus/**"),
 		"dropping one of its own declarations cannot widen a role")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
+		"client op=put id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
 		"adding a declaration is a widen however it is spelled")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/**"),
+		"client op=put id="+wide.ID+" write_paths=cmd/**"),
 		"a pattern that happens to cover less is not a shrink this rule will try to prove")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
+		"client op=put id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
 		"a shrink carrying another field is not a shrink")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
+		"client op=put id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
 		"the checkpoint is the base this lease's work is graded against, and giving a path back is not cover for moving it")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
-		"both spellings at once leaves nothing saying which the store would apply")
+		"client op=put id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
+		"a key the store does not know is not a shrink either")
 }
 
 // childFleet is a lease with a child already forked beneath it, beside another row, and a
@@ -585,7 +586,7 @@ func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
 	for _, command := range []string{
 		"magus job fork " + me.ID + "/research --parent " + me.ID + " --read-only --criteria 'read the store'",
 		"./magus job fork --parent=" + me.ID + " " + me.ID + "/research --read-only",
-		"magus_job op=fork id=" + me.ID + "/research parent=" + me.ID + " read_only=true",
+		"client op=put id=" + me.ID + "/research parent=" + me.ID + " read_only=true",
 		"magus job fork --stdin <<'EOF'\n{\"schema_version\": " + strconv.Itoa(types.JobSchemaVersion) + ", \"id\": \"" + me.ID + "/research\", \"parent\": \"" + me.ID + "\", \"read_only\": true}\nEOF",
 		"magus job wait " + me.ID + "/scout",
 		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths docs/**",
@@ -616,7 +617,7 @@ func TestDenyLeaseScopedRebindRefusesWhatIsNotAChild(t *testing.T) {
 	for command, what := range map[string]string{
 		"magus job fork " + me.ID + "/x --parent " + other + " --read-only":                   "must name " + me.ID + " as its parent",
 		"magus job fork " + me.ID + "/x --read-only":                                          "must name " + me.ID + " as its parent",
-		"magus_job op=fork id=" + me.ID + "/x parent=" + other + " read_only=true":            "must name " + me.ID + " as its parent",
+		"client op=put id=" + me.ID + "/x parent=" + other + " read_only=true":                "must name " + me.ID + " as its parent",
 		"magus job fork " + other + " --parent " + me.ID + " --read-only":                     "already exists",
 		"magus job fork " + me.ID + " --parent " + me.ID:                                      "rewrite the job it holds",
 		"magus job fork " + me.ID + "/x --parent " + me.ID:                                    "can write anywhere",
@@ -650,7 +651,7 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 	for _, command := range []string{
 		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths cmd/magus/**",
 		"magus job fork " + me.ID + "/scout --parent " + me.ID + " --read-only --read-paths **",
-		"magus_job op=fork id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
+		"client op=put id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "nothing would grade", "%q", command)
 	}
@@ -710,11 +711,11 @@ func TestJobToolRebindIsSilentWhenTheStoreCannotAnswer(t *testing.T) {
 	ctx, _ := fleetFixture(t, done)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, done.ID,
-		"magus_job op=fork id="+done.ID+" write_paths=**"),
+		"client op=put id="+done.ID+" write_paths=**"),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "magus_job op=fork id="+done.ID),
+	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "client op=put id="+done.ID),
 		"a store the guard cannot read leaves nothing to judge against")
 }
 

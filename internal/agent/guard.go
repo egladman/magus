@@ -169,7 +169,14 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
 // config written for 17 sets the environment variable an 18 copy never reads, so every
 // call it makes is refused until the config is rewritten.
-const GuardTemplateVersion = 18
+//
+// 19: the POSIX sh templates are gone and every host wires the Buzz glue, codex included.
+// The rehydrate glue takes its two knobs on the argv (`-- --format json --rules <file>`)
+// instead of REHYDRATE_FORMAT and REHYDRATE_RULES, because a Buzz hook command is a plain
+// argv with no room for a variable prefix. This bumps because the CONFIG and the glue moved
+// together: under a config written for 19, an 18 copy reports the flags as unsupported and
+// prints plain text, which Codex drops without a word.
+const GuardTemplateVersion = 19
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

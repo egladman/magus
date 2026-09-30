@@ -60,12 +60,14 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 	}
 	normalizeEvent(&ev)
 
-	if err := recordAttentionOpen(root, ev); err != nil {
+	held, err := fileAttention(root, ev)
+	if err != nil {
 		noteAttentionOpenFailure(err)
 	}
 
-	if nf.Desktop {
-		_ = raiseDesktopNotification(ctx, ev)
+	// A repeat of a block the queue already holds would ask for a yes on it twice.
+	if nf.Desktop && !held {
+		_ = raiseDesktop(ctx, ev)
 	}
 
 	switch opts.Format {
@@ -199,6 +201,8 @@ func notifyUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "An event whose outcome is waiting or permission also opens a durable request")
 	fmt.Fprintln(w, "in this repository, which `"+hint.SessionAttention.String()+"` lists and only a person closes.")
+	fmt.Fprintln(w, "A repeat of a request the queue already holds does not raise another desktop")
+	fmt.Fprintln(w, "notification. A failure still does.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintf(w, "  printf '%%s\\n' 'needs approval' | magus session notify --outcome permission --desktop\n")
@@ -227,6 +231,10 @@ func renderNotification(ev types.Event) (title, body string) {
 	}
 	return title, body
 }
+
+// raiseDesktop posts the OS notification. Tests replace it; production calls
+// [raiseDesktopNotification].
+var raiseDesktop = raiseDesktopNotification
 
 func raiseDesktopNotification(ctx context.Context, ev types.Event) error {
 	title, body := renderNotification(ev)

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
@@ -43,8 +45,8 @@ func writeBenchProject(b *testing.B, root, project string) (outPath string) {
 func benchStep(root, project, outRel string) Step {
 	return Step{
 		ProjectPath:   project,
-		Sources:       []string{project + "/*.go"},
-		Outputs:       []string{outRel},
+		Sources:       types.MustParseGlobs(project + "/*.go"),
+		Outputs:       types.MustParseGlobs(outRel),
 		WorkspaceRoot: root,
 		Target:        "build",
 	}

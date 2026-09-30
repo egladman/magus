@@ -1,0 +1,108 @@
+// buzz-glue-is-wired-as-plain-argv refuses a `NAME=value` prefix on any hook command that
+// runs the Buzz glue.
+//
+// A leading assignment is shell syntax, and a hook command is not a shell line: the host
+// splits it into argv itself, so the prefix only works where something later re-joins and
+// re-parses it. The Buzz glue takes its per-entry knobs from the event it already reads
+// and from its own argv, which `magus buzz` forwards after `--`.
+namespace buzzglue;
+
+import "assert";
+import "encoding/json";
+import "serialize";
+import "std";
+import "strings";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// HOSTS are the host hook configs this repository owns: the one it dogfoods, and the
+// one it ships for a reader to copy.
+export final HOSTS = {
+    "claude-code": ".claude/settings.json",
+    "codex": "docs/guides/integrations/agents/codex-hooks.json",
+};
+
+export fun reads() > [str] {
+    return support\sorted(HOSTS.values());
+}
+
+// envName reports whether s is shaped like an environment variable name.
+export fun envName(s: str) > bool {
+    return s != "" and std\pattern("^[A-Za-z_][A-Za-z0-9_]*$").match(s) != null;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (host in support\sorted(HOSTS.keys())) {
+        final p = HOSTS[host]!;
+        final f = support\named(files, p: p);
+        if (f == null) {
+            found.append(support\missing(p));
+            continue;
+        }
+        final raw = support\read(f!);
+        final cfg = serialize\Boxed.init(json\parse(raw));
+        final events = cfg.q(["hooks"]).mapValue();
+        foreach (event in support\sorted(events.keys())) {
+            foreach (entry in events[event]!.listValue()) {
+                final matcher = entry.q(["matcher"]).stringValue();
+                foreach (h in entry.q(["hooks"]).listValue()) {
+                    final command = h.q(["command"]).stringValue();
+                    if (command.indexOf(".buzz") == null) {
+                        continue;
+                    }
+                    final words = strings\fields(command);
+                    if (words.len() == 0) {
+                        continue;
+                    }
+                    final eq = words[0].indexOf("=");
+                    if (eq == null or !envName(words[0].sub(0, len: eq!))) {
+                        continue;
+                    }
+                    final name = words[0].sub(0, len: eq!);
+                    found.append(Finding{ path = p, line = support\lineOf(raw, needle: words[0]),
+                        message = "wires the Buzz glue on {event} \"{matcher}\" behind a {name}= prefix",
+                        fix = "A Buzz hook command is a plain argv: {host} runs magus buzz -s <file> [-- flags].\n"
+                            + "The glue reads the raw-event question off the event itself and takes its\n"
+                            + "flags from the argv after --, so there is nothing left for a variable to say." });
+                }
+            }
+        }
+    }
+    return found;
+}
+
+// configs is both shipped configs, the dogfooded one wiring command on PreToolUse.
+fun configs(command: str) > [Path] !> any {
+    final body = "\{\n  \"hooks\": \{\n    \"PreToolUse\": [\n"
+        + "      \{\"matcher\": \"Bash\", \"hooks\": [\{\"type\": \"command\", \"command\": \"" + command + "\"}]}\n"
+        + "    ]\n  }\n}\n";
+    return support\fixture({HOSTS["claude-code"]!: body, HOSTS["codex"]!: "\{\"hooks\": \{}}"});
+}
+
+test "plain argv and a prefix on a command that runs no Buzz glue pass" {
+    foreach (command in [
+        "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --advise",
+        "MAGUS_GUARD_ADVISE=1 ./my-own-guard",
+    ]) {
+        assert\equal(check(configs(command)).len(), want: 0, message: command);
+    }
+}
+
+test "a prefix on the Buzz glue is reported at its line" {
+    final got = check(configs("MAGUS_GUARD_ADVISE=1 magus buzz -s docs/guides/integrations/agents/magus-command.buzz"));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: ".claude/settings.json", message: "path");
+    assert\equal(got[0].line, want: 4, message: "line");
+    assert\equal(got[0].message, want: "wires the Buzz glue on PreToolUse \"Bash\" behind a MAGUS_GUARD_ADVISE= prefix", message: "message");
+}
+
+test "a missing config is reported" {
+    assert\equal(support\messages(check([<Path>])), want: ["cannot read .claude/settings.json", "cannot read docs/guides/integrations/agents/codex-hooks.json"], message: "both missing");
+}
+
+test "envName is an environment variable's shape" {
+    foreach (s, want in {"": false, "A": true, "_x1": true, "1A": false, "A-B": false, "--flag": false}) {
+        assert\equal(envName(s), want: want, message: s);
+    }
+}

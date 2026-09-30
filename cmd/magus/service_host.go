@@ -15,16 +15,16 @@ import (
 // leave running all day.
 const defaultServiceIdle = 30 * time.Minute
 
-// serviceHost adapts a service.Registry to broker.ServiceHost: the broker's Acquire
-// returns nothing (the client only needs to know the service is up), so the Handle
-// is dropped. Release maps straight through.
+// serviceHost adapts a service.Registry to broker.ServiceHost: the client only needs
+// to know the service is up and whether the broker owns it, so the Handle is reduced
+// to that. Release maps straight through.
 type serviceHost struct{ reg *service.Registry }
 
 func (h serviceHost) Snapshot() []types.StatusService { return serviceStatuses(h.reg) }
 
-func (h serviceHost) Acquire(ctx context.Context, key string, spec broker.ServiceSpec) error {
-	_, err := h.reg.Acquire(ctx, key, spec.Service())
-	return err
+func (h serviceHost) Acquire(ctx context.Context, key string, spec broker.ServiceSpec) (bool, error) {
+	handle, err := h.reg.Acquire(ctx, key, spec.Service())
+	return err == nil && handle != service.Adopted, err
 }
 
 func (h serviceHost) Release(key string) { h.reg.Release(key) }

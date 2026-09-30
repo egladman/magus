@@ -1,10 +1,10 @@
 import "magus";
-import "../tools/toolchain-policy" as policy;
-// The shared advisory gate; see tools/advisories.buzz for why an exit code is the wrong question.
-import "../tools/advisories" as advisories;
-import "../tools/drift" as drift;
-import "../tools/index" as index;
-import "../tools/changelog" as changelog;
+import "../hack/toolchain-policy" as policy;
+// The shared advisory gate; see hack/advisories.buzz for why an exit code is the wrong question.
+import "../hack/advisories" as advisories;
+import "../hack/drift" as drift;
+import "../hack/index" as index;
+import "../hack/changelog" as changelog;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -52,7 +52,7 @@ import "magus/spell/go";
 import "magus/spell/markdown";
 
 magus\project({
-    // The shared node window, by explicit import (tools/toolchain-policy.buzz).
+    // The shared node window, by explicit import (hack/toolchain-policy.buzz).
     // This project drives node; it declares no go window because it drives no Go.
     "tools": {"node": policy\node},
     "spells": [typescript],
@@ -171,7 +171,7 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 // standalone after editing targets: `magus run index-generate docs`.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
-    // Reasons for these inputs are in tools/index.buzz.
+    // Reasons for these inputs are in hack/index.buzz.
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
                    "../internal/render/md/md.go", "../internal/hint/cli_command.go");
     index\render("docs");
@@ -336,8 +336,8 @@ fun isDecimalCopySuffix(suffix: str) > bool {
 // that link becomes the URL. Trailing slash and no anchor, so a "#naming" suffix survives.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("templates/changelog.mustache", workspace\file("releases/*.yaml"),
-        workspace\file("changes/unreleased/*.md"), workspace\file("tools/changelog.buzz"),
-        workspace\file("tools/commits.buzz"));
+        workspace\file("changes/unreleased/*.md"), workspace\file("hack/changelog.buzz"),
+        workspace\file("hack/commits.buzz"));
     ctx.writesFiles("changelog.md");
     final page = changelog\render(fs\readFile("templates/changelog.mustache"),
         fragments: changelog\read("../" + changelog\FRAGMENT_DIR),
@@ -489,7 +489,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
         workspace\file(".claude/settings.json"),
-        agents\file("*.sh"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
+        agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
         agents\file("opencode-plugin.ts"));
     renderer\site_conventions(ROOT, DOCS);
 }
@@ -620,7 +620,7 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     // source file still marks is caught from the other side.
     // Named anchors, not drift: this is the SEMANTIC check (does a diagram still name a
     // real package), which is a different question from whether the rendered bytes moved.
-    // The old name also shadowed the tools/drift module this file imports, so reaching for
+    // The old name also shadowed the hack/drift module this file imports, so reaching for
     // drift.hashes inside this function would have failed on a list.
     final anchors = renderer\site_diagram_drift(ROOT, ["internal/**/*.go", "cmd/**/*.go"]);
     if (anchors.len() > 0) {

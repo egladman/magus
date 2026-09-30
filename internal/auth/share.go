@@ -10,7 +10,7 @@ import (
 
 // A share token (mgl_) is the secret behind a share link: it lives only in the running
 // server's memory, only as long as the LAN listener it guards, and only that listener's
-// verifier accepts it. [Verify], the loopback verifier, refuses the class outright, and the
+// verifier accepts it. [Verify], the loopback verifier, refuses the kind outright, and the
 // share verifier accepts nothing else, so the operator token never crosses the LAN.
 
 // Share lifetimes. A share link is a bearer credential served over plaintext HTTP on the LAN
@@ -45,7 +45,7 @@ func MintShare(minter types.Grant, ttl time.Duration) (secret string, tok ShareT
 		return "", ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
 			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
-	secret, err = mintSecret(types.ClassShare)
+	secret, err = mintSecret(types.KindShare)
 	if err != nil {
 		return "", ShareToken{}, err
 	}
@@ -65,7 +65,7 @@ func (t ShareToken) ID() string {
 
 // Credential is the credential this token verifies as.
 func (t ShareToken) Credential() types.Credential {
-	return types.Credential{Class: types.ClassShare, ID: t.ID(), Grant: types.GrantViewer}
+	return types.Credential{Kind: types.KindShare, ID: t.ID(), Grant: types.GrantViewer}
 }
 
 // Verify reports whether presented is exactly this token and unexpired at now. Anything that
@@ -75,7 +75,7 @@ func (t ShareToken) Verify(presented string, now time.Time) bool {
 	if t.SHA256 == "" || t.Expired(now) {
 		return false
 	}
-	if class, ok := classOf(presented); !ok || class != types.ClassShare {
+	if kind, ok := kindOf(presented); !ok || kind != types.KindShare {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(digest(presented))) == 1

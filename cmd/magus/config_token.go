@@ -107,7 +107,7 @@ func configTokenGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
-	operator := types.Credential{Class: types.ClassOperator, ID: auth.TokenID(tok), Grant: types.GrantOperator}
+	operator := types.Credential{Kind: types.KindOperator, ID: auth.TokenID(tok), Grant: types.GrantOperator}
 	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every

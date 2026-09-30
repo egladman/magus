@@ -941,7 +941,7 @@ var envNamesNeverInEnvironment = map[string]string{
 // repoToolingPrefixes are the paths this repository builds and releases itself with,
 // which ship to nobody. A MAGUS_* name only they read is theirs, not magus's.
 var repoToolingPrefixes = []string{
-	"cmd/magus-utils/", "tools/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
+	"cmd/magus-utils/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
 }
 
 // shipsWithMagus reports whether slash (a slash-separated repo path) is code that ships:
@@ -1097,4 +1097,198 @@ func TestVendoredHostSchemasMatchTheirRecordedDigest(t *testing.T) {
 		assert.FileExists(t, filepath.Join(hostSchemaDir, filepath.FromSlash(rel)),
 			"SOURCES.md records %s, which is not vendored", rel)
 	}
+}
+
+// storeMechanicsAllowed maps "<path>:<func>" to why that function still hand-rolls a
+// temp-file rename or takes an flock itself instead of calling internal/file. It only
+// shrinks: TestStoreMechanicsLiveInInternalFile fails on an entry whose site is gone.
+var storeMechanicsAllowed = map[string]string{
+	"internal/cache/artifact.go:copyBlob":                    "streams a blob into the CAS, hashing as it copies",
+	"internal/cache/snapshot.go:Cache.snapshotOne":           "streams a blob into the CAS, hashing as it copies",
+	"internal/queue/verdicts.go:VerdictDir.WritePlan":        "publishes a directory, not a file",
+	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
+	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"lock.go:lockIsHeld":                                     "probes a project lock without holding it",
+	"pipe.go:GatePipe":                                       "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
+}
+
+// storeMechanicsSkipDirs are trees the rule does not govern. libs/ holds modules of their
+// own, which cannot import internal/file.
+var storeMechanicsSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true,
+}
+
+// storeMechanicsSites returns "<path>:<func>" for every function in f that renames a file
+// it also creates or writes (a hand-rolled atomic write) or constructs an flock.
+func storeMechanicsSites(path string, f *ast.File) []string {
+	local := map[string]string{"os": "", "github.com/gofrs/flock": ""}
+	for _, imp := range f.Imports {
+		p, _ := strconv.Unquote(imp.Path.Value)
+		if _, ok := local[p]; !ok {
+			continue
+		}
+		name := filepath.Base(p)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		local[p] = name
+	}
+	var sites []string
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		var writes, renames, flocks bool
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			switch {
+			case pkg.Name == local["os"] && slices.Contains([]string{"CreateTemp", "Create", "OpenFile", "WriteFile"}, sel.Sel.Name):
+				writes = true
+			case pkg.Name == local["os"] && sel.Sel.Name == "Rename":
+				renames = true
+			case pkg.Name == local["github.com/gofrs/flock"] && sel.Sel.Name == "New":
+				flocks = true
+			}
+			return true
+		})
+		if (writes && renames) || flocks {
+			name := fn.Name.Name
+			if fn.Recv != nil && len(fn.Recv.List) == 1 {
+				recv := fn.Recv.List[0].Type
+				if star, ok := recv.(*ast.StarExpr); ok {
+					recv = star.X
+				}
+				if idx, ok := recv.(*ast.IndexExpr); ok {
+					recv = idx.X
+				}
+				if id, ok := recv.(*ast.Ident); ok {
+					name = id.Name + "." + name
+				}
+			}
+			sites = append(sites, path+":"+name)
+		}
+	}
+	return sites
+}
+
+// TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one
+// implementation. A temp file renamed into place and an flock-guarded read-modify-write
+// each had several copies that differed in fsync, file mode, temp cleanup and whether the
+// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, Doc) is the one
+// copy. The scan is per function and textual, so a copy split across two functions slips
+// past it; what it catches is the shape every copy so far has had.
+func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
+	t.Parallel()
+
+	var files []string
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		slashed := filepath.ToSlash(path)
+		if d.IsDir() {
+			if storeMechanicsSkipDirs[d.Name()] || slashed == "libs" || slashed == "internal/file" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	found := make([][]string, len(files))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, path := range files {
+		g.Go(func() error {
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(string(src), "Rename(") && !strings.Contains(string(src), ".New(") {
+				return nil
+			}
+			f, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			found[i] = storeMechanicsSites(filepath.ToSlash(path), f)
+			return nil
+		})
+	}
+	require.NoError(t, g.Wait())
+
+	seen := map[string]bool{}
+	var violations []string
+	for _, sites := range found {
+		for _, site := range sites {
+			seen[site] = true
+			if _, ok := storeMechanicsAllowed[site]; !ok {
+				violations = append(violations, site)
+			}
+		}
+	}
+	var stale []string
+	for site := range storeMechanicsAllowed {
+		if !seen[site] {
+			stale = append(stale, site)
+		}
+	}
+	sort.Strings(violations)
+	sort.Strings(stale)
+
+	assert.Empty(t, violations,
+		"these functions write a file by temp and rename, or take an flock, themselves.\n"+
+			"Use internal/file: WriteFileAtomic or ReplaceFile to replace a file, WithLock to\n"+
+			"hold a lock, Doc.Update for a locked read-modify-write. A site that truly cannot\n"+
+			"(it streams while hashing, publishes a directory, waits unbounded) goes in\n"+
+			"storeMechanicsAllowed with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
+	assert.Empty(t, stale,
+		"storeMechanicsAllowed names sites that no longer hand-roll these mechanics; delete\n"+
+			"their entries so the list only shrinks:\n%s", strings.Join(stale, "\n"))
+}
+
+// TestStoreMechanicsMatcher grades the scan against sources, because a tree scan that
+// finds nothing is equally consistent with a matcher that matches nothing.
+func TestStoreMechanicsMatcher(t *testing.T) {
+	src := `package p
+
+import (
+	osx "os"
+
+	"github.com/gofrs/flock"
+)
+
+func handRolled(p string) error {
+	f, _ := osx.CreateTemp(".", "x")
+	_ = f.Close()
+	return osx.Rename(f.Name(), p)
+}
+
+func (s *store) locks() { _ = flock.New("x") }
+
+func renameOnly(a, b string) error { return osx.Rename(a, b) }
+
+func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
+`
+	f, err := parser.ParseFile(token.NewFileSet(), "p.go", src, parser.SkipObjectResolution)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"p.go:handRolled", "p.go:store.locks"}, storeMechanicsSites("p.go", f))
 }

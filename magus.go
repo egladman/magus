@@ -1737,11 +1737,27 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 			if l == nil {
 				return nil
 			}
-			return l
+			return poolSlots{l}
 		}
 		m.buzzPoolReg = buzz.NewPoolRegistry(getSem, lim.Capacity())
 	})
 	return m.buzzPoolReg
+}
+
+// poolSlots is the Buzz pool's view of the workspace limiter. A pooled target's body runs
+// under the same slot mark a cache step's does, so an install or a child magus it starts
+// sees the slot the body holds and yields it rather than queueing behind it.
+type poolSlots struct{ lim *cache.Limiter }
+
+func (s poolSlots) Acquire(ctx context.Context, name string) (context.Context, func(), error) {
+	return s.lim.Admit(ctx, name)
+}
+
+func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) error {
+	if !cache.SlotHeld(ctx) {
+		return fn(ctx)
+	}
+	return s.lim.Yield(ctx, func() error { return fn(cache.WithoutSlotHeld(ctx)) })
 }
 
 // Close releases workspace resources (VM pools, telemetry); cache and limiter are
@@ -1780,17 +1796,17 @@ func (m *Magus) volatilityConfig() volatility.Config {
 
 // baseStep returns the cache.Step for p; always includes magusfiles so edits produce a miss.
 func (m *Magus) baseStep(p *types.Project) cache.Step {
-	sources := make([]string, 0, len(p.Sources))
+	sources := make([]types.Glob, 0, len(p.Sources))
 	for _, glob := range p.Sources {
-		sources = append(sources, joinGlob(p.Path, glob))
+		sources = append(sources, glob.Root(p.Path))
 	}
 	sources = append(sources, magusfileGlobs(p.Path)...)
 	if p.Path != "." {
 		sources = append(sources, magusfileGlobs(".")...)
 	}
-	outputs := make([]string, 0, len(p.Outputs))
+	outputs := make([]types.Glob, 0, len(p.Outputs))
 	for _, o := range p.Outputs {
-		outputs = append(outputs, joinGlob(p.Path, o))
+		outputs = append(outputs, o.Root(p.Path))
 	}
 	// Union the non-source dirs every resolved spell declares (vendor, node_modules,
 	// __pycache__, ...) so the source walk prunes them per-project instead of the cache
@@ -1817,28 +1833,16 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 	}
 }
 
-func magusfileGlobs(projectPath string) []string {
+func magusfileGlobs(projectPath string) []types.Glob {
 	names := []string{
 		"magusfile.buzz",
 		"magusfiles/**/*.buzz",
 	}
-	if projectPath == "." {
-		return names
-	}
-	out := make([]string, len(names))
+	out := make([]types.Glob, len(names))
 	for i, n := range names {
-		out[i] = projectPath + "/" + n
+		out[i] = types.Glob{Pattern: n}.Root(projectPath)
 	}
 	return out
-}
-
-// joinGlob roots a project-relative glob at the workspace for the cache step and the
-// describe surfaces. It is a named pass-through on purpose: the call sites in this
-// package read as "join", and the rooting rule itself belongs in types, where
-// Project.DeclaredGlobs (the attribution mirror of these very lines) can share it.
-// See types.RootGlob for why the join is cleaned rather than concatenated.
-func joinGlob(projectPath, glob string) string {
-	return types.RootGlob(projectPath, glob)
 }
 
 // ExpandPath resolves the target pattern to concrete per-project targets; empty or "/" fans out to all.
@@ -2033,12 +2037,13 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 				defer wg.Done()
 				spellCtx := ctx
 				if bounded {
-					if err := lim.Acquire(ctx); err != nil {
+					held, release, err := lim.Admit(ctx, s.Name()+" spell")
+					if err != nil {
 						results[i] = result{name: s.Name(), err: err}
 						return
 					}
-					spellCtx = cache.WithSlotHeld(ctx)
-					defer lim.Release()
+					spellCtx = held
+					defer release()
 				}
 				results[i] = result{name: s.Name(), err: fn(spellCtx, s)}
 			}(i, s)

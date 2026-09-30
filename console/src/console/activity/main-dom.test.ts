@@ -48,7 +48,7 @@ function mcpEvent(): unknown {
     time: new Date(Date.now() - 30_000).toISOString(),
     kind: "KIND_MCP_TOOL_CALL",
     actor: "agent:claude",
-    action: "magus_query",
+    action: "client",
     outcome: "OUTCOME_OK",
     responseRef: "mcpbbbb",
     responseBytes: "2048",

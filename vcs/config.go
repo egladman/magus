@@ -168,6 +168,43 @@ func gitCommonDir(root string) string {
 	return filepath.Clean(common)
 }
 
+// headOID is the checked-out commit, read from HEAD and the loose ref it
+// names, without starting git. The index is not part of it: status rewrites
+// the index mtime to refresh its stat cache, so an index stat would change on
+// the read itself and a caller could never reuse the previous answer.
+//
+// ok is false when dir is not a readable git checkout, or the branch ref lives
+// only in packed-refs. The caller then asks git.
+func headOID(dir string) (string, bool) {
+	gitdir := filepath.Join(dir, ".git")
+	if linked, ok := gitLinkedDir(dir); ok {
+		gitdir = linked
+	} else if info, err := os.Stat(gitdir); err != nil || !info.IsDir() {
+		return "", false
+	}
+	head, err := os.ReadFile(filepath.Join(gitdir, "HEAD"))
+	if err != nil {
+		return "", false
+	}
+	line := strings.TrimSpace(string(head))
+	ref, indirect := strings.CutPrefix(line, "ref: ")
+	if !indirect {
+		if line == "" {
+			return "", false
+		}
+		return line, true
+	}
+	b, err := os.ReadFile(filepath.Join(gitCommonDir(dir), filepath.FromSlash(ref)))
+	if err != nil {
+		return "", false
+	}
+	oid := strings.TrimSpace(string(b))
+	if oid == "" {
+		return "", false
+	}
+	return oid, true
+}
+
 // gitLinkedDir reports the gitdir a .git FILE points at. A plain checkout's .git is a
 // directory, which reads as absent here.
 //

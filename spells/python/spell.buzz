@@ -11,7 +11,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 
 export fun mgs_getTools() > {str: Tool} {
-    return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}}};
+    return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"}};
 }
 
 // pip's and uv's caches, and the interpreters uv installs and runs.

@@ -50,7 +50,7 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 }
 
 // consoleCred is the verified credential the seeded token event was made under.
-var consoleCred = types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+var consoleCred = types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
 
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
@@ -59,7 +59,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3",
 		Origin: types.Origin{EntryPoint: types.EntryPointMCP, Host: "claude"},
-		Action: "magus_query", Outcome: trail.OutcomeOK,
+		Action: "client", Outcome: trail.OutcomeOK,
 		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
@@ -125,7 +125,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Empty(t, events[2].GetWorkspace())
 	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[3].GetKind())
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, events[3].GetOutcome())
-	assert.Equal(t, "magus_query", events[3].GetAction())
+	assert.Equal(t, "client", events[3].GetAction())
 	// An MCP call records the client's own handshake name as its host, which wins over the
 	// User-Agent the wire falls back to when no host was recorded.
 	assert.Equal(t, "claude", events[3].GetHost())
@@ -152,7 +152,7 @@ func TestListActivityEvents_FilterByKind(t *testing.T) {
 	require.NoError(t, err)
 	events := resp.Msg.GetEvents()
 	require.Len(t, events, 1)
-	assert.Equal(t, "magus_query", events[0].GetAction())
+	assert.Equal(t, "client", events[0].GetAction())
 }
 
 func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
@@ -210,15 +210,15 @@ func TestGetPayload_RoundTripAndReject(t *testing.T) {
 }
 
 func TestMatchFilter_ActorsActions(t *testing.T) {
-	dir, _ := seedTrail(t) // mcp(claude,magus_query) token(console-1,connector.create) job(server,graph build)
+	dir, _ := seedTrail(t) // mcp(claude,client) token(console-1,connector.create) job(server,graph build)
 
 	assert.Equal(t, []string{"graph build"},
 		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"server"}})))
-	assert.Equal(t, []string{"magus_query"},
-		actions(list(t, dir, &activityv1.ActivityQuery{Actions: []string{"magus_query"}})))
+	assert.Equal(t, []string{"client"},
+		actions(list(t, dir, &activityv1.ActivityQuery{Actions: []string{"client"}})))
 	// actors AND actions both constrain: a mismatch on either drops the event.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{
-		Actors: []string{"server"}, Actions: []string{"magus_query"},
+		Actors: []string{"server"}, Actions: []string{"client"},
 	}))
 	// an unmatched value yields nothing, not everything.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{"nobody"}}))
@@ -247,7 +247,7 @@ func TestMatchFilter_TimeWindow(t *testing.T) {
 	until := list(t, dir, &activityv1.ActivityQuery{
 		Time: &queryv1.TimeRange{Until: timestamppb.New(time.UnixMilli(2))},
 	})
-	assert.Equal(t, []string{"connector.create", "magus_query"}, actions(until)) // Ts<=2
+	assert.Equal(t, []string{"connector.create", "client"}, actions(until)) // Ts<=2
 
 	window := list(t, dir, &activityv1.ActivityQuery{
 		Time: &queryv1.TimeRange{
@@ -375,7 +375,7 @@ func TestListActivityEvents_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t
 	assert.Equal(t, "/ws/a", byAction["graph build"], "a workspace-bound job keeps its own root")
 	assert.Equal(t, "/ws"+other, byAction["job-9"], "an event from the other trail keeps its root")
 	assert.Empty(t, byAction["connector.create"], "a server-wide token event stays unattributed")
-	assert.Empty(t, byAction["magus_query"], "a server-wide MCP call stays unattributed")
+	assert.Empty(t, byAction["client"], "a server-wide MCP call stays unattributed")
 }
 
 func TestListActivityEvents_SingleWorkspaceAndNoWorkspaces(t *testing.T) {

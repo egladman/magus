@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,7 +15,9 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -169,6 +172,18 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return usagef("magus buzz: --%s and -%s are different modes; --%s does not run the file",
 			gen.FlagBuzzCheck, gen.FlagBuzzT, gen.FlagBuzzCheck)
 	}
+	// A trace (-vvv) already carries a profile and prints it when the process
+	// exits. --profile is the switch for a run that is not otherwise traced, and
+	// it prints once, here, so the two do not each emit the same report.
+	if bf.Profile && buzz.ProfileFromContext(ctx) == nil {
+		p := buzz.NewProfile()
+		ctx = buzz.WithProfile(ctx, p)
+		defer func() {
+			if rep := p.Report(); rep != "" {
+				fmt.Fprint(os.Stderr, rep)
+			}
+		}()
+	}
 	if bf.Check {
 		// -e and stdin are deliberately absent: a check reports positions, and both
 		// name a source no reader can open at the position reported. `magus buzz -e`
@@ -206,6 +221,14 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The script's magus\service leases end with it. WithoutCancel: a Ctrl-C'd script
+	// still has to release what it holds.
+	ctx, services := service.WithScope(ctx)
+	defer func() {
+		relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+		defer cancel()
+		services.ReleaseAll(relCtx)
+	}()
 	// A script is a pipe stage: it reads the records a magus stage upstream writes and
 	// emits records downstream. While a magus reads its stdout, stdout carries records
 	// alone and what the script prints goes to stderr, as a run's prose does.
@@ -225,6 +248,16 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	}
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
+	// A file script's imports resolve beside the file, not beside the process's
+	// working directory. A hook runs in the host's session directory, which is
+	// not the directory the script lives in, and `import "lib/hook"` has to
+	// follow the script. Stdin and -e have no file to stand beside.
+	if dir := scriptImportDir(name); dir != "" {
+		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
+	}
+	tr := traceFromContext(ctx)
+	addProfileObserver(ctx, sess)
+	installBuzzHost(ctx, sess, code, scriptOut, tr)
 	var cov *buzz.LineCoverage
 	if bf.Coverprofile != "" {
 		if path := buzzCoverPath(name); path != "" {
@@ -233,25 +266,17 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		cov = buzz.NewLineCoverage()
 		sess.EnableLineCoverage(cov)
 	}
-	// Install the full magus module surface (Buzz stdlib + assert/suite + every
-	// magus host module), the same one the magusfile engine uses. Sharing one
-	// registration keeps `magus buzz` and magusfile execution in lock-step: any
-	// module a script or test imports resolves the same way in both, with no
-	// per-surface module list.
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))
-	// The magus.* namespace on top, so `import "magus"` resolves here too. The
-	// members that declare into a workspace being loaded (magus\project,
-	// magus\cache.remote, magus\ci.provider) raise MGS1022 on this surface; the rest
-	// (magus\describe, magus\cmd, magus\run, ...) work.
-	bindings.RegisterMagusNamespace(ctx, sess)
-	// Install the magus/spell and magus/charm source modules too, so a spell file
-	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
-	// is the spell test harness.
-	bindings.RegisterSpellSourceModules(sess)
-
+	stopExec := tr.phase("buzz.exec")
 	if err := sess.Exec(ctx, code); err != nil {
+		stopExec()
+		// Strict mode refuses both a raising call and a try at the top level, so the
+		// fix is the one place a raise may go, which -e can hold as well as a file.
+		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
+			return fmt.Errorf("%s: %w\n  a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level; -e takes that form too", name, err)
+		}
 		return fmt.Errorf("%s: %w", name, err)
 	}
+	stopExec()
 	// Warnings (e.g. BZZ3001 unused imports) never fail Exec, so they only reach
 	// the user if something prints them after the fact; print to stderr, matching
 	// how every other magus diagnostic (and the -t failure lines below) stays off
@@ -277,7 +302,9 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		for _, a := range scriptArgs {
 			items = append(items, vm.StrValue(a))
 		}
+		stopMain := tr.phase("buzz.main")
 		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
+		stopMain()
 		if err != nil {
 			testErr = fmt.Errorf("%s: %w", name, err)
 		} else if ret.IsInt() && ret.AsInt() != 0 {
@@ -408,6 +435,84 @@ func splitScriptArgs(args []string) (before []string, sep bool, after []string) 
 	return args, false, nil
 }
 
+// addProfileObserver records compile phases on the Buzz profile carried by ctx.
+// -vvv puts the startup trace's own profile there, so a traced `magus shell` and
+// a profiled `magus buzz` describe the same events. With no profile, nothing is
+// installed and the session pays nothing for the clocks.
+func addProfileObserver(ctx context.Context, sess *buzz.Session) {
+	if p := buzz.ProfileFromContext(ctx); p != nil {
+		sess.AddCompileObserver(p)
+	}
+}
+
+// buzzEntryImportsMagus reports whether code's own import statements name the
+// magus namespace, a magus/* module, or a spell. A comment that mentions the
+// same text takes the slow path.
+func buzzEntryImportsMagus(code string) bool {
+	return strings.Contains(code, `import "magus"`) ||
+		strings.Contains(code, `import "magus/`) ||
+		strings.Contains(code, `import "spells/`)
+}
+
+// installBuzzHost registers the module surface a script can import.
+//
+// The stdlib and the spell declaration text are always installed: the first is
+// what a hook imports, and the second is a few string stores. The magus
+// namespace and its type mirrors are not. Building the namespace walks every
+// member, and a guard hook does not import it. Measured 2026-09-28, in process:
+// the namespace was 1.3ms and the closed script's own exec was 27µs. The
+// workspace open these hooks already skip is the ~700ms figure; this is the
+// part that was still on the tool-call path for nothing.
+//
+// A nested import of magus from a file the entry did not name still resolves.
+// The mirrors are parsed at that import, which is the order DeclareMagusTypes
+// exists to avoid when the entry itself imports magus: an entry that does is
+// parsed up front, so a later file's type of the same name still wins.
+func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
+	stop := tr.phase("buzz.register_surface")
+	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))
+	stop()
+	stop = tr.phase("buzz.register_decls")
+	bindings.RegisterSpellDecls(sess)
+	stop()
+	if buzzEntryImportsMagus(code) {
+		stop = tr.phase("buzz.register_namespace")
+		bindings.DeclareMagusTypes(sess)
+		bindings.RegisterMagusNamespace(ctx, sess)
+		stop()
+		return
+	}
+	var once sync.Once
+	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
+		if importPath != "magus" {
+			var zero vm.Value
+			return zero, false
+		}
+		once.Do(func() {
+			stop := tr.phase("buzz.register_namespace")
+			bindings.DeclareMagusTypes(sess)
+			bindings.RegisterMagusNamespace(ctx, sess)
+			stop()
+		})
+		v, ok := sess.NativeModule("magus")
+		return v, ok
+	})
+}
+
+// scriptImportDir is the directory a file script's imports resolve against.
+// Stdin and -e have none: there is no file for a sibling import to stand beside.
+func scriptImportDir(name string) string {
+	switch name {
+	case "", "-e", "<stdin>":
+		return ""
+	}
+	abs, err := filepath.Abs(name)
+	if err != nil {
+		return filepath.Dir(name)
+	}
+	return filepath.Dir(abs)
+}
+
 // buzzResolveFile returns the path to use for reading a script. If the path
 // contains a separator it is used as-is. Otherwise BUZZ_INCLUDE_PATH
 // (colon-separated) is searched for the first match, falling back to the original
@@ -448,6 +553,7 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line instead of a file")
 	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail")
 	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")
+	fmt.Fprintln(os.Stderr, "  --profile   print where compile and import time went, after the script runs")
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
 	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
 	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
@@ -500,6 +606,15 @@ func buzzUsage() {
 // has to be in force before the first line runs. globalCfg is the config the open
 // would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
+	// --root is the directory a script runs as if started in, as -C is for make: its
+	// vcs calls, execs and relative paths resolve there, not in the process cwd.
+	if _, set := std.CwdFromContext(ctx); root != "" && !set {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return nil, fmt.Errorf("magus buzz: --root: %w", err)
+		}
+		ctx = std.WithCwd(ctx, abs)
+	}
 	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Mode.Enabled() {
 		return newLazyWorkspaceContext(ctx, root), nil
 	}
@@ -584,13 +699,15 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	}
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
+	if dir := scriptImportDir(resolved); dir != "" {
+		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
+	}
 	// Script output goes to STDERR on this path, unlike a run. A check prints no
 	// program output of its own, so anything reaching stdout here came from an
 	// imported module's top level, which Diagnostics executes; that is incidental to
 	// the answer and must not be mixed into stdout with it.
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(os.Stderr))
-	bindings.RegisterMagusNamespace(ctx, sess)
-	bindings.RegisterSpellSourceModules(sess)
+	addProfileObserver(ctx, sess)
+	installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
 
 	diags := sess.Diagnostics(string(data))
 	for i := range diags {

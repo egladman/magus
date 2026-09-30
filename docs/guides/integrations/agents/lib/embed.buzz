@@ -1,9 +1,9 @@
 // Renders guard-templates.md from its prose template and the files it documents.
 //
-// The page is a VERBATIM copy of ten shipped templates, and keeping it by hand meant it
-// drifted in silence: the conventions test compares executable lines only, so a comment
+// The page is a VERBATIM copy of the shipped templates, and keeping it by hand meant it
+// drifted in silence: the conventions test compared executable lines only, so a comment
 // rewritten in a template and not in the page passed every gate and reached readers as the
-// old text. Measured on three of the ten in one sitting. The same argument the cursor
+// old text. Measured on three of ten in one sitting. The same argument the cursor
 // schema generator beside this makes: a transcription is partial by construction, and one
 // the drift gate compares byte for byte cannot be.
 //
@@ -19,7 +19,7 @@ final EMBED_SUFFIX = " -->";
 // nothing has to be kept in step with it.
 export fun fenceFor(name: str) > str {
     if (name.endsWith(".buzz")) { return "buzz"; }
-    return "sh";
+    return "text";
 }
 
 // markerName returns the file a marker line names, or "" for any other line.
@@ -73,35 +73,35 @@ export fun render(tmpl: str, files: {str: str}) > str !> str {
 }
 
 test "a marker becomes a fenced block carrying the whole file" {
-    final page = render("intro\n<!-- embed: magus-command.sh -->\noutro",
-        files: {"magus-command.sh": "#!/usr/bin/env sh\necho hi\n"}) catch "raised";
-    assert\equal(page, "intro\n```sh\n#!/usr/bin/env sh\necho hi\n```\noutro", "block replaces the marker");
+    final page = render("intro\n<!-- embed: magus-command.buzz -->\noutro",
+        files: {"magus-command.buzz": "import \"std\";\nstd\\print(\"hi\");\n"}) catch "raised";
+    assert\equal(page, "intro\n```buzz\nimport \"std\";\nstd\\print(\"hi\");\n```\noutro", "block replaces the marker");
 }
 
 test "the fence follows the extension" {
-    assert\equal(fenceFor("magus-command.buzz"), "buzz", "a Buzz port");
-    assert\equal(fenceFor("magus-command.sh"), "sh", "its sh twin");
+    assert\equal(fenceFor("magus-command.buzz"), "buzz", "a Buzz template");
+    assert\equal(fenceFor("notes.txt"), "text", "anything else is plain text");
 }
 
 test "a file's trailing newline does not open a blank line" {
-    final page = render("<!-- embed: x.sh -->", files: {"x.sh": "one\n\n\n"}) catch "raised";
-    assert\equal(page, "```sh\none\n```", "trailing newlines are trimmed");
+    final page = render("<!-- embed: x.buzz -->", files: {"x.buzz": "one\n\n\n"}) catch "raised";
+    assert\equal(page, "```buzz\none\n```", "trailing newlines are trimmed");
 }
 
 test "prose that merely mentions a marker is left alone" {
-    assert\equal(markerName("text <!-- embed: x.sh --> more"), "", "a marker owns its whole line");
+    assert\equal(markerName("text <!-- embed: x.buzz --> more"), "", "a marker owns its whole line");
     assert\equal(markerName("<!-- embed:  -->"), "", "a marker names a file");
-    assert\equal(markerName("<!-- embed: x.sh -->"), "x.sh", "and this one does");
+    assert\equal(markerName("<!-- embed: x.buzz -->"), "x.buzz", "and this one does");
 }
 
 test "a marker naming a file nobody read raises instead of emptying the page" {
-    final page = render("<!-- embed: missing.sh -->", files: {"other.sh": "x"}) catch "raised";
+    final page = render("<!-- embed: missing.buzz -->", files: {"other.buzz": "x"}) catch "raised";
     assert\equal(page, "raised", "the generator refuses rather than shipping a hole");
 }
 
 test "embedNames lists what the template asks for, in page order, once each" {
-    final names = embedNames("<!-- embed: b.sh -->\nprose\n<!-- embed: a.buzz -->\n<!-- embed: b.sh -->");
+    final names = embedNames("<!-- embed: b.buzz -->\nprose\n<!-- embed: a.buzz -->\n<!-- embed: b.buzz -->");
     assert\equal(names.len(), 2, "a repeated marker is one file to read");
-    assert\equal(names[0], "b.sh", "page order, not sorted");
+    assert\equal(names[0], "b.buzz", "page order, not sorted");
     assert\equal(names[1], "a.buzz", "and the second");
 }

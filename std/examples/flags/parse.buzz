@@ -1,0 +1,21 @@
+import "std";
+import "flags";
+
+// A flag is declared as it is typed, dashes included: "--file", never "file".
+// Only the words after `--` are positionals; a bare word before it is unknown.
+// `magus buzz <file> -- <args>` consumes its own `--`, so a script taking paths
+// is run as `magus buzz x.buzz -- --file a.go -- b.go c.go`.
+try {
+    final parsed = flags\parse(["--apply", "--file", "a.go", "stray", "--", "b.go", "c.go"],
+        switches: ["--apply"], valued: ["--file"]);
+    std\print(parsed.values["--apply"] ?? "false");
+    std\print(parsed.values["--file"] ?? "");
+    std\print(parsed.positionals.join(" "));
+    std\print(parsed.unknown.join(" "));
+    // -> true
+    // -> a.go
+    // -> b.go c.go
+    // -> stray
+} catch (e) {
+    std\print("{e}");
+}

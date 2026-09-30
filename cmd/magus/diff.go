@@ -694,10 +694,12 @@ func opensDir(root string, added map[string]bool) bool {
 // requirement: a target rewriting a generated file would fire a re-render, which is the same
 // rebuild-loop guard `magus watch` needs, for the same reason.
 func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
-	var outputGlobs []string
+	var outputGlobs []types.Glob
 	var projectIgnores []types.IgnorePattern
 	for _, p := range m.All() {
-		outputGlobs = append(outputGlobs, p.AllOutputs()...)
+		for _, g := range p.AllOutputs() {
+			outputGlobs = append(outputGlobs, g.Root(p.Path))
+		}
 		projectIgnores = append(projectIgnores, p.WatchIgnores...)
 	}
 
@@ -2614,7 +2616,7 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	defer restore()
 
 	// The advisors ask magus about the workspace (magus\describeFile, magus\diff,
-	// magus\affectedImpact), which reads it off the context the way `magus buzz` does.
+	// magus\impact), which reads it off the context the way `magus buzz` does.
 	// The caller's already-loaded workspace is attached rather than loaded again:
 	// loadMagus is once-per-process and panics on a second call with a different root.
 	if m != nil {

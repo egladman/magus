@@ -39,7 +39,7 @@ func TestRunAllowsDeclaredSourceMutation(t *testing.T) {
 	writeMain(t, root, "package main // recieve")
 
 	step := makeStep(root)
-	step.Updates = []string{"test/pkg/*.go"}
+	step.Updates = types.MustParseGlobs("test/pkg/*.go")
 
 	_, err := c.Run(t.Context(), step, rewriteMain(t, root, "package main // receive"))
 
@@ -97,7 +97,18 @@ func TestMutatedSourcesHonoursUpdateGlobs(t *testing.T) {
 	after := sourceFingerprint{"docs/a.md": "changed", "src/b.go": "changed"}
 
 	assert.Equal(t, []string{"src/b.go"},
-		mutatedSources(before, after, []string{"docs/**/*.md"}, nil))
+		mutatedSources(before, after, types.MustParseGlobs("docs/**/*.md"), nil))
+}
+
+// TestMutatedSourcesHonoursAnUpdateAnOutputExcludes is the hand file a generator's
+// output carves out and another target edits in place: the update declares the edit, and
+// the output's exclusion must not cancel it.
+func TestMutatedSourcesHonoursAnUpdateAnOutputExcludes(t *testing.T) {
+	before := sourceFingerprint{"gen/rt.go": "h1", "gen/fs.go": "h2"}
+	after := sourceFingerprint{"gen/rt.go": "edited", "gen/fs.go": "regenerated"}
+
+	assert.Empty(t, mutatedSources(before, after,
+		types.MustParseGlobs("gen/rt.go"), types.MustParseGlobs("gen/*.go", "!gen/rt.go")))
 }
 
 // ctx.needs composes targets, so a chained target's declared output is written inside
@@ -108,7 +119,7 @@ func TestMutatedSourcesIgnoresAnyTargetsDeclaredOutput(t *testing.T) {
 	after := sourceFingerprint{"docs/gen-page.md": "regenerated", "docs/authored.md": "reformatted"}
 
 	assert.Equal(t, []string{"docs/authored.md"},
-		mutatedSources(before, after, nil, []string{"docs/gen-page.md"}))
+		mutatedSources(before, after, nil, types.MustParseGlobs("docs/gen-page.md")))
 }
 
 // The cap keeps a formatter over a large tree from printing hundreds of paths, while
@@ -161,9 +172,9 @@ func TestRunDoesNotRecordAnEntryWhoseInputsMovedWhileItRan(t *testing.T) {
 		ProjectPath:   ".",
 		WorkspaceRoot: root,
 		Target:        "build",
-		Sources:       []string{"pkg/*.go"},
+		Sources:       types.MustParseGlobs("pkg/*.go"),
 		// Claimed as a declared output, which is what silenced the old check.
-		OwnedOutputs: []string{"pkg/*.go"},
+		OwnedOutputs: types.MustParseGlobs("pkg/*.go"),
 	}
 
 	runs := 0
@@ -195,7 +206,7 @@ func TestKeyStillDescribesInputsSeesAClaimedOutputMove(t *testing.T) {
 	// Declared as an output, which is what the blame check exempts and the store gate
 	// must not. Not under gen/, which the source walk prunes.
 	s := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "build",
-		Sources: []string{"pkg/*.go"}, OwnedOutputs: []string{"pkg/*.go"}}
+		Sources: types.MustParseGlobs("pkg/*.go"), OwnedOutputs: types.MustParseGlobs("pkg/*.go")}
 
 	before, err := c.fingerprintSources(t.Context(), &s)
 	require.NoError(t, err)

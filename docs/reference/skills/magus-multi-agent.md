@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40362
-skill_short_bytes: 30567
+skill_full_bytes: 41004
+skill_short_bytes: 31209
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `71f4f358513b` |
+| `skill-content` | `cd084f71a455` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -144,7 +144,7 @@ Before spawning, state the topology: the model per job and whether isolated
 worktrees are available. Fan-out and depth are not capped unless the workspace
 sets a cap: spawn as many jobs, nested as deep, as the partition supports. A limit
 exists only when magus.yaml's `jobs` section sets one (read it with
-`magus config view` or `magus_config_get`): `max_depth` and `max_live`
+`magus config view` or `config`): `max_depth` and `max_live`
 make `magus job fork` refuse past them, naming the key, and
 `default_timeout` bounds a fork that names no `--timeout`. Honor a cap the user
 states the same way. Editing costs the workspace nothing; what contends is VALIDATION - the
@@ -264,7 +264,8 @@ Read the facts: `overlaps` lists each declaration covering more than one
 proposed path - a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
-Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
+Affinity stays with `client` (`magus\insight`, read affinity; without MCP,
+`magus buzz -e` printing `magus\insight().affinity`), and `magus refs <symbol>`
 when two jobs may touch the same API. A read-only job has no write set, so it is outside
 this analysis entirely.
 
@@ -308,7 +309,7 @@ warning. When evidence is incomplete, reduce parallelism.
 Before spawning, fork one job per unit - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
 tree is not clean) - and keep descendants in the same store. Fork each one with
-the `magus_job` tool from the orchestrating agent, or `magus job fork` from a
+`client` (`magus\job.put`) from the orchestrating agent, or `magus job fork` from a
 person at a terminal.
 A worker holding a lease forks its own units the same way, naming its job with
 `--parent`, and the job store refuses a child that claims more than its parent:
@@ -370,13 +371,21 @@ there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-job's `write_paths` with another `magus_job` write, or message the orchestrator
+job's `write_paths` with another `client` (`magus\job.put`) write, or message the orchestrator
 if the host supports it - and then carries on validating.
 
 That write records each dropped path with the digest it carried at that moment.
 Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
+
+Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
+widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
+the row and keep its state, where a re-fork hands a taken job out again as declared,
+and both preview until `--apply`. A revoked path is recorded as a release with its
+digest, and the worker's next write there is refused, naming the revocation. Ending
+a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
+`magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
@@ -463,7 +472,7 @@ magus job fork --stdin <<'EOF'
 EOF
 ```
 
-The magus_job tool's fork op and `magus\job.put` take the same `goals` array.
+`client` (`magus\job.put`) and `magus job fork` take the same `goals` array.
 `magus job fork --schema` prints every field.
 
 A goal names WHAT it examines and what must be true of it:
@@ -754,7 +763,7 @@ Before spawning, state the topology: the model per job and whether isolated
 worktrees are available. Fan-out and depth are not capped unless the workspace
 sets a cap: spawn as many jobs, nested as deep, as the partition supports. A limit
 exists only when magus.yaml's `jobs` section sets one (read it with
-`magus config view` or `magus_config_get`): `max_depth` and `max_live`
+`magus config view` or `config`): `max_depth` and `max_live`
 make `magus job fork` refuse past them, naming the key, and
 `default_timeout` bounds a fork that names no `--timeout`. Honor a cap the user
 states the same way. Editing costs the workspace nothing; what contends is VALIDATION - the
@@ -892,7 +901,8 @@ Read the facts: `overlaps` lists each declaration covering more than one
 proposed path - a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
-Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
+Affinity stays with `client` (`magus\insight`, read affinity; without MCP,
+`magus buzz -e` printing `magus\insight().affinity`), and `magus refs <symbol>`
 when two jobs may touch the same API; `magus path <a> <b>` settles
 a suspicious pair. A read-only job has no write set, so it is outside
 this analysis entirely.
@@ -939,7 +949,7 @@ warning. When evidence is incomplete, reduce parallelism.
 Before spawning, fork one job per unit - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
 tree is not clean) - and keep descendants in the same store. Fork each one with
-the `magus_job` tool from the orchestrating agent, or `magus job fork` from a
+`client` (`magus\job.put`) from the orchestrating agent, or `magus job fork` from a
 person at a terminal - the same store and the same
 authorization rule either way, so a job forked by hand and one an agent forked are
 indistinguishable to everything that reads them.
@@ -1032,7 +1042,7 @@ there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-job's `write_paths` with another `magus_job` write, or message the orchestrator
+job's `write_paths` with another `client` (`magus\job.put`) write, or message the orchestrator
 if the host supports it - and then carries on validating. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
@@ -1042,6 +1052,14 @@ That write records each dropped path with the digest it carried at that moment.
 Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
+
+Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
+widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
+the row and keep its state, where a re-fork hands a taken job out again as declared,
+and both preview until `--apply`. A revoked path is recorded as a release with its
+digest, and the worker's next write there is refused, naming the revocation. Ending
+a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
+`magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
@@ -1148,7 +1166,7 @@ magus job fork --stdin <<'EOF'
 EOF
 ```
 
-The magus_job tool's fork op and `magus\job.put` take the same `goals` array.
+`client` (`magus\job.put`) and `magus job fork` take the same `goals` array.
 `magus job fork --schema` prints every field.
 
 A goal names WHAT it examines and what must be true of it:

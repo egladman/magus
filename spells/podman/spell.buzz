@@ -64,8 +64,22 @@ fun podmanRun(target: Target) > Command {
     return Command{bin = "podman", args = ["run", "--rm"], hints = REGISTRY_HINTS};
 }
 
-export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"podman-build": podmanBuild, "podman-push": podmanPush, "podman-manifest": podmanManifest, "podman-run": podmanRun};
+// The machine is the Linux VM podman runs containers in on macOS and Windows. It outlives
+// `podman machine start`, so it is a start service: already running, magus adopts it and
+// never stops it; started by magus, it is stopped after 30 minutes with no holder. On
+// Linux `podman info` passes at once, so the machine is adopted and never touched.
+fun podmanMachine(target: Target) > Service {
+    return Service{
+        start     = Command{bin = "podman", args = ["machine", "start"]},
+        readiness = Command{bin = "podman", args = ["info"]},
+        stop      = Command{bin = "podman", args = ["machine", "stop"]},
+        idle      = "30m",
+    };
+}
+
+// Typed `any` because machine returns a Service beside the Command ops.
+export fun mgs_listTargets() > any {
+    return {"podman-build": podmanBuild, "podman-push": podmanPush, "podman-manifest": podmanManifest, "podman-run": podmanRun, "machine": podmanMachine};
 }
 
 // `podman info` is the readiness probe rather than `--version`: podman is daemonless on

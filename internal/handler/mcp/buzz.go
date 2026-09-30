@@ -3,198 +3,218 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
-// buzzDefaultTimeout bounds a script when the workspace sets no target_timeout. A runaway
-// guard like that setting, not a budget: the script is code an agent wrote a moment ago.
-const buzzDefaultTimeout = 5 * time.Minute
+const buzzDefaultTimeout = 30 * time.Second
 
-// magusExecutable locates the binary a script is forked through. A variable so a test can
-// point it at a stand-in, since the test binary is not magus.
+// The MCP server re-executes its own binary so a looping script can be killed
+// without blocking the server's protocol stream.
 var magusExecutable = os.Executable
 
-// buzzCLI names the verb in replies on its PATH spelling: a server started as ./magus
-// would otherwise send a path that resolves against the client's directory.
-var buzzCLI = hint.Buzz.StringAs(hint.DefaultBinaryName)
-
-// buzzTool runs a Buzz program by forking `magus buzz` rather than opening a session in
-// this process. In-process, io\stdin and io\stdout are the server's own stdio, which
-// over ServeStdio IS the protocol stream, and a runaway loop could only be abandoned,
-// never killed.
 type buzzTool struct {
 	root    string
 	timeout time.Duration
 }
 
-// buzzResult is a finished run that exited 0. JSON is stdout parsed, present only when
-// the whole of stdout is one JSON value.
-type buzzResult struct {
-	ExitCode int             `json:"exit_code"`
-	Stdout   string          `json:"stdout"`
-	Stderr   string          `json:"stderr,omitempty"`
-	JSON     json.RawMessage `json:"json,omitempty"`
-}
-
 func (t *buzzTool) Name() string { return hint.ToolBuzz.String() }
 
-func (t *buzzTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
-	argv, err := t.argv(req.Params)
+func (t *buzzTool) Invoke(ctx context.Context, call spells.InvokeRequest) (spells.InvokeResponse, error) {
+	req, err := t.request(call.Params)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	// Checked after argv so a malformed call reports what is malformed, and before the
-	// executable is resolved so a refused call has touched nothing.
-	if !paramBool(req.Params, "write", false) {
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %s refused: `%s` has no read-only mode, so a script can write anything its fs, proc and http modules reach; pass write=true to run it anyway",
-			hint.ToolBuzz, buzzCLI)
+	result, err := runWorker[transform.Result](ctx, worker{
+		tool:          hint.ToolBuzz,
+		code:          types.MCPBuzzFailed,
+		root:          t.root,
+		env:           []string{transform.WorkerEnv + "=1"},
+		maxRequest:    transform.MaxRequestBytes,
+		shorten:       "shorten the script, args or input",
+		timeout:       t.timeout,
+		timeoutRemedy: "simplify it or run it through the Buzz CLI",
+	}, req)
+	if err != nil {
+		return spells.InvokeResponse{}, err
+	}
+	return spells.InvokeResponse{Data: result}, nil
+}
+
+func (t *buzzTool) request(params map[string]any) (transform.Request, error) {
+	script, err := scriptSource(params, t.root, hint.ToolBuzz, types.MCPBuzzFailed, transform.MaxSourceBytes)
+	if err != nil {
+		return transform.Request{}, err
+	}
+	args, err := stringArgs(params["args"], hint.ToolBuzz, types.MCPBuzzFailed, transform.MaxArgs, transform.MaxArgBytes)
+	if err != nil {
+		return transform.Request{}, err
+	}
+	var input json.RawMessage
+	if value, found := params["input"]; found {
+		input, err = json.Marshal(value)
+		if err != nil {
+			return transform.Request{}, types.DiagnosticErrorf(types.MCPBuzzFailed, "%s: encode input: %v", hint.ToolBuzz, err)
+		}
+		if len(input) > transform.MaxInputBytes {
+			return transform.Request{}, types.DiagnosticErrorf(types.MCPBuzzFailed, "%s: input exceeds %d bytes; pass a smaller value", hint.ToolBuzz, transform.MaxInputBytes)
+		}
+	}
+	return transform.Request{Script: script, Input: input, Args: args}, nil
+}
+
+// worker is one forked Buzz worker: how to start it, what bounds it, and whose
+// name and diagnostic code its errors carry.
+type worker struct {
+	tool       hint.ToolName
+	code       types.DiagnosticCode
+	root       string
+	env        []string
+	maxRequest int
+	// shorten is the remedy for a request over maxRequest.
+	shorten string
+	// timeout bounds the call; zero leaves it to ctx.
+	timeout       time.Duration
+	timeoutRemedy string
+}
+
+// runWorker sends req to a fresh worker process and decodes its one response.
+// A worker failure that is already a diagnostic is returned as written, so its
+// code and remedy reach the caller once.
+func runWorker[R any](ctx context.Context, w worker, req any) (R, error) {
+	var zero R
+	wire, err := json.Marshal(req)
+	if err != nil {
+		return zero, types.DiagnosticErrorf(w.code, "%s: encode request: %v", w.tool, err)
+	}
+	if len(wire) > w.maxRequest {
+		return zero, types.DiagnosticErrorf(w.code, "%s: request exceeds %d bytes; %s", w.tool, w.maxRequest, w.shorten)
 	}
 	exe, err := magusExecutable()
 	if err != nil {
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %s: locate magus: %w", hint.ToolBuzz, err)
+		return zero, types.DiagnosticErrorf(w.code, "%s: locate magus executable: %v", w.tool, err)
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, t.timeout)
-	defer cancel()
-	// Quiet: the ctx output writers default to this process's stdout, the protocol stream
-	// under ServeStdio.
-	res, err := run.Exec(ctx, exe, argv, run.ExecOptions{
-		Dir:     t.root,
-		Env:     callerEnv(ctx),
-		Stdin:   paramString(req.Params, "stdin", ""),
+	if w.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.timeout)
+		defer cancel()
+	}
+	res, err := run.Exec(ctx, exe, []string{"buzz"}, run.ExecOptions{
+		Dir:     w.root,
+		Env:     w.env,
+		Stdin:   string(wire),
 		Capture: true,
 		Quiet:   true,
 	})
+	stderr := strings.TrimSpace(res.Stderr)
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %s: timed out after %s", hint.ToolBuzz, t.timeout)
+		return zero, types.DiagnosticErrorf(w.code, "%s: script timed out after %s; %s", w.tool, w.timeout, w.timeoutRemedy)
+	case ctx.Err() != nil:
+		return zero, types.DiagnosticErrorf(w.code, "%s: script cancelled", w.tool)
 	case !res.Started:
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %s: start %s: %w", hint.ToolBuzz, exe, err)
+		return zero, types.DiagnosticErrorf(w.code, "%s: start magus executable %q: %v", w.tool, exe, err)
+	case res.Code != 0 && strings.HasPrefix(stderr, "[MGS"):
+		return zero, errors.New(stderr)
 	case res.Code != 0:
-		return spells.InvokeResponse{}, buzzExitError(res)
+		return zero, types.DiagnosticErrorf(w.code, "%s: script failed: %s", w.tool, stderr)
 	}
-	out := buzzResult{Stdout: res.Stdout, Stderr: res.Stderr}
-	if trimmed := strings.TrimSpace(res.Stdout); trimmed != "" && json.Valid([]byte(trimmed)) {
-		out.JSON = json.RawMessage(trimmed)
+	var result R
+	if err := json.UnmarshalStrict([]byte(res.Stdout), &result); err != nil {
+		return zero, types.DiagnosticErrorf(w.code, "%s: worker returned an invalid response: %v", w.tool, err)
 	}
-	return spells.InvokeResponse{Data: out}, nil
+	return result, nil
 }
 
-// callerEnv is the environment a script's magus\job calls act as the caller under.
-//
-// Over stdio this process is the caller and the child inherits its environment, so it adds
-// nothing. Over HTTP the server's own BAGGAGE belongs to nobody calling it: the child gets the
-// lease the request stamped, or none, and job.EnvStampedLease so that none reads as
-// job.Actor.Unstamped rather than unbound. Reads pass either way; only graded writes differ.
-func callerEnv(ctx context.Context) []string {
-	actor, ok := callerActor(ctx)
-	if !ok {
-		return nil
-	}
-	baggage := ""
-	if actor.Lease != "" {
-		baggage = trail.BaggageLease + "=" + actor.Lease
-	}
-	return []string{trail.EnvBaggage + "=" + baggage, job.EnvStampedLease + "=1"}
-}
-
-// argv builds the `magus buzz` command line, always ending in `--` so an argument that
-// looks like a flag reaches the script instead of being parsed by magus.
-func (t *buzzTool) argv(params map[string]any) ([]string, error) {
-	script := paramString(params, "script", "")
-	path := paramString(params, "path", "")
-	argv := []string{hint.Buzz.Leaf()}
+// scriptSource reads the script a call names: inline under script, or a
+// workspace .buzz file under path, exactly one of them.
+func scriptSource(params map[string]any, root string, tool hint.ToolName, code types.DiagnosticCode, maxBytes int) (string, error) {
+	script, _ := params["script"].(string)
+	path, _ := params["path"].(string)
 	switch {
 	case script != "" && path != "":
-		return nil, fmt.Errorf("mcp: %s takes script or path, not both", hint.ToolBuzz)
-	case script != "":
-		argv = append(argv, "-e", script)
+		return "", types.DiagnosticErrorf(code, "%s: provide script or path, not both", tool)
+	case script == "" && path == "":
+		return "", types.DiagnosticErrorf(code, "%s: provide script or a workspace .buzz path", tool)
 	case path != "":
-		rel, err := t.workspaceScript(path)
-		if err != nil {
-			return nil, err
-		}
-		argv = append(argv, rel)
-	default:
-		return nil, fmt.Errorf("mcp: %s needs script (inline source) or path (a .buzz file)", hint.ToolBuzz)
+		return readWorkspaceScript(root, path, tool, code, maxBytes)
+	case len(script) > maxBytes:
+		return "", types.DiagnosticErrorf(code, "%s: script exceeds %d bytes; split it or run it through the Buzz CLI", tool, maxBytes)
 	}
-	args, err := buzzArgs(params["args"])
-	if err != nil {
-		return nil, err
-	}
-	return append(append(argv, "--"), args...), nil
+	return script, nil
 }
 
-// workspaceScript resolves path to an existing .buzz file under the workspace root and
-// returns it root-relative, which is how the CLI names it in a diagnostic.
-func (t *buzzTool) workspaceScript(path string) (string, error) {
+func readWorkspaceScript(root, path string, tool hint.ToolName, code types.DiagnosticCode, maxBytes int) (string, error) {
 	if !strings.EqualFold(filepath.Ext(path), ".buzz") {
-		return "", fmt.Errorf("mcp: %s: path %q is not a .buzz file", hint.ToolBuzz, path)
+		return "", types.DiagnosticErrorf(code, "%s: path %q must name a .buzz file", tool, path)
 	}
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(t.root, path)
-	}
-	rel, err := filepath.Rel(t.root, filepath.Clean(abs))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("mcp: %s: path %q is outside the workspace", hint.ToolBuzz, path)
-	}
-	info, err := os.Stat(abs)
+	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", fmt.Errorf("mcp: %s: %w", hint.ToolBuzz, err)
+		return "", types.DiagnosticErrorf(code, "%s: resolve workspace root: %v", tool, err)
+	}
+	name := path
+	if !filepath.IsAbs(name) {
+		name = filepath.Join(resolved, name)
+	}
+	name, err = filepath.EvalSymlinks(name)
+	if err != nil {
+		return "", types.DiagnosticErrorf(code, "%s: resolve script %q: %v", tool, path, err)
+	}
+	rel, err := filepath.Rel(resolved, name)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", types.DiagnosticErrorf(code, "%s: path %q is outside the workspace; use an inline script instead", tool, path)
+	}
+	info, err := os.Stat(name)
+	if err != nil {
+		return "", types.DiagnosticErrorf(code, "%s: stat script %q: %v", tool, path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("mcp: %s: path %q is not a regular file", hint.ToolBuzz, path)
+		return "", types.DiagnosticErrorf(code, "%s: path %q must name a regular file", tool, path)
 	}
-	return rel, nil
+	if info.Size() > int64(maxBytes) {
+		return "", types.DiagnosticErrorf(code, "%s: script %q exceeds %d bytes", tool, path, maxBytes)
+	}
+	data, err := os.ReadFile(name)
+	if err != nil {
+		return "", types.DiagnosticErrorf(code, "%s: read script %q: %v", tool, path, err)
+	}
+	return string(data), nil
 }
 
-// buzzArgs reads the args parameter: a space-separated string, or an array of strings
-// for an argument that holds whitespace.
-func buzzArgs(v any) ([]string, error) {
-	switch a := v.(type) {
-	case nil:
+// stringArgs reads the args param as decoded JSON: absent, or an array of at
+// most maxArgs strings of at most maxBytes each.
+func stringArgs(value any, tool hint.ToolName, code types.DiagnosticCode, maxArgs, maxBytes int) ([]string, error) {
+	if value == nil {
 		return nil, nil
-	case string:
-		return strings.Fields(a), nil
-	case []any:
-		out := make([]string, 0, len(a))
-		for _, item := range a {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("mcp: %s: args holds %T, want strings", hint.ToolBuzz, item)
-			}
-			out = append(out, s)
+	}
+	args, ok := value.([]any)
+	if !ok {
+		return nil, types.DiagnosticErrorf(code, "%s: args must be an array of strings, got %T", tool, value)
+	}
+	if len(args) > maxArgs {
+		return nil, types.DiagnosticErrorf(code, "%s: more than %d args", tool, maxArgs)
+	}
+	out := make([]string, len(args))
+	for i, arg := range args {
+		text, ok := arg.(string)
+		if !ok {
+			return nil, types.DiagnosticErrorf(code, "%s: args[%d] must be a string, got %T", tool, i, arg)
 		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("mcp: %s: args is %T, want a string or an array of strings", hint.ToolBuzz, v)
+		if len(text) > maxBytes {
+			return nil, types.DiagnosticErrorf(code, "%s: args[%d] exceeds %d bytes", tool, i, maxBytes)
+		}
+		out[i] = text
 	}
-}
-
-// buzzExitError carries a failed run's diagnostic. A compile or runtime error prints it on
-// stderr; a main returning a nonzero int prints nothing, so stdout rides along too.
-func buzzExitError(res run.ExecResult) error {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s exited with code %d", buzzCLI, res.Code)
-	if stderr := strings.TrimSpace(res.Stderr); stderr != "" {
-		b.WriteString("\n" + stderr)
-	}
-	if stdout := strings.TrimSpace(res.Stdout); stdout != "" {
-		b.WriteString("\nstdout:\n" + stdout)
-	}
-	return errors.New(b.String())
+	return out, nil
 }
 
 var _ spells.Driver = (*buzzTool)(nil)

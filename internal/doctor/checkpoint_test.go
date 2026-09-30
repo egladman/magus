@@ -40,7 +40,7 @@ const doctorHarnessDescriptorJSON = `{
   "skills": {"paths": [".agents/skills"], "form": "both"},
   "managed_entries": [{
     "path": ["hooks", "before"],
-    "entries": [{"match":"run", "commands":[{"type":"command","command":"sh magus-command.sh"}]}]
+    "entries": [{"match":"run", "commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}]
   }]
 }`
 
@@ -55,13 +55,13 @@ func writeDoctorHarness(t *testing.T, root string) {
 	agent.RegisterHarnessSpellLoader(agentTestHarnessSpell("test-host", doctorHarnessDescriptorJSON))
 	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
 	// VerifyHarness now actually runs the wired command (see internal/agent's
-	// harness_probe.go), rather than trusting that "sh magus-command.sh" is
+	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every
 	// caller of guardedHarnessConfig() references this exact script name.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command-stand-in.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
 	// The probe also checks for AN executable magus before running anything (see
 	// checkProbeEnvironment), purely as a presence gate: it never actually
-	// invokes this file for a "sh magus-command.sh" entry, which resolves
+	// invokes this file for a "sh magus-command-stand-in.sh" entry, which resolves
 	// against root on its own. Written only if a caller (writeGuardProbeStub, for
 	// the real guard probe) has not already planted a specific one here.
 	magusStub := filepath.Join(root, "magus")
@@ -77,7 +77,7 @@ func writeCheckpointHarness(t *testing.T, root, body string) {
 }
 
 func guardedHarnessConfig() string {
-	return `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}}`
+	return `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}]}}`
 }
 
 // The case this check exists for: a host wired for the guard months ago, judging
@@ -141,8 +141,10 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarness(t, root)
-	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}],"stop":[{"commands":[{"type":"command","command":"sh docs/agents/cursor-hook.sh"}]}]}}`)
-	plant(t, root, "docs/agents/cursor-hook.sh", "#!/bin/sh\n$MAGUS session checkpoint --agent-name cursor\n")
+	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}],"stop":[{"commands":[{"type":"command","command":"magus buzz -s docs/agents/cursor-hook.buzz -- --agent-name cursor"}]}]}}`)
+	// The call as the shipped Cursor glue spells it: an argv list, never the words
+	// "session checkpoint" side by side.
+	plant(t, root, "docs/agents/cursor-hook.buzz", `proc\exec(bin, args: ["session", "checkpoint", "--agent-name", agent], opts: {"quiet": true});`+"\n")
 
 	got := checkCheckpointWiring(root, "test-host")
 

@@ -1,0 +1,9 @@
+import "std";
+import "encoding/json";
+import "merge";
+
+// "after" is a sibling of the key overlay patches, so it survives.
+// "before" is an array, so overlay replaces it instead of appending.
+final base = { "kept": true, "hooks": { "before": ["old"], "after": ["theirs"] } };
+final overlay = { "hooks": { "before": ["magus"] } };
+std\print(json\stringify(merge\deep(base, overlay: overlay)) catch "");

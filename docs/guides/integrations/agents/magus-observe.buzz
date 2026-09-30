@@ -1,17 +1,14 @@
 // magus observe hook: records ONE path an agent reached, and judges nothing.
 //
-// This file is the source of truth for hosts wired to `magus buzz`. It is the
-// Buzz port of magus-observe.sh and behaves identically without jq or a
-// POSIX shell.
-//
 // Run it as `magus buzz -s magus-observe.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz
 // module and no spell: a read hook fires on every file an agent opens, so the
 // 10ms start a closed workspace buys is worth more here than anywhere else.
 //
 // Wire it to the tools that only LOOK, your host's read equivalent. The guard
-// templates beside this one handle the tools that ACT. Do not point a read tool
-// at those: a read event carries a file path, so the write rules would advise
+// templates beside this one handle the tools that ACT; magus-command.buzz also judges
+// a read, restated as the shell read it stands for. Do not point a read tool at
+// magus-path.buzz: a read event carries a file path, so the write rules would advise
 // "you are editing a declared output" at a file the agent merely opened.
 // --observe is what separates the two, and only this wrapper can set it,
 // because only it knows which of your host's tools look.
@@ -39,7 +36,7 @@
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 18
+// magus-guard-template: 19
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -52,91 +49,20 @@
 import "io";
 import "flags";
 import "encoding/json";
-import "env";
-import "fs";
-import "path";
 import "proc";
+import "lib/hook" as hook;
 
-fun envOr(name: str, fallback: str) > str {
-    final value = env\get(name) catch "";
-    if (value == "") { return fallback; }
-    return value;
-}
 
-fun digKey(node: any?, key: str) > any? {
-    final m = node as? {str: any};
-    if (m == null) { return null; }
-    return m![key];
-}
-
-fun dig(event: any?, dotPath: str) > any? {
-    var cur = event;
-    foreach (key in dotPath.split(".")) {
-        cur = digKey(cur, key: key);
-        if (cur == null) { return null; }
-    }
-    return cur;
-}
-
-// field is `jq -r ".<dotPath> // empty"`: absent reads as the empty string rather
-// than the literal "null".
-// Only a STRING is a path. Rendering an object or a list as JSON instead recorded the
+// field reads an absent value as the empty string rather than the literal "null".
+// Only a STRING is a path. hook\field renders an object or a list as JSON, and that recorded the
 // serialized blob as the file the agent reached, which the judging surfaces treat as a
 // shape they cannot read; nothing to record beats recording something untrue.
 fun field(event: any?, dotPath: str) > str {
-    final value = dig(event, dotPath: dotPath);
+    final value = hook\dig(event, dotPath: dotPath);
     if (value == null) { return ""; }
     return (value as? str) ?? "";
 }
 
-// isExecutable answers "could proc\exec run this", which a directory cannot; see
-// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
-// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
-fun isExecutable(candidate: str) > bool {
-    final info = fs\stat(candidate) catch null;
-    if (info == null) { return false; }
-    if ((info!.is_dir as? bool) ?? false) { return false; }
-    final mode = info!.mode as? int;
-    if (mode == null) { return false; }
-    return (mode! & 73) != 0;
-}
-
-// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
-// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
-fun parentDir(dir: str) > str {
-    var i = dir.len() - 1;
-    while (i >= 0) {
-        final ch = dir.sub(i, len: 1);
-        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
-        i = i - 1;
-    }
-    return "";
-}
-
-// resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two
-// siblings do, and this file needs it MORE than they do, because it is silent by design.
-// An older PATH copy does not know --observe at all: it rejects the flag, prints its usage
-// to a stream this script discards, and exits non-zero, so the observation is simply never
-// recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own
-// repository, where the wiring was correct, the binary was wrong, and the trail held 3252
-// events and not one read.
-fun resolveBin() > str {
-    final declared = env\get("__MAGUS_BIN") catch "";
-    if (declared != "") { return declared; }
-    var dir = path\abs(".") catch "";
-    while (dir != "") {
-        final marker = "{dir}/magusfile.buzz";
-        final found = fs\isFile(marker) catch false;
-        if (found) {
-            final candidate = "{dir}/magus";
-            if (isExecutable(candidate)) { return candidate; }
-            break;
-        }
-        dir = parentDir(dir);
-    }
-    return proc\which("magus") catch "";
-}
 
 // warn names the file; see magus-command.buzz. STDERR, which is why it does not break
 // this file's contract to print nothing: stdout is what the host reads as a verdict.
@@ -171,9 +97,9 @@ fun main(args: [str]) > void {
             + "the commands it prints name the host.");
         return;
     }
-    final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
-    final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
-    final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
 
     // An absent observer is SILENT, where an absent guard is loud.
     //
@@ -181,8 +107,8 @@ fun main(args: [str]) > void {
     // unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
     // here, there is no rule, so the same announcement would be a per-read interruption
     // reporting that an optional record was not written.
-    final bin = resolveBin();
-    if (bin == "" or !isExecutable(bin)) { return; }
+    final bin = hook\resolveBin();
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     final raw = io\stdin.readAll() catch "";
     final event = json\parse(raw) catch null;

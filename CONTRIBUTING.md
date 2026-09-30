@@ -63,6 +63,21 @@ magus promises that a magusfile which works today keeps working, and there is no
 plan for a 2.0. [docs/concepts/compatibility.md](https://github.com/egladman/magus/blob/main/docs/concepts/compatibility.md)
 is the promise itself; this is how to work inside it.
 
+### MCP is an adapter, not another Magus API
+
+The [MCP tool inventory and boundary](docs/guides/integrations/mcp.md#the-boundary-and-the-fallback)
+lists the currently exposed tools and their CLI fallbacks. Before adding one,
+identify the existing domain operation it adapts and explain why an agent cannot
+use an existing MCP tool for the same job. Put the declaration on `std.Magus`;
+`internal/handler/mcp` translates the request and result, and the registry is
+generated. Do not implement a second graph query, VCS search, build runner or
+permission model in a handler.
+
+`buzz` is for JSON-to-JSON transforms of data the caller supplies. Its
+worker does not register the `magus` module. Workspace reads and actions belong
+to the Magus MCP tools; full-host Buzz scripting belongs to the CLI. A new host
+module in the CLI does not automatically become an MCP transform capability.
+
 **Add, never substitute.** A new `magus\project` key goes beside the existing
 ones, a new protobuf field takes a new number, a new flag joins the current set.
 If you find yourself changing what an existing name means, that is the thing the
@@ -96,7 +111,7 @@ nothing catches it:
 So a std rename is a silent break that review has to catch by eye. If you make one
 deliberately, it belongs under **Breaking** in the changelog with the old and new
 spellings, and every in-repo caller must move with it - `magusfile.buzz`,
-`spells/`, `docs/**/*.buzz`, `tools/`, testdata scripts, and the `.txtar` fixtures
+`spells/`, `docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures
 under `cmd/magus/testdata/`.
 
 The same descriptor's `Doc:` string is not documentation either: it is codegen
@@ -488,7 +503,7 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
 - **A `feat`, `fix` or `perf` change to shipped code adds a changelog
   fragment**, as does any title marked breaking with `!`. Every other type
   passes without one, and so do changes that touch only docs, tests, workflows,
-  repository tooling and plans; `tools/changelog.buzz` lists what does not
+  repository tooling and plans; `hack/changelog.buzz` lists what does not
   ship. A change no user can notice is not a `feat`, `fix` or `perf`, so
   retitle it rather than add an entry. Check a branch with
   `magus run pr-changelog . -- "<title>"`.
@@ -499,12 +514,12 @@ There is no changelog file to edit: concurrent pull requests add different files
 and never touch a shared one. The docs changelog page renders the fragments and
 the release manifests (`magus run changelog-page docs`), and cutting a release
 folds the fragments into its manifest. `changes/README.md` has the format, and
-`tools/changelog.buzz` is its one parser; a malformed fragment or an unknown
+`hack/changelog.buzz` is its one parser; a malformed fragment or an unknown
 group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase
 imperative style with no prefix. `magus run git-hooks-install .` installs this
-repository's git hooks from `tools/git-hooks/`; its `commit-msg` hook applies the
+repository's git hooks from `hack/git-hooks/`; its `commit-msg` hook applies the
 title rule only to commits made directly on `main`. `magus run git-hooks-remove .`
 takes them out again. To add a hook, see
 [Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).

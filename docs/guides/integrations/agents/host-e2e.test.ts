@@ -18,7 +18,7 @@ const shellDescriptor = parseDescriptor(
     schemaVersion: 1,
     id: "fixture-shell",
     binary: "fixture",
-    guardTemplate: "guard.sh",
+    guardTemplate: "guard.buzz",
     setup: [{ kind: "json", path: "host.json", value: { hook: "{{guard_command}}" } }],
     launch: { args: ["run", "{{workspace}}"] },
     evidence: { kind: "shell-deny", transport: "shell" },
@@ -81,31 +81,25 @@ test("runtime harness spells cover read observation and checkpoints", () => {
   // observer and the stop checkpoint by name.
   for (const name of ["codex", "claude-code"]) {
     const spell = readFileSync(path.join(repository, "spells/harness", name, "spell.buzz"), "utf8");
-    // Either shipped form of the observer: the sh copy, or the Buzz port a
-    // `magus buzz` wiring names. They render the same behavior, and an executed
-    // case refuses a difference; what this asks is that the host records reads
-    // at all, not which of the two files it reached for.
-    assert.ok(
-      spell.includes("magus-observe.sh") || spell.includes("magus-observe.buzz"),
-      `${name} must record read observations`,
+    assert.ok(spell.includes("magus-observe.buzz"), `${name} must record read observations`);
+    // And judge them: the command glue restates a Read as the `cat` or `sed -n` line it
+    // stands for, so the read rules reach the host's read tool as well as its shell.
+    assert.match(
+      spell,
+      /pretool_entry\("Read", (claude|codex)_guard_command\(\)/,
+      `${name} must judge reads with the command guard`,
     );
-    // Either form again, for the reason above: codex is still wired to the sh copy
-    // and claude-code has moved to the Buzz port, and this asks whether the host
-    // records where the work stopped, not which runtime it spells that in.
-    assert.ok(
-      spell.includes("magus-checkpoint.sh") || spell.includes("magus-checkpoint.buzz"),
-      `${name} must record stop checkpoints`,
-    );
+    assert.ok(spell.includes("magus-checkpoint.buzz"), `${name} must record stop checkpoints`);
   }
 
   // Cursor: the harness spell is the magusfile SoT, with no JSON sibling left to
-  // stay in lockstep with. It points at the unified cursor-hook.sh, which covers
-  // command/path/observe/checkpoint in one script (sessionEnd = checkpoint).
+  // stay in lockstep with. It points at cursor-hook.buzz, which covers
+  // command/path/observe/checkpoint in one file (sessionEnd = checkpoint).
   const cursorSpell = readFileSync(
     path.join(repository, "spells/harness/cursor/spell.buzz"),
     "utf8",
   );
-  assert.match(cursorSpell, /cursor-hook\.sh/, "cursor spell names the Cursor hook script");
+  assert.match(cursorSpell, /cursor-hook\.buzz/, "cursor spell names the Cursor hook");
   assert.match(cursorSpell, /sessionEnd/, "cursor spell wires sessionEnd for checkpoints");
   assert.match(cursorSpell, /beforeShellExecution/, "cursor spell wires the shell guard");
   assert.match(cursorSpell, /preToolUse/, "cursor spell wires the write guard");
@@ -132,7 +126,10 @@ test("selects the named VCS-neutral command-deny scenario", () => {
 });
 
 test("the disposable probe stores the raw hook response and structured exit evidence", () => {
-  assert.match(probeScript, /sh "\$2" --agent-name "\$1" > "\$MAGUS_HOST_E2E_RESPONSE"/);
+  assert.match(
+    probeScript,
+    /"\$__MAGUS_BIN" buzz -s "\$2" -- --agent-name "\$1" > "\$MAGUS_HOST_E2E_RESPONSE"/,
+  );
   assert.doesNotMatch(
     probeScript,
     /AGENT_NAME=/,

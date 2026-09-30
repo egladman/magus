@@ -159,7 +159,7 @@ func deadOutputRepo(t *testing.T, built bool) string {
 }
 
 func deadOutputProject(dir string) *types.Project {
-	return &types.Project{Path: "console", Name: "console", Dir: dir, Outputs: []string{"gen/**", "src/gen/**"}}
+	return &types.Project{Path: "console", Name: "console", Dir: dir, Outputs: types.MustParseGlobs("gen/**", "src/gen/**")}
 }
 
 // TestDeadOutputGlobsIgnoresCommittedOutputs is the regression. On a fresh clone src/gen/**
@@ -185,7 +185,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 	repo := deadOutputRepo(t, true)
 	p := deadOutputProject(repo)
-	p.Outputs = []string{"gen/**", "src/gen/**", "dist/**"}
+	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
 	r := &runner{root: repo, ws: stubWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
@@ -211,6 +211,26 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Equal(t,
 		[]string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
+		got.Details)
+}
+
+// TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave: an exclusion matches nothing by
+// design and is never itself dead, while a glob whose every match is excluded produces
+// nothing a snapshot keeps, which is the dead shape.
+func TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave(t *testing.T) {
+	dir := t.TempDir() // not a repository, so presence is the evidence
+	for _, rel := range []string{"src/gen/a.ts", "gen/hand.ts"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, rel), []byte("x"), 0o644))
+	}
+	p := deadOutputProject(dir)
+	p.Outputs = types.MustParseGlobs("src/gen/**", "gen/*.ts", "!gen/hand.ts")
+	r := &runner{root: dir, ws: stubWorkspace{}}
+
+	got := r.checkDeadOutputGlobs([]*types.Project{p})
+
+	assert.Equal(t,
+		[]string{`console: output glob "gen/*.ts" matched no files while the project's other outputs did`},
 		got.Details)
 }
 
@@ -247,6 +267,17 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 			Status:  types.CheckOK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
+	})
+
+	t.Run("two targets excluding one file do not own it", func(t *testing.T) {
+		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
+			Path: "docs", Name: "docs",
+			TargetOutputs: map[string][]types.OutputRef{
+				"generate": {{Glob: "gen/*.go", Except: []string{"gen/runtime.go"}}},
+				"format":   {{Glob: "gen/*.md", Except: []string{"gen/runtime.go"}}},
+			},
+		}})
+		assert.Equal(t, types.CheckOK, got.Status)
 	})
 
 	t.Run("one target repeating a glob is not two owners", func(t *testing.T) {
@@ -485,7 +516,7 @@ func TestDeclaredOutputFiles(t *testing.T) {
 		"per-target outputs are expanded; undeclared files are not")
 
 	t.Run("a directory is not a file to scan", func(t *testing.T) {
-		p := &types.Project{Path: ".", Dir: dir, Outputs: []string{"gen"}}
+		p := &types.Project{Path: ".", Dir: dir, Outputs: types.MustParseGlobs("gen")}
 		assert.Empty(t, declaredOutputFiles(p))
 	})
 }
@@ -542,7 +573,7 @@ func seedingRepo(t *testing.T) string {
 }
 
 func seedingProject() *types.Project {
-	return &types.Project{Path: ".", Name: "root", Sources: []string{"**/*.go"}}
+	return &types.Project{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.go")}
 }
 
 // TestUndeclaredSeedingFilesReportsTheStandingSet is MGS1028 asked of the whole tree
@@ -580,7 +611,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 	repo := seedingRepo(t)
 	p := seedingProject()
-	p.Sources = []string{"**/*.go", ".golangci.yml"}
+	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
 	r := &runner{root: repo, ws: stubWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
@@ -605,10 +636,10 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 // matches nothing and keys nothing, and the target replays while those files change.
 func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
-	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/*.binpb",
 		"src/**/*.ts",
-	}}
+	)}
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
@@ -625,10 +656,10 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 // would tell the author to fix something that already works.
 func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
-	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/descriptor.binpb",
 		"node_modules/pkg/index.js",
-	}}
+	)}
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
@@ -681,8 +712,8 @@ func TestCheckAgentSkills(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
-		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"MAGUS.md"}},
+		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
+		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
@@ -696,7 +727,7 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: "docs", Name: "docs", Sources: []string{"**/*.md"}, Outputs: []string{"MAGUS.md"}},
+		{Path: "docs", Name: "docs", Sources: types.MustParseGlobs("**/*.md"), Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
@@ -709,8 +740,8 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	projects := []*types.Project{
-		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
-		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"docs/**"}},
+		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
+		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("docs/**")},
 	}
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
@@ -723,7 +754,7 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(dir, []sessions.LoadEvent{{
+	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{{
 		Session: "s1",
 		Event: sessions.AgentEvent{
 			Host: "h1", Kind: sessions.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
@@ -1385,28 +1416,19 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	configDir := filepath.Join(root, ".claude")
 	require.NoError(t, os.MkdirAll(configDir, 0o755))
 
-	fromRoot := plant(t, root, "docs/guides/magus-command.sh", "#!/bin/sh\n")
-	besideConfig := plant(t, configDir, "magus-path.sh", "#!/bin/sh\n")
+	fromRoot := plant(t, root, "docs/guides/magus-command.buzz", "import \"std\";\n")
+	besideConfig := plant(t, configDir, "magus-path.buzz", "import \"std\";\n")
 
 	t.Run("resolves against the root and against the config dir", func(t *testing.T) {
-		body := []byte(`{"command": "sh docs/guides/magus-command.sh", "other": "magus-path.sh"}`)
+		body := []byte(`{"command": "magus buzz -s docs/guides/magus-command.buzz", "other": "magus-path.buzz"}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Equal(t, []string{fromRoot, besideConfig}, found)
 		assert.Empty(t, missing)
 	})
 
-	t.Run("resolves Codex's VCS-neutral workspace-root shell expansion", func(t *testing.T) {
-		body := []byte(`{"command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/magus-command.sh\""}`)
-		found, missing := guardReferencedTemplates(root, configDir, body)
-		assert.Equal(t, []string{fromRoot}, found)
-		assert.Empty(t, missing)
-	})
-
-	// Root-relative treatment is deliberately a narrow compatibility rule for the
-	// documented expansion, not a way for a config to smuggle an arbitrary shell
-	// command into doctor.
-	t.Run("does not resolve an arbitrary magus shell expansion from the root", func(t *testing.T) {
-		body := []byte(`{"command": "sh \"$(magus version)/docs/guides/magus-command.sh\""}`)
+	// A shell expansion is not a path, and doctor resolves nothing it would have to run.
+	t.Run("does not resolve a shell expansion from the root", func(t *testing.T) {
+		body := []byte(`{"command": "magus buzz -s \"$(magus version)/docs/guides/magus-command.buzz\""}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Empty(t, found)
 		assert.NotEmpty(t, missing)
@@ -1415,10 +1437,10 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	// A config whose hook points at a template that is not there runs nothing;
 	// reporting only what resolved would grade exactly that case as healthy.
 	t.Run("an unresolvable token is the finding", func(t *testing.T) {
-		body := []byte(`{"command": "sh hooks/cursor-hook.sh"}`)
+		body := []byte(`{"command": "magus buzz -s hooks/cursor-hook.buzz"}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Empty(t, found)
-		assert.Equal(t, []string{"hooks/cursor-hook.sh"}, missing, "the token is reported as the config wrote it")
+		assert.Equal(t, []string{"hooks/cursor-hook.buzz"}, missing, "the token is reported as the config wrote it")
 	})
 
 	t.Run("a config naming no template", func(t *testing.T) {
@@ -1430,8 +1452,8 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	// The token starts at the nearest quote, space, tab, newline or '=', so a bare
 	// basename is taken whole rather than swallowing the word before it.
 	t.Run("a bare basename", func(t *testing.T) {
-		bare := plant(t, root, "cursor-hook.sh", "#!/bin/sh\n")
-		found, missing := guardReferencedTemplates(root, configDir, []byte("hook=cursor-hook.sh\n"))
+		bare := plant(t, root, "cursor-hook.buzz", "import \"std\";\n")
+		found, missing := guardReferencedTemplates(root, configDir, []byte("hook=cursor-hook.buzz\n"))
 		assert.Equal(t, []string{bare}, found)
 		assert.Empty(t, missing)
 	})
@@ -1699,8 +1721,8 @@ func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
 }
 
 // TestGuardTemplateBasenamesAreShipped pins the list against the templates that actually
-// exist, because for the whole life of one rename it named magus-pause.sh, a file the
-// same commit had renamed to magus-checkpoint.sh.
+// exist, because for the whole life of one rename it named magus-pause, a file the same
+// commit had renamed to magus-checkpoint.
 //
 // The cost of that is total and silent: guardReferencedTemplates only inspects a config
 // for basenames in this list, so the one check written to catch a silently stale hook
@@ -1709,7 +1731,7 @@ func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
 //
 // Membership is deliberately NOT asserted in the other direction: a template a host
 // discovers by placing it in a directory is graded in checkGuardWiring's directory
-// branch and correctly absent here (magus-observe.sh is the standing example).
+// branch and correctly absent here.
 func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
 	dir := filepath.Join("..", "..", "docs", "guides", "integrations", "agents")
 	for _, base := range guardTemplateBasenames {

@@ -453,8 +453,15 @@ var ErrVCSUnknown = errors.New("vcs: unknown VCS")
 // MergeDriverGlobs are the workspace-relative globs a merge driver registration routes
 // to magus.
 type MergeDriverGlobs struct {
-	// Outputs are declared outputs, which the backend also marks generated where it can.
+	// Outputs are the patterns of every declared output, without their exclusions, sorted.
+	// The backend also marks them generated where it can.
 	Outputs []string
+	// Carved are the tracked files an Outputs pattern covers that no output declaration
+	// claims once its exclusions apply: hand-maintained files among generated ones, which
+	// a backend that can undo a pattern for one path (git) returns to its default merge.
+	// Sorted. A hand file added later is routed to magus until the next load recomputes
+	// these, and the driver then treats it as source.
+	Carved []string
 	// AutoResolve are the source files magus.yaml's vcs.auto_resolve opts into low-risk
 	// conflict resolution. They are source, and are never marked generated.
 	AutoResolve []string

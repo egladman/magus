@@ -87,8 +87,8 @@ func TestAddProvidedProjectsCarriesProvenance(t *testing.T) {
 		Origin:    types.ProvidedBy("nx"),
 		Dir:       filepath.Join(ws.Root, "libs", "foo"),
 		DependsOn: []string{"libs/shared"},
-		Sources:   []string{"**/*.ts"},
-		Outputs:   []string{"dist/**"},
+		Sources:   types.MustParseGlobs("**/*.ts"),
+		Outputs:   types.MustParseGlobs("dist/**"),
 	}, got)
 
 	provider, ok := got.Origin.Provider()

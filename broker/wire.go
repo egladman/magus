@@ -93,6 +93,7 @@ type serviceAcquireRequest struct {
 // serviceWire is a ServiceSpec on the wire.
 type serviceWire struct {
 	Command   []string `json:"command"`
+	Start     []string `json:"start,omitempty"`
 	Readiness []string `json:"readiness,omitempty"`
 	Stop      []string `json:"stop,omitempty"`
 	IdleMS    int64    `json:"idle_ms,omitzero"`
@@ -103,9 +104,11 @@ type serviceReleaseRequest struct {
 	Key string `json:"key"`
 }
 
-// serviceReply answers a service request. Stopped is set by a stop-all.
+// serviceReply answers a service request. Owned is set by an acquire of a service the
+// broker started, and Stopped by a stop-all.
 type serviceReply struct {
-	Stopped int `json:"stopped,omitzero"`
+	Owned   bool `json:"owned,omitzero"`
+	Stopped int  `json:"stopped,omitzero"`
 }
 
 // shutdownRequest stops the broker. The magic is a second guard beside the hello's,

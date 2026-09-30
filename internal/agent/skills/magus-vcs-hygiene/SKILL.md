@@ -14,7 +14,7 @@ each against the workspace's declared globs{{end}}:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `{{tool "describe_file"}}` {paths}. Each path comes back with its owning
+MCP: `{{tool "client"}}` calling `{{buzz "describeFile"}}([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -98,7 +98,7 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\ref() + " " + vcs\commit().short); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
 
 Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
@@ -111,8 +111,9 @@ Annotate it `> Commit` for compile-checked field access.
 
 `vcs\ref()` is the movable name pointing at the current revision, and it is
 deliberately not called `branch`: it is a git branch, a Mercurial named branch,
-or a Jujutsu bookmark depending on the backend, and jj's working copy is usually
-an anonymous change, so `""` is an ordinary answer there rather than a failure.
+or a Jujutsu bookmark depending on the backend. It is `null` when no name points
+at the revision: a detached git HEAD, or jj's working copy, which is usually an
+anonymous change, so `null` is an ordinary answer there rather than a failure.
 Run `magus describe module vcs` for the current method list before reaching for
 anything not named here.
 
@@ -184,6 +185,6 @@ Then, whatever the backend:
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.{{end}}
 
-`{{tool "affected_explain"}}` {project} answers why a specific project is in the
-affected set{{if .Full}} (the changed files and dependency chains that pulled it in) when
-the result surprises you{{end}}.
+`magus affected --explain <project>` shows the chain that put a project in the
+affected set{{if .Full}}, when the result surprises you{{end}}. `{{tool "client"}}`
+(`{{buzz "impact"}}`) lists the changed files per seed project.

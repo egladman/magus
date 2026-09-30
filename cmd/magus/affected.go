@@ -483,10 +483,9 @@ type planOutput struct {
 	// agreeing with a workflow is not a thing either side can check. A plan that
 	// states its own outputs makes the next field arrive everywhere at once.
 	Outputs []planPublish `json:"outputs"`
-	// Summary is the job summary for this plan as markdown: the inheritance report
-	// when the verdict was inherited, the shard table otherwise. Rendered here so a
-	// provider target writes bytes rather than branching on which case it is in.
-	Summary string `json:"summary"`
+	// Summary is filled only for `-o template`; the JSON plan carries the typed
+	// inputs above, not Markdown.
+	Summary string `json:"summary,omitempty"`
 }
 
 type planShard struct {
@@ -522,15 +521,13 @@ type planPublish struct {
 }
 
 // planInherit is the --plan inheritance block: the delta since the branch's
-// last green CI run classified entirely low-risk, so that run's verdict
-// stands, the emitted matrix is empty, and the workflow's report publishes
-// Summary. Never a silent skip: every changed path rides along with its class
-// and the fact that classified it.
+// last green CI run classified entirely low-risk, so that run's verdict stands
+// and the emitted matrix is empty. Never a silent skip: every changed path rides
+// along with its class and the fact that classified it.
 type planInherit struct {
-	Run     string            `json:"run"`
-	Commit  string            `json:"commit"`
-	Paths   []planInheritPath `json:"paths"`
-	Summary string            `json:"summary"`
+	Run    string            `json:"run"`
+	Commit string            `json:"commit"`
+	Paths  []planInheritPath `json:"paths"`
 }
 
 type planInheritPath struct {
@@ -544,27 +541,30 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier    types.RiskTier       `json:"tier"`
-	Base    string               `json:"base"`
-	Paths   []types.RiskEvidence `json:"paths"`
-	Summary string               `json:"summary"`
+	Tier  types.RiskTier       `json:"tier"`
+	Base  string               `json:"base"`
+	Paths []types.RiskEvidence `json:"paths"`
 }
 
 func newPlanRisk(rep types.RiskReport) *planRisk {
+	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence}
+}
+
+func planRiskSummaryMarkdown(r *planRisk) string {
 	var b strings.Builder
-	b.WriteString("### Gate sized " + string(rep.Tier) + "\n\n")
-	b.WriteString("No shard runs: the change against `" + shortCommit(rep.Base) + "` tiers " + string(rep.Tier) +
+	b.WriteString("### Gate sized " + string(r.Tier) + "\n\n")
+	b.WriteString("No shard runs: the change against `" + shortCommit(r.Base) + "` tiers " + string(r.Tier) +
 		", so no step of the gate can observe it.\n\n")
-	if len(rep.Evidence) == 0 {
+	if len(r.Paths) == 0 {
 		b.WriteString("No paths changed.\n")
 	} else {
 		b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
-		for _, e := range rep.Evidence {
+		for _, e := range r.Paths {
 			b.WriteString("| `" + e.Path + "` | " + string(e.Tier) + " | " + e.Class + " | " + e.Why + " |\n")
 		}
 	}
 	b.WriteString("\nTo run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n")
-	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence, Summary: b.String()}
+	return b.String()
 }
 
 // planOutputs renders the plan's CI job outputs. The matrix is wrapped in the
@@ -595,10 +595,17 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 // for the delta.
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
-		return out.Inherit.Summary
+		evidence := make([]types.RiskEvidence, 0, len(out.Inherit.Paths))
+		for _, p := range out.Inherit.Paths {
+			evidence = append(evidence, types.RiskEvidence{Path: p.Path, Tier: types.RiskTier(p.Tier), Class: p.Class, Why: p.Why})
+		}
+		return (internalci.InheritFinding{
+			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
+			Report: types.RiskReport{Evidence: evidence},
+		}).SummaryMarkdown()
 	}
 	if out.Risk != nil {
-		return out.Risk.Summary
+		return planRiskSummaryMarkdown(out.Risk)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Affected CI plan\n\n%d shard(s), max parallel %d\n\n", out.Count, out.MaxParallel)
@@ -847,7 +854,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if inherit != nil {
-		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit, Summary: inherit.SummaryMarkdown()}
+		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit}
 		for _, e := range inherit.Report.Evidence {
 			pi.Paths = append(pi.Paths, planInheritPath{Path: e.Path, Tier: string(e.Tier), Class: e.Class, Why: e.Why})
 		}
@@ -863,25 +870,30 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if out.Outputs, err = planOutputs(out); err != nil {
 		return err
 	}
-	out.Summary = planSummaryMarkdown(out)
-
-	// --plan goes through the shared renderer like every other structured command, so -o
-	// selects the encoding. Marshaling here directly would ignore it and print JSON for
-	// `-o yaml`, in both flag positions.
-	//
-	// FormatText maps to JSON rather than to a prose rendering, because the plan has
-	// no prose rendering to fall back on: the default output IS the machine-readable
-	// document, and a workflow that pipes `--plan` without -o must keep getting it.
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
+	return emitPlan(opts, out)
+}
+
+// emitPlan renders a --plan through the shared renderer like every other structured
+// command, so -o selects the encoding. Marshaling here directly would ignore it and
+// print JSON for `-o yaml`, in both flag positions.
+//
+// FormatText maps to JSON rather than to a prose rendering, because the plan has
+// no prose rendering to fall back on: the default output IS the machine-readable
+// document, and a workflow that pipes `--plan` without -o must keep getting it.
+func emitPlan(opts OutputOptions, out planOutput) error {
 	switch opts.Format {
 	case outputText, outputJSON:
 		return emitFormatted(OutputOptions{Format: outputJSON}, out)
 	case outputName:
 		return emitNamesOf(out.Matrix, func(s planShard) string { return s.Shard })
 	default:
+		if opts.Format == outputTemplate {
+			out.Summary = planSummaryMarkdown(out)
+		}
 		return emitFormatted(opts, out)
 	}
 }
@@ -1516,11 +1528,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 		for _, proj := range graph.Projects {
 			for _, node := range proj.Nodes {
 				for _, ref := range node.WritesFiles {
-					owner := ref.Project
-					if owner == "" {
-						owner = proj.Path
-					}
-					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], joinProjectGlob(owner, ref.Glob))
+					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], ref.Rooted(proj.Path).String())
 				}
 			}
 		}
@@ -1540,8 +1548,10 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 			}
 			// Project-relative as declared, rooted at the project, so two briefings can be
 			// compared for overlap without the reader re-deriving where each one sits.
-			for _, g := range p.Outputs {
-				b.Writes = appendUnique(b.Writes, joinProjectGlob(path, g))
+			if proj := m.Get(path); proj != nil {
+				for _, g := range proj.Outputs {
+					b.Writes = appendUnique(b.Writes, g.Root(path).String())
+				}
 			}
 			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
 		}
@@ -1571,15 +1581,6 @@ func shardSkills(b shardDetail) (skills, why []string) {
 	}
 	why = append(why, "variant: each skill is named as its always-full twin, because the reader of this record is not the session that chose the install")
 	return skills, why
-}
-
-// joinProjectGlob roots a project-relative declared glob at the project, leaving an
-// already-rooted or workspace-level glob alone.
-func joinProjectGlob(project, glob string) string {
-	if project == "" || project == "." || strings.HasPrefix(glob, project+"/") {
-		return glob
-	}
-	return project + "/" + glob
 }
 
 // appendUnique appends each value not already present, preserving order.

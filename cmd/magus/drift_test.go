@@ -48,7 +48,7 @@ func writeAndCommit(t *testing.T, dir, name, body, message string) {
 // noFormatCheck stands in for the (formatGlobs, gofmtList) pair on a test that has
 // nothing to say about formatting: nil globs already short-circuit before gofmtList
 // would ever run, and the stub panics if that assumption ever breaks.
-var noFormatGlobs []string
+var noFormatGlobs []types.Glob
 
 func noGofmtList(context.Context, string, []string) ([]string, error) {
 	panic("gofmtList must not be called when formatGlobs is empty")
@@ -180,7 +180,7 @@ func TestCheckDriftForCommit_FormattingOnly(t *testing.T) {
 		return []string{"b.go"}, nil
 	}
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, []string{"**/*.go"}, gofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("**/*.go"), gofmtList)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, "gofmt would reformat")
@@ -202,7 +202,7 @@ func TestCheckDriftForCommit_FormatGlobsScopeTheCheck(t *testing.T) {
 	driver := resolveGitDriver(t, dir)
 	classify := fixedClassify(nil)
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, []string{"internal/**/*.go"}, noGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("internal/**/*.go"), noGofmtList)
 	require.NoError(t, err)
 	assert.False(t, ok)
 	assert.Empty(t, notice)
@@ -224,7 +224,7 @@ func TestCheckDriftForCommit_RealGofmt(t *testing.T) {
 	driver := resolveGitDriver(t, dir)
 	classify := fixedClassify(nil)
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, []string{"**/*.go"}, realGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("**/*.go"), realGofmtList)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, "b.go")

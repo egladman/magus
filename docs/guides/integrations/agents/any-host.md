@@ -61,18 +61,18 @@ printf '%s' "$command" | magus session hook -o 'template=<your host reply>'
 If your host writes its payload as JSON with `tool_input.command` or
 `tool_input.file_path`, pipe the payload in unchanged: magus reads the envelope
 itself, infers a write from a file path, and picks up `session_id` and
-`hook_event_name` for attribution. Otherwise select the field yourself - `jq -r
-'.<path>'` is what the shipped templates use - and pass `--path` when the input
-is a file. A lease id is not a field you select out of the event: the guard
+`hook_event_name` for attribution. Otherwise select the field yourself - the
+shipped templates set `HOST_EVENT_PATH` to a dot-path - and pass `--path` when the
+input is a file. A lease id is not a field you select out of the event: the guard
 inherits it from the worker's environment, which the orchestrator that spawned
 the worker has to export - see
 [wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
-The fastest start is to copy [`magus-command.sh`](guard-templates.md) and
+The fastest start is to copy [`magus-command.buzz`](guard-templates.md) and
 set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`, and the two
 unavailable-response variables. Name your host on the command itself,
-`sh magus-command.sh --agent-name <your host>`: the template reads the host from that
-argument and nowhere else, and refuses a call without it
+`magus buzz -s magus-command.buzz -- --agent-name <your host>`: the template reads the
+host from that argument and nowhere else, and refuses a call without it
 ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answering in
 another host's dialect. That gets you the missing-binary and broken-binary handling
 without writing it again.
@@ -114,7 +114,7 @@ would have to enumerate per host: a `tool_input` with a `prompt` is a spawn. It
 reads the prompt as the handed context, takes the callee's label from
 `subagent_type`, then `description`, then `tool_name`, and takes the parent's
 session from `session_id`. If your host names those fields differently, reshape
-the payload before piping it - `jq` is enough.
+the payload before piping it - a few lines of Buzz run by `magus buzz` are enough.
 
 The ordering is deliberate: a payload carrying `command` or `file_path` is judged
 as a command or a write exactly as before, and only one carrying neither is read
@@ -181,8 +181,8 @@ Wire any event that means a human is needed to `magus session notify`; see [Atte
 ## Recording where the work stands
 
 Wire whatever event fires when a session ends to
-[`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh), passing your
-host's name as `--agent-name <your host>`. `magus session` lists what it records.
+[`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz), passing your
+host's name as `-- --agent-name <your host>`. `magus session` lists what it records.
 
 The requirements are close to nothing, which is deliberate. magus reads the
 revision, branch and dirtiness from the tree itself, so a host that emits no
@@ -198,12 +198,12 @@ label you choose, exactly as on the guard hook.
 
 If your host has an event for "a session started" or "the history was
 compacted", wire it to
-[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and whatever it
+[`magus-rehydrate.buzz`](guard-templates.md#magus-rehydratebuzz) and whatever it
 prints reaches the model as context. It runs `magus session --brief`, which
 reads this checkout off the disk: branch and revision, commits not yet on the
 base ref, the dirty tree classified, the live leases, the last recorded run's
-failures, the guard wiring, and where the rules live. Set `REHYDRATE_RULES` to
-your host's own instruction file.
+failures, the guard wiring, and where the rules live. Pass `-- --rules <file>` to
+name your host's own instruction file.
 
 Nothing about it is host-shaped except which event you hang it on. If your host
 has no such event, run `magus session --brief` by hand and paste it, or read it

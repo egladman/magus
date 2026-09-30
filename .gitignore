@@ -43,13 +43,6 @@
 /docs/gen/public/release/*
 !/docs/gen/public/release/index.json
 !/docs/gen/public/release/index.json.sig
-# The signed registry, tracked for the same reason: only a job holding
-# MAGUS_REGISTRY_KEY can produce it, and the site render must copy it rather than
-# rebuild it. registry.yaml opens the pull request that merges it.
-!/docs/gen/public/registry/
-/docs/gen/public/registry/*
-!/docs/gen/public/registry/index.json
-!/docs/gen/public/registry/index.json.sig
 console/gen/
 
 # The changelog, rendered at build time (docs changelog-page) from releases/ and the
@@ -162,9 +155,3 @@ coverage.cmd.out
 # most checkouts and TestDogfoodedHookInvokesTheTemplate skipped itself. A guard that is
 # absent by default is not a guard.
 .claude/launch.json
-
-# Fetched upstream responses the registry aggregator reads. Not committed: the
-# published file records each response digest, which is what -verify compares
-# against, and archiving several hundred raw responses is a cost this project has
-# not priced. See docs/scope.md.
-/upstream/

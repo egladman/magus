@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -609,6 +610,19 @@ func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
 	}
 }
 
+// An agent record is published 0644, not with its temp file's 0600.
+func TestAgentMarkerMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	facts := hint.NewGate(t.TempDir(), FactsKey("claude-code", "8f2c6a1e"))
+	writeSpawnedAgent(facts, "a1b2c3", spawnedAgent{})
+
+	fi, err := os.Stat(hint.MarkerPath(facts.CacheDir(), facts.Session(), spawnedAgentKind("a1b2c3")))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
+}
+
 // A stop for an agent magus never saw spawned still records its size, and a transcript
 // with no usage records nothing rather than a zero.
 func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
@@ -968,8 +982,8 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
 	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec --base 77aa01c agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
-	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__magus_job",
-		"tool_input": map[string]any{"op": "exec", "id": "tool-job"}})
+	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client",
+		"tool_input": map[string]any{"script": `import "magus"; magus\job\register("tool-job", reported_base: "77aa01c");`}})
 	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
 
 	got := map[string]string{}
@@ -1031,7 +1045,7 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 			}
 
 			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec other-job"))
-			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus_job op=exec id=other-job"))
+			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("client op=register id=other-job"))
 			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec held-job"))
 			assert.Equal(t, held.ID, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
 		})

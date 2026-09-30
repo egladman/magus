@@ -2,11 +2,13 @@ package vcs
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/zlib"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -256,7 +258,7 @@ func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
 	dir := t.TempDir()
 	installed, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
 	require.NoError(t, err)
-	assert.Nil(t, installed)
+	assert.Equal(t, []string{}, installed)
 	assert.NoDirExists(t, filepath.Join(dir, ".git"))
 
 	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
@@ -1429,6 +1431,47 @@ func TestEnsureMergeDriverRoutesAutoResolveGlobs(t *testing.T) {
 	assert.True(t, changed, "auto-resolve globs alone are worth a registration")
 }
 
+// TestGitAttrsCarveOutsReturnAHandFileToTheDefaultMerge pins the carve-out block against
+// git's own answer. The output lines carry only the positive patterns; each carved file
+// follows as `!merge !linguist-generated`, which is UNSPECIFIED (git's text merge) where
+// `-merge` would be unset (binary: take ours, conflict every time). A slashless pattern is
+// anchored, since git matches one at every depth and magus's globs are rooted. An
+// auto-resolve glob, written last, can still opt a carved file back in.
+func TestGitAttrsCarveOutsReturnAHandFileToTheDefaultMerge(t *testing.T) {
+	repo := t.TempDir()
+	isolateGitConfig(t)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	globs := types.MergeDriverGlobs{
+		Outputs:     []string{"MAGUS.md", "gen/*.go"},
+		Carved:      []string{"gen/runtime.go", "gen/opted.go"},
+		AutoResolve: []string{"gen/opted.go"},
+	}
+	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, globs))
+
+	assertFile(t, filepath.Join(repo, ".gitattributes"), generatedMarkers.section(wantDiffDriverLines+
+		"/MAGUS.md merge=magus linguist-generated\n"+
+		"gen/*.go merge=magus linguist-generated\n"+
+		"gen/runtime.go !merge !linguist-generated\n"+
+		"gen/opted.go !merge !linguist-generated\n"+
+		"gen/opted.go merge=magus\n"), 0o644)
+
+	out, err := gitOutput(t.Context(), repo, gitOpts{}, "check-attr", "merge", "linguist-generated", "--",
+		"gen/fs.go", "gen/runtime.go", "gen/opted.go", "MAGUS.md", "docs/MAGUS.md")
+	require.NoError(t, err)
+	assert.Equal(t, strings.Join([]string{
+		"gen/fs.go: merge: magus",
+		"gen/fs.go: linguist-generated: set",
+		"gen/runtime.go: merge: unspecified",
+		"gen/runtime.go: linguist-generated: unspecified",
+		"gen/opted.go: merge: magus",
+		"gen/opted.go: linguist-generated: unspecified",
+		"MAGUS.md: merge: magus",
+		"MAGUS.md: linguist-generated: set",
+		"docs/MAGUS.md: merge: unspecified",
+		"docs/MAGUS.md: linguist-generated: unspecified",
+	}, "\n"), out)
+}
+
 // wantDiffDriverLines opens every managed section, spelled out rather than rendered from
 // gitDiffDrivers so a dropped driver fails here.
 const wantDiffDriverLines = "*.go diff=golang\n" +
@@ -2452,6 +2495,26 @@ func TestStatusAndDiffIgnoreDisplayConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, diff, "diff --git a/a.txt b/a.txt")
 	assert.NotContains(t, diff, "\x1b[")
+}
+
+// A detached HEAD has no movable name. git's --abbrev-ref answers the literal "HEAD",
+// which every caller of Ref would take for a branch: two detached checkouts would
+// share one gate record.
+func TestGitMetadataRefIsEmptyOnADetachedHead(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "work")
+	g := gitVCS{}
+
+	meta, err := g.Metadata(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "work", meta.Ref)
+
+	gitRun(t, dir, "switch", "-q", "--detach")
+	meta, err = g.Metadata(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Empty(t, meta.Ref)
+	assert.NotEmpty(t, meta.ID)
 }
 
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
@@ -3576,3 +3639,67 @@ func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a.md", "b.md"}, renamed[0].Files)
 }
+
+func TestGitObjectBatchReadsCommittedFiles(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{
+		"magusfile.buzz":         "one\n",
+		"hack/policy/guard.buzz": "two\n",
+	})
+	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	for _, rel := range []string{"magusfile.buzz", "hack/policy/guard.buzz"} {
+		want, err := gitVCS{}.ReadFileAt(t.Context(), dir, "HEAD", rel)
+		require.NoError(t, err)
+		got, err := batch.Read(rel)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, rel)
+	}
+	_, err = batch.Read("no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("magusfile.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+}
+
+// A newline in a path would be two requests to cat-file, and every later reply
+// would answer the request before it: an approved read of one file would return
+// another's bytes.
+func TestGitObjectBatchRefusesAPathWithANewline(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{
+		"magusfile.buzz": "one\n",
+		"other.buzz":     "two\n",
+	})
+	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, batch.Close()) }()
+
+	_, err = batch.Read("x\nHEAD:other.buzz")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrObjectMissing)
+	got, err := batch.Read("magusfile.buzz")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", got)
+}
+
+// Once a reply fails to parse, the stream is out of step with the requests, so
+// the batch answers every later read with that failure instead of a reply that
+// belongs to another path.
+func TestGitObjectBatchFailureIsSticky(t *testing.T) {
+	b := &objectBatch{
+		rev:    "HEAD",
+		stdin:  nopWriteCloser{&bytes.Buffer{}},
+		stdout: bufio.NewReader(strings.NewReader("garbage\nHEAD:b.buzz missing\n")),
+	}
+	_, first := b.Read("a.buzz")
+	require.ErrorContains(t, first, "malformed header")
+	_, err := b.Read("b.buzz")
+	assert.Equal(t, first, err)
+}
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }

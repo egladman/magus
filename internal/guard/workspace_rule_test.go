@@ -17,7 +17,7 @@ import (
 
 // errStaleLoad is what a ./magus older than the tree reports: it cannot load the working tree,
 // and parsing the approved copy with the same binary fails the same way.
-var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
+var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./hack/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
 
 // unloadedDeps is a workspace whose working tree and approved copy both fail to load.
 func unloadedDeps() Dependencies {
@@ -96,8 +96,8 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 			"That rule judges pushes, pull request merges and magus verbs that write shared state, so these wait until it loads; " +
 			"every other call still runs on the built-in rules.\n" +
 			"The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
-			"If that cannot load the tree either, relink, one command at a time: `mv magus magus.old`, " +
-			"`go build -o magus ./cmd/magus`, `./magus run go-build .`. If the error names a magusfile line instead, fix that line.",
+			"If that cannot load the tree either, move it aside and bootstrap, one command at a time: `mv magus magus.old`, " +
+			"`go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.",
 		Rule: workspaceCommandRule,
 	}, v)
 }

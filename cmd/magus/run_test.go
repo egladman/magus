@@ -628,7 +628,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 
 	got, err := decodeSavedPlan([]byte(`{"target":"ci","count":2,"max_parallel":2,"future_key":true,
 		"matrix":[{"shard":"1","projects":". docs","label":". docs"},{"shard":"2","projects":"console","label":"console"}],
-		"outputs":[{"name":"count","value":"2"}],"summary":"s"}`))
+		"outputs":[{"name":"count","value":"2"}]}`))
 	require.NoError(t, err)
 	assert.Equal(t, planOutput{
 		Target:      "ci",
@@ -639,7 +639,6 @@ func TestDecodeSavedPlan(t *testing.T) {
 			{Shard: "2", Projects: "console", Label: "console"},
 		},
 		Outputs: []planPublish{{Name: "count", Value: "2"}},
-		Summary: "s",
 	}, got)
 
 	refused := []struct {
@@ -748,7 +747,8 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 
 // The merge queue replays main's signed cache only for a step main's CI keyed the same
 // way, and charms are key lines: a gate running `ci` against shards that ran `ci:gha`
-// missed every entry main stored for an unchanged base. The queue's box moves HOME,
+// missed every entry main stored for an unchanged base. Forwarded args are key lines too,
+// and main's shards forward what a pull request's do not. The queue's box moves HOME,
 // TMPDIR and the XDG directories (see boxEnv in internal/queue), none of which may key a
 // step either.
 func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
@@ -772,16 +772,19 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 			command = inner
 		}
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(command, "run ci") {
+			// Rendered as main's run renders it: main's shards are the ones whose entries
+			// the queue replays. The projects are dropped, as the gate's are.
+			command = regexp.MustCompile(`\$\{\{ github\.event_name != 'pull_request' && '([^']*)' \|\| '' \}\}`).ReplaceAllString(command, "$1")
 			shard = regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(command, "")
 		}
 	}
 	require.NotEmpty(t, shard, "ci.yaml's shards run no `run ci` command")
 
 	// candidateMagus puts `go run ./cmd/magus` in front of the literal.
-	raw, err = os.ReadFile(filepath.Join(root, "tools", "gha-queue.buzz"))
+	raw, err = os.ReadFile(filepath.Join(root, "hack", "ci", "merge-queue.buzz"))
 	require.NoError(t, err)
 	m := regexp.MustCompile(`final GATE = candidateMagus\("([^"]+)"\);`).FindSubmatch(raw)
-	require.NotNil(t, m, "tools/gha-queue.buzz declares no GATE")
+	require.NotNil(t, m, "hack/ci/merge-queue.buzz declares no GATE")
 	gate := string(m[1])
 
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
@@ -794,18 +797,24 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 
-	// Flags outside the charm set key nothing, and forwarded args would.
-	charms := func(command string) []string {
+	// Flags outside the charm set key nothing. Forwarded args key every named step
+	// verbatim, so both lines must forward the same ones.
+	charms := func(command string) ([]string, []string) {
 		argv := strings.Fields(command)
 		require.GreaterOrEqual(t, len(argv), 2, command)
 		require.Equal(t, "run", argv[0], command)
-		require.NotContains(t, argv, "--", command)
+		var forwarded []string
+		if i := slices.Index(argv, "--"); i >= 0 {
+			argv, forwarded = argv[:i], argv[i+1:]
+		}
 		target, err := types.ParseTarget(argv[1])
 		require.NoError(t, err, command)
 		require.Equal(t, types.TargetCI, target.Name, command)
-		return magus.CharmsForCI(withDefaultCharms(target.Charms, cfg.DefaultCharms, slices.Contains(argv, "--no-default-charms")))
+		return magus.CharmsForCI(withDefaultCharms(target.Charms, cfg.DefaultCharms, slices.Contains(argv, "--no-default-charms"))), forwarded
 	}
-	shardCharms, gateCharms := charms(shard), charms(gate)
+	shardCharms, shardArgs := charms(shard)
+	gateCharms, gateArgs := charms(gate)
+	assert.Equal(t, shardArgs, gateArgs, "the queue gate %q forwards other args than main's ci.yaml shards %q", gate, shard)
 
 	// test is one of ci's stages there, keyed with the invocation's charms, and keys GOOS.
 	const project = "libs/diagnostics"

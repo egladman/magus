@@ -38,6 +38,10 @@ var briefPlaceholderRe = regexp.MustCompile(`<[A-Za-z][^<>\n]*>`)
 // the rule, or returns the zero verdict.
 func denyBriefCommand(deps Dependencies, brief string) ShellVerdict {
 	for _, cmd := range briefCommands(brief) {
+		cmd = withoutBootstrap(cmd)
+		if strings.TrimSpace(cmd) == "" {
+			continue
+		}
 		v := Evaluate(deps, briefPlaceholderRe.ReplaceAllString(cmd, "X"))
 		if v.Deny == "" {
 			continue
@@ -76,10 +80,34 @@ func briefCommands(brief string) []string {
 			continue
 		}
 		for _, m := range briefSpanRe.FindAllStringSubmatch(line, -1) {
+			// A lone word names a program in prose (`cat`, `grep`); there is no command
+			// line in it to teach. An assignment still counts: it is a prefix to copy.
+			if f := strings.Fields(m[1]); len(f) == 1 && !strings.Contains(f[0], "=") {
+				continue
+			}
 			out = append(out, m[1])
 		}
 	}
 	return out
+}
+
+// withoutBootstrap drops each line that is the bootstrap alone. A brief is judged from the
+// spawner's checkout, which has a binary, but the worker runs it in a fresh tree with none,
+// where the bootstrap is the one exempt go command. Sharing its line keeps it graded, as it
+// is in the worker.
+func withoutBootstrap(cmd string) string {
+	lines := strings.Split(cmd, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		cmds, ok := ParseCommandsDialect(l, DialectBash)
+		if ok && len(cmds) == 1 {
+			if call, isGo := readGoCall(cmds[0]); isGo && call.chdir == "" && call.bootstrapsMagus() {
+				continue
+			}
+		}
+		kept = append(kept, l)
+	}
+	return strings.Join(kept, "\n")
 }
 
 // lineBefore is the last non-blank line above line index i, which is where a block's

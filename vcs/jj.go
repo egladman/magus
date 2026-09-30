@@ -728,6 +728,72 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 	return keepSubtree(parseChangesByCommit(out), prefix), nil
 }
 
+// CheckoutID is the operation-log head. The working-copy parent (@-) lives in
+// that operation's view, and the view is not a text file, so the head's name
+// is the id a commit moves. A clean `jj diff` writes no new operation
+// (measured on jj 0.45); a dirty one writes one, which is why a caller that
+// records this id reads it again after status.
+//
+// Heads live in the shared store. A secondary workspace's .jj/repo is a file
+// naming that store, and a commit in either workspace moves the same head.
+func (jjVCS) CheckoutID(dir string) (string, bool) {
+	repo, ok := jjRepoDir(dir)
+	if !ok {
+		return "", false
+	}
+	entries, err := os.ReadDir(filepath.Join(repo, "op_heads", "heads"))
+	if err != nil || len(entries) == 0 {
+		return "", false
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.ContainsAny(name, " \n") {
+			return "", false
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return "", false
+	}
+	slices.Sort(names)
+	return strings.Join(names, ","), true
+}
+
+// jjRepoDir is the store directory. A primary workspace keeps it at .jj/repo;
+// a secondary workspace's .jj/repo is a file whose contents name the primary
+// store, relative to the .jj directory.
+func jjRepoDir(dir string) (string, bool) {
+	repo := filepath.Join(dir, ".jj", "repo")
+	info, err := os.Lstat(repo)
+	if err != nil {
+		return "", false
+	}
+	if info.IsDir() {
+		return repo, true
+	}
+	b, err := os.ReadFile(repo)
+	if err != nil {
+		return "", false
+	}
+	target := strings.TrimSpace(string(b))
+	if target == "" {
+		return "", false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(dir, ".jj", target)
+	}
+	target = filepath.Clean(target)
+	info, err = os.Stat(target)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	return target, true
+}
+
 // ReadFileAt implements types.RevisionFileReader via `jj file show -r <rev>`.
 //
 // "" is `@-`, NOT `@` as everywhere else in this driver. jj's working copy IS a commit and

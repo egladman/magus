@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestManifestOutOfTreeOutputPathIsRefused(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	r1, err := c.Run(context.Background(), step, func(context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
@@ -91,7 +92,7 @@ func TestManifestMalformedBlobRefIsRefused(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	r1, err := c.Run(context.Background(), step, func(context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)

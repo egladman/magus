@@ -112,6 +112,16 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		// checks completely, because reading it as a pure read is what stops any write
 		// target being offered at all.
 		"awk -f /dev/stdin f <<'EOF'\n{ print $0 > \".magus/lease\" }\nEOF",
+		// A program that deletes or moves rather than writes: no destination is readable,
+		// so every path it carries stays a candidate.
+		`python3 -c "import os; os.remove('.magus/lease')"`,
+		"python3 - <<'PY'\nimport shutil\nshutil.rmtree('.magus/advisories')\nPY",
+		// A write whose destination is argv, which no literal in the program names.
+		"python3 - .magus/lease <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nPY",
+		// A destination read through its assignment.
+		"python3 - <<'PY'\nd = '.magus/lease'\nopen(d, 'w').write('x')\nPY",
+		`perl -e "open(my $f, '>', '.magus/lease'); print $f 1"`,
+		`node -e "require('fs').appendFileSync('.magus/lease', 'x')"`,
 		"cd sub && rm ../.magus/lease",
 	} {
 		assert.NotEmpty(t, denyCacheDirCommand(at, command, DialectBash), "%q writes into the cache dir", command)
@@ -150,6 +160,13 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		// the same.
 		`python3 -c "print('candidates live under .magus/ during the run')"`,
 		"python3 - <<'PY'\nwith open('/tmp/scratchpad/fp.go', 'w') as f:\n    f.write(\"package main // lives under .magus/ once a run starts\")\nPY",
+
+		// A program that only READS the trail. Measured 2026-09-29: an audit script
+		// globbing .magus/activity was refused as a write into it.
+		"python3 - <<'PY'\nimport glob, json\nfor d in glob.glob('/r/.claude/worktrees/*/.magus/activity'):\n    print(len(open(d + '/events.jsonl').read()))\nPY",
+		`node -e "console.log(require('fs').readFileSync('.magus/activity/events.jsonl', 'utf8').length)"`,
+		// A write whose destination is a literal outside the dir, reading from inside it.
+		"python3 - <<'PY'\nsrc = open('.magus/activity/events.jsonl').read()\nopen('/tmp/scratchpad/copy.jsonl', 'w').write(src)\nPY",
 
 		// A pure print: awk's range/comparison operators share a character with its
 		// redirect operator, but neither follows a print/printf statement here, so

@@ -2,7 +2,7 @@ package types
 
 // The impact report, as a domain type rather than an internal one.
 //
-// magus.affectedImpact returns ImpactResult, so a caller reads the affected set and why
+// magus\impact returns ImpactResult, so a caller reads the affected set and why
 // each project is in it as values. project/impact computes the report and names these
 // types directly; there is no second spelling of them anywhere.
 

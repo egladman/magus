@@ -1,12 +1,16 @@
 package diff
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func TestTakeAndChanged(t *testing.T) {
@@ -52,7 +56,7 @@ func TestHashContent_DetectsChange(t *testing.T) {
 
 	all := func() ContentSnap {
 		t.Helper()
-		snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"**"}}})
+		snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("**")}})
 		require.NoError(t, err)
 		return snap
 	}
@@ -107,8 +111,8 @@ func TestHashContent_GlobFilterKeepsTheAnswerAboutOutputs(t *testing.T) {
 	write(filepath.Join("node_modules", ".pnpm-state.json"), `{"at":1}`)
 
 	// GlobBaseDirs("MAGUS.md") is the project dir, so the walk sees node_modules too.
-	declared := []OutputGlobs{{Root: dir, Globs: []string{"MAGUS.md"}}}
-	everything := []OutputGlobs{{Root: dir, Globs: []string{"**"}}}
+	declared := []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("MAGUS.md")}}
+	everything := []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("**")}}
 	snap := func(sets []OutputGlobs) ContentSnap {
 		t.Helper()
 		s, err := HashContent(t.Context(), sets)
@@ -141,7 +145,7 @@ func TestHashContent_GlobFilterHandlesDoubleStar(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("1"), 0o644))
 
 	// path.Match would read "gen/**" as one segment and miss the nested file.
-	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"gen/**"}}})
+	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("gen/**")}})
 	require.NoError(t, err)
 	assert.Len(t, snap, 1)
 	_, ok := snap[filepath.Join(dir, "gen", "api", "a.json")]
@@ -156,7 +160,7 @@ func TestHashContent_RootIsNotAGlob(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "a.json"), []byte("1"), 0o644))
 
-		snap, err := HashContent(t.Context(), []OutputGlobs{{Root: root, Globs: []string{"gen/*"}}})
+		snap, err := HashContent(t.Context(), []OutputGlobs{{Root: root, Globs: types.MustParseGlobs("gen/*")}})
 		require.NoError(t, err)
 		assert.Len(t, snap, 1, "a root containing glob syntax (%q) must not be treated as a pattern", name)
 	}
@@ -168,7 +172,7 @@ func TestHashContent_MalformedGlobIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.json"), []byte("1"), 0o644))
 
-	_, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"[a-"}}})
+	_, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("[a-")}})
 	require.Error(t, err, "doublestar's ErrBadPattern must surface, not read as a non-match")
 	assert.Contains(t, err.Error(), "[a-")
 }
@@ -193,7 +197,7 @@ func TestHashContent_MatchesTheCacheOnADirectoryGlob(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "dist", "linux_amd64", "magus"), []byte("elf"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "dist", "SHA256SUMS"), []byte("sums"), 0o644))
 
-	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"dist/*"}}})
+	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("dist/*")}})
 	require.NoError(t, err)
 	_, nested := snap[filepath.Join(dir, "dist", "linux_amd64", "magus")]
 	assert.True(t, nested, "a directory match must contribute the files beneath it")
@@ -204,9 +208,23 @@ func TestHashContent_MatchesTheCacheOnADirectoryGlob(t *testing.T) {
 // A malformed glob must surface even when nothing could have matched it.
 func TestHashContent_MalformedGlobErrorsWithNoMatchAndNoFiles(t *testing.T) {
 	dir := t.TempDir()
-	_, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"gen/**", "[a-"}}})
+	_, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("gen/**", "[a-")}})
 	require.Error(t, err, "an unmatched malformed glob must not hide behind an earlier one")
 	assert.Contains(t, err.Error(), "[a-")
+}
+
+// TestHashContentSkipsAnExcludedFile pins the replay check to the declaration: a
+// hand-maintained file an output carves out is not an output, so a nondeterministic edit
+// to it must not fail the determinism check.
+func TestHashContentSkipsAnExcludedFile(t *testing.T) {
+	dir := t.TempDir()
+	for _, rel := range []string{"gen/fs.go", "gen/runtime.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, rel), []byte(rel), 0o644))
+	}
+	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("gen/*.go", "!gen/runtime.go")}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(dir, "gen", "fs.go")}, slices.Collect(maps.Keys(snap)))
 }
 
 // HashContent claims what the cache snapshot claims: a nested project's files belong to it.
@@ -216,7 +234,7 @@ func TestHashContentStopsAtNestedProjects(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, rel), []byte(rel), 0o644))
 	}
-	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"**/gen/*.txt", "gen"}, Nested: []string{"leaf"}}})
+	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: types.MustParseGlobs("**/gen/*.txt", "gen"), Nested: []string{"leaf"}}})
 	require.NoError(t, err)
 	assert.Len(t, snap, 1)
 	assert.Contains(t, snap, filepath.Join(dir, "gen", "own.txt"))

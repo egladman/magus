@@ -39,7 +39,11 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 	ctx := context.Background()
 
 	for name, call := range map[string]func() (string, error){
-		"ref":      func() (string, error) { return VcsRef(ctx) },
+		"ref": func() (string, error) {
+			ref, err := VcsRef(ctx)
+			assert.Nil(t, ref, "no VCS is an error, not a checkout that names no ref")
+			return "", err
+		},
 		"describe": func() (string, error) { return VcsDescribe(ctx) },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -117,6 +121,40 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 	all, err := VcsHistory(WithCwd(context.Background(), dir), 0, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
+}
+
+// A detached checkout names no ref, and says so with null: "" and "HEAD" both read as a
+// branch to a caller that does not know git.
+func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	for _, kv := range [][2]string{
+		{"GIT_AUTHOR_NAME", "t"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+		{"GIT_COMMITTER_NAME", "t"}, {"GIT_COMMITTER_EMAIL", "t@t"},
+		{"GIT_CONFIG_GLOBAL", os.DevNull}, {"GIT_CONFIG_SYSTEM", os.DevNull},
+	} {
+		t.Setenv(kv[0], kv[1])
+	}
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	ctx := WithCwd(context.Background(), dir)
+
+	ref, err := VcsRef(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+	assert.Equal(t, "main", *ref)
+
+	git("switch", "-q", "--detach")
+	ref, err = VcsRef(ctx)
+	require.NoError(t, err)
+	assert.Nil(t, ref)
 }
 
 // TestVcsIsDirtyRaisesWhenTheProbeFails is the most important one here. is_dirty is the

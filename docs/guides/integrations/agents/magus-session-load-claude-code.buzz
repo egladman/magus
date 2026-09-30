@@ -1,0 +1,333 @@
+// magus session load adapter: turns Claude Code's session store into the magus
+// session event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, magus's own
+// repository invokes it, and you can download it and do the same. Nothing in it is
+// magus-internal: it reads the store with the magus Buzz host modules and hands the
+// stream to `magus session load`.
+//
+// Contract, one line per event:
+//
+//   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
+//    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
+//    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
+//    "transcript":"<abs>",
+//    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
+//    "outcome":{"exit":null,"denied":false,"interrupted":false}}
+//
+// Run it as `magus buzz -s magus-session-load-claude-code.buzz` to pipe the stream
+// into `magus session load`; add `-- --stdout` to read the stream yourself. Override
+// any of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A cwd UNDER it counts,
+//                       which keeps nested project sessions in
+//   HOST_SESSION_STORE  where Claude Code keeps its sessions
+//   HOST_PROJECT_DIRS   the directories to walk, space separated. Default is
+//                       every project directory under the store whose name
+//                       begins with the encoded repo root
+//   SESSION_STATE_DIR   where the per-file offsets live
+//   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// The `text` of a spawn is the SUBAGENT TYPE, not the prompt the host records.
+// A prompt is the delegating agent's own words about work in progress, it is
+// unbounded, and the audit question it would answer ("what was this agent told")
+// is not one any report here asks. The type answers the one that IS asked: which
+// kind of agent ran, how often, and what it did next.
+//
+// Re-runs are incremental: each transcript's consumed byte count is checkpointed
+// under SESSION_STATE_DIR, and the checkpoint is written only after the whole
+// stream is delivered, so a failed load is retried rather than skipped. Byte
+// offsets stop at the last COMPLETE line, because the host appends to a file this
+// script is reading.
+//
+// The line below declares, per dimension of the contract, what this host can
+// supply: yes when the store carries it, none when it does not. It is machine-read
+// by the session-parity gate, which fails the build when an adapter drops a
+// dimension or the guide's table disagrees with it. A host that supplies less
+// declares less; the report then says unobservable rather than zero.
+// magus-guard-template: 19
+// magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
+
+// EVERY call that can fail is caught. A failure is a transcript this run does not
+// read, not a reason to abandon the ones it can: a single malformed line would
+// otherwise end the walk and leave every later session unloaded.
+
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "time";
+import "strings";
+import "encoding/json";
+import "lib/hook" as hook;
+
+final HOST = "claude-code";
+final STDOUT_FLAG = "--stdout";
+
+// warn says why nothing was extracted. An adapter that loaded nothing looks exactly
+// like a host nobody used, so every arm that gives up announces itself on stderr.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
+}
+
+object Event {
+    session: str,
+    ts: int,
+    cwd: str,
+    kind: str,
+    ref: str,
+    text: str,
+    model: any?,
+    hostVersion: any?,
+    denied: bool,
+    interrupted: bool,
+}
+
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(e: Event, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(e.session)},\"ts\":{e.ts},\"cwd\":{s(e.cwd)},"
+        + "\"kind\":{s(e.kind)},\"ref\":{s(e.ref)},\"text\":{s(e.text)},\"transcript\":{s(transcript)},"
+        + "\"agent\":\{\"model\":{s(e.model)},\"host_version\":{s(e.hostVersion)}},"
+        + "\"outcome\":\{\"exit\":null,\"denied\":{e.denied},\"interrupted\":{e.interrupted}}}";
+}
+
+// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
+fun ms(stamp: str) > int {
+    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed);
+}
+
+fun kindOf(name: str) > str? {
+    if (name == "Bash") { return "shell.command"; }
+    if (name == "Read" or name == "NotebookRead") { return "file.read"; }
+    if (name == "Edit" or name == "Write" or name == "MultiEdit" or name == "NotebookEdit") { return "file.write"; }
+    if (name == "Skill") { return "skill.load"; }
+    if (name == "Agent" or name == "Task") { return "spawn"; }
+    if (name.startsWith("mcp__magus")) { return "magus.call"; }
+    return null;
+}
+
+fun textOf(name: str, input: any?) > str {
+    if (name == "Bash") { return hook\field(input, dotPath: "command"); }
+    if (name == "Skill") {
+        final skill = hook\field(input, dotPath: "skill");
+        if (skill != "") { return skill; }
+        return hook\field(input, dotPath: "name");
+    }
+    if (name == "Agent" or name == "Task") { return hook\field(input, dotPath: "subagent_type"); }
+    if (name.startsWith("mcp__magus")) { return name; }
+    return hook\field(input, dotPath: "file_path");
+}
+
+fun eventOf(r: any?, kind: str, ref: str, text: str) > Event {
+    return Event{
+        session = hook\field(r, dotPath: "sessionId"),
+        ts = ms(hook\field(r, dotPath: "timestamp")),
+        cwd = hook\field(r, dotPath: "cwd"),
+        kind = kind,
+        ref = ref,
+        text = text,
+        model = hook\dig(r, dotPath: "message.model"),
+        hostVersion = hook\dig(r, dotPath: "version"),
+        denied = false,
+        interrupted = false,
+    };
+}
+
+fun listAt(r: any?, dotPath: str) > [any] {
+    return (hook\dig(r, dotPath: dotPath) as? [any]) ?? [<any>];
+}
+
+fun inScope(cwd: str, root: str) > bool {
+    return cwd == root or cwd.startsWith(root + "/");
+}
+
+// extract reads one transcript's unread records and returns contract lines.
+//
+// Claude Code records a tool_use and its result as two records, so an event is
+// parked under its id and released when the result arrives, carrying the outcome
+// back to the call it belongs to. Whatever is still parked at the end of the chunk
+// is released too, which is how the last call of an incremental chunk is emitted
+// rather than lost.
+fun extract(lines: [str], transcript: str, root: str) > [str] {
+    final emitted = mut [<str>];
+    final parked = mut {<str: Event>};
+    final order = mut [<str>];
+    foreach (line in lines) {
+        if (line == "") { continue; }
+        final r = json\parse(line) catch null;
+        if (r == null) { continue; }
+        if (!inScope(hook\field(r, dotPath: "cwd"), root: root)) { continue; }
+        final kind = hook\field(r, dotPath: "type");
+        if (kind == "assistant") {
+            foreach (item in listAt(r, dotPath: "message.content")) {
+                if (hook\field(item, dotPath: "type") != "tool_use") { continue; }
+                final name = hook\field(item, dotPath: "name");
+                final eventKind = kindOf(name);
+                if (eventKind == null) { continue; }
+                final id = hook\field(item, dotPath: "id");
+                if (parked[id] == null) { order.append(id); }
+                parked[id] = eventOf(r, kind: eventKind!, ref: id, text: textOf(name, input: hook\dig(item, dotPath: "input")));
+            }
+        } else if (kind == "user") {
+            foreach (item in listAt(r, dotPath: "message.content")) {
+                if (hook\field(item, dotPath: "type") != "tool_result") { continue; }
+                final id = hook\field(item, dotPath: "tool_use_id");
+                final e = parked[id];
+                if (e == null) { continue; }
+                final interrupted = (hook\dig(r, dotPath: "toolUseResult.interrupted") as? bool) ?? false;
+                emitted.append(render(Event{
+                    session = e!.session, ts = e!.ts, cwd = e!.cwd, kind = e!.kind, ref = e!.ref,
+                    text = e!.text, model = e!.model, hostVersion = e!.hostVersion,
+                    denied = hook\dig(r, dotPath: "toolDenialKind") != null,
+                    interrupted = interrupted,
+                }, transcript: transcript));
+                parked.remove(id);
+            }
+        } else if (kind == "attachment" and hook\field(r, dotPath: "attachment.type").startsWith("hook_")) {
+            var ref = hook\field(r, dotPath: "attachment.toolUseID");
+            if (ref == "") { ref = hook\field(r, dotPath: "uuid"); }
+            var text = hook\field(r, dotPath: "attachment.content");
+            if (text == "") { text = hook\field(r, dotPath: "attachment.stdout"); }
+            emitted.append(render(eventOf(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
+        }
+    }
+    foreach (id in order) {
+        final e = parked[id];
+        if (e != null) { emitted.append(render(e!, transcript: transcript)); }
+    }
+    return emitted;
+}
+
+// wholeLines is the prefix of chunk that ends at its last line break. A chunk whose
+// last byte is not one is a host mid-append, and the fragment after the break is
+// left for the next run to read whole.
+fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+fun offsetOf(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+// encodeRoot names a project directory the way Claude Code does: every byte outside
+// [A-Za-z0-9] becomes a dash. Matching on the encoded root as a PREFIX is what picks
+// up worktrees, whose paths extend the root.
+fun encodeRoot(root: str) > str {
+    final encoded = mut [<str>];
+    foreach (i in 0..root.len()) {
+        final b = root.byte(i) catch 0;
+        final ok = (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122);
+        if (ok) { encoded.append(root.sub(i, len: 1)); } else { encoded.append("-"); }
+    }
+    return encoded.join("");
+}
+
+fun projectDirs(store: str, root: str) > [str] {
+    final declared = env\get("HOST_PROJECT_DIRS") catch "";
+    if (declared != "") { return strings\fields(declared); }
+    final prefix = encodeRoot(root);
+    final dirs = mut [<str>];
+    foreach (name in fs\listDir(store) catch [<str>]) {
+        if (!name.startsWith(prefix)) { continue; }
+        final dir = "{store}/{name}";
+        if (fs\isDir(dir) catch false) { dirs.append(dir); }
+    }
+    return dirs;
+}
+
+// transcripts lists every JSONL file under dir. Subagent transcripts sit a level
+// down, under <sessionId>/subagents/, and carry the orchestrator's session id;
+// excluded, they take the delegated half of every fanned-out session with them.
+fun transcripts(dir: str) > [str] {
+    final found = mut [<str>];
+    fs\walk(dir, callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final store = hook\envOr("HOST_SESSION_STORE", fallback: "{home}/.claude/projects");
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (dir in projectDirs(store, root: root)) {
+        foreach (transcript in transcripts(dir)) {
+            final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
+            final content = fs\readFile(transcript) catch null;
+            if (content == null) { continue; }
+            var offset = offsetOf(mark);
+            // A file smaller than its checkpoint was rotated or replaced, so the offset
+            // describes bytes that no longer exist and reading from it would land mid-record.
+            if (content!.len() < offset) { offset = 0; }
+            if (content!.len() <= offset) { continue; }
+            final whole = wholeLines(content!.sub(offset));
+            if (whole == "") { continue; }
+            foreach (line in extract(whole.split("\n"), transcript: transcript, root: root)) {
+                events.append(line);
+            }
+            marks[mark] = offset + whole.len();
+        }
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Checkpoints are committed only once the stream has been delivered. A load that
+    // failed leaves every offset where it was, so the retry re-reads the same records
+    // instead of the audit quietly losing them.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}

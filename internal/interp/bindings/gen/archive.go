@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -19,43 +20,43 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("uncompress", vm.DirectValue("archive.uncompress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		dest := Str(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		src := ffi.Str(bzArgs, 0)
+		dest := ffi.Str(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveUncompress(ctx, src, dest, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectUncompressResult(ret0), nil
 	}))
 	m.MapSet("compress", vm.DirectValue("archive.compress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		dest := Str(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		src := ffi.Str(bzArgs, 0)
+		dest := ffi.Str(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveCompress(ctx, src, dest, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectCompressResult(ret0), nil
 	}))
 	m.MapSet("list", vm.DirectValue("archive.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		src := ffi.Str(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.ArchiveList(ctx, src, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectArchiveEntry), nil
+		return ffi.ObjectSlice(ret0, ObjectArchiveEntry), nil
 	}))
 	m.MapSet("readFile", vm.DirectValue("archive.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		name := Str(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
+		src := ffi.Str(bzArgs, 0)
+		name := ffi.Str(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveReadFile(ctx, src, name, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

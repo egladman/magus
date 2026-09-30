@@ -1,0 +1,91 @@
+{
+  "depends_on": {
+    ".": ["libs/core", "libs/util"],
+    "console": ["."],
+    "docs": ["."],
+    "libs/core": [],
+    "libs/extra": [],
+    "libs/util": ["libs/core"],
+    "proto": []
+  },
+  "files": [
+    {"path": ".gitattributes", "project": ".", "role": "maintained", "claims": []},
+    {"path": "README.md", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "**/*.md"}
+    ]},
+    {"path": "CONTRIBUTING.md", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "**/*.md"},
+      {"project": ".", "target": "lint", "role": "source", "glob": "CONTRIBUTING.md"}
+    ]},
+    {"path": "cmd/main.go", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "**/*.go"},
+      {"project": ".", "target": "x-generate", "role": "source", "glob": "**/*.go"},
+      {"project": "docs", "target": "cli-generate", "role": "source", "glob": "cmd/**/*.go"},
+      {"project": "docs", "target": "ref-generate", "role": "source", "glob": "cmd/**/*.go"}
+    ]},
+    {"path": "console/src/app.ts", "project": "console", "role": "source", "claims": [
+      {"project": "console", "role": "source", "glob": "console/**/*.ts"}
+    ]},
+    {"path": "console/src/gen/x_pb.ts", "project": "console", "role": "output", "claims": [
+      {"project": "console", "role": "source", "glob": "console/**/*.ts"},
+      {"project": "proto", "target": "generate", "role": "output", "glob": "console/src/gen/**"}
+    ]},
+    {"path": "docs/faq.md", "project": "docs", "role": "source", "claims": [
+      {"project": "docs", "role": "source", "glob": "docs/**/*.md"}
+    ]},
+    {"path": "docs/guide.md", "project": "docs", "role": "source", "claims": [
+      {"project": "docs", "role": "source", "glob": "docs/**/*.md"},
+      {"project": "docs", "target": "ref-generate", "role": "source", "glob": "docs/**/*.md"}
+    ]},
+    {"path": "docs/intro.md", "project": "docs", "role": "source", "claims": [
+      {"project": "docs", "role": "source", "glob": "docs/**/*.md"}
+    ]},
+    {"path": "docs/reference/api.md", "project": "docs", "role": "output", "claims": [
+      {"project": "docs", "target": "ref-generate", "role": "output", "glob": "docs/reference/api.md"}
+    ]},
+    {"path": "docs/reference/cli.md", "project": "docs", "role": "output", "claims": [
+      {"project": "docs", "target": "cli-generate", "role": "output", "glob": "docs/reference/cli.md"}
+    ]},
+    {"path": "docs/reference/old.md", "project": "docs", "role": "output", "claims": [
+      {"project": "docs", "target": "old-generate", "role": "output", "glob": "docs/reference/old.md"}
+    ]},
+    {"path": "go.mod", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "go.mod"},
+      {"project": ".", "target": "test", "role": "source", "glob": "go.mod"}
+    ]},
+    {"path": "internal/gen/x.go", "project": ".", "role": "output", "claims": [
+      {"project": ".", "target": "x-generate", "role": "output", "glob": "internal/gen/*.go"}
+    ]},
+    {"path": "internal/x.go", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "**/*.go"},
+      {"project": ".", "target": "x-generate", "role": "source", "glob": "**/*.go"}
+    ]},
+    {"path": "libs/core/a.go", "project": "libs/core", "role": "source", "claims": [
+      {"project": "libs/core", "role": "source", "glob": "libs/core/**/*.go"}
+    ]},
+    {"path": "libs/core/b.go", "project": "libs/core", "role": "source", "claims": [
+      {"project": "libs/core", "role": "source", "glob": "libs/core/**/*.go"}
+    ]},
+    {"path": "libs/core/c.go", "project": "libs/core", "role": "source", "claims": [
+      {"project": "libs/core", "role": "source", "glob": "libs/core/**/*.go"}
+    ]},
+    {"path": "libs/extra/x.go", "project": "libs/extra", "role": "source", "claims": [
+      {"project": "libs/extra", "role": "source", "glob": "libs/extra/**/*.go"}
+    ]},
+    {"path": "libs/util/u.go", "project": "libs/util", "role": "source", "claims": [
+      {"project": "libs/util", "role": "source", "glob": "libs/util/**/*.go"}
+    ]},
+    {"path": "magus.yaml", "project": ".", "role": "source", "claims": [
+      {"project": ".", "role": "source", "glob": "magus.yaml"}
+    ]},
+    {"path": "proto/a.proto", "project": "proto", "role": "source", "claims": [
+      {"project": "proto", "role": "source", "glob": "proto/**/*.proto"}
+    ]},
+    {"path": "proto/b.proto", "project": "proto", "role": "source", "claims": [
+      {"project": "proto", "role": "source", "glob": "proto/**/*.proto"}
+    ]},
+    {"path": "proto/gen/x.pb.go", "project": "proto", "role": "output", "claims": [
+      {"project": "proto", "target": "generate", "role": "output", "glob": "proto/gen/**"}
+    ]}
+  ]
+}

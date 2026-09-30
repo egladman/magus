@@ -1,7 +1,7 @@
-### Fixed
+### Changed
 
-- **The bootstrap link accepts `-trimpath`.** `go build -o magus ./cmd/magus`, the one
-  raw command a fresh worktree runs before it has a binary, was refused as "not a
-  bootstrap" when it carried `-trimpath`. It is recognized now, and the bootstrap and
-  rebuild hints print `-trimpath`, so a linked binary keeps the worktree's path out of
-  its build cache keys.
+- **A fresh checkout bootstraps in one command.** `go run -trimpath ./cmd/magus run
+  go-build --no-cache .` compiles magus and runs its real `go-build` target, so the
+  first `./magus` is built like every later one. `--no-cache` skips the magus cache for
+  that target; Go's build cache stays on. Every hint that taught the old two-step build
+  names it.

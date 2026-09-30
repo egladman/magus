@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,8 +102,8 @@ func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 				Exists:   true,
 				Fragment: map[string]any{"hooks": map[string]any{"Stop": []any{}}},
 				Changes: []agent.HarnessChange{
-					{Op: agent.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "sh magus-checkpoint.sh"}},
-					{Op: agent.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "sh old/magus-checkpoint.sh"}},
+					{Op: agent.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s magus-checkpoint.buzz"}},
+					{Op: agent.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s old/magus-checkpoint.buzz"}},
 				},
 			},
 			".codex/rules/magus.rules": {Content: "rule\n", Changes: []agent.HarnessChange{{Op: agent.HarnessWrite}}},
@@ -112,11 +113,11 @@ func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 	}))
 	assert.Equal(t, `claude-code harness: 2 file(s) to merge
   .claude/settings.json (exists)
-    add hooks.Stop: {"command":"sh magus-checkpoint.sh"}
-    retire hooks.Stop: {"command":"sh old/magus-checkpoint.sh"}
+    add hooks.Stop: {"command":"magus buzz -s magus-checkpoint.buzz"}
+    retire hooks.Stop: {"command":"magus buzz -s old/magus-checkpoint.buzz"}
   .codex/rules/magus.rules (missing)
     write the whole file
-merge it yourself (magus never writes host config; needs jq):
+merge it yourself (magus never writes host config):
   merge-command
 mcp claude-code (user-owned; Magus does not write host MCP config):
 register it
@@ -127,12 +128,102 @@ register it
 	assert.Equal(t, "cursor harness: current\n", out.String())
 }
 
-// TestAgentHarnessHasNoWritingVerb pins that the verbs which wrote host config stay gone:
-// magus prints host config through `describe harness` and the person merges it.
+// TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
+// this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
+// and never a stale binary found on disk. Afterwards nothing is left to merge, the person's
+// own entries and an integer past 2^53 survive, and a retired entry is gone.
+func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "describe_harness_merge.txtar")
+	require.NoError(t, os.WriteFile(script, []byte(describeHarnessMergeTxtar), 0o644))
+	testscript.Run(t, testscript.Params{
+		Files: []string{script},
+		Setup: func(e *testscript.Env) error {
+			e.Setenv("MAGUS_SERVER_ENABLED", "false")
+			e.Setenv("MAGUS_BROKER", "off")
+			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			return nil
+		},
+	})
+}
+
+const describeHarnessMergeTxtar = `exec magus describe harness script-host -o 'template={{.merge}}'
+cp stdout merge.sh
+exec sh merge.sh
+cmp hooks.json want.json
+exec magus describe harness script-host
+stdout '^script-host harness: current$'
+
+-- magusfile.buzz --
+import "magus";
+import "spells/script-host" as scripthost;
+magus\harness.provider(scripthost);
+-- spells/script-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "script-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "hooks.json"};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [], "form": "short"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [{"path": ["hooks", "before"], "entries": [{"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]}]}];
+}
+-- hooks.json --
+{
+  "large": 9007199254740993,
+  "hooks": {
+    "before": [
+      {"match": "run", "commands": [{"type": "command", "command": "magus buzz -s old/magus-command.buzz"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
+    ],
+    "after": [{"command": "theirs"}]
+  }
+}
+-- want.json --
+{
+  "hooks": {
+    "after": [
+      {
+        "command": "theirs"
+      }
+    ],
+    "before": [
+      {
+        "commands": [
+          {
+            "command": "my-own-hook",
+            "type": "command"
+          }
+        ],
+        "match": "run"
+      },
+      {
+        "commands": [
+          {
+            "command": "magus buzz -s magus-command.buzz",
+            "type": "command"
+          }
+        ],
+        "match": "run"
+      }
+    ]
+  },
+  "large": 9007199254740993
+}
+`
+
+// TestAgentHarnessHasNoWritingVerb pins that no verb writes host config: magus prints it
+// through `describe harness` and the person merges it.
 func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 	for _, verb := range []string{"apply", "remove"} {
-		err := agentHarnessCmd(context.Background(), t.TempDir(), []string{verb})
+		err := agentHarnessCmd(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
 		require.Error(t, err, verb)
+		assert.Contains(t, err.Error(), "unknown subcommand", verb)
 		assert.Contains(t, err.Error(), "magus describe harness", verb)
 	}
 }

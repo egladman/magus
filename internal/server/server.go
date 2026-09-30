@@ -199,10 +199,10 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 
-	// ONE job store for the whole server, built before the MCP handler so the magus_job
-	// tool and the JobService below hold the same object. Two stores over one file each
-	// take their own mutex, and the merge Update performs under a single acquisition then
-	// serializes against nothing.
+	// ONE job store for the server's own readers, the activity feed and the JobService
+	// below. Two stores over one file each take their own mutex, and the merge Update
+	// performs under a single acquisition then serializes against nothing. The client
+	// tool's magus\job runs in a forked worker and opens the store itself.
 	if opts.Jobs == nil && opts.Magus != nil {
 		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
@@ -299,7 +299,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The server-wide session store, constructed by the caller so the console routes
-			// below and the magus_diff MCP tool read the SAME object: that sharing is the
+			// below and the diff MCP tool read the SAME object: that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
 			diffSessions := opts.DiffSessions

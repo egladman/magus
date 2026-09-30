@@ -759,6 +759,10 @@ func (h *History) Load(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	return h.decode(path, b)
+}
+
+func (h *History) decode(path string, b []byte) error {
 	if err := json.Unmarshal(b, h); err != nil {
 		return fmt.Errorf("forecast: decode history %q: %w", path, err)
 	}
@@ -772,7 +776,33 @@ func (h *History) Load(ctx context.Context, path string) error {
 	return nil
 }
 
-// Save writes h to path atomically.
+// UpdateHistory applies fn to the history at path as it stands on disk, under a
+// cross-process lock, and writes the result atomically; fn failing writes nothing.
+//
+// The file is shared by every workspace on the host, so a writer that loaded it before
+// a run and saves it after would erase every outcome another run recorded meanwhile.
+// Such a writer keeps what IT learned and replays that here instead. ctx bounds only
+// the wait for the lock.
+func UpdateHistory(ctx context.Context, path string, fn func(*History) error) error {
+	d := file.Doc[History]{Path: path, Decode: func(b []byte, h *History) error { return h.decode(path, b) }}
+	err := d.Update(ctx, func(h *History) error {
+		if h.Projects == nil {
+			h.Projects = make(map[string]map[string]Stats)
+		}
+		if err := fn(h); err != nil {
+			return err
+		}
+		h.Version = HistoryVersion
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("forecast: update history: %w", err)
+	}
+	return nil
+}
+
+// Save writes h to path atomically, replacing whatever is there. A writer sharing the
+// file with other processes uses [UpdateHistory] instead.
 func (h *History) Save(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err

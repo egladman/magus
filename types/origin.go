@@ -86,7 +86,7 @@ func (o Origin) Names(name string) bool {
 		return false
 	}
 	c := o.Credential
-	for _, field := range []string{o.User, o.Host, o.Agent, string(c.Class), c.ID, c.Name, string(o.EntryPoint)} {
+	for _, field := range []string{o.User, o.Host, o.Agent, string(c.Kind), c.ID, c.Name, string(o.EntryPoint)} {
 		if field == name {
 			return true
 		}

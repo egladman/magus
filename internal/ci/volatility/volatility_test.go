@@ -383,3 +383,36 @@ func TestRecordIgnoresAnUnrecognizedResult(t *testing.T) {
 	assert.Zero(t, s.FailCount)
 	assert.Zero(t, s.VolatileCount)
 }
+
+// Two runs that overlap load the same history before either saves. The one saving
+// second must not erase what the first recorded: the file is shared by every workspace
+// on the host, and both run `go/test` on a project keyed ".".
+func TestHistorySaveKeepsAnOverlappingRunsOutcomes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	seed := forecast.History{Version: forecast.HistoryVersion}
+	applyOutcome(&seed, ".", "go/test", forecast.Outcome{Result: forecast.OutcomePass, At: time.Unix(1, 0)})
+	require.NoError(t, seed.Save(t.Context(), path))
+
+	load := func() *Runtime {
+		var h forecast.History
+		require.NoError(t, h.Load(t.Context(), path))
+		return NewRuntime(&h, path, testCfg, nil, false)
+	}
+	first, second := load(), load()
+	first.Record(".", "go/test", forecast.Outcome{Result: forecast.OutcomeFail, At: time.Unix(2, 0)})
+	second.Record(".", "go/test", forecast.Outcome{Result: forecast.OutcomeVolatile, At: time.Unix(3, 0)})
+	require.NoError(t, first.Save(t.Context()))
+	require.NoError(t, second.Save(t.Context()))
+
+	var got forecast.History
+	require.NoError(t, got.Load(t.Context(), path))
+	var results []forecast.OutcomeResult
+	for _, o := range got.Projects["."]["go/test"].RecentOutcomes {
+		results = append(results, o.Result)
+	}
+	assert.Equal(t, []forecast.OutcomeResult{forecast.OutcomePass, forecast.OutcomeFail, forecast.OutcomeVolatile}, results)
+
+	require.NoError(t, second.Save(t.Context()))
+	require.NoError(t, got.Load(t.Context(), path))
+	assert.Len(t, got.Projects["."]["go/test"].RecentOutcomes, 3, "a second Save replays nothing twice")
+}

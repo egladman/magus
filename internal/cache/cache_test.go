@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func writeMain(t *testing.T, root, body string) {
 func makeStep(root string) Step {
 	return Step{
 		ProjectPath:   "test/pkg",
-		Sources:       []string{"test/pkg/*.go"},
+		Sources:       types.MustParseGlobs("test/pkg/*.go"),
 		WorkspaceRoot: root,
 	}
 }
@@ -76,7 +77,7 @@ func TestMissThenHit(t *testing.T) {
 	out := touchOut(t, root)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	calls := 0
 	fn := func(_ context.Context) error {
@@ -112,7 +113,7 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 	out := touchOut(t, root)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	const marker = "BUILD OUTPUT MARKER"
 	fn := func(ctx context.Context) error {
@@ -153,10 +154,10 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 	out := touchOut(t, root)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	// A required output that fn never produces forces snapshot to fail
 	// deterministically, after fn itself has already succeeded.
-	step.RequiredOutputs = []string{"other/project/missing.txt"}
+	step.RequiredOutputs = types.MustParseGlobs("other/project/missing.txt")
 
 	fn := func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
@@ -192,7 +193,7 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 	out := touchOut(t, root)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	step.NoCache = true
 
 	calls := 0
@@ -221,7 +222,7 @@ func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
 	out := touchOut(t, root)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	step.SkipReplay = true
 
 	calls := 0
@@ -258,7 +259,7 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	calls := 0
 	fn := func(_ context.Context) error { calls++; return os.WriteFile(out, []byte("built"), 0o644) }
 
@@ -282,7 +283,7 @@ func TestModeAutoReplaysOnHit(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
 	_, err := c.Run(context.Background(), step, fn)
@@ -306,7 +307,7 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
 	c, err := Open(t.Context(), cdir, WithLocalWrite(false))
@@ -330,7 +331,7 @@ func TestHashChangesOnSourceEdit(t *testing.T) {
 	writeMain(t, root, "package main // v1")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
 	r1, err := c.Run(context.Background(), step, fn)
@@ -349,7 +350,7 @@ func TestActionDiscriminant(t *testing.T) {
 	out := touchOut(t, root)
 
 	base := makeStep(root)
-	base.Outputs = []string{"test/pkg/out.txt"}
+	base.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
 	build := base
@@ -370,7 +371,7 @@ func TestClean(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
 	_, err := c.Run(context.Background(), step, fn)
@@ -392,7 +393,7 @@ func TestStats(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("out"), 0o644)
@@ -423,7 +424,7 @@ func TestPanicInFnDoesNotDeadlock(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	// The panic from fn must propagate out of Run rather than deadlock.
 	assert.Panics(t, func() {
@@ -441,7 +442,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	// Populate the source cache.
 	_, err := src.Run(context.Background(), step, func(_ context.Context) error {
@@ -476,7 +477,7 @@ func TestOnResult(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	type call struct {
 		projectPath string
@@ -508,7 +509,7 @@ func TestOnResult(t *testing.T) {
 	// Error: fn fails; OnResult fires with the error.
 	errStep := Step{
 		ProjectPath:   "test/pkg/err",
-		Sources:       []string{"test/pkg/*.go"},
+		Sources:       types.MustParseGlobs("test/pkg/*.go"),
 		WorkspaceRoot: root,
 	}
 	wantErr := errors.New("build failed")
@@ -531,7 +532,7 @@ func TestOnResultMultiple(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	var first, second int
 	_, err := c.Run(context.Background(), step, func(_ context.Context) error {

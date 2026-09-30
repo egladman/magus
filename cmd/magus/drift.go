@@ -67,7 +67,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	// it into a real run's Step.Updates. A workspace with no "format" target (or none at
 	// root) yields an empty set, and the formatting class simply never fires: no error,
 	// no gofmt call.
-	var formatGlobs []string
+	var formatGlobs []types.Glob
 	if p := m.Get("."); p != nil {
 		formatGlobs = types.ChainUpdates(p, "format", m.Get)
 	}
@@ -99,7 +99,7 @@ func checkDriftForCommit(
 	root string,
 	driver types.VCSDriver,
 	classify func(context.Context, []string) ([]types.FileEntry, error),
-	formatGlobs []string,
+	formatGlobs []types.Glob,
 	gofmtList func(ctx context.Context, root string, files []string) ([]string, error),
 ) (notice string, ok bool, err error) {
 	before, err := driver.Metadata(ctx, root)
@@ -164,13 +164,13 @@ func checkDriftForCommit(
 // types.ChainUpdates). Go only: dprint/Markdown formatting is a real gap this pass does
 // not close (see the report), and narrowing first is what keeps gofmt -l from ever
 // running when nothing changed calls for it.
-func formatGovernedGoFiles(paths, updateGlobs []string) []string {
+func formatGovernedGoFiles(paths []string, updateGlobs []types.Glob) []string {
 	if len(updateGlobs) == 0 {
 		return nil
 	}
 	var out []string
 	for _, p := range paths {
-		if strings.HasSuffix(p, ".go") && types.MatchesAnyGlob(updateGlobs, p) {
+		if strings.HasSuffix(p, ".go") && types.MatchGlobs(updateGlobs, p) {
 			out = append(out, p)
 		}
 	}

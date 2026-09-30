@@ -84,9 +84,9 @@ under "Adapting a Buzz harness" and in [Recurring guard friction](agents/guard.m
 that is not host-shaped stays in `magus\guard.shell({...})`.
 
 magus never writes host config. `magus describe harness` (no id) prints, for every
-magusfile-wired provider, each entry its host files lack and the one command that
-merges them; you read the command and run it. `magus describe harness <id>` targets
-one spell, and `-o json` prints the exact fragments. `magus agent harness verify`
+magusfile-wired provider, each entry its host files lack and the one `magus buzz`
+command that merges them; you read the command and run it. `magus describe harness <id>`
+targets one spell, and `-o json` prints the exact fragments. `magus agent harness verify`
 reports whether the fragments are still present and runs the wired guard command. A host Magus has never heard of can
 ship its own harness spell without a Magus release, by the same ownership switch
 as adapting a shipped one; a portable adapter remains an option where a native
@@ -143,10 +143,10 @@ degrade; it restates no rule, because a rule copied into a context block is a
 second copy to go stale.
 
 magus prints it and your host places it. Wire
-[`magus-rehydrate.sh`](agents/guard-templates.md#magus-rehydratesh) to whatever
+[`magus-rehydrate.buzz`](agents/guard-templates.md#magus-rehydratebuzz) to whatever
 event your host fires after compaction: `SessionStart` with matcher `compact` on
 [Claude Code](agents/claude-code.md) and on [Codex](agents/codex.md), where
-`REHYDRATE_FORMAT=json` wraps the text in the reply Codex parses.
+`--format json` wraps the text in the reply Codex parses.
 [OpenCode](agents/opencode.md) has no hook to point at a file, so its plugin pushes
 the same brief into the compaction prompt itself. [Cursor](agents/cursor.md) is
 the one host that cannot: `preCompact` returns a message for the person and
@@ -331,17 +331,19 @@ settled by diffing against the checkpoint each job was handed.
 
 ## MCP
 
-An MCP-connected host gets the same verbs as the CLI plus run and log tools;
-`magus describe mcp-tools` lists all of them with parameters. See
+An MCP-connected host gets a curated agent-facing adapter to Magus operations,
+not every CLI command. `magus describe mcp-tools` lists all of them with
+parameters. See
 [MCP](mcp.md) for transport and token setup, and
 [Knowledge graph](../../concepts/knowledge.md) for the graph the query tools
 read.
 
 Skills prefer the MCP tools and fall back to the CLI, so they work in both
 connected and disconnected sessions. MCP availability is a host/integration
-concern: configure it once for the host that owns it. An agent checks
-`magus status --probe=mcp` when it needs to know, then uses the CLI fallback if
-the surface is unavailable; it must not manually start Magus merely to obtain
+concern: configure it once for the host that owns it. An agent tries an exposed
+MCP tool directly, then uses the CLI fallback if the tool is missing or fails.
+`magus status --probe=mcp` checks the loopback HTTP listener, so it cannot judge
+stdio or Unix-socket MCP. An agent must not manually start Magus merely to obtain
 MCP.
 
 No tool carries state across sessions: magus remembers nothing an agent told it,
@@ -356,10 +358,11 @@ The CLI still reads the workspace, runs targets, uses the cache, and answers
 graph queries with no server running. What it lacks is MCP tool discovery, the
 warm graph and background indexes, and structured output retrieval.
 
-An agent must not turn that into a blocker. At task start, or after an MCP
-error, run `magus status --probe=mcp`; if it is unavailable, use the CLI
-fallback. Restoring or changing host MCP wiring is a user-owned integration
-action, not ordinary agent work.
+An agent must not turn that into a blocker. If an MCP tool is missing or its
+call fails, use the CLI fallback. For server-socket diagnosis,
+`magus status --probe=readiness` checks whether this workspace is loaded on the
+socket; it does not prove the host registered MCP. Restoring or changing host
+MCP wiring is a user-owned integration action, not ordinary agent work.
 
 ### Why a server, not a wrapper
 
@@ -377,7 +380,7 @@ trying to understand, and fills the gap by guessing: this file looks generated,
 these two packages probably change together. Those guesses are frequently wrong,
 and the agent has no way to check them.
 
-The tools answer from what the workspace declares. Ask `magus_describe_file`
+The tools answer from what the workspace declares. Ask `client` (`magus\describeFile`)
 about a path and it does not read the filename and infer; it checks the
 project's own globs and reports `role: output` with the note "generated: never
 hand-edit, regenerate." In one case an agent spent close to an hour working out

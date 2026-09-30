@@ -706,7 +706,7 @@ type SessionsConfig struct {
 // It is a COMMAND rather than a host magus knows how to read, and that is the whole
 // design: transcript formats belong to the hosts, so a host renaming a tool costs this
 // one line instead of a magus release. magus ships a ready adapter per host it documents
-// (docs/guides/integrations/agents/magus-session-load-*.sh); declaring one here is how a
+// (docs/guides/integrations/agents/magus-session-load-*.buzz); declaring one here is how a
 // workspace opts in, and writing your own is how an undocumented host gets supported
 // without waiting for anybody.
 //
@@ -860,13 +860,17 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
 		{"MAGUS_STAMPED_LEASE", "", "", "Set by a shared server on a script it forks for a remote caller: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
-		{"MAGUS_REGISTRY_URL", "", "https://eli.gladman.cc/magus/public/registry/index.json", "Env-only, no magus.yaml equivalent: override the built-in registry source's URL with a mirror of its signed index"},
-		{"MAGUS_OFFLINE", "", "false", "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote-spell fetch fails with a named error instead of sending a request"},
+		{"MAGUS_OFFLINE", "", "false", "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
 		{"MAGUS_DIFFTOOL", "", "$DIFFTOOL, then git diff --no-index", "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},
 		{"MAGUS_LOG_VIEWER_URL", "", "the hosted log viewer", "Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror"},
 		{"MAGUS_CONSOLE_DIR", "", "<root>/console/gen", "Env-only, no magus.yaml equivalent: directory of the built console the LAN share serves"},
 		{"MAGUS_PPROF", "", "", "Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated"},
 		{"MAGUS_MCP_TOKEN", "", "", "Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable"},
+		{"MAGUS_MCP_BUZZ_PURE", "", "", "Set internally by the buzz MCP tool for its forked transform worker; never set it by hand"},
+		{"MAGUS_MCP_CLIENT", "", "", "Set internally by the client MCP tool for its forked worker; never set it by hand"},
+		{"MAGUS_MCP_CLIENT_HOST", "", "", "Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand"},
+		{"MAGUS_MCP_CLIENT_LEASE", "", "", "Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand"},
+		{"MAGUS_STAMPED_LEASE", "", "", "Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand"},
 		{"MAGUS_S3_BUCKET", "", "", "Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in"},
 		{"MAGUS_S3_ENDPOINT", "", "https://s3.<region>.amazonaws.com", "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
 		{"MAGUS_LEVEL", "", "", "Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand"},

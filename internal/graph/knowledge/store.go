@@ -103,7 +103,31 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 // and rewrites the manifest. In immutable mode it writes nothing but still
 // returns the merged graph, warning once if the persisted store is stale.
 // refresh forces every shard to be treated as stale (a full rebuild).
+//
+// A writing Sync holds the store's cross-process lock throughout. Every query in every
+// process on the checkout builds the graph, and two unlocked Syncs interleave: one's
+// shard lands under the other's manifest, whose fingerprint then matches every later
+// build, so the stale shard is never rewritten; or one prunes a shard the other's
+// manifest still names.
 func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string, refresh bool) (*Graph, error) {
+	if s.immutable {
+		return s.sync(ctx, shards, fps, refresh)
+	}
+	var g *Graph
+	err := file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+		var err error
+		g, err = s.sync(ctx, shards, fps, refresh)
+		return err
+	})
+	return g, err
+}
+
+// syncLockWait bounds the wait for another Sync. A cold build of a large workspace
+// writes thousands of shards and has been measured near 10s, so file.LockWait would
+// give up on a holder that is only busy.
+const syncLockWait = 2 * time.Minute
+
+func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string, refresh bool) (*Graph, error) {
 	old := s.readManifestOrNil()
 	if refresh {
 		old = nil

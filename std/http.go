@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
 )
@@ -39,10 +40,10 @@ const defaultHTTPTimeout = 30 * time.Second
 // HTTP is the "http" host module: an HTTP client with automatic retry on
 // transient errors and curl-style per-request control over retry and failure.
 //
-// Security note: outbound requests are audited but NOT blocked when the sandbox
-// is active. There is no SSRF guard: any URL a magusfile passes is fetched,
-// including localhost, internal services, and the cloud metadata endpoint. Only
-// pass URLs you trust.
+// Security note: outbound requests are not recorded, and the sandbox does not block
+// them; MAGUS_OFFLINE refuses every one by name. There is no SSRF guard: any URL a
+// magusfile passes is fetched, including localhost, internal services, and the
+// cloud metadata endpoint. Only pass URLs you trust.
 var HTTP = Module{
 	Name: "http",
 	Doc:  "HTTP client. Requests run ONCE unless given a retry policy.",
@@ -450,6 +451,9 @@ func httpListen(port int) (net.Listener, error) {
 // retryPolicy ask for anything the default lacks. label prefixes every error ("http.get").
 // The caller closes the body.
 func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, headers map[string]string, o httpOpts, retryPolicy map[string]any) (*http.Response, error) {
+	if config.Offline() {
+		return nil, fmt.Errorf("%s %s: MAGUS_OFFLINE is set, so no request is sent", label, url)
+	}
 	r, err := parseHTTPRetry(retryPolicy)
 	if err != nil {
 		return nil, err

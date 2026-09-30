@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -31,19 +32,20 @@ import (
 // target that contains it, turning a convenience into self-recursion.
 //
 // Exclusions apply to the union of the includes regardless of order, so
-// ("*-generate", "!site-generate") and ("!site-generate", "*-generate") are the same set.
-// Patterns that are ONLY negations select nothing: subtracting from an empty set is empty,
-// not "everything else": a glob that silently grew to the whole workspace because its one
-// positive pattern was deleted is a worse failure than matching nothing.
+// ("*-generate", "!site-generate") and ("!site-generate", "*-generate") are the same set:
+// the meaning "!" has in every magus pattern list (see ParseGlobs). A list that is ONLY
+// negations is refused. Reading it as "everything else" would grow a glob to the whole
+// workspace the day its one positive pattern is deleted, and reading it as nothing would
+// run no target while the author believes the list selects some.
 //
 // One implementation, deliberately. The runtime binding, the dry-run tracer, and the static
 // describe extractor each carried their own copy of the compile step, each commented as
 // mirroring the others: three places to update in lockstep for a matcher whose whole job is
 // that the traced, described, and executed edge sets agree.
-func MatchTargetPatterns(names, patterns []string) []string {
+func MatchTargetPatterns(names, patterns []string) ([]string, error) {
 	include, exclude := compileTargetPatterns(patterns)
-	if len(include) == 0 {
-		return nil
+	if len(include) == 0 && len(exclude) > 0 {
+		return nil, fmt.Errorf("negation %q has no pattern to narrow", patterns[0])
 	}
 	var matched []string
 	for _, name := range names {
@@ -55,7 +57,7 @@ func MatchTargetPatterns(names, patterns []string) []string {
 		}
 	}
 	slices.Sort(matched)
-	return matched
+	return matched, nil
 }
 
 // compileTargetPatterns splits a pattern list into the anchored regexps to include and the

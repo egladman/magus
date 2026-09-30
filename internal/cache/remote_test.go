@@ -22,6 +22,7 @@ import (
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,7 @@ func TestExportArtifactStreamsBlobsWithoutFullyBuffering(t *testing.T) {
 	big := bytes.Repeat([]byte("x"), blobSize)
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	result, err := c.Run(context.Background(), step, func(context.Context) error {
 		return os.WriteFile(out, big, 0o644)
 	})
@@ -91,7 +92,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	writeMain(t, root1, "package main")
 	out1 := touchOut(t, root1)
 	spec1 := makeStep(root1)
-	spec1.Outputs = []string{"test/pkg/out.txt"}
+	spec1.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	runs := 0
 	r1, err := c1.Run(context.Background(), spec1, func(_ context.Context) error {
@@ -108,7 +109,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	writeMain(t, root2, "package main")
 	out2 := touchOut(t, root2)
 	spec2 := makeStep(root2)
-	spec2.Outputs = []string{"test/pkg/out.txt"}
+	spec2.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
 		runs++ // must not be called
@@ -153,7 +154,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 	writeMain(t, root1, "package main")
 	out1 := touchOut(t, root1)
 	spec1 := makeStep(root1)
-	spec1.Outputs = []string{"test/pkg/out.txt"}
+	spec1.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	runs := 0
 	r1, err := c1.Run(context.Background(), spec1, func(_ context.Context) error {
@@ -169,7 +170,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 	writeMain(t, root2, "package main")
 	out2 := touchOut(t, root2)
 	spec2 := makeStep(root2)
-	spec2.Outputs = []string{"test/pkg/out.txt"}
+	spec2.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
 		runs++
@@ -259,7 +260,7 @@ func learnHash(t *testing.T) (project, hash string) {
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
@@ -282,7 +283,7 @@ func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, r
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		ran = true
@@ -361,7 +362,7 @@ func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
 	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
@@ -529,7 +530,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
 	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
@@ -556,7 +557,7 @@ func buildIn(t *testing.T, ctx context.Context, root string, c *Cache) (Result, 
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
 	r, err := c.Run(ctx, step, func(_ context.Context) error {
@@ -665,7 +666,7 @@ func TestRemoteTierMissIsCountedAndNamed(t *testing.T) {
 	assert.Equal(t, PortableRef(r.Hash), miss["ref"], "the ref the producing run printed for this key")
 
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	var lines []string
 	_, err = c.hashStepInputs(t.Context(), &step, &lines)
 	require.NoError(t, err)

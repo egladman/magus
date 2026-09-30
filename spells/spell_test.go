@@ -231,7 +231,7 @@ func TestIsRemoteImport(t *testing.T) {
 		"127.0.0.1:5000/team/lint":         true,
 		"spells/harness/cursor":            false,
 		"magus/spell/go":                   false,
-		"./tools/drift":                    false,
+		"./hack/drift":                     false,
 		"../shared/lint":                   false,
 		"ghcr.io":                          false, // a host alone names no repository
 		"ghcr.io/":                         false,

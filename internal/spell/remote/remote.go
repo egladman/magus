@@ -145,7 +145,7 @@ func resolveSlot(ctx context.Context, ref Ref, opts Options, root, slot string) 
 	}
 	_, statErr := os.Stat(slot)
 	stale := statErr == nil
-	if offline() {
+	if config.Offline() {
 		if stale {
 			return "", types.WrapDiagnostic(types.RemoteSpellDigestMismatch, verr,
 				"remote spell %s: the cached copy does not match the pin and MAGUS_OFFLINE forbids a fresh pull: %v", ref.Import, verr)
@@ -418,15 +418,20 @@ func Pack(ctx context.Context, dir string, vcs types.TrackedFileReporter) ([]byt
 			return !slices.Contains(candidates, p)
 		})
 	}
-	slices.Sort(tracked)
-	tracked = slices.Compact(tracked)
-	if !slices.Contains(tracked, entryFile) {
+	return packFiles(dir, tracked, func(name string) ([]byte, error) { return readRegular(dir, name) })
+}
+
+// packFiles writes names as a spell layer in sorted order, each body from read, with
+// fixed mode, owner and time; dir only names the spell in an error.
+func packFiles(dir string, names []string, read func(name string) ([]byte, error)) ([]byte, error) {
+	names = slices.Compact(slices.Sorted(slices.Values(names)))
+	if !slices.Contains(names, entryFile) {
 		return nil, fmt.Errorf("%s holds no tracked %s", dir, entryFile)
 	}
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	for _, name := range tracked {
-		body, err := readRegular(dir, name)
+	for _, name := range names {
+		body, err := read(name)
 		if err != nil {
 			return nil, fmt.Errorf("pack: %w", err)
 		}
@@ -557,11 +562,159 @@ func Build(ctx context.Context, dir string, tracked types.TrackedFileReporter, p
 	if err != nil {
 		return oci.Content{}, err
 	}
+	return artifact(layer, prov), nil
+}
+
+func artifact(layer []byte, prov Provenance) oci.Content {
 	return oci.Content{
 		ArtifactType: artifactType,
 		Annotations:  prov.Annotations(),
 		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: layer}},
-	}, nil
+	}
+}
+
+// ShippedRepository is where a release publishes each spell magus ships, one
+// repository per spell under its registered name: ghcr.io/egladman/magus/spells/go.
+const ShippedRepository = "ghcr.io/egladman/magus/spells"
+
+// ShippedProvenance is the provenance a shipped spell's artifact carries: the
+// directory it is authored in and the repository, and no revision or creation time.
+// Without those the manifest digest is a function of the spell's files alone, so a
+// binary computes it from what it embeds, and a release that leaves a spell unchanged
+// publishes the digest the previous release did. The release tag names the version.
+func ShippedProvenance(dir string) Provenance {
+	return Provenance{Title: dir, Source: "https://github.com/egladman/magus"}
+}
+
+type shippedArtifact struct {
+	content  oci.Content
+	manifest digest.Digest
+}
+
+var shippedArtifacts sync.Map // dir -> func() (shippedArtifact, error)
+
+// Shipped returns the artifact a release publishes for the shipped spell name, whose
+// source is the directory dir of spells.Shipped(), and the reference that pins it by
+// manifest digest. It packs the embedded files the way Build packs a checkout, with
+// ShippedProvenance, so the two agree on the digest (TestShippedMatchesBuild). The
+// artifact is computed once per dir.
+func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
+	f, _ := shippedArtifacts.LoadOrStore(dir, sync.OnceValues(func() (shippedArtifact, error) {
+		sub, err := fs.Sub(spells.Shipped(), dir)
+		if err != nil {
+			return shippedArtifact{}, err
+		}
+		var names []string
+		if err := fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				names = append(names, p)
+			}
+			return err
+		}); err != nil {
+			return shippedArtifact{}, fmt.Errorf("shipped spell %s: %w", dir, err)
+		}
+		layer, err := packFiles(dir, names, func(file string) ([]byte, error) { return fs.ReadFile(sub, file) })
+		if err != nil {
+			return shippedArtifact{}, err
+		}
+		content := artifact(layer, ShippedProvenance(dir))
+		_, d, err := content.Manifest()
+		return shippedArtifact{content: content, manifest: d}, err
+	}))
+	a, err := f.(func() (shippedArtifact, error))()
+	if err != nil {
+		return oci.Reference{}, oci.Content{}, err
+	}
+	ref, err := oci.ParseRepository(ShippedRepository + "/" + name)
+	if err != nil {
+		return oci.Reference{}, oci.Content{}, err
+	}
+	ref.Digest = a.manifest
+	return ref, a.content, nil
+}
+
+// originPrefix opens the line Eject writes first in a copy's spell.buzz.
+const originPrefix = "// magus:origin "
+
+// Eject writes the shipped spell name (source directory dir) into dst, which must be
+// empty or absent: exactly the files its published artifact holds, with spell.buzz
+// opening on `// magus:origin <reference>`, the artifact pinned by digest. The copy is
+// the workspace's to edit; the stamp is what lets `magus doctor` say whether the
+// shipped spell changed since. It returns that reference.
+func Eject(name, dir, dst string) (oci.Reference, error) {
+	ref, content, err := Shipped(name, dir)
+	if err != nil {
+		return oci.Reference{}, err
+	}
+	if entries, err := os.ReadDir(dst); err == nil && len(entries) > 0 {
+		return oci.Reference{}, fmt.Errorf("eject into %s: directory is not empty", dst)
+	}
+	layer := content.Layers[0].Payload
+	if err := walkTar(layer, func(file string, body []byte) error {
+		if file == entryFile {
+			body = append([]byte(originPrefix+ref.String()+"\n"), body...)
+		}
+		target := filepath.Join(dst, filepath.FromSlash(file))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, body, 0o644)
+	}); err != nil {
+		return oci.Reference{}, fmt.Errorf("eject into %s: %w", dst, err)
+	}
+	switch f, err := ReadFork(dst, name, dir); {
+	case err != nil:
+		return oci.Reference{}, fmt.Errorf("eject into %s: %w", dst, err)
+	case f.Origin != ref || f.Edited:
+		return oci.Reference{}, fmt.Errorf("eject into %s: the copy does not read back as %s", dst, ref)
+	}
+	return ref, nil
+}
+
+// Fork is a workspace copy of a shipped spell, as ReadFork finds it.
+type Fork struct {
+	// Origin is the artifact the copy's origin stamp names, zero when it has none.
+	Origin oci.Reference
+	// Shipped is this binary's artifact for the spell.
+	Shipped oci.Reference
+	// Edited is whether the copy's files, the stamp aside, differ from Shipped's.
+	Edited bool
+}
+
+// ReadFork compares the copy in forkDir with the shipped spell name (source directory
+// dir). Every file under forkDir counts, so an added file is an edit.
+func ReadFork(forkDir, name, dir string) (Fork, error) {
+	ref, content, err := Shipped(name, dir)
+	if err != nil {
+		return Fork{}, err
+	}
+	want, err := tarFiles(content.Layers[0].Payload)
+	if err != nil {
+		return Fork{}, err
+	}
+	names, err := dirEntries(forkDir)
+	if err != nil {
+		return Fork{}, err
+	}
+	f := Fork{Shipped: ref}
+	got := make([]fileSum, 0, len(names))
+	for _, n := range names {
+		body, err := readRegular(forkDir, n)
+		if err != nil {
+			return Fork{}, err
+		}
+		if n == entryFile {
+			if line, rest, ok := bytes.Cut(body, []byte("\n")); ok && bytes.HasPrefix(line, []byte(originPrefix)) {
+				body = rest
+				if f.Origin, err = oci.ParseReference(string(bytes.TrimPrefix(line, []byte(originPrefix)))); err != nil {
+					return Fork{}, fmt.Errorf("%s: origin stamp: %w", filepath.Join(forkDir, entryFile), err)
+				}
+			}
+		}
+		got = append(got, fileSum{path: n, sum: sha256.Sum256(body)})
+	}
+	f.Edited = !slices.Equal(sortSums(got), want)
+	return f, nil
 }
 
 // Pin resolves ref to the manifest digest it names now, checking the artifact type. A
@@ -600,10 +753,4 @@ func (o Options) client(ctx context.Context) (*oci.Client, error) {
 		return o.Connect(ctx)
 	}
 	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}, nil
-}
-
-// offline matches internal/registry: MAGUS_OFFLINE set to anything but 0 or false.
-func offline() bool {
-	v := os.Getenv("MAGUS_OFFLINE")
-	return v != "" && v != "0" && v != "false"
 }

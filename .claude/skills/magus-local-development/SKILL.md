@@ -123,13 +123,13 @@ know which one is wrong.
 
 Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
 `AGENTS.md`; enforcement is the `spells/harness/cursor` Buzz spell plus
-`docs/guides/integrations/agents/cursor-hook.sh`.
+`docs/guides/integrations/agents/cursor-hook.buzz`.
 
 The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward
-`magus refs` / `magus query`. Cursor's built-in Grep and Glob tools never hit
-`beforeShellExecution`, so they used to bypass that entirely. They must stay on
-`postToolUse` matchers in the cursor harness, and the guard script must restate
-them as the shell shapes those rules already judge.
+`magus refs` / `magus query`. Cursor's built-in Grep, Glob, and Read never hit
+`beforeShellExecution`. The Buzz hook restates them as the shell shapes those
+rules already judge, and gates that restatement on `preToolUse`. `postToolUse`
+still carries the advise.
 
 A side rules file is the opposite of host-agnostic glue: invisible to
 `harness verify`, absent from what `describe harness` prints, and gone the next time someone treats

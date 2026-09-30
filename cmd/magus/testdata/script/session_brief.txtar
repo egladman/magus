@@ -54,14 +54,14 @@ export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
 export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     return [{
         "path": ["hooks", "before"],
-        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-command.sh"}]}],
+        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-command-stand-in.sh"}]}],
     }];
 }
 -- host/hooks.json --
-{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}}
--- magus-command.sh --
+{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}]}}
+-- magus-command-stand-in.sh --
 #!/bin/sh
-# Stands in for the real shipped script: `magus session --brief` reports guard
+# Stands in for the shipped glue: `magus session --brief` reports guard
 # wiring only for a harness `magus agent harness verify` actually confirms
 # answers (internal/agent/harness_probe.go), not merely one whose config carries
 # the right text.

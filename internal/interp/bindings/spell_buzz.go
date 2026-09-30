@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -153,6 +153,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(spellSearchPaths(roots...)...))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
+	sess.AddCompileObserver(buzz.ProfileFromContext(ctx))
 	registerMagusModules(ctx, sess)
 	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
@@ -233,7 +234,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := bindinggen.AnyToValue(req.Params)
+	params := ffi.AnyToValue(req.Params)
 	tgt := targetValue(ctx, req)
 	cb := vm.DirectValue("magus.cb", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
@@ -251,7 +252,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	if err != nil {
 		return nil, fmt.Errorf("spell handler op %q: %w", fn, err)
 	}
-	return bindinggen.ValueToAny(rv), nil
+	return ffi.ValueToAny(rv), nil
 }
 
 // targetValue builds the Buzz Target value a spell handler receives as its first

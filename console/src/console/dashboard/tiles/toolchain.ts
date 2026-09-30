@@ -10,12 +10,15 @@
 // "Probed" shows the reading's age rather than implying live, because the server caches
 // probes behind a TTL and a page has no build to piggyback on.
 //
+// Cycle, End of life and Support come from the workspace's lifecycle provider, the same
+// answer `magus describe tools` prints. The note says when that answer did not arrive.
+//
 // There is deliberately no "enforced" column. Whether a window can actually fail a build
 // depends on whether the project dispatches a spell op at all, which this view cannot see;
 // an earlier attempt computed "does an op fork this binary", which is a different question
 // and answered it wrongly. See the reserved field in magus/tool/v1alpha1/tool.proto.
 
-import type { DashboardState, ToolRowView } from "../state";
+import type { DashboardState, LifecycleView, ToolRowView } from "../state";
 import { SortableTable, type Column } from "./widgets";
 import { Card, type Tile } from "./card";
 
@@ -73,7 +76,28 @@ const cols: Column<ToolRowView>[] = [
     text: (r) => age(r.probedAtMs, Date.now()),
     sort: (r) => r.probedAtMs,
   },
+  { key: "cycle", label: "Cycle", text: (r) => r.cycle || "-", sort: (r) => r.cycle },
+  { key: "eol", label: "End of life", text: (r) => r.eol || "-", sort: (r) => r.eol },
+  // Named after `magus describe tools`' column, and read from the same provider answer.
+  { key: "support", label: "Support", text: (r) => r.support || "-", sort: (r) => r.support },
 ];
+
+// lifecycleNote says where the end-of-life columns came from when that is not a live
+// answer. An unreached or offline provider leaves every row unknown, and a note that only
+// counted windows would let that pass as "all fine".
+export const lifecycleNote = (l: LifecycleView | undefined): string => {
+  if (!l) return "";
+  switch (l.state) {
+    case "offline":
+      return "end of life not fetched: MAGUS_OFFLINE is set on the server";
+    case "unreached": {
+      const why = l.detail ? " (" + l.detail + ")" : "";
+      return "end of life unknown: " + l.provider + " did not answer" + why;
+    }
+    default:
+      return "";
+  }
+};
 
 // toolchainTile renders the table, or the empty state when no project declares a probed
 // tool. A workspace with no windows is a legitimate resting state, not a failure, so the
@@ -99,13 +123,18 @@ export function toolchainTile(): Tile {
       table.setRows(rows);
       // Lead with the count that needs acting on. Zero violations is worth stating
       // explicitly, because silence reads as "not checked".
-      card.setNote(
+      const windows =
         rows.length === 0
           ? "The binaries this workspace drives, and the version window each is held to."
           : view && view.violations > 0
             ? view.violations + " outside their window"
-            : rows.length + " tools, all inside their window",
-      );
+            : rows.length + " tools, all inside their window";
+      const pastEol = rows.filter((r) => r.support === "eol").length;
+      const notes = [windows];
+      if (pastEol > 0) notes.push(pastEol + " past end of life");
+      const lifecycle = lifecycleNote(view?.lifecycle);
+      if (lifecycle) notes.push(lifecycle);
+      card.setNote(notes.join("; "));
     },
     destroy() {},
   };

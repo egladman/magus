@@ -1,0 +1,107 @@
+// whole-tree-targets-key-on-the-go-tree pins the footprint replacement that once made
+// this repository's own suite report a false green.
+//
+// ctx.readsFiles REPLACES a target's footprint rather than adding to it: buildStep keeps
+// the magusfiles and the target's spell sources, drops the project and spell globs, then
+// folds the declared refs in. So a call added to key four files the project does not
+// claim silently deleted **/*.go from the key of the target that runs every Go test, and
+// ~8,400 new lines of *_test.go replayed against the cached verdict. `magus affected`
+// still selected "." for those edits, because project claims and a target's key are
+// computed separately, which is what kept it invisible.
+//
+// It reads magus\targets(), the same static extraction buildStep depends on, so a
+// footprint moved into a helper or reworded still gets graded.
+namespace wholetree;
+
+import "assert";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// WHOLE_TREE are the root targets that compile or analyze the entire Go module, mapped
+// to the globs whose absence from the target's own footprint would make a Go edit replay
+// instead of re-measure. Every other readsFiles in the root magusfile narrows
+// deliberately (compress-cgo-test to one package, lint-build to libs/testlayout) and
+// must keep its narrow footprint.
+export final WHOLE_TREE = {
+    "test": ["**/*.go", "go.mod", "go.sum"],
+    "lint": ["**/*.go", "go.mod", "go.sum", ".golangci.yml"],
+};
+
+export fun reads() > [str] {
+    return ["magusfile.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final footprints = mut {<str: [str]>};
+    foreach (p in support\targets().projects) {
+        if (p.path != ".") {
+            continue;
+        }
+        foreach (n in p.nodes) {
+            if (WHOLE_TREE[n.name] == null) {
+                continue;
+            }
+            final globs = mut [<str>];
+            foreach (ref in n.readsFiles) {
+                globs.append(ref.glob);
+            }
+            footprints[n.name] = globs;
+        }
+    }
+    final magusfile = support\named(files, p: "magusfile.buzz");
+    if (magusfile == null) {
+        return [support\missing("magusfile.buzz")];
+    }
+    return findings(footprints, magusfile: support\read(magusfile!));
+}
+
+// findings grades each whole-tree target's declared footprint, keyed by target; a target
+// the root does not declare is absent.
+export fun findings(footprints: {str: [str]}, magusfile: str) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (target in support\sorted(WHOLE_TREE.keys())) {
+        final declared = footprints[target];
+        if (declared == null) {
+            found.append(Finding{ path = "magusfile.buzz", message = "declares no \"{target}\" target",
+                fix = "Update WHOLE_TREE if the target was renamed." });
+            continue;
+        }
+        // No footprint means no replacement: the target still inherits the project's.
+        if (declared!.len() == 0) {
+            continue;
+        }
+        final line = support\lineOf(magusfile, needle: "export fun " + target + "(");
+        foreach (glob in WHOLE_TREE[target]!) {
+            if (declared!.indexOf(glob) != null) {
+                continue;
+            }
+            found.append(Finding{ path = "magusfile.buzz", line = line,
+                message = "target \"{target}\" declares a ctx.readsFiles footprint that does not name \"{glob}\"",
+                fix = "A footprint REPLACES the project and spell source globs, so an edit to it produces a cache HIT\n"
+                    + "and the target replays a verdict computed against different code. Restate the tree the\n"
+                    + "target actually reads, or drop the footprint declaration entirely." });
+        }
+    }
+    return found;
+}
+
+final full = ["**/*.go", "go.mod", "go.sum", ".golangci.yml", "README.md"];
+
+test "footprints naming the Go tree, or no footprint at all, pass" {
+    assert\equal(findings({"test": full, "lint": full}, magusfile: "").len(), want: 0, message: "full");
+    assert\equal(findings({"test": [<str>], "lint": full}, magusfile: "").len(), want: 0, message: "inherited");
+}
+
+test "a footprint dropping the Go tree is reported at its target" {
+    final got = findings({"test": ["internal/foo/*.json"], "lint": full}, magusfile: "x\nexport fun test(ctx: magus\\Context) > void \{}\n");
+    assert\equal(support\messages(got), want: [
+        "target \"test\" declares a ctx.readsFiles footprint that does not name \"**/*.go\"",
+        "target \"test\" declares a ctx.readsFiles footprint that does not name \"go.mod\"",
+        "target \"test\" declares a ctx.readsFiles footprint that does not name \"go.sum\"",
+    ], message: "three globs");
+    assert\equal(got[0].line, want: 2, message: "line");
+}
+
+test "a renamed target is reported" {
+    assert\equal(support\messages(findings({"test": full}, magusfile: "")), want: ["declares no \"lint\" target"], message: "missing");
+}

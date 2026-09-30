@@ -3,6 +3,7 @@
 package gen
 
 import (
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -10,7 +11,7 @@ import (
 
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
-var RuntimeBoundaryTypes = []BoundaryType{
+var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
@@ -19,6 +20,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
 	{Name: "Check", Zero: types.Check{}, Encode: func(v any) vm.Value { return ObjectCheck(v.(types.Check)) }},
 	{Name: "CheckoutState", Zero: types.CheckoutState{}, Encode: func(v any) vm.Value { return ObjectCheckoutState(v.(types.CheckoutState)) }},
+	{Name: "CleanReport", Zero: types.CleanReport{}, Encode: func(v any) vm.Value { return ObjectCleanReport(v.(types.CleanReport)) }},
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
 	{Name: "Command", Zero: spells.Command{}, Encode: func(v any) vm.Value { return ObjectCommand(v.(spells.Command)) }},
 	{Name: "CommandInvocation", Zero: types.CommandInvocation{}, Encode: func(v any) vm.Value { return ObjectCommandInvocation(v.(types.CommandInvocation)) }},
@@ -45,7 +47,9 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "DuplicationGroup", Zero: types.DuplicationGroup{}, Encode: func(v any) vm.Value { return ObjectDuplicationGroup(v.(types.DuplicationGroup)) }},
 	{Name: "DuplicationHistory", Zero: types.DuplicationHistory{}, Encode: func(v any) vm.Value { return ObjectDuplicationHistory(v.(types.DuplicationHistory)) }},
 	{Name: "DuplicationSite", Zero: types.DuplicationSite{}, Encode: func(v any) vm.Value { return ObjectDuplicationSite(v.(types.DuplicationSite)) }},
+	{Name: "EdgeRef", Zero: types.KnowledgeEdgeRef{}, Encode: func(v any) vm.Value { return ObjectKnowledgeEdgeRef(v.(types.KnowledgeEdgeRef)) }},
 	{Name: "ExecResult", Zero: types.ExecResult{}, Encode: func(v any) vm.Value { return ObjectExecResult(v.(types.ExecResult)) }},
+	{Name: "ExplainResult", Zero: types.KnowledgeExplainOutput{}, Encode: func(v any) vm.Value { return ObjectKnowledgeExplainOutput(v.(types.KnowledgeExplainOutput)) }},
 	{Name: "FileChange", Zero: types.FileChange{}, Encode: func(v any) vm.Value { return ObjectFileChange(v.(types.FileChange)) }},
 	{Name: "FileClaim", Zero: types.FileClaim{}, Encode: func(v any) vm.Value { return ObjectFileClaim(v.(types.FileClaim)) }},
 	{Name: "FileEntry", Zero: types.FileEntry{}, Encode: func(v any) vm.Value { return ObjectFileEntry(v.(types.FileEntry)) }},
@@ -87,21 +91,35 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "JobStatus", Zero: types.JobStatus{}, Encode: func(v any) vm.Value { return ObjectJobStatus(v.(types.JobStatus)) }},
 	{Name: "JobUnattributedWrite", Zero: types.JobUnattributedWrite{}, Encode: func(v any) vm.Value { return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any) vm.Value { return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer)) }},
+	{Name: "KnowledgeDocCoverage", Zero: types.KnowledgeDocCoverage{}, Encode: func(v any) vm.Value { return ObjectKnowledgeDocCoverage(v.(types.KnowledgeDocCoverage)) }},
+	{Name: "KnowledgeEdge", Zero: types.KnowledgeEdge{}, Encode: func(v any) vm.Value { return ObjectKnowledgeEdge(v.(types.KnowledgeEdge)) }},
+	{Name: "KnowledgeGodNode", Zero: types.KnowledgeGodNode{}, Encode: func(v any) vm.Value { return ObjectKnowledgeGodNode(v.(types.KnowledgeGodNode)) }},
+	{Name: "KnowledgeNode", Zero: types.KnowledgeNode{}, Encode: func(v any) vm.Value { return ObjectKnowledgeNode(v.(types.KnowledgeNode)) }},
+	{Name: "KnowledgeOrphan", Zero: types.KnowledgeOrphan{}, Encode: func(v any) vm.Value { return ObjectKnowledgeOrphan(v.(types.KnowledgeOrphan)) }},
+	{Name: "KnowledgeStats", Zero: types.KnowledgeStats{}, Encode: func(v any) vm.Value { return ObjectKnowledgeStats(v.(types.KnowledgeStats)) }},
 	{Name: "KnowledgeSymbolGap", Zero: types.KnowledgeSymbolGap{}, Encode: func(v any) vm.Value { return ObjectKnowledgeSymbolGap(v.(types.KnowledgeSymbolGap)) }},
 	{Name: "KnowledgeTextPresence", Zero: types.KnowledgeTextPresence{}, Encode: func(v any) vm.Value { return ObjectKnowledgeTextPresence(v.(types.KnowledgeTextPresence)) }},
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
+	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
+	{Name: "Match", Zero: types.KnowledgeMatch{}, Encode: func(v any) vm.Value { return ObjectKnowledgeMatch(v.(types.KnowledgeMatch)) }},
 	{Name: "Module", Zero: types.ModuleEntry{}, Encode: func(v any) vm.Value { return ObjectModuleEntry(v.(types.ModuleEntry)) }},
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
 	{Name: "Node", Zero: types.Node{}, Encode: func(v any) vm.Value { return ObjectNode(v.(types.Node)) }},
 	{Name: "Origin", Zero: types.Origin{}, Encode: func(v any) vm.Value { return ObjectOrigin(v.(types.Origin)) }},
+	{Name: "OutputRecord", Zero: types.OutputRecord{}, Encode: func(v any) vm.Value { return ObjectOutputRecord(v.(types.OutputRecord)) }},
 	{Name: "OutputRef", Zero: types.OutputRef{}, Encode: func(v any) vm.Value { return ObjectOutputRef(v.(types.OutputRef)) }},
 	{Name: "Ownership", Zero: types.OwnershipOutput{}, Encode: func(v any) vm.Value { return ObjectOwnershipOutput(v.(types.OwnershipOutput)) }},
 	{Name: "OwnershipEntry", Zero: types.OwnershipEntry{}, Encode: func(v any) vm.Value { return ObjectOwnershipEntry(v.(types.OwnershipEntry)) }},
+	{Name: "PathResult", Zero: types.KnowledgePathOutput{}, Encode: func(v any) vm.Value { return ObjectKnowledgePathOutput(v.(types.KnowledgePathOutput)) }},
+	{Name: "PathStep", Zero: types.KnowledgePathStep{}, Encode: func(v any) vm.Value { return ObjectKnowledgePathStep(v.(types.KnowledgePathStep)) }},
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }},
 	{Name: "Projects", Zero: types.ProjectsOutput{}, Encode: func(v any) vm.Value { return ObjectProjectsOutput(v.(types.ProjectsOutput)) }},
+	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any) vm.Value { return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput)) }},
+	{Name: "RefSite", Zero: types.KnowledgeRefSite{}, Encode: func(v any) vm.Value { return ObjectKnowledgeRefSite(v.(types.KnowledgeRefSite)) }},
+	{Name: "RefsResult", Zero: types.KnowledgeRefsOutput{}, Encode: func(v any) vm.Value { return ObjectKnowledgeRefsOutput(v.(types.KnowledgeRefsOutput)) }},
 	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any) vm.Value { return ObjectRegionChange(v.(types.RegionChange)) }},
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any) vm.Value { return ObjectStatusRun(v.(types.StatusRun)) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any) vm.Value { return ObjectSandbox(v.(spells.Sandbox)) }},
@@ -110,6 +128,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "SandboxEnv", Zero: spells.SandboxEnv{}, Encode: func(v any) vm.Value { return ObjectSandboxEnv(v.(spells.SandboxEnv)) }},
 	{Name: "SemverNext", Zero: types.SemverNext{}, Encode: func(v any) vm.Value { return ObjectSemverNext(v.(types.SemverNext)) }},
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},
+	{Name: "ServiceLease", Zero: types.ServiceLease{}, Encode: func(v any) vm.Value { return ObjectServiceLease(v.(types.ServiceLease)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest)) }},
@@ -123,6 +142,8 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "TargetRun", Zero: types.StatusTargetRun{}, Encode: func(v any) vm.Value { return ObjectStatusTargetRun(v.(types.StatusTargetRun)) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
+	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
+	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
 	{Name: "Trend", Zero: types.TrendOutput{}, Encode: func(v any) vm.Value { return ObjectTrendOutput(v.(types.TrendOutput)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
 	{Name: "URL", Zero: types.URL{}, Encode: func(v any) vm.Value { return ObjectURL(v.(types.URL)) }},

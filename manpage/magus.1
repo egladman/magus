@@ -134,7 +134,7 @@ Build, publish, pull and list spells as OCI artifacts, and pin them in magus.loc
 Manage skills, harnesses, and agent feedback. See \fBmagus\-agent\fR(1).
 .TP
 \fBself\fR
-Manage the magus binary (update, refresh, registry, install\-shorthand). See \fBmagus\-self\fR(1).
+Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print the client and server versions. See \fBmagus\-version\fR(1).
@@ -415,11 +415,8 @@ Set by a shared server on a script it forks for a remote caller: the BAGGAGE lea
 \fBMAGUS_NO_BOOTSTRAP_EXEC\fR
 Env\-only, no magus.yaml equivalent: when 1, true or yes, disable the pre\-workspace\-load check that replaces this process with a workspace\-local ./magus found by walking up from the working directory (or \-\-root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
 .TP
-\fBMAGUS_REGISTRY_URL\fR
-Env\-only, no magus.yaml equivalent: override the built\-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
-.TP
 \fBMAGUS_OFFLINE\fR
-Env\-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote\-spell fetch fails with a named error instead of sending a request (default: false)
+Env\-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote\-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline) (default: false)
 .TP
 \fBMAGUS_DIFFTOOL\fR
 Env\-only, no magus.yaml equivalent: the command, taking two paths, that `\-\-then file <path> diff` compares a cached artifact with (default: $DIFFTOOL, then git diff \-\-no\-index)
@@ -435,6 +432,21 @@ Env\-only, no magus.yaml equivalent: write Go profiles for one invocation, as ki
 .TP
 \fBMAGUS_MCP_TOKEN\fR
 Env\-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
+.TP
+\fBMAGUS_MCP_BUZZ_PURE\fR
+Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT\fR
+Set internally by the client MCP tool for its forked worker; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT_HOST\fR
+Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
+.TP
+\fBMAGUS_MCP_CLIENT_LEASE\fR
+Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
+.TP
+\fBMAGUS_STAMPED_LEASE\fR
+Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand
 .TP
 \fBMAGUS_S3_BUCKET\fR
 Env\-only: the bucket the aws/s3\-cache spell stores remote\-cache artifacts in

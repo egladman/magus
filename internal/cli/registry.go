@@ -204,9 +204,10 @@ config: the hook wiring is what lets the guard see an agent at all, so a change 
 it is one a person makes with their own hands.
 
 -o json prints the plan the command reads back: files keyed by path, each with the
-exact fragment to merge (jq's * operator: objects merge key by key, and an array
-arrives whole, with your own entries kept in place) or the whole content to write.
-The command needs jq. Omit the id for every wired harness.`,
+exact fragment to merge (objects merge key by key, and an array arrives whole, with
+your own entries kept in place) or the whole content to write. The command pipes
+that plan into ` + "`magus buzz`" + `, which merges each file with merge\json. Omit the
+id for every wired harness.`,
 		},
 	},
 	Examples: []Example{
@@ -658,7 +659,7 @@ Subcommands (the first argument):
            share of diagnostics, spells, and modules with a doc). --kind scopes
            every section to one node kind. The VCS-history lenses (hotspots,
            affinity, ownership, trend, unreferenced) are a separate view, served
-           by the magus_insight MCP tool and the console's Insight page - not by
+           by the client MCP tool (magus\insight) and the console's Insight page - not by
            this command.
   diff     Nodes and edges added, removed, or changed relative to a baseline
            export or a git revision (--rev): the PR-review blast-radius
@@ -759,11 +760,19 @@ Subcommands (the first argument):
   push     Pack <dir> as one uncompressed tar layer and push it to <ref>, a
            <registry>/<repository>:<tag>, then under each --tag with no second
            upload. Prints <registry>/<repository>@sha256:<digest>.
+           magus/spell/<name> in place of <dir> pushes a spell magus ships,
+           packed from the binary: the digest pull stamps on a copy.
   pull     Fetch <ref> by tag or digest, verify the manifest and layer digests,
            and print the pinned reference and the directory holding the files:
            [<dir>] when given, otherwise the user cache. A bare registry path,
            as a magusfile imports it, pulls the digest magus.lock pins.
+           magus/spell/<name> <dir> copies a spell magus ships instead, from
+           the binary with no network: the files its published artifact holds,
+           spell.buzz opening on a "// magus:origin <reference>" line, and
+           prints the magus.yaml override to add.
   ls       List <registry>/<repository>'s tags, following pagination.
+           magus/spell lists every spell magus ships instead, each pinned to
+           the digest a release publishes, with no network.
   lock     Check that magus.lock pins every remote spell magus.yaml declares,
            for its declared tag, and verify each pinned digest; no tag is
            resolved. --update resolves each tag and rewrites magus.lock, and is
@@ -780,7 +789,7 @@ Credentials: the spells.registries entry in magus.yaml for the reference's host
 names a username and a secret reference, resolved through the workspace's
 secret provider. --username overrides it and reads the password from stdin.
 With neither, requests are anonymous. A new GHCR package is private until
-someone makes it public.`,
+its owner makes it public in the package settings; magus never changes it.`,
 	Usage: "magus spell <build|push|pull|ls|lock> [args] [flags]",
 	Children: []Command{
 		{
@@ -793,7 +802,7 @@ someone makes it public.`,
 		},
 		{
 			Name:  "push",
-			Short: "Push a spell directory's tracked files as an OCI artifact and print its pinned reference",
+			Short: "Push a spell directory's tracked files, or a spell magus ships, as an OCI artifact and print its pinned reference",
 			Flags: []Flag{
 				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 				{Name: "tag", Kind: FlagCustom, Doc: "Another tag to write the same manifest under; repeatable"},
@@ -802,14 +811,14 @@ someone makes it public.`,
 		},
 		{
 			Name:  "pull",
-			Short: "Fetch and verify a published spell into the cache or a directory",
+			Short: "Fetch and verify a published spell into the cache or a directory, or copy out one magus ships",
 			Flags: []Flag{
 				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 			},
 		},
 		{
 			Name:  "ls",
-			Short: "List a spell repository's tags",
+			Short: "List a spell repository's tags, or the spells magus ships",
 			Flags: []Flag{
 				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 			},
@@ -827,6 +836,7 @@ someone makes it public.`,
 		{"Publish under a version and a floating tag", "magus spell push spells/harness/cursor ghcr.io/owner/repo/spells/cursor:v1.2.0 --tag latest"},
 		{"Pull a published spell into a directory", "magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor"},
 		{"List a spell repository's tags", "magus spell ls ghcr.io/owner/repo/spells/cursor"},
+		{"List every spell magus ships with the digest a release publishes", "magus spell ls magus/spell"},
 		{"Pin every declared remote spell's tag in magus.lock", "magus spell lock --update"},
 	},
 }
@@ -1552,6 +1562,7 @@ not block every tool call.`,
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 		{Name: "observes-skill-loads", Kind: FlagBool, Doc: "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down"},
 		{Name: "renders-ask", Kind: FlagBool, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
+		{Name: "rewrites-input", Kind: FlagBool, Doc: "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed"},
 	},
 	Examples: []Example{
 		{"Check one command", "magus shell 'go test ./...'"},
@@ -1887,8 +1898,8 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			Usage: "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
 			Flags: append(append([]Flag{
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the mergequeue.plan/v1 document from stdin; required"},
-				{Name: "gate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green"},
-				{Name: "regenerate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin"},
+				{Name: "gate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green"},
+				{Name: "regenerate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin"},
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
@@ -1936,7 +1947,7 @@ cache it withholds, is refused.`,
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
-				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
+				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `--` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 			}, queueFacts...), queueCheckout...),
@@ -2177,7 +2188,12 @@ without it the event is recorded and nothing pops up.
 An event whose outcome is waiting (blocked on input) or permission (blocked on
 approval) additionally opens a durable request in this repository, listed by
 ` + "`session attention`" + ` and closed only by a person. Any other outcome opens
-none. This is the only command that opens one.`,
+none. This is the only command that opens one.
+
+A repeat of a request the queue already holds does not raise another desktop
+notification. The open row is the block, and a second toast asks for a yes on
+it. A failure still notifies, and so does a waiting or permission event that
+could not be filed, because that one has no row.`,
 			Usage: "magus session notify [--outcome <vocab>] [--desktop]",
 			Flags: []Flag{
 				{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
@@ -2214,7 +2230,7 @@ is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: ` + "`magus run`" + ` executes a target with no job involved,
 while a job's check and the server's maintenance each cause runs.
 
-Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+Two channels write the job store. The client MCP tool (magus\job) is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own
@@ -2264,12 +2280,16 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
+edit adds write paths to a live job and revokes others in one write that keeps
+its state, where a re-fork would hand a taken job out again. It previews until
+--apply, and only the orchestrator widens.
+
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run|rm|prune> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run|edit|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2344,6 +2364,22 @@ shows what it is doing.`,
 		},
 		{Name: "run", Short: "Submit one of the server's own jobs and return"},
 		{
+			Name:  "edit",
+			Short: "Add write paths to a live job or revoke them, keeping its state",
+			Description: "Merge write paths into a live job in one write: --add-write-path widens it and --remove-write-path " +
+				"revokes a path it holds. The job keeps its state and its holder, where a re-fork hands it out again as " +
+				"declared. A revoked path is recorded as a release carrying the digest of what the job left, and the " +
+				"holder's next write there is refused, naming the revocation and when it happened. Widening is the " +
+				"orchestrator's; a session holding a lease may only revoke its own paths. It previews and writes " +
+				"nothing until --apply. Ending a whole job is `magus job exit`, not an edit that revokes every path.",
+			Flags: []Flag{
+				{Name: "add-write-path", Kind: FlagCustom, Doc: "A path to add to the job's write paths; repeatable or comma-separated"},
+				{Name: "remove-write-path", Kind: FlagCustom, Doc: "A path to revoke from the job's write paths; repeatable or comma-separated"},
+				{Name: "apply", Kind: FlagBool, Doc: "Write the edit; without it the edit is previewed and nothing is written"},
+			},
+			Usage: "magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]",
+		},
+		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",
 			Description: "Remove ONE job from the plan, leaving every other row alone. This is not how a job ends: " +
@@ -2377,6 +2413,7 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
+		{"Widen a live job and write it", "magus job edit session-load/core --add-write-path internal/sessions/load.go --apply"},
 		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }
@@ -2438,7 +2475,7 @@ needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
 The console's Diff surface reads the same annotations over the same session,
-and an agent can join that session through the magus_diff MCP tool.
+and an agent can join that session through the diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild
 and which were merely edited, who has been changing them, an estimate of the
@@ -2614,6 +2651,7 @@ nothing loads.`,
 		{Name: "test", Kind: FlagBool, AliasOf: "t", Doc: "Alias for -t"},
 		{Name: "check", Kind: FlagBool, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
 		{Name: "coverprofile", Kind: FlagString, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
+		{Name: "profile", Kind: FlagBool, Doc: "Print where compile and import time went, after the script runs"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
@@ -2630,6 +2668,7 @@ nothing loads.`,
 		{"Check files without running them", "magus buzz --check scripts/report.buzz scripts/build.buzz"},
 		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
 		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
+		{"See which imports a script spends its time on", "magus buzz --profile scripts/report.buzz"},
 	},
 }
 
@@ -2677,8 +2716,7 @@ a pattern no graph verb fits.`,
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "harness", Short: "Install skills for, or verify, harnesses wired in the magusfile", Children: []Command{
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
-			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
-		}},
+			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}}}},
 		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
 			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it commands are read from stdin"},

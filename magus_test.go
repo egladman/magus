@@ -282,16 +282,16 @@ func TestStepFor_RootProject(t *testing.T) {
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
-		Sources: []string{"**/*.go"},
-		Outputs: []string{"bin/app"},
+		Sources: types.MustParseGlobs("**/*.go"),
+		Outputs: types.MustParseGlobs("bin/app"),
 	}
 	spec := m.baseStep(p)
 	assert.Equal(t, ".", spec.ProjectPath, "ProjectPath")
 	// Root project: declared glob passes through unchanged; magusfile globs are
 	// also appended (see magusfileGlobs). Use Contains rather than exact-count.
-	assert.Contains(t, spec.Sources, "**/*.go", "Sources must contain declared glob")
-	assert.Contains(t, spec.Sources, "magusfile.buzz", "Sources must contain root magusfile glob")
-	assert.Equal(t, []string{"bin/app"}, spec.Outputs, "Outputs")
+	assert.Contains(t, spec.Sources, types.Glob{Pattern: "**/*.go"}, "Sources must contain declared glob")
+	assert.Contains(t, spec.Sources, types.Glob{Pattern: "magusfile.buzz"}, "Sources must contain root magusfile glob")
+	assert.Equal(t, types.MustParseGlobs("bin/app"), spec.Outputs, "Outputs")
 	assert.Equal(t, m.Root(), spec.WorkspaceRoot, "WorkspaceRoot")
 }
 
@@ -302,7 +302,7 @@ func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
 	require.NoError(t, err)
-	p := &types.Project{Path: ".", Sources: []string{"**/*.go"}}
+	p := &types.Project{Path: ".", Sources: types.MustParseGlobs("**/*.go")}
 	assert.Empty(t, m.baseStep(p).IgnoreDirs, "no resolved spells: Step.IgnoreDirs must be empty")
 }
 
@@ -317,7 +317,7 @@ func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
-		Sources: []string{"**/*.go"},
+		Sources: types.MustParseGlobs("**/*.go"),
 		ResolvedSpells: []*spells.Spell{
 			spells.NewSpell("go", spells.WithIgnoreDirs("vendor")),
 			spells.NewSpell("ts", spells.WithIgnoreDirs("node_modules", "vendor")), // vendor overlaps -> deduped
@@ -334,17 +334,17 @@ func TestStepFor_NestedProject(t *testing.T) {
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    "api",
-		Sources: []string{"**/*.go"},
-		Outputs: []string{"bin/server"},
+		Sources: types.MustParseGlobs("**/*.go"),
+		Outputs: types.MustParseGlobs("bin/server"),
 	}
 	spec := m.baseStep(p)
 	// Declared glob is prefixed with the project path.
-	assert.Contains(t, spec.Sources, "api/**/*.go", "Sources must contain project-prefixed glob")
+	assert.Contains(t, spec.Sources, types.Glob{Pattern: "api/**/*.go"}, "Sources must contain project-prefixed glob")
 	// Project-local magusfile glob is included.
-	assert.Contains(t, spec.Sources, "api/magusfile.buzz", "Sources must contain project-local magusfile glob")
+	assert.Contains(t, spec.Sources, types.Glob{Pattern: "api/magusfile.buzz"}, "Sources must contain project-local magusfile glob")
 	// Root magusfile glob is always included for non-root projects.
-	assert.Contains(t, spec.Sources, "magusfile.buzz", "Sources must contain root magusfile glob")
-	assert.Equal(t, []string{"api/bin/server"}, spec.Outputs, "Outputs")
+	assert.Contains(t, spec.Sources, types.Glob{Pattern: "magusfile.buzz"}, "Sources must contain root magusfile glob")
+	assert.Equal(t, types.MustParseGlobs("api/bin/server"), spec.Outputs, "Outputs")
 }
 
 // countingObserver is a types.Observer stub that counts OnBuild calls.
@@ -365,19 +365,19 @@ func TestMagusfileGlobs(t *testing.T) {
 
 	t.Run("root project", func(t *testing.T) {
 		t.Parallel()
-		want := []string{
+		want := types.MustParseGlobs(
 			"magusfile.buzz",
 			"magusfiles/**/*.buzz",
-		}
+		)
 		assert.Equal(t, want, magusfileGlobs("."))
 	})
 
 	t.Run("non-root project", func(t *testing.T) {
 		t.Parallel()
-		want := []string{
+		want := types.MustParseGlobs(
 			"extensions/drape/magusfile.buzz",
 			"extensions/drape/magusfiles/**/*.buzz",
-		}
+		)
 		assert.Equal(t, want, magusfileGlobs("extensions/drape"))
 	})
 
@@ -386,7 +386,7 @@ func TestMagusfileGlobs(t *testing.T) {
 		got := magusfileGlobs("api")
 		require.NotEmpty(t, got, "expected non-empty globs for single-segment path")
 		for _, g := range got {
-			assert.Truef(t, strings.HasPrefix(g, "api/"), "glob %q should start with \"api/\"", g)
+			assert.Truef(t, strings.HasPrefix(g.Pattern, "api/"), "glob %q should start with \"api/\"", g.Pattern)
 		}
 	})
 }
@@ -937,9 +937,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 	// The buildStep hashes each input at its workspace-relative path.
 	step := m.buildStep(consumer, "build")
-	assert.Contains(t, step.Sources, "lib/go.mod",
+	assert.Contains(t, step.Sources, types.Glob{Pattern: "lib/go.mod"},
 		"the cross-input enters the cache key workspace-relative")
-	assert.Contains(t, step.Sources, "consumer/app/**",
+	assert.Contains(t, step.Sources, types.Glob{Pattern: "consumer/app/**"},
 		"the same-project input enters the cache key relative to the consumer")
 
 	// The payoff, both ways: editing lib/go.mod marks the consumer affected via DependsOn.

@@ -132,6 +132,23 @@ func (o ImportOutcome) String() string {
 	}
 }
 
+// compileObservers is the list AddCompileObserver builds when more than one
+// observer is set. One observer is stored as itself, so a single watcher does
+// not allocate a list.
+type compileObservers []CompileObserver
+
+func (c compileObservers) Phase(phase CompilePhase, elapsed time.Duration, err error) {
+	for _, o := range c {
+		o.Phase(phase, elapsed, err)
+	}
+}
+
+func (c compileObservers) Import(importPath string, outcome ImportOutcome, elapsed time.Duration, err error) {
+	for _, o := range c {
+		o.Import(importPath, outcome, elapsed, err)
+	}
+}
+
 // CompileObserver is notified as a Session compiles source into a runnable chunk:
 // the parse/check/compile phase timings and each import it resolves.
 //

@@ -289,8 +289,8 @@ func TestVerifyHoldsTheClaimToTheObservedDiff(t *testing.T) {
 	})
 }
 
-// TestForkMergeHoldsANewRowToTheLimits pins that the merge doors (the magus_job tool and
-// magus\job.put) fork under the same limits and default timeout `magus job fork` applies,
+// TestForkMergeHoldsANewRowToTheLimits pins that magus\job.put forks under the same
+// limits and default timeout `magus job fork` applies,
 // while a merge onto an existing row stays an update nothing refuses.
 func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()
@@ -315,6 +315,27 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Model = "opus" }, config.Jobs{MaxLive: 1}, nil)
 	require.NoError(t, err, "an update is not a fork")
 	assert.Equal(t, "opus", updated.Model)
+}
+
+// MGS3018 does not depend on which call wrote the path: a put that adds a directory to a
+// row that exists is refused as a fork naming it would be, and writes nothing.
+func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.WritePaths = append(u.WritePaths, "internal/**")
+	}, config.Jobs{}, nil)
+	require.ErrorIs(t, err, types.WritePathIsDirectory)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].WritePaths)
 }
 
 // A job that writes is held to something wait can grade; one that writes nothing is not.

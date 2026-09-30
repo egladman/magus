@@ -148,10 +148,10 @@ func TestGrantJSONUsesLevelNames(t *testing.T) {
 func TestCredentialPhrase(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "", Credential{}.Phrase())
-	assert.Equal(t, "the operator token", Credential{Class: ClassOperator, ID: "0badf00d"}.Phrase())
-	assert.Equal(t, "token laptop (3fa9c1d2)", Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "laptop"}.Phrase())
-	assert.Equal(t, "share link 9b2e04aa", Credential{Class: ClassShare, ID: "9b2e04aa"}.Phrase())
-	assert.Equal(t, "link code 51c0de00", Credential{Class: ClassExchange, ID: "51c0de00", Name: "console-1"}.Phrase())
+	assert.Equal(t, "the operator token", Credential{Kind: KindOperator, ID: "0badf00d"}.Phrase())
+	assert.Equal(t, "token laptop (3fa9c1d2)", Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "laptop"}.Phrase())
+	assert.Equal(t, "share link 9b2e04aa", Credential{Kind: KindShare, ID: "9b2e04aa"}.Phrase())
+	assert.Equal(t, "link code 51c0de00", Credential{Kind: KindExchange, ID: "51c0de00", Name: "console-1"}.Phrase())
 	assert.Equal(t, "stdio", CredentialStdio.Phrase())
 	assert.Equal(t, "the socket's owner", CredentialSocketPeer.Phrase())
 }

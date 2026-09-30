@@ -115,7 +115,7 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Every step's logic is tools/gha-queue.buzz, one subcommand each.
+      # Every step's logic is hack/ci/merge-queue.buzz, one subcommand each.
       # Speculation depth 8: the first eight changes of each partition get a validate job;
       # the rest wait for the run the next merge starts. Nearly every change here touches
       # the root project, so the queue is one partition, and at 3 it validated three
@@ -126,7 +126,7 @@ jobs:
         name: Plan the queue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus buzz tools/gha-queue.buzz -- plan --depth 8
+        run: magus buzz hack/ci/merge-queue.buzz -- plan --depth 8
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -213,7 +213,7 @@ jobs:
           MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
           TMPDIR: ${{ runner.temp }}
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
-        run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
+        run: magus buzz hack/ci/merge-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json, and
       # candidate.bundle when the regeneration committed anything.

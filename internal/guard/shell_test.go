@@ -278,6 +278,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "bash -c 'go test ./...'", rule: rawTool(`go test ./...`)},
 		{command: `sh -c "gofmt -w x.go"`, rule: rawTool(`gofmt -w x.go`)},
 		{command: "timeout 300 go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "gtimeout 60 go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "nohup pnpm build"},
 		{command: "time npx prettier --write ."},
 		{command: "nice -n 10 cargo build", rule: rawTool(`cargo build`)},
@@ -366,13 +367,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// The wrapper peeling that judges `time go test` as `go test` would erase
 		// the token this rule reads, so it works off the raw line.
 		{command: "time go test ./...", rule: rawTool(`go test ./...`)},
-		// Bounding magus with the shell. Advisory: run and affected take --timeout,
-		// which cancels the run instead of signalling the process.
-		{command: "timeout 300 magus run ci .", context: "--timeout 5m"},
-		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", context: "names the target"},
+		// Bounding magus with the shell kills it from outside; magustimeout_test.go
+		// covers each shape and the command it serves.
+		{command: "timeout 300 magus run ci .", rule: denyRule{Name: denyRuleMagusTimeout}},
+		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", rule: denyRule{Name: denyRuleMagusTimeout}},
 		{command: "timeout 60 sleep 30"},
-		// Only run and affected carry the flag, so nothing else is advised toward it.
-		{command: "timeout 60 magus graph build"},
+		{command: "timeout 60 magus graph build", rule: denyRule{Name: denyRuleMagusTimeout}},
 		{command: "magus run test ."},
 		// A cd ahead of magus is the same command as the project operand, so it passes.
 		// A cd into a temp or scratchpad copy is the throwaway rule above, and one into
@@ -1589,6 +1589,70 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 	}
 }
 
+// TestInPlaceSedLeavesAScratchFile: the refusal says editing under a scratch path is
+// untouched, and 28 of 36 measured refusals of scratch edits were this rule's. A file
+// provably outside the workspace is nobody's tracked file and nobody else's machine.
+func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"sed -i '' 's/^main();$/x/' /private/tmp/claude-501/x/scratchpad/probe.buzz",
+		"sed -i 's/a/b/' /tmp/x/f.txt",
+		`S=/private/tmp/c/scratchpad; sed -i '' 's/a/b/' $S/last.py && python3 $S/last.py`,
+		"cd /private/tmp/c/scratchpad/exp && sed -i '' 's|a|b|' M_*.yml && grep formula M_comment.yml",
+		"sed -i -e 's/a/b/' /tmp/x/one.txt /tmp/x/two.txt",
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q edits only scratch files", cmd)
+	}
+	for _, cmd := range []string{
+		"sed -i '' 's/a/b/' f.go",
+		"sed -i '' 's/a/b/' /tmp/x/f.txt internal/x.go",
+		"cd /tmp/x && cd - && sed -i '' 's/a/b/' f.go",
+		`sed -i '' 's/a/b/' "$UNSET/f.txt"`,
+		"sed -i '' 's/a/b/' $(ls /tmp/x)",
+		// The files come from the traversal, which is the blind sweep wherever it starts.
+		"find /tmp/x -name '*.py' -exec sed -i 's/a/b/' {} +",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Equal(t, denyRuleSedInPlace, v.Rule.Name, "%q may edit a workspace file", cmd)
+	}
+}
+
+// TestDenyTextsPointAtTheReferenceScripts: each rewrite refusal names the scripted rename,
+// and each output refusal the typed-result script, in one line, only where the workspace
+// carries the script.
+func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal"), 0o755))
+	for _, f := range []string{"hack/rename-symbol.buzz", "hack/example-typed-results.buzz", "internal/x.go"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, f), nil, 0o644))
+	}
+	carries := Dependencies{scope: workspaceScope{root: root}}
+	bare := Dependencies{scope: workspaceScope{root: t.TempDir()}}
+	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
+	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/example-typed-results.buzz") + "`"
+	for _, tt := range []struct {
+		command string
+		rule    denyRuleName
+		note    string
+	}{
+		{"sed -i '' 's/a/b/' f.go", denyRuleSedInPlace, rename},
+		{"perl -pi -e 's/a/b/' f.go", denyRuleScriptedRewrite, rename},
+		{"magus ls targets . | wc -l", denyRuleOutputPipe, typed},
+		{"magus run lint . > /tmp/x.txt", denyRuleOutputRedirect, typed},
+	} {
+		v := Evaluate(carries, tt.command)
+		require.Equal(t, tt.rule, v.Rule.Name, tt.command)
+		assert.Equal(t, 1, strings.Count(v.Deny, tt.note), "%q names its script once: %s", tt.command, v.Deny)
+		assert.NotContains(t, Evaluate(bare, tt.command).Deny, "hack/", "%q in a workspace without the script", tt.command)
+	}
+
+	at := location{workspace: root, dir: root}
+	got := denyInterpreterRewrite(at, `python3 -c "open('internal/x.go','w').write(x)"`, DialectBash)
+	assert.True(t, strings.HasSuffix(got, rename), got)
+}
+
 // TestGuardDeniesScriptedRewrite: `sed -i` is denied, so the next thing to hand is a
 // python one-liner that substitutes and writes: the same edit, by a route the sed rule
 // cannot see. This is not hypothetical: a `\.Sum\b` rewrite aimed at one proto field also
@@ -1688,6 +1752,17 @@ func TestScriptedRewriteLeavesPathsOutsideTheWorkspace(t *testing.T) {
 		{rooted, heredoc("/work/repo/f.go"), true},
 		// A path the script computes proves nothing about where it lands.
 		{Dependencies{}, "python3 - <<'PY'\nopen(p,'w').write(open(p).read().replace('a','b'))\nPY", true},
+
+		// A relative path after a cd resolves from where the cd landed: the measured shape of
+		// a scratch edit the promise above did not cover.
+		{Dependencies{}, "cd /private/tmp/claude-501/x/scratchpad/audit && " + heredoc("audit.py"), false},
+		{Dependencies{}, `S=/private/tmp/c/scratchpad; cd "$S" && ` + heredoc("gofuncs.py"), false},
+		{Dependencies{}, "python3 - /tmp/x/scratchpad/count.py <<'PY'\nimport sys\np = sys.argv[1]\n" +
+			"open(p, 'w').write(open(p).read().replace('a', 'b'))\nPY", false},
+		{rooted, "cd /tmp/x && " + heredoc("/work/repo/f.go"), true},
+		{Dependencies{}, "cd internal && " + heredoc("guard/shell.go"), true},
+		{Dependencies{}, "cd /tmp/x && cd - && " + heredoc("f.go"), true},
+		{Dependencies{}, heredoc("f.go") + "\ncd /tmp/x", true},
 	} {
 		v := Evaluate(tt.deps, tt.command)
 		if tt.denied {

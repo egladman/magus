@@ -195,12 +195,16 @@ func bindSpell(p *types.Project, spell *spells.Spell, name string, opts ...Bindi
 	// told a reader nothing, while hiding the toolchain they wanted (the root
 	// project's real answer is `go`). A project with no toolchain spell now
 	// correctly reports none; its targets come from its magusfile.
+	sources, outputs, err := types.SpellGlobs(spell)
+	if err != nil {
+		return fmt.Errorf("magus: WithSpell(%q) on %q: %w", name, p.Path, err)
+	}
 	if p.Spell == "" && !spell.Internal() {
 		p.Spell = name
 	}
 	p.Spells = append(p.Spells, name)
 	p.Bindings = append(p.Bindings, b)
-	p.Sources = append(p.Sources, spell.Sources()...)
-	p.Outputs = append(p.Outputs, spell.Outputs()...)
+	p.Sources = append(p.Sources, sources...)
+	p.Outputs = append(p.Outputs, outputs...)
 	return nil
 }

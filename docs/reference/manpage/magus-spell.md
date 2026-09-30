@@ -27,11 +27,19 @@ build    Pack \<dir\> exactly as push would and print the manifest digest the
   push     Pack \<dir\> as one uncompressed tar layer and push it to \<ref\>, a
            \<registry\>/\<repository\>:\<tag\>, then under each --tag with no second
            upload. Prints \<registry\>/\<repository\>@sha256:\<digest\>.
+           magus/spell/\<name\> in place of \<dir\> pushes a spell magus ships,
+           packed from the binary: the digest pull stamps on a copy.
   pull     Fetch \<ref\> by tag or digest, verify the manifest and layer digests,
            and print the pinned reference and the directory holding the files:
            [\<dir\>] when given, otherwise the user cache. A bare registry path,
            as a magusfile imports it, pulls the digest magus.lock pins.
+           magus/spell/\<name\> \<dir\> copies a spell magus ships instead, from
+           the binary with no network: the files its published artifact holds,
+           spell.buzz opening on a "// magus:origin \<reference\>" line, and
+           prints the magus.yaml override to add.
   ls       List \<registry\>/\<repository\>'s tags, following pagination.
+           magus/spell lists every spell magus ships instead, each pinned to
+           the digest a release publishes, with no network.
   lock     Check that magus.lock pins every remote spell magus.yaml declares,
            for its declared tag, and verify each pinned digest; no tag is
            resolved. --update resolves each tag and rewrites magus.lock, and is
@@ -48,7 +56,7 @@ Credentials: the spells.registries entry in magus.yaml for the reference's host
 names a username and a secret reference, resolved through the workspace's
 secret provider. --username overrides it and reads the password from stdin.
 With neither, requests are anonymous. A new GHCR package is private until
-someone makes it public.
+its owner makes it public in the package settings; magus never changes it.
 
 ### spell build options
 
@@ -90,13 +98,13 @@ someone makes it public.
 : Pack a spell directory and print the manifest digest a push would produce
 
 **push**
-: Push a spell directory's tracked files as an OCI artifact and print its pinned reference
+: Push a spell directory's tracked files, or a spell magus ships, as an OCI artifact and print its pinned reference
 
 **pull**
-: Fetch and verify a published spell into the cache or a directory
+: Fetch and verify a published spell into the cache or a directory, or copy out one magus ships
 
 **ls**
-: List a spell repository's tags
+: List a spell repository's tags, or the spells magus ships
 
 **lock**
 : Check magus.lock against magus.yaml, or rewrite it with --update
@@ -125,6 +133,12 @@ magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor
 
 ```sh
 magus spell ls ghcr.io/owner/repo/spells/cursor
+```
+
+*List every spell magus ships with the digest a release publishes*
+
+```sh
+magus spell ls magus/spell
 ```
 
 *Pin every declared remote spell's tag in magus.lock*

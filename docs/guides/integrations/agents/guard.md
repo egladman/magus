@@ -222,7 +222,6 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   spells selected with `magus\harness.provider`; several hosts are fine when you
   bounce between tools). Optional `dialect` selects the mvdan/sh parser variant
   for outer parse when judging rules; the last declared non-empty dialect wins.
-  `magus\guard.bash` remains as a deprecated alias that defaults dialect to bash.
 - **A workspace spawn rule** (`magus\guard.spawn(fun)` in the root magusfile): one
   Buzz function called on every subagent spawn and continuation with a normalized
   request, answering allow, advise or deny. Strengthen only, like the shell rules.
@@ -260,10 +259,10 @@ magus\guard.shell({
     reason: "Prefer the workspace terraform target: magus run plan <project>.",
 })
 
-import "ghcr.io/egladman/magus/spells/cursor";
-import "ghcr.io/egladman/magus/spells/codex";
-import "ghcr.io/egladman/magus/spells/claude-code" as claude;
-import "ghcr.io/egladman/magus/spells/opencode";
+import "ghcr.io/egladman/magus/spells/harness/cursor";
+import "ghcr.io/egladman/magus/spells/harness/codex";
+import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;
+import "ghcr.io/egladman/magus/spells/harness/opencode";
 magus\harness.provider(cursor)
 magus\harness.provider(codex)
 magus\harness.provider(claude)
@@ -298,29 +297,27 @@ config.
   redirect targets and coreutil operands, never a `magus` argv.
 - **Rewriting your own job row, while holding a lease**: taking another job's
   lease with `magus job exec <other-id>`, verifying a result with `magus job
-  wait`, and the `magus_job` tool's row writes, whichever channel they arrive
+  wait`, and a `client` call's `magus\job` writes, whichever channel they arrive
   on. Every lease-scoped rule below reads that row, so an agent that can rewrite
   it grades itself against a boundary nobody handed it from the next call on. A
   session holding no lease is untouched entirely, whether that is an
   orchestrator or a person in their own checkout, because those are the parties
   that write rows.
 
-  Over MCP the operations divide the same way. A write naming a row other than
-  the one this checkout holds is refused, and so is a write to the holder's own
-  row, with one exception: dropping declarations the row already carries, which
-  is how a holder releases a path, passes through to the store. Giving a path
-  back cannot widen a role, and whether a particular shrink is legitimate is the
-  store's judgment rather than the guard's. Recording the base a lease landed on
-  passes, because it is a procedure the write surface demands. Reading is
-  untouched everywhere: the tool's list op, `magus job exec` with no argument,
-  and `magus ls jobs`.
+  Over MCP the agent's write is the `client` tool calling `magus\job`. The
+  store refuses a write to a row the caller does not own. Dropping declarations
+  the row already carries, which is how a holder releases a path, passes
+  through. Giving a path back cannot widen a role, and whether a particular
+  shrink is legitimate is the store's judgment. Recording the base a lease
+  landed on passes, because it is a procedure the write surface demands.
+  Reading is untouched: `magus\job\list` and `magus ls jobs`.
 
-  The MCP form is judged because it is the same write through a different
-  transport; a rule holding on one channel would move the traffic rather than
-  stop it. magus reads its OWN tool name out of whatever the host prefixed it
-  with, and the parameters out of its own tool schema, so no host's vocabulary
-  enters the rule. The call is normalized to a command line before any rule sees
-  it, so what the activity trail records is what was graded.
+  The guard parses a `client` script and renders each literal `magus\job\put`,
+  `register`, `clear` and `wait` call as a line the lease rules read, so a
+  worker's widening or forged checkpoint is refused before the store sees it.
+  Only a call addressed to the magus server (`mcp__magus__<tool>`)
+  is graded as a magus call, and the call is normalized to a command line before
+  any rule sees it, so what the activity trail records is what was graded.
 
 ## What magus explains
 
@@ -514,7 +511,7 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
 Every one of those denials names the ACTOR who can move the boundary, and it is
 never the reader: "your orchestrator can widen these write paths; you cannot. Report it as
 an unresolved risk and stop." The texts they replace ended by naming the
-`magus_job` tool, meaning "ask the orchestrator", and two independent readers
+`client` tool, meaning "ask the orchestrator", and two independent readers
 took it as permission and widened their own row with it.
 
 A fourth rule DENIES and is not about the boundary at all: a write to a harness
@@ -759,7 +756,8 @@ touching Magus source:
    `magus.yaml` change and the forked spell together.
 
 That is the ownership switch: Magus ships the default spell; the declaration in
-`magus.yaml` chooses which tree apply reads, and it is the one line a reviewer sees.
+`magus.yaml` chooses which tree `magus describe harness` reads, and it is the one line a
+reviewer sees.
 See the magus-workspace-rules skill section "Adapting a Buzz harness".
 
 A later `magus run` request in the same host session is shown as a follow-up,
@@ -770,7 +768,6 @@ update is not itself a decision. Never relax a compiled guard
 locally. To strengthen one for THIS workspace, declare an additive
 `magus\guard.shell({...})` in the root magusfile (deny or advise matched on
 parsed program + args) and commit it; that path cannot disable a built-in.
-`magus\guard.bash` is deprecated; use `guard.shell` instead.
 
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
 rather than a command or a file path is a lease handoff: it appends an

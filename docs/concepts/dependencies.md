@@ -223,16 +223,20 @@ Run these against a live workspace in the tour's
 [glob step](../tour/index.html#step-7); `magus run <umbrella> --dry-run` prints the resolved set
 without executing anything.
 
-And the four that surprise people, each one a no-op rather than an error:
+One list is an error rather than a set:
 
 ```buzz
-// ONLY A NEGATION: nothing. Subtracting from an empty set is empty - it does
-// NOT mean "everything else".
-//   -> (no handles)
+// ONLY A NEGATION: refused. There is nothing for it to subtract from, and
+// neither reading of it is safe (see the rules below).
+//   -> error: negation "!site-generate" has no pattern to narrow
 export fun nothing_at_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("!site-generate"));
 }
+```
 
+And three that surprise people, each one a no-op rather than an error:
+
+```buzz
 // NEGATION IS EXACT, NOT SHORTHAND: "!generate" removes the target literally
 // named `generate`, which the include never selected anyway. Nothing is
 // subtracted. To drop the family, write "!*-generate".
@@ -271,10 +275,16 @@ rule it would compile to `^.*-index-generate$` and quietly subtract nothing, whi
 the one outcome a subtraction must never produce. To exclude a family, spell it
 the way you would include one: `"!*-generate"`.
 
-**Patterns that are only negations select nothing.** `ctx.glob("!site-generate")`
-resolves to no handles. Subtracting from an empty set is empty, not "everything
-else" - a glob that silently grew to the whole workspace because someone deleted
-its one positive pattern is a worse failure than one that matches nothing.
+**Patterns that are only negations are refused.** `ctx.glob("!site-generate")`
+fails the run. Reading it as "everything else" would grow the glob to the whole
+workspace the day someone deletes its one positive pattern, and reading it as
+nothing would quietly run no target at all.
+
+`!` means the same thing wherever magus reads a pattern list: in `ctx.glob`, and in
+the file globs `ctx.readsFiles`, `ctx.writesFiles`, `ctx.modifiesExistingFiles` and a
+project's `sources` and `outputs` take (see [per-target inputs and outputs](cache.md#per-target-inputs-and-outputs)). It subtracts from the
+other patterns of the same call, in any order, and never from another call's; a
+call of nothing but negations is an error.
 
 ### Globs, not regexes
 

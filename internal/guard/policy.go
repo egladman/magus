@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -191,20 +192,5 @@ func writePolicyMarker(path string, m policyMarker) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".guard-policy-*")
-	if err != nil {
-		return
-	}
-	_, werr := tmp.Write(body)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil {
-		_ = os.Remove(tmp.Name())
-		return
-	}
-	if os.Rename(tmp.Name(), path) != nil {
-		_ = os.Remove(tmp.Name())
-	}
+	_ = file.ReplaceFile(path, body, 0o600)
 }

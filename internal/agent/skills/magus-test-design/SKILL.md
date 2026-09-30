@@ -37,8 +37,8 @@ runs locally, on a commit, or in CI.
    change what a lower boundary can prove: process/runtime execution,
    filesystem, network, time, scheduling, persistence, or a language boundary.
 
-Prefer connected MCP tools (`{{tool "describe"}}`, `{{tool "explain"}}`, `{{tool "refs"}}`,
-`{{tool "path"}}`); use the CLI commands above as fallback. Do not start a server
+Prefer `{{tool "client"}}` (`{{buzz "describe"}}`, `{{buzz "explain"}}`, `{{buzz "refs"}}`,
+`{{buzz "path"}}`); use the CLI commands above as fallback. Do not start a server
 solely to review test design.
 
 An `unknown` result from `magus refs` is missing evidence, not proof of no

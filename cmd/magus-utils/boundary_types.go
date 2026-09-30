@@ -58,6 +58,10 @@ var boundaryTypes = []boundaryType{
 	// the adjective because types.Project and types.ProjectEntry already exist. The
 	// registry keys on the Buzz name, which is what makes that split expressible.
 	{Name: "Project", Type: reflect.TypeFor[spells.ProvidedProject]()},
+	// A lifecycle provider WRITES these, like Project. Leaf first: Lifecycle.cycles is
+	// [ReleaseCycle].
+	{Name: "ReleaseCycle", Type: reflect.TypeFor[spells.ReleaseCycle]()},
+	{Name: "Lifecycle", Type: reflect.TypeFor[spells.Lifecycle]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "ShellCommand", Type: reflect.TypeFor[types.ShellCommand](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
@@ -91,6 +95,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "Module", Type: reflect.TypeFor[types.ModuleEntry](), RuntimeObject: true},
 	{Name: "ProjectEntry", Type: reflect.TypeFor[types.ProjectEntry](), RuntimeObject: true},
 	{Name: "Projects", Type: reflect.TypeFor[types.ProjectsOutput](), RuntimeObject: true},
+	// magus\tools()'s report, leaves first.
+	{Name: "ToolRow", Type: reflect.TypeFor[types.ToolRow](), RuntimeObject: true},
+	{Name: "LifecycleStatus", Type: reflect.TypeFor[types.LifecycleStatus](), RuntimeObject: true},
+	{Name: "ToolReport", Type: reflect.TypeFor[types.ToolReport](), RuntimeObject: true},
 	{Name: "CrossTargetRef", Type: reflect.TypeFor[types.CrossTargetRef](), RuntimeObject: true},
 	{Name: "TargetSpellUse", Type: reflect.TypeFor[types.TargetSpellUse](), RuntimeObject: true},
 	{Name: "InputRef", Type: reflect.TypeFor[types.InputRef](), RuntimeObject: true},
@@ -122,6 +130,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
+	{Name: "CleanReport", Type: reflect.TypeFor[types.CleanReport](), RuntimeObject: true},
 	// magus.insight's bundle, leaf-first. Element names are not uniform on purpose:
 	// *Entry only where the bare noun collides with the bundle's own name. These are
 	// public Buzz names magusfiles annotate with, so do not tidy them.
@@ -136,14 +145,23 @@ var boundaryTypes = []boundaryType{
 	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
-	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
-	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
-	// one as a typed return; module_decls.go's KnowledgeGodNode comment is the fossil
-	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
-	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
-	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},
-	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage]()},
-	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats]()},
+	// Graph reads, leaf-first. magus\query, explain, path, refs, and stats return these.
+	// KnowledgeGodNode.in is a Buzz keyword; the mirror emits it as a free identifier.
+	{Name: "Match", Type: reflect.TypeFor[types.KnowledgeMatch](), RuntimeObject: true},
+	{Name: "KnowledgeNode", Type: reflect.TypeFor[types.KnowledgeNode](), RuntimeObject: true},
+	{Name: "KnowledgeEdge", Type: reflect.TypeFor[types.KnowledgeEdge](), RuntimeObject: true},
+	{Name: "EdgeRef", Type: reflect.TypeFor[types.KnowledgeEdgeRef](), RuntimeObject: true},
+	{Name: "PathStep", Type: reflect.TypeFor[types.KnowledgePathStep](), RuntimeObject: true},
+	{Name: "RefSite", Type: reflect.TypeFor[types.KnowledgeRefSite](), RuntimeObject: true},
+	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
+	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
+	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
+	{Name: "QueryResult", Type: reflect.TypeFor[types.KnowledgeQueryOutput](), RuntimeObject: true},
+	{Name: "ExplainResult", Type: reflect.TypeFor[types.KnowledgeExplainOutput](), RuntimeObject: true},
+	{Name: "PathResult", Type: reflect.TypeFor[types.KnowledgePathOutput](), RuntimeObject: true},
+	{Name: "RefsResult", Type: reflect.TypeFor[types.KnowledgeRefsOutput](), RuntimeObject: true},
+	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats](), RuntimeObject: true},
+	{Name: "OutputRecord", Type: reflect.TypeFor[types.OutputRecord](), RuntimeObject: true},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
 	// Registered because KnowledgeAnswer carries it: a struct field on a registered Buzz
@@ -216,6 +234,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 	{Name: "GuardBinary", Type: reflect.TypeFor[types.GuardBinary](), RuntimeObject: true},
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
+	// magus\service.acquire returns it and magus\service.release takes it back.
+	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

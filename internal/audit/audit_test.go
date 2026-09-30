@@ -439,6 +439,22 @@ func TestFinishNamesTheTargetWhoseOutputMatches(t *testing.T) {
 	assert.NotContains(t, err.Error(), "writer:", "no declared output matches, so the report guesses nothing")
 }
 
+// TestOutputClaimSkipsAnExcludedFile: a hand file a target's output carves out is not that
+// target's output, so a write to it must not be blamed on the target.
+func TestOutputClaimSkipsAnExcludedFile(t *testing.T) {
+	p := &types.Project{Path: "api", TargetOutputs: map[string][]types.OutputRef{
+		"generate": {{Glob: "docs/gen/*.go", Except: []string{"docs/gen/runtime.go"}}},
+	}}
+
+	_, _, ok := outputClaim(p, "api/docs", &changeBucket{modified: []string{"gen/runtime.go"}})
+	assert.False(t, ok, "the excluded file is nobody's output")
+
+	target, glob, ok := outputClaim(p, "api/docs", &changeBucket{modified: []string{"gen/fs.go"}})
+	require.True(t, ok)
+	assert.Equal(t, "generate", target)
+	assert.Equal(t, "docs/gen/*.go", glob)
+}
+
 // A cache replay removes the file and clones the blob in its place, and clonefile(2)
 // carries the blob's mtime over. Same size, same mtime: only the file's identity moved,
 // and a comparison of mtime and size alone read the write as no change at all.

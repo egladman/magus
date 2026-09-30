@@ -60,6 +60,9 @@ Relax upstream strictness (top\-level statements, optional argument labels) to m
 \fB\-\-no\-autoload\fR
 Start the REPL without executing the magusfile
 .TP
+\fB\-\-profile\fR
+Print where compile and import time went, after the script runs
+.TP
 \fB\-t\fR
 Run the file's test "..." {} blocks and report pass/fail
 .TP
@@ -113,6 +116,12 @@ magus buzz --embedded scripts/target.buzz
 .PP
 .EX
 magus buzz -t --coverprofile=out.lcov scripts/report.buzz
+.EE
+.PP
+\fISee which imports a script spends its time on\fR
+.PP
+.EX
+magus buzz --profile scripts/report.buzz
 .EE
 .PP
 .SH SEE ALSO

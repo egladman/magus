@@ -373,13 +373,14 @@ func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
 		return fs
 	}
 
-	err := checkOutputSupported("clean", parsed("-o", "json"))
+	err := checkOutputSupported("buzz", parsed("-o", "json"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "magus clean: -o is not supported by this command")
+	assert.Contains(t, err.Error(), "magus buzz: -o is not supported by this command")
 	assert.Equal(t, exitUsage, exitCodeOf(err), "a flag that could never act is misuse, not a failed run")
 
 	assert.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
-	assert.NoError(t, checkOutputSupported("clean", parsed()), "an unset -o is not a misuse")
+	assert.NoError(t, checkOutputSupported("clean", parsed("-o", "json")), "clean returns a report")
+	assert.NoError(t, checkOutputSupported("buzz", parsed()), "an unset -o is not a misuse")
 }
 
 // The verdict is keyed on the flag being TYPED, not on global.output, which every
@@ -393,7 +394,7 @@ func TestOutputRefusalIgnoresAmbientGlobal(t *testing.T) {
 	fs := flag.NewFlagSet("t", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	require.NoError(t, fs.Parse(nil))
-	assert.NoError(t, checkOutputSupported("clean", fs))
+	assert.NoError(t, checkOutputSupported("buzz", fs))
 }
 
 // The check rides cmdParse, so it fires on the real parse path for every spelling of the
@@ -408,7 +409,7 @@ func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
 		{"./web", "-o", "json"},
 	} {
 		global.output = ""
-		_, err := cmdParse("clean", args, nil)
+		_, err := cmdParse("buzz", args, nil)
 		require.Error(t, err, "args %v", args)
 		assert.Contains(t, err.Error(), "-o is not supported by this command")
 	}

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -73,6 +74,22 @@ func TestGuardIndexRoundTrip(t *testing.T) {
 	sites, err = x.RefSites("Jud")
 	require.NoError(t, err)
 	assert.Empty(t, sites)
+}
+
+// The index and its reference sites name the workspace's symbols and files, so both stay
+// private to their owner.
+func TestGuardIndexFilesAreOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	root, cacheDir, g := guardFixture(t)
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+
+	for _, p := range []string{GuardIndexPath(cacheDir), guardRefsPath(cacheDir)} {
+		fi, err := os.Stat(p)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm(), p)
+	}
 }
 
 // TestGuardIndexFreshness pins what makes a kind non-definitive: an edit to a file of its

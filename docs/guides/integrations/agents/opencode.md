@@ -33,7 +33,7 @@ Prefer wiring the OpenCode harness from the root magusfile so skills install
 and multi-host apply see it beside the other hosts:
 
 ```buzz
-import "ghcr.io/egladman/magus/spells/opencode";
+import "ghcr.io/egladman/magus/spells/harness/opencode";
 magus\harness.provider(opencode);
 ```
 
@@ -99,7 +99,7 @@ other templates.
 // belongs to by callID. That append is what replaced a console.warn, which reached
 // the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
-// magus-command.sh.
+// magus-command.buzz.
 //
 // It also carries the two jobs that are not verdicts: a compacting session is
 // handed this checkout back through the compaction prompt, and a checkpoint is
@@ -115,7 +115,7 @@ other templates.
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 18
+// magus-guard-template: 19
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none ask=none
@@ -244,12 +244,12 @@ function workspaceMagus(): string | null {
 
 export const MagusGuard: Plugin = async () => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
-  // magus-command.sh: an older PATH binary does not fail when it lacks a rule, it
+  // lib/hook.buzz: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
   const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
   // Said once per session. This plugin instance lives as long as the session does, so a
-  // flag here IS the session and needs no marker on disk, unlike the sh templates whose
+  // flag here IS the session and needs no marker on disk, unlike the Buzz templates whose
   // process ends with each tool call. The notice reports a broken installation: a fact
   // for the person, with nothing in it a model can act on, so a repeat is noise.
   // Measured over recent sessions: 99% of these firings were same-session repeats.
@@ -309,8 +309,8 @@ export const MagusGuard: Plugin = async () => {
    * empty and every verdict silently disappears. So: try as called, and on an
    * empty reply - which under `-o json` only happens when the call itself failed,
    * since even a pass renders `{"decision":"pass",...}` - retry with `--agent-name` and
-   * its value stripped out. Same shape as magus-command.sh's `guard()`
-   * fallback, fixed there after the same gap (memory:
+   * its value stripped out. Same shape as magus-command.buzz's unattributed
+   * retry, fixed there after the same gap (memory:
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.
    */
@@ -558,7 +558,7 @@ so a long session records several checkpoints. That is the same shape a `Stop`
 hook produces on the hosts that have one, and the listing is ordered.
 
 If you would rather not have the plugin do it, running
-[`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) with
+[`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz) with
 `--agent-name opencode` records the identical row.
 `magus session checkpoint --note "..."` writes it by hand.
 

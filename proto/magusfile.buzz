@@ -16,9 +16,9 @@ import "magus/spell/go";
 // their trees as its own outputs (see below).
 import "project/../docs";
 import "project/../console";
-// The shared generated-file gate (tools/drift.buzz) and the fs helpers it takes paths from.
-import "../tools/drift" as drift;
-import "../tools/index" as index;
+// The shared generated-file gate (hack/drift.buzz) and the fs helpers it takes paths from.
+import "../hack/drift" as drift;
+import "../hack/index" as index;
 import "fs";
 import "vcs";
 
@@ -133,7 +133,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in tools/index.buzz.
+// body and the reasons for them are in hack/index.buzz.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",

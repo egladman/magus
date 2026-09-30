@@ -9,11 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/stamp"
-	"github.com/gofrs/flock"
 )
 
 // managedMarkers names one kind of magus-managed section. Four kinds, not one:
@@ -276,55 +274,22 @@ func managedSectionPresent(path string, m managedMarkers) (bool, error) {
 	return len(spans) > 0, nil
 }
 
-// The repository lock's shape, matching the job store's (internal/job/store.go).
-// lockWait bounds one acquisition and lockRetryDelay is how often a blocked one re-polls.
-const (
-	managedLockName = "magus-managed.lock"
-	lockWait        = 10 * time.Second
-	lockRetryDelay  = 20 * time.Millisecond
-)
+// managedLockName is the repository's managed-section lock file, in its metadata dir.
+const managedLockName = "magus-managed.lock"
 
 // withRepoLock runs fn holding the managed-section lock of the repository whose metadata
 // directory is metaDir (git's common dir, .hg, or .sl), so concurrent installs from any
 // worktree or process cannot drop each other's section. One lock covers every managed
 // file of the repository, and it lives in the metadata dir so it never shows as untracked.
-//
-// It follows the job store and project-lock idiom: gofrs/flock, TryLock first, then a
-// wait bounded by lockWait. An OS lock, so a killed holder never wedges it; advisory, so
-// a hand-edit ignores it. A managed write is a small file rewrite, so a longer wait means
-// a stuck holder. ctx shortens the wait and never lengthens it. The lock is not
+// A managed write is a small file rewrite, so the wait is file.LockWait. The lock is not
 // reentrant: fn must not call withRepoLock.
-func withRepoLock(ctx context.Context, metaDir string, fn func() error) (err error) {
+func withRepoLock(ctx context.Context, metaDir string, fn func() error) error {
 	// One key per repository, however the caller spelled the path to it.
 	dir, err := filepath.EvalSymlinks(metaDir)
 	if err != nil {
 		return fmt.Errorf("vcs: lock %s: %w", metaDir, err)
 	}
-	fl := flock.New(filepath.Join(dir, managedLockName))
-	got, err := fl.TryLock()
-	if err != nil {
-		return fmt.Errorf("vcs: lock %s: %w", fl.Path(), err)
-	}
-	if !got {
-		wait, cancel := context.WithTimeout(ctx, lockWait)
-		defer cancel()
-		if got, err = fl.TryLockContext(wait, lockRetryDelay); err != nil || !got {
-			// Blaming a stuck holder for the caller's own cancellation would send them
-			// looking for a process that is working fine.
-			if ctx.Err() != nil {
-				return fmt.Errorf("vcs: cancelled while waiting for the managed-section lock at %s, so nothing was written: %w", fl.Path(), ctx.Err())
-			}
-			return fmt.Errorf("vcs: another process has held the managed-section lock at %s for more than %s, so nothing was written."+
-				" Look for a stuck magus process with `magus status`, then retry;"+
-				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
-		}
-	}
-	defer func() {
-		if uerr := fl.Unlock(); uerr != nil {
-			err = errors.Join(err, fmt.Errorf("vcs: unlock %s: %w", fl.Path(), uerr))
-		}
-	}()
-	return fn()
+	return file.WithLock(ctx, filepath.Join(dir, managedLockName), file.LockWait, fn)
 }
 
 // lockedWrite runs write under withRepoLock and returns what it reported.

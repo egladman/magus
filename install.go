@@ -149,7 +149,7 @@ func (m *Magus) installStep(p *types.Project, spellName, target string, choice s
 		ProjectPath:     p.Path,
 		Target:          target,
 		Spell:           spellName,
-		Sources:         []string{m.workspaceRel(choice.Manifest), m.workspaceRel(choice.Lock)},
+		Sources:         []types.Glob{{Pattern: m.workspaceRel(choice.Manifest)}, {Pattern: m.workspaceRel(choice.Lock)}},
 		IgnoreDirs:      base.IgnoreDirs,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: base.SpellDefVersion,
@@ -158,10 +158,10 @@ func (m *Magus) installStep(p *types.Project, spellName, target string, choice s
 		IncludeArch:     true,
 	}
 	for _, in := range choice.Install.Inputs {
-		step.Sources = append(step.Sources, joinGlob(p.Path, in))
+		step.Sources = append(step.Sources, types.Glob{Pattern: in}.Root(p.Path))
 	}
 	for _, s := range choice.Install.Stamps {
-		step.Stamps = append(step.Stamps, joinGlob(p.Path, s))
+		step.Stamps = append(step.Stamps, types.RootGlob(p.Path, s))
 	}
 	for _, v := range toolVersions {
 		for _, t := range choice.Install.Tools {

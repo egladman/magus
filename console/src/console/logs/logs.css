@@ -480,7 +480,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    case. */
 /* min-width: 0 is what makes the basis above binding. A flex item defaults to min-width:
    auto, which floors it at its MIN-CONTENT width, and a long leaf label then overrides the
-   clamp entirely - the activity index's "magus_run_target 3m ago" leaves pushed this aside
+   clamp entirely - the activity index's long call leaves pushed this aside
    to 580px inside a 1395px split. The run browser's leaves are short enough to stay under
    the cap, so the same rule looked correct in one surface while it was broken in the
    other. The tree scrolls, so the floor buys nothing. */

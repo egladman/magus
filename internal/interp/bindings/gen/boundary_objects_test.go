@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -163,7 +164,7 @@ func TestObjectNamedStringsCrossAsPlainStrings(t *testing.T) {
 
 func objectMap(t *testing.T, v vm.Value) map[string]any {
 	t.Helper()
-	m, ok := ValueToAny(v).(map[string]any)
-	require.True(t, ok, "encoder produced %T, not a map", ValueToAny(v))
+	m, ok := ffi.ValueToAny(v).(map[string]any)
+	require.True(t, ok, "encoder produced %T, not a map", ffi.ValueToAny(v))
 	return m
 }

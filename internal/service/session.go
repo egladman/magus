@@ -19,7 +19,8 @@ type Session struct {
 
 	// brokerAcquire/brokerRelease route to the cross-invocation host when non-nil;
 	// nil means no broker is reachable, so services run in-process for this run only.
-	brokerAcquire func(ctx context.Context, key string, svc spells.Service) error
+	// brokerAcquire reports whether the broker owns the service (see Acquire).
+	brokerAcquire func(ctx context.Context, key string, svc spells.Service) (owned bool, err error)
 	// brokerRelease takes a ctx for the reason ReleaseAll does: a wedged broker socket
 	// would otherwise hang every run at exit, with no bound anywhere on the path.
 	brokerRelease func(ctx context.Context, key string)
@@ -33,7 +34,7 @@ type Session struct {
 
 // NewSession returns a Session backed by reg. brokerAcquire/brokerRelease may be nil
 // (no cross-invocation host), in which case every service runs in-process.
-func NewSession(reg *Registry, brokerAcquire func(context.Context, string, spells.Service) error, brokerRelease func(context.Context, string)) *Session {
+func NewSession(reg *Registry, brokerAcquire func(context.Context, string, spells.Service) (bool, error), brokerRelease func(context.Context, string)) *Session {
 	return &Session{
 		reg:           reg,
 		brokerAcquire: brokerAcquire,
@@ -42,26 +43,50 @@ func NewSession(reg *Registry, brokerAcquire func(context.Context, string, spell
 	}
 }
 
-// acquire starts (or reuses) the service for key, routing to the broker when one is
-// reachable, else to the in-process Registry. If the broker acquire fails (it was
-// reachable at run start but has since died or wedged) the service is hosted
-// in-process for this run rather than aborting (the design's "degrade to
-// per-invocation"), so a broker hiccup does not fail an otherwise-fine run.
-func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) error {
+// Acquire starts (or reuses) the service for key and takes one reference to it,
+// routing to the broker when one is reachable, else to the in-process Registry. If
+// the broker acquire fails (it was reachable at run start but has since died or
+// wedged) the service is hosted in-process rather than aborting (the design's
+// "degrade to per-invocation"), so a broker hiccup does not fail an otherwise-fine run.
+//
+// owned reports whether magus started the service and so stops it once its last
+// reference ends; false means it was [Adopted]. brokered reports whether the broker
+// hosts it, which keeps it warm past this session.
+func (s *Session) Acquire(ctx context.Context, key string, svc spells.Service) (owned, brokered bool, err error) {
 	if s.brokerAcquire != nil {
-		if err := s.brokerAcquire(ctx, key, svc); err != nil {
-			slog.WarnContext(ctx, "magus: the broker could not host a service; hosting it in-process for this run",
-				slog.String("key", key), slog.String("err", err.Error()))
-			_, ierr := s.reg.Acquire(ctx, key, svc)
-			return ierr
+		owned, err := s.brokerAcquire(ctx, key, svc)
+		if err == nil {
+			s.mu.Lock()
+			s.brokerKeys[key]++
+			s.mu.Unlock()
+			return owned, true, nil
 		}
-		s.mu.Lock()
-		s.brokerKeys[key]++
-		s.mu.Unlock()
-		return nil
+		slog.WarnContext(ctx, "magus: the broker could not host a service; hosting it in-process for this run",
+			slog.String("key", key), slog.String("err", err.Error()))
 	}
-	_, err := s.reg.Acquire(ctx, key, svc)
-	return err
+	h, err := s.reg.Acquire(ctx, key, svc)
+	if err != nil {
+		return false, false, err
+	}
+	return h != Adopted, false, nil
+}
+
+// Release drops one reference Acquire took on key, before the session ends.
+func (s *Session) Release(ctx context.Context, key string) {
+	s.mu.Lock()
+	brokered := s.brokerKeys[key] > 0
+	if brokered {
+		s.brokerKeys[key]--
+		if s.brokerKeys[key] == 0 {
+			delete(s.brokerKeys, key)
+		}
+	}
+	s.mu.Unlock()
+	if brokered {
+		s.brokerRelease(ctx, key)
+		return
+	}
+	s.reg.Release(key)
 }
 
 // ReleaseAll releases everything the session acquired: broker-hosted services are

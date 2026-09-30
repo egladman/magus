@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // startupTracer records named phase durations; all methods are no-ops when disabled.
@@ -16,6 +18,7 @@ type startupTracer struct {
 	phases  []tracePhase
 	start   time.Time
 	w       io.Writer
+	profile *buzz.Profile
 }
 
 type tracePhase struct {
@@ -27,6 +30,7 @@ func newStartupTracer(enabled bool) *startupTracer {
 	t := &startupTracer{enabled: enabled, w: os.Stderr}
 	if enabled {
 		t.start = time.Now()
+		t.profile = buzz.NewProfile()
 	}
 	return t
 }
@@ -59,4 +63,9 @@ func (t *startupTracer) done() {
 		fmt.Fprintf(t.w, "  %-35s %v\n", p.name, p.d.Round(time.Microsecond))
 	}
 	fmt.Fprintf(t.w, "  %-35s %v\n", "total", total.Round(time.Microsecond))
+	if t.profile != nil {
+		if rep := t.profile.Report(); rep != "" {
+			fmt.Fprint(t.w, rep)
+		}
+	}
 }

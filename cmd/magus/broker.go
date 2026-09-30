@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -405,4 +406,94 @@ var (
 func processBrokerClient() *broker.Client {
 	processBrokerOnce.Do(func() { processBroker = newBrokerClient(true) })
 	return processBroker
+}
+
+// brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor
+// needs to run the broker, for the person to install. The default is launchd on macOS
+// and systemd elsewhere.
+func brokerUnits(args []string) error {
+	rest, err := cmdParse("broker units", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus broker units [systemd|launchd] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Print the units a supervisor needs to run the broker: a systemd socket and")
+			fmt.Fprintln(os.Stderr, "service that socket-activate it, or a launchd agent that keeps it alive.")
+			fmt.Fprintln(os.Stderr, "magus prints them; installing them is yours.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	supervisor := broker.SupervisorSystemd
+	if runtime.GOOS == "darwin" {
+		supervisor = broker.SupervisorLaunchd
+	}
+	switch len(rest) {
+	case 0:
+	case 1:
+		supervisor = rest[0]
+	default:
+		return usagef("magus broker units: takes at most one supervisor (got %q)", rest)
+	}
+	facts, err := gatherUnitFacts()
+	if err != nil {
+		return fmt.Errorf("magus broker units: %w", err)
+	}
+	units, err := broker.RenderUnits(supervisor, facts)
+	if err != nil {
+		return usagef("magus broker units: %v", err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format != outputText {
+		return emitFormatted(opts, units)
+	}
+	for i, u := range units {
+		if i > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("# %s\n%s", u.Path, u.Content)
+	}
+	fmt.Fprintln(os.Stderr, "\nmagus: write each file above to the path in its header, then:")
+	switch supervisor {
+	case broker.SupervisorSystemd:
+		fmt.Fprintln(os.Stderr, "  systemctl --user daemon-reload && systemctl --user enable --now magus-broker.socket")
+	case broker.SupervisorLaunchd:
+		fmt.Fprintf(os.Stderr, "  launchctl bootstrap gui/%d %s\n", os.Getuid(), units[0].Path)
+	}
+	return nil
+}
+
+func gatherUnitFacts() (broker.UnitFacts, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return broker.UnitFacts{}, err
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return broker.UnitFacts{}, err
+	}
+	configDir, err := config.UserConfigDir()
+	if err != nil {
+		return broker.UnitFacts{}, err
+	}
+	f := broker.UnitFacts{
+		Exe:       exe,
+		Socket:    strings.TrimPrefix(broker.DefaultAddr(), "unix://"),
+		Log:       brokerLogPath(),
+		Grace:     globalCfg.ShutdownGrace,
+		Home:      home,
+		ConfigDir: configDir,
+	}
+	for _, k := range []string{"XDG_RUNTIME_DIR", "TMPDIR"} {
+		if v, ok := os.LookupEnv(k); ok {
+			f.Env = append(f.Env, [2]string{k, v})
+		}
+	}
+	return f, nil
 }

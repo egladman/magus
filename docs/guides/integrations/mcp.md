@@ -63,12 +63,11 @@ http://127.0.0.1:7391/mcp
 
 `magus doctor` reports whether MCP is reachable and prints the endpoint URL.
 
-## Is MCP actually reachable?
+## Is the loopback MCP endpoint reachable?
 
-An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on
-its own, so if the server is not running the tools silently disappear from the host.
-`magus status` reports the endpoint's live health as its own block, checked independently
-of the server's job socket:
+For a host configured with the loopback URL, `magus status` reports the HTTP
+endpoint's live health as its own block, checked independently of the server's
+socket. This block does not describe a host using stdio or the server's Unix socket:
 
 ```text
 mcp endpoint
@@ -91,7 +90,7 @@ loaded), and `mcp` (this endpoint is reachable) - and they are comma-combinable,
 if any listed check does:
 
 ```sh
-magus status --probe=mcp             # fail if the tools are unreachable
+magus status --probe=mcp             # fail if loopback HTTP MCP is unreachable
 magus status --probe=liveness,mcp    # fail if the server OR the endpoint is down
 ```
 
@@ -148,100 +147,137 @@ curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
 
 ## Available tools
 
-Both transports expose these tools. This list is authoritative at the time of writing;
-`magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
-the live set with full parameters, so trust that over this table if they ever differ.
+Both transports expose one `client` tool for the `magus` module, plus the
+operations no member of that module covers. That is the current inventory, not
+a claim that every CLI command deserves an MCP twin. This list is authoritative
+at the time of writing; `magus describe mcp-tools` (or `client` calling
+`magus\describe` with the arguments of `magus describe mcp-tools`) prints the
+live set with full parameters, so trust that over this table if they ever differ.
 
 The catalog itself is generated from the `std.Magus` module descriptor, the same
 declaration the Buzz bindings, the checker declarations and
 [the `magus` module reference](../../reference/buzz/magus.md) come from. Declare an
 `MCPTool` there to add one; nothing in the handler package is hand-listed.
 
-Discover:
+### The boundary and the fallback
 
-| Tool                  | Purpose                                                                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `magus_describe`      | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail)    |
-| `magus_describe_file` | Classify paths against declared globs: owning project, per-target claims, dependency edges, and declarations covering several paths |
-| `magus_where`         | Resolve a fuzzy project name to its absolute path                                                                                   |
-| `magus_config_get`    | Read the resolved workspace config (read-only)                                                                                      |
+MCP is an agent-facing adapter to Magus's existing workspace operations. It
+does not own a second graph, build engine, job store or VCS implementation.
+Use a typed MCP tool when the host exposes it. If the tool is missing or its
+call fails, use the corresponding CLI verb. The HTTP probe above cannot test
+the host's stdio or Unix-socket connection. For a server-socket problem,
+`magus status --probe=readiness` checks whether this workspace is loaded on
+the socket, but cannot confirm the host registered MCP. The host owns the
+connection; an agent should not start a server merely to unlock a tool.
 
-Run:
+| Need                                      | MCP                                                             | Disconnected fallback                                                |
+| ----------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`                 |
+| Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`            |
+| Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                          |
+| Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has a broader host surface |
 
-| Tool                     | Purpose                                                                    |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `magus_run_target`       | Run a target (`build`, `test`, `lint`, `ci`, ...) for one or more projects |
-| `magus_run_affected`     | Run a target on only the VCS-affected projects                             |
-| `magus_affected_plan`    | Emit a provider-neutral CI shard plan for the affected set                 |
-| `magus_affected_explain` | Explain why a project is in the affected set                               |
-| `magus_buzz`             | Run a Buzz program (`magus buzz`) over `stdin` and return its output       |
+`client` is the magus module. Define `main(args: [str])`, `import "magus"`, and
+return a JSON-encodable value. The return is under `json`; `std.print` text is
+under `stdout`. Call `magus\describeModule("magus")` for the signatures. Also
+importable: `std`, `math`, `crypto`, `serialize`, `buffer`, and the WASM host
+modules except `env`. File imports, native FFI, and `fs`, `proc`, `http`, `os`,
+`net`, `vcs`, and `env` are refused with
+[MGS3034](../../reference/codes/sandbox/MGS3034.md), and `magus\cmd` and
+`magus\pry` are not offered. Each call runs in its own process. Bounded at 10
+minutes when called directly; a host that supports MCP tasks can run it as a
+task without that bound. Filter a large result in the script before returning
+it.
 
-`magus_buzz` is the tool for transforming another tool's output, in place of a shell
-one-liner. Pass the earlier result as `stdin` and the script reads it with
-`io\stdin.readAll()`; its `main` receives `args`. This call keeps the spell ids from a
-`magus_query` result:
+`buzz` is deliberately not a back door to the Magus API. It receives
+JSON, runs a small set of Buzz standard modules, and returns JSON. Query or
+change the workspace through `client`, then pass that result as `input`.
+`import "magus"` explains this boundary with
+[MGS3033](../../reference/codes/sandbox/MGS3033.md). The CLI's full
+`magus buzz` interpreter remains available for scripts that intentionally
+need host modules, file imports or native FFI; do not treat it as a
+capability-equivalent fallback for an untrusted transform.
+
+Today each MCP connection is bound to one opened workspace. A future
+multi-workspace orchestrator should own several explicit workspace clients and
+derive a scoped client for each delegated job. It should not add a `root`
+parameter to every tool call or let `buzz` import a privileged client:
+those would make a scoped call silently cross into another workspace.
+
+The tools beside `client` keep distinct jobs: transforming supplied JSON
+(`buzz`), the live pool (`status`), the resolved config
+(`config`), review collaboration (`diff`), and a local console
+link (`console`). The client does not offer `magus\cmd`. A new MCP tool should
+expose an existing domain operation that an agent cannot use well through
+the current tools. Do not add a second implementation or a thin alias for a
+CLI spelling.
+
+The magus module, through `client`:
+
+| Call                                              | Purpose                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `magus\describe`                                  | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools |
+| `magus\describeFile`                              | Classify paths against declared globs: owning project and role                             |
+| `magus\run`                                       | Run a target for one or more projects, with the same arguments as `magus run`              |
+| `magus\clean`                                     | Remove declared outputs. Arguments are `magus clean`'s                                     |
+| `magus\where`                                     | Which project contains a directory                                                         |
+| `magus\affected`                                  | The affected project set                                                                   |
+| `magus\impact`                                    | The blast radius: why each project is in that set                                          |
+| `magus\output`                                    | Fetch one target execution's captured output by its `out...` ref                           |
+| `magus\doctor`                                    | Validate workspace health (config, cache, cycles, tool availability)                       |
+| `magus\insight`                                   | One report: hotspots, affinity, ownership, trend, volatility, unreferenced                 |
+| `magus\query`, `explain`, `path`, `refs`, `stats` | Search the graph, one node, a path, a symbol's references, and the graph's shape           |
+| `magus\memory`                                    | User-owned per-repo memory shared across worktrees                                         |
+| `magus\job`                                       | The orchestrating agent's declared jobs; magus never enforces them                         |
+| `magus\vcs.checkpoint`                            | The working state's identity: revision, branch, dirty, patch digest; writes nothing        |
+
+Example:
+
+```json
+{"script": "import \"magus\"; fun main(args: [str]) > any !> str { return magus\\query(\"kind=spell\"); }"}
+```
+
+Operations no member covers:
+
+| Tool      | Purpose                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------- |
+| `buzz`    | Transform supplied JSON with Buzz and return a JSON value                                                         |
+| `status`  | Report the live proc-server pool                                                                                  |
+| `config`  | Read the resolved workspace config (read-only)                                                                    |
+| `diff`    | Join the review session a person has open. `magus\diff` reads the working tree and does not write to that session |
+| `console` | Return a tokenless link to a local console surface when the user asks to see it                                   |
+
+`buzz` transforms a result from another MCP tool without a shell. Pass that
+result as `input`; `transform(input: any, args: [str])` returns the JSON value to
+send back. For example:
 
 ```json
 {
-  "script": "import \"std\"; import \"io\"; import \"encoding/json\";\nfun main(args: [str]) > void !> any {\n    final q = json\\parse(io\\stdin.readAll() ?? \"null\") as {str: any};\n    final ids = mut [<str>];\n    foreach (m in q[\"matches\"] as [any]) {\n        final hit = m as {str: any};\n        if (hit[\"kind\"] == args[0]) { ids.append(hit[\"id\"] as str); }\n    }\n    std\\print(json\\stringify({\"kind\": args[0], \"ids\": ids}));\n}",
-  "args": "spell",
-  "stdin": "<the magus_query result text>",
-  "write": true
+  "script": "fun transform(input: any, args: [str]) > any { return input; }",
+  "args": ["spell"],
+  "input": {"matches": [{"kind": "spell", "id": "spell:go"}]}
 }
 ```
 
-The reply carries the script's stdout and, because that stdout is JSON, the same value
-parsed under `json`:
+The reply carries the returned value under `json`. Text emitted through
+`std\print` is captured separately under `stdout`:
 
 ```json
-{"exit_code":0,"stdout":"{\"ids\":[\"spell:go\",\"spell:golangci\"],\"kind\":\"spell\"}\n","json":{"ids":["spell:go","spell:golangci"],"kind":"spell"}}
+{"stdout":"","json":{"matches":[{"kind":"spell","id":"spell:go"}]}}
 ```
 
-A compile or runtime error comes back as a tool error carrying the diagnostic, such as
-`[BZZ1005] buzz: line 1:32: ...`. `magus buzz` has no read-only mode, so a script
-reaches whatever its `fs`, `proc` and `http` modules can; every call must pass
-`write: true` to accept that, and one without it is refused before anything runs. A
-run is bounded by `target_timeout`, or five minutes when that is unset.
+A compile or runtime error is a tool error carrying a diagnostic. This MCP
+interpreter offers `std`, `math`, `crypto`, `serialize` and `buffer`, but no
+file imports, native FFI or Magus host modules. An `import "magus"` error
+points to the `client` tool: use that for workspace queries and
+actions, then pass its result to `buzz`. The regular `magus buzz`
+CLI retains its full host surface. Each MCP transform has a 30-second limit.
 
-Inspect:
+`diff` joins the review session a person has open: `op=state` (default)
+returns the annotated changeset, and `comment`, `suggest`, and `resolve` write
+to it, addressed by workspace-relative path and 0-based hunk digest.
 
-| Tool                   | Purpose                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------- |
-| `magus_doctor`         | Validate workspace health (config, cache, cycles, tool availability)                        |
-| `magus_status`         | Report telemetry/cache settings and the live proc-server pool state                         |
-| `magus_output`         | Fetch one target execution's exact captured output by its `out...` ref                      |
-| `magus_insight`        | Lenses: hotspots, files, affinity, ownership, trend, unreferenced                           |
-| `magus_vcs_checkpoint` | Resolve the working state's identity: revision, branch, dirty, patch digest; writes nothing |
-
-Knowledge graph:
-
-| Tool            | Purpose                                                                  |
-| --------------- | ------------------------------------------------------------------------ |
-| `magus_query`   | Search the graph and return ranked matches plus their neighborhood       |
-| `magus_explain` | Show one node's data, edges with provenance, and how many nodes reach it |
-| `magus_path`    | Shortest path between two nodes: how two entities relate                 |
-| `magus_refs`    | Where a code symbol is defined and every file that references it (SCIP)  |
-| `magus_stats`   | Graph shape: god nodes, orphans, doc coverage                            |
-
-Review:
-
-| Tool         | Purpose                                                                                                                                                                                                                                 |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `magus_diff` | Join the review session a person has open and pair with them on it: `op=state` (default) returns the annotated changeset, `comment`, `suggest`, and `resolve` write to it, addressed by workspace-relative path and 0-based hunk digest |
-
-Jobs:
-
-| Tool        | Purpose                                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `magus_job` | The orchestrating agent's declared jobs (list/fork/exec/exit/wait), recorded for humans to see; magus never enforces them |
-
-Console:
-
-| Tool                    | Purpose                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| `magus_console_present` | Return a tokenless link to a local console surface when the user asks to see dashboard status or output |
-
-`magus_console_present` does not open a browser or hand a client a token. A compatible
+`console` does not open a browser or hand a client a token. A compatible
 desktop client may render its link as an action. Other clients can return the link as text.
 Its `open` field is a shell command that opens the link signed in, for example
 `open "http://127.0.0.1:7391/console/dashboard/#code=$(magus config console token create --code --expires 12h)"`;

@@ -8,12 +8,11 @@
 // this repo says it supports", which the CLI answers one op at a time (MGS3005/MGS3006)
 // and which nothing could answer for the workspace as a whole.
 //
-// Everything here is a READ of state magus already builds: the probe is a cache-key input
-// that runs on every build regardless, and the window comes from a spell's `supported`
-// plus a project's `tools` key. magus does not learn which versions exist upstream, does
-// not select one, and carries no end-of-life data - see docs/scope.md. A future eol field
-// would be an ADDITION to Tool, which proto3 permits without a wire break, so its absence
-// here costs nothing later.
+// The probe is a cache-key input that runs on every build regardless, and the window comes
+// from a spell's `supported` plus a project's `tools` key. End-of-life data is the one
+// thing magus does not already hold: it comes from the lifecycle provider the workspace
+// wires (magus\lifecycle.provider), a spell that reads it upstream. magus never selects a
+// version or installs one, and nothing here fails a build (docs/scope.md).
 //
 // A sibling of magus.status.v1alpha1: status is "what is happening right now", this is "what is
 // this workspace built with". buf-breaking gates this file.

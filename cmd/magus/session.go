@@ -55,7 +55,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "ls":
 		return invocationList(ctx, root, rest)
 	case "load":
-		return sessionLoad(root, rest)
+		return sessionLoad(ctx, root, rest)
 	case "show":
 		return sessionShow(root, rest)
 	case "hints":
@@ -536,7 +536,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 }
 
 // sessionLoad implements `magus session load`.
-func sessionLoad(root string, args []string) error {
+func sessionLoad(ctx context.Context, root string, args []string) error {
 	var file string
 	rest, err := cmdParse("session load", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
@@ -573,7 +573,7 @@ func sessionLoad(root string, args []string) error {
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
-	result, err := sessions.LoadEvents(dir, summary.Events, sessions.InvocationStart{
+	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",

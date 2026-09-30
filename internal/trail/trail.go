@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
@@ -232,11 +233,13 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
-	// Rule is the guard's stable denial identifier. It is empty for a pass,
-	// advisory, or a deny whose producer cannot identify a single rule.
-	Rule      string
-	Lease     string
-	LeaseFrom types.LeaseSource
+	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
+	Rule string
+	// StdinClosed records that the guard handed the host the command rewritten to run
+	// with stdin at end-of-file.
+	StdinClosed bool
+	Lease       string
+	LeaseFrom   types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -274,6 +277,7 @@ type agentCommandResponse struct {
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
+	StdinClosed     bool          `json:"stdin_closed,omitempty"`
 }
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may
@@ -327,6 +331,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
 		RuleFailures:    redactFailures(ctx, command.RuleFailures),
+		StdinClosed:     command.StdinClosed,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
@@ -611,8 +616,8 @@ func Append(ctx context.Context, base string, e Event) {
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte
 // size. An empty base, invalid prefix, empty data, or write failure yields an empty ref (the
-// caller omits it) while still reporting the size. Idempotent by content and atomic (temp file
-// then rename), so a concurrent reader never observes a partial blob.
+// caller omits it) while still reporting the size. Idempotent by content and replaced whole,
+// so a concurrent reader never observes a partial blob.
 func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref string, size int64) {
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
 	// stored. Blobs are the highest-risk surface in this package: an MCP request/response pair
@@ -622,12 +627,8 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 	if base == "" || len(data) == 0 || !validPrefix(prefix) {
 		return "", size
 	}
-	d := blobsPath(base)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return "", size
-	}
 	ref = blobRef(prefix, data)
-	path := filepath.Join(d, ref)
+	path := filepath.Join(blobsPath(base), ref)
 	if _, err := os.Stat(path); err == nil {
 		// A dedup hit is a fresh reference to an old file, and gcBlobs decides by mtime: without
 		// this touch a rotate between here and the caller's Append sees a blob older than
@@ -636,21 +637,9 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 		_ = os.Chtimes(path, now, now)
 		return ref, size
 	}
-	tmp, err := os.CreateTemp(d, ref+".*")
-	if err != nil {
-		return "", size
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmp.Name())
-		return "", size
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmp.Name())
-		return "", size
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		_ = os.Remove(tmp.Name())
+	// 0600 because a blob is a whole tool payload, which redaction scrubs of what it
+	// recognizes and no more.
+	if err := file.ReplaceFile(path, data, 0o600); err != nil {
 		return "", size
 	}
 	return ref, size
@@ -887,26 +876,15 @@ func rotate(base string, max int) {
 	}
 	kept := selectKept(lines, max)
 
-	tmp, err := os.CreateTemp(filepath.Join(base, dir), eventsFile+".*")
-	if err != nil {
-		return
-	}
+	var b strings.Builder
 	for _, l := range kept {
-		if l == "" {
-			continue
-		}
-		if _, err := tmp.WriteString(l + "\n"); err != nil {
-			tmp.Close()
-			_ = os.Remove(tmp.Name())
-			return
+		if l != "" {
+			b.WriteString(l + "\n")
 		}
 	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmp.Name())
-		return
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		_ = os.Remove(tmp.Name())
+	// Synced, unlike a blob: a crash that emptied this file would lose the whole trail,
+	// where an unsynced blob loses one payload.
+	if err := file.WriteFileAtomic(path, []byte(b.String()), 0o644); err != nil {
 		return
 	}
 	gcBlobs(base, kept)

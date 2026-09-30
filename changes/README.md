@@ -26,7 +26,7 @@ Changelog group heading, a blank line, and one entry.
 A malformed fragment or an unknown group is an error:
 `magus run pr-changelog . -- "<title>"` checks a branch's fragments, and
 `magus run lint .` checks them all.
-`tools/changelog.buzz` holds the grammar, and `testdata/fragments.txtar` holds the
+`hack/changelog.buzz` holds the grammar, and `testdata/fragments.txtar` holds the
 cases it and `magus-utils cut` are both tested against.
 
 `magus run changelog-page docs` renders the changelog page from these fragments

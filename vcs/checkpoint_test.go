@@ -79,10 +79,9 @@ func TestCheckpointDirtyTree(t *testing.T) {
 // TestCheckpointRecordsWhatTheBackendReports pins the two places the record is a
 // PASS-THROUGH rather than a judgement, because both look like bugs to a later reader.
 //
-// Detached HEAD: git's own --abbrev-ref answer is the literal "HEAD", and that is what
-// is recorded. Normalizing it to "" would be git knowledge inside a backend-agnostic
-// function, and the place to fix it (if it is ever worth fixing) is gitVCS.Metadata,
-// where every other caller would see it too.
+// Detached HEAD: the record carries whatever Metadata reports, which is "" for a
+// checkout with no branch. Normalizing here would be git knowledge inside a
+// backend-agnostic function; gitVCS.Metadata owns it, where every caller sees it.
 //
 // Untracked-only: the tree is dirty (status --porcelain sees the file) while the patch
 // is empty (diff does not), so the digest is the empty patch's. Two trees with different
@@ -101,7 +100,7 @@ func TestCheckpointRecordsWhatTheBackendReports(t *testing.T) {
 	gitRun(t, dir, "checkout", "-q", "--detach")
 	detached, err := Checkpoint(ctx, dir, res, false)
 	require.NoError(t, err)
-	assert.Equal(t, "HEAD", detached.Branch, "git reports a detached head as the literal HEAD")
+	assert.Empty(t, detached.Branch, "a detached head has no branch")
 	assert.False(t, detached.Dirty)
 }
 

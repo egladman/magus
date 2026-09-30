@@ -68,32 +68,35 @@ func writeProbeableHarness(t *testing.T, root, id, command string) {
 	mergeHarness(t, root, id)
 }
 
-// writeFakeMagusBinary satisfies checkProbeEnvironment's presence check without
-// needing a real one: it is only ever stat'd, never executed, because every
-// command these tests probe is a self-contained relative script.
+// probeCommand is the shape a harness wires the command glue in: the workspace's
+// binary running the Buzz file. The binary these tests put at root/magus is a stub,
+// so what answers is whatever the test registered for the glue.
+const probeCommand = "./magus buzz -s magus-command.buzz"
+
+// writeFakeMagusBinary satisfies checkProbeEnvironment's presence check with a
+// binary that answers nothing at all.
 func writeFakeMagusBinary(t *testing.T, root string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 }
 
 // TestVerifyHarnessProbeCatchesABrokenWiredCommand is defect 2's pinning test: a
-// config that carries the declared "sh magus-command.sh" entry byte-for-byte
-// (so the OLD presence-comparison VerifyHarness said "verified") but whose script
-// does not exist at that path: the exact shape of the incident that motivated this
-// change, a wired command that looks right and does nothing. This must FAIL against
-// the presence-only implementation: that code never executes anything, so it would
+// config that carries the declared command glue entry byte-for-byte (so the OLD
+// presence-comparison VerifyHarness said "verified") but whose command answers
+// nothing: the exact shape of the incident that motivated this change, a wired
+// command that looks right and does nothing. This must FAIL against the
+// presence-only implementation: that code never executes anything, so it would
 // report HarnessVerified here as it did for the config that locked a session out.
 func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 	root := t.TempDir()
 	writeFakeMagusBinary(t, root)
-	writeProbeableHarness(t, root, "broken", "sh magus-command.sh")
-	// Deliberately never written: the script the config names does not exist.
+	writeProbeableHarness(t, root, "broken", probeCommand)
 
 	result, err := VerifyHarness(context.Background(), root, "broken")
 	require.NoError(t, err)
-	assert.NotEqual(t, HarnessVerified, result.Status, "a wired command that cannot even run must never read as verified")
+	assert.NotEqual(t, HarnessVerified, result.Status, "a wired command that answers nothing must never read as verified")
 	assert.Equal(t, HarnessUncovered, result.Status)
-	assert.Contains(t, result.Reason, "magus-command.sh")
+	assert.Contains(t, result.Reason, "magus-command.buzz")
 }
 
 // TestVerifyHarnessProbeAcceptsAWorkingWiredCommand is the positive twin: the same
@@ -101,9 +104,8 @@ func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 // universal whole-tree-stash event. Only this earns HarnessVerified.
 func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-command.sh", "deny")
-	writeProbeableHarness(t, root, "working", "sh magus-command.sh")
+	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
+	writeProbeableHarness(t, root, "working", probeCommand)
 
 	result, err := VerifyHarness(context.Background(), root, "working")
 	require.NoError(t, err)
@@ -118,10 +120,9 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 // correctly as uncovered.
 func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) {
 	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
 	script := "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command.sh"), []byte(script), 0o755))
-	writeProbeableHarness(t, root, "chatty", "sh magus-command.sh")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(script), 0o755))
+	writeProbeableHarness(t, root, "chatty", probeCommand)
 
 	result, err := VerifyHarness(context.Background(), root, "chatty")
 	require.NoError(t, err)
@@ -134,9 +135,8 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 // missed.
 func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-command.sh", "pass")
-	writeProbeableHarness(t, root, "wrongdecision", "sh magus-command.sh")
+	writeStubGuardScript(t, root, "magus-command.buzz", "pass")
+	writeProbeableHarness(t, root, "wrongdecision", probeCommand)
 
 	result, err := VerifyHarness(context.Background(), root, "wrongdecision")
 	require.NoError(t, err)
@@ -144,37 +144,18 @@ func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 	assert.Contains(t, result.Reason, `"pass"`)
 }
 
-// TestVerifyHarnessProbeReportsMissingJQAsUnprobed pins the "cannot run" contract:
-// a probe that cannot execute at all must say exactly why, distinct from both a
-// working guard and a broken one. PATH is emptied so exec.LookPath("jq") fails
-// exactly like a machine that never installed it, per checkProbeEnvironment.
-func TestVerifyHarnessProbeReportsMissingJQAsUnprobed(t *testing.T) {
+// TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed pins the "cannot run"
+// contract: a probe that cannot execute at all must say exactly why, distinct from
+// both a working guard and a broken one. sh resolves, but no magus binary does
+// anywhere checkProbeEnvironment looks (root, then PATH).
+func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-command.sh", "deny")
-	writeProbeableHarness(t, root, "nojq", "sh magus-command.sh")
+	// root/magus is deliberately absent, and PATH holds sh alone.
+	writeProbeableHarness(t, root, "nomagus", "magus buzz -s magus-command.buzz")
 
 	// Resolved and copied BEFORE PATH is overridden below.
 	shOnlyPATH := buildMinimalPATH(t, "sh")
 	t.Setenv("PATH", shOnlyPATH)
-
-	result, err := VerifyHarness(context.Background(), root, "nojq")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUnprobed, result.Status)
-	assert.Contains(t, result.Reason, "jq")
-}
-
-// TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed is the third named "cannot
-// run" case: sh and jq resolve, but no magus binary does anywhere checkProbeEnvironment
-// looks (root, then PATH).
-func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
-	root := t.TempDir()
-	// No writeFakeMagusBinary this time: root/magus is deliberately absent.
-	writeStubGuardScript(t, root, "magus-command.sh", "deny")
-	writeProbeableHarness(t, root, "nomagus", "sh magus-command.sh")
-
-	shAndJQOnlyPATH := buildMinimalPATH(t, "sh", "jq")
-	t.Setenv("PATH", shAndJQOnlyPATH)
 
 	result, err := VerifyHarness(context.Background(), root, "nomagus")
 	require.NoError(t, err)
@@ -186,16 +167,11 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 // managed command is a lifecycle hook (checkpoint/rehydrate/observe), which
 // never renders a verdict, is still reported verified from presence alone: there
 // is nothing for the probe to run, and that is not a gap.
-// Both forms of both wrappers, because the skip used to match the .sh suffix alone:
-// porting checkpoint and rehydrate to Buzz made every claude-code config merged from
-// its descriptor one its own verify then called uncovered, on the grounds that a recorder had
-// rendered no verdict.
 func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 	for _, command := range []string{
-		"sh magus-checkpoint.sh",
-		"sh magus-rehydrate.sh",
-		"magus buzz -s magus-checkpoint.buzz",
-		"magus buzz -s magus-rehydrate.buzz",
+		"magus buzz -s magus-observe.buzz -- --agent-name x",
+		"magus buzz -s magus-checkpoint.buzz -- --agent-name x",
+		"magus buzz -s magus-rehydrate.buzz -- --format json",
 	} {
 		t.Run(command, func(t *testing.T) {
 			root := t.TempDir()
@@ -213,7 +189,7 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 // buildMinimalPATH resolves each name against the CURRENT (real) PATH, so call it
 // before t.Setenv("PATH", ...) replaces it, copies each into a fresh directory,
 // and returns that directory. A test then sets PATH to exactly this, giving a
-// deterministic PATH that carries some real tools (sh, jq) but not others
+// deterministic PATH that carries some real tools (sh) but not others
 // (magus), rather than depending on what happens to be installed elsewhere on
 // the machine running the suite.
 func buildMinimalPATH(t *testing.T, names ...string) string {

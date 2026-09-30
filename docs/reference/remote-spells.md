@@ -10,7 +10,7 @@ A spell that is neither built in nor in your workspace can be imported from a co
 registry by its repository path, the way a Go import path names its repository:
 
 ```buzz
-import "ghcr.io/egladman/magus/spells/cursor";   // binds `cursor`
+import "ghcr.io/egladman/magus/spells/harness/cursor";   // binds `cursor`
 magus\harness.provider(cursor);
 ```
 
@@ -23,11 +23,11 @@ path works wherever a spell is named: a magusfile import, the handle
 
 The path alone says where a spell comes from ([ADR 0002](../decisions/0002-remote-spells-are-imported-by-registry-path.md)):
 
-| Import                         | Kind      | Comes from                                            |
-| ------------------------------ | --------- | ----------------------------------------------------- |
-| `ghcr.io/team/spells/lint`     | remote    | a registry: the first element carries a dot or a port |
-| `magus/spell/go`               | embedded  | the magus binary                                      |
-| `spells/lint`, `./tools/drift` | workspace | a file in the workspace                               |
+| Import                        | Kind      | Comes from                                            |
+| ----------------------------- | --------- | ----------------------------------------------------- |
+| `ghcr.io/team/spells/lint`    | remote    | a registry: the first element carries a dot or a port |
+| `magus/spell/go`              | embedded  | the magus binary                                      |
+| `spells/lint`, `./hack/drift` | workspace | a file in the workspace                               |
 
 The import binds the path's last segment, as every Buzz import does; alias it
 (`as claude`) when that segment is not a Buzz identifier, such as `claude-code`.
@@ -39,8 +39,8 @@ tracks:
 
 ```yaml
 spells:
-  ghcr.io/egladman/magus/spells/cursor:
-    tag: "1.4"
+  ghcr.io/egladman/magus/spells/harness/cursor:
+    tag: v0.5.0
 ```
 
 An import of a registry path with no entry fails to load with
@@ -57,8 +57,8 @@ would pin nothing removes the file instead of writing one.
 # Written by `magus spell lock`. Do not edit: change a tag in magus.yaml and run the update charm.
 version: 1
 spells:
-  ghcr.io/egladman/magus/spells/cursor:
-    tag: "1.4"
+  ghcr.io/egladman/magus/spells/harness/cursor:
+    tag: v0.5.0
     digest: sha256:4f1c...
 ```
 
@@ -104,6 +104,17 @@ existing: a workspace directory at a declared remote path, or a workspace spell 
 an embedded spell's name, without an entry is [MGS1002](codes/magusfile/MGS1002.md).
 An override points at a workspace directory only; replacing one registry path with
 another is not supported.
+
+`magus spell pull magus/spell/<name> <dir>` writes the copy to start from. It prints what
+a registry pull of `ghcr.io/egladman/magus/spells/<name>` prints, the reference pinned by
+digest and then the directory, and lands the same files, read from the binary with no
+network. `spell.buzz` opens on one extra line, `// magus:origin <reference>`, and pull
+prints the `magus.yaml` entry to add rather than writing it. `magus doctor`'s
+`spell-overrides` check compares that stamp with the spell this binary ships and advises
+when the built-in has changed since, or when a copy is identical to it; merging is left to
+you. A release publishes every spell magus ships with no revision or creation annotation,
+so the digest follows the spell's files alone: a release that leaves a spell unchanged
+publishes the digest the last one did, and the binary computes it from what it embeds.
 
 ## Publish your own spell
 
@@ -164,9 +175,35 @@ A bare registry path, as a magusfile imports it, pulls the digest `magus.lock` p
 that declaration, so what lands is exactly what a load would run. A target directory must
 be absent or empty. Every verb takes `-o json`.
 
-This repository publishes its spells with the `spell-publish` target. It declares the
-spell sources as inputs, so a change to one selects it; without the `cd` charm it only
-builds and prints each digest, and under `cd` it pushes.
+## The spells magus ships
+
+Every spell the binary carries is published with each release, one repository per spell
+under `ghcr.io/egladman/magus/spells`, tagged with the release version: the built-ins
+(`go`, `docker`, ...), the source-only spells that import a host module
+(`endoflife-date`, `onepassword`, `system-keychain`), and the providers a workspace wires
+by import path, named by their directory (`harness/cursor`, `github/actions`,
+`aws/s3-cache`). List them, each pinned to the digest a release publishes, with no
+network:
+
+```sh
+magus spell ls magus/spell
+# ghcr.io/egladman/magus/spells/aws/s3-cache@sha256:1a0c...
+# ...
+```
+
+`magus spell push magus/spell/<name> <registry>/<repository>:<tag>` pushes one of them
+exactly as the binary packs it, so the registry holds the digest
+`magus spell pull magus/spell/<name>` stamps on a copy. `--source` does not apply: the
+provenance of a shipped spell is fixed.
+
+This repository's `spell-publish` target reads that list and pushes each spell;
+`release.yaml` runs it under the `cd` charm on a release tag, after the binaries are
+signed. Without `cd` it prints each pinned reference and pushes nothing.
+
+A GHCR package is private when a release first creates it. Until the repository owner
+sets each one public in the package's settings on GitHub, an anonymous pull, and so an
+import from any other workspace, fails with 401. magus does not change package
+visibility.
 
 ## Credentials
 

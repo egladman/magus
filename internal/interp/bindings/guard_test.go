@@ -30,7 +30,7 @@ func TestBuildGuard(t *testing.T) {
 		assert.Equal(t, []string{"https://prod.example/health"}, got[0].Args)
 	})
 
-	t.Run("bash alias defaults dialect to bash", func(t *testing.T) {
+	t.Run("dialect is kept as written", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
 
@@ -39,10 +39,16 @@ func TestBuildGuard(t *testing.T) {
 		rule.MapSet("decision", vm.StrValue("deny"))
 		rule.MapSet("program", vm.StrValue("curl"))
 		rule.MapSet("reason", vm.StrValue("r"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "bash"), rule))
+		rule.MapSet("dialect", vm.StrValue(" Bash "))
+		require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "shell"), rule))
 		got := reg.ShellRules()
 		require.Len(t, got, 1)
 		assert.Equal(t, "bash", got[0].Dialect)
+	})
+
+	t.Run("shell is the only rule member", func(t *testing.T) {
+		_, ok := buildGuard(context.Background(), nil, nil).MapGet("bash")
+		assert.False(t, ok)
 	})
 
 	t.Run("invalid dialect is rejected", func(t *testing.T) {
@@ -65,7 +71,7 @@ func TestBuildGuard(t *testing.T) {
 		rule.MapSet("decision", vm.StrValue("warn"))
 		rule.MapSet("program", vm.StrValue("curl"))
 		rule.MapSet("reason", vm.StrValue("r"))
-		err := callVoidDirect(t, requireDirect(t, guard, "bash"), rule)
+		err := callVoidDirect(t, requireDirect(t, guard, "shell"), rule)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "deny")
 	})

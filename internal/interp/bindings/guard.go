@@ -36,28 +36,23 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	registerSpawnRule(ctx, sess, obs, guardMap)
 	registerCommandRule(ctx, sess, obs, guardMap)
 	registerWriteRule(ctx, sess, obs, guardMap)
-	registerShellRule := func(member, obsName, defaultDialect string) {
-		guardMap.MapSet(member, directVal(obs, obsName, func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) == 0 || !args[0].IsMap() {
-				return vm.Null, fmt.Errorf(`magus\guard.%s: expected a rule object`, member)
-			}
-			rule, err := parseShellRule(args[0], member, defaultDialect)
-			if err != nil {
-				return vm.Null, err
-			}
-			if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
-				reg.AddShellRule(rule)
-			}
-			return vm.Null, nil
-		}))
-	}
-	registerShellRule("shell", "magus.guard.shell", "")
-	// compat(until: no magusfile still calls guard.bash): observe via magus refs / workspace search for guard.bash
-	registerShellRule("bash", "magus.guard.bash", "bash")
+	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\guard.shell: expected a rule object`)
+		}
+		rule, err := parseShellRule(args[0], "shell")
+		if err != nil {
+			return vm.Null, err
+		}
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+			reg.AddShellRule(rule)
+		}
+		return vm.Null, nil
+	}))
 	return guardMap
 }
 
-func parseShellRule(m vm.Value, apiName, defaultDialect string) (workspace.ShellRule, error) {
+func parseShellRule(m vm.Value, apiName string) (workspace.ShellRule, error) {
 	var rule workspace.ShellRule
 	for _, k := range m.MapKeys() {
 		v, _ := m.MapGet(k)
@@ -111,9 +106,6 @@ func parseShellRule(m vm.Value, apiName, defaultDialect string) (workspace.Shell
 	case "deny", "advise":
 	default:
 		return rule, fmt.Errorf(`magus\guard.%s: decision must be "deny" or "advise" (got %q)`, apiName, rule.Decision)
-	}
-	if rule.Dialect == "" && defaultDialect != "" {
-		rule.Dialect = defaultDialect
 	}
 	return rule, nil
 }

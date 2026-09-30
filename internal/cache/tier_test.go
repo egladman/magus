@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // countingBackend wraps a real store and counts every call, so a test can say the
@@ -245,7 +247,7 @@ func TestTierRequiredRemoteWriteFailsTheStep(t *testing.T) {
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	_, err := c.Run(ContextWithRemoteStats(t.Context()), step, func(context.Context) error {
 		return os.WriteFile(filepath.Join(root, "test", "pkg", "out.txt"), []byte("built"), 0o644)
 	})
@@ -304,7 +306,7 @@ func TestTierRemoteHitIsOneEventAfterReplay(t *testing.T) {
 	require.NoError(t, err)
 	ctx := ContextWithRemoteStats(t.Context())
 	step := makeStep(root)
-	step.Outputs = []string{"test/pkg/out.txt"}
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	_, _ = other.Run(ctx, step, func(context.Context) error { return nil })
 	stats := remoteStatsFrom(ctx)
 	assert.Zero(t, stats.hits.Load(), "a hit was counted before its replay succeeded")
@@ -346,7 +348,7 @@ func TestTierPromotionEvicts(t *testing.T) {
 	require.NoError(t, err)
 	big := makeStep(t.TempDir())
 	big.Target = "big"
-	big.Outputs = []string{"test/pkg/big"}
+	big.Outputs = types.MustParseGlobs("test/pkg/big")
 	writeMain(t, big.WorkspaceRoot, "package big")
 	touchOut(t, big.WorkspaceRoot)
 	rb, err := uncapped.Run(t.Context(), big, func(context.Context) error {

@@ -50,10 +50,13 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp/mcpclient"
+	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,6 +71,12 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	if os.Getenv(transform.WorkerEnv) == "1" {
+		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
+	}
+	if os.Getenv(mcpclient.WorkerEnv) == "1" {
+		return runClientWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
+	}
 	// Ahead of everything, including log setup: a binary below the workspace's
 	// required_version floor cannot get far enough into startup to discover that on
 	// its own, so this has to work on nothing but os.Args and a directory walk. See
@@ -450,7 +459,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
 		// code and an error string and never output, so the server runs the mode in its
 		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
-		// child (magus\affectedImpact forks `affected --impact -o json` and decodes it)
+		// child (magus\impact forks `affected --impact -o json` and decodes it)
 		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
 		// shape as the usage bug above, one layer down.
 		if sub == "affected" && isForensicAffected(subArgs) {
@@ -854,6 +863,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 
 	rootCtx = withTrace(rootCtx, trace)
+	if trace.profile != nil {
+		rootCtx = buzz.WithProfile(rootCtx, trace.profile)
+	}
 
 	sub, subArgs := rest[0], rest[1:]
 	rc := runConfig{watchIgnores: cfg.Watch.Ignore}

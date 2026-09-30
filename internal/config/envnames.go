@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -26,6 +27,14 @@ func FlagName(parts ...string) string {
 }
 
 const envPrefix = "MAGUS_"
+
+// Offline reports whether MAGUS_OFFLINE is set to anything but 0 or false. It is read
+// on every call rather than through Config, so a request refuses under the value the
+// process holds when it is sent.
+func Offline() bool {
+	v := os.Getenv("MAGUS_OFFLINE")
+	return v != "" && v != "0" && v != "false"
+}
 
 // inheritedEnv holds variables an older magus exports to the processes it spawns and this
 // one ignores. Nobody sets them by hand, so refusing one would fail a nested run over a

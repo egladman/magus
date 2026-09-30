@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -21,104 +22,104 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("name", vm.DirectValue("vcs.name", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsName(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("base", vm.DirectValue("vcs.base", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsBase(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("root", vm.DirectValue("vcs.root", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRoot(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("changedFiles", vm.DirectValue("vcs.changedFiles", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := Str(bzArgs, 0)
+		base := ffi.Str(bzArgs, 0)
 		ret0, err := std.VcsChangedFiles(ctx, base)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectPath), nil
+		return ffi.ObjectSlice(ret0, ObjectPath), nil
 	}))
 	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRef(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.OptStrVal(ret0), nil
 	}))
 	m.MapSet("status", vm.DirectValue("vcs.status", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		paths := StrSlice(bzArgs, 0)
+		paths := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.VcsStatus(ctx, paths)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectStatus(ret0), nil
 	}))
 	m.MapSet("isDirty", vm.DirectValue("vcs.isDirty", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		paths := StrSlice(bzArgs, 0)
+		paths := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.VcsIsDirty(ctx, paths)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("dirtyDiff", vm.DirectValue("vcs.dirtyDiff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		paths := StrSlice(bzArgs, 0)
+		paths := ffi.StrSlice(bzArgs, 0)
 		ret0, err := std.VcsDirtyDiff(ctx, paths)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("commit", vm.DirectValue("vcs.commit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		rev := Str(bzArgs, 0)
+		rev := ffi.Str(bzArgs, 0)
 		ret0, err := std.VcsCommit(ctx, rev)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectCommit(ret0), nil
 	}))
 	m.MapSet("history", vm.DirectValue("vcs.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		limit := Int(bzArgs, 0, 10)
-		paths := StrSlice(bzArgs, 1)
-		first_parent := Bool(bzArgs, 2, false)
+		limit := ffi.Int(bzArgs, 0, 10)
+		paths := ffi.StrSlice(bzArgs, 1)
+		first_parent := ffi.Bool(bzArgs, 2, false)
 		ret0, err := std.VcsHistory(ctx, limit, paths, first_parent)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectCommit), nil
+		return ffi.ObjectSlice(ret0, ObjectCommit), nil
 	}))
 	m.MapSet("cmd", vm.DirectValue("vcs.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
+		args := ffi.StrSlice(bzArgs, 0)
+		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.VcsCmd(ctx, args, opts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("tags", vm.DirectValue("vcs.tags", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		pattern := Str(bzArgs, 0)
+		pattern := ffi.Str(bzArgs, 0)
 		ret0, err := std.VcsTags(ctx, pattern)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectVCSTag), nil
+		return ffi.ObjectSlice(ret0, ObjectVCSTag), nil
 	}))
 	m.MapSet("describe", vm.DirectValue("vcs.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsDescribe(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

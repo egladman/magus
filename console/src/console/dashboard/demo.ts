@@ -313,12 +313,12 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     ];
     // The recent calls are the SAME session the activity trail records (demo-scenario.ts): the primary
     // harness ran services/identity:test and is still working, so the tools it calls here are the tools
-    // that appear there - magus_run_target, magus_query - and the guard verdicts around them are the
-    // ones that story implies. The deny is a raw `go test` the guard turned back because the run belongs
+    // that appear there - client, running and querying through its magus\ members - and the guard
+    // verdicts around them are the ones that story implies. The deny is a raw `go test` the guard turned back because the run belongs
     // to magus; the advise is the edit to libs/authkit that started all of this. Those two rows are what
     // the tile exists to make findable, so the showcase must contain both.
     const recent: AgentCallView[] = [
-      { atMs: now - 4000, host: "mcp", tool: "magus_run_target", decision: "", mcp: true },
+      { atMs: now - 4000, host: "mcp", tool: "client", decision: "", mcp: true },
       {
         atMs: now - 12_000,
         host: "harness-alpha",
@@ -326,7 +326,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         decision: "advise",
         mcp: false,
       },
-      { atMs: now - 26_000, host: "mcp", tool: "magus_query", decision: "", mcp: true },
+      { atMs: now - 26_000, host: "mcp", tool: "client", decision: "", mcp: true },
       {
         atMs: now - 41_000,
         host: "harness-alpha",
@@ -465,48 +465,35 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           errors: 0,
         },
       ],
-      // The MCP tools the scenario's agent actually called (magus_run_target, magus_query,
-      // magus_output), so the metrics tile names the same tools the activity trail records - including
-      // the one magus_output error (the pruned-ref lookup).
+      // The MCP tools the scenario's agent actually called, so the metrics tile names the same tools
+      // the activity trail records. Every run, query and output lookup goes through client, including
+      // the one error (the pruned-ref lookup); status is the pool check between them.
       mcpTools: [
         {
-          tool: "magus_run_target",
-          calls: 63,
-          errors: 1,
-          inputP50Bytes: 205,
+          tool: "client",
+          calls: 318,
+          errors: 2,
+          inputP50Bytes: 88,
           inputP95Bytes: 320,
-          inputTotal: 13_104,
-          outputP50Bytes: 4_120,
-          outputP95Bytes: 9_800,
-          outputTotal: 271_402,
-          durationP50Seconds: 2.1,
-          durationP95Seconds: 4.4,
-        },
-        {
-          tool: "magus_query",
-          calls: 214,
-          errors: 0,
-          inputP50Bytes: 84,
-          inputP95Bytes: 190,
-          inputTotal: 19_006,
+          inputTotal: 34_030,
           outputP50Bytes: 1_640,
-          outputP95Bytes: 6_210,
-          outputTotal: 402_118,
+          outputP95Bytes: 9_800,
+          outputTotal: 831_920,
           durationP50Seconds: 0.034,
-          durationP95Seconds: 0.09,
+          durationP95Seconds: 3.1,
         },
         {
-          tool: "magus_output",
-          calls: 41,
-          errors: 1,
-          inputP50Bytes: 44,
-          inputP95Bytes: 60,
-          inputTotal: 1_920,
-          outputP50Bytes: 3_200,
-          outputP95Bytes: 9_100,
-          outputTotal: 158_400,
-          durationP50Seconds: 0.008,
-          durationP95Seconds: 0.02,
+          tool: "status",
+          calls: 12,
+          errors: 0,
+          inputP50Bytes: 2,
+          inputP95Bytes: 2,
+          inputTotal: 24,
+          outputP50Bytes: 380,
+          outputP95Bytes: 410,
+          outputTotal: 4_520,
+          durationP50Seconds: 0.004,
+          durationP95Seconds: 0.011,
         },
       ],
       buzz: {

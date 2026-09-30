@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/encoding/url"
@@ -17,36 +18,36 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("url.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := url.URLEncode(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("decode", vm.DirectValue("url.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := url.URLDecode(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("url.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		raw_url := Str(bzArgs, 0)
+		raw_url := ffi.Str(bzArgs, 0)
 		ret0, err := url.URLParse(ctx, raw_url)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectURL(ret0), nil
 	}))
 	m.MapSet("build", vm.DirectValue("url.build", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		parts := AnyMap(bzArgs, 0)
+		parts := ffi.AnyMap(bzArgs, 0)
 		ret0, err := url.URLBuild(ctx, parts)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

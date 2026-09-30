@@ -163,8 +163,8 @@ func unloadedReason(seam functionSeam, verb string, failures []trail.RuleFailure
 	b.WriteString("\nThat rule judges " + gatedCalls(seam) + ", so these wait until it loads; every other call still runs on the built-in rules.\n")
 	if own {
 		b.WriteString("The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
-			"If that cannot load the tree either, relink, one command at a time: `mv magus magus.old`, " +
-			"`go build -o magus ./cmd/magus`, `./magus run go-build .`. If the error names a magusfile line instead, fix that line.")
+			"If that cannot load the tree either, move it aside and bootstrap, one command at a time: `mv magus magus.old`, " +
+			"`" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.")
 	} else {
 		b.WriteString("The likeliest cause is a magus older than this workspace's magusfile, or an error in it: " +
 			"`magus doctor` names the failure. Install a magus that loads it, or fix the line the error names.")

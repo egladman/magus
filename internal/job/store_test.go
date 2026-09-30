@@ -483,7 +483,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
-		{name: "the magus_job fork op and magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
+		{name: "magus\\job\\put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
 			merge, err := ParseMerge(map[string]any{
 				"criteria": "goal", "checkpoint": "abc123", "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
@@ -1025,4 +1025,137 @@ func TestRecordUnattributedWriteDoesNotInventARow(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows)
+}
+
+// takenRow seeds w as a job a worker took, holding write, in a root holding each path.
+func takenRow(t *testing.T, write ...string) (*Store, Location) {
+	t.Helper()
+	root := t.TempDir()
+	for _, p := range write {
+		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
+	}
+	loc := tmpLoc(t, root)
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "w", Criteria: "goal", WritePaths: write, State: types.StateDeclared})
+	_, err := s.Exec(t.Context(), "w", "abc123")
+	require.NoError(t, err)
+	_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+	require.NoError(t, err)
+	return s, loc
+}
+
+// An edit merges into the row: the holder keeps its job, its state and its registration,
+// where a re-fork would hand the job out again as declared.
+func TestEditMergesWritePathsAndKeepsTheState(t *testing.T) {
+	t.Parallel()
+
+	s, _ := takenRow(t, "a.go")
+	before, err := s.List()
+	require.NoError(t, err)
+
+	got, err := s.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"b.go", "a.go"}})
+	require.NoError(t, err)
+	want := before[0].Clone()
+	want.WritePaths = []string{"a.go", "b.go"}
+	want.Updated = got.Updated
+	assert.Equal(t, want, got)
+}
+
+func TestEditRefusesAWorkerWideningItsOwnRow(t *testing.T) {
+	t.Parallel()
+
+	s, loc := takenRow(t, "a.go", "b.go")
+	worker := boundStore(loc, "w")
+
+	_, err := worker.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"c.go"}})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	_, err = worker.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"c.go"}, DryRun: true})
+	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
+
+	shrunk, err := worker.Edit(t.Context(), "w", EditOptions{RemoveWritePaths: []string{"b.go"}})
+	require.NoError(t, err, "a worker may shrink its own row")
+	assert.Equal(t, []string{"a.go"}, shrunk.WritePaths)
+	assert.False(t, shrunk.Releases[0].Revoked, "giving up its own path is a release, not a revocation")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.go"}, rows[0].WritePaths)
+}
+
+func TestEditDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	s, _ := takenRow(t, "a.go")
+	path, err := s.Path()
+	require.NoError(t, err)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	got, err := s.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"b.go"}, RemoveWritePaths: []string{"a.go"}, DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.go"}, got.WritePaths, "the dry run returns the row the edit would write")
+	require.Len(t, got.Releases, 1)
+	assert.Equal(t, "a.go", got.Releases[0].Path)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+}
+
+// Revoking records the release a worker's own shrink records, the digest of what it left
+// included, marked as taken by someone other than its holder.
+func TestEditRevokesAPathWithItsDigest(t *testing.T) {
+	t.Parallel()
+
+	s, _ := takenRow(t, "a.go", "b.go")
+	got, err := s.Edit(t.Context(), "w", EditOptions{RemoveWritePaths: []string{"b.go"}})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"a.go"}, got.WritePaths)
+	assert.Equal(t, []types.JobRelease{{
+		Path: "b.go", Digest: "sha256:" + hashOf(t, filepath.Join(s.root, "b.go")), ReleasedAt: got.Updated, Revoked: true,
+	}}, got.Releases)
+	assert.Equal(t, types.StateRunning, got.State)
+}
+
+// One call that adds and revokes is one write: both land, or neither does.
+func TestEditAppliesAddAndRevokeAtomically(t *testing.T) {
+	t.Parallel()
+
+	s, _ := takenRow(t, "a.go", "b.go")
+	got, err := s.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"c.go"}, RemoveWritePaths: []string{"a.go"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.go", "c.go"}, got.WritePaths)
+
+	_, err = s.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"d.go"}, RemoveWritePaths: []string{"a.go"}})
+	require.ErrorContains(t, err, `w does not hold "a.go"`)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.go", "c.go"}, rows[0].WritePaths, "a refused revoke adds nothing either")
+}
+
+func TestEditRefusesWhatItCannotApply(t *testing.T) {
+	t.Parallel()
+
+	s, _ := takenRow(t, "a.go")
+	for name, tc := range map[string]struct {
+		id   string
+		opts EditOptions
+		want string
+	}{
+		"nothing to change":        {id: "w", want: "names no write path"},
+		"a path it does not hold":  {id: "w", opts: EditOptions{RemoveWritePaths: []string{"z.go"}}, want: `w does not hold "z.go"`},
+		"a path added and removed": {id: "w", opts: EditOptions{AddWritePaths: []string{"a.go"}, RemoveWritePaths: []string{"a.go"}}, want: `"a.go" is both added and removed`},
+		"a job nobody declared":    {id: "nope", opts: EditOptions{AddWritePaths: []string{"a.go"}}, want: `there is no job "nope"`},
+		"every path the job holds": {id: "w", opts: EditOptions{RemoveWritePaths: []string{"a.go"}}, want: "`magus job exit w`"},
+	} {
+		_, err := s.Edit(t.Context(), tc.id, tc.opts)
+		require.ErrorContains(t, err, tc.want, name)
+	}
+
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateFail })
+	require.NoError(t, err)
+	_, err = s.Edit(t.Context(), "w", EditOptions{AddWritePaths: []string{"b.go"}})
+	require.ErrorContains(t, err, "w already ended fail")
 }

@@ -133,7 +133,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// at magusfile top level. Stubbed no-ops like cache.remote.
 	guard := vm.NewMap()
 	guard.MapSet("shell", fn("magus.guard.shell", retNull))
-	guard.MapSet("bash", fn("magus.guard.bash", retNull))
 	guard.MapSet("spawn", fn("magus.guard.spawn", retNull))
 	guard.MapSet("command", fn("magus.guard.command", retNull))
 	guard.MapSet("write", fn("magus.guard.write", retNull))
@@ -148,6 +147,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	review := vm.NewMap()
 	review.MapSet("provider", fn("magus.review.provider", retNull))
 	m.MapSet("review", review)
+
+	// magus.lifecycle.<...>: selects the spell that answers when release cycles end.
+	// Stubbed for the same reason as review: a top-level selection with no VM here to
+	// resolve the handle.
+	lifecycle := vm.NewMap()
+	lifecycle.MapSet("provider", fn("magus.lifecycle.provider", retNull))
+	m.MapSet("lifecycle", lifecycle)
 
 	// magus.secret.<...>: selects the secret provider spell and reads a credential
 	// through it in the real module. provider() stubs to a no-op like the two above.
@@ -268,6 +274,23 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
+	// magus.tools probes and fetches in the live host; here it is the empty report, its
+	// lifecycle unwired, so `magus\tools().lifecycle.state` resolves.
+	m.MapSet("tools", fn("magus.tools", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		lifecycle := vm.NewMap()
+		lifecycle.MapSet("provider", vm.StrValue(""))
+		lifecycle.MapSet("state", vm.StrValue(types.LifecycleUnwired))
+		lifecycle.MapSet("sources", vm.ListValue(nil))
+		lifecycle.MapSet("asOf", vm.StrValue(""))
+		lifecycle.MapSet("fetchedAt", vm.StrValue(""))
+		lifecycle.MapSet("detail", vm.StrValue(""))
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("lifecycle", lifecycle)
+		res.MapSet("tools", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
@@ -278,10 +301,17 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	// The reports magus returns as domain types (doctor, describeFile, insight,
-	// affectedImpact) fork a real magus in the live host. Same rule as
+	// impact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spell/gen/types.
+	m.MapSet("clean", fn("magus.clean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("removed", vm.ListValue(nil))
+		res.MapSet("tracked", vm.ListValue(nil))
+		res.MapSet("dryRun", vm.BoolValue(false))
+		return res, nil
+	}))
 	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("workspace", vm.StrValue(""))
@@ -315,7 +345,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("notes", vm.ListValue(nil))
 		return res, nil
 	}))
-	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("impact", fn("magus.impact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
 		res.MapSet("changedFileCount", vm.IntValue(0))
@@ -435,6 +465,21 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return vm.IntValue(0), nil
 	}))
 	m.MapSet("job", job)
+
+	// A dry run starts no service: acquire answers with an unowned lease, release does nothing.
+	service := vm.NewMap()
+	service.MapSet("acquire", fn("magus.service.acquire", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("key", vm.StrValue(""))
+		res.MapSet("owned", vm.BoolValue(false))
+		res.MapSet("brokered", vm.BoolValue(false))
+		res.MapSet("idle", vm.StrValue(""))
+		return res, nil
+	}))
+	service.MapSet("release", fn("magus.service.release", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.Null, nil
+	}))
+	m.MapSet("service", service)
 
 	// The knowledge-graph reads, output and vcs.checkpoint read real state the
 	// dry run never opens, so each answers with its snake_case record shaped and empty.
@@ -563,7 +608,10 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 			}
 			patterns = append(patterns, a.AsString())
 		}
-		matched := types.MatchTargetPatterns(tr.targetKeys, patterns)
+		matched, err := types.MatchTargetPatterns(tr.targetKeys, patterns)
+		if err != nil {
+			return vm.Null, fmt.Errorf("ctx.glob: %w", err)
+		}
 		handles := make([]vm.Value, 0, len(matched))
 		for _, name := range matched {
 			handles = append(handles, fn(name, retNull))

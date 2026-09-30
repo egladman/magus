@@ -39,15 +39,22 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	// Each required glob is checked on its own, not folded into the all-or-nothing test
 	// above: a target declaring its own outputs alongside a cross-project one passes that
 	// test on its own outputs alone, and the missing foreign file goes unnoticed.
+	//
+	// Found among matches, which exclusions have already narrowed: a required glob whose
+	// every file is excluded produced nothing the snapshot keeps.
+	kept := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		kept[m.rel] = true
+	}
 	for _, g := range s.RequiredOutputs {
-		found, err := expandOutputGlobs([]string{g}, root, s.NestedDirs)
+		found, err := expandOutputGlobs([]types.Glob{g}, root, s.NestedDirs)
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(found) == 0 {
+		if !slices.ContainsFunc(found, func(f relAbs) bool { return kept[f.rel] }) {
 			return nil, nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
 				"target %q declared an output into another project (%q) but produced no file matching it; check the path the target actually writes",
-				s.Target, g)
+				s.Target, g.Pattern)
 		}
 	}
 	manifest := &Manifest{
@@ -156,19 +163,31 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 }
 
 // expandOutputGlobs expands output globs relative to root; rejects absolute paths and "..".
-// A match inside one of nested is dropped unless its glob is rooted inside that project.
-func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, error) {
+// A match inside one of nested is dropped unless its glob is rooted inside that project,
+// and one its glob's exclusions claim is dropped too, so an excluded file is never stored.
+func expandOutputGlobs(globs []types.Glob, root string, nested []string) ([]relAbs, error) {
+	for _, g := range globs {
+		for _, pattern := range append([]string{g.Pattern}, g.Except...) {
+			if filepath.IsAbs(pattern) || strings.Contains(pattern, "..") {
+				return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", pattern)
+			}
+		}
+	}
 	rootFS := os.DirFS(root)
 	seen := map[string]struct{}{}
 	var out []relAbs
 	for _, g := range globs {
-		if filepath.IsAbs(g) || strings.Contains(g, "..") {
-			return nil, fmt.Errorf("output glob must be repo-relative without ..: %q", g)
+		keep := func(rel string) bool {
+			if !types.GlobClaims(g.Pattern, rel, nested) || g.Excludes(rel) {
+				return false
+			}
+			_, dup := seen[rel]
+			seen[rel] = struct{}{}
+			return !dup
 		}
-		g = filepath.ToSlash(g)
-		matches, err := doublestar.Glob(rootFS, g)
+		matches, err := doublestar.Glob(rootFS, g.Pattern)
 		if err != nil {
-			return nil, fmt.Errorf("glob %q: %w", g, err)
+			return nil, fmt.Errorf("glob %q: %w", g.Pattern, err)
 		}
 		for _, m := range matches {
 			abs := filepath.Join(root, m)
@@ -186,14 +205,9 @@ func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, 
 					}
 					rel, _ := filepath.Rel(root, p)
 					rel = filepath.ToSlash(rel)
-					if !types.GlobClaims(g, rel, nested) {
-						return nil
+					if keep(rel) {
+						out = append(out, relAbs{rel: rel, abs: p})
 					}
-					if _, ok := seen[rel]; ok {
-						return nil
-					}
-					seen[rel] = struct{}{}
-					out = append(out, relAbs{rel: rel, abs: p})
 					return nil
 				})
 				if err != nil {
@@ -201,40 +215,28 @@ func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, 
 				}
 				continue
 			}
-			if !types.GlobClaims(g, m, nested) {
-				continue
+			if keep(m) {
+				out = append(out, relAbs{rel: m, abs: abs})
 			}
-			if _, ok := seen[m]; ok {
-				continue
-			}
-			seen[m] = struct{}{}
-			out = append(out, relAbs{rel: m, abs: abs})
 		}
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
 	return out, nil
 }
 
-// ownedOutputs drops the records inside a nested project that no glob of s rooted there
-// claims. A manifest is not trusted to have been snapshotted under this rule (a remote
-// tier, an older binary), so a hit enforces it again. It returns m itself when nothing
+// ownedOutputs drops the records s's outputs do not own: one inside a nested project that
+// no glob of s rooted there claims, and one every claiming glob excludes. A manifest is
+// not trusted to have been snapshotted under these rules (a remote tier, an older binary,
+// a declaration that gained an exclusion), so a hit enforces them again: replay must
+// never write over a file the declaration carves out. It returns m itself when nothing
 // drops.
 func ownedOutputs(m *Manifest, s Step) *Manifest {
-	if len(s.NestedDirs) == 0 {
+	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g types.Glob) bool { return len(g.Except) > 0 }) {
 		return m
 	}
 	kept := make([]OutputRecord, 0, len(m.Outputs))
 	for _, rec := range m.Outputs {
-		if types.NestedOwner(rec.Path, s.NestedDirs) == "" || slices.ContainsFunc(s.Outputs, func(g string) bool {
-			g = filepath.ToSlash(g)
-			// A literal glob that names a directory claims every file beneath it, as
-			// expandOutputGlobs walks it.
-			ok := rec.Path == g || strings.HasPrefix(rec.Path, g+"/")
-			if !ok {
-				ok, _ = doublestar.Match(g, rec.Path)
-			}
-			return ok && types.GlobClaims(g, rec.Path, s.NestedDirs)
-		}) {
+		if ownsRecord(s, rec.Path) {
 			kept = append(kept, rec)
 		}
 	}
@@ -244,6 +246,23 @@ func ownedOutputs(m *Manifest, s Step) *Manifest {
 	narrowed := *m
 	narrowed.Outputs = kept
 	return &narrowed
+}
+
+// ownsRecord reports whether s's outputs own the recorded path rel. A record no glob
+// claims is kept outside a nested project, as a hit always has been.
+func ownsRecord(s Step, rel string) bool {
+	nested := types.NestedOwner(rel, s.NestedDirs) != ""
+	claimed := false
+	for _, g := range s.Outputs {
+		if !(types.Glob{Pattern: g.Pattern}).Match(rel) || !types.GlobClaims(g.Pattern, rel, s.NestedDirs) {
+			continue
+		}
+		if !g.Excludes(rel) {
+			return true
+		}
+		claimed = true
+	}
+	return !claimed && !nested
 }
 
 // replay restores a manifest's outputs from the local store.

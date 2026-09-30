@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7051
-skill_short_bytes: 5385
+skill_full_bytes: 7318
+skill_short_bytes: 5658
 ---
 
 # magus-change-summary
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `94` |
+| `agent-skill-version` | `100` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `d02dc16cbb2f` |
+| `skill-content` | `2bbf694a7a43` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,7 +80,7 @@ brief.
 
    Ignore generated outputs when identifying the change.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
+   `client` (`magus\query`, `magus\explain`, `magus\describeFile`); otherwise use:
 
    ```sh
    magus query "<project or feature terms>"
@@ -88,8 +88,13 @@ brief.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Use `magus_insight` with lens=affinity, ownership, or trend only to add context:
-   hidden coupling, ownership risk, or unusually rising activity.
+5. Use `client` (`magus\insight`) and read affinity, ownership, or trend only to add context:
+   hidden coupling, ownership risk, or unusually rising activity. Insight has no CLI verb; without MCP, read one lens
+   through `magus buzz`:
+
+   ```sh
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
+   ```
 
 ## Write the brief
 
@@ -224,8 +229,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so. Use `magus_insight lens=trend`
-   and `magus_insight lens=files` for activity, but do not call that a merge summary.
+   If no VCS merge history is available, say so. Use `client` (`magus\insight`) and read trend and hotspots for activity, but do not call that a merge summary.
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -236,7 +240,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    Ignore generated outputs when identifying the change; trace them to their
    declared source and generator instead.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
+   `client` (`magus\query`, `magus\explain`, `magus\describeFile`); otherwise use:
 
    ```sh
    magus query "<project or feature terms>"
@@ -244,9 +248,14 @@ brief. The output is a decision aid, not a chronological commit dump.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Use `magus_insight` with lens=affinity, ownership, or trend only to add context:
+5. Use `client` (`magus\insight`) and read affinity, ownership, or trend only to add context:
    hidden coupling, ownership risk, or unusually rising activity. They do not
-   prove that a feature landed.
+   prove that a feature landed. Insight has no CLI verb; without MCP, read one lens
+   through `magus buzz`:
+
+   ```sh
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
+   ```
 
 ## Write the brief
 

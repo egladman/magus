@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -124,6 +125,59 @@ func TestNotifyCmd(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "other\n", out)
 	})
+}
+
+func countToasts(t *testing.T) *int {
+	t.Helper()
+	var toasts int
+	prev := raiseDesktop
+	raiseDesktop = func(context.Context, types.Event) error {
+		toasts++
+		return nil
+	}
+	t.Cleanup(func() { raiseDesktop = prev })
+	return &toasts
+}
+
+// A block the queue cannot hold (no source id, no repository) has only the toast
+// to reach a person, so it raises one every time.
+func TestNotifyCmdToastsABlockWithNoQueueRow(t *testing.T) {
+	testkit.Isolate(t)
+	toasts := countToasts(t)
+	run := func(root string) {
+		t.Helper()
+		global = globalFlags{}
+		require.NoError(t, notifyCmd(context.Background(), root, strings.NewReader("needs approval"), io.Discard,
+			[]string{"--outcome", "permission", "--desktop"}))
+	}
+
+	run(t.TempDir())
+	assert.Equal(t, 1, *toasts, "plain text carries no source id, so no row opens and the toast is the only signal")
+
+	t.Chdir(t.TempDir())
+	run("")
+	assert.Equal(t, 2, *toasts, "outside a repository there is no queue, and the block still notifies")
+}
+
+func TestNotifyCmdDoesNotToastARefiredPermission(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	toasts := countToasts(t)
+
+	ev := `{"schema_version":1,"outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"where":{"workspace":{"value":"/repo","is_dir":true},"files":[{"value":"cmd/magus/notify.go"}]},"message":"needs approval"}`
+	run := func(stdin string, args ...string) {
+		t.Helper()
+		global = globalFlags{}
+		require.NoError(t, notifyCmd(context.Background(), root, strings.NewReader(stdin), io.Discard, args))
+	}
+	run(ev, "--desktop", "-o", "name")
+	run(ev, "--desktop", "-o", "name")
+	assert.Equal(t, 1, *toasts, "the queue already holds the block; a second toast asks for a yes on it")
+
+	failed := `{"schema_version":1,"outcome":"failed","source":{"kind":"agent","sub":"host","id":"abc"},"message":"the gate failed"}`
+	run(failed, "--desktop", "-o", "name")
+	run(failed, "--desktop", "-o", "name")
+	assert.Equal(t, 3, *toasts, "a failure is news, never a queue row, and each one still notifies")
 }
 
 func TestRenderNotificationAlwaysHasABody(t *testing.T) {

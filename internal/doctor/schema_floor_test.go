@@ -51,7 +51,7 @@ func TestUsedSchemaKeysQualifiesTargetPolicyLabels(t *testing.T) {
 func TestUsedSchemaKeysIgnoresUngatedKeys(t *testing.T) {
 	// name/sources/spells predate floors and carry no Since, so a workspace using only
 	// those needs no required_version and must not be nagged for one.
-	projects := []*types.Project{{Path: ".", Name: "magus", Sources: []string{"**/*.go"}}}
+	projects := []*types.Project{{Path: ".", Name: "magus", Sources: types.MustParseGlobs("**/*.go")}}
 	assert.Empty(t, usedSchemaKeys(projects))
 }
 

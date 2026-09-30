@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/spells"
@@ -44,19 +48,32 @@ func NewJournal(dir string) (*Journal, error) {
 	return &Journal{dir: dir}, nil
 }
 
-func (j *Journal) path(key string) string { return filepath.Join(j.dir, key+".json") }
+// path names key's record by its hash: a key carries a workspace path and a NUL, and
+// Sweep reads the key back from the record, never the name.
+func (j *Journal) path(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(j.dir, hex.EncodeToString(sum[:])+".json")
+}
 
 // record notes that the service for key is running, with the command that stops it.
 // A nil Journal (the in-process Registry) is a no-op.
+//
+// Atomic and fsync'd, because the record exists for the power loss that kills its
+// broker: a record torn by that crash reads as corrupt, and Sweep deletes it without
+// reaping the service it names. A failure is logged rather than returned: the service
+// is already running, and only a later crash would miss the record.
 func (j *Journal) record(key string, stop spells.Command) {
 	if j == nil {
 		return
 	}
 	data, err := json.Marshal(journalEntry{Key: key, Stop: stop})
-	if err != nil {
-		return
+	if err == nil {
+		err = file.WriteFileAtomic(j.path(key), data, 0o600)
 	}
-	_ = os.WriteFile(j.path(key), data, 0o600)
+	if err != nil {
+		slog.Warn("magus: could not journal a hosted service; a broker crash would leave it running",
+			slog.String("key", key), slog.String("err", err.Error()))
+	}
 }
 
 // forget drops the record for key once the service has been stopped cleanly.

@@ -10,6 +10,11 @@ An agent blocked on a permission prompt, or one that finished twenty minutes
 ago, is only useful if you find out. `magus session notify` normalizes one host event
 and, with `--desktop`, posts a desktop notification.
 
+A waiting or permission event the queue already holds does not post another
+one. The open row is the block, and a second toast asks for a yes on it. A
+failure still notifies, and so does a block that could not be filed, because
+that one has no row.
+
 It does not publish an event to the server or Console. Use it to bring a
 person back to the host where the agent needs an answer.
 

@@ -32,24 +32,28 @@ only: no server AND no CLI, or a human asking what the committed index says.{{en
    `magus describe spells`, `magus describe projects`.{{if .Full}} These are live, so they
    are right even mid-change, and they take a `-o json` for machine reading.{{end}}
 
-2. Then reach for the verbs. Prefer the MCP tools. At session start, or after an
-   MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
-   the user once that `magus server start` restores the full agent surface, then
-   use the CLI equivalent from the same row below. Do not stop or grep.{{if .Full}} CLI
+2. Then reach for the verbs. Prefer an MCP tool when this host exposes it. Call
+   the tool itself to check availability: `magus status --probe=mcp` tests the
+   loopback HTTP listener, so it can fail while stdio or Unix-socket MCP works.
+   If the tool is missing or its call fails, use the CLI equivalent from the same
+   row below. Do not stop or grep. For server-socket diagnosis,
+   `magus status --probe=readiness` checks that this workspace is loaded there;
+   it does not test the host's MCP registration. Do not start a server merely
+   to unlock a tool.{{if .Full}} CLI
    fallback remains correct, but has no tool discovery or warm server graph.{{end}}
 
-   | question                                      | MCP tool        | CLI                                |
-   | --------------------------------------------- | --------------- | ---------------------------------- |
-   | find and relate entities                      | `{{tool "query"}}`   | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `{{tool "explain"}}` | `magus explain <node>`             |
-   | how do two nodes relate                       | `{{tool "path"}}`    | `magus path <a> <b>`               |
-   | where risk concentrates                       | `{{tool "stats"}}`   | `magus graph stats`                |
-   | where a code symbol is defined and used       | `{{tool "refs"}}`    | `magus refs <symbol>`              |
+   | question                                      | MCP                                              | CLI                                |
+   | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
+   | find and relate entities                      | `{{tool "client"}}` (`{{buzz "query"}}`)         | `magus query "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "explain"}}`)       | `magus explain <node>`             |
+   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "path"}}`)          | `magus path <a> <b>`               |
+   | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "stats"}}`)         | `magus graph stats`                |
+   | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "refs"}}`)          | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
-   Prefer these over grep and glob for anything in the magus domain. `{{tool "refs"}}`
+   Prefer these over grep and glob for anything in the magus domain. `{{buzz "refs"}}`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config);{{if .Full}} it
-   is the occurrence-shaped def/references answer, so use it over `{{tool "query"}}` for a
+   is the occurrence-shaped def/references answer, so use it over `{{buzz "query"}}` for a
    symbol's fan-in.{{end}} Every empty result carries a verdict: `absent` means magus
    searched every symbol index this workspace declares and the thing is not there;
    `unknown` names the projects it could not search, and building those with
@@ -147,9 +151,10 @@ are `=` (match), `!=` (exclude), `=~` (regex):
 spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`/`=~`.{{else}}The `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.{{end}}
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50).{{if .Full}} For a large match set over MCP, pass `limit` and echo the returned
-`next_cursor` to fetch the next page.{{else}} Over MCP, page with `limit` plus the returned
-`next_cursor`.{{end}}
+(default 50).{{if .Full}} For a large match set over MCP, pass `{limit, offset}` in the
+options of `{{buzz "query"}}` and raise `offset` by `limit` for the next page; `matchCount`
+stays the total, so you know when you have them all.{{else}} Over MCP, page with `{limit, offset}`
+in `{{buzz "query"}}`'s options; `matchCount` stays the total.{{end}}
 
 ## Retrieving prose from the docs
 
@@ -232,7 +237,7 @@ this workspace declares no adapter, which is the common case.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `{{tool "insight"}}`, and `magus describe` sit alongside the graph;
+- `magus affected`, `{{tool "client"}}` (`{{buzz "insight"}}`), and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment{{if .Full}} (nodes/edges added, removed, or changed); `--rev` builds the base graph from

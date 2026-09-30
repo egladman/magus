@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // targetNames is a stand-in for a registered target set, deliberately including the bare
@@ -52,10 +53,6 @@ func TestMatchTargetPatterns(t *testing.T) {
 		patterns: []string{"*-generate", "!*-build", "!site-*"},
 		want:     []string{"content-generate", "md-generate"},
 	}, {
-		name:     "negation with no include selects nothing, never everything",
-		patterns: []string{"!site-generate"},
-		want:     nil,
-	}, {
 		name:     "overlapping includes yield each name once",
 		patterns: []string{"*-generate", "generate"},
 		want:     []string{"content-generate", "md-generate", "site-generate"},
@@ -80,15 +77,25 @@ func TestMatchTargetPatterns(t *testing.T) {
 		want:     nil,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, MatchTargetPatterns(targetNames, tc.patterns))
+			got, err := MatchTargetPatterns(targetNames, tc.patterns)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// TestMatchTargetPatternsRefusesOnlyNegations pins the meaning "!" shares with declared
+// file globs: a list with nothing to subtract from is an error, not an empty set.
+func TestMatchTargetPatternsRefusesOnlyNegations(t *testing.T) {
+	_, err := MatchTargetPatterns(targetNames, []string{"!site-generate", "!md-generate"})
+	require.EqualError(t, err, `negation "!site-generate" has no pattern to narrow`)
 }
 
 // TestMatchTargetPatternsSorted locks the ordering contract: callers iterate a Go map to
 // produce names, so an unsorted result would make the dispatch order vary run to run.
 func TestMatchTargetPatternsSorted(t *testing.T) {
-	got := MatchTargetPatterns([]string{"z-generate", "a-generate", "m-generate"}, []string{"*-generate"})
+	got, err := MatchTargetPatterns([]string{"z-generate", "a-generate", "m-generate"}, []string{"*-generate"})
+	require.NoError(t, err)
 	assert.Equal(t, []string{"a-generate", "m-generate", "z-generate"}, got)
 }
 
@@ -112,14 +119,19 @@ func TestMatchTargetPatternsDocumentedExamples(t *testing.T) {
 		{"generate_first_party", []string{"*-generate", "!vendor-*"}, []string{"md-generate", "site-generate"}},
 		{"generate_fast_reordered", []string{"!site-generate", "*-generate"}, []string{"md-generate", "vendor-generate"}},
 		{"everything", []string{"*-generate", "*-build"}, []string{"go-build", "md-generate", "site-generate", "vendor-generate"}},
-		{"nothing_at_all", []string{"!site-generate"}, nil},
 		{"negation_is_exact", []string{"*-generate", "!generate"}, []string{"md-generate", "site-generate", "vendor-generate"}},
 		{"regex_does_nothing", []string{"^(?!site-).*-generate$"}, nil},
 		{"future_family", []string{"*-lint"}, nil},
 	} {
 		t.Run(tc.umbrella, func(t *testing.T) {
-			assert.Equal(t, tc.want, MatchTargetPatterns(docNames, tc.patterns),
+			got, err := MatchTargetPatterns(docNames, tc.patterns)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got,
 				"docs/concepts/dependencies.md documents this exact result for %s", tc.umbrella)
 		})
 	}
+
+	_, err := MatchTargetPatterns(docNames, []string{"!site-generate"})
+	require.EqualError(t, err, `negation "!site-generate" has no pattern to narrow`,
+		"docs/concepts/dependencies.md documents nothing_at_all's exact error")
 }

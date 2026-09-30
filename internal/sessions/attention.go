@@ -45,7 +45,12 @@ type AttentionOpen struct {
 	Where     string            `json:"where,omitempty"`
 	Lease     string            `json:"lease,omitempty"`
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
-	Message   string            `json:"message"` // clamped to MaxMessageBytes when written
+	// Files are the paths the event named: the subject a person judges. They stay
+	// out of RequestID for the same reason Lease does. A re-fire that adds a path
+	// must not re-key the row someone is about to close, and the first open is the
+	// one the queue keeps.
+	Files   []types.FileRef `json:"files,omitempty"`
+	Message string          `json:"message"` // clamped to MaxMessageBytes when written
 }
 
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
@@ -119,6 +124,10 @@ type AttentionDispose struct {
 // row a person was about to dispose of would vanish and an identical one would appear under a new
 // id, from a change that did not touch the block at all.
 //
+// Files stay out for that same reason. They are the subject the row shows, not a
+// second identity. A hook that learns a path between two fires of one block must
+// not mint a new request for it.
+//
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
 func RequestID(sourceID string, o AttentionOpen) string {
@@ -139,7 +148,10 @@ type AttentionRequest struct {
 	Lease      string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see types.LeaseSource.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
-	Message   string            `json:"message"`
+	// Files are the paths the raising event named. Empty when it named none, which
+	// leaves the message as the only line the row has.
+	Files   []types.FileRef `json:"files,omitempty"`
+	Message string          `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
 	DisposedMs int64  `json:"disposed_ms,omitempty"`
@@ -202,6 +214,7 @@ func Attention(fold Fold) []AttentionRequest {
 				Where:      open.Where,
 				Lease:      open.Lease,
 				LeaseFrom:  open.LeaseFrom,
+				Files:      open.Files,
 				Message:    open.Message,
 			}
 		case KindAttentionDispose:

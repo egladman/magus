@@ -2,20 +2,19 @@
 
 package cli
 
-// selfCommand (default build) documents the `magus self` surface: update,
-// refresh, registry, and install-shorthand. The update child is omitted from
-// binaries built with -tags noselfupdate, so that build carries its own
-// selfCommand.
+// selfCommand (default build) documents the `magus self` surface: update and
+// install-shorthand. The update child is omitted from binaries built with
+// -tags noselfupdate, so that build carries its own selfCommand.
 var selfCommand = Command{
 	Name:        "self",
-	Short:       "Manage the magus binary (update, refresh, registry, install-shorthand)",
-	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus registry data refresh and the mgs shorthand.",
-	Tags:        []string{"cli", "magus self", "self update", "self refresh", "self registry", "self install-shorthand", "updates", "versioning", "install", "mgs"},
+	Short:       "Manage the magus binary (update, install-shorthand)",
+	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.",
+	Tags:        []string{"cli", "magus self", "self update", "self install-shorthand", "updates", "versioning", "install", "mgs"},
 	Long: `Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
 binary can build with -tags noselfupdate to disable the self-update mechanism.
-refresh, registry, and install-shorthand are available in every build.
+install-shorthand is available in every build.
 
 To bootstrap a workspace, use: magus init`,
 	Usage: "magus self <subcommand> [flags]",
@@ -48,14 +47,10 @@ updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 				{"Install into ~/bin instead of replacing in place", "magus self update --bin-dir ~/bin"},
 			},
 		},
-		selfRefreshCommand,
-		selfRegistryCommand,
 		selfInstallShorthandCommand,
 	},
 	Examples: []Example{
 		{"Update the running binary", "magus self update"},
-		{"Refresh the registry data", "magus self refresh"},
-		{"Show cached registry state", "magus self registry"},
 		{"Install the mgs shorthand", "magus self install-shorthand"},
 	},
 }

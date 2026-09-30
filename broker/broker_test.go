@@ -339,20 +339,21 @@ type fakeHost struct {
 	last     ServiceSpec
 	stopped  bool
 	startErr error
+	adopt    bool // answer as if the service was already running
 }
 
-func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) error {
+func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.last = spec
 	if h.startErr != nil {
-		return h.startErr
+		return false, h.startErr
 	}
 	if h.refs == nil {
 		h.refs = map[string]int{}
 	}
 	h.refs[key]++
-	return nil
+	return !h.adopt, nil
 }
 
 func (h *fakeHost) Release(key string) {
@@ -392,8 +393,10 @@ func TestServiceReferencesRideTheConnection(t *testing.T) {
 	serve(t, addr, WithServices(host))
 	c := dial(t, addr)
 	svc := ServiceSpec{Command: []string{"postgres"}}
-	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
-	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
+	_, err := c.AcquireService(t.Context(), "pg", svc)
+	require.NoError(t, err)
+	_, err = c.AcquireService(t.Context(), "pg", svc)
+	require.NoError(t, err)
 	require.NoError(t, c.ReleaseService(t.Context(), "pg"))
 	assert.Equal(t, 1, host.count("pg"))
 
@@ -417,7 +420,7 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 	serve(t, addr)
 	c := dial(t, addr)
 	pg := ServiceSpec{Command: []string{"postgres"}}
-	err := c.AcquireService(t.Context(), "pg", pg)
+	_, err := c.AcquireService(t.Context(), "pg", pg)
 	var be *Error
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, CodeNoServices, be.Code, "a broker hosting nothing says so by code, and the run hosts the service itself")
@@ -425,11 +428,11 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 	failing := testAddr(t)
 	serve(t, failing, WithServices(&fakeHost{startErr: errors.New("readiness failed")}))
 	fc := dial(t, failing)
-	err = fc.AcquireService(t.Context(), "pg", pg)
+	_, err = fc.AcquireService(t.Context(), "pg", pg)
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, &Error{Code: CodeService, Message: "readiness failed"}, be)
 
-	err = fc.AcquireService(t.Context(), "pg", ServiceSpec{})
+	_, err = fc.AcquireService(t.Context(), "pg", ServiceSpec{})
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, CodeMalformed, be.Code, "a service with no command is refused before any host sees it")
 }
@@ -446,10 +449,34 @@ func TestAServiceSpecCrossesTheWireWhole(t *testing.T) {
 		Stop:      []string{"pg_ctl", "stop"},
 		Idle:      90 * time.Second,
 	}
-	require.NoError(t, dial(t, addr).AcquireService(t.Context(), "pg", want))
+	_, err := dial(t, addr).AcquireService(t.Context(), "pg", want)
+	require.NoError(t, err)
 	host.mu.Lock()
 	defer host.mu.Unlock()
 	assert.Equal(t, want, host.last)
+}
+
+// TestAStartServiceReportsWhetherTheBrokerOwnsIt pins the start service's round trip:
+// its start argv reaches the host, and the client learns whether the host started it
+// (and stops it at idle) or found it running and leaves it alone.
+func TestAStartServiceReportsWhetherTheBrokerOwnsIt(t *testing.T) {
+	want := ServiceSpec{
+		Start:     []string{"podman", "machine", "start"},
+		Readiness: []string{"podman", "info"},
+		Stop:      []string{"podman", "machine", "stop"},
+		Idle:      30 * time.Minute,
+	}
+	for _, adopt := range []bool{false, true} {
+		addr := testAddr(t)
+		host := &fakeHost{adopt: adopt}
+		serve(t, addr, WithServices(host))
+		owned, err := dial(t, addr).AcquireService(t.Context(), "machine", want)
+		require.NoError(t, err)
+		assert.Equal(t, !adopt, owned)
+		host.mu.Lock()
+		assert.Equal(t, want, host.last)
+		host.mu.Unlock()
+	}
 }
 
 func TestServiceSpecRoundTripsASpellService(t *testing.T) {
@@ -575,7 +602,7 @@ func TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves(t *testing.T) {
 	assert.Contains(t, be.Message, fmt.Sprintf("the broker (pid %d) is shutting down", os.Getpid()),
 		"the refusal names the process that turned the run away")
 
-	err = late.AcquireService(t.Context(), "pg", ServiceSpec{Command: []string{"postgres"}})
+	_, err = late.AcquireService(t.Context(), "pg", ServiceSpec{Command: []string{"postgres"}})
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, CodeDraining, be.Code, "a new service reference is a new hold, and is refused the same way")
 

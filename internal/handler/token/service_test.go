@@ -66,7 +66,7 @@ func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 // as is a context carrying the credential the bearer guard would have verified.
 func as(grant types.Grant) context.Context {
-	return trail.ContextWithCredential(context.Background(), types.Credential{Class: types.ClassStored, ID: "0badf00d", Grant: grant})
+	return trail.ContextWithCredential(context.Background(), types.Credential{Kind: types.KindStored, ID: "0badf00d", Grant: grant})
 }
 
 // operator is the context the server's guard gives the operator token.
@@ -413,7 +413,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s,
 		connect.WithInterceptors(trailrpc.Interceptor(dir, trail.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
-	op := types.Credential{Class: types.ClassOperator, ID: "0badf00d", Grant: types.GrantOperator}
+	op := types.Credential{Kind: types.KindOperator, ID: "0badf00d", Grant: types.GrantOperator}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), types.EntryPointRPC)))
 	}))
@@ -455,7 +455,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	assert.Equal(t, secondID, second.ID)
 	_, ok = auth.Verify(firstSecret)
 	assert.False(t, ok, "the revoked secret does not come back with the name")
-	underFirst := types.Origin{Credential: types.Credential{Class: types.ClassStored, ID: firstID, Name: "laptop"}}
+	underFirst := types.Origin{Credential: types.Credential{Kind: types.KindStored, ID: firstID, Name: "laptop"}}
 	underSecond := types.Origin{Credential: second}
 	assert.True(t, underFirst.Names(firstID))
 	assert.False(t, underFirst.Names(secondID), "a record made under the first token never reads as the second")

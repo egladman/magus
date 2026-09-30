@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -966,6 +967,11 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.C
 	const name = "redundant-footprint-globs"
 	var details []string
 	for _, p := range projects {
+		projectWide := func(ref types.OutputRef) bool {
+			return slices.ContainsFunc(p.Outputs, func(g types.Glob) bool {
+				return g.Compare(types.Glob{Pattern: ref.Glob, Except: ref.Except}) == 0
+			})
+		}
 		for target, refs := range p.TargetOutputs {
 			// ctx.writesFiles REPLACES the project and spell baseline for its target rather
 			// than adding to it, so a restated baseline glob is only pointless when the
@@ -977,7 +983,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.C
 				if ref.Project != "" && ref.Project != p.Path {
 					return true
 				}
-				return !slices.Contains(p.Outputs, ref.Glob)
+				return !projectWide(ref)
 			}) {
 				for _, ref := range refs {
 					// A cross-project output is never redundant with THIS project's globs:
@@ -985,7 +991,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.C
 					if ref.Project != "" && ref.Project != p.Path {
 						continue
 					}
-					if slices.Contains(p.Outputs, ref.Glob) {
+					if projectWide(ref) {
 						details = append(details, fmt.Sprintf("%s: ctx.writesFiles(%q) already in project outputs", target, ref.Glob))
 					}
 				}
@@ -1030,18 +1036,23 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
 	for _, p := range projects {
 		var dead []string
 		builtAny := false
+		// A glob is judged by what its exclusions leave it.
 		for _, glob := range p.Outputs {
-			hits, err := globOutputs(p.Dir, glob)
+			hits, err := globOutputs(p.Dir, glob.Pattern)
 			if err != nil {
 				continue
 			}
+			hits = slices.DeleteFunc(hits, func(hit string) bool {
+				rel, err := filepath.Rel(p.Dir, hit)
+				return err == nil && glob.Excludes(filepath.ToSlash(rel))
+			})
 			if len(hits) > 0 {
 				if provesBuilt(r.runCtx(), tracked, p.Dir, hits) {
 					builtAny = true
 				}
 				continue
 			}
-			dead = append(dead, glob)
+			dead = append(dead, glob.Pattern)
 		}
 		if !builtAny {
 			continue
@@ -1238,7 +1249,7 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Ch
 		return types.Check{Name: name, Status: types.CheckOK, Message: "could not list tracked files: " + err.Error()}
 	}
 
-	var globs []string
+	var globs []types.Glob
 	for _, p := range projects {
 		globs = append(globs, p.DeclaredGlobs()...)
 	}
@@ -1257,7 +1268,7 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Ch
 		if types.IsMagusMaintained(f) {
 			continue // magus writes it; no project was ever going to declare it
 		}
-		if types.MatchesAnyGlob(globs, f) {
+		if types.MatchGlobs(globs, f) {
 			continue
 		}
 		details = append(details, f)
@@ -2034,32 +2045,22 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-command.sh",
-	"magus-path.sh",
-	// The Buzz ports of the two above, which a `magus buzz` wiring names instead.
-	// They carry the same verdicts, so a stale copy of one fails the same way a
-	// stale copy of its sh twin does, and both names have to be gradeable.
 	"magus-command.buzz",
 	"magus-path.buzz",
 	"magus-observe.buzz",
-	"cursor-hook.sh",
+	"cursor-hook.buzz",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
 	// where nobody ever stopped mid-task.
 	//
-	// This entry named magus-pause.sh for the whole life of the rename that produced
-	// magus-checkpoint.sh, so the one check written to catch a silently stale copy
-	// could not match the only name a config ever carries. TestGuardTemplateBasenames
+	// This entry once named magus-pause for the whole life of the rename that produced
+	// magus-checkpoint, so the one check written to catch a silently stale copy could
+	// not match the only name a config ever carries. TestGuardTemplateBasenames
 	// AreShipped is what makes the next rename fail loudly instead.
-	"magus-checkpoint.sh",
+	"magus-checkpoint.buzz",
 	// Judges nothing either, and graded for the same reason: a stale copy of it hands a
 	// compacted session a brief the current binary would not have written, and the only
 	// sign is a model working from a summary that looked complete.
-	"magus-rehydrate.sh",
-	// The Buzz ports of those two, for the reason the hook templates' ports are here:
-	// a config names one form or the other, and a name this list cannot match is a
-	// staleness check that silently grades nothing.
-	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 }
 
@@ -2117,7 +2118,7 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 
 // guardReferencedTemplates finds every known template basename mentioned in a
 // config's bytes and resolves each to a file on disk: first relative to the
-// workspace root (the dogfooded shape: `sh docs/guides/.../foo.sh`), then
+// workspace root (the dogfooded shape: `magus buzz -s docs/guides/.../foo.buzz`), then
 // relative to the config's own directory, then as written. A single config
 // commonly names two (this repository's own .claude/settings.json wires the
 // command and path templates as separate hooks), so this checks every
@@ -2128,7 +2129,6 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 // at a template that is not there runs nothing, and reporting only what
 // resolved would grade exactly that case as healthy.
 func guardReferencedTemplates(root, configDir string, body []byte) (found, missing []string) {
-	const workspaceRoot = "$(magus describe projects -o 'template={{.workspace}}')/"
 	for _, base := range guardTemplateBasenames {
 		idx := bytes.Index(body, []byte(base))
 		if idx == -1 {
@@ -2144,20 +2144,10 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 			}
 			break
 		}
-		// Hook commands run from the task's working directory, which can be below
-		// the repository root. The shipped config uses this exact VCS-neutral
-		// expansion so a template stays reachable there. Treat only that expansion
-		// as root-relative; executing or accepting arbitrary hook commands would
-		// turn a diagnostic into a risk.
-		if rootStart := bytes.LastIndex(body[:idx], []byte(workspaceRoot)); rootStart >= 0 &&
-			!bytes.ContainsAny(body[rootStart+len(workspaceRoot):idx], "\"'\n") {
-			start = rootStart
-		}
 		token := string(body[start : idx+len(base)])
-		rootToken := strings.TrimPrefix(token, workspaceRoot)
 		resolved := ""
 		for _, candidate := range []string{
-			filepath.Join(root, rootToken),
+			filepath.Join(root, token),
 			filepath.Join(configDir, token),
 			token,
 		} {
@@ -2570,7 +2560,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 func declaredOutputFiles(p *types.Project) []string {
 	var rels []string
 	for _, glob := range p.AllOutputs() {
-		hits, err := globOutputs(p.Dir, glob)
+		hits, err := globOutputs(p.Dir, glob.Pattern)
 		if err != nil {
 			continue
 		}
@@ -2583,7 +2573,9 @@ func declaredOutputFiles(p *types.Project) []string {
 			if err != nil {
 				continue
 			}
-			rels = append(rels, filepath.ToSlash(rel))
+			if rel = filepath.ToSlash(rel); !glob.Excludes(rel) {
+				rels = append(rels, rel)
+			}
 		}
 	}
 	slices.Sort(rels)
@@ -2756,11 +2748,12 @@ func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.Ch
 
 	var details []string
 	for _, p := range projects {
+		// Only patterns: an exclusion under a pruned dir removes what the walk never yields.
 		for _, glob := range p.Sources {
-			if dir, ok := prunedPrefix(glob); ok {
+			if dir, ok := prunedPrefix(glob.Pattern); ok {
 				details = append(details, fmt.Sprintf(
 					"%s: source glob %q can never match: the expansion walk prunes %q",
-					types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob, dir))
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob.Pattern, dir))
 			}
 		}
 	}
@@ -2824,21 +2817,19 @@ func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) t
 	const name = "output-is-another-projects-source"
 
 	// Rooted exact output paths, and who writes each.
+	exact := func(rooted types.Glob) bool { return !strings.ContainsAny(rooted.Pattern, "*?[") }
 	owners := map[string]string{}
 	for _, p := range projects {
 		for _, glob := range p.AllOutputs() {
-			if rooted := types.RootGlob(p.Path, glob); !strings.ContainsAny(rooted, "*?[") {
-				owners[rooted] = p.Path
+			if rooted := glob.Root(p.Path); exact(rooted) {
+				owners[rooted.Pattern] = p.Path
 			}
 		}
 		for _, refs := range p.TargetOutputs {
 			for _, ref := range refs {
-				owner := ref.Project
-				if owner == "" {
-					owner = p.Path
-				}
-				if rooted := types.RootGlob(owner, ref.Glob); !strings.ContainsAny(rooted, "*?[") {
-					owners[rooted] = owner
+				owner := cmp.Or(ref.Project, p.Path)
+				if rooted := ref.Rooted(p.Path); exact(rooted) {
+					owners[rooted.Pattern] = owner
 				}
 			}
 		}
@@ -2849,24 +2840,20 @@ func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) t
 
 	var details []string
 	for _, p := range projects {
-		var sources []string
+		sources := make([]types.Glob, 0, len(p.Sources))
 		for _, glob := range p.Sources {
-			sources = append(sources, types.RootGlob(p.Path, glob))
+			sources = append(sources, glob.Root(p.Path))
 		}
 		for _, refs := range p.TargetInputs {
 			for _, ref := range refs {
-				owner := ref.Project
-				if owner == "" {
-					owner = p.Path
-				}
-				sources = append(sources, types.RootGlob(owner, ref.Glob))
+				sources = append(sources, ref.Rooted(p.Path))
 			}
 		}
 		for path, owner := range owners {
 			if owner == p.Path {
 				continue // its own output; writing it is what generate is for
 			}
-			if types.MatchesAnyGlob(sources, path) {
+			if types.MatchGlobs(sources, path) {
 				details = append(details, fmt.Sprintf("%s is %s's output and %s's source", path, owner, p.Path))
 			}
 		}

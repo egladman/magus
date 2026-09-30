@@ -268,7 +268,7 @@ export function demoRuns(now: number): RunSummary[] {
 
 // demoRunLogs is the invocation half of the same showcase, projected from the shared scenario so the
 // demo tree reads the way a real one does - a `magus affected ci` sweep with its targets under it,
-// and the agent-driven runs each on their own.
+// and the MCP-triggered runs each on their own.
 export function demoRunLogs(now: number): RunLog[] {
   return scenarioInvocations(now).map((i) => ({
     inv: i.inv,

@@ -365,3 +365,25 @@ func TestImportDoesNotDependOnFixedStagingNames(t *testing.T) {
 	_, err = os.Stat(cB.logPath("test/pkg", rA.Hash))
 	require.NoError(t, err, "the signed log must be committed")
 }
+
+// A fetched bundle is filed by rename, as Persist files a local one: newestAttemptBlob
+// can pick a blob before its descriptor lands, so one written in place can be read torn.
+func TestStoreFetchedBundleReplacesByRename(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	_, c := openSigned(t, remote, nil, nil)
+	b := OutputBundle{Descriptor: OutputDescriptor{Key: "k1", Attempt: "a1"}}
+	blob := filepath.Join(c.outputs.outputsDir(), "k1", "a1"+outExt)
+
+	c.storeFetchedBundle(t.Context(), []byte("first"), b)
+	before, err := os.Stat(blob)
+	require.NoError(t, err)
+	c.storeFetchedBundle(t.Context(), []byte("second"), b)
+	after, err := os.Stat(blob)
+	require.NoError(t, err)
+
+	assert.False(t, os.SameFile(before, after), "the blob was rewritten in place")
+	got, err := os.ReadFile(blob)
+	require.NoError(t, err)
+	assert.Equal(t, "second", string(got))
+}

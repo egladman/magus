@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -19,240 +20,240 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("glob", vm.DirectValue("fs.glob", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		pattern := Str(bzArgs, 0)
+		pattern := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsGlob(ctx, pattern)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectPath), nil
+		return ffi.ObjectSlice(ret0, ObjectPath), nil
 	}))
 	m.MapSet("dirname", vm.DirectValue("fs.dirname", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsDirname(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("basename", vm.DirectValue("fs.basename", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsBasename(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("exists", vm.DirectValue("fs.exists", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsExists(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("readFile", vm.DirectValue("fs.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsReadFile(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("writeFile", vm.DirectValue("fs.writeFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		content := Str(bzArgs, 1)
+		path := ffi.Str(bzArgs, 0)
+		content := ffi.Str(bzArgs, 1)
 		if err := std.FsWriteFile(ctx, path, content); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("mkdirAll", vm.DirectValue("fs.mkdirAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		perm := Int(bzArgs, 1, 493)
+		path := ffi.Str(bzArgs, 0)
+		perm := ffi.Int(bzArgs, 1, 493)
 		if err := std.FsMkdirAll(ctx, path, perm); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("join", vm.DirectValue("fs.join", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		parts := VariadicStr(bzArgs, 0)
+		parts := ffi.VariadicStr(bzArgs, 0)
 		ret0, err := std.FsJoin(ctx, parts...)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("removeAll", vm.DirectValue("fs.removeAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		if err := std.FsRemoveAll(ctx, path); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("remove", vm.DirectValue("fs.remove", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		if err := std.FsRemove(ctx, path); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("rename", vm.DirectValue("fs.rename", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		dst := Str(bzArgs, 1)
+		src := ffi.Str(bzArgs, 0)
+		dst := ffi.Str(bzArgs, 1)
 		if err := std.FsRename(ctx, src, dst); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("size", vm.DirectValue("fs.size", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsSize(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("tempFile", vm.DirectValue("fs.tempFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		prefix := Str(bzArgs, 0)
+		prefix := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsTempFile(ctx, prefix)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("writeFileAtomic", vm.DirectValue("fs.writeFileAtomic", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		content := Str(bzArgs, 1)
+		path := ffi.Str(bzArgs, 0)
+		content := ffi.Str(bzArgs, 1)
 		if err := std.FsWriteFileAtomic(ctx, path, content); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("listDir", vm.DirectValue("fs.listDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsListDir(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("ext", vm.DirectValue("fs.ext", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsExt(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("isDir", vm.DirectValue("fs.isDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsIsDir(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("isFile", vm.DirectValue("fs.isFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsIsFile(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("stat", vm.DirectValue("fs.stat", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsStat(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectFileInfo(ret0), nil
 	}))
 	m.MapSet("copyFile", vm.DirectValue("fs.copyFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		dst := Str(bzArgs, 1)
+		src := ffi.Str(bzArgs, 0)
+		dst := ffi.Str(bzArgs, 1)
 		if err := std.FsCopyFile(ctx, src, dst); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("copyDir", vm.DirectValue("fs.copyDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := Str(bzArgs, 0)
-		dst := Str(bzArgs, 1)
+		src := ffi.Str(bzArgs, 0)
+		dst := ffi.Str(bzArgs, 1)
 		if err := std.FsCopyDir(ctx, src, dst); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("watch", vm.DirectValue("fs.watch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		paths := StrSlice(bzArgs, 0)
-		callback := CallbackArg(sess, bzArgs, 1)
+		paths := ffi.StrSlice(bzArgs, 0)
+		callback := ffi.CallbackArg(sess, bzArgs, 1)
 		if err := std.FsWatch(ctx, paths, callback); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("walk", vm.DirectValue("fs.walk", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		root := Str(bzArgs, 0)
-		callback := CallbackArg(sess, bzArgs, 1)
+		root := ffi.Str(bzArgs, 0)
+		callback := ffi.CallbackArg(sess, bzArgs, 1)
 		if err := std.FsWalk(ctx, root, callback); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("appendFile", vm.DirectValue("fs.appendFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		content := Str(bzArgs, 1)
+		path := ffi.Str(bzArgs, 0)
+		content := ffi.Str(bzArgs, 1)
 		if err := std.FsAppendFile(ctx, path, content); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("chmod", vm.DirectValue("fs.chmod", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		mode := Int(bzArgs, 1, 0)
+		path := ffi.Str(bzArgs, 0)
+		mode := ffi.Int(bzArgs, 1, 0)
 		if err := std.FsChmod(ctx, path, mode); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("symlink", vm.DirectValue("fs.symlink", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		target := Str(bzArgs, 0)
-		link := Str(bzArgs, 1)
+		target := ffi.Str(bzArgs, 0)
+		link := ffi.Str(bzArgs, 1)
 		if err := std.FsSymlink(ctx, target, link); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("readlink", vm.DirectValue("fs.readlink", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsReadlink(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("tempDir", vm.DirectValue("fs.tempDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		prefix := Str(bzArgs, 0)
+		prefix := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsTempDir(ctx, prefix)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("readLines", vm.DirectValue("fs.readLines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
+		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsReadLines(ctx, path)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("writeLines", vm.DirectValue("fs.writeLines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := Str(bzArgs, 0)
-		lines := StrSlice(bzArgs, 1)
+		path := ffi.Str(bzArgs, 0)
+		lines := ffi.StrSlice(bzArgs, 1)
 		if err := std.FsWriteLines(ctx, path, lines); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))

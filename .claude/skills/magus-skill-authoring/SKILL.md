@@ -107,7 +107,7 @@ The whole vocabulary, each resolving against the registry that defines it:
 | write | renders | resolves against |
 | --- | --- | --- |
 | `{{cmd "agent harness verify"}}` | `magus agent harness verify` | `hint.AllCommands` |
-| `{{tool "query"}}` | `magus_query` | `hint.AllToolNames` |
+| `{{tool "client"}}` | `client` | `hint.AllToolNames` (a `magus_` prefix is tried when the bare name misses) |
 | `{{skill "vcs-hygiene"}}` | `magus-vcs-hygiene` | the shipped catalog |
 | `{{buzz "harness.provider"}}` | `magus\harness.provider` | the magus host module |
 | `{{mgs "MGS2001"}}` | `MGS2001` | the diagnostic registry |

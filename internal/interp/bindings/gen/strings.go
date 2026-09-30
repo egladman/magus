@@ -5,6 +5,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -17,159 +18,159 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("camelCase", vm.DirectValue("strings.camelCase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsCamelCase(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("snakeCase", vm.DirectValue("strings.snakeCase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsSnakeCase(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("kebabCase", vm.DirectValue("strings.kebabCase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsKebabCase(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("pascalCase", vm.DirectValue("strings.pascalCase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsPascalCase(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("capitalize", vm.DirectValue("strings.capitalize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsCapitalize(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("words", vm.DirectValue("strings.words", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsWords(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("ellipsis", vm.DirectValue("strings.ellipsis", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		length := Int(bzArgs, 1, 0)
+		s := ffi.Str(bzArgs, 0)
+		length := ffi.Int(bzArgs, 1, 0)
 		ret0, err := std.StringsEllipsis(ctx, s, length)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("upperFirst", vm.DirectValue("strings.upperFirst", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsUpperFirst(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("compare", vm.DirectValue("strings.compare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := Str(bzArgs, 0)
-		b := Str(bzArgs, 1)
+		a := ffi.Str(bzArgs, 0)
+		b := ffi.Str(bzArgs, 1)
 		ret0, err := std.StringsCompare(ctx, a, b)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return IntVal(ret0), nil
+		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("contains", vm.DirectValue("strings.contains", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		substr := Str(bzArgs, 1)
+		s := ffi.Str(bzArgs, 0)
+		substr := ffi.Str(bzArgs, 1)
 		ret0, err := std.StringsContains(ctx, s, substr)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("trimPrefix", vm.DirectValue("strings.trimPrefix", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		prefix := Str(bzArgs, 1)
+		s := ffi.Str(bzArgs, 0)
+		prefix := ffi.Str(bzArgs, 1)
 		ret0, err := std.StringsTrimPrefix(ctx, s, prefix)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("trimSuffix", vm.DirectValue("strings.trimSuffix", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		suffix := Str(bzArgs, 1)
+		s := ffi.Str(bzArgs, 0)
+		suffix := ffi.Str(bzArgs, 1)
 		ret0, err := std.StringsTrimSuffix(ctx, s, suffix)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("padLeft", vm.DirectValue("strings.padLeft", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		length := Int(bzArgs, 1, 0)
-		pad := Str(bzArgs, 2)
+		s := ffi.Str(bzArgs, 0)
+		length := ffi.Int(bzArgs, 1, 0)
+		pad := ffi.Str(bzArgs, 2)
 		ret0, err := std.StringsPadLeft(ctx, s, length, pad)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("padRight", vm.DirectValue("strings.padRight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		length := Int(bzArgs, 1, 0)
-		pad := Str(bzArgs, 2)
+		s := ffi.Str(bzArgs, 0)
+		length := ffi.Int(bzArgs, 1, 0)
+		pad := ffi.Str(bzArgs, 2)
 		ret0, err := std.StringsPadRight(ctx, s, length, pad)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("lines", vm.DirectValue("strings.lines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsLines(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("fields", vm.DirectValue("strings.fields", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsFields(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("splitN", vm.DirectValue("strings.splitN", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
-		sep := Str(bzArgs, 1)
-		n := Int(bzArgs, 2, 0)
+		s := ffi.Str(bzArgs, 0)
+		sep := ffi.Str(bzArgs, 1)
+		n := ffi.Int(bzArgs, 2, 0)
 		ret0, err := std.StringsSplitN(ctx, s, sep, n)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrSliceVal(ret0), nil
+		return ffi.StrSliceVal(ret0), nil
 	}))
 	m.MapSet("collapseWs", vm.DirectValue("strings.collapseWs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := Str(bzArgs, 0)
+		s := ffi.Str(bzArgs, 0)
 		ret0, err := std.StringsCollapseWs(ctx, s)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	return m
 }

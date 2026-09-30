@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/egladman/magus/internal/file"
 )
 
 // FSRemoteBackend is a local-filesystem RemoteBackend: artifacts are stored as
@@ -53,31 +55,14 @@ func (r *FSRemoteBackend) HasArtifact(_ context.Context, namespace, key string) 
 	return err == nil, err
 }
 
-// PutArtifact writes the artifact to the filesystem atomically.
+// PutArtifact writes the artifact to the filesystem atomically, or returns
+// [ErrRemoteExists] without reading data when the key is already stored. Two pushes of
+// one key that overlap both write, each through its own temp file, and the later rename
+// wins with the same bytes.
 func (r *FSRemoteBackend) PutArtifact(_ context.Context, namespace, key string, data io.Reader) error {
 	path := r.artifactPath(namespace, key)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+	if _, err := os.Stat(path); err == nil {
+		return ErrRemoteExists
 	}
-	// A unique-per-call temp name, not a fixed one: two processes pushing the
-	// same (project, hash) concurrently would otherwise both os.Create the SAME
-	// path (which reuses one inode rather than making two), so one push's
-	// writes land on a file the other is simultaneously rewriting, and whichever
-	// renames last can carry a torn tarball into the shared store.
-	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	if _, err := io.Copy(f, data); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
+	return file.WriteFrom(path, data, 0o600)
 }

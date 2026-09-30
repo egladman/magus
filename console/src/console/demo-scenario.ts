@@ -111,7 +111,7 @@ export interface ScenarioRun {
   inv: string;
   project: string;
   target: string;
-  trigger: string; // mcp (agent-driven) | ci (the sweep) | cli (manual)
+  trigger: string; // mcp (through the client tool) | ci (the sweep) | cli (manual)
   state: RunState;
   startMs: number;
   endMs: number;
@@ -123,7 +123,7 @@ export interface ScenarioRun {
 }
 
 // The invocation ids the timeline threads runs onto. The CI sweep's targets all share INV_CI, so
-// the tree and dashboard group them as one run; the agent-driven test runs each get their own.
+// the tree and dashboard group them as one run; the MCP-triggered test runs each get their own.
 export const INV_CI = "invci7a";
 export const INV_TEST_BREAK = "inv92e1";
 export const INV_TEST_FIX = "inv80f2";
@@ -346,7 +346,7 @@ export function scenarioRuns(now: number): ScenarioRun[] {
 }
 
 // A ref shaped like the CI sweep's outputs but deliberately absent from scenarioRuns: it aged out
-// of the retained store, so the agent's later magus_output lookup for it fails. This is the join
+// of the retained store, so the agent's later magus\output lookup for it fails. This is the join
 // key for the "failed lookup for a pruned ref" beat in the trail.
 // ScenarioInvocation is one COMMAND in the scenario - the unit the run browser lists and the log
 // viewer opens. scenarioRuns records what each TARGET did; this records what was asked for, which no
@@ -429,7 +429,7 @@ export interface ScenarioActivity {
 // the trail records what the agent was handed back, the journal records what the tool printed.
 export function scenarioActivity(now: number): ScenarioActivity[] {
   const runs = scenarioRuns(now);
-  // Each agent-driven invocation holds a single run, so lookup by invocation id is unambiguous.
+  // Each MCP-triggered invocation holds a single run, so lookup by invocation id is unambiguous.
   const run = (inv: string): ScenarioRun => must(runs.find((x) => x.inv === inv));
   const fresh = run(INV_BUILD_FRESH);
   const fix = run(INV_TEST_FIX);
@@ -439,7 +439,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: true,
       timeMs: fresh.startMs,
       durationMs: fresh.durationMs,
@@ -453,7 +453,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_output",
+      action: "client",
       ok: false,
       timeMs: at(18),
       durationMs: 6,
@@ -475,7 +475,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: true,
       timeMs: fix.startMs,
       durationMs: fix.durationMs,
@@ -491,7 +491,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_run_target",
+      action: "client",
       ok: false,
       timeMs: broke.startMs,
       durationMs: broke.durationMs,
@@ -520,7 +520,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     {
       kind: "mcp",
       actor: "claude-code",
-      action: "magus_query",
+      action: "client",
       ok: true,
       timeMs: at(100),
       durationMs: 34,

@@ -2,10 +2,11 @@ package watch
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 )
 
 // BuiltinIgnore returns true for paths that should never trigger a
@@ -82,19 +83,12 @@ func Compose(preds ...func(string) bool) func(string) bool {
 	}
 }
 
-// matchGlob reports whether pattern matches path, supporting ** to match any
-// number of path segments (e.g. "dist/**" matches "dist/a/b/c.js").
-// It delegates to doublestar.Match which is already used by IgnorePatterns.
-func matchGlob(pattern, path string) bool {
-	ok, _ := doublestar.Match(pattern, path)
-	return ok
-}
-
-// OutputsIgnore returns an ignore predicate that skips any path that matches
-// one of the provided output glob patterns (relative to wsRoot). Pass the
-// project Outputs globs from the workspace to prevent the
-// build → output-write → rebuild loop.
-func OutputsIgnore(wsRoot string, outputGlobs []string) func(string) bool {
+// OutputsIgnore returns an ignore predicate that skips any path one of the declared output
+// globs (workspace-rooted, relative to wsRoot) claims. Pass every project's outputs to
+// prevent the build → output-write → rebuild loop. A file an output's exclusions carve out
+// is a source and still fires, and so is the directory holding one: ignoring a directory
+// prunes the watch beneath it.
+func OutputsIgnore(wsRoot string, outputGlobs []types.Glob) func(string) bool {
 	if len(outputGlobs) == 0 {
 		return func(string) bool { return false }
 	}
@@ -105,15 +99,20 @@ func OutputsIgnore(wsRoot string, outputGlobs []string) func(string) bool {
 		}
 		rel = filepath.ToSlash(rel)
 		for _, glob := range outputGlobs {
-			if matchGlob(glob, rel) {
-				return true
-			}
-			// Also match if absPath is a prefix of the glob's directory, so
-			// the directory itself is pruned (avoids descending into it).
-			if strings.HasPrefix(rel+"/", filepath.ToSlash(glob)+"/") {
+			if glob.Match(rel) && !slices.ContainsFunc(glob.Except, func(e string) bool { return reachesUnder(e, rel) }) {
 				return true
 			}
 		}
 		return false
 	}
+}
+
+// reachesUnder reports whether pattern can match a path beneath dir: every match starts
+// with the pattern's text before its first metacharacter.
+func reachesUnder(pattern, dir string) bool {
+	lead := pattern
+	if i := strings.IndexAny(pattern, `*?[{\`); i >= 0 {
+		lead = pattern[:i]
+	}
+	return strings.HasPrefix(dir+"/", lead) || strings.HasPrefix(lead, dir+"/")
 }

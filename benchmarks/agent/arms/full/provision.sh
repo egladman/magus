@@ -32,8 +32,9 @@ MAGUS_HINTS_ENABLED=false "$BIN" agent install --dir "$WT" .claude/skills --forc
 # provisioning and the run is invisible to it. The probe re-counts.
 find "$WT/.claude/skills" -name SKILL.md | wc -l | tr -d ' ' > "$WT/.benchmark/skills.expected"
 
-mkdir -p "$WT/.claude/hooks"
-for t in magus-command.sh magus-path.sh magus-observe.sh; do
+# The Buzz templates import lib/hook.buzz relative to themselves, so it travels with them.
+mkdir -p "$WT/.claude/hooks/lib"
+for t in magus-command.buzz magus-path.buzz magus-observe.buzz lib/hook.buzz; do
     cp "$TEMPLATES/$t" "$WT/.claude/hooks/$t"
 done
 
@@ -43,15 +44,15 @@ cat > "$WT/.claude/settings.json" <<'JSON'
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "magus buzz -s .claude/hooks/magus-command.buzz -- --agent-name claude-code", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "magus buzz -s .claude/hooks/magus-path.buzz -- --agent-name claude-code", "timeout": 10 }]
       },
       {
         "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-observe.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "magus buzz -s .claude/hooks/magus-observe.buzz -- --agent-name claude-code", "timeout": 10 }]
       }
     ]
   }

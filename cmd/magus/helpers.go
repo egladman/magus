@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -172,7 +173,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 			// Declared outputs are known only once the workspace is open, and they are
 			// what the merge driver registers, so this is the first point that can keep
 			// the registration honest. It is a no-op unless the globs actually moved.
-			ensureMergeDriver(ctx, magusValue)
+			settle.EnsureDriver(ctx, magusValue)
 		}
 	})
 	if err := magusOpened.check("loadMagus", rootOverride); err != nil {

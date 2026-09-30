@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -21,70 +22,70 @@ func RegisterPipe(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("more", vm.DirectValue("pipe.more", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PipeMore(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return BoolVal(ret0), nil
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("next", vm.DirectValue("pipe.next", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PipeNext(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return ObjectPipeRecord(ret0), nil
 	}))
 	m.MapSet("all", vm.DirectValue("pipe.all", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PipeAll(ctx)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectPipeRecord), nil
+		return ffi.ObjectSlice(ret0, ObjectPipeRecord), nil
 	}))
 	m.MapSet("emit", vm.DirectValue("pipe.emit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		record := AnyMap(bzArgs, 0)
+		record := ffi.AnyMap(bzArgs, 0)
 		if err := std.PipeEmit(ctx, record); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("outputs", vm.DirectValue("pipe.outputs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		record := AnyMap(bzArgs, 0)
+		record := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.PipeOutputs(ctx, record)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectTargetArtifact), nil
+		return ffi.ObjectSlice(ret0, ObjectTargetArtifact), nil
 	}))
 	m.MapSet("exportTo", vm.DirectValue("pipe.exportTo", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		artifact := AnyMap(bzArgs, 0)
-		dest := Str(bzArgs, 1)
+		artifact := ffi.AnyMap(bzArgs, 0)
+		dest := ffi.Str(bzArgs, 1)
 		ret0, err := std.PipeExport(ctx, artifact, dest)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return StrVal(ret0), nil
+		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("history", vm.DirectValue("pipe.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		artifact := AnyMap(bzArgs, 0)
+		artifact := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.PipeHistory(ctx, artifact)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return ObjectSlice(ret0, ObjectArtifactVersion), nil
+		return ffi.ObjectSlice(ret0, ObjectArtifactVersion), nil
 	}))
 	m.MapSet("diff", vm.DirectValue("pipe.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		artifact := AnyMap(bzArgs, 0)
+		artifact := ffi.AnyMap(bzArgs, 0)
 		if err := std.PipeDiff(ctx, artifact); err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("value", vm.DirectValue("pipe.value", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		record := AnyMap(bzArgs, 0)
+		record := ffi.AnyMap(bzArgs, 0)
 		ret0, err := std.PipeValue(ctx, record)
 		if err != nil {
-			return vm.Null, HostError(err)
+			return vm.Null, ffi.Error(err)
 		}
-		return AnyVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
 	return m
 }

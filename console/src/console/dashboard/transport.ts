@@ -20,7 +20,7 @@ import { StatusSchema, StatusService, type Status } from "@wire/status/v1alpha1/
 import { MetricsService } from "@wire/metrics/v1alpha1/metrics_pb";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { InsightService } from "@wire/insight/v1alpha1/insight_pb";
-import { ToolService, Verdict } from "@wire/tool/v1alpha1/tool_pb";
+import { LifecycleState, Support, ToolService, Verdict } from "@wire/tool/v1alpha1/tool_pb";
 import {
   authHeaders,
   createServerTransport,
@@ -38,6 +38,7 @@ import {
   mapAgentActivity,
   type AgentEventWire,
   type DashboardState,
+  type LifecycleView,
   type SampleView,
   type ToolRowView,
   renderWindow,
@@ -73,6 +74,39 @@ const verdictLabel = (v: Verdict): "inside" | "too old" | "too new" | "unknown" 
       return "inside";
     default:
       return "unknown";
+  }
+};
+
+// supportLabel maps the wire enum to the `support` word `magus describe tools` prints.
+const supportLabel = (s: Support): ToolRowView["support"] => {
+  switch (s) {
+    case Support.SUPPORTED:
+      return "supported";
+    case Support.EOL:
+      return "eol";
+    case Support.UNANNOUNCED:
+      return "unannounced";
+    case Support.UNKNOWN:
+      return "unknown";
+    default:
+      return "";
+  }
+};
+
+// lifecycleStateLabel maps the wire enum to the state `magus describe tools -o json` prints.
+// An unset state reads as unwired: nothing was asked.
+const lifecycleStateLabel = (s: LifecycleState): LifecycleView["state"] => {
+  switch (s) {
+    case LifecycleState.LIVE:
+      return "live";
+    case LifecycleState.CACHED:
+      return "cached";
+    case LifecycleState.OFFLINE:
+      return "offline";
+    case LifecycleState.UNREACHED:
+      return "unreached";
+    default:
+      return "unwired";
   }
 };
 
@@ -374,11 +408,20 @@ export class DashboardTransport {
             probedAtMs: tool.probeTime
               ? Number(tool.probeTime.seconds) * 1000 + Math.floor(tool.probeTime.nanos / 1e6)
               : 0,
+            cycle: tool.cycle,
+            eol: tool.eol,
+            support: supportLabel(tool.support),
           });
         }
       }
       const violations = rows.filter((r) => r.code !== "").length;
-      this.store.set({ tools: { rows, violations } });
+      const lifecycle: LifecycleView = {
+        provider: resp.lifecycle?.provider ?? "",
+        state: lifecycleStateLabel(resp.lifecycle?.state ?? LifecycleState.UNSPECIFIED),
+        sources: resp.lifecycle?.sources ?? [],
+        detail: resp.lifecycle?.detail ?? "",
+      };
+      this.store.set({ tools: { rows, violations, lifecycle } });
     } catch {
       // reported: by the server transport. Leave the prior view in place.
     }

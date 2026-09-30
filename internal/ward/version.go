@@ -109,6 +109,10 @@ const (
 	buzzUnresolvedImport = "BZZ2001"
 )
 
+// bootstrapCmd builds a first binary in a checkout no magus on hand can load; the guard
+// serves the same command.
+const bootstrapCmd = "go run -trimpath ./cmd/magus run go-build --no-cache ."
+
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.
 //
@@ -130,8 +134,8 @@ type StaleBuild struct {
 // Advice states the version gap once and lists the fixes as runnable commands, one per
 // line, without a trailing newline.
 //
-// The go-build line appears only for a [StaleBuild.SourceTree] workspace, and the bare
-// `go build` bootstrap only when the running build is also a dev build: that is the
+// The go-build line appears only for a [StaleBuild.SourceTree] workspace, and the
+// [bootstrapCmd] only when the running build is also a dev build: that is the
 // binary that may be unable to load the tree it would rebuild itself from. An unknown
 // running version is not a dev build, so it never earns the bootstrap line.
 func (b StaleBuild) Advice() string {
@@ -141,10 +145,10 @@ func (b StaleBuild) Advice() string {
 	case b.SourceTree:
 		lines = append(lines, "  - built from this checkout: ./magus run go-build .")
 		if dev {
-			lines = append(lines, "  - if that cannot load the tree either: go build -o ./magus ./cmd/magus")
+			lines = append(lines, "  - if that cannot load the tree either: mv magus magus.old, then "+bootstrapCmd)
 		}
 	case dev:
-		lines = append(lines, "  - built from source, in the checkout it came from: go build -o ./magus ./cmd/magus")
+		lines = append(lines, "  - built from source, in the checkout it came from: "+bootstrapCmd)
 	}
 	return strings.Join(lines, "\n")
 }

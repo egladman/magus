@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,4 +102,33 @@ func TestFSRemoteBackendPutArtifactConcurrentPushesDontTear(t *testing.T) {
 	isB := bytes.Equal(got, payloadB)
 	assert.True(t, isA || isB,
 		"the stored artifact must be exactly one push's complete payload (got %d bytes), never a mix of both", len(got))
+}
+
+// A key already in the store is ErrRemoteExists, as the RemoteBackend contract says, and
+// the stored bytes stay: content addressing makes them the same entry.
+func TestFSRemoteBackendPutArtifactExistingKey(t *testing.T) {
+	r, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, r.PutArtifact(t.Context(), "proj", "deadbeef", bytes.NewReader([]byte("first"))))
+
+	err = r.PutArtifact(t.Context(), "proj", "deadbeef", bytes.NewReader([]byte("second")))
+	require.ErrorIs(t, err, ErrRemoteExists)
+	got, err := os.ReadFile(r.artifactPath("proj", "deadbeef"))
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(got))
+}
+
+// An artifact is owner-only: the store shares a cache between one user's workspaces, and
+// nothing grants it to other users.
+func TestFSRemoteBackendPutArtifactMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX modes")
+	}
+	r, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, r.PutArtifact(t.Context(), "proj", "deadbeef", bytes.NewReader([]byte("x"))))
+
+	fi, err := os.Stat(r.artifactPath("proj", "deadbeef"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }

@@ -92,6 +92,43 @@ If the broker is killed uncleanly, a new broker replays each hosted service's `s
 command on startup to **reap orphans** the dead one left behind. Give a container
 service a `stop` command (e.g. `docker stop <name>`) so it can be reaped this way.
 
+## Services that outlive their command
+
+Some services are not a foreground process at all: a VM or a system unit keeps running
+after the command that starts it exits. Declare those with `start` instead of `command`.
+A service has exactly one of the two, and a `start` service must declare `readiness` and
+`stop`, since magus holds no process to watch or signal:
+
+```buzz
+fun machine(t: Target) > Service {
+    return Service{
+        start     = Command{bin = "podman", args = ["machine", "start"]},
+        readiness = Command{bin = "podman", args = ["info"]},
+        stop      = Command{bin = "podman", args = ["machine", "stop"]},
+        idle      = "30m",
+    };
+}
+```
+
+The supervisor runs `readiness` first. If it already passes, the service is **adopted**:
+shared with every dependent, but never stopped by magus, because something else started
+it. Otherwise magus runs `start` (it must exit 0), polls `readiness` until it passes,
+and then **owns** the service: the broker runs `stop` when it reaps it at idle, and only
+an owned service is recorded for the crash reaper. A start service is shared once per
+machine, not once per workspace, so one workspace's idle reap never stops it under
+another.
+
+A `magus buzz` script holds a service the way a target's `magus\needs` does, through the
+same broker:
+
+```buzz
+final lease: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+// lease.owned is false when the machine was already running.
+```
+
+`magus\service\release(lease)` drops it early; whatever the script still holds is
+released when it ends, however it ends.
+
 ## Guarding against foot-guns
 
 magus is proactive about the two ways services go wrong. Both surface as
@@ -118,8 +155,9 @@ opt-outs get pruned.
 
 magus rejects an op whose argv contradicts its kind, at resolution time:
 
-- a **service** op that **detaches** (`docker run -d`): the process forks away from
-  magus, so foreground supervision, readiness, and stop all become meaningless;
+- a **service** op whose `command` **detaches** (`docker run -d`): the process forks
+  away from magus, so foreground supervision, readiness, and stop all become
+  meaningless (a service meant to outlive its command declares `start` instead);
 - a **command** op that runs a **watcher** (`tsc --watch`): a run-to-completion op
   that never exits hangs the run.
 

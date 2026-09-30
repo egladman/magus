@@ -1,10 +1,5 @@
 // magus checkpoint hook: records where the work stands when a session stops.
 //
-// This file is the source of truth for hosts wired to `magus buzz`. It is the
-// Buzz port of magus-checkpoint.sh and behaves identically without a POSIX
-// shell, so the wiring works unchanged on Windows. The shell copy stays for the
-// hosts still wired to `sh`.
-//
 // Run it as `magus buzz -s magus-checkpoint.buzz`; see magus-command.buzz for why `-s`
 // is load-bearing. It imports no magus Buzz module
 // and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
@@ -44,70 +39,16 @@
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 18
+// magus-guard-template: 19
 
-// EVERY call that can fail is caught, matching the templates beside it and the
-// missing `set -e` in the sh copy. A hook that can fail is a hook that can break
+// EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
 // worth strictly less than the work.
 
 import "io";
 import "flags";
-import "env";
-import "fs";
-import "path";
 import "proc";
-
-fun envOr(name: str, fallback: str) > str {
-    final value = env\get(name) catch "";
-    if (value == "") { return fallback; }
-    return value;
-}
-
-// isExecutable answers "could proc\exec run this", which a directory cannot; see
-// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
-// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
-fun isExecutable(candidate: str) > bool {
-    final info = fs\stat(candidate) catch null;
-    if (info == null) { return false; }
-    if ((info!.is_dir as? bool) ?? false) { return false; }
-    final mode = info!.mode as? int;
-    if (mode == null) { return false; }
-    return (mode! & 73) != 0;
-}
-
-// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
-// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
-fun parentDir(dir: str) > str {
-    var i = dir.len() - 1;
-    while (i >= 0) {
-        final ch = dir.sub(i, len: 1);
-        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
-        i = i - 1;
-    }
-    return "";
-}
-
-// resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the
-// magusfile: a hook runs in the host's session directory, which is not always the
-// workspace root. magus-command.buzz carries the full reasoning.
-fun resolveBin() > str {
-    final declared = env\get("__MAGUS_BIN") catch "";
-    if (declared != "") { return declared; }
-    var dir = path\abs(".") catch "";
-    while (dir != "") {
-        final marker = "{dir}/magusfile.buzz";
-        final found = fs\isFile(marker) catch false;
-        if (found) {
-            final candidate = "{dir}/magus";
-            if (isExecutable(candidate)) { return candidate; }
-            break;
-        }
-        dir = parentDir(dir);
-    }
-    return proc\which("magus") catch "";
-}
+import "lib/hook" as hook;
 
 // warn names the file; see magus-command.buzz. STDERR, which is why it does not break
 // this file's contract to print nothing: stdout is what the host reads as a verdict.
@@ -146,10 +87,10 @@ fun main(args: [str]) > void {
     // unenforced, because there is no rule, so announcing it would interrupt the end of
     // every session to report that an optional record was not written.
     //
-    // Checked before stdin is touched, exactly as the sh copy leaves the event unread
-    // on this arm: there is nobody to forward it to.
-    final bin = resolveBin();
-    if (bin == "" or !isExecutable(bin)) { return; }
+    // Checked before stdin is touched, leaving the event unread on this arm: there is
+    // nobody to forward it to.
+    final bin = hook\resolveBin();
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     final event = io\stdin.readAll() catch "";
 

@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -273,7 +274,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the "+hint.ToolJob.String()+" tool if leased work is meant to be running.\n"+
+			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the client tool (magus\\job) if leased work is meant to be running.\n"+
 				"This workspace's job store could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
 	live := liveLeases(leases)
@@ -330,7 +331,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, take it with `%s` so the guard grades your writes (a process no hook sees sets %s=%s instead); if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.\n"+
-				"For one small change once its holder is done, record it on the job first: `%s`.",
+				"For one small change once its holder is done, record it on the job first with the client tool script `%s`.",
 			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State, enterCall(owner.ID, rel))}
 	}
 	return writeGrade{}
@@ -359,7 +360,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the "+hint.ToolJob.String()+" tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+		"magus workspace: declare the plan with the client tool (magus\\job\\put) and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
 			"This process reports a spawner but names no lease, and this workspace's job store holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
@@ -396,9 +397,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and exec what it prints with the "+hint.ToolJob.String()+" tool (op exec, lease %s), then retry this write.\n"+
+			"magus workspace: run `%s` in this tree, which records the base `"+hint.VCSCheckpoint.With("-o", "name")+"` names for it, then retry this write.\n"+
 				"Lease %s (%s) has not reported the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
-			me.ID, me.ID, criteriaLine(me))}
+			hint.JobExec.With(me.ID), me.ID, criteriaLine(me))}
 	}
 	decl, denied, err := declarationCovering(me.DenyPaths, rel)
 	if err != nil {
@@ -444,7 +445,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
 				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
-				"For one small change once its holder is done, enter the path instead: `%s` records it on the job and lets one write through. A job takes %d.",
+				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.",
 			rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
 			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
 			enterCall(owner.ID, rel), job.MaxJobEntries)}
@@ -452,33 +453,43 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
+	// It names what the job holds and who to ask, and no command that widens it: a
+	// refusal is read as the next thing to run, so a served widening is an escalation.
+	revoked := ""
+	if r, ok := revokedCovering(me, rel); ok {
+		revoked = fmt.Sprintf("The orchestrator revoked %q from lease %s at %s; it is no longer yours to write. ",
+			r.Path, me.ID, time.Unix(r.ReleasedAt, 0).UTC().Format(time.RFC3339))
+	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen these write paths")+"\n"+
-			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
-			"Report it as this call, which is the whole widening:\n  %s",
-		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, criteriaLine(me), widenCall(me, rel))}
+			"%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.",
+		me.ID, strings.Join(me.WritePaths, ", "), revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel)}
 }
 
-// widenCall renders the job-store call that adds rel to the row's declared paths, so a
-// blocked worker reports a paste rather than a paragraph and whoever owns the plan acts
-// without reconstructing the row from a denial.
-//
-// It carries every path the row already declared alongside the new one, because a put's
-// write_paths REPLACES the row's: a call naming only the blocked path would hand back a
-// narrower set of paths than the worker started with. The tool's put op is `fork`.
-//
-// Only this denial offers it. A path another live row owns wants the plan re-partitioned
-// rather than a second owner, and a path the row's own deny list names was refused on
-// purpose; printing the undo for either would teach the reader that a boundary is a
-// formality.
-func widenCall(me types.Job, rel string) string {
-	return fmt.Sprintf("%s op=fork id=%s write_paths=%q",
-		hint.ToolJob.String(), me.ID, strings.Join(append(slices.Clone(me.WritePaths), rel), " "))
+// revokedCovering is the newest revoked release on me that covers rel.
+func revokedCovering(me types.Job, rel string) (types.JobRelease, bool) {
+	var found types.JobRelease
+	for _, r := range me.Releases {
+		if !r.Revoked || r.ReleasedAt < found.ReleasedAt {
+			continue
+		}
+		if _, covered, err := declarationCovering([]string{r.Path}, rel); err == nil && covered {
+			found = r
+		}
+	}
+	return found, found.Path != ""
 }
 
-// enterCall renders the job-store call that enters rel on lease id.
+// enterCall renders the job-store call that enters rel on lease id. The CLI has no
+// entry, so it is a client script.
 func enterCall(id, rel string) string {
-	return fmt.Sprintf("%s op=fork id=%s enter=%s", hint.ToolJob.String(), id, rel)
+	return clientJobPut(id, "enter", strconv.Quote(rel))
+}
+
+// clientJobPut is a client tool script putting one key on row id.
+func clientJobPut(id, key, value string) string {
+	return fmt.Sprintf(`import "magus"; magus\job\put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its
@@ -672,7 +683,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-		"magus workspace: fix the path pattern with the "+hint.ToolJob.String()+" tool, then retry this write.\n"+
+		"magus workspace: fix the path pattern with the client tool (magus\\job\\put), then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
 }
 
@@ -740,7 +751,7 @@ func adviseInstructionWrite(path string) string {
 //
 // The STAMP is the discriminator, not the path: a workspace's own skill sits in
 // the same directory, and telling an author their file is generated would be
-// worse than saying nothing.
+// worse than saying nothing. See [stampedByMagus] for where the stamp is read.
 //
 // Unreachable in magus's own tree, which is worth knowing before hunting a bug:
 // this repo declares its installed skills as outputs, so adviseGeneratedWrite
@@ -755,12 +766,32 @@ func adviseInstalledSkillWrite(filePath string) string {
 		return ""
 	}
 	body, err := os.ReadFile(filePath)
-	if err != nil || !strings.Contains(string(body), "source: magus") {
+	if err != nil || !stampedByMagus(string(body)) {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones, in a directory magus does not ship (conventionally magus-local-development), which install and verify both leave alone.\n" +
 		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `" + hint.Doctor.String() + "` reports your edit as stale rather than reading it, and the next `" + hint.AgentInstall.With("<dir>", "--force") + "` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
+}
+
+// stampedByMagus reports whether body's frontmatter carries the install stamp. The
+// frontmatter alone: the embedded source an installed copy is rendered from has none, and
+// its prose quotes the stamp (magus-workspace-rules does).
+func stampedByMagus(body string) bool {
+	rest, ok := strings.CutPrefix(body, "---\n")
+	if !ok {
+		return false
+	}
+	front, _, ok := strings.Cut(rest, "\n---")
+	if !ok {
+		return false
+	}
+	for line := range strings.SplitSeq(front, "\n") {
+		if strings.TrimSpace(line) == "source: magus" {
+			return true
+		}
+	}
+	return false
 }
 
 // The two rules below name paths, a skill, and a target that belong to magus's OWN
@@ -926,7 +957,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
 // guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
 // with none resolved there is no HEAD to compare a policy edit against, so from that
-// write on every tools/policy/*.buzz rule stops being checked against an approved copy
+// write on every hack/policy/*.buzz rule stops being checked against an approved copy
 // before it takes effect. That is the guard's own foundational safety, so it is judged
 // here whether or not a job store is running to grade ordinary path boundaries.
 //

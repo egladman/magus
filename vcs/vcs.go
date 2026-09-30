@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -170,6 +171,17 @@ func chooseBase(runtime, global, perVCS, def string) string {
 
 func perVCSEnv(name, suffix string) string {
 	return "MAGUS_VCS_" + strings.ToUpper(name) + "_" + suffix
+}
+
+// exitCode is err's exit status, or -1 when the command did not exit normally (it never
+// started, or ctx ended it). The callers that read a status as an answer (`paths` 1,
+// merge-tree 1, check-ignore 1, remote get-url 2, merge-base --is-ancestor 1) use it.
+func exitCode(err error) int {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // checkRef rejects a base ref / rev / sha that begins with "-", which a VCS would
