@@ -2,8 +2,10 @@ package knowledge
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +50,7 @@ func guardFixture(t *testing.T) (root, cacheDir string, g *Graph) {
 // the write.
 func TestGuardIndexRoundTrip(t *testing.T) {
 	root, cacheDir, g := guardFixture(t)
-	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 
 	x, err := ReadGuardIndex(cacheDir, root)
 	require.NoError(t, err)
@@ -83,7 +85,7 @@ func TestGuardIndexFilesAreOwnerOnly(t *testing.T) {
 		t.Skip("no POSIX modes")
 	}
 	root, cacheDir, g := guardFixture(t)
-	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 
 	for _, p := range []string{GuardIndexPath(cacheDir), guardRefsPath(cacheDir)} {
 		fi, err := os.Stat(p)
@@ -106,30 +108,31 @@ func TestGuardIndexFreshness(t *testing.T) {
 
 	t.Run("edited source", func(t *testing.T) {
 		root, cacheDir, g := guardFixture(t)
-		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 		require.NoError(t, os.Chtimes(filepath.Join(root, "pkg/a.go"), future, future))
 		x := read(t, cacheDir, root)
 		assert.False(t, x.Fresh(GuardSymbol))
 		assert.True(t, x.Fresh(types.KindDocSection), "a Go edit says nothing about docs")
 		assert.True(t, x.Fresh(types.KindTarget))
 		assert.False(t, x.Fresh(types.KindFile), "a file node may come from any indexed source")
+		assert.False(t, x.Fresh(types.KindDiagnostic), "a diagnostic's emitters are symbols")
 	})
 	t.Run("added file", func(t *testing.T) {
 		root, cacheDir, g := guardFixture(t)
-		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/b.go"), []byte("package pkg\n"), 0o644))
 		assert.False(t, read(t, cacheDir, root).Fresh(GuardSymbol))
 	})
 	t.Run("unrelated file", func(t *testing.T) {
 		root, cacheDir, g := guardFixture(t)
-		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+		require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
 		require.NoError(t, os.Chtimes(filepath.Join(root, "notes.txt"), future, future))
 		assert.True(t, read(t, cacheDir, root).Fresh(GuardSymbol))
 	})
 	t.Run("stale symbol index", func(t *testing.T) {
 		root, cacheDir, g := guardFixture(t)
-		require.NoError(t, WriteGuardIndex(cacheDir, root, g, false))
+		require.NoError(t, WriteGuardIndex(cacheDir, root, g, false, GuardCheckout{}))
 		x := read(t, cacheDir, root)
 		assert.False(t, x.Fresh(GuardSymbol))
 		assert.True(t, x.Fresh(types.KindDocSection))
@@ -140,7 +143,102 @@ func TestGuardIndexRefusesAnotherRoot(t *testing.T) {
 	root, cacheDir, g := guardFixture(t)
 	_, err := ReadGuardIndex(cacheDir, root)
 	require.Error(t, err, "no index yet")
-	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true))
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
 	_, err = ReadGuardIndex(cacheDir, t.TempDir())
 	assert.Error(t, err)
+}
+
+// guardRepo is guardFixture committed to a git repository on main, with a runner for more
+// git commands there. Global and system config stay out, so a signing or hook setting on
+// the box cannot fail a commit.
+func guardRepo(t *testing.T) (root, cacheDir string, g *Graph, git func(args ...string) string) {
+	t.Helper()
+	root, cacheDir, g = guardFixture(t)
+	git = func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_EDITOR=true")
+		out, err := cmd.CombinedOutput()
+		if args[0] != "rebase" {
+			require.NoError(t, err, "git %v: %s", args, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	return root, cacheDir, g, git
+}
+
+var guardKinds = []string{GuardSymbol, types.KindDocSection, types.KindTarget, types.KindDiagnostic, types.KindFile}
+
+// An index answers only for the revision it was built at: a rewrite that moves HEAD and
+// touches no indexed file leaves every stamp holding, and still makes every kind stale.
+func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
+	root, cacheDir, g, git := guardRepo(t)
+	at := ReadGuardCheckout(t.Context(), root)
+	require.Equal(t, git("rev-parse", "HEAD"), at.Revision)
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, at))
+
+	x, err := ReadGuardIndex(cacheDir, root)
+	require.NoError(t, err)
+	assert.Empty(t, x.Stale())
+	for _, kind := range guardKinds {
+		assert.True(t, x.Fresh(kind), kind)
+	}
+
+	git("commit", "-q", "--amend", "-m", "one, reworded")
+	x, err = ReadGuardIndex(cacheDir, root)
+	require.NoError(t, err)
+	assert.Equal(t, "the index was built at "+at.Revision[:12]+" and the checkout is at "+git("rev-parse", "HEAD")[:12], x.Stale())
+	for _, kind := range guardKinds {
+		assert.False(t, x.Fresh(kind), kind)
+	}
+	built, err := ReadGuardIndexCheckout(cacheDir, root)
+	require.NoError(t, err)
+	assert.Equal(t, at, built)
+}
+
+// An index built while a rebase is stopped describes a tree the rebase is about to
+// change, and says so even though its revision and stamps match the checkout.
+func TestGuardIndexStaleDuringARebase(t *testing.T) {
+	root, cacheDir, g, git := guardRepo(t)
+	git("checkout", "-q", "-b", "topic")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Topic() {}\n"), 0o644))
+	git("commit", "-q", "-am", "topic")
+	git("checkout", "-q", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Main() {}\n"), 0o644))
+	git("commit", "-q", "-am", "main")
+	git("checkout", "-q", "topic")
+	git("rebase", "main")
+
+	at := ReadGuardCheckout(t.Context(), root)
+	assert.Equal(t, conflictedOperation, at.Operation)
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, at))
+	x, err := ReadGuardIndex(cacheDir, root)
+	require.NoError(t, err)
+	assert.Equal(t, "a merge, rebase or cherry-pick is in progress", x.Stale())
+	for _, kind := range guardKinds {
+		assert.False(t, x.Fresh(kind), kind)
+	}
+}
+
+func TestGuardCheckoutStaleAt(t *testing.T) {
+	const rev = "0123456789abcdef0123"
+	for _, tt := range []struct {
+		built, now GuardCheckout
+		want       string
+	}{
+		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: rev}, ""},
+		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: "0123456"}, ""},
+		{GuardCheckout{}, GuardCheckout{}, ""},
+		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: rev, Operation: "rebase"}, "a rebase is in progress"},
+		{GuardCheckout{Revision: rev, Operation: "merge"}, GuardCheckout{Revision: rev}, "the index was built during a merge"},
+		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: "fedcba"}, "the index was built at 0123456789ab and the checkout is at fedcba"},
+		{GuardCheckout{Revision: rev}, GuardCheckout{}, "the index was built at 0123456789ab and the checkout is at no recorded revision"},
+		{GuardCheckout{}, GuardCheckout{Revision: rev}, "the index was built at no recorded revision and the checkout is at 0123456789ab"},
+	} {
+		assert.Equal(t, tt.want, tt.built.StaleAt(tt.now), "%+v at %+v", tt.built, tt.now)
+	}
 }

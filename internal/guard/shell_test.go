@@ -846,6 +846,35 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 	assert.False(t, rawToolDenied(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
 }
 
+// Two ops rendering one subcommand, listed so that the first in catalog order and the
+// first by name are both the wrong one: the invocation carries every argument of the
+// second and misses the first's `^$`.
+func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
+	const spellName = "guard-shared-subcommand-test"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
+		spellName,
+		spells.WithTargets("alpha-fuzz", "beta-test"),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+			switch target {
+			case "alpha-fuzz":
+				return "shared-tool", []string{"test", "-run", "^$"}, true, nil
+			case "beta-test":
+				return "shared-tool", []string{"test", "./..."}, true, nil
+			}
+			return "", nil, false, nil
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "shared-tool", Args: []string{"test", "./...", "-run", "TestFocused"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "beta-test"}, match)
+
+	match, ok = rawToolMatch(testDependencies(), hint.Invocation{Name: "shared-tool", Args: []string{"test", "-run", "^$", "./pkg"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "alpha-fuzz"}, match)
+}
+
 // The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
 // ships in a binary and a workspace calls its targets whatever it likes, so the
 // message points at discovery. The resolved spell op appears only as the

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"hash/fnv"
 	"io/fs"
@@ -31,6 +32,11 @@ import (
 // longer matches makes that kind non-definitive, which keeps the rule silent until the next
 // build. That errs one way only: a rewrite with identical bytes silences a rule for a while,
 // and nothing makes it deny on a stale answer.
+//
+// Stamps describe files, not where the checkout stands, so the index also records the
+// revision it was built at and any merge or rebase then underway. An index built at
+// another revision, or while one of those was underway or since one began, answers for
+// no kind: stamps taken mid-rebase hold until the next pick touches an indexed file.
 
 // GuardSymbol is the pseudo-kind the index lists symbol NAMES under, the spelling a search
 // pattern and `magus refs <name>` use, rather than the full symbol ids.
@@ -107,9 +113,13 @@ type GuardIndex struct {
 	root         string
 	refsPath     string
 	symbolsFresh bool
+	built        GuardCheckout
 	ids          map[string][]string // sorted
 	files        []guardFileStamp
 	dirs         []guardDirStamp
+
+	staleOnce sync.Once
+	stale     string
 
 	mu    sync.Mutex
 	fresh map[string]bool
@@ -117,10 +127,97 @@ type GuardIndex struct {
 	refsE error
 }
 
-// WriteGuardIndex writes the index for g, built from the workspace at root. symbolsFresh
-// says whether every built symbol index matched its sources when g was assembled; false
-// keeps symbol lookups non-definitive whatever the stamps say. The write is atomic.
-func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
+// GuardCheckout is where a checkout stands: the revision it is at, and the history
+// rewrite it is in the middle of.
+type GuardCheckout struct {
+	// Revision is the current revision's full id, "" where no version control answers.
+	Revision string
+	// Operation names the merge, rebase, cherry-pick or revert underway, "" when none is.
+	Operation string
+}
+
+// operationReporter is the capability to name the history rewrite a checkout is in the
+// middle of. A backend without it is read through its unresolved conflicts instead, which
+// miss a rebase stopped on a clean pick.
+type operationReporter interface {
+	OperationInProgress(ctx context.Context, root string) (string, error)
+}
+
+// conflictedOperation is what a checkout with unresolved conflicts is known to be in.
+const conflictedOperation = "merge, rebase or cherry-pick"
+
+// ReadGuardCheckout reads the checkout at root through the vcs layer, whichever backend
+// claims it. A read that fails leaves its field empty.
+func ReadGuardCheckout(ctx context.Context, root string) GuardCheckout {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return GuardCheckout{}
+	}
+	var c GuardCheckout
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		if commit, err := res.VCS.FindCommit(ctx, root, ""); err == nil {
+			c.Revision = commit.ID
+		}
+	})
+	wg.Go(func() { c.Operation = operationUnderway(ctx, res.VCS, root) })
+	wg.Wait()
+	return c
+}
+
+// ReadGuardOperation is ReadGuardCheckout's Operation alone.
+func ReadGuardOperation(ctx context.Context, root string) string {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	return operationUnderway(ctx, res.VCS, root)
+}
+
+func operationUnderway(ctx context.Context, v types.VCSDriver, root string) string {
+	if r, ok := v.(operationReporter); ok {
+		if op, err := r.OperationInProgress(ctx, root); err == nil {
+			return op
+		}
+	}
+	if r, ok := v.(types.ConflictResolver); ok {
+		if conflicts, err := r.Conflicts(ctx, root); err == nil && len(conflicts) > 0 {
+			return conflictedOperation
+		}
+	}
+	return ""
+}
+
+// StaleAt says why an index built at c cannot answer for the checkout now, or "" when it
+// can. A revision in now may be abbreviated.
+func (c GuardCheckout) StaleAt(now GuardCheckout) string {
+	switch {
+	case now.Operation != "":
+		return "a " + now.Operation + " is in progress"
+	case c.Operation != "":
+		return "the index was built during a " + c.Operation
+	case c.Revision == now.Revision, now.Revision != "" && strings.HasPrefix(c.Revision, now.Revision):
+		return ""
+	}
+	return "the index was built at " + shortRevision(c.Revision) + " and the checkout is at " + shortRevision(now.Revision)
+}
+
+func shortRevision(id string) string {
+	switch {
+	case id == "":
+		return "no recorded revision"
+	case len(id) > 12:
+		return id[:12]
+	}
+	return id
+}
+
+// WriteGuardIndex writes the index for g, built from the workspace at root with the
+// checkout at at, which the caller reads before building g so a checkout that moves
+// meanwhile reads as stale. symbolsFresh says whether every built symbol index matched
+// its sources when g was assembled; false keeps symbol lookups non-definitive whatever the
+// stamps say. The write is atomic.
+func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool, at GuardCheckout) error {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -147,6 +244,12 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nroot %s\nsymbols-fresh %t\n", guardIndexHeader, absRoot, symbolsFresh)
+	if at.Revision != "" {
+		fmt.Fprintf(&b, "revision %s\n", at.Revision)
+	}
+	if at.Operation != "" {
+		fmt.Fprintf(&b, "operation %s\n", at.Operation)
+	}
 	dirs := map[string]bool{".": true}
 	for _, rel := range files {
 		info, err := os.Lstat(filepath.Join(absRoot, filepath.FromSlash(rel)))
@@ -281,6 +384,20 @@ func guardDirDigest(dir string) (uint64, error) {
 // ReadGuardIndex reads the index for the workspace at root, and reports an error when
 // there is none or it was written for another root.
 func ReadGuardIndex(cacheDir, root string) (*GuardIndex, error) {
+	return readGuardIndex(cacheDir, root, false)
+}
+
+// ReadGuardIndexCheckout reads only where the checkout stood when the index for the
+// workspace at root was built, with ReadGuardIndex's errors.
+func ReadGuardIndexCheckout(cacheDir, root string) (GuardCheckout, error) {
+	x, err := readGuardIndex(cacheDir, root, true)
+	if err != nil {
+		return GuardCheckout{}, err
+	}
+	return x.built, nil
+}
+
+func readGuardIndex(cacheDir, root string, headerOnly bool) (*GuardIndex, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -299,11 +416,18 @@ func ReadGuardIndex(cacheDir, root string) (*GuardIndex, error) {
 	for s.Scan() {
 		line := s.Text()
 		tag, rest, _ := strings.Cut(line, " ")
+		if headerOnly && len(tag) == 1 {
+			break
+		}
 		switch tag {
 		case "root":
 			x.root = rest
 		case "symbols-fresh":
 			x.symbolsFresh = rest == "true"
+		case "revision":
+			x.built.Revision = rest
+		case "operation":
+			x.built.Operation = rest
 		case "f":
 			fields := strings.SplitN(rest, " ", 4)
 			if len(fields) != 4 {
@@ -332,10 +456,20 @@ func ReadGuardIndex(cacheDir, root string) (*GuardIndex, error) {
 	if err := s.Err(); err != nil {
 		return nil, err
 	}
-	if x.root != absRoot {
+	if !sameDir(x.root, absRoot) {
 		return nil, fmt.Errorf("knowledge: the guard index was written for %s, not %s", x.root, absRoot)
 	}
 	return x, nil
+}
+
+// sameDir reports whether a and b name one directory, either spelled through a symlink.
+func sameDir(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // IDs are the ids of kind, sorted; for GuardSymbol, the symbol names.
@@ -406,9 +540,21 @@ func (x *GuardIndex) RefSites(name string) ([]types.KnowledgeRefSite, error) {
 	return out, nil
 }
 
-// Fresh reports whether every source kind's ids were derived from is unchanged since the
-// index was written, so a query of the graph answers what the index says. Diagnostics are
-// compiled into the binary and always fresh. It stats the sources once per kind.
+// Stale says why the index describes another tree than the checkout's, "" when it does
+// not: a history rewrite underway now or when it was built, or a build at another
+// revision. It reads the checkout once, starting a version control process or two.
+func (x *GuardIndex) Stale() string {
+	x.staleOnce.Do(func() {
+		x.stale = x.built.StaleAt(ReadGuardCheckout(context.Background(), x.root))
+	})
+	return x.stale
+}
+
+// Fresh reports whether the index still describes the checkout (see Stale) and every
+// source kind's ids were derived from is unchanged since it was written, so a query of the
+// graph answers what the index says. A diagnostic's ids are compiled into the binary, but
+// the pages and emitters its node links come from every source, so it counts every stamp.
+// It stats the sources once per kind.
 func (x *GuardIndex) Fresh(kind string) bool {
 	x.mu.Lock()
 	defer x.mu.Unlock()
@@ -421,18 +567,16 @@ func (x *GuardIndex) Fresh(kind string) bool {
 }
 
 func (x *GuardIndex) computeFresh(kind string) bool {
-	if kind == types.KindDiagnostic {
-		return true
-	}
 	if kind == GuardSymbol && !x.symbolsFresh {
 		return false
 	}
 	// A file node comes from whichever index read the file, so every stamp counts for it.
 	class := kindClass(kind)
-	if class == 0 && kind != types.KindFile {
+	if class == 0 && kind != types.KindFile && kind != types.KindDiagnostic {
 		return false
 	}
-	checks := make([]func() bool, 0, len(x.dirs)+len(x.files))
+	checks := make([]func() bool, 0, 1+len(x.dirs)+len(x.files))
+	checks = append(checks, func() bool { return x.Stale() == "" })
 	for _, d := range x.dirs {
 		checks = append(checks, func() bool {
 			digest, err := guardDirDigest(filepath.Join(x.root, filepath.FromSlash(d.rel)))

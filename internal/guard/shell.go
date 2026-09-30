@@ -1269,6 +1269,7 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	// checked to name this same program, so the invocation reads the same way for all of
 	// them. Computed inside the loops it cost a scan per spell, per operation, per charm.
 	have := afterGlobalFlags(c.Name, c.Args)
+	var best *toolCandidate
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			// Installs are advised, never denied: see installAdvised.
@@ -1285,11 +1286,69 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 					continue
 				}
 				exact := len(have) == len(c.Args) && (len(have) == len(prefix) || slices.Equal(have, args))
-				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0, exact: exact}, true
+				next := toolCandidate{
+					match:   toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0, exact: exact},
+					missing: missingArgs(args[len(prefix):], have),
+					shared:  sharedPrefix(args, have),
+				}
+				if best == nil || next.beats(*best) {
+					best = &next
+				}
+				break
 			}
 		}
 	}
-	return toolMatch{}, false
+	if best == nil {
+		return toolMatch{}, false
+	}
+	return best.match, true
+}
+
+// toolCandidate is one operation whose rendering matched, with how close it came.
+type toolCandidate struct {
+	match toolMatch
+	// missing counts the op's own arguments the invocation leaves out; shared is the
+	// argument prefix the two have in common.
+	missing, shared int
+}
+
+// beats ranks two operations rendering the same subcommand (go-test and go-fuzz both
+// render `go test`), so the catalog's order never decides which one a verdict names: an
+// exact match, then the fewest missing arguments, then the longest shared prefix, then
+// the names.
+func (a toolCandidate) beats(b toolCandidate) bool {
+	if a.match.exact != b.match.exact {
+		return a.match.exact
+	}
+	if a.missing != b.missing {
+		return a.missing < b.missing
+	}
+	if a.shared != b.shared {
+		return a.shared > b.shared
+	}
+	if a.match.spell != b.match.spell {
+		return a.match.spell < b.match.spell
+	}
+	return a.match.operation < b.match.operation
+}
+
+// missingArgs counts the arguments of want that have does not carry anywhere.
+func missingArgs(want, have []string) int {
+	n := 0
+	for _, a := range want {
+		if !slices.Contains(have, a) {
+			n++
+		}
+	}
+	return n
+}
+
+func sharedPrefix(a, b []string) int {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return n
 }
 
 // gofmtReadOnly reports a gofmt that lists (-l) or diffs (-d) and does not write (-w). It
@@ -2673,6 +2732,12 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
 	if v, ok := translateVerdict(deps, cmds); ok {
+		if v.Deny == "" {
+			return v
+		}
+		if stale := graphMoved(deps); stale.reason != "" {
+			return stale.verdict()
+		}
 		return v
 	}
 	if v, ok := searchVerdict(deps, cmds); ok {

@@ -101,6 +101,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A context count guesses at a declaration's length: too short cuts the body off and costs another call, too long spends lines on whatever follows. " +
 			"`magus refs X --definition --source` prints the declaration whole, numbered and checked against the index. Where the index cannot vouch for the name, the deny serves `sed -n <first>,<last>p <file>` instead, the declaration's own lines from a parse of the file the search reads (a named file or glob, or under a directory the files the index last saw name it). " +
 			"The single-file allowance symbol-search gives `grep -n 'func X' f.go` does not apply: with -A, -B or -C the search is the read. " +
+			"A deny resting on the index advises instead while the graph describes another tree, as graph-stale; one parsed from a named file does not. " +
 			"It fires only when every alternative is a definition lookup (`func X`, `func (r *T) X`, `type X`, `type X struct`) and a declaration of each name is found; a search for uses, a case-insensitive one, or one with any text alternative is left to the search rules. A pipe after it is named as not reproduced. " +
 			"Measured 2026-09-29 over the audit's transcripts from three hosts: 1,456 context-flag definition lookups, 16 of them denied by any rule. A hand-read sample of 39 held 33 (85%) where the served command answered what the grep asked; the 6 misses filtered the body through a second grep for a few lines, which the served command answers at a higher cost."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
@@ -232,6 +233,7 @@ var denyRuleDocs = []RuleDoc{
 			"A search of the tree carries the index's own answer when it can give one within the hook's budget: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. It is refs' answer, not grep's: comments, strings and prose are not in it. " +
 			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it, and the deny would then state the wrong output as fact. " +
 			"A stale index or a diagnostic code keeps the routing deny without the answer. " +
+			"A graph describing another tree (a rebase underway, an index built at another revision) turns the deny into graph-stale's advice. " +
 			"A single name the index cannot vouch for, a BZZ code, a case-insensitive search, a Markdown or log operand, or a search of a tree outside the workspace stays advice or nothing. " +
 			"Searching raw TEXT is untouched and has its own answer: `magus refs --text <pattern> [<path>...]` is a literal substring search with grep's exit codes, scoped by the same trailing paths. " +
 			"Measured 2026-09-24 over 14,773 search patterns: 45% were alternations and 13% definition lookups, and the single-identifier form this rule started with fired 0 times."},
@@ -244,7 +246,7 @@ var denyRuleDocs = []RuleDoc{
 			"A search of one Go file whose every hit declares a symbol the index holds (`^func`, `^func Test`, `func (s \\*Store)`) becomes `magus explain file:<path>`, with the names and their lines inline. " +
 			"A `find -name` under the workspace whose files are, name for name, the file nodes the graph holds under the searched paths becomes `magus query kind=file 'id=~^file:...'`; -type f and -maxdepth are honored; a `[!x]` class, any other predicate, or a walk past the hook's budget is silent. " +
 			"A pipe after the search is not reproduced: the deny carries the query's unfiltered answer and says so, rather than a model of the filter that could diverge from the real tool. " +
-			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. " +
+			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. A graph describing another tree advises, as graph-stale. " +
 			"Measured 2026-09-26 over 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389 listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target declarations, 1,366 were a `find -name`."},
 	{Name: string(denyRuleThrowawayCopy), Decision: "deny",
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
@@ -346,7 +348,11 @@ var advisoryDocs = []RuleDoc{
 		Catches: "a read-only graph verb piped into a text filter, when magus projects the record itself",
 		Why: "The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
 			"It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. Measured 2026-09-26: 819 output-pipe denies landed on these verbs, and the refused agent went back to `grep -rn`, which answers with less than the graph read it was denied."},
-	{Name: string(advisoryGraphStale), Decision: "advise", Catches: "a graph read while the index is older than the sources it describes"},
+	{Name: string(advisoryGraphStale), Decision: "advise",
+		Catches: "a graph read, or a graph-backed deny, while the graph describes another tree",
+		Why: "symbol-search, grep-reader and search-translation deny in favor of a graph answer, so they first ask whether the graph describes the tree on disk: no merge, rebase, cherry-pick or revert underway, read through the workspace's version control, and a guard index built at the current revision. " +
+			"When either fails the search runs, and this names why and `magus graph build`, to run once the operation is finished: a rebuild mid-rebase would describe a tree about to change. " +
+			"An index that records another revision is stale for every kind, so after a history rewrite the next lookup waits for a rebuild rather than trusting it."},
 	{Name: string(advisoryHookWiring), Decision: "advise", Catches: "a write to the host wiring that decides whether these rules run at all"},
 	{Name: string(advisoryInstalledSkill), Decision: "advise", Catches: "a write to an installed skill copy, which re-installing discards"},
 	{Name: string(advisoryLeaseInvalid), Decision: "advise", Catches: "a call naming a lease this workspace's job store does not declare"},
