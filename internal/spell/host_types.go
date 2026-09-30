@@ -43,30 +43,22 @@ var HTTPResponseSource string
 //go:embed gen/types/url.buzz
 var URLSource string
 
-// SemverVersionSource / SemverNextSource are the generated Buzz mirrors of
-// semver.parse's and semver.next's results. Ship with "semver". No ordering
-// dependency between the two (SemverNext's fields are plain strings), but they
-// live next to each other since the two host methods are a pair.
+// SemverVersionSource is the generated Buzz mirror of semver.parse's result. Ships with
+// "semver".
 //
-// SemverVersionSource is ALSO co-located into the "vcs" bundle: vcs.tags returns [Tag]
-// and Tag.version is a SemverVersion, so `import "vcs";` alone still needs it in scope.
-// An import line inside vcs's bundle cannot reach "semver" (a synthetic module's
-// companion source is only collected, never executed, so an import inside it is inert),
-// hence duplicating the generated string into both bundles at assembly time.
+// It is ALSO co-located into the "vcs" bundle, since a vcs tag's version is a
+// SemverVersion and `import "vcs";` alone still needs it in scope. An import line inside
+// vcs's bundle cannot reach "semver" (a synthetic module's companion source is only
+// collected, never executed, so an import inside it is inert), hence duplicating the
+// generated string into both bundles at assembly time.
 //
 //go:generate go run ../../cmd/magus-utils types -type SemverVersion -out gen/types/semverversion.buzz
 //go:embed gen/types/semverversion.buzz
 var SemverVersionSource string
 
-//go:generate go run ../../cmd/magus-utils types -type SemverNext -out gen/types/semvernext.buzz
-//go:embed gen/types/semvernext.buzz
-var SemverNextSource string
-
-// CommitAuthorSource / CommitSource / TagSource are the generated Buzz mirrors of
-// types.CommitAuthor, types.CommitRecord, and types.VCSTag. Ship with "vcs":
-// vcs.commit/vcs.history return Commit, vcs.tags returns [Tag]. CommitAuthor must
-// precede Commit (Commit.author is CommitAuthor); the co-located SemverVersion (see
-// above) must precede Tag (Tag.version is SemverVersion).
+// CommitAuthorSource / CommitSource are the generated Buzz mirrors of types.CommitAuthor
+// and types.CommitRecord. Ship with "vcs": vcs.commit/vcs.history return Commit.
+// CommitAuthor must precede Commit (Commit.author is CommitAuthor).
 //
 //go:generate go run ../../cmd/magus-utils types -type CommitAuthor -out gen/types/commitauthor.buzz
 //go:embed gen/types/commitauthor.buzz
@@ -75,89 +67,6 @@ var CommitAuthorSource string
 //go:generate go run ../../cmd/magus-utils types -type Commit -out gen/types/commit.buzz
 //go:embed gen/types/commit.buzz
 var CommitSource string
-
-//go:generate go run ../../cmd/magus-utils types -type Tag -out gen/types/tag.buzz
-//go:embed gen/types/tag.buzz
-var TagSource string
-
-// ProjectEntrySource / ProjectsSource are the generated Buzz mirrors of
-// types.ProjectEntry and types.ProjectsOutput: what magus.ls returns. They close
-// a documented gap: magus.ls's own doc told readers to annotate `> Projects`
-// while no such type existed, so the annotation it recommended did not compile.
-// Ship with "magus" (magus.ls is a magus.* method, not a bare-import host module).
-// ProjectEntry must precede Projects (Projects.projects is [ProjectEntry]).
-//
-//go:generate go run ../../cmd/magus-utils types -type ProjectEntry -out gen/types/projectentry.buzz
-//go:embed gen/types/projectentry.buzz
-var ProjectEntrySource string
-
-//go:generate go run ../../cmd/magus-utils types -type Projects -out gen/types/projects.buzz
-//go:embed gen/types/projects.buzz
-var ProjectsSource string
-
-// AffectedSource / GraphSource are magus.affected's and magus.graph's returns:
-// the in-process verbs beside ls, which had the same annotation gap Projects did.
-// Ship with "magus".
-//
-//go:generate go run ../../cmd/magus-utils types -type Affected -out gen/types/affected.buzz
-//go:embed gen/types/affected.buzz
-var AffectedSource string
-
-//go:generate go run ../../cmd/magus-utils types -type Graph -out gen/types/graph.buzz
-//go:embed gen/types/graph.buzz
-var GraphSource string
-
-// ModuleFieldEntrySource / ModuleMethodEntrySource / ModuleSource are magus.modules
-// / magus.module's returns. Ship with "magus". ModuleFieldEntry and
-// ModuleMethodEntry must precede Module (its fields/methods are lists of them).
-//
-//go:generate go run ../../cmd/magus-utils types -type ModuleFieldEntry -out gen/types/modulefieldentry.buzz
-//go:embed gen/types/modulefieldentry.buzz
-var ModuleFieldEntrySource string
-
-//go:generate go run ../../cmd/magus-utils types -type ModuleMethodEntry -out gen/types/modulemethodentry.buzz
-//go:embed gen/types/modulemethodentry.buzz
-var ModuleMethodEntrySource string
-
-//go:generate go run ../../cmd/magus-utils types -type Module -out gen/types/module.buzz
-//go:embed gen/types/module.buzz
-var ModuleSource string
-
-// CrossTargetRefSource / TargetSpellUseSource / InputRefSource / OutputRefSource /
-// TargetGraphNodeSource / TargetGraphProjectSource / TargetGraphSource are the
-// generated Buzz mirrors of magus.targets's result (types.TargetGraphOutput and the
-// node/ref types it nests). Ship with "magus" (magus.targets is a magus.* method).
-// Declare-before-use order, since each nested type is referenced by the next: the four
-// leaves have no struct-valued fields so their relative order does not matter; then
-// TargetGraphNode (referencing all four), TargetGraphProject, then TargetGraph.
-//
-//go:generate go run ../../cmd/magus-utils types -type CrossTargetRef -out gen/types/crosstargetref.buzz
-//go:embed gen/types/crosstargetref.buzz
-var CrossTargetRefSource string
-
-//go:generate go run ../../cmd/magus-utils types -type TargetSpellUse -out gen/types/targetspelluse.buzz
-//go:embed gen/types/targetspelluse.buzz
-var TargetSpellUseSource string
-
-//go:generate go run ../../cmd/magus-utils types -type InputRef -out gen/types/inputref.buzz
-//go:embed gen/types/inputref.buzz
-var InputRefSource string
-
-//go:generate go run ../../cmd/magus-utils types -type OutputRef -out gen/types/outputref.buzz
-//go:embed gen/types/outputref.buzz
-var OutputRefSource string
-
-//go:generate go run ../../cmd/magus-utils types -type TargetGraphNode -out gen/types/targetgraphnode.buzz
-//go:embed gen/types/targetgraphnode.buzz
-var TargetGraphNodeSource string
-
-//go:generate go run ../../cmd/magus-utils types -type TargetGraphProject -out gen/types/targetgraphproject.buzz
-//go:embed gen/types/targetgraphproject.buzz
-var TargetGraphProjectSource string
-
-//go:generate go run ../../cmd/magus-utils types -type TargetGraph -out gen/types/targetgraph.buzz
-//go:embed gen/types/targetgraph.buzz
-var TargetGraphSource string
 
 // TargetRunSource / RunSource are the generated Buzz mirrors of one run and the
 // targets in it (types.StatusTargetRun and types.StatusRun), the same shape
