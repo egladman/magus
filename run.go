@@ -612,6 +612,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
 	step.NoCache = alwaysRuns(p, target)
+	if !step.NoCache {
+		step.BeforeKey = types.BeforeKey(p, target, m.Get)
+	}
 	// Resolve the two spellings of the same claim into the one number the limiter
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
@@ -633,7 +636,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// reads a dependency project's manifest, never its installed tree, so each install
 	// level the scheduler walked was pure latency.
 	if len(installOpsOf(p, target)) > 0 {
-		step.Sources, step.Outputs, step.RequiredOutputs = nil, nil, nil
+		step.Sources, step.Outputs, step.RequiredOutputs, step.BeforeKey = nil, nil, nil, nil
 		step.DependsOn = nil
 	}
 	return step
@@ -661,40 +664,37 @@ type composedRunner struct {
 	cacheOpts    []cache.RunOption
 }
 
-// beforeKey runs the skip_cache members s's key reads; see types.ChainSkipCacheSteps. It is
-// RunAll's before-key hook, so it runs once s's upstreams have finished and holds no slot:
-// it sees the tree its dependencies left, and the slots it takes are not its composer's.
+// beforeKey runs s's BeforeKey targets, the way RunAll does for a step it schedules; a
+// member reached through an interceptor is run with RunAside, which does not.
 func (r *composedRunner) beforeKey(ctx context.Context, s cache.Step) error {
 	if s.NoCache {
 		return nil // nothing is keyed, and the body runs the chain
 	}
-	p := r.m.Get(s.ProjectPath)
-	if p == nil {
-		return nil
-	}
-	for _, member := range types.ChainSkipCacheSteps(p, s.Target, r.m.Get) {
-		if err := r.runSkipCache(ctx, member); err != nil {
+	for _, ref := range s.BeforeKey {
+		if err := r.runSkipCache(ctx, ref); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// runSkipCache runs one skip_cache member, or waits on whoever reached it first. It goes
-// through cache.RunAside like any other target work, so its console output, output ref,
-// journal entry and report events look the same as a directly invoked target's, and the
-// machine claim and inflight record a separate magus and `magus status` read are held.
-func (r *composedRunner) runSkipCache(ctx context.Context, member types.ChainStep) error {
-	owner := r.m.Get(member.Project)
+// runSkipCache runs one skip_cache member before a key that reads it, or waits on whoever
+// reached it first. It is RunAll's target runner, so it runs once the step's upstreams
+// have finished and holds no slot: it sees the tree its dependencies left, and the slots
+// it takes are not its composer's. It goes through cache.RunAside like any other target
+// work, so its console output, output ref, journal entry and report events look the same
+// as a directly invoked target's, and the machine claim and inflight record a separate
+// magus and `magus status` read are held.
+func (r *composedRunner) runSkipCache(ctx context.Context, ref types.TargetRef) error {
+	owner := r.m.Get(ref.Project)
 	if owner == nil {
 		return nil
 	}
-	ref := types.TargetRef{Project: owner.Path, Target: member.Target}
 	return r.runs.Once(ctx, ref, func() error {
 		// No ExtraArgs and no Spell: `--` args and a spell::op filter belong to the target
 		// the user named, the same boundary runBuzzDependencies draws for a dependency.
-		handler := r.m.targetHandler(member.Target)
-		_, err := r.m.cache.RunAside(ctx, r.newStep(owner, member.Target), func(ctx context.Context) error {
+		handler := r.m.targetHandler(ref.Target)
+		_, err := r.m.cache.RunAside(ctx, r.newStep(owner, ref.Target), func(ctx context.Context) error {
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(owner.Path)...))
 			return handler(buzz.WithTargetInterceptor(ctx, r.interceptor(owner)), owner)
 		}, r.cacheOpts...)
@@ -1664,7 +1664,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Normalized by applyRunKeying below, shared with ComputeTargetKey.
 	charmKey := opts.Charms
 
-	// The keying every step of this invocation shares. gateRunner mints
+	// The keying every step of this invocation shares. composedRunner mints
 	// steps outside the stage loop, so the two would otherwise key differently.
 	// Scoped per project to the union of the targets this invocation will key, since
 	// newStep mints steps for every stage off this one probe.
@@ -1980,7 +1980,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if len(steps) == 0 {
 		return nil
 	}
-	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), append(slices.Clone(cacheOpts), cache.WithBeforeKey(composed.beforeKey))...)
+	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), append(slices.Clone(cacheOpts), cache.WithTargetRunner(composed.runSkipCache))...)
 
 	if volatilityRT != nil {
 		if err := volatilityRT.Save(ctx); err != nil {

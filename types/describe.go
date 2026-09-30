@@ -702,7 +702,10 @@ type EvaluatedTarget struct {
 	Outputs []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	// Chain is the targets this one composes, in invocation order; empty when it
 	// composes nothing. See TargetGraphNode.Chain, which it is copied from.
-	Chain     []ChainStep      `json:"chain,omitempty"      yaml:"chain,omitempty"`
+	Chain []ChainStep `json:"chain,omitempty"      yaml:"chain,omitempty"`
+	// BeforeKey is the skip_cache members of the chain that run before this target's key
+	// is taken, because the key reads what they write; see ChainSkipCacheSteps.
+	BeforeKey []TargetRef      `json:"before_key,omitempty" yaml:"before_key,omitempty"`
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`

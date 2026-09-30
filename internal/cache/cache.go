@@ -121,6 +121,10 @@ type Stats struct {
 type Step struct {
 	ProjectPath string       // repo-relative project directory
 	Sources     []types.Glob // for the cache key
+	// BeforeKey is the targets RunAll runs, through WithTargetRunner, once this step's
+	// upstreams have finished and before its key is hashed: the skip_cache members whose
+	// artifacts Sources reads. Never hashed itself; what they write is.
+	BeforeKey []types.TargetRef
 	// IgnoreDirs are the non-source dir names this project's resolved spells generate
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
 	// The field itself is not written into the key; only the resulting file set is, so
@@ -284,8 +288,8 @@ type runCtx struct {
 	// Zero is unlimited: every step that can run, runs, and the batch reports all of
 	// them. See RunAll for why that is the default.
 	maxFailures int
-	// beforeKey runs for each RunAll step before its key is hashed; see WithBeforeKey.
-	beforeKey func(context.Context, Step) error
+	// runTarget runs a step's BeforeKey targets; see WithTargetRunner.
+	runTarget func(context.Context, types.TargetRef) error
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -1445,10 +1449,12 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					s.Deps = slices.Concat(s.Deps, depKeys)
 				}
 			}
-			if rc.beforeKey != nil {
-				if err := rc.beforeKey(gctx, s); err != nil {
-					ran = gctx.Err() == nil
-					return fail(err)
+			if rc.runTarget != nil && !s.NoCache {
+				for _, ref := range s.BeforeKey {
+					if err := rc.runTarget(gctx, ref); err != nil {
+						ran = gctx.Err() == nil
+						return fail(err)
+					}
 				}
 			}
 

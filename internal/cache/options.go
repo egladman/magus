@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"log/slog"
+
+	"github.com/egladman/magus/types"
 )
 
 // Option configures a Cache at open time.
@@ -162,13 +164,13 @@ func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }
 }
 
-// WithBeforeKey runs fn for each RunAll step once its upstreams have finished and before
-// its key is hashed, holding no slot, so work fn does lands in the key and a target fn
-// waits on can take the slots it needs. An error fails the step as its own failure,
-// spending the failure budget like any other. RunAside does not honor it: a caller of
-// RunAside runs the same work itself first.
-func WithBeforeKey(fn func(context.Context, Step) error) RunOption {
-	return func(rc *runCtx) { rc.beforeKey = fn }
+// WithTargetRunner is how RunAll runs a step's BeforeKey targets: once the step's upstreams
+// have finished and before its key is hashed, holding no slot, so what they write lands in
+// the key and each can take the slots it needs. An error fails the step as its own failure,
+// spending the failure budget like any other. Without it BeforeKey is ignored; RunAside
+// never runs it, so a caller of RunAside runs the same targets itself first.
+func WithTargetRunner(fn func(context.Context, types.TargetRef) error) RunOption {
+	return func(rc *runCtx) { rc.runTarget = fn }
 }
 
 // WithLimiter shares an external Limiter with RunAll instead of creating a private one,

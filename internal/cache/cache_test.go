@@ -1308,28 +1308,28 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 	}
 }
 
-// A before-key hook runs after a step's upstreams and before its key, and one that fails
-// fails that step alone: its body never runs, its dependents are held back, and a peer
-// with nothing to do with it still runs.
+// A step's BeforeKey targets run after its upstreams and before its key, and one that
+// fails fails that step alone: its body never runs, its dependents are held back, and a
+// peer with nothing to do with it still runs.
 func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	root, c := openCache(t)
 	up := depStep(root, "up")
 	failing := depStep(root, "failing")
 	failing.DependsOn = []string{"up"}
+	failing.BeforeKey = []types.TargetRef{{Project: "gen", Target: "broken"}}
 	after := depStep(root, "after")
 	after.DependsOn = []string{"failing"}
+	after.BeforeKey = []types.TargetRef{{Project: "gen", Target: "after-member"}}
 	peer := depStep(root, "peer")
+	peer.BeforeKey = []types.TargetRef{{Project: "gen", Target: "peer-member"}}
 	steps := []Step{up, failing, after, peer}
-	for i := range steps {
-		steps[i].NoCache = true
-	}
 
 	var mu sync.Mutex
 	var order []string
 	note := func(s string) { mu.Lock(); order = append(order, s); mu.Unlock() }
-	beforeKey := func(_ context.Context, s Step) error {
-		note("before-key:" + s.ProjectPath)
-		if s.ProjectPath == "failing" {
+	runTarget := func(_ context.Context, ref types.TargetRef) error {
+		note("before-key:" + ref.Target)
+		if ref.Target == "broken" {
 			return errors.New("skip_cache member failed")
 		}
 		return nil
@@ -1337,11 +1337,12 @@ func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
 		note("run:" + s.ProjectPath)
 		return nil
-	}, WithBeforeKey(beforeKey))
+	}, WithTargetRunner(runTarget))
 
 	require.ErrorContains(t, err, "skip_cache member failed")
-	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "before-key:failing"), "the hook waits for its step's upstreams")
+	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "before-key:broken"), "a step's BeforeKey waits for its upstreams")
 	assert.NotContains(t, order, "run:failing", "a failed hook fails its step")
-	assert.NotContains(t, order, "before-key:after", "and holds back its dependents")
+	assert.NotContains(t, order, "before-key:after-member", "and holds back its dependents")
+	assert.Contains(t, order, "before-key:peer-member", "an unrelated step still runs its own")
 	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }

@@ -1277,6 +1277,13 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		if len(e.Chain) > 0 {
 			fmt.Printf("  chain:   %s\n", types.Chain(e.Chain))
 		}
+		if len(e.BeforeKey) > 0 {
+			refs := make([]string, len(e.BeforeKey))
+			for i, r := range e.BeforeKey {
+				refs[i] = r.Ref()
+			}
+			fmt.Printf("  before key: %s\n", strings.Join(refs, ", "))
+		}
 		if len(e.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", e.DependsOn)
 		}

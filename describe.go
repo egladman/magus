@@ -1115,6 +1115,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			Sources:   types.GlobStrings(step.Sources),
 			Outputs:   types.GlobStrings(step.Outputs),
 			Chain:     p.TargetChains[et.Name],
+			BeforeKey: step.BeforeKey,
 			DependsOn: p.DependsOn,
 			Charms:    charms,
 			Spells:    spellEntries,

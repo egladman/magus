@@ -743,6 +743,23 @@ func chainKey(projectPath, target string) string { return projectPath + "\x00" +
 // `generate` composing `index-generate` directly, and root `ci` reaching `generate`
 // through `lint` and again through `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+	return chainSkipCacheSteps(p, target, lookup)
+}
+
+// BeforeKey is ChainSkipCacheSteps as the target refs a caller runs, in order.
+func BeforeKey(p *Project, target string, lookup func(path string) *Project) []TargetRef {
+	steps := chainSkipCacheSteps(p, target, lookup)
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]TargetRef, len(steps))
+	for i, s := range steps {
+		out[i] = TargetRef{Project: s.Project, Target: s.Target}
+	}
+	return out
+}
+
+func chainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
 	keyed := ChainSkipCacheOutputs(p, target, lookup)
 	inKey := func(artifacts []Glob) bool {
 		return slices.ContainsFunc(artifacts, func(a Glob) bool {
