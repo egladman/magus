@@ -50,6 +50,6 @@ import "os";
 import "proc";
 magus\project({});
 
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh", ["-c", "echo 'compiling widget...'; echo 'error: undefined symbol' >&2; exit 1"], ".", {});
 }

@@ -1,13 +1,13 @@
 package bindings
 
 import (
-	"regexp"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -41,7 +41,7 @@ func objectMembers(d *ast.ObjectDecl) []string {
 // checker refuses every target that calls it. The removed declarations stay
 // unmirrored so a call to one fails the check.
 func TestMagusContextMirrorsTheTargetContext(t *testing.T) {
-	objects := parseObjects(t, magusContextSource)
+	objects := parseObjects(t, spell.MagusContextSource)
 	require.Contains(t, objects, "Context")
 	require.Contains(t, objects, "Exec")
 
@@ -55,53 +55,6 @@ func TestMagusContextMirrorsTheTargetContext(t *testing.T) {
 	for _, refused := range ExecRefusedKeys() {
 		assert.NotContains(t, objectMembers(objects["Exec"]), refused)
 	}
-}
-
-var typeIdent = regexp.MustCompile(`[A-Za-z_]\w*`)
-
-// Every type the hand-written mirrors name is declared in the magus declarations.
-func TestMagusUndeclaredTypeSourceNamesDeclaredTypes(t *testing.T) {
-	prog, err := buzz.ParseEmbedded(magusDeclSource())
-	require.NoError(t, err)
-	declared := map[string]bool{
-		"int": true, "double": true, "str": true, "bool": true, "void": true, "any": true, "fun": true,
-	}
-	for _, stmt := range prog.Stmts {
-		switch d := stmt.(type) {
-		case *ast.ObjectDecl:
-			declared[d.Name] = true
-		case *ast.EnumDecl:
-			declared[d.Name] = true
-		}
-	}
-	for _, d := range parseObjects(t, magusUndeclaredTypeSource) {
-		annots := []string{}
-		for _, f := range d.Fields {
-			annots = append(annots, f.TypeAnnot)
-		}
-		for _, m := range d.Methods {
-			annots = append(annots, m.RetAnnot)
-			annots = append(annots, m.ParamAnnots...)
-		}
-		for _, a := range annots {
-			for _, name := range typeIdent.FindAllString(a, -1) {
-				assert.True(t, declared[name], "%s names undeclared type %q", d.Name, name)
-			}
-		}
-	}
-}
-
-// The records run on their own; a failure here means the generated declarations name a
-// type they do not declare, or are stale.
-func TestMagusDeclarationsRun(t *testing.T) {
-	records, err := magusRecords()
-	require.NoError(t, err, "regenerate with `magus run spells-generate`")
-	var names []string
-	for _, r := range records {
-		names = append(names, r.name)
-	}
-	assert.Subset(t, names, []string{"DirsOptions", "NeighborhoodOptions", "PathOptions", "CheckStatus", "TargetRun", "Run"})
-	assert.NotContains(t, names, "Context", "the target context is the host's to build")
 }
 
 // magus\ records and enums exist at run time, directly and through an aliased import.

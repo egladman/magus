@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
@@ -202,7 +201,7 @@ func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error
 		return err
 	}
 	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface, clientWithheld...))
-	finishDeclareMagusTypes(sess, clientWithheld...)
+	spell.DeclareMagusTypes(sess, func(member string) bool { return !slices.Contains(clientWithheld, member) })
 	return nil
 }
 
@@ -287,24 +286,6 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterSpellSourceModules(sess)
 }
 
-// magusUndeclaredTypeSource carries the only magus.* mirrors the generated
-// declarations cannot reach, because the generator derives a module's mirrors from
-// its std.Module method signatures and these appear in none:
-//
-//   - TargetRun / Run: annotate-only shapes. No host method returns them; they exist so a
-//     caller can type a run payload it decoded itself. TargetRun precedes Run because
-//     Run.targets is a list of it.
-//   - Context / Exec: the value a target receives, built by buildTargetContext rather
-//     than returned by any method.
-//
-// Everything else is generated, leaf-first, from the signatures themselves: a mirror
-// can no longer go missing when a return is added.
-var magusUndeclaredTypeSource = strings.Join([]string{
-	spell.TargetRunSource,
-	spell.RunSource,
-	magusContextSource,
-}, "\n")
-
 // RegisterSpellSourceModules installs every source-only Buzz module a spell (or
 // magusfile) imports for its value types:
 //
@@ -314,8 +295,7 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
 //   - magus/lint: the Finding a Buzz lint rule returns.
-//   - magus: the generated declarations for the magus namespace itself, plus the
-//     mirrors the generator cannot reach (magusUndeclaredTypeSource above). The
+//   - magus: spell.MagusDeclSource, the declarations for the magus namespace itself. The
 //     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
 //     RegisterMagusNamespace); only its types are declared here.
 //
@@ -338,43 +318,6 @@ func RegisterSpellDecls(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 }
 
-// DeclareMagusTypes parses the generated magus\ mirrors into the session now,
-// before any file import, so a program's own type of the same name still wins, and
-// binds their runtime definitions so a magus\ record can be constructed. Call it after
-// the magus namespace is registered, or magus\ enum cases do not resolve at run time.
-// See RegisterSpellSourceModules.
-func DeclareMagusTypes(sess *buzz.Session) {
-	// Declared EAGERLY rather than registered with SetModuleDecls beside the native
-	// value, even though `import "magus"` is what binds that value. The mirrors carry
-	// generic names (Node, Path, Module, Graph, Diff), and collection order is
-	// precedence order: collected at the import point, magus\Node outranked a library's
-	// own Node for every file imported after it. Eager keeps them lowest.
-	finishDeclareMagusTypes(sess)
-}
-
-func finishDeclareMagusTypes(sess *buzz.Session, omit ...string) {
-	decls := magusDeclSource()
-	for _, name := range omit {
-		decls = omitExtern(decls, name)
-	}
-	sess.DeclareModuleTypes("magus", decls)
-	defineMagusRecords(sess)
-}
-
-// omitExtern drops one `export extern fun name(...)` line from generated decls.
-func omitExtern(decls, name string) string {
-	prefix := "export extern fun " + name + "("
-	var b strings.Builder
-	for line := range strings.SplitSeq(decls, "\n") {
-		if strings.HasPrefix(line, prefix) {
-			continue
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
 // through the shared emitMagusLog so every host log path formats identically.
 func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, error) {
@@ -392,11 +335,7 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	// The enums defineMagusRecords sets on the module are declared types, not members.
-	records, _ := magusRecords()
-	return slices.DeleteFunc(magusNativeModule(sess).MapKeys(), func(k string) bool {
-		return slices.ContainsFunc(records, func(r magusRecord) bool { return r.enum && r.name == k })
-	})
+	return slices.DeleteFunc(magusNativeModule(sess).MapKeys(), spell.IsMagusEnum)
 }
 
 // magusNativeModule is the registered magus module value, and a missing one is a

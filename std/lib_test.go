@@ -18,6 +18,6 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 	for _, m := range methods {
 		names = append(names, m.Name)
 	}
-	assert.Equal(t, []string{"setOf", "layerSet", "external", "of"}, names,
-		"only the authoring surface is exported; the layout and renderer stay private")
+	assert.Equal(t, []string{"setOf", "layerSet", "external", "of", "draw"}, names,
+		"only the authoring surface and draw are exported; the layout and renderer stay private")
 }

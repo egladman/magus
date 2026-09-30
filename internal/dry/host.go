@@ -1,6 +1,7 @@
 package dry
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
@@ -29,6 +31,19 @@ import (
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
+	// An IO module Buzz's stdlib also binds (os) is typed by the stdlib's declarations
+	// alone, which lack the host's members, so `os\withEnv` in a target body would fail
+	// the check here and pass in the engine. Append the host's declarations, as the
+	// engine does; a target body is checked here, never run.
+	for name, reg := range bindinggen.Modules {
+		importPath := cmp.Or(reg.Path, name)
+		if _, bound := sess.NativeModule(importPath); !bound || reg.Capabilities.Has(ffi.WASM) {
+			continue
+		}
+		if src, ok := spell.ModuleDecls(name); ok {
+			sess.SetModuleDecls(importPath, src)
+		}
+	}
 
 	// A native module, not a global: the playground must make you write
 	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
@@ -42,18 +57,15 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// snippet could read a field no return carries and the dry run would say nothing,
 	// which is the opposite of what a dry run is for. The stubs above are shaped to
 	// match, and TestMagusSurfaceMatchesBindings holds the member set in sync.
-	if src, ok := spell.ModuleDecls("magus"); ok {
-		sess.SetModuleDecls("magus", src)
-	}
+	spell.DeclareMagusTypes(sess, nil)
 	for name, ops := range spells {
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the canonical value-type module as embedded declarations so a
-	// SPELL buffer's or magusfile's `import "magus/spell"` resolves the
-	// Target/Command/Service object types instead of failing with `undefined type
-	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
-	// host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
+	// Register the magus/spell bundle the real runtime registers, so a SPELL buffer's
+	// or magusfile's `import "magus/spell"` resolves the same Target/Command/Service
+	// object types, followed by the host-returned types. The real runtime
+	// (internal/interp/bindings) instead ships each host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
 	// vcs, ...), but this sandbox never registers os/fs/http/vcs as real importable
 	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
 	// there is no owning-module import for a probed buffer to reach those types
@@ -64,11 +76,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// The session's import lookup order (native, then declarations, then resolver)
 	// means this is never shadowed by the catch-all resolver below.
 	sess.SetModuleDecls(spell.SpellModulePath, strings.Join([]string{
-		spell.TargetModuleSource,
-		spell.PatchOpSource,
-		spell.CharmTypeSource,
-		spell.CommandSource,
-		spell.ServiceSource,
+		spell.SpellModuleSource,
 		spell.ExecResultSource,
 		spell.CommitAuthorSource,
 		spell.CommitSource,

@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -233,8 +232,14 @@ func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
 	// global, which made the import optional here and only here: a snippet that ran
 	// under the Run button then failed when pasted into a magusfile, so the page
 	// taught a form the language rejects.
-	sess.SetNativeModule("magus", pureMagus())
-	declareMagusRecords(sess)
+	magus := pureMagus()
+	sess.SetNativeModule("magus", magus)
+	// Only the externs pureMagus implements: any other would type-check a call that
+	// then fails at run time.
+	spell.DeclareMagusTypes(sess, func(member string) bool {
+		_, ok := magus.MapGet(member)
+		return ok
+	})
 	for _, name := range playgroundSourceModules {
 		sm, ok := std.GetSource(name)
 		if !ok {
@@ -252,26 +257,6 @@ var playgroundSourceModules = []string{"figure"}
 // PlaygroundSourceModules names the Buzz-implemented modules the playground resolves, beside
 // the host modules PlaygroundHostModules names.
 func PlaygroundSourceModules() []string { return slices.Clone(playgroundSourceModules) }
-
-// declareMagusRecords declares the magus\ record types (Dir, Layer, RefsResult, ...) a
-// source module's signatures name, so figure type-checks here as it does in a magusfile.
-// The externs are dropped: pureMagus implements few of them, and a declared extern would
-// type-check a call that then fails at runtime.
-func declareMagusRecords(sess *buzz.Session) {
-	decls, ok := spell.ModuleDecls("magus")
-	if !ok {
-		panic("dry: generated magus declarations are missing; run `magus run generate`")
-	}
-	var b strings.Builder
-	for line := range strings.SplitSeq(decls, "\n") {
-		if strings.HasPrefix(line, "export extern fun ") {
-			continue
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	sess.DeclareModuleTypes("magus", b.String())
-}
 
 // DrawResult is one figure the playground drew: SVG when OK, else the Findings
 // magus/figure raised, or a Diag when the record or the runtime failed.

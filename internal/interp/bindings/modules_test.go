@@ -855,9 +855,9 @@ export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(256); }
 	assert.Equal(t, 1, ex.Code)
 }
 
-// TestOsSleep exercises os.sleep (milliseconds, matching Buzz) from a Buzz
-// magusfile, confirming the TypeFloat binding path works for fractional and int
-// literals and returns.
+// TestOsSleep exercises os.sleep (milliseconds, a double as in Buzz) from a Buzz
+// magusfile, confirming the TypeFloat binding path works for fractional and whole
+// values and returns. An int literal is a check error, as upstream.
 func TestOsSleep(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -867,7 +867,7 @@ import "os";
 
 export fun nap(ctx: magus\Context, _a: [str]) > void !> any {
     os.sleep(1.5);
-    os.sleep(0);
+    os.sleep(0.0);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "nap"))
@@ -1532,49 +1532,31 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 }
 
 // testBoundaryTypesPath is a private, test-only import path bundling every
-// boundary-type mirror (host-owned and magus-owned) into one compilable source
-// module, in declare-before-use order. It exists only for this file's
-// completeness/parity guards; production code reaches these types through their
-// real owning import (magus/spell for the spell-authored types, or the host
-// module that returns a given one: os, fs, http, encoding, semver, vcs).
+// boundary-type mirror into one compilable source module, so the tests below can
+// construct and read every mirror in one shot.
 //
-// A synthetic host module's own import (`import "os";`) only binds its native
-// functions: the type-declaration companion registered alongside it
-// (hostTypeModuleSources) is collected by the CHECKER for annotation-checking
-// (`final r: ExecResult = proc.exec(...)`), but it is never compiled and run, so it
-// can never bind an object literal's constructor into the runtime env: `Name{}`
-// needs `Name` bound as an objectDef VALUE, which only a compiled-and-run source
-// module provides (see vm.buildObjectVal). This bundle is that compiled-and-run
-// module, purpose-built so the tests below can construct and read every mirror
-// in one shot without depending on any one type's real (and, for the
-// synthetic-backed ones, construction-incapable) import path.
+// The mirrors come from the declarations each owning module ships (proc, vcs, fs,
+// http, url, semver, magus), the ones production registers, through
+// spell.RecordSource: every record and enum those declarations define, once each and
+// declare-before-use, since the generator refuses a bundle naming a type it does not
+// declare.
 const testBoundaryTypesPath = "test/boundary-types"
 
-var testBoundaryTypesSource = strings.Join([]string{
-	spell.ExecResultSource,
-	spell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-	spell.CommitSource,
-	spell.FileInfoSource,
-	spell.HTTPResponseSource,
-	spell.SemverVersionSource,
-	spell.SemverNextSource,
-	spell.URLSource,
-	spell.TagSource, // Tag.version is SemverVersion, so it must follow that source
-	spell.ProjectEntrySource,
-	spell.ProjectsSource,
-	spell.AffectedSource,
-	spell.GraphSource,
-	spell.CrossTargetRefSource,
-	spell.TargetSpellUseSource,
-	spell.InputRefSource,
-	spell.OutputRefSource,
-	spell.TargetGraphNodeSource,
-	spell.TargetGraphProjectSource,
-	spell.TargetGraphSource,
-	spell.ModuleFieldEntrySource,
-	spell.ModuleMethodEntrySource,
-	spell.ModuleSource,
-}, "\n")
+var testBoundaryTypesSource = func() string {
+	var decls []string
+	for _, module := range []string{"proc", "vcs", "fs", "http", "url", "semver"} {
+		src, ok := spell.ModuleDecls(module)
+		if !ok {
+			panic("bindings test: no generated declarations for " + module)
+		}
+		decls = append(decls, src)
+	}
+	src, err := spell.RecordSource(strings.Join(append(decls, spell.MagusDeclSource()), "\n"))
+	if err != nil {
+		panic(err)
+	}
+	return src
+}()
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a
 // types/ struct means "this value crosses into Buzz", so every one of them owes
@@ -1635,9 +1617,8 @@ func assertMirrorConstructs(t *testing.T, object string) {
 // would reject correct code or accept a typo.
 func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	t.Parallel()
-	// The types testBoundaryTypesSource bundles, and only those: that bundle is
-	// hand-ordered (a mirror must follow every mirror it references), so a type absent
-	// from it reads as having no fields at all rather than as a disagreement.
+	// The types testBoundaryTypesSource bundles, and only those: a type absent from it
+	// reads as having no fields at all rather than as a disagreement.
 	for _, tc := range []struct {
 		object  string
 		encoded vm.Value
@@ -1740,7 +1721,7 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 // magusfile annotates with. Most ride along with the generated declarations, derived
 // from each method's declared return. Five cannot be (magus.modules/magus.module are
 // hand-bound outside std.Module, and Run/TargetRun have no producing method at all), so
-// they are supplied separately (magusUndeclaredTypeSource). This asserts both sources
+// they are supplied separately (spell.MagusDeclSource). This asserts both sources
 // arrive, because swapping the hand-written bundle for the generated one is exactly the
 // edit that would drop the five without any other test noticing.
 func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
