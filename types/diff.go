@@ -151,8 +151,9 @@ type DiffSymbol struct {
 	ModuleAPI bool `json:"module_api,omitempty" yaml:"module_api,omitempty"`
 	// Change is what this changeset did to the symbol, one of the DiffChange constants. A
 	// base graph decides it where one was given. Otherwise the patch does: added when the
-	// definition line is new and no removed line names the symbol, signature when one does,
-	// body when only lines inside the definition moved. Empty when neither could be read.
+	// definition line is new and no removed line of its file names the symbol, signature
+	// when one does, body when only lines inside the definition moved. Empty when neither
+	// could be read.
 	Change string `json:"change,omitempty" yaml:"change,omitempty"`
 	// Qualified names the symbol through its enclosing declarations (`DiffAPI.Signature`),
 	// read from the ID, so two members sharing a Label stay distinguishable. Set alongside

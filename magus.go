@@ -1500,12 +1500,14 @@ func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*type
 	}
 	out := map[string]touchedSymbol{}
 	for path, ss := range spans {
+		// File-local, so a short name one other file also removed does not read as re-signed.
+		removed := strings.Join(pf.removed[path], "\n")
 		for id := range impact.Touched(ss, lines[path]) {
 			def := defs[id]
 			change := types.DiffChangeBody
 			if _, added := pf.added[path][sourceLine(def.node.Source)]; added {
 				change = types.DiffChangeAdded
-				if knowledge.IndexIdentifier(pf.removedText, def.node.Label) >= 0 {
+				if knowledge.IndexIdentifier(removed, def.node.Label) >= 0 {
 					change = types.DiffChangeSignature
 				}
 			}

@@ -196,23 +196,41 @@ type Span struct {
 }
 
 // Touched returns the IDs of the spans a changed line falls in. A span with an End contains
-// the lines from Start to End. One without owns a line when it is the nearest definition
-// above it that no ranged span closes before it, the rule [knowledge.Graph.SymbolAt] uses,
-// so an indexer that records no ranges still places each change in a declaration.
+// the lines from Start to End, and one without always owns its Start line. A line no ranged
+// span contains also belongs to the nearest definition above it when that one has no End,
+// the rule [knowledge.Graph.SymbolAt] uses, so an indexer that records no ranges still places
+// each change in a declaration. Inside a ranged span that rule would hand a new field's lines
+// to the field declared above it, so a definition a closed range encloses is never nearest.
 func Touched(spans []Span, lines []int) map[string]bool {
-	out := map[string]bool{}
-	for _, l := range lines {
-		nearest := 0
-		for _, s := range spans {
-			if s.Start <= l && (s.End == 0 || s.End >= l) {
-				nearest = max(nearest, s.Start)
+	// enclosedTo is the last line of the ranges enclosing each span's start, itself aside.
+	enclosedTo := make([]int, len(spans))
+	for i, s := range spans {
+		for j, r := range spans {
+			if i != j && r.End > 0 && r.Start <= s.Start && s.Start <= r.End {
+				enclosedTo[i] = max(enclosedTo[i], r.End)
 			}
 		}
-		for _, s := range spans {
+	}
+	out := map[string]bool{}
+	for _, l := range lines {
+		contained, nearest := false, 0
+		for i, s := range spans {
 			switch {
 			case s.End > 0 && s.Start <= l && l <= s.End:
 				out[s.ID] = true
-			case s.End == 0 && s.Start > 0 && s.Start == nearest:
+				contained = true
+			case s.End == 0 && s.Start == l:
+				out[s.ID] = true
+			}
+			if s.Start <= l && (enclosedTo[i] == 0 || enclosedTo[i] >= l) {
+				nearest = max(nearest, s.Start)
+			}
+		}
+		if contained {
+			continue
+		}
+		for _, s := range spans {
+			if s.End == 0 && s.Start > 0 && s.Start == nearest {
 				out[s.ID] = true
 			}
 		}

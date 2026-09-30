@@ -284,6 +284,7 @@ func TestTouched(t *testing.T) {
 		{ID: "f", Start: 3, End: 6},
 		{ID: "g", Start: 8, End: 12},
 		{ID: "g.inner", Start: 9, End: 10},
+		{ID: "g.field", Start: 11},
 		{ID: "unranged", Start: 14},
 		{ID: "unranged.param", Start: 14},
 		{ID: "later", Start: 20},
@@ -296,6 +297,9 @@ func TestTouched(t *testing.T) {
 		{"a line between ranged definitions touches none", []int{7}, map[string]bool{}},
 		{"a ranged span contains its lines", []int{5}, map[string]bool{"f": true}},
 		{"nesting touches both", []int{9}, map[string]bool{"g": true, "g.inner": true}},
+		{"an unranged member owns its own line", []int{11}, map[string]bool{"g": true, "g.field": true}},
+		{"a line below an unranged member inside a range is the range's", []int{12}, map[string]bool{"g": true}},
+		{"a line after a range is not the unranged member's above it", []int{13}, map[string]bool{}},
 		{"no range falls back to the nearest definition above", []int{16}, map[string]bool{"unranged": true, "unranged.param": true}},
 		{"a line above every definition touches none", []int{1}, map[string]bool{}},
 	}
