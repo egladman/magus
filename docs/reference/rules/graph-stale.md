@@ -1,16 +1,20 @@
 ---
-title: "graph-stale: a graph read while the index is older than the sources it describes"
-description: "An advisory: it explains, and blocks nothing, on a graph read while the index is older than the sources it describes."
+title: "graph-stale: a graph read, or a graph-backed deny, while the graph describes another tree"
+description: "An advisory: it explains, and blocks nothing, on a graph read, or a graph-backed deny, while the graph describes another tree."
 tags: [guard, rules, graph-stale, advise]
 ---
 
 # graph-stale
 
-An advisory: it explains, and blocks nothing, on a graph read while the index is older than the sources it describes.
+An advisory: it explains, and blocks nothing, on a graph read, or a graph-backed deny, while the graph describes another tree.
 
 ## What it catches
 
-A graph read while the index is older than the sources it describes.
+A graph read, or a graph-backed deny, while the graph describes another tree.
+
+## Why
+
+symbol-search, grep-reader and search-translation deny in favor of a graph answer, so they first ask whether the graph describes the tree on disk: no merge, rebase, cherry-pick or revert underway, read through the workspace's version control, and a guard index built at the current revision. When either fails the search runs, and this names why and `magus graph build`, to run once the operation is finished: a rebuild mid-rebase would describe a tree about to change. An index that records another revision is stale for every kind, so after a history rewrite the next lookup waits for a rebuild rather than trusting it.
 
 ## Seeing it
 

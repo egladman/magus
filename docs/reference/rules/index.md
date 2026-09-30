@@ -76,7 +76,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [gate-repeat](gate-repeat.md)               | the gate run again soon after it passed, repeating work already done                           |
 | [generated-write](generated-write.md)       | a hand edit to a declared output, which the next run overwrites                                |
 | [graph-pipe](graph-pipe.md)                 | a read-only graph verb piped into a text filter, when magus projects the record itself         |
-| [graph-stale](graph-stale.md)               | a graph read while the index is older than the sources it describes                            |
+| [graph-stale](graph-stale.md)               | a graph read, or a graph-backed deny, while the graph describes another tree                   |
 | [hook-wiring](hook-wiring.md)               | a write to the host wiring that decides whether these rules run at all                         |
 | [installed-skill](installed-skill.md)       | a write to an installed skill copy, which re-installing discards                               |
 | [instruction-write](instruction-write.md)   | a write to a cross-host instruction file, which every session loads whole                      |
