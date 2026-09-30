@@ -16,10 +16,11 @@
 // my build". magus\impact carries it: whether the project was edited directly (a
 // seed) and, when it was not, the files that pulled it in. One typed call for the whole
 // set, where this used to run `magus affected --explain` once per project and parse the
-// output. A link to the console follows, for the reader who wants the shape rather than the
-// rows: GitHub cannot draw our graphs, so the console draws it from the link alone.
+// output. The figure follows, for the reader who wants the shape rather than the rows: an
+// image uploaded beside the comment, and a link the console draws it from.
 //
 // Reads the `fanout-share` and `console-base` inputs.
+import "os";
 import "proc";
 import "advice";
 import "figure-link" as figurelink;
@@ -49,10 +50,16 @@ export fun trips(reached: int, total: int, share: double) > bool {
     return reached >= total * share;
 }
 
-// figure is the console link for the reached projects, the ones the change edited marked
-// and the dependencies among them drawn. A dependency outside the set is not drawn. ""
-// when the link would be too long for a comment.
+// figure is the console link for graphOf's graph, "" when the link would be too long for a
+// comment.
 export fun figure(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > str !> any {
+    final g = graphOf(reached, seeds: seeds, dependsOn: dependsOn);
+    return figurelink\figureLink(base, title: g.title, nodes: g.nodes, edges: g.edges);
+}
+
+// graphOf is the reached projects, the ones the change edited marked and the dependencies
+// among them drawn. A dependency outside the set is not drawn.
+export fun graphOf(reached: [str], seeds: [str], dependsOn: {str: [str]}) > figurelink\FigureGraph {
     final nodes = mut [<figurelink\FigureNode>];
     foreach (path in reached) {
         nodes.append(figurelink\FigureNode{ id = path, label = path, seed = seeds.indexOf(path) != null });
@@ -63,10 +70,11 @@ export fun figure(base: str, reached: [str], seeds: [str], dependsOn: {str: [str
             if (reached.indexOf(dep) != null) { edges.append([dep, path]); }
         }
     }
-    return figurelink\figureLink(base, title: "How far this change reaches", nodes: nodes, edges: edges);
+    return figurelink\FigureGraph{ title = "How far this change reaches", nodes = nodes, edges = edges };
 }
 
-fun body(projects: [str], reasons: [str], total: int, link: str) > str {
+// body renders the section. image is figurelink\imageMarkdown's line, set above the link.
+fun body(projects: [str], reasons: [str], total: int, link: str, image: str) > str {
     final parts = mut ["**This change reaches " + "{projects.len()}" + " of " + "{total}"
         + " projects.**\n\n"
         + "The reach comes from how this workspace is wired: a project is here because "
@@ -75,6 +83,9 @@ fun body(projects: [str], reasons: [str], total: int, link: str) > str {
         + "| project | why it is in the set |\n| --- | --- |\n"];
     for (var i = 0; i < projects.len(); i = i + 1) {
         parts.append("| `" + projects[i] + "` | " + reasons[i] + " |\n");
+    }
+    if (image != "") {
+        parts.append("\n" + image + "\n");
     }
     if (link != "") {
         parts.append("\n[See these projects and how they depend on each other](" + link + ")\n");
@@ -145,12 +156,18 @@ fun main() > void !> any {
 
     // Only the reached projects, so the picture is this change's reach and not the whole
     // workspace - the workspace-wide graph is already rendered in MAGUS.md.
-    final link = figure(advice\input("console-base"), reached: reached, seeds: seeds,
-        dependsOn: magus\projectGraph().dependsOn);
+    final g = graphOf(reached, seeds: seeds, dependsOn: magus\projectGraph().dependsOn);
+    final link = figurelink\figureLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
+    // A local run must not reach the forge, so it attaches nothing and says nothing of it.
+    var image = figurelink\Attachment{};
+    if (!advice\collecting()) {
+        image = figurelink\attachFigure(figurelink\httpSend, repo: repo, token: os\env("GITHUB_TOKEN") ?? "",
+            name: "blast-radius.svg", g: g);
+    }
 
     advice\publish(repo, pr: pr, name: section,
         title: "How far this change reaches ({reached.len()} of {total} projects)",
-        body: body(reached, reasons: why, total: total, link: link));
+        body: body(reached, reasons: why, total: total, link: link, image: figurelink\imageMarkdown(image, alt: g.title)));
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
@@ -171,7 +188,7 @@ test "trips needs at least two projects however small the workspace" {
 
 test "body names every project and why it is in the set" {
     final text = body(["docs", "."], reasons: ["depends on a project you edited", "edited here"],
-        total: 9, link: "");
+        total: 9, link: "", image: "");
     std\assert(text.indexOf("2 of 9 projects") != null, message: "counts the reach");
     std\assert(text.indexOf("| `docs` | depends on a project you edited |") != null, message: "a pulled-in row");
     std\assert(text.indexOf("| `.` | edited here |") != null, message: "a seed row");
@@ -179,16 +196,32 @@ test "body names every project and why it is in the set" {
 }
 
 test "body says splitting will not help when everything is downstream" {
-    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 2, link: "");
+    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 2, link: "", image: "");
     std\assert(text.indexOf("coupling is upstream") != null, message: "does not ask for a split that cannot help");
 }
 
 test "body links the console graph and draws no mermaid fence" {
     final link = figure("https://example.test/console/", reached: ["libs/a", "cmd/b"], seeds: ["libs/a"],
         dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "libs/a": [<str>]});
-    final text = body(["libs/a", "cmd/b"], reasons: ["edited here", "depends on a project you edited"], total: 9, link: link);
+    final text = body(["libs/a", "cmd/b"], reasons: ["edited here", "depends on a project you edited"], total: 9, link: link, image: "");
     std\assert(text.indexOf("](" + link + ")") != null, message: "the link is in the body");
     std\assert(text.indexOf("```mermaid") == null, message: "no mermaid fence");
+    std\assert(text.indexOf("![") == null and text.indexOf("could not be attached") == null, message: "nothing attempted, nothing said");
+}
+
+test "body sets the image above the link" {
+    final image = figurelink\imageMarkdown(figurelink\Attachment{ url = "https://github.com/user-attachments/assets/abc" }, alt: "How far this change reaches");
+    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 9, link: "https://example.test/l", image: image);
+    final at = text.indexOf("![How far this change reaches](https://github.com/user-attachments/assets/abc)\n");
+    std\assert(at != null and at! < text.indexOf("](https://example.test/l)")!, message: text);
+}
+
+test "body keeps the link under an image that could not be attached" {
+    final image = figurelink\imageMarkdown(figurelink\Attachment{ failure = "the attachment upload answered HTTP 404" }, alt: "t");
+    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 9, link: "https://example.test/l", image: image);
+    std\assert(text.indexOf("\nThe figure could not be attached as an image: `the attachment upload answered HTTP 404`\n") != null, message: text);
+    std\assert(text.indexOf("](https://example.test/l)") != null, message: "the link stays");
+    std\assert(text.indexOf("![") == null, message: "no broken image");
 }
 
 test "figure marks the seeds and draws dependency to dependent among the reached only" {

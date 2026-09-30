@@ -14,7 +14,9 @@
 //	    the queue as one markdown page: a link that draws the queue in the console
 //	    (--console-base, the hosted one by default), then a table per section with each
 //	    pull request's reason and a person's command; --issue replaces that issue's body
-//	    with it. `magus queue ls` needs GITHUB_TOKEN
+//	    with it, and sets the queue's figure above the link as an image uploaded with
+//	    GITHUB_TOKEN, or a line saying why it could not be. `magus queue ls` needs
+//	    GITHUB_TOKEN too
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -1634,6 +1636,8 @@ object Board {
     merged: [Merged] = [<Merged>],
     waits: {int: Wait} = {<int: Wait>},
     flights: {int: Flight} = {<int: Flight>},
+    // The queue's graph as an uploaded image, set above its link.
+    image: figurelink\Attachment = figurelink\Attachment{},
 }
 
 // queueOf reads `magus queue ls`'s mergequeue.changes/v1 document.
@@ -1832,10 +1836,10 @@ fun rowOf(p: Pull, r: Record, section: str, b: Board) > str {
     return row([pr, head, "-", "approved; checks green", "`" + cell(joinCommand(p, r: r)) + "`"]);
 }
 
-// figureLinkOf is the console link for the queue's graph: the base, then each queued change
-// after the one it is stacked on. A change kicked back is a node with no edge, since it is
-// stacked on nothing. "" when nothing is queued or kicked, or the link is too long to carry.
-export fun figureLinkOf(b: Board, sections: {int: str}) > str !> any {
+// queueGraphOf is the queue's graph: the base, then each queued change after the one it is
+// stacked on. A change kicked back is a node with no edge, since it is stacked on nothing.
+// Null when nothing is queued or kicked.
+export fun queueGraphOf(b: Board, sections: {int: str}) > figurelink\FigureGraph? {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -1848,7 +1852,7 @@ export fun figureLinkOf(b: Board, sections: {int: str}) > str !> any {
         }
     }
     if (ids.len() == 0 and kicked.len() == 0) {
-        return "";
+        return null;
     }
     final titles = mut {<int: str>};
     foreach (p in b.open) {
@@ -1869,7 +1873,20 @@ export fun figureLinkOf(b: Board, sections: {int: str}) > str !> any {
         }
         edges.append([below, "pr{q.id}"]);
     }
-    return figurelink\figureLink(b.console, title: "Merge queue into " + ascii(b.base), nodes: nodes, edges: edges);
+    return figurelink\FigureGraph{ title = "Merge queue into " + ascii(b.base), nodes = nodes, edges = edges };
+}
+
+// sectionsOf is the section each shown pull request lands in, by number.
+export fun sectionsOf(b: Board) > {int: str} {
+    final ids = mut [<int>];
+    foreach (q in b.queue) {
+        ids.append(q.id);
+    }
+    final sections = mut {<int: str>};
+    foreach (p in b.pulls) {
+        sections[p.number] = sectionOf(p, r: classify(p, open: b.open, facts: Facts{}), b: b, queued: ids.indexOf(p.number) != null);
+    }
+    return sections;
 }
 
 // mergedLine counts the week's merges into base by who merged them.
@@ -1956,13 +1973,22 @@ export fun dashboardOf(b: Board) > str !> any {
         mergedLine(b),
         "",
     ];
-    final link = figureLinkOf(b, sections: sections);
-    if (link == "") {
+    final g = queueGraphOf(b, sections: sections);
+    if (g == null) {
         lines.append("Nothing is queued.");
+        lines.append("");
     } else {
-        lines.append("[The queue as a graph]({link})");
+        final image = figurelink\imageMarkdown(b.image, alt: g!.title);
+        if (image != "") {
+            lines.append(image);
+            lines.append("");
+        }
+        final link = figurelink\figureLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
+        if (link != "") {
+            lines.append("[The queue as a graph]({link})");
+            lines.append("");
+        }
     }
-    lines.append("");
     foreach (s in SECTIONS) {
         final these = linesOf(s[0]);
         if (these.len() == 0) {
@@ -2035,8 +2061,19 @@ fun dashboard(sel: Selector) > void !> any {
     std\print("pull-requests: read {open.len()} open and {merged.len()} merged pull requests, {waits.len()} statuses and "
         + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
         + "{std\toInt(os\time() - began)}ms");
-    final body = dashboardOf(Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
-        queue = queue, merged = merged, waits = waits, flights = flights });
+    final b = mut Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
+        queue = queue, merged = merged, waits = waits, flights = flights };
+    // Only a page bound for an issue gets an image: an upload is a GitHub attachment, and a
+    // local preview has no business leaving one behind.
+    final g = queueGraphOf(b, sections: sectionsOf(b));
+    if (sel.issue != "" and g != null) {
+        final repo = capture("gh", args: ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).trim();
+        b.image = figurelink\attachFigure(figurelink\httpSend, repo: repo, token: os\env("GITHUB_TOKEN") ?? "", name: "merge-queue.svg", g: g!);
+        if (b.image.failure != "") {
+            std\print("pull-requests: the queue's figure was not attached: {b.image.failure}");
+        }
+    }
+    final body = dashboardOf(b);
     if (body.len() > BODY_LIMIT) {
         throw "pull-requests: the dashboard is {body.len()} characters, past the {BODY_LIMIT} GitHub takes in an issue body";
     }
@@ -2664,6 +2701,34 @@ test "a stack links each member behind the one it is stacked on" {
     final page = dashboardOf(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
     assert\equal(edgesOf(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
     has(page, want: "| #11 top | `s2` | - | stacked on #10, which has not merged | wait |");
+}
+
+test "an attached figure sits above the link, and a failed one says why and keeps it" {
+    final open = [Pull{ number = 10, head = "s1", title = "bottom" }];
+    final b = mut Board{ base = "main", at = AT, open = open, pulls = open, queue = [Queued{ id = 10 }] };
+    lacks(dashboardOf(b), want: "could not be attached");
+
+    b.image = figurelink\Attachment{ url = "https://github.com/user-attachments/assets/abc" };
+    var page = dashboardOf(b);
+    has(page, want: "![Merge queue into main](https://github.com/user-attachments/assets/abc)\n\n[The queue as a graph](");
+
+    b.image = figurelink\Attachment{ failure = "the attachment upload answered HTTP 404: Not Found" };
+    page = dashboardOf(b);
+    has(page, want: "The figure could not be attached as an image: `the attachment upload answered HTTP 404: Not Found`\n\n[The queue as a graph](");
+    lacks(page, want: "![");
+}
+
+test "sectionsOf places each pull request as the page does, and the graph follows it" {
+    final open = [
+        Pull{ number = 10, head = "s1", title = "bottom" },
+        Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
+    ];
+    final b = board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]);
+    final g = queueGraphOf(b, sections: sectionsOf(b));
+    assert\equal(g != null, want: true, message: "a queue has a graph");
+    final link = figurelink\figureLink("", title: g!.title, nodes: g!.nodes, edges: g!.edges);
+    has(dashboardOf(b), want: "[The queue as a graph](" + link + ")");
+    assert\equal(queueGraphOf(board([<Pull>], queue: [<Queued>]), sections: {<int: str>}) == null, want: true, message: "an empty queue has none");
 }
 
 test "each kick code goes to the author, and a regeneration to a manual merge" {
