@@ -108,6 +108,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-fuzz
+
+go refuses -fuzz across more than one package, so a fuzz run cannot ride go-test's `./...` default. The caller supplies `-fuzz <name> -fuzztime <d> <pkg>`; `-run '^$'` keeps the package's ordinary tests out of the fuzz run. external = reads because the mutator is randomized: the same tree can pass one run and crash the next, so a replayed pass proves nothing. That makes the doctor ask any composing target for skip_cache. A crasher lands in <pkg>/testdata/fuzz/<name>/, a path only the caller knows, so the composing target declares it as an output.
+
+**Command:** `go test -trimpath -run ^$`
+
 ## go-generate
 
 **Command:** `go generate ./...`

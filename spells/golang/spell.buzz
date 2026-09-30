@@ -248,6 +248,17 @@ fun goTest(target: Target) > Command {
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
+// go refuses -fuzz across more than one package, so a fuzz run cannot ride go-test's
+// `./...` default. The caller supplies `-fuzz <name> -fuzztime <d> <pkg>`; `-run '^$'`
+// keeps the package's ordinary tests out of the fuzz run.
+//
+// external = reads because the mutator is randomized: the same tree can pass one run and
+// crash the next, so a replayed pass proves nothing. That makes the doctor ask any
+// composing target for skip_cache. A crasher lands in <pkg>/testdata/fuzz/<name>/, a
+// path only the caller knows, so the composing target declares it as an output.
+fun goFuzz(target: Target) > Command {
+    return Command{bin = "go", args = ["test", "-trimpath", "-run", "^$"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, external = External.reads};
+}
 // Tidy resolves against the module proxy, and an import go.mod does not require yet
 // arrives at latest, so its result turns on what upstream serves today rather than on
 // this tree alone. The write charm is therefore update, not rw.
@@ -305,6 +316,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-fmt": goFmt,
         "golangci-lint": golangCILint,
         "go-test": goTest,
+        "go-fuzz": goFuzz,
         "go-mod-tidy": goModTidy,
         "go-mod-edit": goModEdit,
         "go-mod-json": goModJSON,
