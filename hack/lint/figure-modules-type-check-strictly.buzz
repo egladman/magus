@@ -106,7 +106,7 @@ test "a figure with an unlabeled argument or a warning is reported, a clean one 
     foreach (f in got) {
         paths.append("{f.path}:{f.line}");
     }
-    assert\equal(paths.len(), want: 2, message: "two findings: {paths}");
+    assert\equal(paths.len(), want: 2, message: "two findings: {paths} {support\messages(got)}");
     assert\contains(paths, item: "docs/site/diagrams/positional.buzz:8", message: "the unlabeled argument");
     assert\isTrue(got[0].path == "docs/site/diagrams/rebuilt.buzz" or got[1].path == "docs/site/diagrams/rebuilt.buzz",
         message: "the warning fails too");

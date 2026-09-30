@@ -62,7 +62,7 @@ func (m memoGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.G
 
 // KnowledgeGraphWithSymbolsForRef merges only the shards mentioning symbol, a subset of
 // every shard, so it reuses the full merge rather than caching one graph per symbol.
-func (m memoGraphs) KnowledgeGraphWithSymbolsForRef(ctx context.Context, symbol string) (*knowledge.Graph, error) {
+func (m memoGraphs) KnowledgeGraphWithSymbolsForRef(ctx context.Context, _ string) (*knowledge.Graph, error) {
 	return m.KnowledgeGraphWithSymbols(ctx)
 }
 
@@ -75,7 +75,7 @@ func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap,
 		list, probed := m.g.SymbolGaps(ctx)
 		return gaps{list, probed}, nil
 	})
-	got := v.(gaps)
+	got, _ := v.(gaps)
 	return got.list, got.probed
 }
 
@@ -84,7 +84,8 @@ func memoGraph(memo *types.EvalMemo, key string, build func() (*knowledge.Graph,
 	if err != nil {
 		return nil, err
 	}
-	return v.(*knowledge.Graph), nil
+	g, _ := v.(*knowledge.Graph)
+	return g, nil
 }
 
 // graphCoverage reports what a lookup could consult, for knowledge.Answer to judge. The

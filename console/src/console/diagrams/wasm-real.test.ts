@@ -23,7 +23,8 @@ const EXEC = resolve(PLAYGROUND, "wasm_exec.js");
 const SKIP =
   existsSync(WASM) && existsSync(EXEC)
     ? false
-    : WASM + " is not built, so the real runtime is untested here; build it with" +
+    : WASM +
+      " is not built, so the real runtime is untested here; build it with" +
       " `magus run build_playground docs`";
 
 async function relay(): Promise<void> {

@@ -10,10 +10,13 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakeWorkspace answers with canned graphs, the shape the graph handler tests use.
 type fakeWorkspace struct {

@@ -29,6 +29,5 @@ func pathDevice(path string) (dev uint64, ok bool) {
 	if !isStat {
 		return 0, false
 	}
-	// Dev is int32 on darwin and uint64 on linux.
-	return uint64(st.Dev), true
+	return uint64(st.Dev), true //nolint:unconvert // Dev is int32 on darwin and uint64 on linux
 }
