@@ -294,7 +294,18 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	if findings := items[1].AsString(); findings != "" {
 		return Figure{}, &FindingsError{Findings: findings}
 	}
-	return Figure{Title: g.title, SVG: items[0].AsString(), Nodes: g.nodes}, nil
+	// A node's ID is the one figure draws as data-node, so a client matches rows to the SVG:
+	// a box is its directory path, an actor is external:<name>.
+	nodes := make([]Node, len(g.nodes))
+	names := actorNames(g.nodes)
+	for i, n := range g.nodes {
+		n.ID = "external:" + names[n.ID]
+		if g.claim == "imports" {
+			n.ID = n.Anchor
+		}
+		nodes[i] = n
+	}
+	return Figure{Title: g.title, SVG: items[0].AsString(), Nodes: nodes}, nil
 }
 
 // driver is the Buzz appended to figure.buzz that declares g and draws it. Every value is a

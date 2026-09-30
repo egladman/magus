@@ -98,15 +98,16 @@ func TestDiagramRendersProjects(t *testing.T) {
 	assert.Equal(t, "projects", out.ID)
 	assert.Equal(t, "Workspace projects", out.Title)
 	assert.Equal(t, []Node{
-		{ID: "app", Anchor: "app", Label: "app"},
-		{ID: "libs-lib", Anchor: "libs/lib", Label: "lib"},
-		{ID: "libs-core", Anchor: "libs/core", Label: "core"},
-		{ID: "libs-base", Anchor: "libs/base", Label: `base "{x}"`},
-		{ID: "tools", Anchor: "tools", Label: "tools"},
+		{ID: "external:app", Anchor: "app", Label: "app"},
+		{ID: "external:lib", Anchor: "libs/lib", Label: "lib"},
+		{ID: "external:core", Anchor: "libs/core", Label: "core"},
+		{ID: `external:base "{x}"`, Anchor: "libs/base", Label: `base "{x}"`},
+		{ID: "external:tools", Anchor: "tools", Label: "tools"},
 	}, out.Nodes)
 	assert.Equal(t, "https://github.com/acme/widgets/blob/0123abcd/{path}#L{line}", out.SourceURL)
-	// The renderer carries no per-node data attribute yet, so the label text is the check;
-	// the quoted, braced label proves the driver escaped it into a Buzz literal intact.
+	// Each row names the node the SVG draws; the quoted, braced label proves the driver
+	// escaped it into a Buzz literal intact.
+	assert.Contains(t, out.SVG, `data-node="external:core"`)
 	assert.Contains(t, out.SVG, "<svg")
 	assert.Contains(t, out.SVG, ">core</text>")
 	assert.Contains(t, out.SVG, "base &quot;{x}&quot;")
@@ -119,8 +120,8 @@ func TestDiagramRendersTargets(t *testing.T) {
 	var out Rendered
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []Node{
-		{ID: "build", Anchor: "app", Label: "build"},
-		{ID: "test", Anchor: "app", Label: "test"},
+		{ID: "external:build", Anchor: "app", Label: "build"},
+		{ID: "external:test", Anchor: "app", Label: "test"},
 	}, out.Nodes)
 
 	assert.Equal(t, http.StatusNotFound, get(t, chainWorkspace(), "/api/v1/diagrams/targets:nope").Code)

@@ -1,12 +1,12 @@
 // wasm.ts - the Buzz runtime a figure upgrades to on request: the docs playground's wasm, loaded
-// the way docs/src/site/buzz-runtime.ts loads it, then fed the same flow sources the server
-// evaluates (GET /api/v1/diagrams/source) with a driver built the way the handler builds its own.
+// the way docs/src/site/buzz-runtime.ts loads it, then fed the magus/figure source the server
+// evaluates (GET /api/v1/diagrams/source) with a driver shaped like internal/handler/diagram's.
 // Once loaded, a lens change re-lays the figure out here instead of asking the server.
 //
 // Never loaded automatically: it is 4.2MB and a Go runtime, and the static render already is the
 // figure. The explicit control is the whole policy.
 
-import type { Declaration, Lens } from "./lens";
+import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
 import type { DiagramSources } from "./api";
 
@@ -167,64 +167,133 @@ export function buzzString(s: string): string {
   return out + '"';
 }
 
-// flowId is the handler's ids.of for the figure id: flow ids take letters, digits, - and _.
-export function flowId(id: string): string {
+// figureId is the handler's ids{}.of for the figure id: letters, digits, - and _ survive.
+export function figureId(id: string): string {
   const base = id.replace(/[^A-Za-z0-9_-]/g, "-").replace(/^-+|-+$/g, "");
   return base || "root";
+}
+
+// anchorTemplate is the handler's: a node anchors a path, never a line.
+export function anchorTemplate(sourceUrl: string): string {
+  const line = "#L{line}";
+  return sourceUrl.endsWith(line) ? sourceUrl.slice(0, -line.length) : sourceUrl;
+}
+
+// linkTo is the handler's linkTo: one pass, so an anchor holding {line} stays as written.
+export function linkTo(anchorHref: string, anchor: string): string {
+  if (!anchorHref) return "";
+  return anchorHref.replace(/\{path\}|\{line\}/g, (m) => (m === "{path}" ? anchor : ""));
+}
+
+// actorNames is the handler's: figure keys an actor by name, so a label two nodes share takes
+// the node's anchor. Aligned with nodes by index.
+export function actorNames(nodes: readonly DeclaredNode[]): string[] {
+  const count = new Map<string, number>();
+  for (const n of nodes) count.set(n.label, (count.get(n.label) ?? 0) + 1);
+  return nodes.map((n) =>
+    (count.get(n.label) ?? 0) > 1 ? n.label + " (" + n.anchor + ")" : n.label,
+  );
+}
+
+// IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
+export const IMPORTS = "imports";
+
+// drawnNodes re-keys the server's node rows by the id magus/figure draws as data-node: a box by
+// its directory, an actor as external:<name>. The SVG's data-edge pairs use those ids, so the
+// node list, focus and a lens cut need them too.
+export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): DeclaredNode[] {
+  if (claim === IMPORTS) return nodes.map((n) => ({ ...n, id: n.anchor }));
+  const names = actorNames(nodes);
+  return nodes.map((n, i) => ({ ...n, id: "external:" + names[i] }));
 }
 
 export interface FigureMeta {
   readonly id: string;
   readonly title: string;
-  // The edge claim the server gives this figure kind: imports for the import graph, flow else.
+  // IMPORTS for the import figure; any other claim draws actors, as the handler's driver does.
   readonly claim: string;
-  // A template with {path}, or "" for no links.
+  // The node link template, {path} filled per node, or "" for no links.
   readonly anchorHref: string;
 }
 
 const SVG_MARK = "svg\n";
 const FINDINGS_MARK = "findings\n";
 
-// driverFor declares decl to flow and draws it. It returns ONE string, marked, because the
-// playground hands back a result as its string form and a list would arrive flattened.
+// The handler's serveDir, byte for byte. A host hands a Dir over as a map, and typing the map
+// through any is how a record reaches figure without the magus module.
+const SERVE_DIR = String.raw`fun serveDir(path: str, imports: [str]) > magus\Dir {
+    final fields: {str: any} = {
+        "path": path, "id": "dir:" + path, "layer": "", "language": "go",
+        "imports": imports, "importedBy": [<str>], "importsIndexed": true,
+        "calls": [<magus\DirCall>], "calledBy": [<magus\DirCall>], "children": [<str>], "files": 1,
+    };
+    final record: any = fields;
+    return record;
+}
+
+`;
+
+// driverFor is the handler's driver over decl, whose node ids are drawnNodes ids. Only the tail
+// differs: the playground hands a result back as its string form, where a list would arrive
+// flattened, so it returns ONE marked string instead of [svg, findings].
 export function driverFor(decl: Declaration, meta: FigureMeta, desc: string): string {
   const lines = [
-    "fun serveFigure() > str !> str {",
-    "    final f = flow(" +
-      buzzString(flowId(meta.id)) +
+    SERVE_DIR + "fun serveFigure() > str !> str {",
+    "    final f = of(" +
+      buzzString(figureId(meta.id)) +
       ").title(" +
       buzzString(meta.title) +
       ").desc(" +
       buzzString(desc) +
       ");",
   ];
-  for (const n of decl.nodes)
+  if (meta.claim === IMPORTS) {
+    const anchor = new Map(decl.nodes.map((n) => [n.id, n.anchor]));
+    const imports = new Map<string, string[]>();
+    for (const [src, dst] of decl.edges)
+      imports.set(src, [...(imports.get(src) ?? []), anchor.get(dst) ?? ""]);
+    for (const n of decl.nodes) {
+      const quoted = (imports.get(n.id) ?? []).map(buzzString);
+      const list = quoted.length ? "[" + quoted.join(", ") + "]" : "[<str>]";
+      lines.push(
+        "    f.box(serveDir(" +
+          buzzString(n.anchor) +
+          ", imports: " +
+          list +
+          "), label: " +
+          buzzString(n.label) +
+          ");",
+      );
+    }
+    lines.push("    f.edgesFromGraph();");
+  } else {
     lines.push(
-      "    f.node(" +
-        buzzString(n.id) +
-        ", label: " +
-        buzzString(n.label) +
-        ", anchor: " +
-        buzzString(n.anchor) +
-        ");",
+      "    f.unscoped(why: " + buzzString("served from the workspace graph: " + desc) + ");",
     );
-  for (const [a, b] of decl.edges)
-    lines.push(
-      "    f.edge(" +
-        buzzString(a) +
-        ", dst: " +
-        buzzString(b) +
-        ", claim: " +
-        buzzString(meta.claim) +
-        ");",
-    );
-  lines.push(
-    meta.anchorHref
-      ? "    return f.svg(cssVarPalette(), s: Style{ anchorHref = " +
-          buzzString(meta.anchorHref) +
-          " });"
-      : "    return f.svg(cssVarPalette());",
-  );
+    const names = actorNames(decl.nodes);
+    const index = new Map<string, number>();
+    decl.nodes.forEach((n, i) => {
+      index.set(n.id, i);
+      lines.push(
+        "    final a" +
+          i +
+          " = external(" +
+          buzzString(names[i]) +
+          ", link: " +
+          buzzString(linkTo(meta.anchorHref, n.anchor)) +
+          ", look: Look.plain);",
+        "    f.actor(a" + i + ");",
+      );
+    });
+    for (const [src, dst] of decl.edges) {
+      const a = index.get(src);
+      const b = index.get(dst);
+      if (a === undefined || b === undefined)
+        throw new Error("the declaration has an edge " + src + "->" + dst + " to no node");
+      lines.push("    f.flowAcross(a" + a + ", dst: a" + b + ");");
+    }
+  }
+  lines.push("    return f.svg(Theme.page, anchorHref: " + buzzString(meta.anchorHref) + ");");
   lines.push("}");
   lines.push("var served = " + buzzString(SVG_MARK) + ";");
   lines.push("try {");
@@ -236,55 +305,16 @@ export function driverFor(decl: Declaration, meta: FigureMeta, desc: string): st
   return lines.join("\n") + "\n";
 }
 
-const DECL = /^(?:export\s+)?(?:mut\s+)?(?:fun|final|var|object|enum)\s+([A-Za-z_]\w*)/gm;
+// FIGURE_PATH is the handler's FigureSource: the one file GET /api/v1/diagrams/source serves.
+export const FIGURE_PATH = "libs/figure/figure.buzz";
 
-function declaredNames(src: string): Set<string> {
-  return new Set([...src.matchAll(DECL)].map((m) => m[1]));
-}
-
-// stripModule turns a module file into program text: its namespace line and imports go (the
-// program imports std once, and the renderer is inlined rather than imported), and so do its
-// test blocks, which need the assert module the playground does not carry. Test blocks open
-// with `test "` at column 0 and close at the next column-0 `}`, the form both files use.
-export function stripModule(src: string): string {
-  const out: string[] = [];
-  let inTest = false;
-  for (const line of src.split("\n")) {
-    if (inTest) {
-      if (line === "}") inTest = false;
-      continue;
-    }
-    if (line.startsWith('test "')) {
-      inTest = !line.trimEnd().endsWith("}");
-      continue;
-    }
-    if (/^namespace\s+\w+\s*;/.test(line) || /^import\s+"/.test(line)) continue;
-    out.push(line);
-  }
-  return out.join("\n");
-}
-
-export const FLOW_PATH = "libs/diagram/flow.buzz";
-export const RENDERER_PATH = "libs/diagram/diagram.buzz";
-
-// assembleProgram inlines the renderer ahead of flow, which is what the server's flat import
-// amounts to, then the driver. One program has one scope, so a private helper both files define
-// (imin, snap) is renamed in the renderer, where flow never calls it.
-export function assembleProgram(sources: DiagramSources, driver: string): string {
-  const flow = sources[FLOW_PATH];
-  const renderer = sources[RENDERER_PATH];
-  if (flow === undefined || renderer === undefined)
-    throw new Error(
-      "the server's library source is missing " + (flow === undefined ? FLOW_PATH : RENDERER_PATH),
-    );
-  let r = stripModule(renderer);
-  const f = stripModule(flow);
-  const flowNames = declaredNames(f);
-  for (const name of declaredNames(r)) {
-    if (!flowNames.has(name)) continue;
-    r = r.replace(new RegExp("(?<![.\\w\\\\])" + name + "\\b", "g"), "diagram_" + name);
-  }
-  return 'import "std";\n' + r + "\n" + f + "\n" + driver;
+// programFor is what the handler evaluates: the module's own source, then the driver. The driver
+// runs inside the module because a program importing it cannot reach the private layout helpers
+// its methods call.
+export function programFor(sources: DiagramSources, driver: string): string {
+  const src = sources[FIGURE_PATH];
+  if (src === undefined) throw new Error("the server's figure source is missing " + FIGURE_PATH);
+  return src + "\n" + driver;
 }
 
 export type Relayout =
@@ -311,22 +341,19 @@ export function parseRelayout(r: BuzzResult): Relayout {
 export interface RelayoutInput {
   readonly runtime: BuzzRuntime;
   readonly sources: DiagramSources;
-  // The whole figure as the server declared it, before any lens.
+  // The whole figure as the server declared it, before any lens, keyed by drawnNodes ids.
   readonly decl: Declaration;
   readonly meta: FigureMeta;
   readonly lens: Lens;
 }
 
-// relayout cuts the declaration through the lens and lays it out with flow, in the page.
+// relayout cuts the declaration through the lens and lays it out with magus/figure, in the page.
 export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (!cut.ok) return { kind: "bad-lens", detail: cut.error };
   let program: string;
   try {
-    program = assembleProgram(
-      input.sources,
-      driverFor(cut.decl, input.meta, describeLens(input.lens)),
-    );
+    program = programFor(input.sources, driverFor(cut.decl, input.meta, describeLens(input.lens)));
   } catch (e) {
     return { kind: "failed", detail: e instanceof Error ? e.message : String(e) };
   }

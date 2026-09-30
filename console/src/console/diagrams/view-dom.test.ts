@@ -1,6 +1,6 @@
 // view-dom.test.ts - a figure as the page shows it: the server's SVG prepared (roles, names, real
 // links), then upgraded by attachFigure (focus and dim, hover, keys, Tab order). The fixture is
-// shaped like diagram.buzz's output: data-node groups with data-anchor, data-edge paths.
+// shaped like magus/figure's output: data-node groups with data-anchor, data-edge paths.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -248,8 +248,8 @@ describe("a prepared figure", () => {
     assert.match(el.textContent ?? "", /exceeds the budget of 9/);
   });
 
-  // Every role cssVarPalette paints (libs/diagram/diagram.buzz) needs a console definition, or that
-  // role falls back to its light hex on a dark console.
+  // Every role cssVarPalette paints (magus/figure, libs/figure/figure.buzz) needs a console
+  // definition, or that role falls back to its light hex on a dark console.
   test("tokens.css defines every --magus-diagram-* role", () => {
     const css = readFileSync("src/styles/tokens.css", "utf8");
     for (const role of [

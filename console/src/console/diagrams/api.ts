@@ -18,6 +18,7 @@ export interface DiagramEntry {
 }
 
 export interface DiagramNode {
+  // The server's row id; main.ts re-keys it to the figure's data-node id (wasm.ts drawnNodes).
   readonly id: string;
   // The workspace-relative path the box depicts; "" for a node that depicts none.
   readonly anchor: string;
@@ -33,7 +34,8 @@ export interface RenderedDiagram {
   readonly sourceUrl: string;
 }
 
-// The flow library the server evaluates, keyed by workspace path (libs/diagram/flow.buzz, ...).
+// The magus/figure module the server evaluates, keyed by workspace path: one file,
+// libs/figure/figure.buzz.
 export type DiagramSources = Readonly<Record<string, string>>;
 
 // DiagramRead keeps the server's answers apart because each asks something different of the
@@ -85,7 +87,7 @@ export function renderDiagram(
 export function loadDiagramSources(
   opts: DiagramClientOptions,
 ): Promise<DiagramRead<DiagramSources>> {
-  return read(opts, diagramsUrl(opts.host) + "/source", "the diagram library source", parseSources);
+  return read(opts, diagramsUrl(opts.host) + "/source", "the figure module source", parseSources);
 }
 
 // readFailure maps a non-2xx status and the body the server wrote with http.Error (plain text,

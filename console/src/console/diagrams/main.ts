@@ -29,7 +29,15 @@ import {
   type Lens,
 } from "./lens";
 import { markListFocus, notice, prepareSvg, renderNodeList, type NoticeTone } from "./view";
-import { ensureBuzz, relayout, type BuzzRuntime, type FigureMeta } from "./wasm";
+import {
+  anchorTemplate,
+  drawnNodes,
+  ensureBuzz,
+  relayout,
+  IMPORTS,
+  type BuzzRuntime,
+  type FigureMeta,
+} from "./wasm";
 
 const SOURCE = "Diagrams";
 
@@ -203,8 +211,9 @@ export function build(host: HTMLElement): DiagramsRefs {
   };
 }
 
-function claimFor(entry: DiagramEntry | undefined): string {
-  return entry?.kind === "imports" ? "imports" : "flow";
+// claimFor reads the kind from the figure id, as the handler's parseLens does.
+function claimFor(id: string): string {
+  return id.split(":")[0] === IMPORTS ? IMPORTS : "flow";
 }
 
 const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
@@ -320,26 +329,31 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     clearNotices();
     const sameFigure = base?.id === id && controller !== null;
+    const claim = claimFor(id);
+    const rendered: RenderedDiagram = {
+      ...read.value,
+      nodes: drawnNodes(read.value.nodes, claim),
+    };
     try {
-      mount(read.value, sameFigure);
+      mount(rendered, sameFigure);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       reportFailure(SOURCE, "Could not show diagram " + id + ": " + detail, "diagrams:mount:" + id);
       showNotice("danger", "Could not show the figure", detail);
       return;
     }
-    figure = { kind: "shown", id, lens, rendered: read.value, laidOut: "server" };
+    figure = { kind: "shown", id, lens, rendered, laidOut: "server" };
     if (lensIsEmpty(lens)) {
       const svg = refs.frame.querySelector("svg");
       base = {
         id,
-        rendered: read.value,
-        decl: { nodes: read.value.nodes, edges: svg ? edgesOf(svg) : [] },
+        rendered,
+        decl: { nodes: rendered.nodes, edges: svg ? edgesOf(svg) : [] },
         meta: {
           id,
-          title: read.value.title,
-          claim: claimFor(entries.find((e) => e.id === id)),
-          anchorHref: "",
+          title: rendered.title,
+          claim,
+          anchorHref: anchorTemplate(rendered.sourceUrl),
         },
       };
     } else if (base?.id !== id) base = null;

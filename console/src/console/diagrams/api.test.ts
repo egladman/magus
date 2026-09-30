@@ -134,9 +134,9 @@ test("a rendered figure decodes source_url and tolerates missing node fields", (
   assert.throws(() => parseRendered({ id: "p", title: "t", nodes: [] }), /svg is not a string/);
 });
 
-test("the library source decodes as path to text", () => {
-  assert.deepEqual(parseSources({ files: { "libs/diagram/flow.buzz": "namespace flow;" } }), {
-    "libs/diagram/flow.buzz": "namespace flow;",
+test("the figure module source decodes as path to text", () => {
+  assert.deepEqual(parseSources({ files: { "libs/figure/figure.buzz": "namespace figure;" } }), {
+    "libs/figure/figure.buzz": "namespace figure;",
   });
   assert.throws(() => parseSources({ files: { "a.buzz": 3 } }), /a\.buzz is not a string/);
 });
