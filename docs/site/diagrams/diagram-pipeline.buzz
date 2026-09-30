@@ -1,12 +1,8 @@
-// site/diagrams/diagram-pipeline.buzz: how a figure on this site gets drawn, including this one.
+// site/diagrams/diagram-pipeline.buzz: how a figure on this site gets drawn, this one included.
+// Every figure goes through magus/figure, which takes the accent, and the Go that touches it
+// embeds the same source the figures import.
 //
-// The figure has one claim: every figure reaches its reader through magus/figure, and the
-// Go that touches the module embeds the same source the figures import. The accent is
-// that module.
-//
-// A figure's boxes are the graph's own records, read through the magus module; the Go
-// edges between std, the module and the server are imports. The figure sources, the
-// committed files and the site render are Buzz and files, so they are actors.
+// The figure sources, committed files and site render are not packages, so they are actors.
 namespace diagramPipeline;
 
 import "magus";

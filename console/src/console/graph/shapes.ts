@@ -153,16 +153,14 @@ export function nodeReach(n: GNode): number {
   return n.r * REACH_BY_SHAPE[shapeOfNode(n)];
 }
 
-// nodeClass is the kind a reader is told: every marker shares one kind and one colour, so its
-// family ("calls", "diagram", ...) is what separates one from another.
+// nodeClass is the kind shown to a reader; a marker is named by its family ("calls", "diagram").
 export function nodeClass(n: Pick<GNodeInput, "kind" | "attrs">): string {
   const family = n.kind === "marker" ? n.attrs?.family : undefined;
   return family ? "marker: " + family : n.kind;
 }
 
-// declaredCall reports a calls edge a person declared with a marker, and the transport it names
-// ("" when the edge carries none). Null for every other edge, observed calls included: only a
-// declared edge is drawn dashed, since nothing in the code proves the call happens.
+// declaredCall returns the transport ("" for none) of a calls edge declared with a marker, and
+// null for every other edge, observed calls included. Only declared calls are drawn dashed.
 export function declaredCall(e: GLink): { transport: string } | null {
   if (e.relation !== "calls" || e.confidence !== "declared") return null;
   return { transport: e.attrs?.transport ?? "" };

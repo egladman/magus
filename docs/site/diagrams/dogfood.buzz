@@ -3,10 +3,8 @@
 //
 // The figure is about a deliberate asymmetry, not a build loop. Nearly every job builds
 // the magus THIS commit defines and runs it here, so a magusfile change that needs an
-// unreleased feature is exercised by the very commit introducing it, with no release-first
-// ordering problem. Exactly one job pins the last release instead. That one is allowed to
-// go red: it is a compatibility signal, not a gate, and breaking it on purpose is
-// sometimes the correct outcome.
+// unreleased feature is exercised by the commit introducing it. Exactly one job pins the
+// last release instead; it may go red, since it is a compatibility signal, not a gate.
 //
 // An earlier version of this diagram drew the build as a three-node cycle. That was true
 // and useless: it showed the bootstrap without showing why there are two tracks.

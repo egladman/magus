@@ -1773,8 +1773,8 @@ function draw() {
     ctx.restore();
     ctx.fillText(n.label, lx, n.y);
   }
-  // Transport labels ride the node labels' zoom floor unless their edge touches the highlight,
-  // and yield to a node label already placed: the node names the endpoint, the edge only says how.
+  // Transport labels share the node labels' zoom floor unless their edge touches the highlight,
+  // and yield to a node label already placed.
   ctx.textAlign = "center";
   for (const l of transportLabels) {
     if (!l.incident && transform.k < LABEL_MIN_ZOOM) continue;

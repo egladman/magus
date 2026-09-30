@@ -1,18 +1,15 @@
 // site/diagrams/lease-loop.buzz: how work is split across several agents and put back
-// together. The mechanism is a loop that closes: the checkpoint the orchestrator takes at
-// the start is the same one it diffs against at the end, so a lease is verified against what
-// it CLAIMED rather than against whatever the tree looks like later.
+// together. The checkpoint taken at the start is the one diffed against at the end, so a
+// lease is verified against what it CLAIMED, not the tree as it looks later.
 //
-// The doctrine box is not a step. It is the doctrine the rest of the figure only makes sense
-// under: every other box is a thing magus RECORDS or ANSWERS, and none of them is a thing
-// it prevents. No connector reaches it because it constrains all of them.
+// The doctrine box is not a step: magus records and answers, never prevents. No connector
+// reaches it because it constrains every box.
 //
 // The release connector is the one accent. Releasing a path early, so write_paths shrinks
 // while the lease is still held, is the move that makes the plan usable by a reader, and
 // it is the half people skip.
 //
-// The job store and the diff are packages; the rest are commands the orchestrator runs,
-// people, and a console page, so they are actors.
+// The job store and the diff are packages; the rest are actors.
 namespace leaseLoop;
 
 import "magus";

@@ -804,8 +804,7 @@ test "substituteVersionTokens is a no-op before any release has shipped" {
 
 // writeFigures re-exports the registry's writer so the magusfile can reach it through
 // render.buzz. It lives behind this module because the registry may have exactly one
-// importer, and the site render is the consumer that cannot give it up. Returns the
-// findings, which the caller fails on.
+// importer, and the site render is it. Returns the findings, which the caller fails on.
 export fun writeFigures(dir: str) > [str] !> any {
     return diagrams\writeFigures(dir);
 }
@@ -821,13 +820,11 @@ export object RunOrderItem {
 // Markdown. Goldmark passes block-level HTML through untouched, so the figure lands in the
 // flow without a fenced block or a client-side renderer.
 //
-// Capped: past CapGeneratedNodes the placement produces a wall of boxes nobody can read, and
-// the table immediately above already carries the same relationships. Returning "" there is
-// a deliberate omission, not a failure.
+// Returns "" past CapGeneratedNodes: the placement is unreadable there, and the table above
+// carries the same relationships.
 //
-// A target is no directory, so each box is an actor and each edge a hand edge; generated: true
-// lifts the hand-authored budgets, since the workspace's own graph has no author to hold to
-// them.
+// A target is not a directory, so each box is an actor and each edge a hand edge. generated:
+// true lifts the hand-authored budgets, which a generated graph has no author to hold to.
 final CapGeneratedNodes = 24;
 
 export fun dependencyFigure(id: str, title: str, items: [RunOrderItem]) > str {
@@ -848,9 +845,7 @@ export fun dependencyFigure(id: str, title: str, items: [RunOrderItem]) > str {
             if (need != null) { f.flowAcross(need!, dst: boxes[it.name]!); }
         }
     }
-    // A layout failure means the figure would be unreadable. Dropping it is the right
-    // outcome, but SAY so: swallowing it silently is how eight run-order figures once
-    // vanished unnoticed.
+    // A layout failure drops the figure, but loudly: a silent drop goes unnoticed.
     try {
         final svg = figure\draw(f, theme: figure\Theme.page);
         return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";

@@ -1,30 +1,13 @@
-// site/diagrams/target-order.buzz: the order a project's targets compose in. The one claim:
-// magus requires only that ci exists, and everything else here is the order this workspace
-// recommends and its root project runs. Only ci takes the accent.
+// site/diagrams/target-order.buzz: the order a project's targets compose in. magus requires
+// only that ci exists (MGS1001 when no project in scope declares it; doctor's ci-target check);
+// the rest is the order this workspace recommends. Only ci takes the accent.
 //
-// What is enforced, and where:
-//   ci      run.go:283-298 refuses `magus run ci` / `magus affected ci` with MGS1001 when no
-//           project in the selected scope declares ci; internal/doctor/checks.go:138
-//           (checkCITarget, registry.go:145 "ci-target") fails doctor when no project in the
-//           workspace does. A project without ci is skipped, not refused.
-//   cd      nothing requires it. types/charm.go:25-32 reserves the name, so the typo guard
-//           accepts it, and run.go:256-260 strips only rw and update from a ci run, so cd
-//           survives into one. This repository never runs ci:cd; cd.yaml delivers with
-//           image-build:cd and graph-generate:cd.
-// MGS1003 (checks.go:683) flags fragment names such as vet or audit, as advice only.
+// A shared order keeps `magus run <verb> <project>` meaning one thing across projects. Lint
+// reports and format rewrites, so they stay two targets; security reads advisory data outside
+// the tree, so it is its own step.
 //
-// Why a recommendation at all: when each project names its own lint, format, security or
-// test target, or folds lint into format, nobody can rely on `magus run <verb> <project>`
-// meaning the same thing across projects. Lint reports and format rewrites, so they stay
-// two targets; security reads advisory data outside the tree, so it is its own step.
-//
-// Edges are the root magusfile's ctx.needs calls, except install -> generate, which is
-// docs/magusfile.buzz's: the root is Go and declares no install. Other projects deviate,
-// per `magus describe target ci <project>`:
-//   .                 lint -> build -> test -> security -> generate
-//   console           install -> lint -> test -> build -> security (lint skips format)
-//   docs              generate -> lint -> test -> build (security declared, not in ci)
-//   libs/diagnostics  lint -> build -> test (no security)
+// Edges are the root magusfile's ctx.needs calls, except install -> generate, which is docs':
+// the root declares no install. Other projects deviate; see `magus describe target ci <project>`.
 //
 // A target is a declaration in a magusfile, not a directory, so every box is an actor.
 namespace targetOrder;

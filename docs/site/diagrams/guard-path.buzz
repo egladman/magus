@@ -1,11 +1,9 @@
-// site/diagrams/guard-path.buzz: what happens between an agent's tool call and the verdict it gets back.
+// site/diagrams/guard-path.buzz: what happens between an agent's tool call and its verdict.
+// Built-in rules run first; the workspace's rules see only what they let through and can only
+// add to the verdict, which carries its own next step and takes the accent.
 //
-// The figure has one claim: one command judges every call, and the verdict it returns
-// carries its own next step. The built-in rules run first; the workspace's rules only
-// see what they let through and can only add to the verdict. The accent is the verdict.
-//
-// The hook runs magus as a separate process, the workspace's rules are a Buzz file, and the
-// verdict is a value the guard returns, so those are actors. The Go connectors are imports.
+// The hook's process, the workspace's rule file and the verdict are not packages, so they are
+// actors.
 namespace guardPath;
 
 import "magus";

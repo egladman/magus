@@ -1,25 +1,12 @@
-// site/diagrams/inputs-outputs.buzz: where a target's globs stop, and what reaches its cache key.
+// site/diagrams/inputs-outputs.buzz: where a target's globs stop, and what reaches its cache
+// key. An output glob stops at a nested project's directory, an input glob does not, and a
+// project handle is the declared way across. The accents are the key and that crossing.
 //
-// The figure has one claim: an output glob stops at a nested project's directory, an input
-// glob does not, and a project handle is the declared way across. The accents are the key
-// and the handle's crossing.
+// Rules drawn: types/workspace.go (a nested project owns its files), internal/cache
+// (NestedDirs narrows a snapshot, never the key), MGS3001 (a write into a descendant project),
+// describe.go (a cross-project input's owner joins DependsOn).
 //
-// The boundary rules it draws, as the code states them:
-//   types/workspace.go:91 "A file inside a nested project is that project's, so
-//     `**/gen/*.go` claims the root's gen/ and not a nested project's, while a declared
-//     cross-project output such as `leaf/gen/*.go` still reaches in."
-//   internal/cache/cache.go:151 NestedDirs is "Unhashed: it narrows what a snapshot records
-//     and a replay writes, never the key." The source walk (hash.go expandSources) takes no
-//     nested dirs, so an input glob matches inside them.
-//   project/affected.go:287 "the root's "**/*.go" reaches every nested Go file in this
-//     very repo".
-//   internal/audit/audit.go:382 MGS3001: "project %q target %q wrote into descendant
-//     project %q".
-//   describe.go:400 a cross-project input's owner "is also unioned into DependsOn".
-//
-// The source walk, the key and the snapshot are one package, internal/cache, which imports
-// the claim rule from types. The globs are declarations in magusfiles and the tool probe is
-// a step of the run, so those are actors.
+// The globs are magusfile declarations and the tool probe is a run step, so they are actors.
 namespace inputsOutputs;
 
 import "magus";

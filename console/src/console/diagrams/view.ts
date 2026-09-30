@@ -1,14 +1,13 @@
-// view.ts - turns the server's SVG into the figure on the page and builds what sits beside it:
-// the node list that is the figure's accessible twin, and the inline notice a refused figure
-// becomes. No listeners here beyond the list's own; interact.ts adds the rest.
+// Turns the server's SVG into the page's figure and builds its node list and inline notices.
+// Listeners beyond the list's own live in interact.ts.
 
 import { h } from "../view";
 import type { DiagramNode } from "./api";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// sourceHref fills a source_url template for an anchor. Anchors name directories, so there is no
-// line to fill and the fragment goes. "" when there is no template or no anchor.
+// sourceHref fills a source_url template for an anchor. Anchors name directories, so the line
+// fragment is dropped. "" when there is no template or no anchor.
 export function sourceHref(template: string, anchor: string): string {
   if (!template || !anchor) return "";
   const path = anchor.split("/").map(encodeURIComponent).join("/");
@@ -19,8 +18,7 @@ function isSvg(el: Element | null): el is SVGSVGElement {
   return el !== null && el.namespaceURI === SVG_NS && el.localName === "svg";
 }
 
-// The figure is the server's own drawing, but it is still markup from a response: anything that
-// could run or embed is dropped before it reaches the page.
+// The server drew it, but it is still markup from a response: drop anything that could run or embed.
 function sanitize(root: Element): void {
   for (const el of [...root.querySelectorAll("script, foreignObject, iframe")]) el.remove();
   for (const el of [root, ...root.querySelectorAll("*")]) {
@@ -37,9 +35,8 @@ export interface PrepareOptions {
   readonly sourceUrl: string;
 }
 
-// prepareSvg parses the server's SVG and makes it the page's figure: graphics roles, every node
-// named, every anchored node a real link that works before any script runs, and no fixed size
-// so the frame decides it. A node the server already linked (Style.anchorHref) keeps its link.
+// prepareSvg parses the server's SVG into the page's figure: graphics roles, every node labelled,
+// every anchored node a link that works without script, no fixed size. Server links are kept.
 export function prepareSvg(text: string, opts: PrepareOptions): SVGSVGElement {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const parsed = doc.documentElement;
@@ -97,7 +94,7 @@ export interface NodeListOptions {
 }
 
 // renderNodeList is the figure in words: every box, its source link, and a control that focuses
-// it in the drawing. It is what a screen reader reads first and what a reader on a phone taps.
+// it in the drawing.
 export function renderNodeList(list: HTMLElement, opts: NodeListOptions): void {
   list.replaceChildren();
   for (const n of opts.nodes) {
@@ -122,7 +119,7 @@ export function renderNodeList(list: HTMLElement, opts: NodeListOptions): void {
   }
 }
 
-// markListFocus mirrors the figure's focus in the list, so the words and the drawing agree.
+// markListFocus mirrors the figure's focus in the list.
 export function markListFocus(
   list: HTMLElement,
   focused: string | null,
@@ -137,8 +134,7 @@ export function markListFocus(
 
 export type NoticeTone = "danger" | "warning" | "info";
 
-// notice is the console's inline strip: a full-bleed PF alert with its icon slot, severity in the
-// left rule (diagrams.css). The server's own sentence is the body; it names the fix.
+// notice builds the console's inline alert; severity shows in the left rule (diagrams.css).
 export function notice(tone: NoticeTone, title: string, body: string): HTMLElement {
   const el = h("div", "pf-v6-c-alert pf-m-inline pf-m-" + tone + " console-diagrams__notice");
   el.setAttribute("role", tone === "info" ? "status" : "alert");

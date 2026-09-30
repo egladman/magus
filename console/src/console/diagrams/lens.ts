@@ -1,6 +1,5 @@
-// lens.ts - the declared lens a figure is drawn through (scope, focus, depth), its query string
-// for the server render, and its round trip through the console's #fragment so a view is
-// addressable.
+// The lens a figure is drawn through (scope, focus, depth): its query string for the server and
+// its round trip through the console's #fragment.
 
 export interface Lens {
   readonly scope: readonly string[];
@@ -29,8 +28,8 @@ export interface LensFields {
   depth: string;
 }
 
-// parseLensFields reads the form. Scope is comma or whitespace separated. Depth without a focus
-// is refused here because the server refuses it too, and a form error beats a round trip.
+// parseLensFields reads the form; scope is comma or whitespace separated. Depth without a focus
+// is refused here, as the server would refuse it.
 export function parseLensFields(fields: LensFields): LensParse {
   const scope = fields.scope
     .split(/[\s,]+/)
@@ -79,9 +78,8 @@ function inScope(anchor: string, scope: readonly string[]): boolean {
   });
 }
 
-// cutDeclaration is the handler's graph.cut, so a lens applied in the browser keeps exactly the
-// nodes and edges the server would: scope first, then everything within depth undirected hops of
-// the focus, walking only nodes the scope kept. It never adds an edge.
+// cutDeclaration mirrors the handler's graph.cut: scope first, then the nodes within depth
+// undirected hops of the focus, walking only nodes the scope kept. It never adds an edge.
 export function cutDeclaration(decl: Declaration, lens: Lens): Cut {
   const depth = lens.depth ?? (lens.focus ? 1 : 0);
   if (!lens.focus && depth > 0) return { ok: false, error: "depth needs a focus" };
@@ -129,8 +127,7 @@ export function lensFields(lens: Lens): LensFields {
   };
 }
 
-// describeLens is the handler's Lens.describe, so a figure laid out in the browser carries the
-// same subtitle as one the server drew. The server defaults depth to 1 under a focus.
+// describeLens mirrors the handler's Lens.describe, including its default depth of 1 under a focus.
 export function describeLens(lens: Lens): string {
   const parts: string[] = [];
   if (lens.scope.length) parts.push("scope " + lens.scope.join(", "));
@@ -138,8 +135,7 @@ export function describeLens(lens: Lens): string {
   return parts.join("; ");
 }
 
-// A view is addressable: the figure and its lens ride in the #fragment beside whatever else the
-// console keeps there (port, token, demo), which these keys never touch.
+// The #fragment keys a view owns; the console's other keys (port, token, demo) are left alone.
 const VIEW_KEYS = ["diagram", "scope", "focus", "depth"];
 
 export interface DiagramView {

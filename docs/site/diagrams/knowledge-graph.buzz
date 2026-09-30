@@ -1,11 +1,8 @@
-// site/diagrams/knowledge-graph.buzz: where the knowledge graph's nodes come from and who reads them.
+// site/diagrams/knowledge-graph.buzz: where the knowledge graph's nodes come from and who reads
+// them. Every source lands in its own shard, and every reader asks the one merged graph, which
+// takes the accent, the same four verbs.
 //
-// The figure has one claim: every source lands in a shard of its own, and every reader
-// asks the one merged graph the same four verbs. The accent is that graph.
-//
-// The adapters are files of internal/graph/knowledge, so they are actors writing into the
-// package that stores and merges their shards. The readers' connectors are real imports:
-// the CLI and the MCP tools both reach the graph through the root package's verbs.
+// The adapters are files of internal/graph/knowledge, not packages, so they are actors.
 namespace knowledgeGraph;
 
 import "magus";

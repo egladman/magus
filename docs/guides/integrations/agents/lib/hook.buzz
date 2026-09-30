@@ -198,11 +198,9 @@ export fun workspaceRootAt(dir: str) > str {
 // 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
 // unjudged because the session directory was not the workspace root.
 //
-// cwd is the directory the host says the call runs in, walked first. A host runs a
+// cwd, the directory the host says the call runs in, is walked first: a host runs a
 // subagent's hooks from the session's directory while the subagent works in its own
-// worktree, and the session's binary, or PATH's, is not the one that tree builds.
-// Measured 2026-09-30: every write two worktree workers made was graded by a PATH
-// magus older than the rules their tree carried.
+// worktree, whose binary is the one that tree builds.
 export fun resolveBin(cwd: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }

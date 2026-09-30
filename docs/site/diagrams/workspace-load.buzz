@@ -1,12 +1,10 @@
-// site/diagrams/workspace-load.buzz: how magus reads a workspace in before any target runs.
+// site/diagrams/workspace-load.buzz: how magus reads a workspace in before any target runs. A
+// target exists only because a magusfile exported it, and the project model built from those
+// magusfiles, which takes the accent, is what the cache, describe and a command's directory
+// context read.
 //
-// The figure has one claim: a target exists only because a magusfile exported it, and the
-// project model the load builds from those magusfiles is the one thing the cache, describe
-// and a command's directory context read. The accent is that model.
-//
-// Every edge here is an import into types, where the model lives: the steps that build it
-// and the readers that answer from it all name the same types. The root package runs the
-// load, so its edges to each step are hidden; drawn, every box would hang off it.
+// Every edge is an import into types, where the model lives. The root package's edges to each
+// step are hidden; drawn, every box would hang off it.
 namespace workspaceLoad;
 
 import "magus";

@@ -1,7 +1,6 @@
-// main.ts - the Diagrams surface: the figures the server can draw, one at a time, through a
-// declared lens. The server's SVG is on the page the moment it arrives and is the figure;
-// interact.ts upgrades it in place, and the Buzz runtime (wasm.ts), loaded only on request, takes
-// over lens changes so they lay out in the page without a round trip.
+// The Diagrams surface: one server-drawn figure at a time, through a declared lens. The server's
+// SVG is the figure as soon as it arrives. The Buzz runtime (wasm.ts), loaded only on request,
+// lays out later lens changes in the page without a round trip.
 
 import { reportFailure } from "../../lib/notifications";
 import { adoptServerOrigin, parseHash, resolveServerHost } from "../../lib/server";
@@ -39,8 +38,8 @@ import {
 
 const SOURCE = "Diagrams";
 
-// Per mount, so each mount's control reflects its own request. The wasm itself is one Go
-// instance per page: ensureBuzz loads it once and a second mount's load resolves at once.
+// Per mount, so each mount's control reflects its own request. The wasm is one Go instance per
+// page: ensureBuzz loads it once.
 type RuntimeState =
   | { readonly kind: "off" }
   | { readonly kind: "loading" }
@@ -119,8 +118,8 @@ function textInput(name: string, placeholder: string): HTMLInputElement {
   return i;
 }
 
-// build lays the surface out: the bar (figure and lens), the figure's own controls in a row
-// above it (never over it), then the figure beside its node list.
+// build lays the surface out: the bar (figure and lens), the figure's controls in a row above it
+// (never over it), then the figure beside its node list.
 export function build(host: HTMLElement): DiagramsRefs {
   const page = h("section", "console-diagrams");
   page.setAttribute("aria-label", "Diagrams");
@@ -273,8 +272,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     markListFocus(refs.nodes, id, lit);
   };
 
-  // mount puts an SVG on the page. A first figure fits; a re-layout of the same figure swaps in
-  // place keeping the reader's zoom, fading unless motion is reduced.
+  // A first figure fits; a re-layout of the same figure swaps in place keeping the reader's zoom.
   const mount = (rendered: RenderedDiagram, keepView: boolean): void => {
     const svg = prepareSvg(rendered.svg, { nodes: rendered.nodes, sourceUrl: rendered.sourceUrl });
     const old = refs.frame.querySelector("svg");
@@ -357,8 +355,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     } else if (base?.id !== id) base = null;
   };
 
-  // renderInPage lays the figure out with the runtime. False when it cannot (no runtime, no
-  // whole-figure declaration to cut), so the caller asks the server instead.
+  // False when the runtime cannot lay the figure out (not loaded, no declaration to cut), so the
+  // caller asks the server instead.
   const renderInPage = (id: string, lens: Lens): boolean => {
     const rt = runtimeState;
     if (rt.kind !== "ready" || !base || base.id !== id) return false;

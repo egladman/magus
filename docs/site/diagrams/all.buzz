@@ -1,6 +1,6 @@
-// site/diagrams/all.buzz - the registry every consumer reads. diagrams-generate lays each
-// figure out from the knowledge graph and writes the committed files; the site render inlines
-// the committed page copy, so rendering a page never needs the symbol index.
+// The registry every consumer reads. diagrams-generate lays each figure out from the knowledge
+// graph and writes the committed files; the site render inlines the committed page copy, so
+// rendering a page never needs the symbol index.
 namespace diagrams;
 
 import "assert";
@@ -222,10 +222,8 @@ test "prune removes an obsolete owned file and leaves the rest" {
     fs\removeAll(dir);
 }
 
-// rendered caches the one result pageSvgs can ever produce. Not a speed tweak: on the
-// nanbox build every string a render creates is pinned in the global object heap for the
-// life of the process, so each repeat call permanently retained about a megabyte.
-// See plans/reclaim-the-buzz-heap.md.
+// rendered caches pageSvgs' one possible result. Not for speed: on the nanbox build every
+// string a render creates stays pinned for the process's life. See plans/reclaim-the-buzz-heap.md.
 var rendered: {str: str}? = null;
 
 // pageSvgs is the committed page copy of each figure, keyed by id. diagrams-generate wrote

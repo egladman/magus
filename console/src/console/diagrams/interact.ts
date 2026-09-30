@@ -1,10 +1,8 @@
-// interact.ts - the upgrade a static figure gets once it is on the page: viewBox zoom and pan,
-// fit, focus-and-dim, hover, and keyboard travel through the nodes. It only adds listeners and
-// data-* attributes; the SVG the server drew stays the figure, links and all.
+// Upgrades a static figure on the page: viewBox zoom and pan, fit, focus-and-dim, hover, and
+// keyboard travel through the nodes. It only adds listeners and data-* attributes.
 //
-// Deliberately NOT the graph explorer's camera: that one zooms on a plain wheel because it owns
-// the whole pane, while a figure sits in a scrolling page, so here a plain wheel scrolls the page
-// and only ctrl/cmd+wheel (which is also what a trackpad pinch sends) zooms.
+// Unlike the graph explorer, a plain wheel scrolls the page, since the figure sits in one; only
+// ctrl/cmd+wheel, which a trackpad pinch also sends, zooms.
 
 export interface ViewBox {
   readonly x: number;
@@ -127,9 +125,8 @@ export function parseEdge(s: string | null): readonly [string, string] | null {
   return [s.slice(0, i), s.slice(i + 2)];
 }
 
-// neighbours is focus plus every node one declared edge away, in either direction. Declared
-// only: edges come from the figure's own data-edge set, so focus, dim and hover never show a
-// relation the figure does not draw, and a node with no edges lights only itself.
+// neighbours is focus plus every node one edge away in either direction. Edges come only from the
+// figure's own data-edge set, so a highlight never shows a relation the figure does not draw.
 export function neighbours(
   edges: readonly (readonly [string, string])[],
   focus: string,
@@ -151,8 +148,8 @@ export interface Placed {
 // Two nodes whose tops sit this close read as one row.
 const ROW_SLACK = 24;
 
-// readingOrder is top to bottom, then left to right within a row, the order a reader scans a
-// figure in, which declaration order is not once flow has laid it out.
+// readingOrder is top to bottom, then left to right within a row. Declaration order is not the
+// order a reader scans once flow has laid the figure out.
 export function readingOrder(nodes: readonly Placed[]): string[] {
   const sorted = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x);
   const rows: Placed[][] = [];
@@ -174,7 +171,7 @@ export interface KeyInput {
 }
 
 // figureKey maps a key pressed inside the figure. A modified key is never ours: ctrl/cmd with
-// + - 0 is the browser's own page zoom, and the console's chords all carry a modifier.
+// +, -, 0 is the browser's page zoom, and the console's chords all carry a modifier.
 export function figureKey(e: KeyInput): FigureAction | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
   switch (e.key) {
@@ -194,8 +191,6 @@ export function figureKey(e: KeyInput): FigureAction | null {
       return null;
   }
 }
-
-// ---- the DOM half ------------------------------------------------------------------------
 
 export interface FigureOptions {
   // The element that frames the svg; keys are read here, so they reach the figure only while

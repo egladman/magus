@@ -1,7 +1,5 @@
-// api.ts - the typed client for GET /api/v1/diagrams and /api/v1/diagrams/{id}. It is the
-// surface's one choke point to the server: every answer that is not a figure is reported here (a
-// toast at minimum) AND handed back as a read the view renders as an inline notice, so no failure
-// can reach the page as an empty figure.
+// Typed client for GET /api/v1/diagrams and /api/v1/diagrams/{id}. Every answer that is not a
+// figure is reported here (a toast at minimum) and also returned as a read the view shows inline.
 
 import { reportFailure } from "../../lib/notifications";
 import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/server";
@@ -13,7 +11,7 @@ export interface DiagramEntry {
   readonly kind: string;
   readonly title: string;
   readonly project?: string;
-  // Set only on the import figure: false means the server has no symbol index to draw it from.
+  // Set only on the import figure: false means the server has no symbol index for it.
   readonly indexed?: boolean;
 }
 
@@ -34,9 +32,8 @@ export interface RenderedDiagram {
   readonly sourceUrl: string;
 }
 
-// DiagramRead keeps the server's answers apart because each asks something different of the
-// reader: a refused figure (422) names the lens change that fixes it, an unindexed one (409)
-// names the command that builds the index, a bad lens (400) names the field.
+// DiagramRead keeps the server's answers apart because each names a different fix: a refused
+// figure (422) the lens change, an unindexed one (409) the index command, a bad lens (400) the field.
 export type DiagramRead<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "refused"; readonly detail: string }
@@ -44,7 +41,7 @@ export type DiagramRead<T> =
   | { readonly kind: "bad-lens"; readonly detail: string }
   | { readonly kind: "absent"; readonly detail: string }
   | { readonly kind: "unreadable"; readonly detail: string }
-  // The caller aborted: a superseded request or a closed pane. Not a failure, never shown.
+  // A superseded request or a closed pane. Not a failure; never shown.
   | { readonly kind: "aborted" };
 
 // DiagramFailure is every read a reader is shown: not a figure, not an abort.
@@ -80,8 +77,8 @@ export function renderDiagram(
   return read(opts, diagramUrl(opts.host, id, lens), "diagram " + id, parseRendered);
 }
 
-// readFailure maps a non-2xx status and the body the server wrote with http.Error (plain text,
-// used verbatim: the server's sentence names the fix and a restatement here would be a guess).
+// readFailure maps a non-2xx status to a failure. The server's plain-text body is used verbatim,
+// since it names the fix.
 export function readFailure(status: number, body: string, what: string): DiagramFailure {
   const detail = body.trim();
   switch (status) {
@@ -125,7 +122,7 @@ async function read<T>(
     try {
       body = await res.text();
     } catch (e) {
-      // reported: the status below is what the reader acts on; the unread body only loses words
+      // reported: by the status below; an unread body only loses words
       body = errMessage(e);
     }
     const failure = readFailure(res.status, body, what);

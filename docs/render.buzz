@@ -418,9 +418,8 @@ fun generateJsBundles() > void !> any {
     proc\exec("pnpm", ["run", "build"], ".", {});
 }
 
-// site_figures writes every figure's committed SVGs and receipt for the magusfile's
-// diagrams-generate target and returns the findings, forwarding to engine/page, which owns
-// the registry import.
+// site_figures writes every figure's SVGs and receipt for the diagrams-generate target and
+// returns the findings. It forwards to engine/page, which owns the registry import.
 export fun site_figures(dir: str) > [str] !> any {
     return writeFigures(dir);
 }

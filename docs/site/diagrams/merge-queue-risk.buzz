@@ -1,13 +1,10 @@
 // site/diagrams/merge-queue-risk.buzz: how a candidate's risk decides what the merge queue
-// runs. The one claim: the queue asks the workspace two questions of every candidate, which
-// projects its change reaches and, for a conflicted file, whether the edit is low risk, and
-// the answers alone pick between gating those projects, gating every project, and kicking
-// the change back. The accent is on the classifier, the only step that reads what an edit is.
+// runs. The queue asks which projects a change reaches and, for a conflicted file, whether the
+// edit is low risk; the answers pick between gating those projects, gating every project, and
+// kicking the change back. The accent is on the classifier.
 //
-// The tier table gate sizing builds on the same classes is not drawn: this repository's
-// queue gate is `magus run ci:gha` on the change's projects (hack/ci/merge-queue.buzz), which
-// runs no sizing, and a merge reads the class alone. The gate is that Buzz script and the
-// verdict a value the queue applies, so both are actors, as is the decision.
+// Gate sizing's tier table is not drawn: this repository's queue gate
+// (hack/ci/merge-queue.buzz) runs no sizing. The gate, verdict and decision are actors.
 namespace mergeQueueRisk;
 
 import "magus";

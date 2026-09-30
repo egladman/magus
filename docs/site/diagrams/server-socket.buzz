@@ -26,9 +26,7 @@ export fun serverSocketFigure() > figure\Figure !> any {
                 + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
         .actor(cli)
         .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
-        // --open is the destination flag; --serve only changes how the graph is handed
-        // over (a loopback server rather than a URL fragment), so naming --serve alone
-        // would describe the transport and omit the command.
+        // Not --serve: it only picks the transport, so naming it alone would omit the command.
         .box(share, label: "Loopback server", sub: "graph export --open", look: figure\Look.optional)
         .edgesFromGraph()
         .flowIn(cli, dst: sock, label: "dispatch")

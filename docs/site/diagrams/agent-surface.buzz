@@ -1,14 +1,9 @@
-// site/diagrams/agent-surface.buzz: what an agent host gets from magus, and the one gate
-// every call it makes crosses.
+// site/diagrams/agent-surface.buzz: what an agent host gets from magus. Skills and hook
+// wiring install before a session; after that every tool call, MCP included, reaches the
+// guard's hook first. The accent is on that gate.
 //
-// The figure has one claim: skills and hook wiring are installed before a session, and from
-// then on every tool call the host makes reaches the guard's hook first, MCP calls
-// included. The accent pair (the guard box, the hook connector) is spent on that gate.
-//
-// Hints sit last because three surfaces render through them: a skill may name only a
-// command or tool internal/hint registers, the guard's denials carry its invocations, and
-// the MCP replies carry its next fields. Those three connectors are imports. The harness
-// spells are Buzz and the host is outside magus, so they are actors.
+// Hints sit last because skills, guard denials and MCP replies all render through them. The
+// harness spells are Buzz and the host is outside magus, so they are actors.
 namespace agentSurface;
 
 import "magus";

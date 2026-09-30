@@ -1,14 +1,9 @@
-// site/diagrams/buzz-engine.buzz: how a Buzz program runs, and what decides what it can
-// reach.
+// site/diagrams/buzz-engine.buzz: how a Buzz program runs and what it can reach. Every host
+// runs the same gopherbuzz pipeline and differs only in the modules it registers; the
+// playground's WASM-safe subset takes the accent.
 //
-// The figure has one claim: every host runs the same gopherbuzz pipeline, and a host
-// differs only in the modules it registers. The magusfile engine gets every host module;
-// the browser playground gets the WASM-safe subset and nothing else. The accent pair (the
-// generated module sets, their connector to the host modules) is spent on that subset.
-//
-// Parse, check and compile are the one libs/gopherbuzz package. The playground is a js/wasm
-// build the symbol index does not read, so it is an actor. Every other connector is an
-// import; the hidden ones carry value types, not a stage.
+// The playground is a js/wasm build the symbol index does not read, so it is an actor. The
+// hidden connectors carry value types, not a stage.
 namespace buzzEngine;
 
 import "magus";

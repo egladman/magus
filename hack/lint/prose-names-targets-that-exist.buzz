@@ -1,12 +1,9 @@
 // prose-names-targets-that-exist: a fenced `magus run <target> <project>` in a doc must
-// name a target that project defines. A reader copies the line and gets "unknown target",
-// or worse, trusts a gate the page describes and nothing runs.
+// name a target that project defines.
 //
-// The docs adapter resolves each fenced run command against the workspace's targets: a
-// resolved one is a `documents` edge, and one naming a real project that lacks the target
-// is recorded on the doc node as unknown_targets. This rule reads those records through
-// magus\query. A command naming no project, or a project this workspace does not have, is
-// an illustration and is never a finding.
+// The docs adapter records a command naming a real project that lacks the target as
+// unknown_targets on the doc node; this rule reads that through magus\query. A command
+// naming no project, or a project this workspace does not have, is an illustration.
 namespace prosetargets;
 
 import "assert";

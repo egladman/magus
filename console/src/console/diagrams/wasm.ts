@@ -1,11 +1,9 @@
-// wasm.ts - the Buzz runtime a figure upgrades to on request: the docs playground's wasm, loaded
-// the way docs/src/site/buzz-runtime.ts loads it. It embeds magus/figure, so the page builds a
-// figure\Figure record from the rows the server sent and hands it to buzz.drawFigure, which
-// calls figure\draw exactly as internal/handler/diagram does. No Buzz source is written here.
-// Once loaded, a lens change re-lays the figure out here instead of asking the server.
+// The Buzz runtime a figure upgrades to on request: the docs playground's wasm, which embeds
+// magus/figure. The page builds a figure\Figure record from the server's rows and hands it to
+// buzz.drawFigure, which calls figure\draw as internal/handler/diagram does.
 //
-// Never loaded automatically: it is 4.2MB and a Go runtime, and the static render already is the
-// figure. The explicit control is the whole policy.
+// Never loaded automatically: it is a multi-megabyte Go runtime, and the static render is
+// already the figure.
 
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
@@ -29,10 +27,9 @@ export interface BuzzRuntime {
   drawFigure(figure: Figure, anchorHref: string): DrawResult;
 }
 
-// The figure\Figure record and its parts, field for field as magus/figure declares them and
-// libs/figure/embed.go mirrors them. An enum crosses as its case's name, which the runtime
-// decodes into the case; it refuses a member the record does not declare and a name no case
-// holds.
+// The figure\Figure record and its parts, field for field as magus/figure declares them (mirrored
+// in libs/figure/embed.go). An enum crosses as its case's name; the runtime refuses an undeclared
+// member and an unknown case name.
 export type Look = "plain" | "focal" | "store" | "external" | "input" | "optional" | "decision";
 export type Stroke = "plain" | "focal" | "external" | "optional";
 export type Direction = "across" | "down";
@@ -180,8 +177,8 @@ function diagOf(v: unknown): BuzzDiag | null {
     : null;
 }
 
-// runtimeFrom narrows globalThis.buzz, which the wasm's Go main() installs. A wasm built before
-// drawFigure existed is no runtime here.
+// runtimeFrom narrows globalThis.buzz, which the wasm's Go main() installs. A wasm without
+// drawFigure is not a runtime here.
 export function runtimeFrom(g: unknown): BuzzRuntime | null {
   if (typeof g !== "object" || g === null) return null;
   const buzz = (g as { buzz?: unknown }).buzz;
@@ -258,7 +255,7 @@ export function ensureBuzz(opts: LoadOptions = {}): Promise<BuzzRuntime> {
     document.head.append(script);
   });
   loading.catch(() => {
-    // reported: the caller of ensureBuzz reports this same rejection; dropping it lets a retry reload
+    // reported: by ensureBuzz's caller; forgetting the load lets a retry reload
     loading = null;
   });
   return loading;
@@ -284,7 +281,7 @@ export async function startGo(
   }
 }
 
-// figureId is the handler's ids{}.of for the figure id: letters, digits, - and _ survive.
+// figureId is the handler's ids{}.of for the figure id: letters, digits, '-' and '_' survive.
 export function figureId(id: string): string {
   const base = id.replace(/[^A-Za-z0-9_-]/g, "-").replace(/^-+|-+$/g, "");
   return base || "root";
@@ -315,9 +312,8 @@ export function actorNames(nodes: readonly DeclaredNode[]): string[] {
 // IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
 export const IMPORTS = "imports";
 
-// drawnNodes re-keys the server's node rows by the id magus/figure draws as data-node: a box by
-// its directory, an actor as external:<name>. The SVG's data-edge pairs use those ids, so the
-// node list, focus and a lens cut need them too.
+// drawnNodes re-keys the server's node rows by the data-node id magus/figure draws (a box by its
+// directory, an actor as external:<name>), which the SVG's data-edge pairs also use.
 export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): DeclaredNode[] {
   if (claim === IMPORTS) return nodes.map((n) => ({ ...n, id: n.anchor }));
   const names = actorNames(nodes);

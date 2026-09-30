@@ -1,25 +1,10 @@
-// site/diagrams/bootstrap.buzz: how a checkout gets its first ./magus, and why it only ever needs one go run.
+// site/diagrams/bootstrap.buzz: how a checkout gets its first ./magus. The guard allows go run
+// once, in a checkout root with no magus binary, and even then it runs the real go-build
+// target (internal/guard/catalog.go). The accent is that command and the escape back to it.
 //
-// The figure has one claim: running magus through the Go toolchain is a primitive magus
-// allows exactly once, when there is no magus to run, and even then it runs the real
-// go-build target; everything after is magus building magus. The accent is that one
-// command and the escape that returns to it.
-//
-// The rules it draws, as the code states them:
-//   internal/guard/catalog.go:187  "One command is exempt, in a checkout of magus itself:
-//                                    `go run -trimpath ./cmd/magus run go-build --no-cache .`,
-//                                    alone on its line, in a checkout root that has no `magus`
-//                                    binary yet, is advised rather than refused"
-//   internal/guard/catalog.go:189  "Every other raw go command in that root, a bare
-//                                    `go build -o magus ./cmd/magus` included, is refused and
-//                                    served the bootstrap."
-//   internal/guard/bootstrap.go:150 "Not a bootstrap: <root> already has a magus binary."
-//   hack/policy/stale.buzz:293      the escape: `mv magus magus.old`, then the same go run.
-//
-// The escape is the one edge against the flow: moving the stale binary aside puts the
-// checkout back in the state the exemption names. The bootstrap command, the go-build
-// target, the stale policy and the spell bytecode are commands, Buzz and embedded files, so
-// they are actors; the CLI's hop into the guard is an import.
+// The escape (hack/policy/stale.buzz: move the stale binary aside, then the same go run) is the
+// one edge against the flow. Commands, Buzz and embedded files are not packages, so they are
+// actors.
 namespace bootstrap;
 
 import "magus";

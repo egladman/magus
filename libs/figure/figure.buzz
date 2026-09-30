@@ -55,9 +55,8 @@ final MaxAccent = 2;
 final MaxEdgeLabel = 14;
 
 // HeaderPad is the band a title reserves above the figure. Content keeps its authored
-// coordinates and the whole group is translated down by this much, so a diagram never has
-// to leave room for its own heading by hand - volatility once put its first node four
-// pixels under the title, and every other diagram was guessing at the clearance.
+// coordinates and the whole group is translated down by this much, so no diagram leaves room
+// for its own heading by hand.
 final HeaderPad = 40;
 
 // The bottom LegendStrip px of a figure with a legend belong to the strip; a node there is
@@ -223,10 +222,8 @@ object Node {
     sub: str = "",
     tag: str = "",
     role: str = "default",
-    // Workspace-relative path this box claims to depict. Checked at build time: when the
-    // package is renamed or deleted the diagram fails rather than quietly describing a
-    // tree that no longer exists. Empty means the box depicts no single place in the code
-    // (an external actor, a decision), which is legitimate and not an omission.
+    // Workspace-relative path this box depicts, checked at build time so a rename or delete
+    // fails the diagram. Empty for a box that depicts no single place (an actor, a decision).
     anchor: str = "",
     // The line a symbol anchor starts on, 0 when the anchor is a directory or a whole file.
     line: int = 0,
@@ -292,9 +289,8 @@ object LegendItem {
 // arrowhead at the first definition.
 object Diagram {
     id: str = "",
-    // Set by layered() and flow's generated(): the node and edge budgets exist to stop a HAND-authored figure
-    // growing past what a reader can hold, and a graph computed from the workspace has no
-    // author to push back on. Every structural check still applies.
+    // Set by layered() and flow's generated(): lifts the node and edge budgets, which bound a
+    // hand-authored figure. Every structural check still applies.
     generated: bool = false,
     title: str = "",
     eyebrow: str = "",
@@ -370,8 +366,8 @@ fun isDecision(d: Diagram, id: str) > bool {
 }
 
 // edgeSegments returns an edge's route as axis-aligned segments, each [x1, y1, x2, y2].
-// It mirrors connectorPath's and routePath's branching exactly; they must agree, or the overlap check
-// below is validating a route nobody draws.
+// It must branch exactly as connectorPath and routePath do, or the overlap check below
+// validates a route nobody draws.
 fun edgeSegments(d: Diagram, e: Edge) > [[int]] {
     final geo = edgeGeometry(d, e);
     if (e.via.len() > 0) {
@@ -1064,8 +1060,7 @@ fun edgeStroke(kind: str, p: Palette) > str {
 // labels, then nodes, then the legend. Connectors go under nodes so a stroke cannot cross a
 // box face; a boundary goes under them because crossing it is what a connector is for.
 //
-// Style is defaulted rather than overloaded: a caller that only wants the design system as
-// shipped keeps writing renderSvg(d, palette), and one that wants a knob names it.
+// Style is optional: renderSvg(d, palette) draws the design system as shipped.
 fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     final errs = validate(d);
     if (errs.len() > 0) {
@@ -1077,10 +1072,9 @@ fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     var pad = 0;
     if (d.title != "" or d.eyebrow != "") { pad = HeaderPad; }
     final total = d.height + pad;
-    // optimization: collect fragments and join once. `svg = svg + part` copies the entire
-    // document accumulated so far on every element, and on the default nanbox build each
-    // intermediate is pinned in the global object heap for the life of the process, so those
-    // copies are never reclaimed. See plans/reclaim-the-buzz-heap.md.
+    // optimization: collect fragments and join once. `svg = svg + part` copies the whole
+    // document per element, and on the nanbox build every copy stays pinned in the heap.
+    // See plans/reclaim-the-buzz-heap.md.
     final parts: mut [str] = mut [<str>];
     parts.append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {d.width} {total}\""
         + " width=\"{d.width}\" height=\"{total}\" role=\"img\""
@@ -1635,8 +1629,7 @@ test "an invalid diagram fails the render rather than shipping crooked" {
 }
 
 // A diff nobody intended here is a default that drifted; a deliberate change to the design
-// system regenerates it. Last regenerated for the edge path's stable id, a fragment a link
-// can target.
+// system regenerates it.
 test "the default Style renders the pre-Style bytes" {
     final want = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" width="480" height="280" role="img" aria-labelledby="t-title t-desc" class="magus-diagram">`
         + `<title id="t-title">Two boxes</title><desc id="t-desc">a and b</desc><defs>`
@@ -1662,8 +1655,8 @@ test "the default Style renders the pre-Style bytes" {
         message: "naming the default explicitly changes nothing");
 }
 
-// A knob nothing reaches is not customization. Three field kinds at once - a double, an int
-// and a string - because each one reaches its attribute by a different formatting path.
+// Three field kinds (a double, an int and a string), because each reaches its attribute by a
+// different formatting path.
 test "a customized Style field reaches the attribute" {
     final styled = renderSvg(twoBox(), p: lightPalette(),
         s: Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }) catch "threw";
@@ -1675,9 +1668,7 @@ test "a customized Style field reaches the attribute" {
     std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
 }
 
-// The docs lease-loop figure, bend moved to the corridor's centre so both legs seat the
-// bend floor. Its RELEASE label once sat on the vertical crossing between decl and work,
-// its mask across both boxes.
+// The docs lease-loop figure, bend at the corridor's centre so both legs seat the bend floor.
 fun leaseLoopGeometry() > Diagram {
     return Diagram{
         id = "lease-loop", width = 960, height = 600,
@@ -2089,25 +2080,16 @@ fun fitLabel(label: str) > str {
 // column per rank, and the ranks left to right so every edge points forward.
 //
 // It is deliberately the dumbest placement that works: no crossing minimization, no
-// barycentre passes. flow() is the one that has them, for authored figures. It exists because the
-// workspace's own dependency graph has no author to place it, and it stays honest by
-// staying small - callers cap the node count and fall back to the table above the figure.
+// barycentre passes (flow() has them). Callers keep it small by capping the node count.
 
-// LayerStaggers are the per-column offsets layered() tries, in order. A single fixed value
-// cannot guarantee anything: an attach point is `node.y + h * k/(n+1)`, so two nodes at
-// different y can still land on the same one once slot counts differ, and their stubs then
-// run along each other. Rather than pretend a formula settles it, lay the graph out and
-// ASK the validator, shifting the columns until it stops complaining.
+// LayerStaggers are the per-column offsets layered() tries, in order. No single value works:
+// an attach point is `node.y + h * k/(n+1)`, so nodes at different y can share one once slot
+// counts differ. Each offset is laid out and checked by the validator until one is clean.
 //
-// Bounded and deterministic: same input, same answer. If nothing is clean the last attempt
-// is returned and the caller drops the figure (see dependencyFigure) rather than drawing
-// connectors nobody can trace.
-// Ascending, and the first clean one wins, so a graph pays only the offset it needs and the
-// common case still settles at 4. The list runs to one full row pitch (80): past that a
-// column has dropped a whole row and the staircase reads worse than the table the caller
-// falls back to. Six values used to be the whole search, and the docs run-order figure
-// needed more than that - it went unrendered for months while the graph had ample room
-// (its busiest column gap wants 10 channels of the 18 a gap provides).
+// Bounded and deterministic. If nothing is clean the last attempt is returned and the caller
+// drops the figure (see dependencyFigure).
+// Ascending, so a graph pays only the offset it needs. The list stops at one row pitch (80):
+// past that the staircase reads worse than the table the caller falls back to.
 final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
 
 fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
@@ -2280,9 +2262,8 @@ test "layered exceeds the authored budgets without complaint" {
     assert\equal(validate(d).len(), want: 0, message: "budgets are for hand-authored figures only");
 }
 
-// The regression this pins: distinct attach slots are NOT enough. Two connectors can leave
-// one box at different points and still turn onto the same crossing line, which is what put
-// overlapping vertical runs in the generated run-order figures.
+// Distinct attach slots are NOT enough: two connectors can leave one box at different points
+// and still turn onto the same crossing line.
 test "two connectors sharing a crossing line are a finding" {
     final bad = Diagram{
         id = "t", width = 640, height = 400,
@@ -2319,8 +2300,8 @@ test "offsetting one bend clears the overlap" {
     assert\equal(validate(good).len(), want: 0, message: "distinct crossing lines are traceable");
 }
 
-// The generated path has to satisfy the same rule, and it is where the defect actually
-// shipped: a fan-out is the shape every run-order figure ends in.
+// The generated path must satisfy the same rule; a fan-out is the shape every run-order
+// figure ends in.
 test "layered fans siblings onto distinct crossing lines" {
     final d = layered("t", title: "fan out", desc: "one root, three children", items: [
         LayeredItem{ id = "root", label = "Root" },
@@ -5020,7 +5001,7 @@ fun serverHttpTwin(observed: Observed = Observed{}) > mut Sketch {
 }
 
 // observedServerScope is magus\importGraph() over internal/handler/*, internal/httpx and
-// internal/server on 09-29, declared the way docs/engine/page.buzz importFlow declares it.
+// internal/server, declared the way docs/engine/page.buzz importFlow declares it.
 fun observedServerScope() > mut Sketch {
     final pkgs = [
         "internal/handler/activity", "internal/handler/attention", "internal/handler/diff",
@@ -5854,8 +5835,8 @@ test "edge roles map onto the renderer's treatments" {
     std\assert(d.edges[0].claim == "flow", message: "a declared edge claims flow by default");
 }
 
-// The checker accepts a str where an enum is declared; the old string surface must still
-// fail loudly rather than paint a null role.
+// The checker accepts a str where an enum is declared; a string must fail loudly rather than
+// paint a null role.
 test "a string where a Role, EdgeRole or Claim belongs is a finding" {
     final msg = thrown(fig().node("a", role: "focal").node("b").edge("a", dst: "b", role: "focal", claim: "imports").legend("focal", label: "x"));
     final want = [
@@ -6173,8 +6154,7 @@ fun volatilityTwin() > mut Sketch {
         .edge("pass", dst: "volatile").edge("pass", dst: "regress");
 }
 
-// Bends are legs less one. hist->retry took five before its side vertex turned straight
-// onto the lane beside rate.
+// Bends are legs less one.
 test "a decision's out-edge to a target on its own midline takes the outbound vertex" {
     final d = volatilityTwin().diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
