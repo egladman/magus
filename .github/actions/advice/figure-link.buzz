@@ -211,11 +211,11 @@ fun oneLine(s: str) > str {
         }
         i = i + 1;
     }
-    var line = acc.join("");
-    while (line.indexOf("  ") != null) {
-        line = line.replace("  ", with: " ");
+    final words = mut [<str>];
+    foreach (w in acc.join("").split(" ")) {
+        if (w != "") { words.append(w); }
     }
-    line = line.trim();
+    var line = words.join(" ");
     if (line.len() > 200) { line = line.sub(0, len: 197) + "..."; }
     return line;
 }
