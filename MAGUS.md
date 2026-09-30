@@ -59,7 +59,7 @@ magus graph export -o json  # the whole graph
 | file       |     300+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
 | function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
-| rationale  |      10+ | `magus query kind=rationale`  | `FIXME`, `TODO`, `TODO`                                                                                          |
+| rationale  |        9 | `magus query kind=rationale`  | `FIXME`, `TODO`, `TODO`                                                                                          |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
 | marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
@@ -77,7 +77,7 @@ magus graph export -o json  # the whole graph
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
-| [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
+| [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `ci`, `lint`                                 |
 
 ## Project: magus
 

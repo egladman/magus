@@ -12,6 +12,9 @@ magus\project({
     // go because buf.gen.yaml runs its plugins through `go tool`.
     "spells": [buf, go],
     "outputs": ["gen/**"],
+    "targets": {
+        "ci": {"skip_cache": "buf-breaking compares against the default branch, which moves without touching this tree"},
+    },
     // generate stays cached, unlike the other drift gates: it calls a remote buf
     // plugin, and uncached runs exhaust the BSR rate limit.
 });
@@ -59,9 +62,18 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
-export fun ci(ctx: magus\Context, args: [str]) > void {
-    // TODO: add buf-breaking. It must resolve the default branch (no hardcoded "main"),
-    // skip when proto/buf.yaml is absent at that ref, and pass subdir=proto; the stock
-    // op assumes the module sits at the git root.
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);
+    // buf reads the baseline from git only.
+    if (vcs\name() != "git") { return; }
+    final base = vcs\base();
+    // A ref from before the module existed has no schema to break.
+    final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
+                           opts: {"allow_failure": true, "quiet": true});
+    if (base == "" or !schema["ok"]) {
+        magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
+        return;
+    }
+    buf["buf-breaking"](ctx, {"args": ["--against",
+        vcs\root() + "/.git#ref={base},subdir=proto"]});
 }
