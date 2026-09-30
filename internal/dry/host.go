@@ -33,11 +33,10 @@ import (
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
-	// An IO module gets the engine's declarations over a value that performs nothing:
-	// os keeps the value Buzz's stdlib binds, and proc, http, vcs and the rest an empty
-	// module, so a call checks against its real signature and a probed body stops at it
-	// instead of running it. A wasm registry lists no IO module, so there these imports
-	// still reach the resolver below.
+	// An IO module gets the engine's declarations over a value that performs nothing (os
+	// keeps the stdlib's), so a call checks against its real signature and a probed body
+	// stops at it. A wasm registry lists no IO module, so there these imports reach the
+	// resolver below.
 	for name, reg := range bindinggen.Modules {
 		if !reg.Capabilities.Has(ffi.WASM) {
 			installHostModule(sess, name, reg, vm.NewMap())

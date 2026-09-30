@@ -342,9 +342,7 @@ func buzzDefault(a std.Arg) (string, error) {
 // buzzZero is the default for an optional parameter that declares none.
 //
 // An unmapped tag is an error rather than a fallback: `null` is not the zero of any
-// tag, and an optional callback has no default a caller could mean. Nothing declares
-// one today, so this only ever fires the moment someone adds the first, which is
-// exactly when a silent `null` would be worst.
+// tag, and an optional callback has no default a caller could mean.
 func buzzZero(t std.TypeTag) (string, error) {
 	switch t {
 	case std.TypeString:
@@ -494,10 +492,9 @@ func collectMirrors(mod std.Module) ([]string, error) {
 // collectEnums returns the enum declarations a module's signatures and its mirrors'
 // fields name, in first-use order.
 //
-// Derived rather than hand-listed, for the same reason collectMirrors is: an enum
-// whose declaration does not travel with its use leaves the bundle naming an undefined
-// type. Collection merges bundles, so the checker never noticed; running the bundle,
-// which is what makes its records constructible, stops at the first such name.
+// Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
+// not travel with its use leaves the bundle naming an undefined type, and running the
+// bundle to make its records constructible stops at the first such name.
 func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	seen := map[string]bool{}
 	var order []boundaryEnum

@@ -478,10 +478,9 @@ var hgOperationStates = []struct{ name, op string }{
 }
 
 // hgOperationInProgress reads the operation from the dot-dir of the checkout holding root,
-// starting no process: a stopped rebase, histedit or graft by its state file, then a merge
-// by the merge state `debugmergestate` reads or by the dirstate's second parent. Sapling
-// records no merge state for a merge that merged no file, and still sets the parent.
-// merging answers only where the files cannot.
+// starting no process: a rebase, histedit or graft by its state file, then a merge by its
+// merge state or by the dirstate's second parent, which Sapling sets even when it records
+// no merge state. merging answers only where the files cannot.
 func hgOperationInProgress(root, dot string, merging func() (bool, error)) (string, error) {
 	meta, found := hgDotDir(root, dot)
 	if found {

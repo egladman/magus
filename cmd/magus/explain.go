@@ -6,9 +6,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// resolutionNote is the line explain prints above a card it did not reach by node ID. A
-// fuzzy card may describe something other than what was named, so it says so and names
-// the ID to ask for instead.
+// resolutionNote is the line explain prints above a card it did not reach by node ID, ""
+// for an ID match.
 func resolutionNote(asked string, out types.KnowledgeExplainOutput) string {
 	switch out.Resolution {
 	case types.ResolvedPath:

@@ -449,10 +449,9 @@ func addProfileObserver(ctx context.Context, sess *buzz.Session) {
 var buzzImportPattern = regexp.MustCompile(`\bimport\s+(?:[\w\s,]+?\s+from\s+)?"([^"]+)"`)
 
 // buzzReachesMagus reports whether code, or any file or source module it imports
-// transitively, imports the magus namespace, a magus/* module or a spell. A file
-// resolves beside its importer, then against the session's include dirs; one found
-// nowhere counts as not reaching magus. A comment that mentions an import takes the
-// slow path.
+// transitively, imports the magus namespace, a magus/* module or a spell. An import
+// found nowhere counts as not reaching magus. An import named in a comment also
+// matches, which only costs the eager load.
 func buzzReachesMagus(sess *buzz.Session, code string) bool {
 	sources := map[string]string{}
 	for _, m := range std.AllSource() {
@@ -520,9 +519,8 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 // part that was still on the tool-call path for nothing.
 //
 // A script whose import closure reaches magus gets the mirrors up front, so a later
-// file's type of the same name still wins and an aliased import, which checks against
-// the types declared when it starts, sees them. The resolver below is the fallback
-// for an import the closure scan could not follow.
+// file's type of the same name still wins and an aliased import sees them. The
+// resolver below covers an import the closure scan could not follow.
 func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
 	stop := tr.phase("buzz.register_surface")
 	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))

@@ -137,8 +137,8 @@ func staleGraphAdvice(ctx context.Context) string {
 	return staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
 }
 
-// staleGraphAdviceFor renders the advice for why the guard index cannot answer for the
-// checkout, "" when it can, and the projects whose symbol index is stale.
+// staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
+// symbol indexes, "" when neither is stale.
 func staleGraphAdviceFor(reason string, stale []string) string {
 	var b strings.Builder
 	switch {

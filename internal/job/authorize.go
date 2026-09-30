@@ -287,9 +287,8 @@ func checkLine(row types.Job) string {
 	return strings.Join(lines, ", ")
 }
 
-// ReadBoundary is the declarations a row may READ: its write paths, widened by its read
-// paths. Read paths only ever add; the guard's focus-read deny and the store's subset check
-// both read this, so the two agree on what a lease may read.
+// ReadBoundary is the declarations a row may read: its write paths plus its read paths.
+// The guard's focus-read deny and the store's subset check both use it.
 func ReadBoundary(row types.Job) []string {
 	if len(row.ReadPaths) == 0 {
 		return row.WritePaths

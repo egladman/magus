@@ -646,15 +646,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 // run's TargetRuns: the skip_cache members a step's key reads, before that key, and the
 // members an uncached composer's ctx.needs reaches, as cache steps of their own.
 //
-// skip_cache states that a target always runs. ctx.needs runs a member inside its
-// composer's body and a cache hit never executes that body, so the policy held only for a
-// target named on the command line: `magus run lint libs/gopherbuzz` replayed over a
-// MAGUS.md truncated to one word and reported success, because the index-generate that
-// maintains it is a member of lint's chain. Running those members before the composer's
-// key makes the magusfile's claim true again, and a miss needs it as much as a hit:
-// types.ChainSkipCacheOutputs puts each one's artifact in the composer's key, so a member
-// left for the body rewrote a key input after the key was taken, and the run was refused a
-// cache entry.
+// skip_cache members run before the composer's key for two reasons: a cache hit never
+// executes the body that would run them, and types.ChainSkipCacheOutputs puts each one's
+// artifact in that key, so a member left for the body would rewrite a key input after the
+// key was taken.
 type composedRunner struct {
 	m            *Magus
 	runs         *cache.TargetRuns
@@ -679,12 +674,9 @@ func (r *composedRunner) beforeKey(ctx context.Context, s cache.Step) error {
 }
 
 // runSkipCache runs one skip_cache member before a key that reads it, or waits on whoever
-// reached it first. It is RunAll's target runner, so it runs once the step's upstreams
-// have finished and holds no slot: it sees the tree its dependencies left, and the slots
-// it takes are not its composer's. It goes through cache.RunAside like any other target
-// work, so its console output, output ref, journal entry and report events look the same
-// as a directly invoked target's, and the machine claim and inflight record a separate
-// magus and `magus status` read are held.
+// reached it first. As RunAll's target runner it runs after the step's upstreams finish
+// and holds no slot of its composer's. cache.RunAside gives it the output, journal entry,
+// machine claim and inflight record of a directly invoked target.
 func (r *composedRunner) runSkipCache(ctx context.Context, ref types.TargetRef) error {
 	owner := r.m.Get(ref.Project)
 	if owner == nil {
@@ -718,9 +710,8 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 			if err := r.beforeKey(memberCtx, member); err != nil {
 				return err
 			}
-			// The composer's body record was seeded when its step began; the members just
-			// run before this member's key have to reach it too, or the member's own body,
-			// which shares that record, runs them again inline.
+			// The member's body shares the composer's record, seeded when its step began;
+			// without the members just run, it would run them again inline.
 			if body := buzz.TargetRunsFromContext(memberCtx); body != nil {
 				body.MarkDone(r.runs.Passed(p.Path)...)
 			}
@@ -1931,9 +1922,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		skipReplay: opts.NoCache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
 	runStep := func(handlers map[string]TargetHandler, projects map[string]*types.Project) func(context.Context, cache.Step) error {
 		return func(ctx context.Context, s cache.Step) error {
-			// Each step's body gets its own TargetRuns, so a member two ctx.needs calls in
-			// the body reach runs once, seeded from the run's: a target a preflight pass or
-			// a composer's key already ran starts out done.
+			// Each step's body gets its own TargetRuns, seeded from the run's, so a target
+			// a preflight pass or a composer's key already ran starts out done.
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(runs.Passed(s.ProjectPath)...))
 			// The step's own args, which are nil for a preflight step: only a named
 			// target's step carries the forwarded ones, and they key it too.

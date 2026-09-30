@@ -317,8 +317,7 @@ func (r TargetRef) Ref() string {
 	return r.Project + ":" + r.Target
 }
 
-// Compare orders refs by project, then target, the order every deterministic walk over
-// them uses.
+// Compare orders refs by project, then target.
 func (r TargetRef) Compare(o TargetRef) int {
 	return cmp.Or(strings.Compare(r.Project, o.Project), strings.Compare(r.Target, o.Target))
 }

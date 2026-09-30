@@ -505,8 +505,8 @@ func exposeDataAPI() {
 		}
 		return map[string]any{"ok": r.OK, "output": r.Output, "trace": trace, "diag": diagJS(r.Diag)}
 	}))
-	// drawFigure(figureJSON, anchorHref) draws a figure\Figure record the caller built as
-	// data, so a page relays a figure out without writing any Buzz.
+	// drawFigure(figureJSON, anchorHref) draws a figure\Figure record passed as JSON, with
+	// no Buzz source.
 	api.Set("drawFigure", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 2 || args[0].Type() != js.TypeString || args[1].Type() != js.TypeString {
 			return map[string]any{"ok": false, "svg": "", "findings": "", "diag": diagJS(&dry.Diag{Msg: "drawFigure takes (figureJSON, anchorHref), both strings"})}

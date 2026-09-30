@@ -274,8 +274,8 @@ const (
 	SpellImportEscapesWorkspace DiagnosticCode = "MGS1047"
 	// LayerDeclarationInvalid is a magus.project "layers" entry magus cannot honor: a
 	// directory that does not exist, a glob matching no directory, a path escaping the
-	// workspace, or a blank or malformed layer name. The load stops, because a layer that
-	// silently covers nothing is a check that looks enforced and is not.
+	// workspace, or a blank or malformed layer name. The load stops rather than let a
+	// layer silently cover nothing.
 	LayerDeclarationInvalid DiagnosticCode = "MGS1048"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
@@ -545,9 +545,8 @@ const (
 	// an undeclared source, checked after a target runs, not after a commit is made).
 	UnformattedCommit DiagnosticCode = "MGS4009"
 	// SelfInvalidatingKey is a target whose key reads a file its own run generates after the
-	// key is taken. Every run succeeds and none is cached, which nothing else would say. A
-	// moved input no target declares as an output is a concurrent writer instead, and stays
-	// an uncoded notice: the next run caches normally.
+	// key is taken, so every run succeeds and none is cached. A moved input no target
+	// declares as an output is a concurrent writer instead, and stays an uncoded notice.
 	SelfInvalidatingKey   DiagnosticCode = "MGS4010"
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
@@ -564,8 +563,7 @@ const (
 	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
 	SymbolIndexNotCurrent DiagnosticCode = "MGS7003"
 	// UnknownMarkerFamily is a `magus:<family>` token whose family is not a MarkerFamily.
-	// The graph build fails naming the file, the line and the families it knows, because
-	// a skipped marker is a declaration nothing honors.
+	// The graph build fails naming the file, the line and the known families.
 	UnknownMarkerFamily DiagnosticCode = "MGS7004"
 	// DirNotInGraph is magus\dir asked for a path the graph holds no dir node for. A typo
 	// and a directory outside every project both land here; neither is an empty Dir.

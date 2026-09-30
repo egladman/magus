@@ -213,10 +213,10 @@ func GraphObserverFromContext(ctx context.Context) Observer {
 	return o
 }
 
-// EvalMemo holds what one evaluation computes once: a target body, or one script. Every
+// EvalMemo holds what one evaluation (a target body, or one script) computes once. Every
 // read inside it sees the same snapshot, so a body that writes files and reads the
-// knowledge graph again sees the graph as the body began. A new evaluation starts
-// empty. A failed computation is not kept, so a canceled context never sticks.
+// knowledge graph again sees the graph as the body began. A failed computation is not
+// kept, so a canceled context never sticks.
 type EvalMemo struct {
 	mu    sync.Mutex
 	cells map[string]*evalMemoCell

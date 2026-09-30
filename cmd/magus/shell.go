@@ -407,8 +407,8 @@ func revisionForGuard(ctx context.Context, dir, rev string) string {
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	// FindCommit reads "" as the current revision in one process; Metadata took five,
-	// a status among them, and overran the hook budget on Mercurial and Sapling.
+	// Not Metadata: it runs a status among several processes and overruns the hook
+	// budget on Mercurial and Sapling.
 	c, err := res.VCS.FindCommit(ctx, root, rev)
 	if err != nil {
 		return ""

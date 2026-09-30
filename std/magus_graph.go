@@ -41,9 +41,8 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 	return g, nil
 }
 
-// memoGraphs answers every graph read of one evaluation from one build. Without it each
-// member rebuilt the whole graph: a figure asking magus\dir for 60 boxes paid about ten
-// seconds a call.
+// memoGraphs answers every graph read of one evaluation from one build, so a figure
+// calling magus\dir per box builds the graph once.
 type memoGraphs struct {
 	g    knowledgeGraphs
 	memo *types.EvalMemo

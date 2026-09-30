@@ -654,10 +654,7 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 // entry recorded against different bytes.
 //
 // A target that declares its inputs with ctx.readsFiles keys only on the artifacts those
-// declarations can read. The explicit footprint is the target's claim of everything it
-// reads, so an artifact outside it would move the key for a file the target never opens:
-// the root test suite reran on every docs edit because the knowledge graph it composes,
-// and never reads, holds the docs.
+// declarations can read, so an artifact it composes but never opens does not move its key.
 func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []Glob {
 	out := chainSkipCacheArtifacts(p, target, lookup)
 	inputs := p.TargetInputs[target]
@@ -725,23 +722,17 @@ func chainKey(projectPath, target string) string { return projectPath + "\x00" +
 // ChainSkipCacheSteps is the skip_cache members of target's chain that a caller must run
 // before taking target's key, in invocation order, each carrying its owning project path.
 //
-// skip_cache says a target always runs. ctx.needs runs a member inside its composer's
-// body, which a cache hit never executes, so the policy stopped holding the moment the
-// target was reached through a chain rather than named on the command line. And a member
-// left for the body rewrites an artifact the key already read. Running these before the
-// key makes the policy hold again and keeps the key true.
+// ctx.needs runs a member inside its composer's body, which a cache hit never executes,
+// so skip_cache holds only if the caller runs these first. A member left for the body
+// would also rewrite an artifact the key already read.
 //
-// The set is narrower than "every skip_cache member", and ChainSkipCacheOutputs is what
-// narrows it: a member qualifies only when it maintains an artifact that is in the
-// composer's key. That leaves out the skip_cache members that opted out for a reason a
-// replay cannot invalidate. `image-build` pushes a signed digest per run, so it composes
-// into `ci` and belongs nowhere near a hit path; eight minutes of docker build measured
-// the difference.
+// A member qualifies only when it maintains an artifact in the composer's key
+// (ChainSkipCacheOutputs). That leaves out members that skip the cache for a reason a
+// replay cannot invalidate, such as `image-build`, which pushes a signed digest per run.
 //
 // Running one of these runs everything it composes, so a member reachable from another
-// one is already covered and is left out. One rule covers both shapes that produces:
-// `generate` composing `index-generate` directly, and root `ci` reaching `generate`
-// through `lint` and again through `security`.
+// is left out: `generate` composing `index-generate`, or root `ci` reaching `generate`
+// through both `lint` and `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
 	return chainSkipCacheSteps(p, target, lookup)
 }

@@ -195,10 +195,9 @@ func chainOrNone(chain []types.ChainStep) string {
 	return types.Chain(chain).String()
 }
 
-// runPreflight runs the preflight stages as one batch and records the targets that passed
-// in the run's TargetRuns, so no later body or composer runs them again. runStep is the
-// main batch's step function, so a preflight step is keyed, admitted and reported exactly
-// as the same target named on the command line would be.
+// runPreflight runs the preflight stages as one batch and marks each passed target done
+// in the run's TargetRuns, so nothing runs it again. runStep is the main batch's step
+// function, so a preflight step is keyed, admitted and reported like a command-line target.
 func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*types.Project, string) cache.Step, opts run, runStep func(map[string]TargetHandler, map[string]*types.Project) func(context.Context, cache.Step) error, cacheOpts []cache.RunOption) error {
 	var steps []cache.Step
 	handlerOf := make(map[string]TargetHandler, len(stages))

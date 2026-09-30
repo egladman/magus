@@ -241,10 +241,8 @@ type Project struct {
 	// default, opts nothing in.
 	MergeLowRisk []string
 	// Layers maps a WORKSPACE-relative directory or glob to the layer name declared for
-	// it, from magus.project's "layers" key. Workspace-relative rather than project-relative
-	// because a layering table describes the tree, and the root magusfile usually holds it.
-	// Every entry names at least one existing directory; the load refuses one that does not
-	// (LayerDeclarationInvalid).
+	// it, from magus.project's "layers" key. Every entry names at least one existing
+	// directory; the load refuses one that does not (LayerDeclarationInvalid).
 	Layers map[string]string
 	// GateInheritOff is magus.project's "gate_inherit" key declared false: this
 	// workspace's CI plan never inherits a green run's verdict, however the
@@ -694,8 +692,7 @@ var layerNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // CheckLayer validates the shape of one magus.project "layers" entry: dir is a clean
 // workspace-relative directory or glob inside the workspace, and name matches the layer
-// grammar. Whether dir names an existing directory is the loader's question; this one
-// needs no filesystem, so the dry-run host asks it too. Errors carry
+// grammar. It does not check that dir exists, so it needs no filesystem. Errors carry
 // LayerDeclarationInvalid.
 func CheckLayer(dir, name string) error {
 	fail := func(format string, args ...any) error {

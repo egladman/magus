@@ -197,11 +197,9 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 }
 
 // MagusContextSource mirrors the two maps a target receives: magus\Context, and the
-// magus\Exec its withEnv and withCwd return. A member taking any number of arguments is
-// `any`, the type moduledecls gives a variadic host method, since a Buzz fun has no
-// variadic parameter. Exec carries no declaration members, so
-// `ctx.withEnv({...}).readsFiles(...)` fails the check rather than at run time. The
-// removed inputs/outputs/updates are left undeclared for the same reason.
+// magus\Exec its withEnv and withCwd return. A variadic member is `any`, since a Buzz fun
+// has no variadic parameter. Exec carries no declaration members, so
+// `ctx.withEnv({...}).readsFiles(...)` fails the check rather than at run time.
 const MagusContextSource = `export object Exec {
     env: {str: str}? = null,
     cwd: str? = null,
@@ -240,11 +238,9 @@ func MagusDeclSource() string {
 }
 
 // DeclareMagusTypes declares every magus\ type into sess and binds the runtime
-// definition of each record and enum, so `magus\T{...}` constructs. Every host that
-// type-checks magus code makes this one declaration, whatever implements its magus
-// module.
+// definition of each record and enum, so `magus\T{...}` constructs.
 //
-// implements reports whether that module provides a member; the extern of one it does
+// implements reports whether the magus module provides a member; the extern of one it does
 // not is dropped, so the check refuses the call instead of the run failing. nil keeps
 // every extern. Register the magus module first, or its enums miss it.
 //
@@ -284,10 +280,9 @@ type magusRecord struct {
 }
 
 // magusRecords holds a runtime definition for every plain record and enum the magus
-// declarations define. The module is native, so no import executes its declarations
-// the way a Buzz-source module's are, and `magus\DirsOptions{...}` would otherwise
-// type-check and then fail with "unknown object type". A record definition has no
-// methods and no static state, so one set is shared by every session.
+// declarations define. The module is native, so no import executes its declarations, and
+// `magus\DirsOptions{...}` would otherwise type-check and then fail with "unknown object
+// type". A record has no methods or static state, so every session shares one set.
 var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
 	body, out, err := recordDecls(MagusDeclSource())
 	if err != nil {
@@ -361,9 +356,8 @@ func recordDecls(src string) (string, []magusRecord, error) {
 // `magus\E.case` and an inferred `.case` argument resolve. A name the session already
 // binds keeps its binding, as a program's own type outranks a mirror in the checker.
 //
-// Declarations that do not run leave the records annotate-only rather than panic: the
-// binary that regenerates stale declarations loads this same code.
-// TestMagusDeclarationsRun is what fails.
+// Declarations that do not run leave the records annotate-only rather than panic, since
+// the binary that regenerates them loads this code; TestMagusDeclarationsRun fails instead.
 func defineMagusRecords(sess *buzz.Session) {
 	records, err := magusRecords()
 	if err != nil {

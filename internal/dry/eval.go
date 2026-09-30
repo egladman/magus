@@ -107,8 +107,8 @@ func installHostModule(sess *buzz.Session, name string, reg ffi.Registration, mo
 // installHost registers as a native module like the rest, so the playground is a
 // blank slate and every surface it offers is reached by an explicit import, the same
 // import a magusfile writes. With PlaygroundSourceModules it is the single truth for what
-// runs in the playground (kept next to the wiring so the two can't drift), and the
-// langservice manifest diffs against both to decide which modules are reference-only there. Because magus is listed here (it is
+// runs in the playground, and the langservice manifest diffs against both to decide which
+// modules are reference-only there. Because magus is listed here (it is
 // genuinely wired), it is never reported as excluded: no special-casing downstream.
 func PlaygroundHostModules() []string {
 	out := make([]string, 0, len(WASMCompatibleMagusModules)+1)

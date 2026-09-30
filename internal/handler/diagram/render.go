@@ -268,9 +268,9 @@ func (l Lens) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-// render lays g out with magus/figure and returns the figure. The authored budgets always
-// apply: a figure served to a person is one a person reads, so an oversized one is a
-// FindingsError telling the reader to narrow the lens, never a generated() escape.
+// render lays g out with magus/figure. The authored budgets always apply: an oversized
+// figure is a FindingsError telling the reader to narrow the lens, never a generated()
+// escape.
 //
 // TODO: cache the rendered figure per graph and lens; every request compiles figure anew.
 func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
@@ -305,10 +305,9 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 
 // figureOf is g as a figure\Figure record.
 //
-// An imports figure draws each package as a box from a Dir carrying the imports g holds,
-// and the graph edges follow from those, as a docs figure's do. Projects and targets are
-// no directories, so they are actors joined by hand edges, and the figure says why it is
-// unscoped. A non-empty anchorHref links every actor to its anchor.
+// An imports figure draws each package as a Dir box and derives edges from its imports.
+// Projects and targets are not directories, so they are actors joined by explicit flows
+// in an unscoped figure. A non-empty anchorHref links every actor to its anchor.
 func figureOf(g graph, desc, anchorHref string) figure.Figure {
 	f := figure.Figure{ID: ids{}.of(g.id), Title: g.title, Desc: desc}
 	if g.claim == KindImports {

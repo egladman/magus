@@ -627,10 +627,9 @@ type Job struct {
 	// path `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
 	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
 	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
-	// ReadPaths widens what this lease may READ beyond its WritePaths: the paths whose
+	// ReadPaths widens what this lease may read beyond its WritePaths: the paths whose
 	// projects it may also read, each widened to those projects' own dependencies when the
-	// guard resolves it. A lease always reads what it writes, because a worker leased to
-	// edit a project is a worker that was pointed at that project.
+	// guard resolves it. A lease always reads what it writes.
 	//
 	// A separate field rather than a wider WritePaths, and the separation is the
 	// point: a worker that has to READ a shared library must not be handed the right

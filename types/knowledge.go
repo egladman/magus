@@ -191,11 +191,9 @@ const (
 	// here points there, never that anything is at the other end.
 	KindLink = "link"
 
-	// KindMarker is one `magus:<family>[:<verb>] <args>` token a person wrote into a
-	// source or doc line, keyed "marker:<rel path>:<line>". Extracted from source like a
-	// rationale, but it is a DECLARATION rather than prose, so its edges carry
-	// ConfidenceDeclared. A begin/end pair folds into one node with a line range. The
-	// family set is closed (MarkerFamily); an unknown family is UnknownMarkerFamily.
+	// KindMarker is one `magus:<family>[:<verb>] <args>` token written into a source or
+	// doc line, keyed "marker:<rel path>:<line>". It is a declaration, so its edges carry
+	// ConfidenceDeclared. A begin/end pair folds into one node with a line range.
 	KindMarker = "marker"
 )
 
@@ -317,8 +315,8 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	// minting a near-synonym. The subject kind is what separates the two: a doc
 	// documents source, a comment in that source only references what it cites.
 	//
-	// Prose naming a target it tells the reader to run (a fenced `magus run <target>`)
-	// documents that target, so a drift check can hold the page to a target that exists.
+	// A fenced `magus run <target>` in prose documents that target, so a drift check can
+	// hold the page to a target that exists.
 	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: joinEndpointShapes(
 		endpointShapes(KindDoc, KindSpell, KindDiagnostic, KindModule, KindFile, KindDir, KindDoc, KindTarget),
 		endpointShapes(KindDocSection, KindTarget))},
@@ -418,9 +416,8 @@ func KnowledgeRelationFingerprint() string {
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
 // 1.0); inferred edges come from a documented rubric (fuzzy doc mentions, etc.)
-// and carry a sub-1.0 score. Declared edges come from a marker a person wrote (score
-// 1.0): read off source like an extracted edge, but the fact is the author's claim and
-// nothing in the code verifies it.
+// and carry a sub-1.0 score. Declared edges come from a marker (score 1.0): the fact is
+// the author's claim, and nothing in the code verifies it.
 const (
 	ConfidenceExtracted = "extracted"
 	ConfidenceInferred  = "inferred"
@@ -1273,8 +1270,7 @@ type KnowledgeFold struct {
 }
 
 // Dir is one workspace directory as the graph holds it, the record magus\dir, magus\dirs
-// and magus\layer return. It carries every fact a figure derives a box and its edges
-// from, so a figure takes a Dir and never re-derives one from a path string.
+// and magus\layer return. It carries every fact a figure needs for a box and its edges.
 //
 // Every path in it is workspace-relative with forward slashes, "." for the root. Lists
 // are sorted and never nil.
