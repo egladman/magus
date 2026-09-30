@@ -21,6 +21,7 @@ import (
 func loadSpawnRule(t *testing.T, src string) (workspace.SpawnRule, error) {
 	t.Helper()
 	reg := workspace.NewWorkspaceRegistry()
+	t.Cleanup(func() { _ = reg.Close() })
 	ctx := workspace.ContextWithRegistry(t.Context(), reg)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)

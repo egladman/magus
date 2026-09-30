@@ -1928,8 +1928,8 @@ func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) er
 	return s.lim.Yield(ctx, func() error { return fn(cache.WithoutSlotHeld(ctx)) })
 }
 
-// Close releases workspace resources (VM pools, telemetry); cache and limiter are
-// caller-owned. A provider built by Open is shut down here so its spans/metrics
+// Close releases workspace resources (VM pools, the sessions the guard's function
+// rules run on, telemetry); cache and limiter are caller-owned. A provider built by Open is shut down here so its spans/metrics
 // flush rather than being lost on exit. An injected provider (WithProvider) is
 // left running: it is shared across every workspace the server holds (and the
 // bridge Magus), so one workspace's eviction must not stop telemetry for the
@@ -1943,6 +1943,11 @@ func (m *Magus) Close() error {
 	}
 	if m.buzzPoolReg != nil {
 		if err := m.buzzPoolReg.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if m.wsReg != nil {
+		if err := m.wsReg.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
