@@ -153,6 +153,11 @@ by them, as this repository's `queue-advice.yaml` does:
 change must reach before it says anything. It is a share rather than a count because
 five projects is most of a small workspace and a rounding error in a large one.
 
+Its comment links the reached projects to the console's graph view, which draws them in
+the browser. `console-base` (default `https://eli.gladman.cc/magus/console/`) points the
+link at another console. The graph rides in the link's fragment, which the browser never
+sends to a server, so a private workspace's project names stay on the reader's machine.
+
 ## Conformance on code
 
 The symbol half of `conformance` reads `magus diff`'s `checks` on each symbol the change
