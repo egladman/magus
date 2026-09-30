@@ -1412,9 +1412,9 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		if t.change != "" {
 			sym.Change, sym.Qualified, sym.Signature = t.change, qualifiedName(s.Symbol, s.Label), t.signature
 		}
-		sym.ModuleAPI = exportedFromModule(s.File, s.Label, s.Symbol)
+		sym.PublicBeyondWorkspace = exportedFromModule(s.File, s.Label, s.Symbol)
 		if graph != nil {
-			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
+			sym.PublicTo, sym.PublicFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
 		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
 		// parameters and temporaries (`signal0`, `headers1`, `body0`), and on a real file they
@@ -1426,7 +1426,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// The exports are kept even at zero references, and that is the whole reason this is a
 		// conjunction rather than `RefCount == 0`: a NEWLY ADDED public function has no
 		// referents yet and is precisely the thing a reviewer must see.
-		if sym.RefCount > 0 || sym.FileCount > 0 || sym.ModuleAPI || len(sym.ExternalProjects) > 0 {
+		if sym.RefCount > 0 || sym.FileCount > 0 || sym.PublicBeyondWorkspace || len(sym.PublicTo) > 0 {
 			f.Symbols = append(f.Symbols, sym)
 		}
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
@@ -1439,7 +1439,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// One symbol crossing a project boundary makes the whole file public surface: a
 		// reviewer needs to know the file contains something a consumer can see, and burying
 		// that because its neighbors are internal is how the signal gets missed.
-		if len(sym.ExternalProjects) > 0 || sym.ModuleAPI {
+		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
 			f.Surface = types.DiffSurfacePublic
 		}
 	}
@@ -1470,7 +1470,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		m.conformance(ctx, &out, byPath, graph, cfg, in, patchErr)
 	}
 	if indexed {
-		attachReachesAPI(out.Files, newCallGraph(graph, m.projectOwner()))
+		attachPublicThrough(out.Files, newCallGraph(graph, m.projectOwner()))
 	}
 
 	out.SortForReading()
@@ -1531,11 +1531,11 @@ func namespaceSymbol(id, kind string) bool {
 	return kind == "Package" || kind == "Namespace" || strings.HasSuffix(id, "/")
 }
 
-// attachReachesAPI sets ReachesAPI on every listed symbol.
-func attachReachesAPI(files []types.DiffFile, g impact.CallGraph) {
+// attachPublicThrough sets PublicThrough on every listed symbol.
+func attachPublicThrough(files []types.DiffFile, g impact.CallGraph) {
 	for i := range files {
 		for j := range files[i].Symbols {
-			files[i].Symbols[j].ReachesAPI = impact.ReachesAPI(g, files[i].Symbols[j].ID)
+			files[i].Symbols[j].PublicThrough = impact.PublicThrough(g, files[i].Symbols[j].ID)
 		}
 	}
 }
@@ -1682,7 +1682,7 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 // here because Go states export in the language itself (an initial capital) and states
 // unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
 // is a fact rather than a heuristic. Every other language returns false, which reads as "not
-// known to be module API" and never as "internal": the caller keeps ExternalProjects, which
+// known to be module API" and never as "internal": the caller keeps PublicTo, which
 // is language-neutral, and the surface stays honest about what was not checked.
 //
 // Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a

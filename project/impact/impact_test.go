@@ -320,7 +320,7 @@ func (s callGraphStub) Callers(id string) []string { return s.callers[id] }
 func (s callGraphStub) Boundary(id string) string  { return s.boundary[id] }
 func (s callGraphStub) Qualified(id string) string { return "Q." + id }
 
-func TestReachesAPI(t *testing.T) {
+func TestPublicThrough(t *testing.T) {
 	g := callGraphStub{
 		callers: map[string][]string{
 			"leaf":   {"mid", "direct"},
@@ -334,18 +334,18 @@ func TestReachesAPI(t *testing.T) {
 			"beyond": types.DiffBoundaryProject,
 		},
 	}
-	require.Equal(t, []types.DiffReach{
+	require.Equal(t, []types.DiffPublicPath{
 		{ID: "direct", Qualified: "Q.direct", Boundary: types.DiffBoundaryPackage},
 		{ID: "top", Qualified: "Q.top", Via: []string{"Q.mid"}, Boundary: types.DiffBoundaryProject},
-	}, ReachesAPI(g, "leaf"))
+	}, PublicThrough(g, "leaf"))
 }
 
-func TestReachesAPIStopsAtItsDepth(t *testing.T) {
+func TestPublicThroughStopsAtItsDepth(t *testing.T) {
 	g := callGraphStub{
 		callers:  map[string][]string{"a": {"b"}, "b": {"c"}, "c": {"d"}, "d": {"e"}, "e": {"f"}},
 		boundary: map[string]string{"f": types.DiffBoundaryPackage},
 	}
-	require.Empty(t, ReachesAPI(g, "a"))
-	require.Equal(t, []types.DiffReach{{ID: "f", Qualified: "Q.f", Via: []string{"Q.d", "Q.e"}, Boundary: types.DiffBoundaryPackage}},
-		ReachesAPI(g, "c"))
+	require.Empty(t, PublicThrough(g, "a"))
+	require.Equal(t, []types.DiffPublicPath{{ID: "f", Qualified: "Q.f", Via: []string{"Q.d", "Q.e"}, Boundary: types.DiffBoundaryPackage}},
+		PublicThrough(g, "c"))
 }

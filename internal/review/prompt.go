@@ -43,11 +43,6 @@ var (
 	skillArchitecture = agent.MustSkill("magus-architecture-review")
 )
 
-// perSymbolContext points at the per-symbol depth this prompt leaves out: callers, callees,
-// tests and the path to the API for each changed symbol.
-const perSymbolContext = "For each changed symbol's callers, tests and path to the API, run " +
-	"`magus buzz hack/show-review-context.buzz -- --rev <base>...<head>`."
-
 // PromptInput is everything a review prompt is built from. A struct because these arrive from
 // four different lookups and three of them are optional, which is exactly the shape that turns
 // into an unreadable positional call.
@@ -135,7 +130,6 @@ func Prompt(in PromptInput) string {
 		Skill(skillQuery, "what references what, without guessing from a text search").
 		Skill(skillArchitecture, "where code belongs, grounded in the graph").
 		Because("A graph answer is checked against declared sources; a text search is a guess.").
-		Text(perSymbolContext).
 		Text("Follow the conventions this workspace documents over generic ones.").
 		Text("Before reporting a finding, look for the test that PINS the behavior you are about").
 		Text("to call a bug. If you cannot find where a claim is verified, say it is unverified.").

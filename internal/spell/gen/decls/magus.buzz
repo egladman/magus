@@ -131,7 +131,7 @@ export object Check {
     fix: [str] = [],
 }
 
-export object DiffReach {
+export object DiffPublicPath {
     id: str = "",
     qualified: str = "",
     via: [str] = [],
@@ -143,15 +143,15 @@ export object DiffSymbol {
     label: str = "",
     refCount: int = 0,
     fileCount: int = 0,
-    externalProjects: [str] = [],
-    externalFileCount: int = 0,
-    moduleAPI: bool = false,
+    publicTo: [str] = [],
+    publicFileCount: int = 0,
+    publicBeyondWorkspace: bool = false,
     change: str = "",
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
     checks: [Check] = [],
-    reachesAPI: [DiffReach] = [],
+    publicThrough: [DiffPublicPath] = [],
 }
 
 export object DiffTouch {

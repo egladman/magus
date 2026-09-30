@@ -7,8 +7,9 @@
 
 ### Added
 
-- **`DiffSymbol.reachesAPI`:** the callers a changed symbol reaches through calls whose own
+- **`DiffSymbol.publicThrough`:** the callers a changed symbol reaches through calls whose own
   referents sit outside their package or project, with the callers between, from any SCIP
-  index that records calls.
+  index that records calls. `publicTo`, `publicFileCount` and `publicBeyondWorkspace` name
+  the symbol's own exposure the same way.
 - **`magus\diff` takes `opts.patch`,** a unified diff as text, the way `magus diff --patch -`
   reads one.

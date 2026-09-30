@@ -234,8 +234,8 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   }
 
   if (a.surface === "public") {
-    const api = (a.symbols ?? []).filter((s) => s.module_api).map((s) => s.label ?? s.id);
-    const across = [...new Set((a.symbols ?? []).flatMap((s) => s.external_projects ?? []))];
+    const api = (a.symbols ?? []).filter((s) => s.public_beyond_workspace).map((s) => s.label ?? s.id);
+    const across = [...new Set((a.symbols ?? []).flatMap((s) => s.public_to ?? []))];
     chips.push({
       text: "public surface",
       tone: "warn",
@@ -251,7 +251,7 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
     const named = (kind: ReviewChange) =>
       (a.symbols ?? [])
         .filter(
-          (s) => s.change === kind && (s.module_api || (s.external_projects ?? []).length > 0),
+          (s) => s.change === kind && (s.public_beyond_workspace || (s.public_to ?? []).length > 0),
         )
         .map((s) => s.qualified ?? s.label ?? s.id);
     const removed = named("removed");

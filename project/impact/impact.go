@@ -238,7 +238,7 @@ func Touched(spans []Span, lines []int) map[string]bool {
 	return out
 }
 
-// CallGraph is what ReachesAPI walks.
+// CallGraph is what PublicThrough walks.
 type CallGraph interface {
 	// Callers are the symbols with a calls edge into id, in a stable order.
 	Callers(id string) []string
@@ -249,7 +249,7 @@ type CallGraph interface {
 	Qualified(id string) string
 }
 
-// The bounds on one ReachesAPI walk. A widely called helper fans out fast, and past a few
+// The bounds on one PublicThrough walk. A widely called helper fans out fast, and past a few
 // hops the chain says more about the call graph than about the change.
 const (
 	reachDepth = 4
@@ -257,17 +257,17 @@ const (
 	reachVisit = 500
 )
 
-// ReachesAPI walks id's callers breadth first and returns each one that crosses a package or
+// PublicThrough walks id's callers breadth first and returns each one that crosses a package or
 // project boundary, with the callers between. A path stops at its first such caller, because
 // that is where the change becomes visible to other code.
-func ReachesAPI(g CallGraph, id string) []types.DiffReach {
+func PublicThrough(g CallGraph, id string) []types.DiffPublicPath {
 	type hop struct {
 		id  string
 		via []string
 	}
 	seen := map[string]bool{id: true}
 	frontier := []hop{{id: id}}
-	var out []types.DiffReach
+	var out []types.DiffPublicPath
 	for depth := 0; depth < reachDepth && len(frontier) > 0 && len(seen) < reachVisit; depth++ {
 		var next []hop
 		for _, h := range frontier {
@@ -277,7 +277,7 @@ func ReachesAPI(g CallGraph, id string) []types.DiffReach {
 				}
 				seen[c] = true
 				if b := g.Boundary(c); b != "" {
-					out = append(out, types.DiffReach{ID: c, Qualified: g.Qualified(c), Via: h.via, Boundary: b})
+					out = append(out, types.DiffPublicPath{ID: c, Qualified: g.Qualified(c), Via: h.via, Boundary: b})
 					if len(out) == reachLimit {
 						return out
 					}

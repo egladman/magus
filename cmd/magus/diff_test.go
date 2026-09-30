@@ -1894,7 +1894,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
 			Path:    "a.go",
 			Surface: types.DiffSurfacePublic,
-			Symbols: []types.DiffSymbol{{Label: "Open", ModuleAPI: true}, {Label: "Close", ModuleAPI: true}},
+			Symbols: []types.DiffSymbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
 		})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "PUBLIC SURFACE: exports Open, Close", facts[0])
@@ -1919,8 +1919,8 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 			Path:    "a.go",
 			Surface: types.DiffSurfacePublic,
 			Symbols: []types.DiffSymbol{
-				{Label: "Open", ExternalProjects: []string{"web", "api"}},
-				{Label: "Close", ExternalProjects: []string{"web"}},
+				{Label: "Open", PublicTo: []string{"web", "api"}},
+				{Label: "Close", PublicTo: []string{"web"}},
 			},
 		})
 		require.NotEmpty(t, facts)
@@ -2098,7 +2098,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 				Project: "core",
 				Role:    types.DiffRoleSource,
 				Surface: types.DiffSurfacePublic,
-				Symbols: []types.DiffSymbol{{Label: "Run", ModuleAPI: true, FileCount: 12}},
+				Symbols: []types.DiffSymbol{{Label: "Run", PublicBeyondWorkspace: true, FileCount: 12}},
 				Reach:   diffReach(12),
 				Touches: []types.DiffTouch{{
 					Host:       "claude-code",

@@ -1314,7 +1314,7 @@ func ObjectCheck(v types.Check) vm.Value {
 	return out
 }
 
-func ObjectDiffReach(v types.DiffReach) vm.Value {
+func ObjectDiffPublicPath(v types.DiffPublicPath) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
@@ -1333,13 +1333,13 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("refCount", vm.IntValue(int64(v.RefCount)))
 	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
-	itemsExternalProjects := make([]vm.Value, len(v.ExternalProjects))
-	for indexExternalProjects := range v.ExternalProjects {
-		itemsExternalProjects[indexExternalProjects] = vm.StrValue(v.ExternalProjects[indexExternalProjects])
+	itemsPublicTo := make([]vm.Value, len(v.PublicTo))
+	for indexPublicTo := range v.PublicTo {
+		itemsPublicTo[indexPublicTo] = vm.StrValue(v.PublicTo[indexPublicTo])
 	}
-	out.MapSet("externalProjects", vm.ListValue(itemsExternalProjects))
-	out.MapSet("externalFileCount", vm.IntValue(int64(v.ExternalFileCount)))
-	out.MapSet("moduleAPI", vm.BoolValue(v.ModuleAPI))
+	out.MapSet("publicTo", vm.ListValue(itemsPublicTo))
+	out.MapSet("publicFileCount", vm.IntValue(int64(v.PublicFileCount)))
+	out.MapSet("publicBeyondWorkspace", vm.BoolValue(v.PublicBeyondWorkspace))
 	out.MapSet("change", vm.StrValue(v.Change))
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
@@ -1349,11 +1349,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
-	itemsReachesAPI := make([]vm.Value, len(v.ReachesAPI))
-	for indexReachesAPI := range v.ReachesAPI {
-		itemsReachesAPI[indexReachesAPI] = ObjectDiffReach(v.ReachesAPI[indexReachesAPI])
+	itemsPublicThrough := make([]vm.Value, len(v.PublicThrough))
+	for indexPublicThrough := range v.PublicThrough {
+		itemsPublicThrough[indexPublicThrough] = ObjectDiffPublicPath(v.PublicThrough[indexPublicThrough])
 	}
-	out.MapSet("reachesAPI", vm.ListValue(itemsReachesAPI))
+	out.MapSet("publicThrough", vm.ListValue(itemsPublicThrough))
 	return out
 }
 

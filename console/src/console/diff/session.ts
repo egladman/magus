@@ -31,9 +31,9 @@ export interface DiffSymbol {
   readonly label?: string;
   readonly ref_count: number;
   readonly file_count: number;
-  readonly external_projects?: readonly string[];
-  readonly external_file_count: number;
-  readonly module_api?: boolean;
+  readonly public_to?: readonly string[];
+  readonly public_file_count: number;
+  readonly public_beyond_workspace?: boolean;
   readonly change?: ReviewChange;
   // qualified names the symbol through its enclosing declarations (`DiffAPI.Signature`), so
   // two members sharing a label stay distinguishable.

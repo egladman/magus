@@ -12,7 +12,7 @@
           "label": "widget",
           "ref_count": 40,
           "file_count": 12,
-          "external_file_count": 0,
+          "public_file_count": 0,
           "change": "body"
         },
         {
@@ -20,12 +20,12 @@
           "label": "Render",
           "ref_count": 12,
           "file_count": 5,
-          "external_projects": ["docs"],
-          "external_file_count": 2,
+          "public_to": ["docs"],
+          "public_file_count": 2,
           "change": "body",
           "qualified": "Widget.Render",
           "signature": "func (w *Widget) Render() string",
-          "reaches_api": [
+          "public_through": [
             {
               "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/Open().",
               "qualified": "Open",
@@ -39,15 +39,15 @@
           "label": "size",
           "ref_count": 3,
           "file_count": 1,
-          "external_file_count": 0
+          "public_file_count": 0
         },
         {
           "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/NewWidget().",
           "label": "NewWidget",
           "ref_count": 0,
           "file_count": 0,
-          "external_file_count": 0,
-          "module_api": true,
+          "public_file_count": 0,
+          "public_beyond_workspace": true,
           "change": "added",
           "qualified": "NewWidget",
           "signature": "func NewWidget(ctx context.Context) (*Widget, error) // MGS1022 outside a workspace"
@@ -57,7 +57,7 @@
           "label": "parse_widget_name",
           "ref_count": 3,
           "file_count": 1,
-          "external_file_count": 0,
+          "public_file_count": 0,
           "change": "signature",
           "qualified": "parse_widget_name",
           "signature": "func parse_widget_name(s string, strict bool) string"
@@ -76,7 +76,7 @@
           "label": "WidgetProto",
           "ref_count": 2,
           "file_count": 1,
-          "external_file_count": 0,
+          "public_file_count": 0,
           "change": "added"
         }
       ],

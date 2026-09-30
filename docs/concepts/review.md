@@ -332,7 +332,6 @@ Load these rather than inferring from the diff alone:
 - `magus-query` - what references what, without guessing from a text search
 - `magus-architecture-review` - where code belongs, grounded in the graph
 
-For each changed symbol's callers, tests and path to the API, run `magus buzz hack/show-review-context.buzz -- --rev <base>...<head>`.
 Follow the conventions this workspace documents over generic ones.
 Before reporting a finding, look for the test that PINS the behavior you are about
 to call a bug. If you cannot find where a claim is verified, say it is unverified.

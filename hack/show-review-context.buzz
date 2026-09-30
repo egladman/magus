@@ -73,8 +73,8 @@ export object Candidate {
     signature: str,
     refCount: int,
     fileCount: int,
-    moduleAPI: bool,
-    externalProjects: [str],
+    publicBeyondWorkspace: bool,
+    publicTo: [str],
     reaches: [Reach],
 }
 
@@ -182,14 +182,14 @@ export fun candidates(d: magus\Diff) > [Candidate] {
                 continue;
             }
             final reaches = mut [<Reach>];
-            foreach (r in s.reachesAPI) {
+            foreach (r in s.publicThrough) {
                 reaches.append(Reach{ qualified = if (r.qualified != "") r.qualified else r.id, boundary = r.boundary, via = r.via });
             }
             acc.append(Candidate{
                 id = s.id, label = s.label, qualified = if (s.qualified != "") s.qualified else s.label,
                 path = f.path, project = f.project, change = s.change, signature = s.signature,
-                refCount = s.refCount, fileCount = s.fileCount, moduleAPI = s.moduleAPI,
-                externalProjects = s.externalProjects, reaches = reaches,
+                refCount = s.refCount, fileCount = s.fileCount, publicBeyondWorkspace = s.publicBeyondWorkspace,
+                publicTo = s.publicTo, reaches = reaches,
             });
         }
     }
@@ -204,7 +204,7 @@ fun tier(c: Candidate) > int {
 }
 
 fun exposed(c: Candidate) > bool {
-    return c.moduleAPI or c.externalProjects.len() > 0;
+    return c.publicBeyondWorkspace or c.publicTo.len() > 0;
 }
 
 // before orders candidates widest blast radius first: added or re-signed before a body edit,
@@ -334,11 +334,11 @@ export fun exposureSection(c: Candidate) > Section {
         return unknownSection("exposure", note: "exposure comes from magus diff; run the diff step for it");
     }
     final items = mut [<str>];
-    if (c.moduleAPI) {
+    if (c.publicBeyondWorkspace) {
         items.append("module API: reachable from outside the module");
     }
-    if (c.externalProjects.len() > 0) {
-        items.append("referenced from projects: {c.externalProjects.join(", ")}");
+    if (c.publicTo.len() > 0) {
+        items.append("referenced from projects: {c.publicTo.join(", ")}");
     }
     foreach (r in c.reaches) {
         final via = if (r.via.len() > 0) ", via {r.via.join(" <- ")}" else "";
@@ -490,7 +490,7 @@ export fun symbolCandidate(name: str) > Candidate !> any {
     return Candidate{
         id = r.symbol, label = r.label, qualified = r.label, path = if (r.defs.len() > 0) r.defs[0].file else "",
         project = "", change = "", signature = "", refCount = r.refCount, fileCount = r.fileCount,
-        moduleAPI = false, externalProjects = [<str>], reaches = [<Reach>],
+        publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>],
     };
 }
 
@@ -605,7 +605,7 @@ export fun apiGrowthSection(all: [Candidate]) > Section {
         }
         final dir = fs\dirname(c.path);
         added[dir] = (added[dir] ?? 0) + 1;
-        if (c.externalProjects.len() > 0) {
+        if (c.publicTo.len() > 0) {
             external[dir] = (external[dir] ?? 0) + 1;
         }
     }
@@ -1037,7 +1037,7 @@ test "the budget cuts the narrowest and names what it cut" {
 
 test "an unknown section renders as unknown and is listed as not measured" {
     final c = Candidate{ id = "x", label = "x", qualified = "pkg.X", path = "x.go", project = ".", change = "body",
-        signature = "", refCount = 0, fileCount = 0, moduleAPI = false, externalProjects = [<str>], reaches = [<Reach>] };
+        signature = "", refCount = 0, fileCount = 0, publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>] };
     final b = Bundle{ base = "main", rev = "", lens = "code", files = [<FileRow>], notes = [<str>],
         selection = Selection{ carded = [c], omitted = [<Candidate>] },
         cards = [Card{ symbol = c, kind = "Function", span = "x.go:3-9", sections = [unknownSection("callers", note: "no calls index")] }],
@@ -1051,7 +1051,7 @@ test "an unknown section renders as unknown and is listed as not measured" {
 
 test "exposure reads module API, projects and the path to the API" {
     final c = Candidate{ id = "x", label = "x", qualified = "pkg.x", path = "x.go", project = ".", change = "body",
-        signature = "", refCount = 1, fileCount = 1, moduleAPI = false, externalProjects = ["docs"],
+        signature = "", refCount = 1, fileCount = 1, publicBeyondWorkspace = false, publicTo = ["docs"],
         reaches = [Reach{ qualified = "pkg.Open", boundary = "package", via = ["pkg.load"] }] };
     assert\equal(exposureSection(c).items, want: ["referenced from projects: docs",
         "reaches pkg.Open, referenced across a package boundary, via pkg.load"], message: "exposure");
@@ -1072,7 +1072,7 @@ test "a diagnostic code is read from a signature, once" {
 test "an added type's members fold into its card" {
     fun cand(id: str, change: str) > Candidate {
         return Candidate{ id = id, label = id, qualified = id, path = "w.go", project = ".", change = change,
-            signature = "", refCount = 0, fileCount = 0, moduleAPI = false, externalProjects = [<str>], reaches = [<Reach>] };
+            signature = "", refCount = 0, fileCount = 0, publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>] };
     }
     final all = [cand("m/Widget#", change: "added"), cand("m/Widget#size.", change: "added"),
         cand("m/Other#", change: "body"), cand("m/Other#Draw().", change: "body")];

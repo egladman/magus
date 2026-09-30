@@ -1682,7 +1682,7 @@ func TestTouchedSymbolsNeverIncludeANamespace(t *testing.T) {
 	assert.False(t, namespaceSymbol(goSymbol("api", "Open()."), "Function"))
 }
 
-func TestReachesAPICrossesPackagesAndProjects(t *testing.T) {
+func TestPublicThroughCrossesPackagesAndProjects(t *testing.T) {
 	ns := func(pkg string) map[string]string { return map[string]string{attrNamespace: pkg} }
 	sym := func(pkg, desc, label, source string) types.KnowledgeNode {
 		return types.KnowledgeNode{ID: goSymbol(pkg, desc), Kind: types.KindSymbol, Label: label, Source: source, Attrs: ns(goSymbol(pkg, ""))}
@@ -1725,8 +1725,8 @@ func TestReachesAPICrossesPackagesAndProjects(t *testing.T) {
 	assert.Empty(t, cg.Boundary(helper))
 	assert.Equal(t, types.DiffBoundaryPackage, cg.Boundary(public))
 	assert.Equal(t, types.DiffBoundaryProject, cg.Boundary(exported))
-	assert.Equal(t, []types.DiffReach{
+	assert.Equal(t, []types.DiffPublicPath{
 		{ID: exported, Qualified: "Exported", Boundary: types.DiffBoundaryProject},
 		{ID: public, Qualified: "Public", Boundary: types.DiffBoundaryPackage},
-	}, impact.ReachesAPI(cg, helper))
+	}, impact.PublicThrough(cg, helper))
 }

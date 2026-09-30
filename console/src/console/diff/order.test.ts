@@ -152,8 +152,8 @@ test("risk chips state facts and name the API", () => {
           label: "Open",
           ref_count: 90,
           file_count: 43,
-          external_file_count: 0,
-          module_api: true,
+          public_file_count: 0,
+          public_beyond_workspace: true,
         },
       ],
     }),
@@ -174,8 +174,8 @@ test("removed and re-signed public symbols each earn a chip", () => {
     qualified: label,
     ref_count: 1,
     file_count: 1,
-    external_file_count: 0,
-    module_api: true,
+    public_file_count: 0,
+    public_beyond_workspace: true,
     ...over,
   });
   const chips = riskChips(
@@ -186,7 +186,7 @@ test("removed and re-signed public symbols each earn a chip", () => {
         symbol("Close", { change: "removed" }),
         symbol("Open", { change: "signature" }),
         symbol("Steady", { change: "body" }),
-        symbol("hidden", { change: "removed", module_api: false }),
+        symbol("hidden", { change: "removed", public_beyond_workspace: false }),
       ],
     }),
   );
@@ -258,7 +258,7 @@ test("conformance checks on a symbol earn one chip carrying each message", () =>
           label: "EntryPointFrom",
           ref_count: 0,
           file_count: 0,
-          external_file_count: 0,
+          public_file_count: 0,
           checks: [
             check("naming-affix", "`EntryPointFrom`: 8 of 9 functions are named `<X>FromContext`"),
             check("param-order", "`EntryPointFrom` takes `b` before `a`"),

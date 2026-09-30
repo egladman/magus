@@ -1516,10 +1516,10 @@ func diffFileFacts(f types.DiffFile) []string {
 		var across []string
 		seen := map[string]bool{}
 		for _, s := range f.Symbols {
-			if s.ModuleAPI && s.Label != "" {
+			if s.PublicBeyondWorkspace && s.Label != "" {
 				api = append(api, s.Label)
 			}
-			for _, p := range s.ExternalProjects {
+			for _, p := range s.PublicTo {
 				if !seen[p] {
 					seen[p] = true
 					across = append(across, p)
@@ -1537,7 +1537,7 @@ func diffFileFacts(f types.DiffFile) []string {
 		// Only the changes a consumer can see. A private helper listed here would sit beside
 		// the bump it did not move, and read as the reason for it.
 		for _, s := range f.Symbols {
-			if !s.ModuleAPI && len(s.ExternalProjects) == 0 {
+			if !s.PublicBeyondWorkspace && len(s.PublicTo) == 0 {
 				continue
 			}
 			switch s.Change {
