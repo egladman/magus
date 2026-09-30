@@ -90,7 +90,7 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 // So the test is shape, not content: optional NAME=value assignments, then a program and
 // its arguments, and not one character that could start a second command, expand, or
 // redirect. Everything magus ships passes (`magus buzz -s docs/.../magus-command.buzz --
-// --agent-name codex`), and nothing that composes commands does. A command this rejects
+// --agent-name <host>`), and nothing that composes commands does. A command this rejects
 // is still REPORTED by the coverage path; it is only never run.
 func runnableAsProbe(command string) bool {
 	if strings.ContainsAny(command, probeMetacharacters) {

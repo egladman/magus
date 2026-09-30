@@ -309,7 +309,7 @@ type Verdict struct {
 // backgrounds it instead of killing it. A heredoc, a pipe or a `<` still feed their own
 // command, since each sets stdin for that command alone.
 //
-// A prefix rather than a `{ <line>\n} </dev/null` group. Claude Code's isolation check for
+// A prefix rather than a `{ <line>\n} </dev/null` group. One host's isolation check for
 // worktree agents judges the rewritten line; measured 2026-09-29, it refused the group as
 // too complex even around `stat` or `git status`, and refuses the prefix only on a line it
 // already found borderline (runtime-computed values beside a redirect).

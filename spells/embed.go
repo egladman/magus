@@ -7,7 +7,7 @@ import (
 
 // shipped holds every spell directory the binary carries, whole: go:embed of a
 // directory is recursive, so a file beside spell.buzz (golang/gomod.buzz) ships with it.
-// go:embed reads the disk while a release packs only what the VCS tracks, so
+// The embed reads the disk while a release packs only what the VCS tracks, so
 // TestShippedMatchesTrackedFiles holds the two to the same file set. experimental/ stays
 // out: nothing there ships.
 //

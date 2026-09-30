@@ -191,7 +191,7 @@ const loadGCPercent = 400
 
 // optimization: run the first second of every process under loadGCPercent, not only the load.
 //
-//	measured: median wall, interleaved runs, n=60: commit-msg hook 74.1->61.6ms, claude hook
+//	measured: median wall, interleaved runs, n=60: commit-msg hook 74.1->61.6ms, tool-call hook
 //	          89.7->78.1ms, describe targets 240.8->233.9ms; one fewer GC each.
 //	trade-off: a long-lived process grows its heap 5x live for its first second.
 //	assumes:  darwin arm64, 10 P; the GCs a short process pays are the 4MB-minimum-heap ones.

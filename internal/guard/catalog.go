@@ -102,7 +102,7 @@ var denyRuleDocs = []RuleDoc{
 			"`magus refs X --definition --source` prints the declaration whole, numbered and checked against the index. Where the index cannot vouch for the name, the deny serves `sed -n <first>,<last>p <file>` instead, the declaration's own lines from a parse of the file the search reads (a named file or glob, or under a directory the files the index last saw name it). " +
 			"The single-file allowance symbol-search gives `grep -n 'func X' f.go` does not apply: with -A, -B or -C the search is the read. " +
 			"It fires only when every alternative is a definition lookup (`func X`, `func (r *T) X`, `type X`, `type X struct`) and a declaration of each name is found; a search for uses, a case-insensitive one, or one with any text alternative is left to the search rules. A pipe after it is named as not reproduced. " +
-			"Measured 2026-09-29 over the audit's Claude, Codex and Cursor transcripts: 1,456 context-flag definition lookups, 16 of them denied by any rule. A hand-read sample of 39 held 33 (85%) where the served command answered what the grep asked; the 6 misses filtered the body through a second grep for a few lines, which the served command answers at a higher cost."},
+			"Measured 2026-09-29 over the audit's transcripts from three hosts: 1,456 context-flag definition lookups, 16 of them denied by any rule. A hand-read sample of 39 held 33 (85%) where the served command answered what the grep asked; the 6 misses filtered the body through a second grep for a few lines, which the served command answers at a higher cost."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
 		Catches: "an inline interpreter rewriting a file this tree already carries",
 		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +
@@ -317,7 +317,7 @@ var advisoryDocs = []RuleDoc{
 		Why: "An agent's shell command inherits an open stdin nobody writes to, so anything that reads it (grep or cat with no operand, read, a prompt, ssh, a pager) waits forever, and a host that times the call out backgrounds it rather than killing it. " +
 			"Measured 2026-09-29: a grep whose file operands expanded to nothing read that stdin for 3.5 hours. " +
 			"Where the host lets a hook rewrite the call, the guard prefixes the command with `exec </dev/null;`, never on a refused call and never twice. A heredoc, a pipe or a `<` still give a command its input, since each sets stdin for its own command. " +
-			"A prefix rather than a `{ <command>` ... `} </dev/null` group: Claude Code's isolation check for worktree agents judges the rewritten line, and measured 2026-09-29 it refused the group as too complex even around `stat` or `git status`, where it refuses the prefix only on a line it already found borderline (runtime-computed values beside a redirect)."},
+			"A prefix rather than a `{ <command>` ... `} </dev/null` group: one host's isolation check for worktree agents judges the rewritten line, and measured 2026-09-29 it refused the group as too complex even around `stat` or `git status`, where it refuses the prefix only on a line it already found borderline (runtime-computed values beside a redirect)."},
 	{Name: string(advisoryTimedMagus), Decision: "advise", Catches: "`time` around a silent magus run, which already reports its own durations"},
 	{Name: string(denyRuleReadNavigation), Decision: "deny",
 		Catches: "a whole read of a Go, Buzz or Markdown file over 120 lines",
@@ -328,7 +328,7 @@ var advisoryDocs = []RuleDoc{
 			"120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 8,394 dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by an edit of that file. " +
 			"Measured 2026-09-29 over the audit's transcripts: 657 whole reads of Go or Markdown files over 120 lines ran, 3 denied, most of them on a stale index or a multi-file cat (63); about 90% were reads a map serves, the rest a read before an edit (~38), the reader's own new file (2) and a skill read whole (~17). 299 of them came through the host read tool, which nothing judged. " +
 			"Buzz: 125 whole reads over 120 lines, 5 denied by any rule; a hand-read sample of 35 held 29 (83%), the misses a read right before an edit and a review of the reader's own diff. " +
-			"Silent on a short file, TypeScript (no parser here), SKILL.md, AGENTS.md and CLAUDE.md (written to be read whole), a generated output, a path outside the workspace, a file that does not parse, and a read feeding a pipe or redirect."},
+			"Silent on a short file, TypeScript (no parser here), SKILL.md, AGENTS.md and a host's own instruction file (written to be read whole), a generated output, a path outside the workspace, a file that does not parse, and a read feeding a pipe or redirect."},
 	{Name: string(advisoryReadSymbol), Decision: "advise",
 		Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked",
 		Why:     "Silent inside a method: refs resolves bare names, so its command would print every method of that name."},
