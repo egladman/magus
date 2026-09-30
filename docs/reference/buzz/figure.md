@@ -56,13 +56,32 @@ external is an actor the figure draws but no directory holds. look defaults to
 
 ### of
 
-of starts an empty left-to-right figure. The collections are built here because a mut
+of starts an empty figure. direction defaults to Direction.across; generated marks a
 
-**Signature:** `figure\of(id) -> mut Figure`
+**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction], [generated]) -> mut Figure`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `id`      | `any` |          |             |
+| Parameter   | Type  | Optional | Description |
+| ----------- | ----- | -------- | ----------- |
+| `id`        | `any` |          |             |
+| `title`     | `any` | yes      |             |
+| `eyebrow`   | `any` | yes      |             |
+| `desc`      | `any` | yes      |             |
+| `direction` | `any` | yes      |             |
+| `generated` | `any` | yes      |             |
+
+**Returns:** any
+
+### draw
+
+draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
+
+**Signature:** `figure\draw(f, theme, [anchorHref]) -> str`
+
+| Parameter    | Type  | Optional | Description |
+| ------------ | ----- | -------- | ----------- |
+| `f`          | `any` |          |             |
+| `theme`      | `any` |          |             |
+| `anchorHref` | `any` | yes      |             |
 
 **Returns:** any
 

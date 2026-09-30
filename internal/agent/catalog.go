@@ -258,7 +258,8 @@ import (
 // markdownlint requires.
 // 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
 // 103: magus-diagram teaches magus/figure: boxes from Dir records, groups by layer or dirs set, edges from the graph.
-const SkillVersion = 103
+// 104: magus-diagram passes title, eyebrow, desc and direction to figure\of and paints with figure\draw.
+const SkillVersion = 104
 
 const skillLicense = "GPL-3.0-or-later"
 

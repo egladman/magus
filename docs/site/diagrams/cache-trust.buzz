@@ -15,14 +15,14 @@ export fun cacheTrustFigure() > figure\Figure !> any {
     final local = figure\external("Local tier", sub: "Actions cache, PR ref", look: figure\Look.store);
     final main = figure\external("Default branch run", sub: "holds the signing key", tag: "push", look: figure\Look.plain);
     final reject = figure\external("Unsigned entry", sub: "rejected, then rebuilt", look: figure\Look.optional);
-    return figure\of("cache-trust")
-        .eyebrow("remote cache")
-        .title("A pull request reads the shared cache and never writes it")
-        .desc("A pull request run reads the signed remote tier and reads and writes a "
-            + "local tier scoped to its own ref. Only a run on the default branch holds "
-            + "the signing key, so only the default branch writes the remote tier. "
-            + "Every read checks the signature "
-            + "and rebuilds the target on an unsigned entry.")
+    return figure\of("cache-trust",
+            title: "A pull request reads the shared cache and never writes it",
+            eyebrow: "remote cache",
+            desc: "A pull request run reads the signed remote tier and reads and writes a "
+                + "local tier scoped to its own ref. Only a run on the default branch holds "
+                + "the signing key, so only the default branch writes the remote tier. "
+                + "Every read checks the signature "
+                + "and rebuilds the target on an unsigned entry.")
         .actor(pr)
         .actor(local)
         .box(remote, label: "Remote tier", sub: "verified on every read", tag: "ed25519", focal: true)

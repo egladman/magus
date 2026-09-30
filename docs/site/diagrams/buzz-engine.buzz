@@ -23,15 +23,15 @@ export fun buzzEngineFigure() > figure\Figure !> any {
     final vm = magus\dir("libs/gopherbuzz/vm");
     final playground = figure\external("Browser playground", sub: "js/wasm editor, REPL", tag: "client", look: figure\Look.plain);
     final valueTypes = "every binding and module passes vm and gopherbuzz values; the program reaches them through the pipeline";
-    return figure\of("buzz-engine")
-        .eyebrow("buzz")
-        .title("One pipeline, and the modules each host registers")
-        .desc("gopherbuzz parses Buzz source, type-checks it, compiles it to bytecode and "
-            + "runs it on its VM, the same way for a magusfile, a spell, a magus buzz "
-            + "script and the browser playground. The host bindings register magus's host "
-            + "modules at init, through the trampolines generated from each module's "
-            + "descriptor. The playground's wasm build installs only the modules marked "
-            + "WASM: pure compute, with no filesystem, process or network access.")
+    return figure\of("buzz-engine",
+            title: "One pipeline, and the modules each host registers",
+            eyebrow: "buzz",
+            desc: "gopherbuzz parses Buzz source, type-checks it, compiles it to bytecode and "
+                + "runs it on its VM, the same way for a magusfile, a spell, a magus buzz "
+                + "script and the browser playground. The host bindings register magus's host "
+                + "modules at init, through the trampolines generated from each module's "
+                + "descriptor. The playground's wasm build installs only the modules marked "
+                + "WASM: pure compute, with no filesystem, process or network access.")
         .box(engine, label: "Magusfile engine", sub: "load, cache, run targets")
         .box(bindings, label: "Host bindings", sub: "magus namespace, init()")
         .box(hostModules, label: "Host modules", sub: "fs, vcs, proc, http, json")

@@ -16,12 +16,12 @@ export fun ciProvidersFigure() > figure\Figure !> any {
     final ops = figure\external("Provider ops", sub: "group start, end, annotate", look: figure\Look.plain);
     final prefixes = figure\external("quote_prefixes", sub: "declared once", look: figure\Look.plain);
     final vendor = figure\external("CI system", sub: "job log, pull request");
-    return figure\of("ci-providers")
-        .eyebrow("ci providers")
-        .title("Vendor syntax lives in the spell, never in the binary")
-        .desc("A failing project reaches the annotator contract, which speaks generic "
-            + "verbs to a provider spell; the spell translates them into the CI system's "
-            + "own syntax. Quote prefixes are declared once and applied per line in Go.")
+    return figure\of("ci-providers",
+            title: "Vendor syntax lives in the spell, never in the binary",
+            eyebrow: "ci providers",
+            desc: "A failing project reaches the annotator contract, which speaks generic "
+                + "verbs to a provider spell; the spell translates them into the CI system's "
+                + "own syntax. Quote prefixes are declared once and applied per line in Go.")
         .actor(run)
         .box(contract, label: "Annotator contract", sub: "internal/ci/annotate")
         .box(quote, label: "QuoteWith", sub: "per line, in Go")

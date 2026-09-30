@@ -20,16 +20,16 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
     final files = figure\external("SVGs + receipts", sub: "diagrams-generate", look: figure\Look.store);
     final site = figure\external("Site render", sub: "inlines the page copy", look: figure\Look.plain);
     final console = figure\external("Console view", sub: "static SVG, then wasm", look: figure\Look.plain);
-    return figure\of("diagram-pipeline")
-        .eyebrow("figures")
-        .title("One library draws every figure, here and in the console")
-        .desc("A figure in docs/site/diagrams builds its boxes from the knowledge graph's own "
-            + "records, magus\\dir, magus\\dirs and magus\\layer, and draws the imports and "
-            + "declared calls between them. magus/figure lays it out and paints it; "
-            + "diagrams-generate writes the committed light, dark and page copies with a "
-            + "receipt beside each, and the site render inlines the page copy. The server "
-            + "embeds the same module to draw live figures at /api/v1/diagrams, which the "
-            + "console fetches.")
+    return figure\of("diagram-pipeline",
+            title: "One library draws every figure, here and in the console",
+            eyebrow: "figures",
+            desc: "A figure in docs/site/diagrams builds its boxes from the knowledge graph's own "
+                + "records, magus\\dir, magus\\dirs and magus\\layer, and draws the imports and "
+                + "declared calls between them. magus/figure lays it out and paints it; "
+                + "diagrams-generate writes the committed light, dark and page copies with a "
+                + "receipt beside each, and the site render inlines the page copy. The server "
+                + "embeds the same module to draw live figures at /api/v1/diagrams, which the "
+                + "console fetches.")
         .actor(source)
         .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: figure\Look.input)
         .box(module, label: "magus/figure", sub: "sets, layout, paint", focal: true)

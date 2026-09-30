@@ -23,15 +23,15 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
     final mcp = figure\setOf(nested + [tools]);
     final harness = figure\external("Harness spells", sub: "hook entries per host", look: figure\Look.plain);
     final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor", tag: "client");
-    return figure\of("agent-surface")
-        .eyebrow("agents")
-        .title("What an agent host gets, and the gate every call crosses")
-        .desc("magus agent install writes the skills and the AGENTS.md block, and magus "
-            + "describe harness prints the hook entries a person merges into the host's "
-            + "config. From then on the host runs the guard's PreToolUse hook before every "
-            + "shell command, file edit and magus MCP call, and only an allowed call runs. "
-            + "Skills, guard verdicts and MCP replies all name commands through internal/hint, "
-            + "so a renamed command cannot leave one of them pointing at nothing.")
+    return figure\of("agent-surface",
+            title: "What an agent host gets, and the gate every call crosses",
+            eyebrow: "agents",
+            desc: "magus agent install writes the skills and the AGENTS.md block, and magus "
+                + "describe harness prints the hook entries a person merges into the host's "
+                + "config. From then on the host runs the guard's PreToolUse hook before every "
+                + "shell command, file edit and magus MCP call, and only an allowed call runs. "
+                + "Skills, guard verdicts and MCP replies all name commands through internal/hint, "
+                + "so a renamed command cannot leave one of them pointing at nothing.")
         .box(skills, label: "Skills catalog", sub: "embedded skills, AGENTS.md")
         .actor(harness)
         .actor(host)

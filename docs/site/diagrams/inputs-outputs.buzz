@@ -33,18 +33,18 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
     final writes = figure\external("writesFiles(\"**/gen/mocks/*.go\")", sub: "the root's gen/ only", tag: "root", look: figure\Look.plain);
     final handle = figure\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: figure\Look.plain);
     final probe = figure\external("Tool probe", sub: "the version, or UNPROBED", look: figure\Look.plain);
-    return figure\of("inputs-outputs")
-        .eyebrow("inputs and outputs")
-        .title("An output stops at a nested project; an input does not")
-        .desc("A target's ctx.readsFiles and ctx.writesFiles globs resolve from its own "
-            + "project's directory. The source walk matches every file a glob names, so the "
-            + "root's **/*.go keys every nested Go file too. An output glob claims a file "
-            + "inside a nested project only when the glob is rooted there; the snapshot, "
-            + "the replay and the drift gate all ask the same rule, and a write that lands "
-            + "there anyway fails the run as MGS3001. A nested project reads the root's "
-            + "tree through a project handle, workspace\\file, which also makes the root "
-            + "its upstream. The matched files and the probed tool versions are the key; an "
-            + "input nobody declared never reaches it.")
+    return figure\of("inputs-outputs",
+            title: "An output stops at a nested project; an input does not",
+            eyebrow: "inputs and outputs",
+            desc: "A target's ctx.readsFiles and ctx.writesFiles globs resolve from its own "
+                + "project's directory. The source walk matches every file a glob names, so the "
+                + "root's **/*.go keys every nested Go file too. An output glob claims a file "
+                + "inside a nested project only when the glob is rooted there; the snapshot, "
+                + "the replay and the drift gate all ask the same rule, and a write that lands "
+                + "there anyway fails the run as MGS3001. A nested project reads the root's "
+                + "tree through a project handle, workspace\\file, which also makes the root "
+                + "its upstream. The matched files and the probed tool versions are the key; an "
+                + "input nobody declared never reaches it.")
         .actor(reads)
         .actor(writes)
         .actor(handle)

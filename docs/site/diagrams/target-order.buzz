@@ -41,13 +41,13 @@ export fun targetOrderFigure() > figure\Figure !> any {
     final security = figure\external("security", sub: "advisory data, uncached", look: figure\Look.plain);
     final ci = figure\external("ci", sub: "MGS1001 when absent", look: figure\Look.focal);
     final cd = figure\external("cd charm", sub: "ci:cd delivers", look: figure\Look.optional);
-    return figure\of("target-order")
-        .down()
-        .eyebrow("targets")
-        .title("Only ci is required; the rest is an order")
-        .desc("magus refuses a ci run when no project in scope declares ci. Every other "
-            + "step, and the order between them, is the convention this workspace follows "
-            + "so each verb means the same thing in every project.")
+    return figure\of("target-order",
+            title: "Only ci is required; the rest is an order",
+            eyebrow: "targets",
+            desc: "magus refuses a ci run when no project in scope declares ci. Every other "
+                + "step, and the order between them, is the convention this workspace follows "
+                + "so each verb means the same thing in every project.",
+            direction: figure\Direction.down)
         .actor(install)
         .actor(generate)
         .actor(format)

@@ -21,15 +21,15 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
     final symbols = figure\external("Symbols", sub: "SCIP index, lazy shards", look: figure\Look.input);
     final vcs = figure\external("History", sub: "@vcs, from git", look: figure\Look.plain);
     final notes = figure\external("Notes", sub: "@notes shared + private", look: figure\Look.plain);
-    return figure\of("knowledge-graph")
-        .eyebrow("knowledge graph")
-        .title("Every source writes a shard; every reader asks one graph")
-        .desc("magus graph build assembles a shard per source: the registry and one per "
-            + "project from the magusfiles, the file adapters for Buzz, docs, directories, "
-            + "citations and CODEOWNERS, a lazy symbol shard per project from a SCIP index, "
-            + "git history and notes. The store fingerprints each shard and rewrites only "
-            + "the ones whose content changed, then merges them into one graph. The CLI and "
-            + "the MCP tools read that graph through the same query, explain, refs and path.")
+    return figure\of("knowledge-graph",
+            title: "Every source writes a shard; every reader asks one graph",
+            eyebrow: "knowledge graph",
+            desc: "magus graph build assembles a shard per source: the registry and one per "
+                + "project from the magusfiles, the file adapters for Buzz, docs, directories, "
+                + "citations and CODEOWNERS, a lazy symbol shard per project from a SCIP index, "
+                + "git history and notes. The store fingerprints each shard and rewrites only "
+                + "the ones whose content changed, then merges them into one graph. The CLI and "
+                + "the MCP tools read that graph through the same query, explain, refs and path.")
         .actor(core)
         .actor(files)
         .actor(symbols)

@@ -41,8 +41,7 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final mcp = magus\dir("internal/handler/mcp");
     final handlers = figure\layerSet(magus\layer("handler"));
     final agent = figure\external("AI agents", look: figure\Look.plain);
-    return figure\of("server-http")
-        .title("The HTTP surface")
+    return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(handlers.without([mcp]), label: "Console routes")
@@ -55,12 +54,13 @@ export fun serverHttpFigure() > figure\Figure !> any {
 `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming the
 nearest one, and `magus\layer(name)` raises MGS7006 on a layer nothing declares. A typo
 fails the figure at the line that made it. `.diagram()` lays it out and raises every
-finding at once; `.svg(figure\Theme.light)` does the same and paints it. Prove a figure
-draws before you register it: call it from a scratch `main()` inside `try`/`catch` and
-run it with `{{cmd "buzz"}} <file>`.
+finding at once; `figure\draw(f, theme: figure\Theme.light)` does the same and paints
+it. Prove a figure draws before you register it: call it from a scratch `main()` inside
+`try`/`catch` and run it with `{{cmd "buzz"}} <file>`.
 
 {{if .Full}}`title` is the claim, `desc` the sentence under it, `eyebrow` the small label
-above. `down()` lays ranks top to bottom instead of left to right.
+above, all arguments of `figure\of`. `direction: figure\Direction.down` lays ranks top to
+bottom instead of left to right.
 
 {{end}}## Boxes, groups and actors
 

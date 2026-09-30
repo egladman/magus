@@ -825,14 +825,14 @@ export object RunOrderItem {
 // the table immediately above already carries the same relationships. Returning "" there is
 // a deliberate omission, not a failure.
 //
-// A target is no directory, so each box is an actor and each edge a hand edge; generated()
+// A target is no directory, so each box is an actor and each edge a hand edge; generated: true
 // lifts the hand-authored budgets, since the workspace's own graph has no author to hold to
 // them.
 final CapGeneratedNodes = 24;
 
 export fun dependencyFigure(id: str, title: str, items: [RunOrderItem]) > str {
     if (items.len() == 0 or items.len() > CapGeneratedNodes) { return ""; }
-    final f = figure\of(id).generated().title(title).desc(title)
+    final f = figure\of(id, title: title, desc: title, generated: true)
         .unscoped(why: "a project's targets, which are declared in a magusfile, not directories");
     final boxes: mut {str: figure\Actor} = mut {<str: figure\Actor>};
     foreach (it in items) {
@@ -852,7 +852,7 @@ export fun dependencyFigure(id: str, title: str, items: [RunOrderItem]) > str {
     // outcome, but SAY so: swallowing it silently is how eight run-order figures once
     // vanished unnoticed.
     try {
-        final svg = f.svg(figure\Theme.page);
+        final svg = figure\draw(f, theme: figure\Theme.page);
         return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
     } catch (e) {
         magus\log.warn("skipped diagram {id}: {e}");

@@ -34,8 +34,7 @@ import "magus/figure";
 export fun cacheReadFigure() > figure\Figure !> any {
     final cache = magus\dir("internal/cache");
     final run = figure\external("Run target", look: figure\Look.plain);
-    return figure\of("cache-read")
-        .title("A hit skips the run")
+    return figure\of("cache-read", title: "A hit skips the run")
         .box(cache, label: "Cache key", focal: true)
         .flowOut(cache, dst: run, label: "miss")
         .scope(figure\setOf([cache]));

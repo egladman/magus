@@ -19,13 +19,13 @@ export fun volatilityFigure() > figure\Figure !> any {
     final pass = figure\external("retry passed?", look: figure\Look.decision);
     final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
     final regress = figure\external("Suspected regression", sub: "chase with --bisect", look: figure\Look.focal);
-    return figure\of("volatility")
-        .down()
-        .eyebrow("volatility")
-        .title("When a failure is retried, and when it is believed")
-        .desc("A failing target is retried once if history is too thin to judge, or if its "
-            + "measured volatility is above the threshold. A retry that passes is recorded "
-            + "as volatile and the run continues; anything else is a suspected regression.")
+    return figure\of("volatility",
+            title: "When a failure is retried, and when it is believed",
+            eyebrow: "volatility",
+            desc: "A failing target is retried once if history is too thin to judge, or if its "
+                + "measured volatility is above the threshold. A retry that passes is recorded "
+                + "as volatile and the run continues; anything else is a suspected regression.",
+            direction: figure\Direction.down)
         .actor(fail)
         .actor(det)
         .actor(report)

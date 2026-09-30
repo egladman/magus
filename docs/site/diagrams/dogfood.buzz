@@ -20,14 +20,14 @@ export fun dogfoodFigure() > figure\Figure !> any {
     final gates = figure\external("Every gate", sub: "lint, build, test, ci", look: figure\Look.focal);
     final pinned = figure\external("Last release", sub: "setup-magus git-ref");
     final compat = figure\external("audit compat", sub: "red is a signal, not a stop", look: figure\Look.optional);
-    return figure\of("dogfood")
-        .eyebrow("development")
-        .title("magus builds magus, then runs the last release at it too")
-        .desc("Almost every CI job builds magus from the commit under test and runs it "
-            + "against that commit's magusfile, so a change can rely on a feature that has "
-            + "not shipped. One audit job instead runs the pinned previous release against "
-            + "the same magusfile; it is advisory, and a failure reports a breaking change "
-            + "rather than blocking the branch.")
+    return figure\of("dogfood",
+            title: "magus builds magus, then runs the last release at it too",
+            eyebrow: "development",
+            desc: "Almost every CI job builds magus from the commit under test and runs it "
+                + "against that commit's magusfile, so a change can rely on a feature that has "
+                + "not shipped. One audit job instead runs the pinned previous release against "
+                + "the same magusfile; it is advisory, and a failure reports a breaking change "
+                + "rather than blocking the branch.")
         .actor(commit)
         .flowAcross(commit, dst: fromSource)
         .flowAcross(commit, dst: pinned)

@@ -22,17 +22,17 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
     final rootMf = figure\external("Root magusfile", sub: "declares project .", look: figure\Look.input);
     final nestedMf = figure\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: figure\Look.input);
     final steps = figure\setOf([discover, interp, extract, cache]);
-    return figure\of("workspace-load")
-        .eyebrow("workspace")
-        .title("A target exists because a magusfile exported it")
-        .desc("Discovery walks the tree from the root marker and registers one project per "
-            + "magusfile: the root's is project ., each nested one declares its own. Every "
-            + "magusfile is evaluated: its exported functions are its targets and "
-            + "magus\\project layers policy on. A static read of each target body recovers "
-            + "ctx.readsFiles, ctx.writesFiles and cross-project ctx.needs as literals. The "
-            + "project model that results is what the cache keys, what describe answers "
-            + "from, and what a command resolves its project against from the current "
-            + "directory.")
+    return figure\of("workspace-load",
+            title: "A target exists because a magusfile exported it",
+            eyebrow: "workspace",
+            desc: "Discovery walks the tree from the root marker and registers one project per "
+                + "magusfile: the root's is project ., each nested one declares its own. Every "
+                + "magusfile is evaluated: its exported functions are its targets and "
+                + "magus\\project layers policy on. A static read of each target body recovers "
+                + "ctx.readsFiles, ctx.writesFiles and cross-project ctx.needs as literals. The "
+                + "project model that results is what the cache keys, what describe answers "
+                + "from, and what a command resolves its project against from the current "
+                + "directory.")
         .actor(rootMf)
         .actor(nestedMf)
         .box(discover, label: "Projects", sub: "discovery, Where(cwd)")

@@ -15,12 +15,12 @@ export fun projectReferenceFigure() > figure\Figure !> any {
     final ref = figure\external("One reference", sub: "path: pkg/api", look: figure\Look.focal);
     final human = figure\external("Human output", sub: "pkg/api", look: figure\Look.plain);
     final machine = figure\external("Machine output", sub: "workspace://pkg/api", look: figure\Look.plain);
-    return figure\of("project-reference")
-        .eyebrow("agents")
-        .title("Four spellings in, one reference out")
-        .desc("magus accepts a workspace URL, a workspace-relative path, a dot-relative "
-            + "path or the bare root alias, and parses them all to one project reference. "
-            + "Human output prints the short path; machine output prints the workspace URL.")
+    return figure\of("project-reference",
+            title: "Four spellings in, one reference out",
+            eyebrow: "agents",
+            desc: "magus accepts a workspace URL, a workspace-relative path, a dot-relative "
+                + "path or the bare root alias, and parses them all to one project reference. "
+                + "Human output prints the short path; machine output prints the workspace URL.")
         .actor(url)
         .actor(rel)
         .actor(dot)

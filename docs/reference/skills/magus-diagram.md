@@ -3,8 +3,8 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 7975
-skill_short_bytes: 7238
+skill_full_bytes: 8040
+skill_short_bytes: 7247
 ---
 
 # magus-diagram
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `103` |
+| `agent-skill-version` | `104` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `5b23950d9e19` |
+| `skill-content` | `9dfcef11e5e3` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -93,8 +93,7 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final mcp = magus\dir("internal/handler/mcp");
     final handlers = figure\layerSet(magus\layer("handler"));
     final agent = figure\external("AI agents", look: figure\Look.plain);
-    return figure\of("server-http")
-        .title("The HTTP surface")
+    return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(handlers.without([mcp]), label: "Console routes")
@@ -107,9 +106,9 @@ export fun serverHttpFigure() > figure\Figure !> any {
 `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming the
 nearest one, and `magus\layer(name)` raises MGS7006 on a layer nothing declares. A typo
 fails the figure at the line that made it. `.diagram()` lays it out and raises every
-finding at once; `.svg(figure\Theme.light)` does the same and paints it. Prove a figure
-draws before you register it: call it from a scratch `main()` inside `try`/`catch` and
-run it with `magus buzz <file>`.
+finding at once; `figure\draw(f, theme: figure\Theme.light)` does the same and paints
+it. Prove a figure draws before you register it: call it from a scratch `main()` inside
+`try`/`catch` and run it with `magus buzz <file>`.
 
 ## Boxes, groups and actors
 
@@ -252,8 +251,7 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final mcp = magus\dir("internal/handler/mcp");
     final handlers = figure\layerSet(magus\layer("handler"));
     final agent = figure\external("AI agents", look: figure\Look.plain);
-    return figure\of("server-http")
-        .title("The HTTP surface")
+    return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(handlers.without([mcp]), label: "Console routes")
@@ -266,12 +264,13 @@ export fun serverHttpFigure() > figure\Figure !> any {
 `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming the
 nearest one, and `magus\layer(name)` raises MGS7006 on a layer nothing declares. A typo
 fails the figure at the line that made it. `.diagram()` lays it out and raises every
-finding at once; `.svg(figure\Theme.light)` does the same and paints it. Prove a figure
-draws before you register it: call it from a scratch `main()` inside `try`/`catch` and
-run it with `magus buzz <file>`.
+finding at once; `figure\draw(f, theme: figure\Theme.light)` does the same and paints
+it. Prove a figure draws before you register it: call it from a scratch `main()` inside
+`try`/`catch` and run it with `magus buzz <file>`.
 
 `title` is the claim, `desc` the sentence under it, `eyebrow` the small label
-above. `down()` lays ranks top to bottom instead of left to right.
+above, all arguments of `figure\of`. `direction: figure\Direction.down` lays ranks top to
+bottom instead of left to right.
 
 ## Boxes, groups and actors
 

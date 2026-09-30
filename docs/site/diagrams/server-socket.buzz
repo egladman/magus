@@ -18,12 +18,12 @@ export fun serverSocketFigure() > figure\Figure !> any {
     final ws = figure\external("Workspace registry", sub: "graph, SCIP, cache", look: figure\Look.store);
     final runs = figure\external("Run registry", sub: "live runs", look: figure\Look.store);
     final svc = figure\external("Broker", sub: "shared services");
-    return figure\of("server-socket")
-        .eyebrow("magus server")
-        .title("How a local command reaches the server")
-        .desc("The magus CLI dispatches over a private unix domain socket into the "
-            + "concurrency pool, the workspace registry and the run registry; shared services "
-            + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
+    return figure\of("server-socket",
+            title: "How a local command reaches the server",
+            eyebrow: "magus server",
+            desc: "The magus CLI dispatches over a private unix domain socket into the "
+                + "concurrency pool, the workspace registry and the run registry; shared services "
+                + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
         .actor(cli)
         .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
         // --open is the destination flag; --serve only changes how the graph is handed

@@ -99,9 +99,9 @@ fun runFigure(f: figure\Figure) > FigureRun {
         final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
         return FigureRun{
             id = f.id, stamp = stamp, imports = imports, calls = calls, flow = flow,
-            dark = stamped(f.svg(figure\Theme.dark), id: f.id, stamp: stamp),
-            light = stamped(f.svg(figure\Theme.light), id: f.id, stamp: stamp),
-            page = stamped(f.svg(figure\Theme.page), id: f.id, stamp: stamp),
+            dark = stamped(figure\draw(f, theme: figure\Theme.dark), id: f.id, stamp: stamp),
+            light = stamped(figure\draw(f, theme: figure\Theme.light), id: f.id, stamp: stamp),
+            page = stamped(figure\draw(f, theme: figure\Theme.page), id: f.id, stamp: stamp),
         };
     } catch (msg: str) {
         return FigureRun{ id = f.id, findings = msg.split("\n") };

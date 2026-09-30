@@ -13,12 +13,12 @@ export fun imageBuildFigure() > figure\Figure !> any {
     final commit = figure\external("Commit", sub: "ghcr, tagged by hash", look: figure\Look.plain);
     final unstable = figure\external("Prerelease", sub: "no floating tag", look: figure\Look.plain);
     final stable = figure\external("Release", sub: "version and latest", look: figure\Look.plain);
-    return figure\of("image-build")
-        .eyebrow("recommendations")
-        .title("What a bare run pushes, and what each channel adds")
-        .desc("Without the cd charm an image-build loads locally and pushes nothing. With "
-            + "it, the channel decides: the default commit channel adds one immutable tag "
-            + "to one registry, and only stable moves the floating latest tag.")
+    return figure\of("image-build",
+            title: "What a bare run pushes, and what each channel adds",
+            eyebrow: "recommendations",
+            desc: "Without the cd charm an image-build loads locally and pushes nothing. With "
+                + "it, the channel decides: the default commit channel adds one immutable tag "
+                + "to one registry, and only stable moves the floating latest tag.")
         .flowAcross(run, dst: cd)
         .flowAcross(cd, dst: local, label: "no")
         .flowAcross(cd, dst: channel, label: "yes")

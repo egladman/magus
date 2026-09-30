@@ -11,12 +11,12 @@ import "magus/figure";
 
 export fun ciPipelineFigure() > figure\Figure !> any {
     final cmd = figure\external("magus affected ci", look: figure\Look.focal);
-    final f = figure\of("ci-pipeline")
-        .eyebrow("targets")
-        .title("ci declares steps, not an order")
-        .desc("A ci target names its steps in a single needs call, so they are independent "
-            + "and run in parallel. Order comes from edges the steps themselves declare, "
-            + "such as test depending on build. magus enforces none of this list.")
+    final f = figure\of("ci-pipeline",
+            title: "ci declares steps, not an order",
+            eyebrow: "targets",
+            desc: "A ci target names its steps in a single needs call, so they are independent "
+                + "and run in parallel. Order comes from edges the steps themselves declare, "
+                + "such as test depending on build. magus enforces none of this list.")
         .actor(cmd)
         .unscoped(why: "a magusfile convention, not a package: nothing in the tree to hold it to");
     foreach (step in ["generate", "format", "lint", "build", "test", "security"]) {

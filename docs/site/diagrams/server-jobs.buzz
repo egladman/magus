@@ -17,12 +17,12 @@ export fun serverJobsFigure() > figure\Figure !> any {
     final idx = figure\external("SCIP indexer", sub: "symbol index", tag: "job", look: figure\Look.plain);
     final job = figure\external("Graph build", sub: "coalesced, async", tag: "job", look: figure\Look.plain);
     final ws = figure\external("Workspace registry", sub: "the warm graph", tag: "state", look: figure\Look.focal);
-    return figure\of("server-jobs")
-        .eyebrow("magus server")
-        .title("What keeps the warm workspace current")
-        .desc("File changes drive the watchers and the SCIP auto-indexer; a magus run "
-            + "queues a coalesced graph-build job. All three write into the workspace "
-            + "registry, which is the server's single warm copy of the knowledge graph.")
+    return figure\of("server-jobs",
+            title: "What keeps the warm workspace current",
+            eyebrow: "magus server",
+            desc: "File changes drive the watchers and the SCIP auto-indexer; a magus run "
+                + "queues a coalesced graph-build job. All three write into the workspace "
+                + "registry, which is the server's single warm copy of the knowledge graph.")
         .actor(fs)
         .actor(cli)
         .box(watch, label: "File watchers", sub: "internal/file/watch", tag: "job")

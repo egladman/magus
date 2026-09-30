@@ -14,13 +14,13 @@ export fun commitGeneratedFigure() > figure\Figure !> any {
     final churn = figure\external("big or churns?", look: figure\Look.decision);
     final skip = figure\external("Do not commit", sub: "CI builds it", look: figure\Look.plain);
     final commit = figure\external("Commit it", sub: "generate is the gate", look: figure\Look.focal);
-    return figure\of("commit-generated")
-        .down()
-        .eyebrow("cache")
-        .title("Whether a generated file belongs in the repo")
-        .desc("A generated file is committed only when it is a pure function of committed "
-            + "sources, is not already produced by the build, is read by something that "
-            + "never runs the build, and is neither large nor churning.")
+    return figure\of("commit-generated",
+            title: "Whether a generated file belongs in the repo",
+            eyebrow: "cache",
+            desc: "A generated file is committed only when it is a pure function of committed "
+                + "sources, is not already produced by the build, is read by something that "
+                + "never runs the build, and is neither large nor churning.",
+            direction: figure\Direction.down)
         .actor(start)
         .actor(pure)
         .actor(needed)

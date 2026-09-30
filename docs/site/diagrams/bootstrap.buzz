@@ -35,19 +35,19 @@ export fun bootstrapFigure() > figure\Figure !> any {
     final spells = figure\external("Spell bytecode", sub: "spells-generate", look: figure\Look.store);
     final stale = figure\external("Stale policy", sub: "stamp vs sources", look: figure\Look.input);
     final escape = figure\external("Relink escape", sub: "mv magus magus.old", look: figure\Look.plain);
-    return figure\of("bootstrap")
-        .down()
-        .eyebrow("bootstrap")
-        .title("One go run, then magus builds magus")
-        .desc("In a checkout with no ./magus, the guard's raw-tool rule advises exactly one "
-            + "command through, alone on its line: go run -trimpath ./cmd/magus run go-build "
-            + "--no-cache ., which runs the real go-build target. It regenerates the spell "
-            + "bytecode first and links a stamp of the sources the binary was built from. "
-            + "Every other raw go command, a bare go build included, is refused and served that "
-            + "command; once ./magus exists the rule names ./magus run go-build . instead. The "
-            + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
-            + "the checkout, and when a binary can no longer load the tree the escape moves it "
-            + "aside, which is the one way back to the bootstrap.")
+    return figure\of("bootstrap",
+            title: "One go run, then magus builds magus",
+            eyebrow: "bootstrap",
+            desc: "In a checkout with no ./magus, the guard's raw-tool rule advises exactly one "
+                + "command through, alone on its line: go run -trimpath ./cmd/magus run go-build "
+                + "--no-cache ., which runs the real go-build target. It regenerates the spell "
+                + "bytecode first and links a stamp of the sources the binary was built from. "
+                + "Every other raw go command, a bare go build included, is refused and served that "
+                + "command; once ./magus exists the rule names ./magus run go-build . instead. The "
+                + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
+                + "the checkout, and when a binary can no longer load the tree the escape moves it "
+                + "aside, which is the one way back to the bootstrap.",
+            direction: figure\Direction.down)
         .actor(person)
         .box(cli, label: "magus on PATH", sub: "re-execs ./magus")
         .box(rule, label: "Raw-tool rule", sub: "refuses a raw go build")

@@ -23,14 +23,14 @@ export fun serverShareFigure() > figure\Figure !> any {
     final withheld = magus\dir("internal/handler/graph");
     final dash = figure\external("Console", sub: "dashboard", tag: "pwa", look: figure\Look.plain);
     final phone = figure\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");
-    return figure\of("server-share")
-        .eyebrow("magus server")
-        .title("The only listener a second machine can reach")
-        .desc("Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
-            + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
-            + "serves four JSON read routes and the read Connect services, and nothing "
-            + "else: the graph, the diff routes, the derived plan, the job store, "
-            + "/mcp and job control stay loopback only.")
+    return figure\of("server-share",
+            title: "The only listener a second machine can reach",
+            eyebrow: "magus server",
+            desc: "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
+                + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
+                + "serves four JSON read routes and the read Connect services, and nothing "
+                + "else: the graph, the diff routes, the derived plan, the job store, "
+                + "/mcp and job control stay loopback only.")
         .actor(dash)
         .box(server, label: "/api/v1/share", sub: "loopback + bearer", tag: "route")
         .box(lan, label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", focal: true)

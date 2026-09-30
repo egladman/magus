@@ -23,15 +23,15 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final agent = figure\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: figure\Look.plain);
     final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);
     final probe = figure\external("kubelet", sub: "scripts, probes", tag: "client");
-    return figure\of("server-http")
-        .eyebrow("magus server")
-        .title("The HTTP surface, and the one route without a guard")
-        .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
-            + "plan routes and the typed Connect services through the DNS-rebind, "
-            + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
-            + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
-            + "are loopback only. The health endpoints answer probes directly, with no "
-            + "authentication.")
+    return figure\of("server-http",
+            title: "The HTTP surface, and the one route without a guard",
+            eyebrow: "magus server",
+            desc: "Agents and the console reach /mcp, the /api/v1 read views, the review and "
+                + "plan routes and the typed Connect services through the DNS-rebind, "
+                + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
+                + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
+                + "are loopback only. The health endpoints answer probes directly, with no "
+                + "authentication.")
         .actor(agent)
         .actor(console)
         .actor(probe)

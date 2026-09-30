@@ -19,15 +19,15 @@ export fun guardPathFigure() > figure\Figure !> any {
     final hook = figure\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
     final policy = figure\external("Workspace rules", sub: "magus\\guard.command, can only add", look: figure\Look.input);
     final verdict = figure\external("Verdict", sub: "deny, advise or pass", look: figure\Look.focal);
-    return figure\of("guard-path")
-        .eyebrow("guard")
-        .title("One command judges every call, and says what to run instead")
-        .desc("The host's PreToolUse hook, wired by magus agent harness install, pipes the "
-            + "event to magus shell. The built-in rules judge it first, reading the job store "
-            + "for the lease the call acts as; the workspace's magus\\guard.command rule sees "
-            + "only what they let through and can only add to the verdict. A deny carries its "
-            + "reason and a next: breadcrumb naming the command to run instead, and the hook "
-            + "renders it into the host's reply.")
+    return figure\of("guard-path",
+            title: "One command judges every call, and says what to run instead",
+            eyebrow: "guard",
+            desc: "The host's PreToolUse hook, wired by magus agent harness install, pipes the "
+                + "event to magus shell. The built-in rules judge it first, reading the job store "
+                + "for the lease the call acts as; the workspace's magus\\guard.command rule sees "
+                + "only what they let through and can only add to the verdict. A deny carries its "
+                + "reason and a next: breadcrumb naming the command to run instead, and the hook "
+                + "renders it into the host's reply.")
         .actor(hook)
         .box(shell, label: "magus shell", sub: "the guard with one door")
         .box(guard, label: "Built-in rules", sub: "catalogued, run first")

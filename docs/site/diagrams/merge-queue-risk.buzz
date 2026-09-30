@@ -24,13 +24,13 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
     final low = figure\external("low risk?", look: figure\Look.decision);
     final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
     final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
-    return figure\of("merge-queue-risk")
-        .down()
-        .eyebrow("merge queue")
-        .title("What a candidate's risk makes the queue run")
-        .desc("For a conflicted file the queue asks the classifier which class the edit is "
-            + "and settles only a low-risk one, kicking code back, then gates the projects "
-            + "the magus SDK says the change reaches, or every project when that set is no proof.")
+    return figure\of("merge-queue-risk",
+            title: "What a candidate's risk makes the queue run",
+            eyebrow: "merge queue",
+            desc: "For a conflicted file the queue asks the classifier which class the edit is "
+                + "and settles only a low-risk one, kicking code back, then gates the projects "
+                + "the magus SDK says the change reaches, or every project when that set is no proof.",
+            direction: figure\Direction.down)
         .actor(github)
         .box(provider, label: "Forge provider", sub: "github.buzz on a Buzz VM")
         .group(queue, label: "Queue engine", sub: "plan, validate, apply")
