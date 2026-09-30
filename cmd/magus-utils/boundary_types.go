@@ -117,6 +117,7 @@ var boundaryTypes = []boundaryType{
 	// what keeps one definition of review order serving all three.
 	// DiffSymbol.checks are [Check], shared with DoctorReport.
 	{Name: "Check", Type: reflect.TypeFor[types.Check](), RuntimeObject: true},
+	{Name: "DiffReach", Type: reflect.TypeFor[types.DiffReach](), RuntimeObject: true},
 	{Name: "DiffSymbol", Type: reflect.TypeFor[types.DiffSymbol](), RuntimeObject: true},
 	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
 	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},

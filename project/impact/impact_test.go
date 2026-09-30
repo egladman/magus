@@ -263,3 +263,85 @@ func TestEnrichNilInputs(t *testing.T) {
 	require.Equal(t, &types.ImpactResult{ChangedFiles: []string{"a.go"}}, res)
 	Enrich(nil, &fakeSymbolStore{hasSymbols: true})
 }
+
+func TestTouchedLinesPlaceADeletionAfterIt(t *testing.T) {
+	patch := `diff --git a/a.go b/a.go
+--- a/a.go
++++ b/a.go
+@@ -1,5 +1,4 @@
+ package a
+-var x = 1
++var x = 2
+ func f() {
+-	gone()
+ }
+`
+	require.Equal(t, map[string][]int{"a.go": {2, 2, 4}}, ChangedLines(patch))
+}
+
+func TestTouched(t *testing.T) {
+	spans := []Span{
+		{ID: "f", Start: 3, End: 6},
+		{ID: "g", Start: 8, End: 12},
+		{ID: "g.inner", Start: 9, End: 10},
+		{ID: "unranged", Start: 14},
+		{ID: "unranged.param", Start: 14},
+		{ID: "later", Start: 20},
+	}
+	tests := []struct {
+		name  string
+		lines []int
+		want  map[string]bool
+	}{
+		{"a line between ranged definitions touches none", []int{7}, map[string]bool{}},
+		{"a ranged span contains its lines", []int{5}, map[string]bool{"f": true}},
+		{"nesting touches both", []int{9}, map[string]bool{"g": true, "g.inner": true}},
+		{"no range falls back to the nearest definition above", []int{16}, map[string]bool{"unranged": true, "unranged.param": true}},
+		{"a line above every definition touches none", []int{1}, map[string]bool{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, Touched(spans, tt.lines))
+		})
+	}
+}
+
+// callGraphStub is a CallGraph read from maps.
+type callGraphStub struct {
+	callers  map[string][]string
+	boundary map[string]string
+}
+
+func (s callGraphStub) Callers(id string) []string { return s.callers[id] }
+func (s callGraphStub) Boundary(id string) string  { return s.boundary[id] }
+func (s callGraphStub) Qualified(id string) string { return "Q." + id }
+
+func TestReachesAPI(t *testing.T) {
+	g := callGraphStub{
+		callers: map[string][]string{
+			"leaf":   {"mid", "direct"},
+			"mid":    {"top"},
+			"top":    {"beyond"},
+			"direct": {"leaf"},
+		},
+		boundary: map[string]string{
+			"direct": types.DiffBoundaryPackage,
+			"top":    types.DiffBoundaryProject,
+			"beyond": types.DiffBoundaryProject,
+		},
+	}
+	require.Equal(t, []types.DiffReach{
+		{ID: "direct", Qualified: "Q.direct", Boundary: types.DiffBoundaryPackage},
+		{ID: "top", Qualified: "Q.top", Via: []string{"Q.mid"}, Boundary: types.DiffBoundaryProject},
+	}, ReachesAPI(g, "leaf"))
+}
+
+func TestReachesAPIStopsAtItsDepth(t *testing.T) {
+	g := callGraphStub{
+		callers:  map[string][]string{"a": {"b"}, "b": {"c"}, "c": {"d"}, "d": {"e"}, "e": {"f"}},
+		boundary: map[string]string{"f": types.DiffBoundaryPackage},
+	}
+	require.Empty(t, ReachesAPI(g, "a"))
+	require.Equal(t, []types.DiffReach{{ID: "f", Qualified: "Q.f", Via: []string{"Q.d", "Q.e"}, Boundary: types.DiffBoundaryPackage}},
+		ReachesAPI(g, "c"))
+}

@@ -131,6 +131,13 @@ export object Check {
     fix: [str] = [],
 }
 
+export object DiffReach {
+    id: str = "",
+    qualified: str = "",
+    via: [str] = [],
+    boundary: str = "",
+}
+
 export object DiffSymbol {
     id: str = "",
     label: str = "",
@@ -144,6 +151,7 @@ export object DiffSymbol {
     signature: str = "",
     baseSignature: str = "",
     checks: [Check] = [],
+    reachesAPI: [DiffReach] = [],
 }
 
 export object DiffTouch {

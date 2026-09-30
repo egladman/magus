@@ -48,6 +48,10 @@ func TestPromptNamesSkillsRatherThanRestatingThem(t *testing.T) {
 		"the prompt is a briefing, not a payload: skills are named, never restated")
 }
 
+func TestPromptPointsAtPerSymbolContext(t *testing.T) {
+	assert.Contains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), perSymbolContext)
+}
+
 // TestPromptNamesNoAgentHost. magus must not encode agent-host specifics, and a prompt is exactly
 // where one would sneak in: naming a particular host's conventions file reads as helpful and is
 // wrong for every reader using a different host. The repo-wide convention test enforces this over

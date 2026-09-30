@@ -1314,6 +1314,19 @@ func ObjectCheck(v types.Check) vm.Value {
 	return out
 }
 
+func ObjectDiffReach(v types.DiffReach) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("qualified", vm.StrValue(v.Qualified))
+	itemsVia := make([]vm.Value, len(v.Via))
+	for indexVia := range v.Via {
+		itemsVia[indexVia] = vm.StrValue(v.Via[indexVia])
+	}
+	out.MapSet("via", vm.ListValue(itemsVia))
+	out.MapSet("boundary", vm.StrValue(v.Boundary))
+	return out
+}
+
 func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -1336,6 +1349,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsReachesAPI := make([]vm.Value, len(v.ReachesAPI))
+	for indexReachesAPI := range v.ReachesAPI {
+		itemsReachesAPI[indexReachesAPI] = ObjectDiffReach(v.ReachesAPI[indexReachesAPI])
+	}
+	out.MapSet("reachesAPI", vm.ListValue(itemsReachesAPI))
 	return out
 }
 

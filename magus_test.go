@@ -20,10 +20,12 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
@@ -1628,4 +1630,103 @@ func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
 	require.ErrorIs(t, err, cause)
 	assert.EqualError(t, err, `base "last-passed": read git metadata: unborn branch`)
 	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
+}
+
+// rangedSymbol is an indexed symbol with its definition's extent and SCIP kind.
+func rangedSymbol(id, label, source string, end int, kind string) types.KnowledgeNode {
+	n := symbolNode(id, label, source, "func "+label+"()", "")
+	n.Attrs[attrDefEndLine] = fmt.Sprint(end)
+	n.Attrs[attrSymbolKind] = kind
+	return n
+}
+
+func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
+	patch := `diff --git a/api.go b/api.go
+--- a/api.go
++++ b/api.go
+@@ -1,9 +1,13 @@
+ package api
+
+ func Open() {
+-	a()
++	b()
+ }
+
+-func Close() {
++func Close(force bool) {
+ 	c()
+ }
++
++func Fresh() {
++	d()
++}
+`
+	head := graphOf(
+		rangedSymbol(goSymbol("api", ""), "api", "api.go:1", 0, "Package"),
+		rangedSymbol(goSymbol("api", "Open()."), "Open", "api.go:3", 5, "Function"),
+		rangedSymbol(goSymbol("api", "Close()."), "Close", "api.go:7", 9, "Function"),
+		rangedSymbol(goSymbol("api", "Fresh()."), "Fresh", "api.go:11", 13, "Function"),
+		rangedSymbol(goSymbol("api", "Elsewhere()."), "Elsewhere", "other.go:4", 6, "Function"),
+	)
+	got := touchedSymbols(head, patch, map[string]*types.DiffFile{"api.go": {Path: "api.go"}})
+	require.Equal(t, map[string]touchedSymbol{
+		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()"},
+		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()"},
+		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()"},
+	}, got)
+}
+
+func TestTouchedSymbolsNeverIncludeANamespace(t *testing.T) {
+	assert.True(t, namespaceSymbol(goSymbol("api", ""), ""))
+	assert.True(t, namespaceSymbol("symbol:npm pkg 1.0 src/`mod.ts`/", "Namespace"))
+	assert.False(t, namespaceSymbol(goSymbol("api", "Open()."), "Function"))
+}
+
+func TestReachesAPICrossesPackagesAndProjects(t *testing.T) {
+	ns := func(pkg string) map[string]string { return map[string]string{attrNamespace: pkg} }
+	sym := func(pkg, desc, label, source string) types.KnowledgeNode {
+		return types.KnowledgeNode{ID: goSymbol(pkg, desc), Kind: types.KindSymbol, Label: label, Source: source, Attrs: ns(goSymbol(pkg, ""))}
+	}
+	helper, public, exported := goSymbol("api", "helper()."), goSymbol("api", "Public()."), goSymbol("api", "Exported().")
+	entry, tool := goSymbol("cli", "main()."), goSymbol("tools", "run().")
+	defines := func(file, id string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines}
+	}
+	references := func(file, id string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationReferences, Provenance: "scip count=1 lines=3"}
+	}
+	calls := func(from, to string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: from, Target: to, Relation: types.RelationCalls}
+	}
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{
+		sym("api", "helper().", "helper", "api/a.go:3"),
+		sym("api", "Public().", "Public", "api/a.go:10"),
+		sym("api", "Exported().", "Exported", "api/a.go:20"),
+		sym("cli", "main().", "main", "cli/main.go:5"),
+		sym("tools", "run().", "run", "tools/t.go:5"),
+		{ID: "file:api/a.go", Kind: types.KindFile},
+		{ID: "file:cli/main.go", Kind: types.KindFile},
+		{ID: "file:tools/t.go", Kind: types.KindFile},
+	}, []types.KnowledgeEdge{
+		defines("api/a.go", helper), defines("api/a.go", public), defines("api/a.go", exported),
+		defines("cli/main.go", entry), defines("tools/t.go", tool),
+		references("api/a.go", helper), references("cli/main.go", public), references("tools/t.go", exported),
+		calls(public, helper), calls(exported, helper), calls(entry, public),
+	})
+	owner := func(path string) string {
+		if strings.HasPrefix(path, "tools/") {
+			return "tools"
+		}
+		return "."
+	}
+	cg := newCallGraph(g, owner)
+
+	assert.Empty(t, cg.Boundary(helper))
+	assert.Equal(t, types.DiffBoundaryPackage, cg.Boundary(public))
+	assert.Equal(t, types.DiffBoundaryProject, cg.Boundary(exported))
+	assert.Equal(t, []types.DiffReach{
+		{ID: exported, Qualified: "Exported", Boundary: types.DiffBoundaryProject},
+		{ID: public, Qualified: "Public", Boundary: types.DiffBoundaryPackage},
+	}, impact.ReachesAPI(cg, helper))
 }
