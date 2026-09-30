@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1503,7 +1504,7 @@ func BenchmarkFind(b *testing.B) {
 func BenchmarkRunBuzzParallel(b *testing.B) {
 	const nProjects = 16
 	ctx := context.Background()
-	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void { fs.writeFile(\"out.txt\", \"x\"); }\n"
+	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any { fs.writeFile(\"out.txt\", \"x\"); }\n"
 
 	type proj struct {
 		src *interp.Source
@@ -1529,6 +1530,48 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+// TestRunDirRetainsNothingPerEvaluation pins the daemon's steady state: once a
+// magusfile evaluation's session closes, nothing of it stays behind. Retention is
+// the Go heap's growth per evaluation between 200 and 1,000 evaluations, read
+// after two forced collections. Before sessions released their heap slots every
+// evaluation kept its whole session, about 600KB; the bound leaves room for
+// allocator noise from tests running alongside and no room for a session.
+func TestRunDirRetainsNothingPerEvaluation(t *testing.T) {
+	const nProjects = 4
+	body := "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
+	dirs := make([]string, nProjects)
+	for i := range dirs {
+		dirs[i] = t.TempDir()
+		writeMagusfile(t, dirs[i], body)
+	}
+	ctx := context.Background()
+	evaluate := func(n int) {
+		for i := range n {
+			_, err := interp.RunDir(ctx, dirs[i%nProjects], "build", nil)
+			require.NoError(t, err)
+		}
+	}
+	heapAlloc := func() uint64 {
+		runtime.GC()
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		return ms.HeapAlloc
+	}
+	evaluate(200)
+	warm := heapAlloc()
+	objects := vm.ReadHeapStats().Objects
+	evaluate(800)
+	retained := (int64(heapAlloc()) - int64(warm)) / 800
+	const bound = 32 << 10
+	if retained > bound {
+		t.Fatalf("each evaluation retained %d bytes of Go heap; want at most %d", retained, bound)
+	}
+	if grew := vm.ReadHeapStats().Objects - objects; grew > 800 {
+		t.Fatalf("800 evaluations grew the Buzz heap by %d objects; a closed session must leave none", grew)
+	}
 }
 
 // testBoundaryTypesPath is a private, test-only import path bundling every
