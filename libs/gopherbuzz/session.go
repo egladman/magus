@@ -24,12 +24,13 @@ type Session struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	env    *vmpackage.Env
-	// owner holds every heap slot this session's values occupy; Close releases
-	// them unless sharesOwner, in which case the parent session does.
-	owner       *vmpackage.Owner
-	sharesOwner bool
-	targets     map[string]vmpackage.Callable
-	tests       []TestEntry
+	// owner holds every heap slot this session's values occupy. releaseOnClose
+	// is off when someone else releases them: a parent session (withOwner) or
+	// a caller that took the release (Keep).
+	owner          *vmpackage.Owner
+	releaseOnClose bool
+	targets        map[string]vmpackage.Callable
+	tests          []TestEntry
 	// exportedNames is every name any chunk exported, imports included. It answers
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
@@ -371,7 +372,7 @@ func (s *Session) readImportSource(path string) ([]byte, error) {
 func withOwner(o *vmpackage.Owner) Option {
 	return func(s *Session) {
 		s.owner = o
-		s.sharesOwner = true
+		s.releaseOnClose = false
 	}
 }
 
@@ -384,6 +385,7 @@ func newSession(ctx context.Context, opts ...Option) *Session {
 		cancel:             cancel,
 		env:                env,
 		owner:              new(vmpackage.Owner),
+		releaseOnClose:     true,
 		embedded:           true,
 		targets:            make(map[string]vmpackage.Callable),
 		exportedNames:      make(map[string]bool),
@@ -2236,7 +2238,7 @@ func (s *Session) GetGlobal(name string) vmpackage.Value {
 // open instead. Closing twice is harmless.
 func (s *Session) Close() error {
 	s.cancel()
-	if !s.sharesOwner {
+	if s.releaseOnClose {
 		s.release()
 	}
 	return nil
@@ -2247,7 +2249,7 @@ func (s *Session) Close() error {
 // outlive the load, such as a guard rule the registry calls after the magusfile
 // that registered it has finished. Releasing twice is harmless.
 func (s *Session) Keep() (release func()) {
-	s.sharesOwner = true
+	s.releaseOnClose = false
 	return s.release
 }
 
