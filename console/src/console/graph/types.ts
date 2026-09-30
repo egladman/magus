@@ -60,6 +60,8 @@ export interface GLink {
   relation: string;
   confidence?: string;
   score?: number;
+  // Relation-specific facts about the edge (transport on a declared call).
+  attrs?: Record<string, string>;
   dashed?: boolean;
   cycle?: boolean;
   layoutReversed?: boolean;

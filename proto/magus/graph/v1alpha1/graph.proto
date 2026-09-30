@@ -43,6 +43,7 @@ message Edge {
   string confidence = 4;
   double score = 5;
   string provenance = 6;
+  map<string, string> attrs = 7;  // relation-specific (transport on a declared call, ...)
 }
 
 // GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the

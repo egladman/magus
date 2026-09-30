@@ -2377,11 +2377,13 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
+// Each attempt is one evaluation with its own types.EvalMemo, so the body reads one
+// knowledge graph snapshot however many graph members it calls, and a retry rebuilds it.
 func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.Spell) error {
 	req := spells.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
-		resp, err := s.Invoke(ctx, req)
+		resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
 		if err == nil {
 			types.RecordReturn(ctx, p.Path, name, resp.Data)
 		}
@@ -2400,7 +2402,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// collector is installed here rather than higher up because the unit that
 	// has to fit on one runner is the target, not the invocation.
 	ctx = types.WithPeakRSS(ctx)
-	resp, err := s.Invoke(ctx, req)
+	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
 	// the retry below: a first attempt that failed after returning a value would
@@ -2415,7 +2417,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	if err != nil {
 		decision = rt.Decide(p.Path, volatileTarget, affected, eligible)
 		if decision.Retry {
-			resp2, err2 := s.Invoke(ctx, req)
+			resp2, err2 := s.Invoke(types.WithEvalMemo(ctx), req)
 			if err2 == nil {
 				types.RecordReturn(ctx, p.Path, name, resp2.Data)
 			}

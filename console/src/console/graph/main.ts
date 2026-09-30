@@ -66,7 +66,14 @@ import {
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
 import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
-import { nodeReach, punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
+import {
+  declaredCall,
+  nodeClass,
+  nodeReach,
+  punchRing,
+  shapeOfNode,
+  traceNodeShape,
+} from "./shapes.js";
 import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
@@ -140,6 +147,7 @@ const KINDS = [
   "spell",
   "op",
   "tool",
+  "marker",
   "function",
   "method",
   "symbol",
@@ -610,11 +618,12 @@ function prepareGraph(raw: GraphPayload) {
 }
 
 // A row in the explain card's incident-edge list: the relation, the other endpoint id,
-// and the edge confidence.
+// the edge confidence, and the transport a declared call names.
 interface IncidentRow {
   rel: string;
   other: string;
   confidence?: string;
+  transport?: string;
 }
 
 // Edges touching a node, split by direction, for the explain card.
@@ -624,8 +633,9 @@ function incidentEdges(id: string) {
   for (const e of graph.links) {
     const s = endpointId(e.source);
     const t = endpointId(e.target);
-    if (s === id) out.push({ rel: e.relation, other: t, confidence: e.confidence });
-    if (t === id) inc.push({ rel: e.relation, other: s, confidence: e.confidence });
+    const transport = declaredCall(e)?.transport || undefined;
+    if (s === id) out.push({ rel: e.relation, other: t, confidence: e.confidence, transport });
+    if (t === id) inc.push({ rel: e.relation, other: s, confidence: e.confidence, transport });
   }
   return { out, inc };
 }
@@ -1403,6 +1413,8 @@ function draw() {
   // The projection is its own visibility rule (nodes outside it are absent, not dim), so it
   // stands in for the scope while it is active.
   const scope = matchSet && !projectionActive ? matchSet : null;
+  // Painted in the label pass, so node marks never cover them.
+  const transportLabels: { x: number; y: number; text: string; incident: boolean }[] = [];
   for (const e of graph.links) {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
@@ -1458,8 +1470,9 @@ function draw() {
         : 0.6 / transform.k;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
-    // in layered mode) also render dashed.
-    const dashed = e.cycle || e.layoutReversed;
+    // in layered mode) also render dashed, as does a call only a marker claims.
+    const call = declaredCall(e);
+    const dashed = e.cycle || e.layoutReversed || !!call;
     if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
     // Routed edges (multi-layer spans in a DAG mode) carry world-space bend
     // points ordered ascending-x (dependency end -> dependent end, see
@@ -1495,6 +1508,12 @@ function draw() {
     }
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
+    if (call?.transport && active) {
+      const mid = routePts
+        ? routePts[routePts.length >> 1]
+        : { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+      transportLabels.push({ x: mid.x, y: mid.y, text: call.transport, incident });
+    }
 
     // Arrowheads: only in dag modes (layered/waves - they add clarity on the
     // DAG's directed edges; in force mode at demo-graph density they would be
@@ -1754,6 +1773,29 @@ function draw() {
     ctx.restore();
     ctx.fillText(n.label, lx, n.y);
   }
+  // Transport labels ride the node labels' zoom floor unless their edge touches the highlight,
+  // and yield to a node label already placed: the node names the endpoint, the edge only says how.
+  ctx.textAlign = "center";
+  for (const l of transportLabels) {
+    if (!l.incident && transform.k < LABEL_MIN_ZOOM) continue;
+    const lw = ctx.measureText(l.text).width;
+    const lx = l.x - lw / 2,
+      ly = l.y - lineH / 2;
+    const clash = placedLabels.some(
+      (p) => lx < p.x + p.w && lx + lw > p.x && ly < p.y + lineH && ly + lineH > p.y,
+    );
+    if (clash) continue;
+    placedLabels.push({ x: lx, y: ly, w: lw });
+    ctx.save();
+    ctx.strokeStyle = th.bg;
+    ctx.lineWidth = 3 / transform.k;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(l.text, l.x, l.y);
+    ctx.restore();
+    ctx.fillStyle = l.incident ? th.accent : th.muted;
+    ctx.fillText(l.text, l.x, l.y);
+  }
   ctx.restore();
 }
 
@@ -1962,7 +2004,13 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
       ")</span></span> ";
     html += items
       .slice(0, 40)
-      .map((r) => nodeRefHtml(r.other))
+      .map(
+        (r) =>
+          nodeRefHtml(r.other) +
+          (r.transport
+            ? ' <span class="console-graph-card__muted">(' + escapeHtml(r.transport) + ")</span>"
+            : ""),
+      )
       .join(" ");
     if (items.length > 40)
       html += ' <span class="console-graph-card__muted">+' + (items.length - 40) + " more</span>";
@@ -2078,7 +2126,7 @@ function renderCard(id: string | null) {
   html += '<header class="console-graph-card__head">';
   html += '<span class="console-graph-kinddot" data-kind="' + escapeHtml(n.kind) + '"></span>';
   html += "<h2>" + escapeHtml(n.label) + "</h2>";
-  html += '<span class="console-graph-card__kindtag">' + escapeHtml(n.kind) + "</span>";
+  html += '<span class="console-graph-card__kindtag">' + escapeHtml(nodeClass(n)) + "</span>";
   html += "</header>";
   html += "<dl>";
   html += "<dt>id</dt><dd><code>" + escapeHtml(n.id) + "</code></dd>";
@@ -2100,6 +2148,11 @@ function renderCard(id: string | null) {
         escapeHtml(n.source) +
         "</code></a></dd>"
       : "<dt>source</dt><dd><code>" + escapeHtml(n.source) + "</code></dd>";
+  }
+  if (n.kind === "marker" && n.attrs) {
+    if (n.attrs.args) html += "<dt>args</dt><dd><code>" + escapeHtml(n.attrs.args) + "</code></dd>";
+    if (n.attrs.unresolved)
+      html += "<dt>unresolved</dt><dd>" + escapeHtml(n.attrs.unresolved) + "</dd>";
   }
   if (n.attrs && n.attrs.url && safeUrl(n.attrs.url)) {
     html +=
@@ -3243,7 +3296,7 @@ function renderList() {
         escapeHtml(n.id) +
         '"' +
         ' title="' +
-        escapeHtml(n.kind + " - " + n.label) +
+        escapeHtml(nodeClass(n) + " - " + n.label) +
         '"' +
         (n.id === selected ? ' aria-current="true"' : "") +
         ">" +

@@ -49,6 +49,7 @@
   --gk-file: var(--console-node-file); --gk-dir: var(--console-node-dir);
   --gk-target: var(--console-node-target); --gk-spell: var(--console-node-spell);
   --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
+  --gk-marker: var(--console-node-marker);
   --gk-function: var(--console-node-function); --gk-method: var(--console-node-method);
   --gk-import: var(--console-node-import); --gk-package: var(--console-node-package);
   --gk-symbol: var(--console-node-symbol);
@@ -331,6 +332,7 @@
 .console-graph-kinddot[data-kind="spell"] { background: var(--gk-spell); }
 .console-graph-kinddot[data-kind="op"] { background: var(--gk-op); }
 .console-graph-kinddot[data-kind="tool"] { background: var(--gk-tool); }
+.console-graph-kinddot[data-kind="marker"] { background: var(--gk-marker); }
 .console-graph-kinddot[data-kind="function"] { background: var(--gk-function); }
 .console-graph-kinddot[data-kind="method"] { background: var(--gk-method); }
 .console-graph-kinddot[data-kind="import"] { background: var(--gk-import); }
@@ -361,7 +363,8 @@
   .console-graph-kinddot[data-kind="target"],
   .console-graph-kinddot[data-kind="spell"],
   .console-graph-kinddot[data-kind="op"],
-  .console-graph-kinddot[data-kind="tool"] {
+  .console-graph-kinddot[data-kind="tool"],
+  .console-graph-kinddot[data-kind="marker"] {
     border-radius: 0;
     clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
   }

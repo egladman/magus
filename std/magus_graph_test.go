@@ -175,3 +175,33 @@ func TestDirLayerAndNeighborhoodOptionsAreStrict(t *testing.T) {
 		assert.Error(t, call(), name)
 	}
 }
+
+// countingGraphs counts the graph builds a sequence of members asks for.
+type countingGraphs struct {
+	*fakeGraphWorkspace
+	builds int
+}
+
+func (c *countingGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
+	c.builds++
+	return c.fakeGraphWorkspace.KnowledgeGraphWithSymbols(ctx)
+}
+
+// One evaluation builds the graph once however many members it calls; the next
+// evaluation builds its own.
+func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{fakeGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*fakeGraphWorkspace)}
+	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	for range 3 {
+		_, err := MagusDir(eval, "internal/httpx")
+		require.NoError(t, err)
+	}
+	_, err := MagusDirs(eval, "internal/**", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, ws.builds, "four members in one evaluation")
+
+	_, err = MagusDir(types.WithEvalMemo(eval), "internal/httpx")
+	require.NoError(t, err)
+	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
+}

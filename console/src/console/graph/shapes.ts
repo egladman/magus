@@ -5,7 +5,7 @@
 // around 8. Shape has the same five-or-six category ceiling as hue, which is why it pairs with the
 // palette rather than competing: one shape per FAMILY is six shapes.
 
-import type { GNode } from "./types.js";
+import type { GLink, GNode, GNodeInput } from "./types.js";
 
 export type NodeShape = "circle" | "square" | "triangle" | "diamond" | "hexagon" | "ring";
 
@@ -21,6 +21,7 @@ const SHAPE_BY_KIND: Readonly<Record<string, NodeShape>> = {
   spell: "triangle",
   op: "triangle",
   tool: "triangle",
+  marker: "triangle",
   function: "circle",
   method: "circle",
   import: "circle",
@@ -150,4 +151,19 @@ export function shapeOfNode(n: GNode): NodeShape {
 // their own gap; this is the outline itself.
 export function nodeReach(n: GNode): number {
   return n.r * REACH_BY_SHAPE[shapeOfNode(n)];
+}
+
+// nodeClass is the kind a reader is told: every marker shares one kind and one colour, so its
+// family ("calls", "diagram", ...) is what separates one from another.
+export function nodeClass(n: Pick<GNodeInput, "kind" | "attrs">): string {
+  const family = n.kind === "marker" ? n.attrs?.family : undefined;
+  return family ? "marker: " + family : n.kind;
+}
+
+// declaredCall reports a calls edge a person declared with a marker, and the transport it names
+// ("" when the edge carries none). Null for every other edge, observed calls included: only a
+// declared edge is drawn dashed, since nothing in the code proves the call happens.
+export function declaredCall(e: GLink): { transport: string } | null {
+  if (e.relation !== "calls" || e.confidence !== "declared") return null;
+  return { transport: e.attrs?.transport ?? "" };
 }

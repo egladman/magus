@@ -58,6 +58,7 @@ func edgesToProto(in []types.KnowledgeEdge) []*graphv1.Edge {
 			Confidence: e.Confidence,
 			Score:      e.Score,
 			Provenance: e.Provenance,
+			Attrs:      e.Attrs,
 		})
 	}
 	return out

@@ -89,7 +89,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	kinds := []string{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir, KindFunction, KindImport,
-		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink,
+		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker,
 	}
 
 	// go test's cwd is this package dir, regardless of -trimpath.

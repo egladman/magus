@@ -2,7 +2,9 @@ package types
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -126,4 +128,51 @@ func TestGlobClaims(t *testing.T) {
 	} {
 		assert.Equal(t, tc.want, GlobClaims(tc.glob, tc.rel, nested), "%s claims %s", tc.glob, tc.rel)
 	}
+}
+
+func TestEvalMemoComputesOncePerKey(t *testing.T) {
+	t.Parallel()
+	ctx := WithEvalMemo(context.Background())
+	m := EvalMemoFromContext(ctx)
+	calls := 0
+	compute := func() (any, error) { calls++; return calls, nil }
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			v, err := m.Do("graph", compute)
+			assert.NoError(t, err)
+			assert.Equal(t, 1, v)
+		})
+	}
+	wg.Wait()
+	other, err := m.Do("other", compute)
+	require.NoError(t, err)
+	assert.Equal(t, 2, other, "a second key computes its own value")
+}
+
+func TestEvalMemoKeepsNoFailure(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	_, err := m.Do("graph", func() (any, error) { return nil, context.Canceled })
+	require.ErrorIs(t, err, context.Canceled)
+	v, err := m.Do("graph", func() (any, error) { return "built", nil })
+	require.NoError(t, err)
+	assert.Equal(t, "built", v, "a failure is recomputed rather than replayed")
+}
+
+func TestEvalMemoScopes(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, EvalMemoFromContext(context.Background()))
+	var nilMemo *EvalMemo
+	calls := 0
+	for range 2 {
+		_, err := nilMemo.Do("k", func() (any, error) { calls++; return nil, errors.New("x") })
+		require.Error(t, err)
+	}
+	assert.Equal(t, 2, calls, "a nil memo computes every time")
+
+	outer := WithEvalMemo(context.Background())
+	inner := WithEvalMemo(outer)
+	assert.NotSame(t, EvalMemoFromContext(outer), EvalMemoFromContext(inner), "a nested evaluation starts empty")
 }
