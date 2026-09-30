@@ -284,6 +284,8 @@ type runCtx struct {
 	// Zero is unlimited: every step that can run, runs, and the batch reports all of
 	// them. See RunAll for why that is the default.
 	maxFailures int
+	// prelude runs ahead of each RunAll step's key; see WithPrelude.
+	prelude func(context.Context, Step) error
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -857,9 +859,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	if storable {
 		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
 			storable = false
-			c.log.WarnContext(ctx, fmt.Sprintf(
-				"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
-				s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+			c.log.WarnContext(ctx, movedInputsNotice(*rc.step, hash, moved))
 		}
 	}
 
@@ -1443,6 +1443,15 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				keysMu.Unlock()
 				if len(depKeys) > 0 {
 					s.Deps = slices.Concat(s.Deps, depKeys)
+				}
+			}
+			if rc.prelude != nil {
+				if err := gctx.Err(); err != nil {
+					return fail(err)
+				}
+				if err := rc.prelude(gctx, s); err != nil {
+					ran = gctx.Err() == nil
+					return fail(err)
 				}
 			}
 

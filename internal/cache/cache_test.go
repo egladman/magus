@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1305,4 +1306,42 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 			assert.Equal(t, "read+write", mode)
 		})
 	}
+}
+
+// A prelude runs after a step's upstreams and before its body, and a prelude that fails
+// fails that step alone: its body never runs, its dependents are held back, and a peer
+// with nothing to do with it still runs.
+func TestRunAllPreludeRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
+	root, c := openCache(t)
+	up := depStep(root, "up")
+	gated := depStep(root, "gated")
+	gated.DependsOn = []string{"up"}
+	after := depStep(root, "after")
+	after.DependsOn = []string{"gated"}
+	peer := depStep(root, "peer")
+	steps := []Step{up, gated, after, peer}
+	for i := range steps {
+		steps[i].NoCache = true
+	}
+
+	var mu sync.Mutex
+	var order []string
+	note := func(s string) { mu.Lock(); order = append(order, s); mu.Unlock() }
+	prelude := func(_ context.Context, s Step) error {
+		note("prelude:" + s.ProjectPath)
+		if s.ProjectPath == "gated" {
+			return errors.New("gate failed")
+		}
+		return nil
+	}
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		note("run:" + s.ProjectPath)
+		return nil
+	}, WithPrelude(prelude))
+
+	require.ErrorContains(t, err, "gate failed")
+	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "prelude:gated"), "the prelude waits for its step's upstreams")
+	assert.NotContains(t, order, "run:gated", "a failed prelude fails its step")
+	assert.NotContains(t, order, "prelude:after", "and holds back its dependents")
+	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }

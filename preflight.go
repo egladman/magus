@@ -196,37 +196,104 @@ func chainOrNone(chain []types.ChainStep) string {
 	return types.Chain(chain).String()
 }
 
-// preflightDone is the set of (project, target) pairs a passed preflight covered.
-type preflightDone map[string]bool
+// ranAhead is what one invocation ran ahead of the steps that compose it: a preflight
+// pass, and each step's skip_cache gates, run before its key. A body's ctx.needs of one
+// returns at once, so none runs twice and none moves a key input after the key is taken.
+// Steps run concurrently, so a target is claimed before it runs and a later claimant
+// waits for the first.
+type ranAhead struct {
+	mu   sync.Mutex
+	runs map[string]*aheadRun
+}
 
-func preflightKey(project, target string) string { return project + "\x00" + target }
+// aheadRun is one claimed run; done closes once err holds its outcome.
+type aheadRun struct {
+	done chan struct{}
+	err  error
+}
 
-// targets lists the done target names in project, the names a memo is seeded with.
-func (d preflightDone) targets(project string) []string {
+func aheadKey(project, target string) string { return project + "\x00" + target }
+
+// claim reports whether the caller runs project:target. When it does not, the returned
+// run is the first claimant's, to wait on.
+func (r *ranAhead) claim(project, target string) (*aheadRun, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := aheadKey(project, target)
+	if run, ok := r.runs[key]; ok {
+		return run, false
+	}
+	if r.runs == nil {
+		r.runs = map[string]*aheadRun{}
+	}
+	run := &aheadRun{done: make(chan struct{})}
+	r.runs[key] = run
+	return run, true
+}
+
+// markDone records project:target as run to completion by a pass that already finished it.
+func (r *ranAhead) markDone(project, target string) {
+	if run, first := r.claim(project, target); first {
+		run.finish(nil)
+	}
+}
+
+// targets lists project's targets that finished without error, the names a memo is
+// seeded with.
+func (r *ranAhead) targets(project string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var out []string
-	for key := range d {
-		if p, t, _ := strings.Cut(key, "\x00"); p == project {
+	for key, run := range r.runs {
+		if p, t, _ := strings.Cut(key, "\x00"); p == project && run.succeeded() {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-type preflightDoneKey struct{}
-
-func withPreflightDone(ctx context.Context, d preflightDone) context.Context {
-	return context.WithValue(ctx, preflightDoneKey{}, d)
+func (a *aheadRun) finish(err error) {
+	a.err = err
+	close(a.done)
 }
 
-func preflightDoneFrom(ctx context.Context) preflightDone {
-	d, _ := ctx.Value(preflightDoneKey{}).(preflightDone)
-	return d
+func (a *aheadRun) wait(ctx context.Context) error {
+	select {
+	case <-a.done:
+		return a.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-// runPreflight runs the preflight stages as one batch and returns the pairs that passed.
-// runStep is the main batch's step function, so a preflight step is keyed, admitted and
+func (a *aheadRun) succeeded() bool {
+	select {
+	case <-a.done:
+		return a.err == nil
+	default:
+		return false
+	}
+}
+
+type ranAheadKey struct{}
+
+func withRanAhead(ctx context.Context, r *ranAhead) context.Context {
+	return context.WithValue(ctx, ranAheadKey{}, r)
+}
+
+// ranAheadFrom is ctx's registry, or an empty one that shares nothing when a caller
+// installed none.
+func ranAheadFrom(ctx context.Context) *ranAhead {
+	if r, ok := ctx.Value(ranAheadKey{}).(*ranAhead); ok {
+		return r
+	}
+	return &ranAhead{}
+}
+
+// runPreflight runs the preflight stages as one batch and records the pairs that passed in
+// ctx's ranAhead and cross-project dispatch, so no later body runs them again. runStep is the main batch's step function, so a preflight step is keyed, admitted and
 // reported exactly as the same target named on the command line would be.
-func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*types.Project, string) cache.Step, opts run, runStep func(map[string]TargetHandler, map[string]*types.Project) func(context.Context, cache.Step) error, cacheOpts []cache.RunOption) (preflightDone, error) {
+func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*types.Project, string) cache.Step, opts run, runStep func(map[string]TargetHandler, map[string]*types.Project) func(context.Context, cache.Step) error, cacheOpts []cache.RunOption) error {
 	var steps []cache.Step
 	handlerOf := make(map[string]TargetHandler, len(stages))
 	byPath := map[string]*types.Project{}
@@ -261,21 +328,18 @@ func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*
 		return err
 	}, append(slices.Clone(cacheOpts), cache.WithMaxFailures(1))...)
 	if len(failures) > 0 {
-		return nil, newPreflightError(failures)
+		return newPreflightError(failures)
 	}
 	if runErr != nil {
-		return nil, runErr
+		return runErr
 	}
-	done := preflightDone{}
+	ahead := ranAheadFrom(ctx)
+	cd := interp.CrossDispatchFromContext(ctx)
 	for _, s := range steps {
-		done[preflightKey(s.ProjectPath, s.Target)] = true
-	}
-	if cd := interp.CrossDispatchFromContext(ctx); cd != nil {
-		for _, s := range steps {
-			if p := byPath[s.ProjectPath]; p != nil {
-				cd.MarkDone(p.Dir, s.Target)
-			}
+		ahead.markDone(s.ProjectPath, s.Target)
+		if p := byPath[s.ProjectPath]; p != nil && cd != nil {
+			cd.MarkDone(p.Dir, s.Target)
 		}
 	}
-	return done, nil
+	return nil
 }

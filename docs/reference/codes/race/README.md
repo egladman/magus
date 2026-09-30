@@ -57,3 +57,5 @@ or a manual audit rather than every push.
   one step, with nothing ordering them. Always on and needs no `--race` either,
   and unlike every other code here it is decided before the run starts: it reads
   declarations, so it refuses the plan rather than reporting the damage.
+- [MGS4010](MGS4010.md): a target whose key reads a file its own run generates,
+  so it succeeds and is never cached. Always on.

@@ -162,6 +162,14 @@ func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }
 }
 
+// WithPrelude runs fn for each RunAll step once its upstreams have finished and before
+// its key is hashed, holding no slot, so work fn does lands in the key and a step fn
+// waits on can take the slots it needs. An error fails the step as its own failure,
+// spending the failure budget like any other.
+func WithPrelude(fn func(context.Context, Step) error) RunOption {
+	return func(rc *runCtx) { rc.prelude = fn }
+}
+
 // WithLimiter shares an external Limiter with RunAll instead of creating a private one,
 // so in-process tasks and nested calls compete for the same concurrency budget.
 func WithLimiter(l *Limiter) RunOption {

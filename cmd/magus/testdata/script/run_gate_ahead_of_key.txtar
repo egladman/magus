@@ -1,0 +1,100 @@
+# A composer's skip_cache gate runs ahead of the composer's key, once per invocation, and a
+# body that reaches it through ctx.needs does not run it again. So the first run after a
+# change is cached although the gate rewrites a file in the key, a gate two members of an
+# uncached ci share runs once, and a gate another project owns runs once too.
+
+cd ws
+
+# The gate rewrites gen.txt, which test's key holds; the first run is stored all the same.
+exec magus run test .
+grep -count=1 '^gen$' $WORK/log
+grep -count=1 '^test$' $WORK/log
+rm $WORK/log
+exec magus run test .
+stderr '\(cached'
+grep -count=1 '^gen$' $WORK/log
+! grep '^test$' $WORK/log
+
+# ci reaches generate through lint and through test: one run.
+cp IN.next IN.txt
+rm $WORK/log
+exec magus run ci .
+grep -count=1 '^gen$' $WORK/log
+grep -count=1 '^lint$' $WORK/log
+grep -count=1 '^test$' $WORK/log
+
+# site in docs needs the root's generate across projects: one run.
+cp IN.last IN.txt
+rm $WORK/log
+exec magus run site docs
+grep -count=1 '^gen$' $WORK/log
+grep -count=1 '^site$' $WORK/log
+
+-- ws/IN.txt --
+one
+-- ws/IN.next --
+two
+-- ws/IN.last --
+three
+-- ws/gen.txt --
+stale
+-- ws/magus.yaml --
+default_charms:
+  - rw
+-- ws/.gitignore --
+.magus/
+-- ws/magusfile.buzz --
+import "magus";
+import "spells/acme";
+magus\project({"name": "root", "spells": [acme], "targets": {
+    "generate": {"skip_cache": "stands in for a generator"},
+    "ci": {"skip_cache": "the gate"},
+}});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("IN.txt");
+    ctx.writesFiles("gen.txt");
+    acme["gen"](ctx);
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+    acme["lint"](ctx);
+}
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+    acme["test"](ctx);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint, test);
+}
+-- ws/docs/magusfile.buzz --
+import "magus";
+import "spells/acme";
+import "project/.." as workspace;
+magus\project({"name": "docs", "spells": [acme]});
+
+export fun site(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(workspace\generate);
+    acme["site"](ctx);
+}
+-- ws/spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun gen(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo gen >> ../log && cp IN.txt gen.txt"]};
+}
+fun lint(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo lint >> ../log"]};
+}
+fun test(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo test >> ../log"]};
+}
+fun site(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo site >> ../../log"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"gen": gen, "lint": lint, "test": test, "site": site};
+}

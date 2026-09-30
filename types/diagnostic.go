@@ -543,7 +543,12 @@ const (
 	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
 	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
 	// an undeclared source, checked after a target runs, not after a commit is made).
-	UnformattedCommit     DiagnosticCode = "MGS4009"
+	UnformattedCommit DiagnosticCode = "MGS4009"
+	// SelfInvalidatingKey is a target whose key reads a file its own run generates after the
+	// key is taken. Every run succeeds and none is cached, which nothing else would say. A
+	// moved input no target declares as an output is a concurrent writer instead, and stays
+	// an uncoded notice: the next run caches normally.
+	SelfInvalidatingKey   DiagnosticCode = "MGS4010"
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
 	CommandOpNeverExits   DiagnosticCode = "MGS5003"
@@ -685,7 +690,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
-	UnformattedCommit,
+	UnformattedCommit, SelfInvalidatingKey,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,

@@ -605,17 +605,57 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 
 	require.NoError(t, m.Run(ctx, targets), "first run")
 	assert.Equal(t, int32(1), composer.Load(), "first run: the composer executes")
-	assert.Equal(t, int32(0), gate.Load(),
-		"a miss runs the composer's body, which is where the chain already runs")
+	assert.Equal(t, int32(1), gate.Load(),
+		"a miss runs the gate before the key is taken, and the body's memo skips it")
 
 	require.NoError(t, m.Run(ctx, targets), "second run")
 	assert.Equal(t, int32(1), composer.Load(), "second run: the composer replays")
-	assert.Equal(t, int32(1), gate.Load(), "a replayed composer must still run its gate")
+	assert.Equal(t, int32(2), gate.Load(), "a replayed composer must still run its gate")
 
 	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "third run (--no-cache)")
 	assert.Equal(t, int32(2), composer.Load(), "--no-cache re-executes the composer")
-	assert.Equal(t, int32(1), gate.Load(),
-		"--no-cache runs the body, so pre-running the gate would execute it twice")
+	assert.Equal(t, int32(3), gate.Load(),
+		"--no-cache still stores the entry, so the gate still runs ahead of its key")
+}
+
+// The first run after a change must be stored. The composer's key holds its gate's
+// artifact, so a gate left for the body to run rewrote a key input mid-run and the run
+// was refused a cache entry; every change then cost two full executions.
+func TestRun_FirstRunAfterAChangeIsStoredWhenAGateRewritesItsArtifact(t *testing.T) {
+	const spellName = "zzz-gate-first-run-spell"
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	artifact := filepath.Join(root, "GATE.md")
+	var composer atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("composer", "gate"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "composer" {
+				composer.Add(1)
+			}
+			// Both write it, as a composer whose chain runs the gate does.
+			return nil, os.WriteFile(artifact, []byte("fresh\n"), 0o644)
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	require.NoError(t, os.WriteFile(artifact, []byte("stale\n"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	p.TargetPolicies = map[string]types.Target{"gate": {SkipCache: true}}
+	p.TargetChains = map[string][]types.ChainStep{"composer": {{Target: "gate"}}}
+	p.TargetOutputs = map[string][]types.OutputRef{"gate": {{Glob: "GATE.md"}}}
+
+	targets := []types.Target{{Path: ".", Name: "composer"}}
+	require.NoError(t, m.Run(context.Background(), targets), "first run")
+	require.NoError(t, m.Run(context.Background(), targets), "second run")
+	assert.Equal(t, int32(1), composer.Load(), "the first run was stored, so the second replays")
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
