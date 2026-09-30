@@ -12,8 +12,7 @@ import "magus/figure";
 export fun serverHttp() > Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
-    return figure\of("server-http")
-        .title("The HTTP surface")
+    return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(figure\layerSet(magus\layer("handler")).without([mcp]), label: "Connect RPC")
@@ -25,7 +24,7 @@ export fun serverHttp() > Figure !> any {
 
 | Call                                   | What it does                                                     |
 | -------------------------------------- | ---------------------------------------------------------------- |
-| `of(id)`                               | Starts a figure.                                                 |
+| `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` and `generated:` set the rest.     |
 | `setOf(dirs)`, `layerSet(layer)`       | Build a `DirSet`; `.without(dirs)` and `.plus(dirs)` derive one. |
 | `external(name, ...)`                  | An `Actor`: a box that names no directory.                       |
 | `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\refs` result.            |
@@ -39,7 +38,26 @@ export fun serverHttp() > Figure !> any {
 | `.flowIn`, `.flowOut`, `.flowAcross`   | Hand edges; each has an actor at one end.                        |
 | `.zone`, `.boundary`, `.rank`, `.row`  | Layout bands over sets and actors.                               |
 | `.legend(look, label:)`                | One legend entry.                                                |
-| `.diagram()`, `.svg(theme, ...)`       | Lay out; paint with `Theme.page`, `Theme.light` or `Theme.dark`. |
+| `draw(f, theme:, anchorHref:)`         | Lay out and paint with `Theme.page`, `.light` or `.dark`.        |
+| `.diagram()`                           | Lay out only, for a receipt of the placed boxes and edges.       |
+
+## A figure is data
+
+`Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`, `generated`,
+`unscopedWhy` (empty for a figure that draws code), `graphEdges`, and the lists `boxes`,
+`scopes`, `exclusions`, `hiddenEdges`, `edgeMarks`, `flows`, `zones`, `alignments` and
+`legends`. Their records are `Box`, `DirSet`, `Exclusion`, `HiddenEdges`, `EdgeMark`, `Flow`
+(two `End`s, each a directory or an actor), `Zone`, `Alignment` and `Legend`. A look, stroke,
+direction or axis is always its enum (`Look`, `Stroke`, `Direction`, `Axis`), never a string.
+
+The builder methods only fill those fields, so a `Figure{...}` literal holding the same
+fields draws the same bytes. Every check runs in `draw()` and `diagram()`.
+
+A host builds the record from its own data and calls `draw` with no Buzz source of its own:
+`figure.Draw` in `embed.go` takes the Go mirror of the record, sends each enum as its case's
+name, and refuses a name no case holds. The server's Diagrams handler and the browser
+playground's `buzz.drawFigure` both go through it. `TestMirrorMatchesTheModule` fails when the
+Go mirror drifts from the records declared here.
 
 ## Rules the module enforces
 
@@ -52,9 +70,9 @@ export fun serverHttp() > Figure !> any {
 - A code edge is never drawn by hand. The hand edges each need an actor, and they claim
   `flow`, which nothing checks.
 
-Declarations never raise. `diagram()` raises every finding at once, one per line, each
-naming the call to change. `setOf`, `layerSet`, `without` and `plus` raise immediately
-when handed something that is not a record.
+Declarations never raise. `draw()` and `diagram()` raise every finding at once, one per
+line, each naming the call to change. `setOf`, `layerSet`, `without` and `plus` raise
+immediately when handed something that is not a record.
 
 ## Tests
 

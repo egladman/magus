@@ -10,11 +10,9 @@ import type { SurfaceInstance } from "../standalone";
 import { h } from "../view";
 import {
   listDiagrams,
-  loadDiagramSources,
   renderDiagram,
   type DiagramEntry,
   type DiagramFailure,
-  type DiagramSources,
   type RenderedDiagram,
 } from "./api";
 import { attachFigure, edgesOf, neighbours, type FigureController } from "./interact";
@@ -41,12 +39,12 @@ import {
 
 const SOURCE = "Diagrams";
 
-// Per mount, because the sources come from this mount's server. The wasm itself is one Go
+// Per mount, so each mount's control reflects its own request. The wasm itself is one Go
 // instance per page: ensureBuzz loads it once and a second mount's load resolves at once.
 type RuntimeState =
   | { readonly kind: "off" }
   | { readonly kind: "loading" }
-  | { readonly kind: "ready"; readonly runtime: BuzzRuntime; readonly sources: DiagramSources }
+  | { readonly kind: "ready"; readonly runtime: BuzzRuntime }
   | { readonly kind: "failed"; readonly detail: string };
 
 type FigureState =
@@ -366,7 +364,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (rt.kind !== "ready" || !base || base.id !== id) return false;
     const out = relayout({
       runtime: rt.runtime,
-      sources: rt.sources,
       decl: base.decl,
       meta: base.meta,
       lens,
@@ -489,21 +486,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
     runtimeState = { kind: "loading" };
     syncRuntime();
     void (async () => {
-      const [rt, src] = await Promise.allSettled([
-        ensureBuzz(),
-        loadDiagramSources({ host: serverHost }),
-      ]);
-      if (rt.status === "rejected") {
-        const detail = rt.reason instanceof Error ? rt.reason.message : String(rt.reason);
+      try {
+        runtimeState = { kind: "ready", runtime: await ensureBuzz() };
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
         reportFailure(SOURCE, "The Buzz runtime did not load: " + detail, "diagrams:runtime");
         runtimeState = { kind: "failed", detail };
-      } else if (src.status === "rejected" || src.value.kind !== "ok") {
-        // reported: loadDiagramSources reports its own failures at the choke point
-        const detail =
-          src.status === "fulfilled" && "detail" in src.value ? src.value.detail : "no source";
-        runtimeState = { kind: "failed", detail };
-      } else {
-        runtimeState = { kind: "ready", runtime: rt.value, sources: src.value.value };
       }
       if (stale) return;
       syncRuntime();

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interp/bindings"
-	figuresrc "github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/types"
@@ -279,20 +279,15 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	buzzstd.RegisterWithOutput(sess, io.Discard)
 	// figure names magus\Dir and its kin, which only the magus mirrors declare.
 	bindings.DeclareMagusTypes(sess)
-	sess.SetModuleDecls("magus/figure", figuresrc.Source)
+	sess.SetModuleDecls("magus/figure", figure.Source)
 
-	// The driver runs inside figure's own module: a program importing it cannot reach the
-	// module-private layout helpers its methods call.
-	v, err := sess.Eval(ctx, figuresrc.Source+"\n"+driver(g, desc, anchorHref))
+	svg, err := figure.Draw(ctx, sess, figureOf(g, desc, anchorHref), anchorHref)
+	var refused *figure.Findings
+	if errors.As(err, &refused) {
+		return Figure{}, &FindingsError{Findings: refused.Text}
+	}
 	if err != nil {
 		return Figure{}, fmt.Errorf("diagram: evaluate %s: %w", g.id, err)
-	}
-	if !v.IsList() || len(v.ListItems()) != 2 {
-		return Figure{}, fmt.Errorf("diagram: evaluate %s: driver returned %s", g.id, v.Kind())
-	}
-	items := v.ListItems()
-	if findings := items[1].AsString(); findings != "" {
-		return Figure{}, &FindingsError{Findings: findings}
 	}
 	// A node's ID is the one figure draws as data-node, so a client matches rows to the SVG:
 	// a box is its directory path, an actor is external:<name>.
@@ -305,84 +300,53 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 		}
 		nodes[i] = n
 	}
-	return Figure{Title: g.title, SVG: items[0].AsString(), Nodes: nodes}, nil
+	return Figure{Title: g.title, SVG: svg, Nodes: nodes}, nil
 }
 
-// driver is the Buzz appended to figure.buzz that declares g and draws it. Every value is a
-// Buzz string literal built by buzzString; nothing from the workspace reaches the source
-// unquoted.
+// figureOf is g as a figure\Figure record.
 //
-// An imports figure draws each package as a box from a Dir record carrying the imports g
-// holds, and edgesFromGraph derives the edges, as a docs figure's are. Projects and targets
-// are no directories, so they are actors joined by hand edges, and the figure says why it is
-// unscoped. A non-empty anchorHref links every box to its anchor.
-func driver(g graph, desc, anchorHref string) string {
-	var b strings.Builder
-	// A host hands a Dir over as a map, which no object literal can build; typing the map
-	// through any is how a record reaches figure without the magus module.
-	b.WriteString(`fun serveDir(path: str, imports: [str]) > magus\Dir {
-    final fields: {str: any} = {
-        "path": path, "id": "dir:" + path, "layer": "", "language": "go",
-        "imports": imports, "importedBy": [<str>], "importsIndexed": true,
-        "calls": [<magus\DirCall>], "calledBy": [<magus\DirCall>], "children": [<str>], "files": 1,
-    };
-    final record: any = fields;
-    return record;
-}
-
-`)
-	b.WriteString("fun serveFigure() > str !> str {\n")
-	fmt.Fprintf(&b, "    final f = of(%s).title(%s).desc(%s);\n",
-		buzzString(ids{}.of(g.id)), buzzString(g.title), buzzString(desc))
-	anchor := map[string]string{}
-	for _, n := range g.nodes {
-		anchor[n.ID] = n.Anchor
-	}
-	if g.claim == "imports" {
+// An imports figure draws each package as a box from a Dir carrying the imports g holds,
+// and the graph edges follow from those, as a docs figure's do. Projects and targets are
+// no directories, so they are actors joined by hand edges, and the figure says why it is
+// unscoped. A non-empty anchorHref links every actor to its anchor.
+func figureOf(g graph, desc, anchorHref string) figure.Figure {
+	f := figure.Figure{ID: ids{}.of(g.id), Title: g.title, Desc: desc}
+	if g.claim == KindImports {
+		anchor := make(map[string]string, len(g.nodes))
+		for _, n := range g.nodes {
+			anchor[n.ID] = n.Anchor
+		}
 		imports := map[string][]string{}
 		for _, e := range g.edges {
 			imports[e.src] = append(imports[e.src], anchor[e.dst])
 		}
 		for _, n := range g.nodes {
-			quoted := make([]string, 0, len(imports[n.ID]))
-			for _, dst := range imports[n.ID] {
-				quoted = append(quoted, buzzString(dst))
-			}
-			list := "[<str>]"
-			if len(quoted) > 0 {
-				list = "[" + strings.Join(quoted, ", ") + "]"
-			}
-			fmt.Fprintf(&b, "    f.box(serveDir(%s, imports: %s), label: %s);\n", buzzString(n.Anchor), list, buzzString(n.Label))
+			f.Boxes = append(f.Boxes, figure.Box{Label: n.Label, Dir: &figure.Dir{
+				Path: n.Anchor, ID: "dir:" + n.Anchor, Language: "go",
+				Imports: imports[n.ID], ImportsIndexed: true, Files: 1,
+			}})
 		}
-		b.WriteString("    f.edgesFromGraph();\n")
-	} else {
-		// A served figure is a lens over the graph the server already holds, so nothing in
-		// the tree is left for a scope to check.
-		fmt.Fprintf(&b, "    f.unscoped(why: %s);\n", buzzString("served from the workspace graph: "+desc))
-		names := actorNames(g.nodes)
-		for i, n := range g.nodes {
-			fmt.Fprintf(&b, "    final a%d = external(%s, link: %s, look: Look.plain);\n    f.actor(a%d);\n",
-				i, buzzString(names[n.ID]), buzzString(linkTo(anchorHref, n.Anchor)), i)
-		}
-		index := map[string]int{}
-		for i, n := range g.nodes {
-			index[n.ID] = i
-		}
-		for _, e := range g.edges {
-			fmt.Fprintf(&b, "    f.flowAcross(a%d, dst: a%d);\n", index[e.src], index[e.dst])
-		}
+		f.GraphEdges = true
+		return f
 	}
-	fmt.Fprintf(&b, "    return f.svg(Theme.page, anchorHref: %s);\n}\n", buzzString(anchorHref))
-	b.WriteString(`var serveSvg = "";
-var serveFindings = "";
-try {
-    serveSvg = serveFigure();
-} catch (e: str) {
-    serveFindings = e;
-}
-return [serveSvg, serveFindings];
-`)
-	return b.String()
+	// A served figure is a lens over the graph the server already holds, so nothing in the
+	// tree is left for a scope to check.
+	f.UnscopedWhy = "served from the workspace graph: " + desc
+	plain := figure.Look("plain")
+	names := actorNames(g.nodes)
+	actors := make(map[string]*figure.Actor, len(g.nodes))
+	for _, n := range g.nodes {
+		a := &figure.Actor{Name: names[n.ID], Link: linkTo(anchorHref, n.Anchor), Look: &plain}
+		actors[n.ID] = a
+		f.Boxes = append(f.Boxes, figure.Box{Actor: a})
+	}
+	for _, e := range g.edges {
+		f.Flows = append(f.Flows, figure.Flow{
+			Src: figure.End{Actor: actors[e.src]},
+			Dst: figure.End{Actor: actors[e.dst]},
+		})
+	}
+	return f
 }
 
 // actorNames names each node's actor. figure keys an actor by its name, so a label two
@@ -408,33 +372,4 @@ func linkTo(anchorHref, anchor string) string {
 		return ""
 	}
 	return strings.NewReplacer("{path}", anchor, "{line}", "").Replace(anchorHref)
-}
-
-// buzzString quotes s as a Buzz string literal. Braces are escaped because a bare one opens
-// an interpolation; control bytes use Buzz's three-digit decimal escape.
-func buzzString(s string) string {
-	var b strings.Builder
-	b.WriteByte('"')
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch c {
-		case '"', '\\', '{', '}':
-			b.WriteByte('\\')
-			b.WriteByte(c)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\t':
-			b.WriteString(`\t`)
-		case '\r':
-			b.WriteString(`\r`)
-		default:
-			if c < 0x20 || c == 0x7f {
-				fmt.Fprintf(&b, `\%03d`, c)
-				continue
-			}
-			b.WriteByte(c)
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
 }

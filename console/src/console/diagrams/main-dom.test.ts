@@ -7,8 +7,9 @@
 //   - THE LENS IS ADDRESSABLE. Applying one re-requests the figure and writes the fragment.
 //   - THE RUNTIME IS EXPLICIT. Nothing loads it but its control; once loaded, a lens change lays
 //     out in the page from the declaration the server served, with no second render request.
-//   - THE DRIVER IS THE HANDLER'S. magus/figure's one source plus a driver shaped like
-//     internal/handler/diagram's: Dir records for the import figure, actors for the rest.
+//   - THE RECORD IS THE HANDLER'S. The page hands figure\draw the Figure record
+//     internal/handler/diagram's figureOf builds: Dir boxes for the import figure, actors for
+//     the rest. No Buzz source is written.
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -16,15 +17,15 @@ import { setDefaultHost } from "../../lib/settings";
 import { activate } from "./main";
 import {
   anchorTemplate,
-  buzzString,
   drawnNodes,
-  driverFor,
+  figureFor,
   figureId,
   linkTo,
-  parseRelayout,
-  programFor,
-  FIGURE_PATH,
+  relayoutOf,
+  runtimeFrom,
   IMPORTS,
+  type DrawResult,
+  type Figure,
 } from "./wasm";
 
 const HOST = "127.0.0.1:7391";
@@ -72,12 +73,22 @@ const IMPORTS_SVG =
   '<g data-node="internal/c" data-anchor="internal/c"><rect x="32" y="120" width="160" height="56"/></g>' +
   "</svg>";
 
-const FIGURE_SRC = [
-  "namespace figure;",
-  'import "std";',
-  'import "assert";',
-  "export fun of(id: str) > mut Figure { return mut Figure{ id = id }; }",
-].join("\n");
+// fakeRuntime stands in for buzz.wasm's globalThis.buzz: it records each figure record the page
+// hands drawFigure, decoded from the JSON that crosses into Go, and answers with result.
+function fakeRuntime(result: DrawResult): { figures: Figure[]; hrefs: string[] } {
+  const figures: Figure[] = [];
+  const hrefs: string[] = [];
+  (globalThis as { buzz?: unknown }).buzz = {
+    drawFigure: (json: string, anchorHref: string) => {
+      figures.push(JSON.parse(json) as Figure);
+      hrefs.push(anchorHref);
+      return result;
+    },
+  };
+  return { figures, hrefs };
+}
+
+const drew = (svg: string): DrawResult => ({ ok: true, svg, findings: "", diag: null });
 
 let requests: string[] = [];
 let importsIndexed = false;
@@ -100,7 +111,6 @@ function serve(): void {
           { id: "big", kind: "projects", title: "Too big" },
         ],
       });
-    if (path === "/api/v1/diagrams/source") return json({ files: { [FIGURE_PATH]: FIGURE_SRC } });
     if (path === "/api/v1/diagrams/imports")
       return importsIndexed
         ? json({
@@ -264,18 +274,13 @@ describe("the Diagrams surface", () => {
   });
 
   test("once loaded, the runtime lays a lens out in the page without asking the server", async () => {
-    const programs: string[] = [];
-    (globalThis as { buzz?: unknown }).buzz = {
-      evalBuzz: (src: string) => {
-        programs.push(src);
-        return { ok: true, result: "svg\n" + RELAID, output: "", diag: null };
-      },
-    };
+    const rt = fakeRuntime(drew(RELAID));
     const { host, q, instance } = mountSurface();
     await settle();
+    const loaded = requests.length;
     loadRuntime(host);
     await settle();
-    assert.equal(requests.at(-1), "/api/v1/diagrams/source");
+    assert.equal(requests.length, loaded, "the runtime embeds magus/figure; nothing is fetched");
     assert.match(q(".console-diagrams__runtime-status").textContent ?? "", /Runtime loaded/);
 
     const before = requests.length;
@@ -283,28 +288,40 @@ describe("the Diagrams surface", () => {
     q<HTMLFormElement>("form").dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
     assert.equal(requests.length, before, "no round trip");
-    assert.equal(programs.length, 1);
-    const program = programs[0];
-    assert.ok(program.startsWith(FIGURE_SRC + "\n"), "the module's own source, then the driver");
-    assert.match(program, /final f = of\("projects"\)\.title\("Workspace projects"\)/);
-    assert.match(
-      program,
-      /f\.unscoped\(why: "served from the workspace graph: focus app, depth 1"\);/,
-    );
-    assert.match(
-      program,
-      /final a0 = external\("app", link: "https:\/\/github\.com\/acme\/widgets\/blob\/abc\/app", look: Look\.plain\);\n {4}f\.actor\(a0\);/,
-    );
-    assert.match(
-      program,
-      /final a1 = external\("lib", link: "[^"]*\/libs\/lib", look: Look\.plain\);/,
-    );
-    assert.doesNotMatch(program, /"tools"/, "the lens cut tools before layout");
-    assert.match(program, /f\.flowAcross\(a0, dst: a1\);/, "edges come from data-edge");
-    assert.match(
-      program,
-      /return f\.svg\(Theme\.page, anchorHref: "https:\/\/github\.com\/acme\/widgets\/blob\/abc\/\\\{path\\\}"\);/,
-    );
+    assert.equal(rt.figures.length, 1);
+    const app = { name: "app", sub: "", tag: "", link: BLOB + "app", look: "plain" };
+    const lib = { name: "lib", sub: "", tag: "", link: BLOB + "libs/lib", look: "plain" };
+    const box = { dir: null, group: null, label: "", sub: "", tag: "", focal: false, look: null };
+    assert.deepEqual(rt.figures[0], {
+      id: "projects",
+      title: "Workspace projects",
+      eyebrow: "",
+      desc: "focus app, depth 1",
+      direction: "across",
+      generated: false,
+      unscopedWhy: "served from the workspace graph: focus app, depth 1",
+      graphEdges: false,
+      boxes: [
+        { ...box, actor: app },
+        { ...box, actor: lib },
+      ],
+      scopes: [],
+      exclusions: [],
+      hiddenEdges: [],
+      edgeMarks: [],
+      flows: [
+        {
+          src: { dir: null, actor: app },
+          dst: { dir: null, actor: lib },
+          label: "",
+          stroke: null,
+        },
+      ],
+      zones: [],
+      alignments: [],
+      legends: [],
+    });
+    assert.deepEqual(rt.hrefs, [BLOB + "{path}"]);
     const drawn = [...host.querySelectorAll(".console-diagrams__frame [data-node]")].map((n) =>
       n.getAttribute("data-node"),
     );
@@ -319,13 +336,7 @@ describe("the Diagrams surface", () => {
   test("an import figure lays out in the page from Dir records", async () => {
     importsIndexed = true;
     location.hash = "#diagram=imports";
-    const programs: string[] = [];
-    (globalThis as { buzz?: unknown }).buzz = {
-      evalBuzz: (src: string) => {
-        programs.push(src);
-        return { ok: true, result: "svg\n" + IMPORTS_SVG, output: "", diag: null };
-      },
-    };
+    const rt = fakeRuntime(drew(IMPORTS_SVG));
     const { host, q, instance } = mountSurface();
     await settle();
     loadRuntime(host);
@@ -333,32 +344,24 @@ describe("the Diagrams surface", () => {
     q<HTMLInputElement>('input[name="scope"]').value = "internal/a, internal/b";
     q<HTMLFormElement>("form").dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
-    assert.equal(programs.length, 1);
-    const program = programs[0];
-    assert.match(program, /fun serveDir\(path: str, imports: \[str\]\) > magus\\Dir \{/);
-    assert.match(
-      program,
-      /f\.box\(serveDir\("internal\/a", imports: \["internal\/b"\]\), label: "internal\/a"\);/,
+    assert.equal(rt.figures.length, 1);
+    const f = rt.figures[0];
+    assert.equal(f.graphEdges, true);
+    assert.equal(f.unscopedWhy, "");
+    assert.deepEqual(
+      f.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
+      [
+        ["internal/a", "internal/a", ["internal/b"], true, null],
+        ["internal/b", "internal/b", [], true, null],
+      ],
+      "the scope cut c before layout, and each box carries the imports the SVG drew",
     );
-    assert.match(
-      program,
-      /f\.box\(serveDir\("internal\/b", imports: \[<str>\]\), label: "internal\/b"\);/,
-    );
-    assert.doesNotMatch(program, /internal\/c/, "the scope cut c before layout");
-    assert.match(program, /f\.edgesFromGraph\(\);/);
-    assert.doesNotMatch(program, /external\(|unscoped/);
+    assert.deepEqual(f.flows, []);
     instance.deactivate();
   });
 
   test("a runtime refusal is shown like the server's", async () => {
-    (globalThis as { buzz?: unknown }).buzz = {
-      evalBuzz: () => ({
-        ok: true,
-        result: "findings\ndiagram: over budget",
-        output: "",
-        diag: null,
-      }),
-    };
+    fakeRuntime({ ok: false, svg: "", findings: "diagram: over budget", diag: null });
     const { host, q, instance } = mountSurface();
     await settle();
     loadRuntime(host);
@@ -371,12 +374,7 @@ describe("the Diagrams surface", () => {
   });
 });
 
-// ---- the runtime's program ------------------------------------------------------------------
-
-test("buzzString escapes exactly as the handler's buzzString does", () => {
-  // The same case as internal/handler/diagram/render_test.go's TestDiagramBuzzStringEscapes.
-  assert.equal(buzzString('a"b\\c{d}\n\t\x07'), '"a\\"b\\\\c\\{d\\}\\n\\t\\007"');
-});
+// ---- the runtime's record -------------------------------------------------------------------
 
 test("figure ids are the handler's sanitized ids", () => {
   assert.equal(figureId("targets:libs/lib"), "targets-libs-lib");
@@ -407,19 +405,8 @@ test("server rows take the ids the figure draws", () => {
   );
 });
 
-test("the program is the module's own source, then the driver", () => {
-  assert.equal(
-    programFor({ [FIGURE_PATH]: FIGURE_SRC }, "return 1;\n"),
-    FIGURE_SRC + "\nreturn 1;\n",
-  );
-  assert.throws(
-    () => programFor({ "libs/diagram/flow.buzz": "" }, ""),
-    /missing libs\/figure\/figure\.buzz/,
-  );
-});
-
-test("the actor driver quotes every value and returns one marked string", () => {
-  const driver = driverFor(
+test("the actor record carries every value as data, however it is spelled", () => {
+  const f = figureFor(
     {
       nodes: [
         { id: "external:a", anchor: "x/y", label: 'say "{hi}"' },
@@ -430,15 +417,17 @@ test("the actor driver quotes every value and returns one marked string", () => 
     { id: "targets:app", title: "T", claim: "flow", anchorHref: "" },
     "scope x",
   );
-  assert.match(driver, /final f = of\("targets-app"\)\.title\("T"\)\.desc\("scope x"\);/);
-  assert.match(driver, /external\("say \\"\\\{hi\\\}\\"", link: "", look: Look\.plain\)/);
-  assert.match(driver, /f\.flowAcross\(a0, dst: a1\);/);
-  assert.match(driver, /return f\.svg\(Theme\.page, anchorHref: ""\);/);
-  assert.match(driver, /var served = "svg\\n";/);
-  assert.match(driver, /return served;\n$/);
+  assert.equal(f.id, "targets-app");
+  assert.equal(f.desc, "scope x");
+  assert.equal(f.boxes[0].actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
+  assert.equal(f.boxes[0].actor?.look, "plain");
+  assert.deepEqual(
+    f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
+    [['say "{hi}"', "b"]],
+  );
   assert.throws(
     () =>
-      driverFor(
+      figureFor(
         { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
         { id: "projects", title: "P", claim: "flow", anchorHref: "" },
         "",
@@ -447,21 +436,38 @@ test("the actor driver quotes every value and returns one marked string", () => 
   );
 });
 
-test("a relayout result is a figure, a refusal or a failure", () => {
-  assert.deepEqual(parseRelayout({ ok: true, result: "svg\n<svg/>" }), {
-    kind: "ok",
-    svg: "<svg/>",
-  });
-  assert.deepEqual(parseRelayout({ ok: true, result: "findings\nover" }), {
+test("a draw result is a figure, a refusal or a failure", () => {
+  assert.deepEqual(relayoutOf(drew("<svg/>")), { kind: "ok", svg: "<svg/>" });
+  assert.deepEqual(relayoutOf({ ok: false, svg: "", findings: "over", diag: null }), {
     kind: "refused",
     detail: "over",
   });
-  assert.deepEqual(parseRelayout({ ok: false, diag: { msg: "boom", line: 3, col: 1 } }), {
+  assert.deepEqual(
+    relayoutOf({ ok: false, svg: "", findings: "", diag: { msg: "boom", line: 3, col: 1 } }),
+    { kind: "failed", detail: "boom (line 3)" },
+  );
+  assert.deepEqual(relayoutOf({ ok: false, svg: "", findings: "", diag: null }), {
     kind: "failed",
-    detail: "boom (line 3)",
+    detail: "the runtime drew nothing",
   });
-  assert.deepEqual(parseRelayout({ ok: true, result: "[a, b]" }), {
-    kind: "failed",
-    detail: "the driver returned something that is not a figure",
+});
+
+test("the runtime is globalThis.buzz with drawFigure, and the record crosses as JSON", () => {
+  assert.equal(runtimeFrom({ buzz: { evalBuzz: () => null } }), null, "an older wasm");
+  let sent = "";
+  const rt = runtimeFrom({
+    buzz: {
+      drawFigure: (json: string) => {
+        sent = json;
+        return { ok: true, svg: "<svg/>", findings: "", diag: null };
+      },
+    },
   });
+  assert.ok(rt);
+  const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
+  const f = figureFor({ nodes: [], edges: [] }, meta, "");
+  assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
+  assert.deepEqual(JSON.parse(sent), f);
+  const odd = runtimeFrom({ buzz: { drawFigure: () => 7 } });
+  assert.equal(odd?.drawFigure(f, "").diag?.msg, "the runtime returned nothing");
 });

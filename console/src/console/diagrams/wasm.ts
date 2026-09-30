@@ -1,6 +1,7 @@
 // wasm.ts - the Buzz runtime a figure upgrades to on request: the docs playground's wasm, loaded
-// the way docs/src/site/buzz-runtime.ts loads it, then fed the magus/figure source the server
-// evaluates (GET /api/v1/diagrams/source) with a driver shaped like internal/handler/diagram's.
+// the way docs/src/site/buzz-runtime.ts loads it. It embeds magus/figure, so the page builds a
+// figure\Figure record from the rows the server sent and hands it to buzz.drawFigure, which
+// calls figure\draw exactly as internal/handler/diagram does. No Buzz source is written here.
 // Once loaded, a lens change re-lays the figure out here instead of asking the server.
 //
 // Never loaded automatically: it is 4.2MB and a Go runtime, and the static render already is the
@@ -8,7 +9,6 @@
 
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
-import type { DiagramSources } from "./api";
 
 export interface BuzzDiag {
   readonly msg: string;
@@ -16,23 +16,152 @@ export interface BuzzDiag {
   readonly col: number;
 }
 
-export interface BuzzResult {
+// DrawResult is buzz.drawFigure's answer: the SVG when ok, else figure's findings, or a diag
+// when the record or the runtime failed.
+export interface DrawResult {
   readonly ok: boolean;
-  readonly result?: string;
-  readonly output?: string;
-  readonly diag?: BuzzDiag | null;
+  readonly svg: string;
+  readonly findings: string;
+  readonly diag: BuzzDiag | null;
 }
 
 export interface BuzzRuntime {
-  evalBuzz(src: string): BuzzResult;
+  drawFigure(figure: Figure, anchorHref: string): DrawResult;
 }
 
-interface GoInstance {
+// The figure\Figure record and its parts, field for field as magus/figure declares them and
+// libs/figure/embed.go mirrors them. An enum crosses as its case's name, which the runtime
+// decodes into the case; it refuses a member the record does not declare and a name no case
+// holds.
+export type Look = "plain" | "focal" | "store" | "external" | "input" | "optional" | "decision";
+export type Stroke = "plain" | "focal" | "external" | "optional";
+export type Direction = "across" | "down";
+export type Axis = "rank" | "row";
+
+export interface Figure {
+  readonly id: string;
+  readonly title: string;
+  readonly eyebrow: string;
+  readonly desc: string;
+  readonly direction: Direction;
+  readonly generated: boolean;
+  // Why the figure draws no directory; "" for one that draws some.
+  readonly unscopedWhy: string;
+  readonly graphEdges: boolean;
+  readonly boxes: readonly Box[];
+  readonly scopes: readonly DirSet[];
+  readonly exclusions: readonly Exclusion[];
+  readonly hiddenEdges: readonly HiddenEdges[];
+  readonly edgeMarks: readonly EdgeMark[];
+  readonly flows: readonly Flow[];
+  readonly zones: readonly Zone[];
+  readonly alignments: readonly Alignment[];
+  readonly legends: readonly Legend[];
+}
+
+// Box is one drawn box: exactly one of dir, group and actor is set.
+export interface Box {
+  readonly dir: Dir | null;
+  readonly group: DirSet | null;
+  readonly actor: Actor | null;
+  readonly label: string;
+  readonly sub: string;
+  readonly tag: string;
+  readonly focal: boolean;
+  readonly look: Look | null;
+}
+
+export interface DirSet {
+  readonly dirs: readonly Dir[];
+  readonly named: string;
+}
+
+export interface Actor {
+  readonly name: string;
+  readonly sub: string;
+  readonly tag: string;
+  readonly link: string;
+  // null is "external".
+  readonly look: Look | null;
+}
+
+export interface Exclusion {
+  readonly set: DirSet;
+  readonly why: string;
+}
+
+export interface HiddenEdges {
+  readonly src: DirSet;
+  readonly dst: DirSet;
+  readonly why: string;
+}
+
+export interface EdgeMark {
+  readonly src: Dir;
+  readonly dst: Dir;
+  readonly label: string;
+  readonly stroke: Stroke | null;
+}
+
+// End is one end of a Flow: exactly one of dir and actor is set.
+export interface End {
+  readonly dir: Dir | null;
+  readonly actor: Actor | null;
+}
+
+export interface Flow {
+  readonly src: End;
+  readonly dst: End;
+  readonly label: string;
+  readonly stroke: Stroke | null;
+}
+
+export interface Zone {
+  readonly label: string;
+  readonly dirs: DirSet | null;
+  readonly actors: readonly Actor[];
+  readonly boundary: boolean;
+}
+
+export interface Alignment {
+  readonly axis: Axis;
+  readonly dirs: DirSet | null;
+  readonly actors: readonly Actor[];
+}
+
+export interface Legend {
+  readonly look: Look;
+  readonly label: string;
+}
+
+// Dir is the magus\Dir record under its Buzz field names.
+export interface Dir {
+  readonly path: string;
+  readonly id: string;
+  readonly layer: string;
+  readonly language: string;
+  readonly imports: readonly string[];
+  readonly importedBy: readonly string[];
+  readonly importsIndexed: boolean;
+  readonly calls: readonly DirCall[];
+  readonly calledBy: readonly DirCall[];
+  readonly children: readonly string[];
+  readonly files: number;
+}
+
+export interface DirCall {
+  readonly dir: string;
+  readonly transport: string;
+  readonly marker: string;
+  readonly source: string;
+}
+
+export interface GoInstance {
   run(instance: WebAssembly.Instance): Promise<void> | void;
   importObject: WebAssembly.Imports;
 }
 
-type GoConstructor = new () => GoInstance;
+export type GoConstructor = new () => GoInstance;
 
 function hasFunction<K extends string>(
   v: unknown,
@@ -43,26 +172,37 @@ function hasFunction<K extends string>(
   );
 }
 
-// runtimeFrom narrows globalThis.buzz, which the wasm's Go main() installs.
+function diagOf(v: unknown): BuzzDiag | null {
+  if (typeof v !== "object" || v === null) return null;
+  const d = v as { msg?: unknown; line?: unknown; col?: unknown };
+  return typeof d.msg === "string"
+    ? { msg: d.msg, line: Number(d.line) || 0, col: Number(d.col) || 0 }
+    : null;
+}
+
+// runtimeFrom narrows globalThis.buzz, which the wasm's Go main() installs. A wasm built before
+// drawFigure existed is no runtime here.
 export function runtimeFrom(g: unknown): BuzzRuntime | null {
   if (typeof g !== "object" || g === null) return null;
   const buzz = (g as { buzz?: unknown }).buzz;
-  if (!hasFunction(buzz, "evalBuzz")) return null;
+  if (!hasFunction(buzz, "drawFigure")) return null;
+  const draw = buzz.drawFigure as (figure: string, anchorHref: string) => unknown;
   return {
-    evalBuzz: (src: string): BuzzResult => {
-      const raw: unknown = (buzz.evalBuzz as (s: string) => unknown)(src);
+    drawFigure: (figure: Figure, anchorHref: string): DrawResult => {
+      const raw: unknown = draw(JSON.stringify(figure), anchorHref);
       if (typeof raw !== "object" || raw === null)
-        return { ok: false, diag: { msg: "the runtime returned nothing", line: 0, col: 0 } };
-      const r = raw as { ok?: unknown; result?: unknown; output?: unknown; diag?: unknown };
-      const d = r.diag as { msg?: unknown; line?: unknown; col?: unknown } | null | undefined;
+        return {
+          ok: false,
+          svg: "",
+          findings: "",
+          diag: { msg: "the runtime returned nothing", line: 0, col: 0 },
+        };
+      const r = raw as { ok?: unknown; svg?: unknown; findings?: unknown; diag?: unknown };
       return {
         ok: r.ok === true,
-        result: typeof r.result === "string" ? r.result : undefined,
-        output: typeof r.output === "string" ? r.output : undefined,
-        diag:
-          d && typeof d.msg === "string"
-            ? { msg: d.msg, line: Number(d.line) || 0, col: Number(d.col) || 0 }
-            : null,
+        svg: typeof r.svg === "string" ? r.svg : "",
+        findings: typeof r.findings === "string" ? r.findings : "",
+        diag: diagOf(r.diag),
       };
     },
   };
@@ -107,27 +247,13 @@ export function ensureBuzz(opts: LoadOptions = {}): Promise<BuzzRuntime> {
         reject(new Error("wasm_exec.js loaded but defined no Go runtime"));
         return;
       }
-      const go = new (Go as GoConstructor)();
       const url = root + "buzz.wasm";
-      const start = async (): Promise<void> => {
+      const bytes = async (): Promise<ArrayBuffer> => {
         const res = await fetch(url);
         if (!res.ok) throw new Error("could not load " + url + ": HTTP " + res.status);
-        const mod = await WebAssembly.instantiate(await res.arrayBuffer(), go.importObject);
-        void go.run(mod.instance);
-        // Go's main() installs globalThis.buzz asynchronously after run() returns.
-        const deadline = Date.now() + readyMs;
-        for (;;) {
-          const rt = runtimeFrom(globalThis);
-          if (rt) {
-            resolve(rt);
-            return;
-          }
-          if (Date.now() > deadline)
-            throw new Error("the Buzz runtime started but never exposed evalBuzz");
-          await new Promise((r) => setTimeout(r, 30));
-        }
+        return res.arrayBuffer();
       };
-      start().catch(reject);
+      startGo(Go as GoConstructor, bytes, readyMs).then(resolve, reject);
     };
     document.head.append(script);
   });
@@ -138,33 +264,24 @@ export function ensureBuzz(opts: LoadOptions = {}): Promise<BuzzRuntime> {
   return loading;
 }
 
-// buzzString is the handler's buzzString: a Buzz string literal with braces escaped (a bare one
-// opens an interpolation) and control bytes as three-digit decimal escapes.
-export function buzzString(s: string): string {
-  let out = '"';
-  for (const ch of s) {
-    const c = ch.charCodeAt(0);
-    switch (ch) {
-      case '"':
-      case "\\":
-      case "{":
-      case "}":
-        out += "\\" + ch;
-        break;
-      case "\n":
-        out += "\\n";
-        break;
-      case "\t":
-        out += "\\t";
-        break;
-      case "\r":
-        out += "\\r";
-        break;
-      default:
-        out += c < 0x20 || c === 0x7f ? "\\" + String(c).padStart(3, "0") : ch;
-    }
+// startGo instantiates the wasm under Go and waits for main() to install globalThis.buzz,
+// which it does asynchronously after run() returns.
+export async function startGo(
+  Go: GoConstructor,
+  bytes: () => Promise<ArrayBuffer | Uint8Array>,
+  readyMs: number,
+): Promise<BuzzRuntime> {
+  const go = new Go();
+  const mod = await WebAssembly.instantiate(await bytes(), go.importObject);
+  void go.run(mod.instance);
+  const deadline = Date.now() + readyMs;
+  for (;;) {
+    const rt = runtimeFrom(globalThis);
+    if (rt) return rt;
+    if (Date.now() > deadline)
+      throw new Error("the Buzz runtime started but never exposed drawFigure");
+    await new Promise((r) => setTimeout(r, 30));
   }
-  return out + '"';
 }
 
 // figureId is the handler's ids{}.of for the figure id: letters, digits, - and _ survive.
@@ -210,111 +327,107 @@ export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): Decla
 export interface FigureMeta {
   readonly id: string;
   readonly title: string;
-  // IMPORTS for the import figure; any other claim draws actors, as the handler's driver does.
+  // IMPORTS for the import figure; any other claim draws actors, as the handler's figureOf does.
   readonly claim: string;
   // The node link template, {path} filled per node, or "" for no links.
   readonly anchorHref: string;
 }
 
-const SVG_MARK = "svg\n";
-const FINDINGS_MARK = "findings\n";
+const EMPTY_FIGURE: Figure = {
+  id: "",
+  title: "",
+  eyebrow: "",
+  desc: "",
+  direction: "across",
+  generated: false,
+  unscopedWhy: "",
+  graphEdges: false,
+  boxes: [],
+  scopes: [],
+  exclusions: [],
+  hiddenEdges: [],
+  edgeMarks: [],
+  flows: [],
+  zones: [],
+  alignments: [],
+  legends: [],
+};
 
-// The handler's serveDir, byte for byte. A host hands a Dir over as a map, and typing the map
-// through any is how a record reaches figure without the magus module.
-const SERVE_DIR = String.raw`fun serveDir(path: str, imports: [str]) > magus\Dir {
-    final fields: {str: any} = {
-        "path": path, "id": "dir:" + path, "layer": "", "language": "go",
-        "imports": imports, "importedBy": [<str>], "importsIndexed": true,
-        "calls": [<magus\DirCall>], "calledBy": [<magus\DirCall>], "children": [<str>], "files": 1,
-    };
-    final record: any = fields;
-    return record;
-}
+const EMPTY_BOX: Box = {
+  dir: null,
+  group: null,
+  actor: null,
+  label: "",
+  sub: "",
+  tag: "",
+  focal: false,
+  look: null,
+};
 
-`;
-
-// driverFor is the handler's driver over decl, whose node ids are drawnNodes ids. Only the tail
-// differs: the playground hands a result back as its string form, where a list would arrive
-// flattened, so it returns ONE marked string instead of [svg, findings].
-export function driverFor(decl: Declaration, meta: FigureMeta, desc: string): string {
-  const lines = [
-    SERVE_DIR + "fun serveFigure() > str !> str {",
-    "    final f = of(" +
-      buzzString(figureId(meta.id)) +
-      ").title(" +
-      buzzString(meta.title) +
-      ").desc(" +
-      buzzString(desc) +
-      ");",
-  ];
+// figureFor is the handler's figureOf over decl, whose node ids are drawnNodes ids: the same
+// Figure record, built from the same rows.
+export function figureFor(decl: Declaration, meta: FigureMeta, desc: string): Figure {
+  const base: Figure = {
+    ...EMPTY_FIGURE,
+    id: figureId(meta.id),
+    title: meta.title,
+    desc,
+  };
   if (meta.claim === IMPORTS) {
     const anchor = new Map(decl.nodes.map((n) => [n.id, n.anchor]));
     const imports = new Map<string, string[]>();
     for (const [src, dst] of decl.edges)
       imports.set(src, [...(imports.get(src) ?? []), anchor.get(dst) ?? ""]);
-    for (const n of decl.nodes) {
-      const quoted = (imports.get(n.id) ?? []).map(buzzString);
-      const list = quoted.length ? "[" + quoted.join(", ") + "]" : "[<str>]";
-      lines.push(
-        "    f.box(serveDir(" +
-          buzzString(n.anchor) +
-          ", imports: " +
-          list +
-          "), label: " +
-          buzzString(n.label) +
-          ");",
-      );
-    }
-    lines.push("    f.edgesFromGraph();");
-  } else {
-    lines.push(
-      "    f.unscoped(why: " + buzzString("served from the workspace graph: " + desc) + ");",
+    const boxes = decl.nodes.map(
+      (n): Box => ({
+        ...EMPTY_BOX,
+        label: n.label,
+        dir: {
+          path: n.anchor,
+          id: "dir:" + n.anchor,
+          layer: "",
+          language: "go",
+          imports: imports.get(n.id) ?? [],
+          importedBy: [],
+          importsIndexed: true,
+          calls: [],
+          calledBy: [],
+          children: [],
+          files: 1,
+        },
+      }),
     );
-    const names = actorNames(decl.nodes);
-    const index = new Map<string, number>();
-    decl.nodes.forEach((n, i) => {
-      index.set(n.id, i);
-      lines.push(
-        "    final a" +
-          i +
-          " = external(" +
-          buzzString(names[i]) +
-          ", link: " +
-          buzzString(linkTo(meta.anchorHref, n.anchor)) +
-          ", look: Look.plain);",
-        "    f.actor(a" + i + ");",
-      );
-    });
-    for (const [src, dst] of decl.edges) {
-      const a = index.get(src);
-      const b = index.get(dst);
-      if (a === undefined || b === undefined)
-        throw new Error("the declaration has an edge " + src + "->" + dst + " to no node");
-      lines.push("    f.flowAcross(a" + a + ", dst: a" + b + ");");
-    }
+    return { ...base, graphEdges: true, boxes };
   }
-  lines.push("    return f.svg(Theme.page, anchorHref: " + buzzString(meta.anchorHref) + ");");
-  lines.push("}");
-  lines.push("var served = " + buzzString(SVG_MARK) + ";");
-  lines.push("try {");
-  lines.push("    served = served + serveFigure();");
-  lines.push("} catch (e: str) {");
-  lines.push("    served = " + buzzString(FINDINGS_MARK) + " + e;");
-  lines.push("}");
-  lines.push("return served;");
-  return lines.join("\n") + "\n";
-}
-
-// FIGURE_PATH is the handler's FigureSource: the one file GET /api/v1/diagrams/source serves.
-export const FIGURE_PATH = "libs/figure/figure.buzz";
-
-// programFor is what the handler evaluates: the module's own source, then the driver. The driver
-// runs inside the module because a program importing it cannot reach the private layout helpers
-// its methods call.
-export function programFor(sources: DiagramSources, driver: string): string {
-  const src = sources[FIGURE_PATH];
-  if (src === undefined) throw new Error("the server's figure source is missing " + FIGURE_PATH);
-  return src + "\n" + driver;
+  const names = actorNames(decl.nodes);
+  const actors = new Map<string, Actor>();
+  decl.nodes.forEach((n, i) =>
+    actors.set(n.id, {
+      name: names[i],
+      sub: "",
+      tag: "",
+      link: linkTo(meta.anchorHref, n.anchor),
+      look: "plain",
+    }),
+  );
+  const flows = decl.edges.map(([src, dst]): Flow => {
+    const a = actors.get(src);
+    const b = actors.get(dst);
+    if (!a || !b)
+      throw new Error("the declaration has an edge " + src + "->" + dst + " to no node");
+    return {
+      src: { dir: null, actor: a },
+      dst: { dir: null, actor: b },
+      label: "",
+      stroke: null,
+    };
+  });
+  return {
+    ...base,
+    unscopedWhy: "served from the workspace graph: " + desc,
+    boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
+    flows,
+  };
 }
 
 export type Relayout =
@@ -323,39 +436,33 @@ export type Relayout =
   | { readonly kind: "bad-lens"; readonly detail: string }
   | { readonly kind: "failed"; readonly detail: string };
 
-export function parseRelayout(r: BuzzResult): Relayout {
-  if (!r.ok) {
-    const d = r.diag;
-    return {
-      kind: "failed",
-      detail: d ? d.msg + (d.line ? " (line " + d.line + ")" : "") : "evaluation failed",
-    };
-  }
-  const out = r.result ?? "";
-  if (out.startsWith(SVG_MARK)) return { kind: "ok", svg: out.slice(SVG_MARK.length) };
-  if (out.startsWith(FINDINGS_MARK))
-    return { kind: "refused", detail: out.slice(FINDINGS_MARK.length) };
-  return { kind: "failed", detail: "the driver returned something that is not a figure" };
+export function relayoutOf(r: DrawResult): Relayout {
+  if (r.ok) return { kind: "ok", svg: r.svg };
+  if (r.findings) return { kind: "refused", detail: r.findings };
+  const d = r.diag;
+  return {
+    kind: "failed",
+    detail: d ? d.msg + (d.line ? " (line " + d.line + ")" : "") : "the runtime drew nothing",
+  };
 }
 
 export interface RelayoutInput {
   readonly runtime: BuzzRuntime;
-  readonly sources: DiagramSources;
   // The whole figure as the server declared it, before any lens, keyed by drawnNodes ids.
   readonly decl: Declaration;
   readonly meta: FigureMeta;
   readonly lens: Lens;
 }
 
-// relayout cuts the declaration through the lens and lays it out with magus/figure, in the page.
+// relayout cuts the declaration through the lens and draws it with figure\draw, in the page.
 export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (!cut.ok) return { kind: "bad-lens", detail: cut.error };
-  let program: string;
+  let figure: Figure;
   try {
-    program = programFor(input.sources, driverFor(cut.decl, input.meta, describeLens(input.lens)));
+    figure = figureFor(cut.decl, input.meta, describeLens(input.lens));
   } catch (e) {
     return { kind: "failed", detail: e instanceof Error ? e.message : String(e) };
   }
-  return parseRelayout(input.runtime.evalBuzz(program));
+  return relayoutOf(input.runtime.drawFigure(figure, input.meta.anchorHref));
 }

@@ -460,3 +460,52 @@ func TestSpellExamplesParseAndRecord(t *testing.T) {
 	}
 	t.Logf("checked %d spell example file(s)", count)
 }
+
+func TestEvalImportsFigureWithMagusRecords(t *testing.T) {
+	r := Eval(context.Background(), `import "magus/figure";
+fun dir(path: str) > magus\Dir {
+    final fields: {str: any} = { "path": path, "imports": [<str>], "importsIndexed": true, "calls": [<magus\DirCall>] };
+    final record: any = fields;
+    return record;
+}
+return figure\draw(figure\of("t").box(dir("a")).unscoped(why: "x"), theme: figure\Theme.light) catch "refused";`)
+	require.True(t, r.OK, "eval failed: %+v", r.Diag)
+	assert.Equal(t, "refused", r.Result, "figure type-checks against magus\\Dir and raises its finding")
+}
+
+func TestPlaygroundSourceModules(t *testing.T) {
+	assert.Equal(t, []string{"figure"}, PlaygroundSourceModules())
+}
+
+const actorFigureJSON = `{
+  "id": "t", "title": "T", "eyebrow": "", "desc": "", "direction": "down",
+  "generated": false, "unscopedWhy": "a process", "graphEdges": false,
+  "boxes": [
+    {"actor": {"name": "a", "sub": "", "tag": "", "link": "/code/a", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false},
+    {"actor": {"name": "b", "sub": "", "tag": "", "link": "", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false}
+  ],
+  "scopes": [], "exclusions": [], "hiddenEdges": [], "edgeMarks": [],
+  "flows": [{"src": {"actor": {"name": "a", "sub": "", "tag": "", "link": "/code/a", "look": "plain"}}, "dst": {"actor": {"name": "b", "sub": "", "tag": "", "link": "", "look": "plain"}}, "label": "", "stroke": "focal"}],
+  "zones": [], "alignments": [], "legends": [{"look": "focal", "label": "hot"}]
+}`
+
+func TestDrawFigure(t *testing.T) {
+	ctx := context.Background()
+
+	r := DrawFigure(ctx, actorFigureJSON, "/code/{path}")
+	require.True(t, r.OK, "draw failed: %+v %q", r.Diag, r.Findings)
+	assert.True(t, strings.HasPrefix(r.SVG, "<svg"), r.SVG)
+	assert.Contains(t, r.SVG, `data-node="external:a"`)
+	assert.Contains(t, r.SVG, `data-edge="external:a->external:b"`)
+
+	refused := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"unscopedWhy": "a process"`, `"unscopedWhy": ""`, 1), "")
+	assert.Equal(t, DrawResult{Findings: `figure "t": draws no directory; draw a box() or group(), or say why in unscoped(why:)`}, refused)
+
+	unknownCase := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"look": "focal"`, `"look": "shiny"`, 1), "")
+	assert.Equal(t, DrawResult{Findings: `figure "t": legends[0].look is "shiny", which names no Look case`}, unknownCase)
+
+	drifted := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"title"`, `"titleText"`, 1), "")
+	assert.False(t, drifted.OK)
+	require.NotNil(t, drifted.Diag)
+	assert.Contains(t, drifted.Diag.Msg, "figure record: ")
+}

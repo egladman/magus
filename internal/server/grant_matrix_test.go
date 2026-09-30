@@ -101,9 +101,7 @@ var pinnedNeeds = map[string]types.Need{
 
 // servedUnder pins routes a prefix mount answers without a mount of their own, each to the
 // mount whose Need guards it, so the matrix probes them too.
-var servedUnder = map[string]string{
-	"/api/v1/diagrams/source": "/api/v1/diagrams/",
-}
+var servedUnder = map[string]string{}
 
 // mountedOnlyWhen names the pinned paths a loaded server mounts conditionally.
 var mountedOnlyWhen = map[string]string{

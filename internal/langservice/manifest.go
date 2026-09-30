@@ -64,7 +64,7 @@ func lookupModule(name string) (Module, bool) {
 // ExcludedModules returns the manifest modules NOT in available: the host modules
 // a magusfile can name but that don't run in the browser playground (they need a
 // process, filesystem, or network). The caller passes the set the interpreter
-// actually registered (dry.PlaygroundHostModules), so the excluded list is derived
+// actually registered (dry.PlaygroundHostModules plus dry.PlaygroundSourceModules), so the excluded list is derived
 // from real wiring rather than a hand-kept flag: a module wired into the playground
 // simply never appears here. The playground renders the result as a "not available
 // here" notice.

@@ -39,7 +39,3 @@ func TestDiagramActorNamesStayApart(t *testing.T) {
 	assert.Equal(t, "https://h/blob/r/libs/lib", linkTo("https://h/blob/r/{path}", "libs/lib"))
 	assert.Empty(t, linkTo("", "libs/lib"))
 }
-
-func TestDiagramBuzzStringEscapes(t *testing.T) {
-	assert.Equal(t, `"a\"b\\c\{d\}\n\t\007"`, buzzString("a\"b\\c{d}\n\t\x07"))
-}

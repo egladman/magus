@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/handler"
-	figuresrc "github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,8 +27,7 @@ type workspace interface {
 // Handler serves the figures the workspace can draw, rendered server-side by the embedded
 // magus/figure module. GET /api/v1/diagrams lists them: projects, targets:<project> per
 // project, and imports. GET /api/v1/diagrams/{id}?scope=&focus=&depth= renders one through
-// its lens; scope repeats, and depth defaults to 1 when focus is set. GET
-// /api/v1/diagrams/source answers the module's source.
+// its lens; scope repeats, and depth defaults to 1 when focus is set.
 //
 // A figure the module refuses to draw, most often one over its node or edge budget, is a
 // 422 whose body is its finding. An import figure without a symbol index is a 409.
@@ -65,21 +63,8 @@ type Rendered struct {
 	SourceURL string `json:"source_url"`
 }
 
-// SourcePath answers the figure module's source; "source" is never a figure id.
-const SourcePath = Path + "/source"
-
-// Sources is the figure module as the server evaluates it, keyed by workspace path, so a
-// browser laying a figure out itself runs the same code.
-type Sources struct {
-	Files map[string]string `json:"files"`
-}
-
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	if !handler.AllowGet(w, r) {
-		return
-	}
-	if r.URL.Path == SourcePath {
-		h.source(w, r)
 		return
 	}
 	id, ok := strings.CutPrefix(r.URL.Path, Path+"/")
@@ -114,13 +99,6 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	out = append(out, Entry{ID: KindImports, Kind: KindImports, Title: "Package imports", Indexed: &ig.Indexed})
 	handler.WriteJSON(w, map[string][]Entry{"diagrams": out})
 }
-
-func (h *Handler) source(w http.ResponseWriter, _ *http.Request) {
-	handler.WriteJSON(w, Sources{Files: map[string]string{FigureSource: figuresrc.Source}})
-}
-
-// FigureSource is the workspace path the embedded magus/figure module is built from.
-const FigureSource = "libs/figure/figure.buzz"
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	lens, err := parseLens(id, r.URL.Query())

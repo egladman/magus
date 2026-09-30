@@ -163,11 +163,12 @@ The lens form (scope, focus, depth) re-requests the figure and rides in the `#fr
 **Load interactive runtime** is the only thing that loads the playground's Buzz wasm (4.2MB).
 The build copies `../docs/gen/playground/{buzz.wasm,wasm_exec.js}` into `gen/wasm/` when docs'
 `build_playground` has run, and says so when it has not. Once loaded, a lens change cuts the
-declaration the server served (its nodes plus the SVG's `data-edge` set) and lays it out with the
-one `libs/figure/figure.buzz` the server evaluates (`GET /api/v1/diagrams/source`), appending a
-driver shaped like `internal/handler/diagram`'s: Dir records for the import figure, actors for the
-others. It swaps the SVG in place with the zoom kept. The server's CSP allows it with
-`'wasm-unsafe-eval'`.
+declaration the server served (its nodes plus the SVG's `data-edge` set), builds the same
+`figure\Figure` record `internal/handler/diagram` builds (Dir boxes for the import figure, actors
+for the others), and hands it to `buzz.drawFigure`, which calls `figure\draw` in the wasm's own
+magus/figure. The page writes no Buzz. It swaps the SVG in place with the zoom kept. The server's
+CSP allows it with `'wasm-unsafe-eval'`. `wasm-real.test.ts` drives that path on the built wasm and
+skips until `magus run build_playground docs` has run.
 
 ## Class-vs-ID convention
 

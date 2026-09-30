@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
-	figuresrc "github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,13 +210,32 @@ func TestDiagramSourceURL(t *testing.T) {
 	assert.Empty(t, out.SourceURL)
 }
 
-// The console lays a figure out itself only if it runs the code the server runs.
-func TestDiagramSourceServesTheEmbeddedLibrary(t *testing.T) {
-	w := get(t, chainWorkspace(), SourcePath)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var out Sources
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
-	assert.Equal(t, map[string]string{"libs/figure/figure.buzz": figuresrc.Source}, out.Files)
+// The server hands figure\draw a Figure built as data; the browser builds the same record.
+func TestDiagramFigureOfIsData(t *testing.T) {
+	g := graph{
+		id: "projects", title: "Projects", claim: "flow",
+		nodes: []Node{{ID: "a", Anchor: "app", Label: "app"}, {ID: "b", Anchor: "libs/lib", Label: "lib"}},
+		edges: []edge{{src: "a", dst: "b"}},
+	}
+	plain := figure.Look("plain")
+	app := &figure.Actor{Name: "app", Link: "/code/app", Look: &plain}
+	lib := &figure.Actor{Name: "lib", Link: "/code/libs/lib", Look: &plain}
+	assert.Equal(t, figure.Figure{
+		ID: "projects", Title: "Projects", Desc: "focus app, depth 1",
+		UnscopedWhy: "served from the workspace graph: focus app, depth 1",
+		Boxes:       []figure.Box{{Actor: app}, {Actor: lib}},
+		Flows:       []figure.Flow{{Src: figure.End{Actor: app}, Dst: figure.End{Actor: lib}}},
+	}, figureOf(g, "focus app, depth 1", "/code/{path}"))
+
+	g.claim = KindImports
+	assert.Equal(t, figure.Figure{
+		ID: "projects", Title: "Projects", Desc: "",
+		GraphEdges: true,
+		Boxes: []figure.Box{
+			{Label: "app", Dir: &figure.Dir{Path: "app", ID: "dir:app", Language: "go", Imports: []string{"libs/lib"}, ImportsIndexed: true, Files: 1}},
+			{Label: "lib", Dir: &figure.Dir{Path: "libs/lib", ID: "dir:libs/lib", Language: "go", ImportsIndexed: true, Files: 1}},
+		},
+	}, figureOf(g, "", "/code/{path}"))
 }
 
 func anchors(nodes []Node) []string {

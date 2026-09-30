@@ -1,7 +1,7 @@
-// api.ts - the typed client for GET /api/v1/diagrams, /api/v1/diagrams/{id} and
-// /api/v1/diagrams/source. It is the surface's one choke point to the server: every answer that is
-// not a figure is reported here (a toast at minimum) AND handed back as a read the view renders as
-// an inline notice, so no failure can reach the page as an empty figure.
+// api.ts - the typed client for GET /api/v1/diagrams and /api/v1/diagrams/{id}. It is the
+// surface's one choke point to the server: every answer that is not a figure is reported here (a
+// toast at minimum) AND handed back as a read the view renders as an inline notice, so no failure
+// can reach the page as an empty figure.
 
 import { reportFailure } from "../../lib/notifications";
 import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/server";
@@ -33,10 +33,6 @@ export interface RenderedDiagram {
   // A blob URL template with {path} and {line}, or "" when the remote is not one magus links.
   readonly sourceUrl: string;
 }
-
-// The magus/figure module the server evaluates, keyed by workspace path: one file,
-// libs/figure/figure.buzz.
-export type DiagramSources = Readonly<Record<string, string>>;
 
 // DiagramRead keeps the server's answers apart because each asks something different of the
 // reader: a refused figure (422) names the lens change that fixes it, an unindexed one (409)
@@ -82,12 +78,6 @@ export function renderDiagram(
   lens: Lens,
 ): Promise<DiagramRead<RenderedDiagram>> {
   return read(opts, diagramUrl(opts.host, id, lens), "diagram " + id, parseRendered);
-}
-
-export function loadDiagramSources(
-  opts: DiagramClientOptions,
-): Promise<DiagramRead<DiagramSources>> {
-  return read(opts, diagramsUrl(opts.host) + "/source", "the figure module source", parseSources);
 }
 
 // readFailure maps a non-2xx status and the body the server wrote with http.Error (plain text,
@@ -197,11 +187,4 @@ export function parseRendered(body: unknown): RenderedDiagram {
     }),
     sourceUrl: typeof r.source_url === "string" ? r.source_url : "",
   };
-}
-
-export function parseSources(body: unknown): DiagramSources {
-  const files = record(record(body, "the source").files, "the source files");
-  const out: Record<string, string> = {};
-  for (const [path, text] of Object.entries(files)) out[path] = str(text, path);
-  return out;
 }
