@@ -1892,3 +1892,15 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, runErr, "term.notify with a LogLevel case")
 }
+
+// BenchmarkBindingsDeclareMagusTypes declares the magus mirrors into a fresh session,
+// as every magusfile and spell session does. The cost is the parse and check inside
+// Session.DeclareModuleTypes, repeated per session.
+func BenchmarkBindingsDeclareMagusTypes(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		sess := buzz.NewSession(b.Context(), buzz.WithEmbedded())
+		DeclareMagusTypes(sess)
+		sess.Close()
+	}
+}

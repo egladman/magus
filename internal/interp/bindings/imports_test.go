@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -146,6 +147,68 @@ func TestRootFirstLevels(t *testing.T) {
 	t.Run("file outside the root is not walked above itself (hermetic)", func(t *testing.T) {
 		assert.Equal(t, []string{j("/", "other", "x")}, rootFirstLevels(root, j("/", "other", "x")))
 	})
+}
+
+// BenchmarkResolveLocalSpellImport replays one load's worth of non-spell imports from
+// a nested project, shaped like this repo's docs magusfile: every import statement
+// reaches the resolver, so each module is resolved once per importing file.
+func BenchmarkResolveLocalSpellImport(b *testing.B) {
+	root, err := filepath.EvalSymlinks(b.TempDir())
+	require.NoError(b, err)
+	var imports []string
+	for i := range 20 {
+		name := fmt.Sprintf("page%02d", i)
+		writeFile(b, root, filepath.Join("docs", "site", name+".buzz"), "export fun f() > void {}\n")
+		imports = append(imports, "site/"+name)
+	}
+	for i := range 10 {
+		name := fmt.Sprintf("lib%02d", i)
+		writeFile(b, root, filepath.Join("hack", name+".buzz"), "export fun f() > void {}\n")
+		imports = append(imports, "../hack/"+name, "hack/"+name)
+	}
+	src := &interp.Source{Dir: filepath.Join(root, "docs")}
+	base := interp.WithSource(types.WithWorkspace(b.Context(), rootOnlyWS{root: root}), src)
+	for _, probes := range []bool{false, true} {
+		b.Run(fmt.Sprintf("probes=%v", probes), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				ctx, seal := base, func() {}
+				if probes {
+					ctx, seal = interp.WithImportProbes(base)
+				}
+				for range 4 {
+					for _, imp := range imports {
+						if _, ok := resolveLocalSpellImport(ctx, nil, imp); ok {
+							b.Fatalf("%s resolved as a spell", imp)
+						}
+					}
+				}
+				seal()
+			}
+		})
+	}
+}
+
+// A load's probes answer the same imports the same way stat does.
+func TestResolveLocalSpellImportWithProbes(t *testing.T) {
+	root := symlinkFreeTempDir(t)
+	writeFile(t, root, "spells/hello/spell.buzz", `export fun mgs_getName() > str { return "probehello"; }`)
+	writeFile(t, root, "spells/flat.buzz", `export fun mgs_getName() > str { return "probeflat"; }`)
+	writeFile(t, root, "web/lib.buzz", "export fun f() > void {}\n")
+	src := &interp.Source{Dir: filepath.Join(root, "web")}
+	base := interp.WithSource(declaredCtx(t, root, config.SpellsConfig{}), src)
+	im := remotespell.ImportsFromContext(base)
+	ctx, seal := interp.WithImportProbes(base)
+	defer seal()
+
+	for _, imp := range []string{"spells/hello", "spells/flat", "lib", "spells/missing", "../web/lib"} {
+		want, wantOK := resolveLocalSpellImport(base, im, imp)
+		for range 2 {
+			got, ok := resolveLocalSpellImport(ctx, im, imp)
+			assert.Equal(t, wantOK, ok, imp)
+			assert.Equal(t, want.String(), got.String(), imp)
+		}
+	}
 }
 
 // A workspace bounds the spell search, so `magus --root` from another checkout

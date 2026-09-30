@@ -362,6 +362,8 @@ func (m *Magus) load(ctx context.Context) error {
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
 	ctx = m.withRecordedOutput(ctx)
+	ctx, sealProbes := interp.WithImportProbes(ctx)
+	defer sealProbes()
 	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
 	// asks a registry what a tag means.
 	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{

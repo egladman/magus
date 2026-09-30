@@ -33,6 +33,13 @@ func CheckSpellFile(ctx context.Context, path string) error {
 }
 
 func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, string, error) {
+	// Every import statement reaches the resolver, even of a module already loaded, so
+	// a library imported by ten files would otherwise be read ten times to learn the
+	// same answer.
+	probes := interp.ImportProbesFromContext(ctx)
+	if probes.NotSpell(path) {
+		return spells.Descriptor{}, "", spell.ErrNotASpell
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, err)
@@ -42,6 +49,7 @@ func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, stri
 	// without the text it is a plain module. Executing one to find that out doubled the
 	// cost of every bare-path library import, since the file search runs it again.
 	if !strings.Contains(src, spell.NameFunc) {
+		probes.MarkNotSpell(path)
 		return spells.Descriptor{}, "", spell.ErrNotASpell
 	}
 	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))

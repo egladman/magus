@@ -130,6 +130,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 // guarded separately by the shadow ward at preload; this resolver just picks the
 // canonical one deterministically and never errors.
 func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, importPath string) (vm.Value, bool) {
+	probes := interp.ImportProbesFromContext(ctx)
 	for _, dir := range spellSearchLevels(ctx) {
 		// Two layouts are accepted: a flat spells/<name>.buzz, and the directory
 		// convention spells/<name>/spell.buzz (preferred — keeps a spell's source
@@ -139,7 +140,7 @@ func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, impor
 			if dir != "" {
 				path = filepath.Join(dir, rel)
 			}
-			if fi, err := os.Stat(path); err != nil || fi.IsDir() {
+			if !probes.IsFile(path) {
 				continue
 			}
 			// loadLocalSpell absolutizes a relative path and registers the Buzz spell
