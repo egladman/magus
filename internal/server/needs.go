@@ -43,15 +43,6 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]types.Need{
 		"ListJobs": needConsoleRead,
 		"RunJob":   needConsoleWrite,
 	},
-	// Memory reads are console=write too: the notes are the operator's own, and reading them
-	// is audited like an edit.
-	"magus.memory.v1alpha1.MemoryService": {
-		"ListMemories": needConsoleWrite,
-		"GetCursor":    needConsoleWrite,
-		"UpdateMemory": needConsoleWrite,
-		"DeleteMemory": needConsoleWrite,
-		"UpdateCursor": needConsoleWrite,
-	},
 	"magus.metrics.v1alpha1.MetricsService": {
 		"GetMetrics":    needConsoleRead,
 		"StreamMetrics": needConsoleRead,

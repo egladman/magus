@@ -78,11 +78,11 @@ name is the entry below. `magus describe rules` prints the same list.
 | [graph-stale](graph-stale.md)               | a graph read while the index is older than the sources it describes                            |
 | [hook-wiring](hook-wiring.md)               | a write to the host wiring that decides whether these rules run at all                         |
 | [installed-skill](installed-skill.md)       | a write to an installed skill copy, which re-installing discards                               |
+| [instruction-write](instruction-write.md)   | a write to a cross-host instruction file, which every session loads whole                      |
 | [lease-invalid](lease-invalid.md)           | a call naming a lease this workspace's job store does not declare                              |
 | [lease-state](lease-state.md)               | a leased write while its row reports a diverged base, a re-entered path, or a bad pattern      |
 | [lease-terminal](lease-terminal.md)         | a call naming a lease whose row has already finished                                           |
 | [leased-path](leased-path.md)               | a write into paths a running lease owns, by a caller that names no lease                       |
-| [memory-write](memory-write.md)             | a write to a memory file, where the memory surface is the way in                               |
 | [new-file](new-file.md)                     | a new file in a directory whose naming has settled                                             |
 | [new-source-dir](new-source-dir.md)         | a new file that opens a directory, which is a boundary rather than a file                      |
 | [precedent-search](precedent-search.md)     | a hunt for one distinctive name, which refs answers with verified sites                        |

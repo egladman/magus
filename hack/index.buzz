@@ -1,0 +1,15 @@
+// The caller's index_generate declares writesFiles("MAGUS.md") and its readsFiles
+// literally: the static extractor does not follow calls into an imported module.
+// The output is per target because `magus vcs resolve` matches per-target outputs. The
+// reads are relative paths, not <alias>\file(), which would add a depends_on edge on
+// the root project and pull the caller into every root change.
+namespace index;
+
+import "magus";
+import "fs";
+
+// render writes project's scoped MAGUS.md into the calling target's project directory.
+export fun render(project: str) > void !> any {
+    final doc = magus\describe(["graph", "-o", "markdown", project], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
+}

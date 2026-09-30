@@ -275,13 +275,13 @@ func TestWriteSkillTreeRefusesANewerInstall(t *testing.T) {
 // on every call so re-running to refresh a stale block produces a clean diff.
 func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	catalog := testCatalog(t)
-	block := catalog.AgentsBlock()
+	block := catalog.AgentsBlock(false)
 
 	assert.True(t, strings.HasPrefix(block, "<!-- magus:skills:begin "))
 	assert.True(t, strings.HasSuffix(block, "<!-- magus:skills:end -->\n"))
 	assert.Equal(t, 1, strings.Count(block, "magus:skills:begin"))
 	assert.Contains(t, block, "skill-content: "+catalog.contentDigest)
-	assert.Equal(t, block, catalog.AgentsBlock(), "AgentsBlock must be byte-stable across calls")
+	assert.Equal(t, block, catalog.AgentsBlock(false), "AgentsBlock must be byte-stable across calls")
 
 	// The block a developer pastes is the block CheckStatuses grades: round-trip
 	// it through a hand-owned AGENTS.md and it must read as current, not stale.
@@ -291,6 +291,30 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	require.Len(t, statuses, 1)
 	assert.Equal(t, "AGENTS.md", statuses[0].Location)
 	assert.False(t, statuses[0].Stale, statuses[0].Detail)
+}
+
+// TestAgentsBlockRoutingIndexLineIsConditional pins both renderings of the shipped
+// template: the link line appears exactly when asked for, and one pasted block of either
+// kind grades current because the stamp digests the template, not the rendering.
+func TestAgentsBlockRoutingIndexLineIsConditional(t *testing.T) {
+	const line = "Routing index: [MAGUS.md](MAGUS.md), what this workspace holds; each project's own MAGUS.md is linked from it.\n"
+	catalog := Default(6)
+
+	with, without := catalog.AgentsBlock(true), catalog.AgentsBlock(false)
+	assert.Contains(t, with, "Query before grepping.\n"+line+"\n```sh\nmagus query ")
+	assert.Contains(t, without, "Query before grepping.\n\n```sh\nmagus query ")
+	assert.NotContains(t, without, "Routing index:")
+	assert.NotContains(t, with, "{{routing-index}}")
+	assert.NotContains(t, without, "{{routing-index}}")
+	assert.Equal(t, strings.Replace(with, line, "", 1), without, "the line is the only difference between the two")
+
+	for name, block := range map[string]string{"with": with, "without": without} {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Local rules\n\n"+block), 0o644))
+		statuses := catalog.CheckStatuses(context.Background(), dir)
+		require.Len(t, statuses, 1, name)
+		assert.False(t, statuses[0].Stale, "%s: %s", name, statuses[0].Detail)
+	}
 }
 
 // TestFormBothWritesTwinsStampedFull pins the mixed-batch property: one FormBoth
@@ -928,7 +952,7 @@ func TestOfferedNameSelectsOneSkillOrNamesNearMatches(t *testing.T) {
 	assert.Equal(t, "local", got[0].Source)
 
 	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-qery"})
-	assert.EqualError(t, err, `agent: no skill named "magus-qery"; near matches: magus-query, magus-memory`)
+	assert.EqualError(t, err, `agent: no skill named "magus-qery"; near matches: magus-query`)
 
 	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "zzzzzzzzzzzzzzzzzzzz"})
 	assert.ErrorContains(t, err, "none of the")

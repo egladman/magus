@@ -19,8 +19,8 @@ after something breaks:
 | edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
 | recurring guard feedback or a proposed local rule          | magus-workspace-rules |
 
-Query before grepping. The committed MAGUS.md lists every project, target,
-and the graph's routing table.
+Query before grepping.
+{{routing-index}}
 
 ```sh
 magus query "<terms>"        # find/relate entities: kind=spell, project=web, kind!=op, id=~regex
@@ -78,9 +78,3 @@ drift to `magus doctor` and is erased by the next `magus agent install
 beside them, which install and verify both leave alone. If one exists, read it
 alongside the shipped skills; it overrides nothing, so report a conflict rather
 than picking a side. The magus-workspace-rules skill carries the method.
-
-The optional repository memory (`magus memory` / `client` calling magus\memory) is user-owned,
-outside the repo, and shared across worktrees. It is not automatic model memory:
-read it when picking work up, and add only named decisions or plans that a
-later person must reopen. Use `magus memory verify` to repair stale or broken
-entries; do not write the retired shared cursor.

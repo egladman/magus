@@ -63,8 +63,7 @@ func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 		"the anchors that do resolve are unaffected")
 }
 
-// TestSharedNotesShardIsExportable pins the difference from @memory and from the private
-// store: shared notes are committed content everyone who clones already has, so
+// TestSharedNotesShardIsExportable pins the difference from the private store: shared notes are committed content everyone who clones already has, so
 // withholding them from the remote cache would hide team knowledge for no benefit.
 func TestSharedNotesShardIsExportable(t *testing.T) {
 	assert.False(t, isMachineLocalShard(sharedNotesShardName))
@@ -80,8 +79,7 @@ func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
 // TestPrivateNotesShardIsNeverExported is the one property that makes a notes location
 // outside the repository safe to support at all. @notes is exportable because its content
 // is already committed to the repo everyone clones; a personal note is on one machine and
-// in nobody's repo, so pushing that shard would leak private content into a shared cache,
-// the same hazard @memory's exclusion exists to prevent.
+// in nobody's repo, so pushing that shard would leak private content into a shared cache.
 func TestPrivateNotesShardIsNeverExported(t *testing.T) {
 	assert.True(t, isMachineLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")
 	assert.True(t, isMachineLocalShard(runtimeShardName))

@@ -119,8 +119,8 @@ func workspaceDeclaresNotes(root string) bool {
 // for every other path.
 //
 // The only DENY on the path surface, and it fits neither standing trigger: a note in git is
-// recoverable, and `magus memory put` is not an equal substitute, since memory is user-local
-// while notes are shared. The trigger is a third one: a note is the one thing in the graph
+// recoverable, and there is no agent-writable substitute to route to. The trigger is a third
+// one: a note is the one thing in the graph
 // nothing in the repository corroborates, so its only provenance is the person who wrote it,
 // and one agent-written note costs a reader the ability to trust ANY note without checking
 // blame.
@@ -170,7 +170,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `"+hint.MemoryPut.With("<name>")+"`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
+	return fmt.Sprintf("magus workspace: if this belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
 		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
 		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
 }
@@ -721,13 +721,13 @@ func criteriaLine(u types.Job) string {
 	return line
 }
 
-// adviseMemoryWrite nudges a magus-domain decision toward `magus memory put`
-// when the write lands in a cross-host instruction file, or "" otherwise.
+// adviseInstructionWrite reminds a writer of a cross-host instruction file what the
+// file costs, or returns "" for every other path.
 //
-// Capture, not replication: host instructions belong in the file. The point is
-// that a decision ABOUT THE WORKSPACE outlives a per-checkout, per-host file, so
-// the advisory names both destinations rather than arguing against one.
-func adviseMemoryWrite(path string) string {
+// Every host loads its instruction file whole at session start, so a sentence there is
+// paid for on every session that follows. The advisory is the one line the repo's own
+// instruction file already carries: keep only what no tool says.
+func adviseInstructionWrite(path string) string {
 	// Matched as a bare filename stem, which is the sanctioned form: these name
 	// well-known files on disk rather than branching on which host is running.
 	// The .md check keeps a template or a sibling extension (agents.md.tmpl,
@@ -741,8 +741,7 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the repository's memory too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
-		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-memory skill if not already loaded."
+	return "magus workspace: " + filepath.Base(strings.TrimSpace(path)) + " loads whole into every session on every host, so a sentence here costs context forever. Keep it to what no tool says: a rule the guard refuses or `" + hint.Doctor.String() + "` reports is restated context, and the moment a tool starts saying it, delete it here."
 }
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or

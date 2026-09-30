@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -39,7 +40,7 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 	case "harness":
 		return agentHarnessCmd(ctx, root, args[1:])
 	case "starter":
-		return agentStarterCmd()
+		return agentStarterCmd(ctx, root)
 	case "adoption":
 		return agentAdoptionCmd(args[1:])
 	case "-h", "--help", "help":
@@ -306,7 +307,30 @@ func printAgentsBlockToPaste(dir string) {
 		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
 	}
 	interactive.Emit(os.Stderr, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
-	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock()+"\n")
+	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock(declaresRoutingIndex(context.Background(), dir))+"\n")
+}
+
+// declaresRoutingIndex reports whether the workspace rooted at dir declares MAGUS.md as an
+// output of its root project. Any failure reads as false: a block that omits the link is
+// correct for a workspace that may not exist yet, while a link to a missing file is not.
+//
+// dir must BE the workspace root. AGENTS.md is pasted at dir, so a root found above it
+// would make the block's relative link point at a file that is not beside it.
+func declaresRoutingIndex(ctx context.Context, dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	root, err := magus.FindRoot(abs)
+	if err != nil || root != abs {
+		return false
+	}
+	ws, err := magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	if err != nil {
+		return false
+	}
+	p := ws.Get(".")
+	return p != nil && slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Pattern == "MAGUS.md" })
 }
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
@@ -318,7 +342,7 @@ const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself
 //
 // The magus guidance arrives inside its begin/end markers (the same bytes
 // install prints), so `magus doctor` can grade it once pasted.
-func agentStarterDoc() string {
+func agentStarterDoc(routingIndex bool) string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
 		"     fill in the project-specific sections below. Everything outside the\n" +
@@ -331,12 +355,18 @@ func agentStarterDoc() string {
 		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
 		"## Version control\n\n" +
 		"- " + vcsSafetyRule + "\n\n" +
-		agentSkills.AgentsBlock()
+		agentSkills.AgentsBlock(routingIndex)
 }
 
-// agentStarterCmd prints agentStarterDoc to stdout, never to a file.
-func agentStarterCmd() error {
-	fmt.Fprint(os.Stdout, agentStarterDoc())
+// agentStarterCmd prints agentStarterDoc to stdout, never to a file. The starter is meant
+// for the workspace root, so the root override or the working directory decides the routing
+// index line.
+func agentStarterCmd(ctx context.Context, rootOverride string) error {
+	dir := rootOverride
+	if dir == "" {
+		dir = "."
+	}
+	fmt.Fprint(os.Stdout, agentStarterDoc(declaresRoutingIndex(ctx, dir)))
 	return nil
 }
 

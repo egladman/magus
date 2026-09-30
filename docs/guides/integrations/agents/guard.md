@@ -165,9 +165,8 @@ or `bash -c '...'` all reach the same verdict as the bare command.
 - **Writing into the declared notes store** (`knowledge.notes.shared`), however
   the write is spelled. A file write into the store is caught on the path
   surface; `magus notes edit` reading piped prose is a command, so it is caught
-  here. The reason names both alternatives: `magus memory put` for a workspace
-  decision an agent may record, and `magus notes edit` for a person to write the
-  note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
+  here. The reason names the alternative: `magus notes edit`, for a person to
+  write the note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
   the rule is armed from that moment - before the store holds a single note,
   because otherwise an agent could author its first note and the deny would
   switch on afterwards. A declaration made anywhere else (an explicit
@@ -764,8 +763,8 @@ See the magus-workspace-rules skill section "Adapting a Buzz harness".
 A later `magus run` request in the same host session is shown as a follow-up,
 not a success: pre-tool hooks cannot observe execution or an exit status. After
 a person makes a durable decision, use the existing workspace-rules loop to
-create a memory decision and, when appropriate, a stamped local skill. A host
-harness update is not itself a memory decision. Never relax a compiled guard
+record it and, when appropriate, write a stamped local skill. A host harness
+update is not itself a decision. Never relax a compiled guard
 locally. To strengthen one for THIS workspace, declare an additive
 `magus\guard.shell({...})` in the root magusfile (deny or advise matched on
 parsed program + args) and commit it; that path cannot disable a built-in.

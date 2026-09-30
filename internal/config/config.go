@@ -592,16 +592,9 @@ type Knowledge struct {
 }
 
 // NotesConfig declares where human-authored notes live. There are two locations because
-// there are two audiences, and the pair is one half of a 2x2 the whole knowledge surface
-// turns on:
-//
-//	                    the team sees it        only you see it
-//	a person wrote it   notes.shared            notes.private
-//	an agent wrote it   (deliberately nothing)  magus memory
-//
-// The empty cell is the design, not a gap: an agent's derived claims are never pushed at
-// the team, which is the same rule the guard enforces by refusing agent writes to either
-// notes location.
+// there are two audiences: the team (shared) and only you (private). An agent writes to
+// neither, which the guard enforces: an agent's derived claims are never pushed at the
+// team under a person's name.
 //
 // A note is prose a PERSON wrote about the code, anchored to graph entities but derived
 // from none of them, the one node class magus cannot regenerate, because its only
@@ -634,23 +627,13 @@ type NotesConfig struct {
 	//
 	// Agents still may not write here. That is the point: it is the vault case.
 	//
-	// compat(until: `magus notes promote` has replaced this in practice: no workspace here
-	// or in the wild sets knowledge.notes.private, and `magus memory` carries the drafting
-	// tier instead): SUPERSEDED, still read, no longer the recommended shape.
-	//
-	// Line the three stores up by property rather than by who types into them and this one
-	// has no column of its own: private notes and `magus memory` are both uncommitted,
-	// unattributed, unreviewed and unrecoverable. The only thing separating them was who
-	// wrote the file, which is a field rather than a store, and one the guard cannot
-	// actually enforce, since a person pasting an agent's prose into $EDITOR passes it
-	// cleanly. What private bought that memory did not was ANCHORS; `notes promote` closes
-	// that by deriving a note's anchors from a record's node refs, so the drafting tier can
-	// now graduate into the committed one without a third store in between.
-	//
-	// Observe that it is safe to drop by checking that nothing sets it: it was never set in
-	// this repository, and a store nobody points at holds nothing to lose. Kept readable
-	// until then because the path may name someone's vault, and deleting the key would
-	// orphan real prose to save a struct field.
+	// compat(until: no workspace here or in the wild sets knowledge.notes.private):
+	// SUPERSEDED, still read, no longer the recommended shape. A private note is
+	// uncommitted, unattributed, unreviewed and unrecoverable, and nothing that reads notes
+	// has needed one. Observe that it is safe to drop by checking that nothing sets it: it
+	// was never set in this repository, and a store nobody points at holds nothing to lose.
+	// Kept readable until then because the path may name someone's vault, and deleting the
+	// key would orphan real prose to save a struct field.
 	Private string `json:"private" yaml:"private"`
 }
 
@@ -875,6 +858,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_SANDBOX", "sandbox.mode", "off", "off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_SANDBOX_ENV_PASSTHROUGH", "sandbox.env.passthrough", "", "Comma-separated names or globs (e.g. MISE_*) added to the sandbox's child-process env allowlist"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
+		{"MAGUS_STAMPED_LEASE", "", "", "Set by a shared server on a script it forks for a remote caller: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
 		{"MAGUS_OFFLINE", "", "false", "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
 		{"MAGUS_DIFFTOOL", "", "$DIFFTOOL, then git diff --no-index", "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},

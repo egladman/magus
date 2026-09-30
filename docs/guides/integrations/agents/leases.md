@@ -232,8 +232,7 @@ is a seatbelt for a harness that opted in and not a sandbox.
 
 **One set of jobs per repository.** The rows live in one JSON file in the
 per-REPOSITORY state directory (`<XDG state>/magus/jobs/<repo>/jobs.json`),
-keyed the way [memory](../../../reference/manpage/magus-memory.md) and session
-history are keyed: every worktree and every clone of one repository reads one
+keyed the way session history is keyed: every worktree and every clone of one repository reads one
 set. That is what lets an orchestrator declare a plan in its own checkout and a
 holder take its lease from another. A store an older magus left behind is
 carried forward the first time the new one opens it.

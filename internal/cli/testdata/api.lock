@@ -253,7 +253,6 @@ subcommand job
 subcommand ls
 subcommand man
 subcommand mcp
-subcommand memory
 subcommand notes
 subcommand path
 subcommand query

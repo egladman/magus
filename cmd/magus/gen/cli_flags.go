@@ -333,20 +333,6 @@ const (
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
 	FlagManInstallDryRun = "dry-run"
-	// memory put: --amend
-	FlagMemoryPutAmend = "amend"
-	// memory put: --body
-	FlagMemoryPutBody = "body"
-	// memory put: --excerpt
-	FlagMemoryPutExcerpt = "excerpt"
-	// memory put: --ref
-	FlagMemoryPutRef = "ref"
-	// memory put: --reference
-	FlagMemoryPutReference = "reference"
-	// memory put: --status
-	FlagMemoryPutStatus = "status"
-	// memory put: --type
-	FlagMemoryPutType = "type"
 	// notes capture: --name
 	FlagNotesCaptureName = "name"
 	// notes capture: --private
@@ -357,8 +343,6 @@ const (
 	FlagNotesCaptureTag = "tag"
 	// notes capture: --title
 	FlagNotesCaptureTitle = "title"
-	// notes promote: --name
-	FlagNotesPromoteName = "name"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -1671,29 +1655,6 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 	return &f
 }
 
-// MemoryPutFlags are the flags declared for `magus memory put`.
-//
-// It does NOT carry --ref, --reference: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
-type MemoryPutFlags struct {
-	Amend   bool   // --amend
-	Type    string // --type
-	Status  string // --status
-	Body    string // --body
-	Excerpt string // --excerpt
-}
-
-// BindMemoryPut registers `magus memory put`'s flags on fs and returns the destination.
-func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
-	var f MemoryPutFlags
-	fs.BoolVar(&f.Amend, FlagMemoryPutAmend, false, "Require the entry to exist: refuse a name the journal does not hold instead of creating it")
-	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored")
-	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
-	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision, plan and elimination only")
-	fs.StringVar(&f.Excerpt, FlagMemoryPutExcerpt, "", "The evidence that ruled a hypothesis out, copied inline; elimination only and required there")
-	return &f
-}
-
 // JobForkFlags are the flags declared for `magus job fork`.
 //
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
@@ -1822,18 +1783,6 @@ func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
 	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
 	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
 	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
-	return &f
-}
-
-// NotesPromoteFlags are the flags declared for `magus notes promote`.
-type NotesPromoteFlags struct {
-	Name string // --name
-}
-
-// BindNotesPromote registers `magus notes promote`'s flags on fs and returns the destination.
-func BindNotesPromote(fs *flag.FlagSet) *NotesPromoteFlags {
-	var f NotesPromoteFlags
-	fs.StringVar(&f.Name, FlagNotesPromoteName, "", "Note name (defaults to the record's name)")
 	return &f
 }
 

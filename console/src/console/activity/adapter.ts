@@ -25,8 +25,6 @@ export function kindLabel(kind: Kind): string {
       return "sandbox";
     case Kind.GUARD_POLICY:
       return "guard";
-    case Kind.MEMORY:
-      return "memory";
     case Kind.AGENT_COMMAND:
       return "agent";
     case Kind.CREDENTIAL_GRANT:
@@ -183,7 +181,6 @@ const KIND_GROUP_ORDER: ReadonlyArray<{ kind: Kind; label: string }> = [
   { kind: Kind.TOKEN_LIFECYCLE, label: "Token lifecycle" },
   { kind: Kind.SANDBOX_DENIAL, label: "Sandbox denials" },
   { kind: Kind.GUARD_POLICY, label: "Guard policy changes" },
-  { kind: Kind.MEMORY, label: "Memory" },
   { kind: Kind.AGENT_COMMAND, label: "Agent commands" },
   { kind: Kind.CREDENTIAL_GRANT, label: "Credential grants" },
   { kind: Kind.AGENT_SPAWN, label: "Agent spawns" },

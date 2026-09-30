@@ -26,7 +26,6 @@ var All = []Command{
 	doctorCommand,
 	configCommand,
 	sessionCommand,
-	memoryCommand,
 	jobCommand,
 	notesCommand,
 	diffCommand,
@@ -2221,68 +2220,6 @@ could not be filed, because that one has no row.`,
 	},
 }
 
-var memoryCommand = Command{
-	Name:        "memory",
-	Short:       "Durable cross-session project memory",
-	Description: "Manage the per-repository memory that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
-	Tags:        []string{"cli", "magus memory", "memory", "decisions", "agents"},
-	Long: `Manage the per-repository memory, which is stored outside the
-checkout so it survives worktrees and branch switches.
-
-Entries are visible to people and to agents across sessions. They are NOT
-automatic model memory: nothing writes one for you, and nothing is recalled
-implicitly. An entry earns its place when a later reader needs to reopen the
-evidence behind a decision - the run, the query, the output reference, the
-document - rather than to be told a conclusion.
-
-An elimination entry records what an investigation ruled OUT: the hypothesis,
-why it is dead, and an excerpt of the evidence that killed it. The excerpt is
-required because an output reference resolves only from the checkout that
-produced it, which leaves the ref beside it a best-effort handle.
-
-put creates an entry, and on one that already exists it writes only the fields
-you pass. Omitting a flag keeps what is stored, so refreshing a status cannot
-drop the body beside it - the store keeps no history and there would be nothing
-to restore it from. The cost is that an omitted flag cannot CLEAR a field
-either; delete the entry and create it again for that. Pass --amend to require
-the name to exist, and change a record's type by deleting and recreating it.
-
-verify is the maintenance verb: it reports entries that are malformed, stale,
-that link to something no longer there, or whose evidence no longer resolves.
-The same entries are reachable through the client MCP tool (magus\memory) and the
-console, so a journal written from the CLI is readable by an agent without
-either side learning a new format.`,
-	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
-	Children: []Command{
-		{Name: "ls", Short: "Show entries and any repair warnings"},
-		{Name: "get", Short: "Show one entry"},
-		{
-			Name:  "put",
-			Short: "Create a named entry, or update the fields you name on one",
-			Flags: []Flag{
-				{Name: "amend", Kind: FlagBool, Doc: "Require the entry to exist: refuse a name the journal does not hold instead of creating it"},
-				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored"},
-				{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale"},
-				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision, plan and elimination only"},
-				{Name: "excerpt", Kind: FlagString, Doc: "The evidence that ruled a hypothesis out, copied inline; elimination only and required there"},
-				// Repeatable, so bound by the command itself; declared here only so
-				// they reach the man page, which never listed them.
-				{Name: "ref", Kind: FlagCustom, Doc: "Entry ref in 'kind: target' form; repeat for multiple refs"},
-				{Name: "reference", Kind: FlagCustom, Doc: "Name of another entry this one relates to; repeat as needed"},
-			},
-		},
-		{Name: "delete", Short: "Remove one entry"},
-		{Name: "verify", Short: "Check malformed, stale, broken-linked, and unresolvable-evidence entries"},
-	},
-	Examples: []Example{
-		{"List entries and warnings", "magus memory ls"},
-		{"Read one entry", "magus memory get release-checklist"},
-		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
-		{"Refresh one field and keep the rest", "magus memory put release-checklist --amend --status done"},
-		{"Check the journal's health", "magus memory verify"},
-	},
-}
-
 var jobCommand = Command{
 	Name:        "job",
 	Short:       "Fork a job, take it, return it with its result, and verify that result",
@@ -2638,7 +2575,7 @@ There is no put. Notes are written by a person in their own editor and
 committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.`,
-	Usage: "magus notes <ls|get|edit|verify|capture|promote> [flags]",
+	Usage: "magus notes <ls|get|edit|verify|capture> [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Show notes and any repair warnings"},
 		{Name: "get", Short: "Show one note"},
@@ -2655,13 +2592,6 @@ to declare where they live; with nothing declared the feature is inert.`,
 				{Name: "private", Kind: FlagBool, Doc: "Only your own notes (default for capture)"},
 			},
 		},
-		{
-			Name:  "promote",
-			Short: "Open an agent-drafted memory record for editing and write it to the shared notes store under your own name",
-			Flags: []Flag{
-				{Name: "name", Kind: FlagString, Doc: "Note name (defaults to the record's name)"},
-			},
-		},
 	},
 	Examples: []Example{
 		{"List every note", "magus notes ls"},
@@ -2669,7 +2599,6 @@ to declare where they live; with nothing declared the feature is inert.`,
 		{"Write or revise one", "magus notes edit cache-invalidation-pairing"},
 		{"Check every anchor still resolves", "magus notes verify"},
 		{"Capture the review under way", "magus notes capture"},
-		{"Promote a memory record into a shared note", "magus notes promote release-checklist"},
 	},
 }
 

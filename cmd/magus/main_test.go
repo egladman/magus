@@ -493,14 +493,9 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 			want:  []string{"Usage: magus man install", "--dir", "--dry-run"},
 		},
 		{
-			name:  "memory",
-			print: memoryUsage,
-			want:  []string{"Usage: magus memory", "ls", "get", "put", "delete", "verify", "magus\\memory"},
-		},
-		{
 			name:  "notes",
 			print: notesUsage,
-			want:  []string{"Usage: magus notes", "ls", "get", "edit", "verify", "capture", "promote", "knowledge.notes.shared"},
+			want:  []string{"Usage: magus notes", "ls", "get", "edit", "verify", "capture", "knowledge.notes.shared"},
 		},
 		{
 			name:  "self",

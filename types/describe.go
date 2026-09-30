@@ -500,6 +500,10 @@ type TargetGraphProject struct {
 	// They draw the project -> project arrows in the combined workspace graph;
 	// intra-project target edges live on each node's Dependencies.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Index is the project-relative path of the MAGUS.md this project declares as an
+	// output, empty when it declares none. Read from declarations, never the disk.
+	// Only the markdown describe path fills it, so the Buzz mirror leaves it out.
+	Index string `json:"index,omitempty" yaml:"index,omitempty" buzz:"-"`
 	// RelPath is Path expressed relative to the VCS (repo) root, used only for an
 	// unambiguous MAGUS.md heading when a project sits at the workspace root (Path
 	// is "."). Display-only and repo-derived, so it is not serialized; the run path

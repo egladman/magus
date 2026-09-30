@@ -15,12 +15,31 @@
 // It is NOT a spell. A spell adapts an external tool and hands a project type its ops; this
 // adapts nothing and is called as a library, so libs/ is the honest home.
 import "magus";
+import "../../hack/index" as index;
 
 magus\project({
     // The renderer is one self-contained file; its tests live in it as `test "..."` blocks.
     // No spell claims .buzz, so this is what makes the file a declared source at all.
     "sources": ["*.buzz"],
+    "targets": {
+        // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+    },
 });
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
+// body and the reasons for them are in hack/index.buzz.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("MAGUS.md");
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    index\render("libs/diagram");
+}
 
 // test runs the in-file test blocks. --embedded because the suite calls module-private
 // helpers (connectorPath, attachPoint) directly rather than only the exported surface -
@@ -31,5 +50,5 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(test);
+    ctx.needs(generate, test);
 }

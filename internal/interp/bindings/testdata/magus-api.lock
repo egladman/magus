@@ -47,12 +47,6 @@ log.error
 log.hint
 log.info
 log.warn
-memory
-memory.delete
-memory.get
-memory.list
-memory.put
-memory.verify
 output
 path
 project

@@ -35,7 +35,6 @@ import (
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
-	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
 	planhandler "github.com/egladman/magus/internal/handler/plan"
@@ -54,7 +53,6 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
@@ -545,24 +543,6 @@ func (s *Server) Serve(ctx context.Context) error {
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.service(tokenPath, tokenHandler)
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
-
-			// Memory management service: the typed surface the console Settings UI uses to LIST,
-			// READ, EDIT, and DELETE the durable magus memory files (status, progress, decisions).
-			// It is a second door onto the EXACT on-disk files the client tool's magus\memory writes,
-			// never a second store: the human edit/delete surface is the safety valve against agent
-			// memory growing unbounded (it is append-heavy and never rotated by default). Mounted on
-			// the loopback listener behind the standard bearer guard and deliberately NOT in
-			// shareGuarded: memory is the operator's own working notes, not a read surface for a
-			// shared phone view. Its content is agent-written and must be rendered as text, never as
-			// trusted HTML.
-			// Audit every memory RPC to the trail, READS included (WithAuditReads): unlike the token
-			// service, inspecting the agent's own working notes is itself worth recording, so List/Get
-			// are audited alongside the edits, each naming the credential that made it. The agent/MCP
-			// door onto the same files is audited separately.
-			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindMemory, trailrpc.WithAuditReads()))
-			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit, connectReadMax)
-			f.service(memoryPath, memoryHandler)
-			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
 			// Notes service: the typed surface the console's Notes view uses to READ the
 			// workspace's human-authored notes. Read-only by construction (the contract has no

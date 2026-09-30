@@ -286,9 +286,9 @@ func TestCountLabelAndImpactPct(t *testing.T) {
 }
 
 func TestPluralSuffixAndLinesSuffix(t *testing.T) {
-	assert.Equal(t, "", pluralSuffix(1, "", "s"))
-	assert.Equal(t, "s", pluralSuffix(0, "", "s"))
-	assert.Equal(t, "s", pluralSuffix(2, "", "s"))
+	assert.Equal(t, "", plural(1, "", "s"))
+	assert.Equal(t, "s", plural(0, "", "s"))
+	assert.Equal(t, "s", plural(2, "", "s"))
 
 	assert.Equal(t, "", linesSuffix(nil))
 	assert.Equal(t, "  lines 7", linesSuffix([]int{7}))

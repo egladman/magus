@@ -229,25 +229,32 @@ import (
 // 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
 // adapted harness through `magus describe harness`, which prints the host config and the
 // merge command a person runs; magus never writes host config.
-// 93: `magus agent harness apply` and `remove` return. apply merges host config after
-// confirming each file (--yes skips); remove stays unprompted for lockout recovery.
-// describe harness still prints the plan and a magus buzz fallback.
-// 94: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
+// 93: the AGENTS.md block links the root MAGUS.md through a `{{routing-index}}` line
+// that `magus agent install` renders only when the workspace declares MAGUS.md as an
+// output, instead of asserting a committed MAGUS.md unconditionally.
+// 94: magus-memory is gone with the memory store. magus-commit-composition,
+// magus-context-audit and magus-workspace-rules point at the harness's own memory
+// where they pointed at the store; the evidence a rule cites is an output ref, a trail
+// timestamp or a graph query.
+// 95: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
 // and the member (`magus\query`, `magus\run`, ...). `{{tool}}` resolves a bare
 // tool name, and `{{buzz}}` resolves a top-level method.
-// 95: where, run_affected, affected_plan, and affected_explain fold into client
+// 96: where, run_affected, affected_plan, and affected_explain fold into client
 // (`magus\where`, `magus\affected`, `magus\cmd`). config_get is config
 // and console_present is console. The blast radius member is magus\impact.
-// 96: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
-// 97: `magus agent harness apply` and `remove` are gone again; magus-workspace-rules
-// sends a forked harness through `magus describe harness`. magus-run says a direct
-// `client` call is bounded at 10 minutes and names `magus affected list`. magus-memory
-// passes refs as a list, magus-query pages with limit and offset, and insight names a
-// `magus buzz` fallback where it has no CLI verb.
-// 98: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
+// 97: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
+// 98: `magus agent harness apply` and `remove` are gone; magus-workspace-rules sends a
+// forked harness through `magus describe harness`. magus-run says a direct `client`
+// call is bounded at 10 minutes and names `magus affected list`. magus-query pages
+// with limit and offset, and insight names a `magus buzz` fallback where it has no
+// CLI verb.
+// 99: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
 // from an exported main, and it points at hack/README.md. magus-run names hack/on-actions
 // and hack/on-linux for proving a command on Linux without a pull request.
-const SkillVersion = 98
+// 100: magus-multi-agent teaches `magus job edit` for widening or revoking a job's write
+// paths; magus-vcs-hygiene says vcs\ref() is null when no name points at the revision;
+// magus-workspace-rules forks a harness spell with `magus spell pull`.
+const SkillVersion = 100
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -659,7 +666,6 @@ var skillSources = []skillSource{
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-multi-agent/SKILL.md"},
 	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md"},
-	{name: "magus-memory", description: "Maintain a user-owned per-repository memory through the client MCP tool (magus\\memory) or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
 	{name: "magus-run", description: "Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).", bodyPath: "skills/magus-run/SKILL.md"},
 	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},
@@ -1095,8 +1101,17 @@ const agentsSectionEnd = "<!-- magus:skills:end -->"
 
 var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<!-- magus:skills:end -->`)
 
+// routingIndexPlaceholder is the line of agents-section.md that AgentsBlock swaps for
+// routingIndexLine or drops. The digest hashes the template, so both renderings carry one
+// stamp and a pasted block grades current in either.
+const routingIndexPlaceholder = "{{routing-index}}\n"
+
+const routingIndexLine = "Routing index: [MAGUS.md](MAGUS.md), what this workspace holds; each project's own MAGUS.md is linked from it.\n"
+
 // AgentsBlock returns the managed magus guidance wrapped in its begin/end
-// markers, ready to paste into a repo's AGENTS.md.
+// markers, ready to paste into a repo's AGENTS.md. routingIndex adds the line
+// linking the root MAGUS.md; pass true only when the workspace declares that file
+// as an output, since a link to a file the workspace never writes is a dead end.
 //
 // Magus deliberately has no counterpart that WRITES this into AGENTS.md, and
 // the reason is the same one that makes an installer appending to your
@@ -1104,8 +1119,13 @@ var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<
 // is never as careful as it looks, and re-runs leave cruft nobody wrote and
 // nobody can audit. Instruct, do not mutate. Reading AGENTS.md back to grade
 // the block's stamp (CheckStatuses) is a different thing and stays.
-func (c *Catalog) AgentsBlock() string {
-	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(c.agentsSection) + "\n\n" + agentsSectionEnd + "\n"
+func (c *Catalog) AgentsBlock(routingIndex bool) string {
+	line := ""
+	if routingIndex {
+		line = routingIndexLine
+	}
+	section := strings.Replace(c.agentsSection, routingIndexPlaceholder, line, 1)
+	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(section) + "\n\n" + agentsSectionEnd + "\n"
 }
 
 func (c *Catalog) provenance(name string, v Variant) string {
@@ -1513,7 +1533,8 @@ func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Statu
 	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVersion, schemaVersion, wantDigest)}
 }
 
-// Section returns the provider-neutral always-on AGENTS.md guidance.
+// Section returns the provider-neutral always-on AGENTS.md guidance as embedded, with the
+// routing-index placeholder line unrendered; AgentsBlock is what a caller pastes.
 func (c *Catalog) Section() string { return c.agentsSection }
 
 // VariantSize returns the total rendered size of every skill's PRIMARY entry

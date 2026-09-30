@@ -860,7 +860,7 @@ func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
 	parts = append(parts, compactRunningParts(p.RunningTargets, now)...)
 
 	if n := len(p.Workspaces); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d workspace%s", n, pluralSuffix(n, "", "s")))
+		parts = append(parts, fmt.Sprintf("%d workspace%s", n, plural(n, "", "s")))
 	}
 	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
 		parts = append(parts, tok)
@@ -907,7 +907,7 @@ func compactServiceToken(services []types.StatusService) string {
 		}
 		dependents += s.Dependents
 	}
-	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, pluralSuffix(dependents, "", "s")))
+	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, plural(dependents, "", "s")))
 }
 
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when

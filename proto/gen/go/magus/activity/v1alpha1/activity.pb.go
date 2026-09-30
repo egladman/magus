@@ -51,7 +51,6 @@ const (
 	Kind_KIND_CONFIG_CHANGE   Kind = 3 // reserved: magus.yaml changed on reload, or a `magus config set` mutation
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
 	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
-	Kind_KIND_MEMORY          Kind = 6 // a console MemoryService action on the durable magus memory files (reads audited too)
 	// An agent host observed a shell or file-tool invocation. The request blob contains normalized
 	// host/tool/session data and the command or path; the response blob contains the guard decision.
 	// OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
@@ -101,7 +100,6 @@ var (
 		3:  "KIND_CONFIG_CHANGE",
 		4:  "KIND_TOKEN_LIFECYCLE",
 		5:  "KIND_SANDBOX_DENIAL",
-		6:  "KIND_MEMORY",
 		7:  "KIND_AGENT_COMMAND",
 		8:  "KIND_CREDENTIAL_GRANT",
 		9:  "KIND_AGENT_SPAWN",
@@ -117,7 +115,6 @@ var (
 		"KIND_CONFIG_CHANGE":    3,
 		"KIND_TOKEN_LIFECYCLE":  4,
 		"KIND_SANDBOX_DENIAL":   5,
-		"KIND_MEMORY":           6,
 		"KIND_AGENT_COMMAND":    7,
 		"KIND_CREDENTIAL_GRANT": 8,
 		"KIND_AGENT_SPAWN":      9,
@@ -971,15 +968,14 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\aPayload\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xb2\x02\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xa7\x02\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
 	"\bKIND_JOB\x10\x02\x12\x16\n" +
 	"\x12KIND_CONFIG_CHANGE\x10\x03\x12\x18\n" +
 	"\x14KIND_TOKEN_LIFECYCLE\x10\x04\x12\x17\n" +
-	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x0f\n" +
-	"\vKIND_MEMORY\x10\x06\x12\x16\n" +
+	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x16\n" +
 	"\x12KIND_AGENT_COMMAND\x10\a\x12\x19\n" +
 	"\x15KIND_CREDENTIAL_GRANT\x10\b\x12\x14\n" +
 	"\x10KIND_AGENT_SPAWN\x10\t\x12\x0e\n" +
@@ -988,7 +984,7 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x12\x14\n" +
 	"\x10KIND_FILE_CHANGE\x10\v\x12\f\n" +
 	"\bKIND_RUN\x10\f\x12\x15\n" +
-	"\x11KIND_GUARD_POLICY\x10\r*E\n" +
+	"\x11KIND_GUARD_POLICY\x10\r\"\x04\b\x06\x10\x06*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

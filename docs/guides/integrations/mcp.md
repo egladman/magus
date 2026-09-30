@@ -14,7 +14,7 @@ magus serves its tools as an **MCP (Model Context Protocol) server**, so agents 
 
 Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
-For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
+For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, and the drift check - see [Agents](agents.md).
 
 ## stdio: the host launches magus
 
@@ -174,7 +174,7 @@ connection; an agent should not start a server merely to unlock a tool.
 | ----------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`                 |
 | Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`            |
-| Keep a decision or coordinate a job       | `client` (`magus\memory`, `magus\job`)                          | `magus memory`, `magus job`                                          |
+| Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                          |
 | Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has a broader host surface |
 
 `client` is the magus module. Define `main(args: [str])`, `import "magus"`, and

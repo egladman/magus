@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-270-gfc985da7b (commit fc985da7b, 2026-09-29T17:09:52-04:00)
+# BEGIN magus-generated - do not edit this section manually
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -62,6 +62,7 @@ assets/gen/terminal-*.svg merge=magus linguist-generated
 benchmarks/agent/reports/**/*.md merge=magus linguist-generated
 cmd/magus/completions/* merge=magus linguist-generated
 cmd/magus/gen/*.go merge=magus linguist-generated
+console/MAGUS.md merge=magus linguist-generated
 console/coverage.dom.lcov merge=magus linguist-generated
 console/coverage.plain.lcov merge=magus linguist-generated
 console/coverage.txt merge=magus linguist-generated
@@ -82,6 +83,7 @@ docs/gen/assets/hljs.js merge=magus linguist-generated
 docs/gen/playground/buzz.wasm merge=magus linguist-generated
 docs/gen/playground/editor.js merge=magus linguist-generated
 docs/gen/playground/wasm_exec.js merge=magus linguist-generated
+docs/guides/integrations/agents/MAGUS.md merge=magus linguist-generated
 docs/guides/integrations/agents/guard-templates.md merge=magus linguist-generated
 docs/reference/api/**/*.md merge=magus linguist-generated
 docs/reference/buzz/*.md merge=magus linguist-generated
@@ -112,6 +114,7 @@ libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
+libs/diagram/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/testlayout/MAGUS.md merge=magus linguist-generated
@@ -120,6 +123,7 @@ libs/textsearch/MAGUS.md merge=magus linguist-generated
 libs/textsearch/coverage.lcov merge=magus linguist-generated
 /magus.lock merge=magus linguist-generated
 manpage/*.1 merge=magus linguist-generated
+proto/MAGUS.md merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 schema/gen/*.go merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated

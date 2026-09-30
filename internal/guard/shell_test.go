@@ -575,7 +575,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		{command: "npm ci --help"},
 		// Those rules still judge work, and a flag only some tools read as help.
 		{command: "ps -h", rule: denyRule{Name: denyRuleProcessPoll}},
-		{command: "magus memory get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus notes get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "magus run test --help=false | tail", rule: denyRule{Name: denyRuleOutputPipe}},
 		// One per protected rule: none of them consults helpRequest. sed is not in
 		// helpSafePrograms, since BSD sed reads `-i --help` as a backup suffix.

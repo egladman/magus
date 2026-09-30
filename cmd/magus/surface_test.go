@@ -217,7 +217,7 @@ var helpAliases = []string{"-h", "--help", "help"}
 // command's registry.Children is invisible to man pages, completions, and
 // --help, which is exactly the class of gap item 1 of the 2026-08 doctrine
 // audit found (graph build/diff, config token print/revoke/status, config mcp
-// connector ls, notes capture/promote, self refresh/registry all reached the
+// connector ls, notes capture, self refresh/registry all reached the
 // dispatcher with no registry entry).
 //
 // Only dispatchers whose switch compares against plain string literals are
@@ -350,9 +350,6 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		{"queue", []string{"queue"}, "queue.go", "runQueue", []string{"-h", "--help", "help"}},
 		{"spell", []string{"spell"}, "spell.go", "spellCmd", nil},
 		{"agent", []string{"agent"}, "agent.go", "agentCmd", nil},
-		{"memory", []string{"memory"}, "memory.go", "memoryCmd", []string{
-			"list", // renamed to ls in v0.4.0
-		}},
 		{"session", []string{"session"}, "session.go", "sessionCmd", []string{
 			"hook", // moved: hard-redirects to `magus shell`, which is not session-scoped
 		}},

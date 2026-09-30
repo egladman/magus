@@ -3113,7 +3113,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         cover_for(mod.value, ["--embedded"], {});
     }
     final embedded = ["hack/advisories.buzz", "hack/changelog.buzz", "hack/commits.buzz",
-        "hack/drift.buzz", "hack/toolchain-policy.buzz", "hack/toolchain.buzz"];
+        "hack/drift.buzz", "hack/index.buzz", "hack/toolchain-policy.buzz", "hack/toolchain.buzz"];
     foreach (mod in fs\glob("hack/*.buzz")) {
         if (embedded.indexOf(mod.value) != null) {
             cover_for(mod.value, ["--embedded"], {});

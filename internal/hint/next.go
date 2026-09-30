@@ -328,7 +328,6 @@ var readCommands = []Command{
 	Status, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
 	DescribeGraph, DescribeMCPTools,
 	Explain, Path, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
-	MemoryLs, MemoryVerify,
 	DescribeJob,
 	NotesLs, NotesGet,
 	Session, SessionShow, SessionAttention,
@@ -342,7 +341,7 @@ var readCommands = []Command{
 // alone.
 //
 // DENY BY DEFAULT: a verb readCommands does not carry is a write. The inverse failed
-// open, so `ledger accept`, `memory put`, `clean` and `self update` would all have
+// open, so `ledger accept`, `notes edit`, `clean` and `self update` would all have
 // been served to a reviewer as reads.
 //
 // Deliberately blunt on `run`: magus.yaml may declare default charms, so a bare

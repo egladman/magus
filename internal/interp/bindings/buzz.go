@@ -171,7 +171,6 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("workspace", buildWorkspace(ctx, obs))
 	magus.MapSet("job", buildJob(obs))
 	magus.MapSet("service", buildService(obs))
-	magus.MapSet("memory", buildMemory(obs))
 	magus.MapSet("vcs", buildVCS(obs))
 	magus.MapSet("skills", buildSkills(obs))
 	guard := buildGuard(ctx, sess, obs)

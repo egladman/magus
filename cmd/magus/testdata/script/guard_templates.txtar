@@ -306,7 +306,7 @@ cd $WORK
 stdin advise-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
-stdout 'magus memory put'
+stdout 'every session'
 
 # case: path/advise
 # The same suppression on the other surface, so a host that needs the flag gets it
@@ -325,7 +325,7 @@ env __MAGUS_NO_ADVISE=
 stdin notebook-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"additionalContext":"'
-stdout 'magus memory put'
+stdout 'every session'
 
 # case: path/deny
 # An envelope that arrives truncated. Judged as text it matches no rule and passes, which
@@ -355,7 +355,7 @@ stdin $WORK/deny-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'NOTES store'
-stdout 'magus memory put'
+stdout 'magus notes edit'
 cd $WORK
 
 # --- cursor-hook.buzz: one file, five events, a different response dialect ---
@@ -432,7 +432,7 @@ stdout '"permission":"allow"'
 stdin cursor-post-write.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"'
-stdout 'magus memory put'
+stdout 'every session'
 
 # A preToolUse on a tool carrying neither field allows without asking magus
 # anything. Cursor's preToolUse fires for every tool, and the shell tool in

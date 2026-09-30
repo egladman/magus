@@ -28,18 +28,6 @@ exec magus events -o jsonl --limit 0
 exec magus describe file magusfile.buzz -o name
 stdout '^magusfile\.buzz$'
 
-# -- the memory verbs answer -o name with the entry name ------------------------------
-# The journal lives under the state dir, which is /no-home by default in a script.
-env XDG_STATE_HOME=$WORK/state
-exec magus memory put pairing --type decision --ref 'command: magus run lint' --body 'keep one gate' -o name
-stdout '^pairing$'
-exec magus memory get pairing -o name
-stdout '^pairing$'
-exec magus memory ls -o name
-stdout '^pairing$'
-exec magus memory delete pairing -o name
-stdout '^pairing$'
-
 -- magus.yaml --
 concurrency: 2
 -- magusfile.buzz --

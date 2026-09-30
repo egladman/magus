@@ -16,8 +16,8 @@
 //
 // It is deliberately NARROW today: mounted only on TokenService (whose RevokeToken mutation lacked any
 // producer). The audit-trail assessment (session plans) tracks extending it to the other mutating
-// services and the reconciliation that needs (jobs already record on completion; memory edits would need
-// a new wire Kind), kept out of this doc so it does not rot against current method names.
+// services and the reconciliation that needs (jobs already record on completion), kept out of
+// this doc so it does not rot against current method names.
 //
 // KNOWN LIMIT of verb classification: a method's leading word is matched EXACTLY, so "Listen" is not
 // mistaken for the read verb "List" (it falls to unclassified -> recorded -> flagged by the arch test).
@@ -100,9 +100,9 @@ func WithSubject(fn func(connect.AnyResponse) (blob []byte, preview string)) Opt
 type Option func(*options)
 
 // WithAuditReads makes the interceptor record READ calls (Get/List/...) in addition to mutations.
-// It is off by default because the trail is for consequential actions, not queries, but the memory
-// service opts in, since a read of the repository's own memory is itself worth auditing there. The
-// token service does NOT set it, so its ListTokens stays unrecorded.
+// It is off by default because the trail is for consequential actions, not queries, but the notes
+// service opts in, since its every call is a read and a note read is worth auditing. The token
+// service does NOT set it, so its ListTokens stays unrecorded.
 func WithAuditReads() Option {
 	return func(o *options) { o.auditReads = true }
 }
@@ -111,7 +111,7 @@ func WithAuditReads() Option {
 // the given kind (one wire Kind per mounted service: the token service is all token_lifecycle) and the
 // name of the credential the bearer guard verified, read from the request context rather than from any
 // field the caller sent. Reads are not recorded by default (the trail is for consequential actions, not
-// queries); pass WithAuditReads to also record read verbs, as the memory service does.
+// queries); pass WithAuditReads to also record read verbs, as the notes service does.
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC (trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract), and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.

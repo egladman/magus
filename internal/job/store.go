@@ -7,8 +7,8 @@
 //
 // The INTENT layer of three, flat stores joined by job id at render time rather than a
 // hierarchy: intent is this package, actions are internal/trail, and effects are the run
-// itself. internal/journal (one invocation's events) and internal/memory and
-// internal/notes (prose for a later reader) model no leased work and are not siblings.
+// itself. internal/journal (one invocation's events) and internal/notes (prose for a
+// later reader) model no leased work and are not siblings.
 package job
 
 import (
@@ -135,7 +135,7 @@ type Location struct {
 // resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
 // worktree were invisible to a worker in another, and a lease-scoped guard rule could
 // not bind across the two. The rows describe a repository's plan, so they key on
-// repository identity exactly as internal/sessions and internal/memory do.
+// repository identity exactly as internal/sessions does.
 //
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.

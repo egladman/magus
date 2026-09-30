@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"strings"
 	"testing"
 
@@ -692,7 +691,6 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
-		"memory.list":    func() error { _, err := MagusListMemory(ctx); return err },
 		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
 	}
 	for member, call := range calls {
@@ -720,54 +718,6 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 	require.ErrorContains(t, err, "not an output ref")
 	_, err = MagusOutput(ctx, "out0000000000")
 	require.ErrorContains(t, err, "no stored output")
-}
-
-// Not parallel: the memory store lives under the per-repository state directory, and
-// the environment is the only thing keeping these entries out of the developer's own.
-func TestMemoryMembersRoundTrip(t *testing.T) {
-	testkit.Isolate(t)
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-
-	_, err := MagusPutMemory(ctx, "use-buzz", map[string]any{
-		"type": "decision", "body": "compose in Buzz", "refs": []any{"doc: docs/doctrine.md"},
-	})
-	require.NoError(t, err)
-
-	stored, err := MagusPutMemory(ctx, "use-buzz", map[string]any{"status": "accepted"})
-	require.NoError(t, err)
-	assert.Equal(t, "compose in Buzz", stored["body"], "a key opts omits is kept")
-	assert.Equal(t, "accepted", stored["status"])
-
-	got, err := MagusGetMemory(ctx, "use-buzz")
-	require.NoError(t, err)
-	assert.Equal(t, stored, got)
-
-	listed, err := MagusListMemory(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"records": []any{stored}, "issues": []any{}}, listed)
-
-	verified, err := MagusVerifyMemory(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"records": int64(1), "issues": []any{}}, verified)
-
-	require.NoError(t, MagusDeleteMemory(ctx, "use-buzz"))
-	err = MagusDeleteMemory(ctx, "use-buzz")
-	require.ErrorIs(t, err, os.ErrNotExist, "a second delete finds nothing and says so")
-	require.EqualError(t, err, `magus\memory.delete: memory: no entry named "use-buzz"`)
-	_, err = MagusGetMemory(ctx, "use-buzz")
-	require.ErrorContains(t, err, `no entry named "use-buzz"`)
-}
-
-func TestMemoryPutRefusesWhatItWouldDrop(t *testing.T) {
-	testkit.Isolate(t)
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-
-	_, err := MagusPutMemory(ctx, "x", map[string]any{"stauts": "done"})
-	require.ErrorContains(t, err, `unknown option "stauts"`)
-	_, err = MagusPutMemory(ctx, "absent", map[string]any{"status": "done", "allow_missing": false})
-	require.ErrorContains(t, err, `no entry named "absent"`)
-	_, err = MagusPutMemory(ctx, "x", map[string]any{"refs": "doc: a.md"})
-	require.ErrorContains(t, err, "must be a list of strings")
 }
 
 // fakeCheckoutWorkspace is a workspace rooted at this package's own checkout.

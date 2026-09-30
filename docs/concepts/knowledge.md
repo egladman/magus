@@ -49,10 +49,9 @@ distance is the point.
   rubric-inferred from a source you can open, and `magus explain` prints each
   edge's provenance so the claim is checkable per edge, not per marketing page.
 - **Not agent memory.** The graph is derived state: rebuilt from the workspace,
-  never accumulated, never remembered. Memory is a different surface with the
-  opposite contract - [`magus memory`](../reference/manpage/magus-memory.md) is
-  a user-owned journal of named decisions, written deliberately, and it stays
-  small precisely because the graph answers everything derivable.
+  never accumulated, never remembered. Nothing in magus remembers a session;
+  an agent's harness owns that, and the graph answers everything derivable so
+  there is little left to remember.
 
 ## The two-concept model
 
@@ -699,27 +698,13 @@ meaning what the note said, and git is how the person who left it has their name
 ### Where a note goes, and what that means
 
 There is one question that matters to a reader - **may I act on this without checking it?** -
-and it makes two tiers:
+and the answer the store gives is that **somebody accountable pressed commit**. An agent may
+never write a note, but the rule is not really "a human typed this" - a person pasting an
+agent's prose into `$EDITOR` always passed it. What git records is who stood behind it.
 
-| tier         | where                    | committed | attributed | who writes it       |
-| ------------ | ------------------------ | --------- | ---------- | ------------------- |
-| **drafting** | `magus memory`           | no        | no         | an agent, or you    |
-| **committed**| `knowledge.notes.shared` | yes       | git        | you, by promoting   |
-
-Between them sits one command. `magus notes promote <record>` opens an agent's draft in your
-editor, derives the note's anchors from the record's node refs, and writes it to the shared
-store - and it **refuses a body you did not change**, because promoting without reading is an
-agent's claim with your name on the commit.
-
-That refusal is the whole boundary. An agent may still never write a note, but the rule it
-enforces is not really "a human typed this" - a person pasting an agent's prose into `$EDITOR`
-always passed it. What the store actually guarantees, and the stronger claim, is that
-**somebody accountable pressed commit**, which git records whether or not the first draft was
-theirs.
-
-Writing a note straight into the committed tier is still supported and still the right move
-when the reasoning is already yours: `magus notes edit` opens a scaffold and gets out of the
-way.
+`magus notes edit` opens a scaffold and gets out of the way. `magus notes capture` files the
+review conversation under way, your remarks and your colleagues', as one note anchored to the
+hunks it discussed, so the comment that mattered is findable after the pull request merges.
 
 ```yaml
 knowledge:
@@ -733,13 +718,9 @@ One sentence each, and the whole surface follows from them:
   inside the checkout; outside it there is no commit to attribute a note to and no review to
   have seen it, so "shared" would be a claim the location cannot back.
 - **`knowledge.notes.private`** - **superseded, still read.** A second notes location, yours
-  rather than the team's, anywhere on disk. It is no longer the recommended shape: line the
-  stores up by property and it has no column of its own, because a private note and a memory
-  record are both uncommitted, unattributed, unreviewed and unrecoverable. The one thing it
-  had that memory did not was anchors, and `notes promote` closes that. Existing stores keep
-  working; new workspaces should use the drafting tier instead.
-- **`magus memory`** - an agent wrote it, only this machine has it, and every entry cites a
-  ref a later reader can re-run.
+  rather than the team's, anywhere on disk. It is no longer the recommended shape: a private
+  note is uncommitted, unattributed, unreviewed and unrecoverable, so nothing a reader can
+  check stands behind it. Existing stores keep working; new workspaces should not declare one.
 
 Every note node carries a `scope` attr (`shared` or `private`), so a reader can always tell
 which of the two they are looking at without knowing which shard it came from.
@@ -944,9 +925,9 @@ than committed. If you want a graph of an arbitrary document set, Graphify is th
 right tool; the magus graph is narrower and, within its domain, checkable
 edge by edge.
 
-[Obsidian](https://obsidian.md) shaped the memory side: durable,
+[Obsidian](https://obsidian.md) shaped the notes side: durable,
 linked markdown the user owns and any tool can read. magus borrows that
-files-first stance deliberately, but keeps the scope small: named decisions,
-plans, and pointers that a later person can reopen. It is not automatic agent
-memory. `magus memory verify` makes malformed, stale, and broken-linked entries
-visible instead of quietly skipping them.
+files-first stance deliberately, but keeps the scope small: prose a person
+stands behind, anchored to the code it is about. `magus notes verify` makes
+malformed notes and anchors that no longer resolve visible instead of quietly
+skipping them.

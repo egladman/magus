@@ -844,66 +844,6 @@ var Magus = Module{
 			},
 		},
 		{
-			Name: "memory",
-			Doc: "The per-repository memory: named decisions, plans, pointers and ruled-out " +
-				"hypotheses, kept outside the checkout so every worktree of one repository reads " +
-				"the same entries. The same store `magus memory`, the client MCP tool (magus\\memory) and " +
-				"the console read. Records are the snake_case JSON `magus memory -o json` prints. " +
-				"Read straight off the workspace on the context; raises MGS1022 outside one. " +
-				"Bound by hand in internal/interp/bindings (buildMemory), for the reason magus\\job is.",
-			Methods: []Method{
-				{
-					Name: "list",
-					Doc: "Every entry as {records, issues}. A malformed entry is an issue beside " +
-						"the readable records rather than a raise, since the listing is where a " +
-						"person finds the bad entry to delete.",
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name:    "get",
-					Doc:     "One entry by name. An absent name raises; list finds the right one.",
-					Args:    []Arg{{Name: "name", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name: "put",
-					Doc: "Create the entry name, or write only the fields opts names on one that " +
-						"exists: type, status, refs ([str] of 'kind: target'), references ([str]), " +
-						"body, excerpt, allow_missing (default true; false turns a mistyped name " +
-						"into a raise instead of a second entry). A key opts omits is untouched; " +
-						"a key present with an empty value is an explicit clear. An unknown key " +
-						"raises. Returns the stored entry.",
-					Args: []Arg{
-						{Name: "name", Type: TypeString},
-						{Name: "opts", Type: TypeAnyMap, Optional: true},
-					},
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-				{
-					Name: "delete",
-					Doc: "Archive the entry name inside the memory store; a put of its fields " +
-						"restores it. An absent name raises, naming the entries one typo away.",
-					Args:   []Arg{{Name: "name", Type: TypeString}},
-					Raises: true,
-					Extern: true,
-				},
-				{
-					Name: "verify",
-					Doc: "{records, issues} for malformed entries, broken links between entries, " +
-						"and output refs this checkout can no longer reopen.",
-					Returns: []Ret{{Type: TypeAnyMap}},
-					Raises:  true,
-					Extern:  true,
-				},
-			},
-		},
-		{
 			Name: "vcs",
 			Doc: "Facts about the workspace's version control that only magus computes. The " +
 				"`vcs` host module is the repository itself; this namespace is magus's reading " +

@@ -285,9 +285,8 @@ func wantsUsage(subArgs []string) bool {
 			return true
 		}
 		// The bare word is only a help request in the FIRST position. Elsewhere it is
-		// ordinary data: `magus memory get help` fetches an entry named help, and
-		// `magus notes show help` shows a note. Treating those as usage would skip the
-		// workspace preload for a real invocation.
+		// ordinary data: `magus notes get help` shows a note named help. Treating it as
+		// usage would skip the workspace preload for a real invocation.
 		if a == "help" && i == 0 {
 			return true
 		}
@@ -1020,8 +1019,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return sessionCmd(ctx, root, subArgs)
 	case "shell":
 		return shellCmd(ctx, subArgs)
-	case "memory":
-		return memoryCmd(ctx, root, subArgs)
 	case "job":
 		return jobCmd(ctx, root, subArgs)
 	case "notes":

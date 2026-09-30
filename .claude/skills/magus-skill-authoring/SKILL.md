@@ -30,7 +30,7 @@ inconveniences. Probe every claim adversarially before teaching it: when
 workaround in the skill; the right response was tracing the scorer, fixing
 the filter, and adding a regression test. Fix the tool before teaching the
 workaround. When the fix is out of reach, teach ONLY verified idioms and file
-the gap where it will be found (the plans doc, a task, the repository memory).
+the gap where it will be found (the plans doc, a task, the harness memory).
 
 ## 3. One source of truth, drift-gated
 
@@ -262,9 +262,9 @@ reader can generalize for a ritual.
 
 ## 6. Record the why, then verify the whole
 
-- Decisions with a why go to the repository memory (`client` calling magus\memory, or `magus memory`) so the next
-  session - possibly a lesser model - inherits them instead of re-deriving.
-  Read status and decisions before re-litigating anything.
+- Decisions with a why go to the harness memory so the next session,
+  possibly a lesser model, inherits them instead of re-deriving. Read them
+  before re-litigating anything.
 - After editing skills, in this order:
   1. `magus run go-build .` - the embedded bodies are go:embed'd, so nothing
      below reads your edit until the binary carries it.

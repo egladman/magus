@@ -74,7 +74,6 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 
 ## Agent surface
 
-- Record decisions worth keeping, with the why, via `magus memory` or the `client` tool (`magus\memory`).
 - If a convention matters, give it an enforcement point; `internal/guard/dir.go`
   is the worked example. Measured 2026-08-24: a rule that lives only in prose has
   roughly even odds.

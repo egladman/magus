@@ -19,7 +19,7 @@ final WRITE_VERBS = ["rename", "split"];
 // NOUNS are the libraries the magusfile imports, and the scripts named before the verb
 // rule. labels, host-schemas and pull-requests are run by a person, so each is due a verb
 // name.
-final NOUNS = ["advisories", "changelog", "commits", "drift", "lint", "toolchain", "toolchain-policy",
+final NOUNS = ["advisories", "changelog", "commits", "drift", "index", "lint", "toolchain", "toolchain-policy",
     "labels", "host-schemas", "pull-requests"];
 
 export fun reads() > [str] {

@@ -61,6 +61,7 @@ hand.
 | `hack/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/drift.buzz` | drift measured by content, for every generated-file gate |
+| `hack/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 | `hack/lint.buzz` and `hack/lint/` | this repository's file linter and its rules |
