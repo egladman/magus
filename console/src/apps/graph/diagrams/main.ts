@@ -14,6 +14,7 @@ import {
   type DiagramFailure,
   type RenderedDiagram,
 } from "./api";
+import { decodeFigureLink } from "./figure-link";
 import { attachFigure, edgesOf, neighbours, type FigureController } from "./interact";
 import {
   EMPTY_LENS,
@@ -30,13 +31,18 @@ import {
   anchorTemplate,
   drawnNodes,
   ensureBuzz,
+  figureForLink,
+  linkedRows,
   relayout,
+  relayoutOf,
   IMPORTS,
   type BuzzRuntime,
   type FigureMeta,
 } from "./wasm";
 
 const SOURCE = "Diagrams";
+// The id a shared link's figure goes by; no server figure has it.
+const LINK_ID = "link";
 
 // Per mount, so each mount's control reflects its own request. The wasm is one Go instance per
 // page: ensureBuzz loads it once.
@@ -67,6 +73,7 @@ interface Base {
 }
 
 export interface DiagramsRefs {
+  readonly bar: HTMLElement;
   readonly picker: HTMLSelectElement;
   readonly lensForm: HTMLFormElement;
   readonly scope: HTMLInputElement;
@@ -188,6 +195,7 @@ export function build(host: HTMLElement): DiagramsRefs {
   page.append(bar, notices, body);
   host.append(page);
   return {
+    bar,
     picker,
     lensForm,
     scope,
@@ -234,6 +242,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   let current: AbortController | null = null;
   let lastNode: string | null = null;
   let stale = false;
+  let linkPayload: string | null = null;
 
   const showNotice = (tone: NoticeTone, title: string, body: string): void => {
     refs.notices.replaceChildren(notice(tone, title, body));
@@ -258,7 +267,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       s.kind === "loading"
         ? "Loading the runtime..."
         : s.kind === "ready"
-          ? "Runtime loaded: lens changes lay out here."
+          ? linkPayload === null
+            ? "Runtime loaded: lens changes lay out here."
+            : ""
           : s.kind === "failed"
             ? "Runtime failed to load."
             : "";
@@ -502,10 +513,82 @@ export function activate(host: HTMLElement): SurfaceInstance {
     })();
   });
 
+  // A shared link is drawn from its fragment alone. The runtime loads at once because nothing
+  // else can draw it, and the picker and lens have no server figure to act on.
+  const openLink = async (payload: string): Promise<void> => {
+    linkPayload = payload;
+    current?.abort();
+    const ac = new AbortController();
+    current = ac;
+    refs.bar.hidden = true;
+    refs.runtime.hidden = true;
+    clearFigure();
+    clearNotices();
+    const refuse = (title: string, detail: string): void => {
+      clearFigure();
+      figure = { kind: "refused", id: LINK_ID, lens: EMPTY_LENS };
+      reportFailure(SOURCE, title + ": " + detail, "diagrams:link");
+      showNotice("danger", title, detail);
+    };
+    const read = decodeFigureLink(payload);
+    if (!read.ok) {
+      refuse("This figure link could not be read", read.error);
+      return;
+    }
+    figure = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
+    refs.frame.setAttribute("aria-busy", "true");
+    runtimeState = { kind: "loading" };
+    syncRuntime();
+    let runtime: BuzzRuntime | null = null;
+    let loadError = "";
+    try {
+      runtime = await ensureBuzz();
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    }
+    if (stale || current !== ac) return;
+    refs.frame.removeAttribute("aria-busy");
+    runtimeState = runtime ? { kind: "ready", runtime } : { kind: "failed", detail: loadError };
+    syncRuntime();
+    if (!runtime) {
+      refuse("The runtime that draws this figure did not load", loadError);
+      return;
+    }
+    const out = relayoutOf(runtime.drawFigure(figureForLink(read.figure), ""));
+    if (out.kind !== "ok") {
+      refuse("This figure could not be drawn", out.detail);
+      return;
+    }
+    const rendered: RenderedDiagram = {
+      id: LINK_ID,
+      title: read.figure.title,
+      svg: out.svg,
+      nodes: linkedRows(read.figure),
+      sourceUrl: "",
+    };
+    try {
+      mount(rendered, false);
+    } catch (e) {
+      refuse("Could not show the figure", e instanceof Error ? e.message : String(e));
+      return;
+    }
+    base = null;
+    figure = { kind: "shown", id: LINK_ID, lens: EMPTY_LENS, rendered, laidOut: "runtime" };
+  };
+
+  const onHashChange = (): void => {
+    const next = parseHash().figure;
+    if (next !== undefined && next !== linkPayload) void openLink(next);
+  };
+  window.addEventListener("hashchange", onHashChange);
+
   syncRuntime();
-  void loadList();
+  const linked = parseHash().figure;
+  if (linked !== undefined) void openLink(linked);
+  else void loadList();
 
   const unsubscribeHost = subscribeDefaultHost(() => {
+    if (linkPayload !== null) return; // a link needs no server
     if (figure.kind === "shown") return; // a figure being read keeps the server it came from
     serverHost = resolveServerHost(parseHash()) ?? "";
     void loadList();
@@ -515,6 +598,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     setVisible: () => {},
     deactivate: () => {
       stale = true;
+      window.removeEventListener("hashchange", onHashChange);
       current?.abort();
       controller?.destroy();
       unsubscribeHost();

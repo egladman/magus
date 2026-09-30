@@ -372,6 +372,100 @@ describe("the Diagrams surface", () => {
     assert.match(q(".console-diagrams__notice").textContent ?? "", /over budget/);
     instance.deactivate();
   });
+
+  describe("a #figure= link", () => {
+    const linkHash = (doc: unknown): string =>
+      "#figure=" + Buffer.from(JSON.stringify(doc), "utf8").toString("base64url");
+    const DEPS = {
+      v: 1,
+      kind: "deps",
+      title: "How far this change reaches",
+      nodes: [
+        { id: "libs/lib", label: "lib", seed: true },
+        { id: "app", label: "app", seed: false },
+      ],
+      edges: [["libs/lib", "app"]],
+    };
+
+    test("is drawn from the fragment alone: no request, the runtime's figure, the seed marked", async () => {
+      location.hash = linkHash(DEPS);
+      const rt = fakeRuntime(drew(RELAID));
+      const { host, q, instance } = mountSurface();
+      await settle();
+      assert.deepEqual(requests, [], "a link needs no server");
+      assert.equal(rt.figures.length, 1);
+      assert.deepEqual(
+        rt.figures[0].boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
+        [
+          ["lib", "edited", "focal"],
+          ["app", "", "plain"],
+        ],
+      );
+      assert.deepEqual(
+        rt.figures[0].flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
+        [["lib", "app"]],
+        "an edge runs dependency to dependent",
+      );
+      assert.equal(
+        q<SVGSVGElement>(".console-diagrams__frame svg").getAttribute("role"),
+        "graphics-document",
+      );
+      assert.equal(q(".console-diagrams__caption").textContent, "How far this change reaches");
+      assert.deepEqual(
+        [...host.querySelectorAll<HTMLElement>(".console-diagrams__node")].map(
+          (li) => li.dataset.nodeId,
+        ),
+        ["external:lib", "external:app"],
+      );
+      assert.equal(q<HTMLElement>(".console-diagrams__bar").hidden, true);
+      assert.equal(host.querySelector(".console-diagrams__notice"), null);
+      instance.deactivate();
+    });
+
+    test("that cannot be read is an inline notice naming the problem", async () => {
+      location.hash = linkHash({ ...DEPS, v: 2 });
+      const rt = fakeRuntime(drew(RELAID));
+      const { host, q, instance } = mountSurface();
+      await settle();
+      const note = q(".console-diagrams__notice");
+      assert.match(note.textContent ?? "", /could not be read/);
+      assert.match(note.textContent ?? "", /version 2 and this console reads version 1/);
+      assert.equal(rt.figures.length, 0);
+      assert.equal(host.querySelector(".console-diagrams__frame svg"), null);
+      instance.deactivate();
+    });
+
+    test("that is not base64url is an inline notice", async () => {
+      location.hash = "#figure=!!not-a-link!!";
+      const { q, instance } = mountSurface();
+      await settle();
+      assert.match(q(".console-diagrams__notice").textContent ?? "", /not base64url/);
+      instance.deactivate();
+    });
+
+    test("the runtime declines to draw is an inline notice with its finding", async () => {
+      location.hash = linkHash(DEPS);
+      fakeRuntime({ ok: false, svg: "", findings: "figure: over budget", diag: null });
+      const { host, q, instance } = mountSurface();
+      await settle();
+      assert.match(q(".console-diagrams__notice").textContent ?? "", /over budget/);
+      assert.equal(host.querySelector(".console-diagrams__frame svg"), null);
+      instance.deactivate();
+    });
+
+    test("replaced in the address bar is drawn again", async () => {
+      location.hash = linkHash(DEPS);
+      const rt = fakeRuntime(drew(RELAID));
+      const { q, instance } = mountSurface();
+      await settle();
+      location.hash = linkHash({ ...DEPS, title: "Another" });
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      await settle();
+      assert.equal(rt.figures.length, 2);
+      assert.equal(q(".console-diagrams__caption").textContent, "Another");
+      instance.deactivate();
+    });
+  });
 });
 
 // ---- the runtime's record -------------------------------------------------------------------

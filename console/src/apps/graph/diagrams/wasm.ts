@@ -7,6 +7,7 @@
 
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
+import type { LinkedFigure } from "./figure-link";
 
 export interface BuzzDiag {
   readonly msg: string;
@@ -421,6 +422,52 @@ export function figureFor(decl: Declaration, meta: FigureMeta, desc: string): Fi
   return {
     ...base,
     unscopedWhy: "served from the workspace graph: " + desc,
+    boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
+    flows,
+  };
+}
+
+// libs/figure's MaxAccent: a third accent is a finding.
+const MAX_ACCENT = 2;
+
+// linkedRows is the node list of a linked figure, keyed by the ids its drawing carries.
+export function linkedRows(linked: LinkedFigure): DeclaredNode[] {
+  return drawnNodes(
+    linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label })),
+    "flow",
+  );
+}
+
+// figureForLink builds the Figure record for a shared dependency graph: one actor per node, one
+// flow per edge, dependency first. A seed is tagged "edited" and takes the accent only while the
+// figure has room for it, so a change that edits many projects is still drawn.
+export function figureForLink(linked: LinkedFigure): Figure {
+  const rows = linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label }));
+  const names = actorNames(rows);
+  const accent = linked.nodes.filter((n) => n.seed).length <= MAX_ACCENT;
+  const actors = new Map<string, Actor>(
+    linked.nodes.map((n, i) => [
+      n.id,
+      {
+        name: names[i],
+        sub: "",
+        tag: n.seed ? "edited" : "",
+        link: "",
+        look: n.seed && accent ? "focal" : "plain",
+      },
+    ]),
+  );
+  const flows = linked.edges.map(([src, dst]): Flow => {
+    const a = actors.get(src);
+    const b = actors.get(dst);
+    if (!a || !b) throw new Error("the link has an edge " + src + "->" + dst + " to no node");
+    return { src: { dir: null, actor: a }, dst: { dir: null, actor: b }, label: "", stroke: null };
+  });
+  return {
+    ...EMPTY_FIGURE,
+    id: figureId("link"),
+    title: linked.title,
+    unscopedWhy: "drawn from a shared link, which carries the graph and no directories",
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
     flows,
   };

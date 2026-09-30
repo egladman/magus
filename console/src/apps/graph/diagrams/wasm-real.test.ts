@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { runInThisContext } from "node:vm";
 import {
   figureFor,
+  figureForLink,
   relayoutOf,
   startGo,
   type Figure,
@@ -64,7 +65,26 @@ async function relay(): Promise<void> {
     assert.match(svg, /data-edge="external:app->external:lib"/);
     assert.match(svg, /href="\/code\/libs\/lib"/);
 
-    const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
+    // A shared link's graph: actors only, the edited node accented and tagged.
+    const linkDrawn = relayoutOf(
+      rt.drawFigure(
+        figureForLink({
+          title: "How far this change reaches",
+          nodes: [
+            { id: "libs/lib", label: "lib", seed: true },
+            { id: "app", label: "app", seed: false },
+          ],
+          edges: [["libs/lib", "app"]],
+        }),
+        "",
+      ),
+    );
+    assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
+    const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
+    assert.match(linkSvg, /data-edge="external:lib->external:app"/);
+    assert.match(linkSvg, /edited/);
+
+    const importsMeta ={ id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
     const imports = figureFor(
       {
         nodes: [

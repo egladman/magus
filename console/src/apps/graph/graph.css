@@ -1,9 +1,9 @@
 /* graph.css - page-scoped styles for the console Graph Explorer surface.
  *
  * PatternFly (W3): the CHROME migrated to PatternFly - the stage toolbar (Fit / Open file /
- * Copy as Mermaid / Fullscreen / Legend) is PF Buttons, and the cold "nothing loaded" screen is a
+ * Fullscreen / Legend) is PF Buttons, and the cold "nothing loaded" screen is a
  * PF EmptyState (mirroring logs/dashboard). The d3 force-graph STAGE itself (the canvas nodes/edges,
- * the force sim, drag/zoom, the mermaid path) is custom rendering PatternFly has no component for -
+ * the force sim, drag/zoom) is custom rendering PatternFly has no component for -
  * it is KEPT, with its color reads repointed from the old Pico/--c palette to the console's
  * PF-native tokens (--console-* / --pf-t--* directly, theme-aware in light and dark). The node-kind
  * fills come from the --console-node-<kind> categorical palette (tokens.css), aliased below to the
@@ -436,16 +436,7 @@
 .console-graph-card__ref:hover { border-color: var(--console-accent); }
 .console-graph-card__muted { color: var(--pf-t--global--text--color--subtle); }
 .console-graph-legend__count { color: var(--pf-t--global--text--color--subtle); }
-/* Copy as Mermaid in the card: a quiet link-styled action, not a chunky button, so
-   it matches the card's density (the canvas toolbar keeps the prominent button). */
 .console-graph-card__actions { margin-top: 0.7rem; }
-.console-graph-card__mermaidlink {
-  width: auto; margin: 0; padding: 0; background: transparent; border: 0;
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.76rem; line-height: 1.4; color: var(--console-accent); cursor: pointer;
-}
-.console-graph-card__mermaidlink:hover { text-decoration: underline; }
-.console-graph-card__mermaidlink .console-graph-card__copyglyph { font-size: 0.95em; }
 .console-graph-card__noteslink { margin-inline-start: 0.7rem; padding: 0; border: 0; background: transparent; color: var(--console-accent); cursor: pointer; font: inherit; font-size: 0.78rem; }
 .console-graph-card__noteslink:hover { text-decoration: underline; }
 

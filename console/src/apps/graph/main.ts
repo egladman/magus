@@ -764,7 +764,7 @@ function applyLayeredMode() {
   const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
-      "layered layout is capped at 500 nodes: narrow with a query or the local graph (the CLI applies the same rule to -o mermaid)",
+      "layered layout is capped at 500 nodes: narrow with a query or the local graph",
       true,
     );
     return false;
@@ -1524,12 +1524,12 @@ function draw() {
 
     // Arrowheads: only in dag modes (layered/waves - they add clarity on the
     // DAG's directed edges; in force mode at demo-graph density they would be
-    // visual noise). Convention matches the Go mermaid emitter (LR direction):
+    // visual noise). Layout runs left to right:
     // the dependency is placed at a lower x (left) and the dependent at a
     // higher x (right). In link terms: e.source = dependent (right), e.target
     // = dependency (left). The arrowhead is drawn at the SOURCE end (the
-    // dependent node on the right), matching mermaid `dependency --> dependent`
-    // reading left-to-right. For layout-reversed back-edges the arrow tip moves
+    // dependent node on the right), so the graph reads dependency to dependent
+    // left-to-right. For layout-reversed back-edges the arrow tip moves
     // to the target end (the reversed direction is layout-only fiction; the
     // mark calls it out).
     if (isDagMode() && active && e.relation === "depends_on") {
@@ -3589,7 +3589,7 @@ let suppressHash = false;
 
 // Fragment keys that name the GRAPH rather than the view: updateHash copies these through
 // rather than rewriting them. `data` is absent on purpose - it bails out of updateHash entirely.
-const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor"];
+const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor", "figure"];
 
 function updateHash() {
   renderScope(); // called wherever the applied state changes, which is what the bar reflects
@@ -5938,6 +5938,7 @@ function bootWireEvents() {
   window.addEventListener(
     "hashchange",
     () => {
+      if (hashParams().figure !== undefined && graphMode !== "figures") setGraphMode("figures");
       suppressHash = true;
       applyDeepLinks();
       suppressHash = false;
@@ -6202,7 +6203,7 @@ async function bootLive() {
 // calls it on deactivate.
 // Figures is the Graph's second mode: the diagrams view (./diagrams), drawn by the server from the
 // same workspace graph, mounted in the explorer's place the way the Dashboard mounts its Jobs
-// view. /console/diagrams/ opens it.
+// view. /console/diagrams/ opens it, and so does a #figure= link, which carries its own graph.
 type GraphMode = "explore" | "figures";
 let graphMode: GraphMode = "explore";
 let figuresMount: SurfaceInstance | null = null;
@@ -6266,6 +6267,8 @@ function wireGraphModes(signal: AbortSignal): void {
   );
   const intent = takeModeIntent("graph");
   if (isGraphMode(intent)) setGraphMode(intent);
+  // A shared figure link names its mode itself and wins over an intent.
+  if (hashParams().figure !== undefined) setGraphMode("figures");
 }
 
 // setVisible is the console's surface contract (page.ts). Here it is not a formality: a graph

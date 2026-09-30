@@ -22,6 +22,9 @@
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
+/* A shared link has no picker or lens to offer and draws without asking for the runtime. */
+.console-diagrams__bar[hidden],
+.console-diagrams__controls .pf-v6-c-button[hidden] { display: none; }
 .console-diagrams__lens { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .console-diagrams__field { display: inline-flex; align-items: center; gap: 0.4rem; }
 .console-diagrams__field-label { font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
