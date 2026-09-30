@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
@@ -917,4 +919,113 @@ func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 		_, ok := Rule(v.advisoryName())
 		assert.True(t, ok, "%q names %q, which the catalog does not list", command, v.advisoryName())
 	}
+}
+
+// BenchmarkWithJobStoreRows is one guard call's read of the job store: a store the size a
+// working session leaves behind, in a real repository so the store's placement resolves as
+// it does for a hook.
+func BenchmarkWithJobStoreRows(b *testing.B) {
+	testkit.Isolate(b)
+	root, err := magus.FindRoot("")
+	require.NoError(b, err)
+	cacheDir := b.TempDir()
+	at := location{cacheDir: cacheDir, workspace: root, dir: root}
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	states := []types.JobState{types.StatePass, types.StatePass, types.StateFail, types.StateNoReturn, types.StateDeclared}
+	for i := range 300 {
+		row := types.Job{
+			ID: fmt.Sprintf("root-%d/job-%d", i%20, i), Parent: fmt.Sprintf("root-%d", i%20),
+			State: states[i%len(states)], WritePaths: []string{"internal/guard/guard.go"},
+		}
+		_, err := store.Update(b.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(b, err)
+	}
+	path, err := store.Path()
+	require.NoError(b, err)
+	old := time.Now().Add(-time.Hour)
+	require.NoError(b, os.Chtimes(path, old, old))
+	ctx := b.Context()
+	b.Run("read=list", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = store.List()
+		}
+	})
+	b.Run("read=memo", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			withJobStoreRows(ctx, at)
+		}
+	})
+}
+
+// A store edited between two calls in one process is read again, however recent the
+// memo, and a memo is only ever the answer for the file it was taken from.
+func TestJobStoreRowsMemo(t *testing.T) {
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	at := location{cacheDir: cacheDir, workspace: root, dir: root}
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	path, err := store.Path()
+	require.NoError(t, err)
+	memoPath := filepath.Join(filepath.Dir(path), jobRowsMemoFile)
+
+	put := func(row types.Job) {
+		t.Helper()
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	backdate := func() {
+		t.Helper()
+		old := time.Now().Add(-time.Hour)
+		require.NoError(t, os.Chtimes(path, old, old))
+	}
+	rowsOf := func() []types.Job {
+		t.Helper()
+		snap, ok := job.SnapshotFromContext(withJobStoreRows(t.Context(), at))
+		require.True(t, ok)
+		require.NoError(t, snap.Err)
+		return snap.Rows
+	}
+	ids := func(rows []types.Job) []string {
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+	// plant replaces the memo's rows, keeping the stamp, so a read that used the memo is
+	// visible in what it returns.
+	plant := func(when time.Time, rows ...types.Job) {
+		t.Helper()
+		raw, err := os.ReadFile(memoPath)
+		require.NoError(t, err)
+		var memo jobRowsMemo
+		require.NoError(t, json.Unmarshal(raw, &memo))
+		memo.Rows, memo.AtNS = rows, when.UnixNano()
+		raw, err = json.Marshal(memo)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(memoPath, raw, 0o644))
+	}
+
+	put(types.Job{ID: "a", State: types.StateDeclared, Parent: "", WritePaths: []string{"x.go"}, Model: "sonnet"})
+	fresh := rowsOf()
+	assert.NoFileExists(t, memoPath, "a store written this second is not memoized")
+
+	backdate()
+	first := rowsOf()
+	assert.Equal(t, fresh, first)
+	require.FileExists(t, memoPath)
+	assert.Equal(t, first, rowsOf(), "the memo returns the rows the store did")
+
+	plant(time.Now(), types.Job{ID: "memo-only"})
+	assert.Equal(t, []string{"memo-only"}, ids(rowsOf()), "an unchanged store answers from the memo")
+
+	put(types.Job{ID: "b", State: types.StateDeclared})
+	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "an edited store is read again")
+
+	backdate()
+	rowsOf()
+	plant(time.Now().Add(-time.Minute), types.Job{ID: "memo-only"})
+	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "a memo past its TTL is not trusted")
 }
