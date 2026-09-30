@@ -1455,6 +1455,8 @@ var adviceLocalExclusions = map[string]string{
 		"working tree has no author and no first-time contributor to welcome",
 	"merge-queue.buzz": "reads the pull request's review state and labels through its own gh " +
 		"call, and a working tree has no pull request to queue",
+	"trusted-script-moved.buzz": "asks the forge for the pull request's renamed and removed " +
+		"files, and a working tree has no pull request",
 }
 
 // adviseScripts returns the scripts one of advise.buzz's advisor lists names, in order.

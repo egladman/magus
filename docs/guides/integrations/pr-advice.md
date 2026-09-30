@@ -114,24 +114,27 @@ invisible until you `git add` it.
 
 **`first-contribution` does not run.** It asks the forge whether the pull request's author
 has merged anything before, and a working tree has no author. Neither does `merge-queue`,
-for the same reason: it reads the pull request's review state and labels.
+for the same reason: it reads the pull request's review state and labels. Nor does
+`trusted-script-moved`, which asks the forge for the pull request's renamed and removed
+files.
 
 ## What each advisor says
 
-| input                | it comments when                                                                                                                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `merge-conflicts`    | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server                                      |
-| `unclaimed`          | changed files belong to no project, so no target reads them and the checks say nothing about them                                                        |
-| `target-outputs`     | a new target declares no outputs, which means it never replays from cache                                                                                |
-| `skip-cache`         | a target opts out of the cache, quoting the reason magus requires for it                                                                                 |
-| `blast-radius`       | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
-| `doctor`             | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
-| `version-floor`      | the pull request raises `required_version`, which every contributor must act on                                                                          |
-| `conformance`        | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
-| `missing-target`     | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
-| `api-surface`        | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
-| `first-contribution` | the author has no merged pull request here yet                                                                                                           |
-| `merge-queue`        | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
+| input                  | it comments when                                                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `merge-conflicts`      | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server                                      |
+| `unclaimed`            | changed files belong to no project, so no target reads them and the checks say nothing about them                                                        |
+| `target-outputs`       | a new target declares no outputs, which means it never replays from cache                                                                                |
+| `skip-cache`           | a target opts out of the cache, quoting the reason magus requires for it                                                                                 |
+| `blast-radius`         | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
+| `doctor`               | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
+| `version-floor`        | the pull request raises `required_version`, which every contributor must act on                                                                          |
+| `trusted-script-moved` | the change renames or removes a script a job runs from a default-branch checkout, which breaks that job on the pull request or after the merge           |
+| `conformance`          | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
+| `missing-target`       | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
+| `api-surface`          | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
+| `first-contribution`   | the author has no merged pull request here yet                                                                                                           |
+| `merge-queue`          | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
 
 `merge-queue` appears only while the pull request is open, approved, targets
 `merge-queue-base` (the default branch unless set), comes from this repository, and
@@ -157,6 +160,12 @@ Its comment links the reached projects to the console's graph view, which draws 
 the browser. `console-base` (default `https://eli.gladman.cc/magus/console/`) points the
 link at another console. The graph rides in the link's fragment, which the browser never
 sends to a server, so the link sends a private workspace's project names nowhere.
+
+`trusted-script-moved` reads the base's workflows for jobs whose `actions/checkout` step
+sets `ref:` to the default branch, by name or as `github.event.repository.default_branch`,
+and the paths their `run:` steps name. Such a job runs the default branch's copy of a
+script, so a move the workflow follows skips or fails on the pull request and passes once
+it merges; a removal, or a move the workflow does not follow, fails after the merge.
 
 ## Conformance on code
 

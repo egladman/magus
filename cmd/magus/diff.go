@@ -2567,9 +2567,9 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // `advice.buzz` and `advise.buzz`, the shared library and the entry script, neither an
 // advisor, and filename order is not the order advise.buzz chose.
 //
-// first-contribution.buzz and merge-queue.buzz are the read-only advisors deliberately left
-// out: each asks the forge about the pull request through its own `gh` call, and neither
-// has a local meaning. adviceLocalExclusions in the test records why.
+// first-contribution.buzz, merge-queue.buzz and trusted-script-moved.buzz are the read-only
+// advisors deliberately left out: each asks the forge about the pull request through its
+// own `gh` call, and none has a local meaning. adviceLocalExclusions in the test records why.
 //
 // Restating is not the same as drifting, and TestLocalAdvisorsMatchAdviseBuzz is what keeps
 // the two apart: it reads the lists back out of advise.buzz and fails naming any advisor

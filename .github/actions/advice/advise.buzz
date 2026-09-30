@@ -24,6 +24,7 @@ final reading = [
     Advisor{input = "target-outputs", script = "target-outputs.buzz"},
     Advisor{input = "doctor", script = "doctor.buzz"},
     Advisor{input = "version-floor", script = "version-floor.buzz"},
+    Advisor{input = "trusted-script-moved", script = "trusted-script-moved.buzz"},
     Advisor{input = "unclaimed", script = "unclaimed.buzz"},
     Advisor{input = "blast-radius", script = "blast-radius.buzz"},
     Advisor{input = "skip-cache", script = "skip-cache.buzz"},
