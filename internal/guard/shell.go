@@ -1259,6 +1259,10 @@ func rawToolDenied(deps Dependencies, c hint.Invocation) bool {
 // exactly as the rewriting form does. gofmt's listing and diff (gofmtReadOnly) are the one
 // exemption: they read files and print, where the others run an analysis.
 //
+// A program with many uses and no subcommand declares the args that select the op instead
+// (spells.Op.ModeArgs): `node --test` is node-test, while `node -e` and `node app.mjs` run
+// something no spell does.
+//
 // A help or version request passes (helpRequest): it reads the tool's documentation and
 // runs nothing over the tree, and a guard funnels a capability rather than removing one.
 func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
@@ -1272,8 +1276,9 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	var best *toolCandidate
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
+			op, _ := spell.Op(operation)
 			// Installs are advised, never denied: see installAdvised.
-			if op, ok := spell.Op(operation); ok && op.Kind == spells.OpKindInstall {
+			if op.Kind == spells.OpKindInstall || !carriesModeArgs(op.ModeArgs, c.Args) {
 				continue
 			}
 			for _, charms := range [][]string{nil, {"rw"}} {
@@ -1302,6 +1307,20 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 		return toolMatch{}, false
 	}
 	return best.match, true
+}
+
+// carriesModeArgs reports whether args carry every one of want ahead of the first operand.
+// Past the operand an arg belongs to the script: `node app.mjs --test` runs app.mjs.
+func carriesModeArgs(want, args []string) bool {
+	for _, w := range want {
+		i := slices.Index(args, w)
+		if i < 0 || slices.ContainsFunc(args[:i], func(a string) bool {
+			return a == "--" || !strings.HasPrefix(a, "-") && !slices.Contains(want, a)
+		}) {
+			return false
+		}
+	}
+	return true
 }
 
 // toolCandidate is one operation whose rendering matched, with how close it came.

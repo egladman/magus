@@ -438,6 +438,9 @@ func Decode(src obj) (spells.Descriptor, error) {
 			m.DocOps = docOps
 		}
 	}
+	if err := decodeModeArgs(&m, src); err != nil {
+		return spells.Descriptor{}, err
+	}
 	// An AUTHORED op under the reserved name is refused, whether or not the spell also
 	// declares an indexer. magus owns the name (it registers the declared indexer under
 	// it), so the op would collide; and before mgs_getSymbolIndexer existed, declaring
@@ -468,6 +471,38 @@ func Decode(src obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, err
 	}
 	return m, nil
+}
+
+// decodeModeArgs reads mgs_getModeArgs onto the ops it names. Each arg must be in the op's
+// own argv: the raw-tool guard denies only invocations carrying all of them, and one magus
+// never renders would leave the op's own spelling allowed.
+func decodeModeArgs(m *spells.Descriptor, src obj) error {
+	modes, ok := src.Obj("mode_args")
+	if !ok {
+		return nil
+	}
+	for _, key := range modes.Keys() {
+		args, err := modes.Strs(key)
+		if err != nil {
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %w", m.Name, key, err)
+		}
+		name := types.Normalize(key)
+		op, ok := m.Ops[name]
+		if !ok {
+			return fmt.Errorf("spell %q mgs_getModeArgs names op %q, which the spell does not declare", m.Name, key)
+		}
+		if len(args) == 0 {
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args; drop the entry", m.Name, key)
+		}
+		for _, a := range args {
+			if !slices.Contains(op.Args, a) {
+				return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %q is not in the op's args %q", m.Name, key, a, op.Args)
+			}
+		}
+		op.ModeArgs = args
+		m.Ops[name] = op
+	}
+	return nil
 }
 
 // validEnvName reports whether s is usable as an environment variable name:

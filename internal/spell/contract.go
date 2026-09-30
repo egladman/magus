@@ -69,5 +69,6 @@ var OptionalContract = []contractEntry{
 	{Name: "mgs_getSymbolIndexer", Field: "symbol_indexer"},
 	{Name: "mgs_getSandbox", Field: "sandbox"},
 	{Name: "mgs_isOpaque", Field: "opaque"},
+	{Name: "mgs_getModeArgs", Field: "mode_args"},
 	{Name: "mgs_listTargets", Field: "ops"},
 }

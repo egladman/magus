@@ -322,6 +322,11 @@ fun nodeTest(target: Target) > Command {
                    defaultArgs = ["--test-reporter-destination=coverage.lcov"],
                    hints = PACKAGE_MANAGER_HINTS};
 }
+// mgs_getModeArgs: node also runs scripts, evals and a REPL, so only a node carrying
+// --test is node-test.
+export fun mgs_getModeArgs() > {str: [str]} {
+    return {"node-test": ["--test"]};
+}
 // dev-server runs the server command the caller names, through pnpm exec so the project's
 // own binary wins: typescript["dev-server"](ctx, {"args": ["vite"]}). The manifest says what
 // the package is and the magusfile how it runs, so the package.json dev script is not read.

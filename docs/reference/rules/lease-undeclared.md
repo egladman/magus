@@ -1,16 +1,16 @@
 ---
-title: "lease-undeclared: a call graded under a well-formed lease id the job store has no row for"
-description: "A deny rule: it refuses a call graded under a well-formed lease id the job store has no row for, and names what to run instead."
+title: "lease-undeclared: a call graded under a lease id the job store has no row for, or a binding it tombstoned"
+description: "A deny rule: it refuses a call graded under a lease id the job store has no row for, or a binding it tombstoned, and names what to run instead."
 tags: [guard, rules, lease-undeclared, deny]
 ---
 
 # lease-undeclared
 
-A deny rule: it refuses a call graded under a well-formed lease id the job store has no row for, and names what to run instead.
+A deny rule: it refuses a call graded under a lease id the job store has no row for, or a binding it tombstoned, and names what to run instead.
 
 ## What it catches
 
-A call graded under a well-formed lease id the job store has no row for.
+A call graded under a lease id the job store has no row for, or a binding it tombstoned.
 
 ## Seeing it
 

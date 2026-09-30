@@ -35,7 +35,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                             |
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                   |
 | [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                  |
-| [lease-undeclared](lease-undeclared.md)           | a call graded under a well-formed lease id the job store has no row for                           |
+| [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned           |
 | [lease-vcs](lease-vcs.md)                         | a worker lease committing, pushing, stashing or reverting the tree it is landed from              |
 | [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns        |
 | [magus-timeout](magus-timeout.md)                 | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside            |

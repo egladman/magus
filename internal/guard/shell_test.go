@@ -999,6 +999,40 @@ func TestRawToolPassesAGofmtListing(t *testing.T) {
 	}
 }
 
+// TestRawToolReadsModeArgs: node has no subcommand and many uses, so its node-test op
+// declares --test as what selects it. Only a node carrying --test ahead of its script is
+// refused; single-purpose checks, which declare none, stay refused in every spelling.
+func TestRawToolReadsModeArgs(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{command: `node -e "console.log(1)"`},
+		{command: "node script.mjs"},
+		{command: "node --enable-source-maps dist/cli.js"},
+		{command: "node app.mjs --test"},
+		{command: "node -- --test"},
+
+		{command: "node --test", denied: true},
+		{command: "node --test src/a.test.mjs", denied: true},
+		{command: "node --enable-source-maps --test --test-reporter=spec", denied: true},
+		{command: "govulncheck ./...", denied: true},
+		{command: "govulncheck -json ./...", denied: true},
+		{command: "shellcheck scripts/release.sh", denied: true},
+		{command: "shellcheck -x scripts/release.sh", denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleRawTool, v.Rule.Name, tc.command)
+	}
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "node", Args: []string{"--test", "a.test.mjs"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: "typescript", operation: "node-test"}, match)
+}
+
 func TestGuardAdversarial(t *testing.T) {
 	denied := []struct{ name, command string }{
 		// Wrapper smuggling, the observed failure mode.

@@ -307,6 +307,10 @@ type Op struct {
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.
 	Install *InstallSpec `json:"install,omitempty"`
+	// ModeArgs are the args, from the spell's mgs_getModeArgs, that tell this op apart
+	// from the other uses of a program with no subcommand: node runs scripts and evals
+	// too, and only --test is node-test. Nil means every use of the program is this op.
+	ModeArgs []string `json:"mode_args,omitempty"`
 	// Doc is the handler function's documentation comment (see buzz Chunk.Doc),
 	// surfaced by `magus describe` and enforced by `magus doctor` for local Buzz
 	// spells. Empty for command built-ins (their Doc is not serialized in bytecode).

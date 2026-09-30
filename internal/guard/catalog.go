@@ -271,7 +271,7 @@ var denyRuleDocs = []RuleDoc{
 	{Name: string(denyRuleLeaseGate), Decision: "deny", Catches: "a leased worker running the gate instead of the check it was assigned"},
 	{Name: string(denyRuleLeaseHarness), Decision: "deny", Catches: "a leased worker rewriting the harness skill trees that steer it"},
 	{Name: string(denyRuleLeaseRebind), Decision: "deny", Catches: "a leased worker rewriting who it is or what its own job row says"},
-	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a well-formed lease id the job store has no row for"},
+	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned"},
 	{Name: string(denyRuleLeaseVCS), Decision: "deny", Catches: "a worker lease committing, pushing, stashing or reverting the tree it is landed from"},
 	{Name: string(denyRuleLeaseWrite), Decision: "deny",
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
