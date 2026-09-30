@@ -106,8 +106,12 @@ func TestDiffHandler_ErrorReturns500(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
 	}
-	if body := w.Body.String(); body != "diff failed\n" {
-		t.Errorf("want only what failed, got %q", body)
+	body := w.Body.String()
+	if !strings.Contains(body, `"reason":"MGS9027"`) || !strings.Contains(body, "diff failed") {
+		t.Errorf("want the internal-failure reason naming what failed, got %q", body)
+	}
+	if strings.Contains(body, "/Users/dev") {
+		t.Errorf("the body names the server's path: %q", body)
 	}
 }
 
@@ -117,6 +121,9 @@ func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("want 503, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9026"`) {
+		t.Errorf("want the workspace-not-wired reason, got %q", w.Body.String())
 	}
 }
 
@@ -174,6 +181,9 @@ func TestContextHandler_RejectsPathEscape(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("path %q: want 400, got %d", path, w.Code)
 		}
+		if !strings.Contains(w.Body.String(), `"reason":"MGS9023"`) {
+			t.Fatalf("path %q: want the invalid-request reason, got %q", path, w.Body.String())
+		}
 	}
 }
 
@@ -190,6 +200,9 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(src.patch)+"&start=1&end=1", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9024"`) {
+		t.Fatalf("want the resource-not-found reason, got %q", w.Body.String())
 	}
 }
 
@@ -215,6 +228,9 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 	if stale.Code != http.StatusConflict {
 		t.Fatalf("stale snapshot: want 409, got %d", stale.Code)
 	}
+	if !strings.Contains(stale.Body.String(), `"reason":"MGS9025"`) {
+		t.Fatalf("stale snapshot: want the state-conflict reason, got %q", stale.Body.String())
+	}
 
 	for _, tc := range []struct {
 		name string
@@ -231,6 +247,9 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 		if w.Code != tc.want {
 			t.Fatalf("%s: want %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
 		}
+		if !strings.Contains(w.Body.String(), `"reason":"MGS9023"`) {
+			t.Fatalf("%s: want the invalid-request reason, got %q", tc.name, w.Body.String())
+		}
 	}
 }
 
@@ -243,6 +262,9 @@ func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 	h.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/diff/session", nil))
 	if missing.Code != http.StatusConflict {
 		t.Fatalf("missing session: want 409, got %d", missing.Code)
+	}
+	if !strings.Contains(missing.Body.String(), `"reason":"MGS9025"`) {
+		t.Fatalf("missing session: want the state-conflict reason, got %q", missing.Body.String())
 	}
 
 	want := store.Attach(root, "main", types.Diff{Base: "main"}, "snapshot-a")
@@ -286,6 +308,9 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "no review provider wired") {
 		t.Fatalf("the reason must travel, got %q", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9029"`) {
+		t.Fatalf("want the review-host-failed reason, got %q", w.Body.String())
 	}
 
 	// NOTHING may be marked published by a send that did not happen. A draft marked on a

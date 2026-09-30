@@ -164,6 +164,7 @@ func TestGraph_BadParams_Return400(t *testing.T) {
 	for _, target := range []string{"/api/v1/graph?flavor=bogus", "/api/v1/graph?level=all", "/api/v1/graph?flavor=targets&level=projects"} {
 		w := get(t, h, target)
 		assert.Equalf(t, http.StatusBadRequest, w.Code, "target %s", target)
+		assert.Containsf(t, w.Body.String(), `"reason":"MGS9023"`, "target %s", target)
 	}
 }
 
@@ -197,6 +198,8 @@ func TestGraph_BuildError_Returns500(t *testing.T) {
 	for _, target := range []string{"/api/v1/graph", "/api/v1/graph?flavor=targets"} {
 		w := get(t, h, target)
 		assert.Equalf(t, http.StatusInternalServerError, w.Code, "target %s", target)
+		assert.Containsf(t, w.Body.String(), `"reason":"MGS9027"`, "target %s", target)
+		assert.NotContainsf(t, w.Body.String(), "boom", "target %s: the cause stays in the log", target)
 	}
 }
 

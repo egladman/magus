@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -56,12 +57,20 @@ func LimitRequestBody(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxWireBodyBytes)
 }
 
+// Refuse answers r with e in AIP-193's JSON shape, the one error format every /api/ route
+// speaks. Its status comes from e, so a caller keeping a legacy status sets e.HTTPStatus.
+func Refuse(w http.ResponseWriter, r *http.Request, e rpcerr.Error) {
+	rpcerr.FormatJSON.Write(w, r, e)
+}
+
 // WriteJSON marshals v and writes it as an uncached JSON body, matching the read handlers'
-// no-store posture: these reads reflect live server state.
-func WriteJSON(w http.ResponseWriter, v any) {
+// no-store posture: these reads reflect live server state. A value that will not marshal is
+// answered as an internal failure, with the cause logged and not sent.
+func WriteJSON(w http.ResponseWriter, r *http.Request, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		http.Error(w, "marshal error: "+err.Error(), http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "response marshal failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
+		Refuse(w, r, rpcerr.Internal("response"))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

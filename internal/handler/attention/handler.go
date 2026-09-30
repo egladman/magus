@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -89,7 +90,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
-		h.list(w)
+		h.list(w, r)
 	case http.MethodPost:
 		h.dispose(w, r)
 	default:
@@ -97,33 +98,33 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) list(w http.ResponseWriter) {
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	dir, err := sessions.Dir(h.root)
 	if err != nil {
-		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "attention", err)
 		return
 	}
 	fold, err := sessions.ReadAll(dir)
 	if err != nil {
-		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "attention", err)
 		return
 	}
 	// A repository nobody has raised a block in serves "requests":[] rather than null: an
 	// empty queue is the GOOD state and the surface renders a list either way. AttentionQueue
 	// already returns an empty slice rather than a nil one, so this needs no normalizing.
-	handler.WriteJSON(w, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
+	handler.WriteJSON(w, r, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
 }
 
 func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	handler.LimitRequestBody(w, r)
 	var body disposeRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"id\": ..., \"reason\": ...}: "+err.Error()))
 		return
 	}
 	dir, err := sessions.Dir(h.root)
 	if err != nil {
-		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "attention", err)
 		return
 	}
 
@@ -133,14 +134,14 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		Version:   h.version,
 	})
 	if err != nil {
-		disposeStatus(w, err, body.ID)
+		h.refuseDispose(w, r, err, body.ID)
 		return
 	}
 	h.recordDisposition(r.Context(), req)
 	// The disposed request as the store now reads it, matching what `magus session dispose
 	// -o json` prints. The caller re-reads the queue on its next poll; answering with the row
 	// that closed lets it say WHICH one closed without waiting for that.
-	handler.WriteJSON(w, req)
+	handler.WriteJSON(w, r, req)
 }
 
 // recordDisposition records how long the closed request waited, from raised to disposed.
@@ -160,23 +161,23 @@ func (h *Handler) recordDisposition(ctx context.Context, req sessions.AttentionR
 	h.tel.RecordAttentionDisposition(ctx, float64(req.DisposedMs-req.OpenedMs)/1000, sev.String())
 }
 
-// disposeStatus maps a refusal from sessions.DisposeRequest onto the status a client can act
+// refuseDispose maps a refusal from sessions.DisposeRequest onto the status a client can act
 // on. Each one is a different thing to do next, which is why they are not one 400: an id that
 // matches nothing is gone (404), an id that matches several needs more characters (400), and
 // one that is already closed is a state the caller has to re-read rather than retry (409).
-func disposeStatus(w http.ResponseWriter, err error, ref string) {
+func (h *Handler) refuseDispose(w http.ResponseWriter, r *http.Request, err error, ref string) {
 	var (
 		ambiguous *sessions.AmbiguousRequestError
 		disposed  *sessions.DisposedError
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		http.Error(w, "no attention request matches "+ref, http.StatusNotFound)
+		handler.Refuse(w, r, rpcerr.NotFound("no attention request matches "+ref))
 	case errors.As(err, &ambiguous):
-		http.Error(w, ambiguous.Error(), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid(ambiguous.Error()))
 	case errors.As(err, &disposed):
-		http.Error(w, disposed.Error(), http.StatusConflict)
+		handler.Refuse(w, r, rpcerr.Conflict(disposed.Error()))
 	default:
-		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "attention", err)
 	}
 }

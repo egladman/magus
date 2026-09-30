@@ -229,7 +229,9 @@ func TestDiagramRendersTargets(t *testing.T) {
 	}, out.Nodes)
 
 	assert.Equal(t, http.StatusNotFound, get(t, chainWorkspace(), "/api/v1/diagrams/targets:nope").Code)
-	assert.Equal(t, http.StatusNotFound, get(t, chainWorkspace(), "/api/v1/diagrams/nope").Code)
+	unknown := get(t, chainWorkspace(), "/api/v1/diagrams/nope")
+	assert.Equal(t, http.StatusNotFound, unknown.Code)
+	assert.Contains(t, unknown.Body.String(), `"reason":"MGS9024"`)
 }
 
 func TestDiagramFocusAndDepthCutTheFigure(t *testing.T) {
@@ -250,7 +252,9 @@ func TestDiagramFocusAndDepthCutTheFigure(t *testing.T) {
 		"/api/v1/diagrams/projects?focus=nowhere",
 		"/api/v1/diagrams/projects?scope=tools&focus=app",
 	} {
-		assert.Equal(t, http.StatusBadRequest, get(t, chainWorkspace(), target).Code, target)
+		w := get(t, chainWorkspace(), target)
+		assert.Equal(t, http.StatusBadRequest, w.Code, target)
+		assert.Contains(t, w.Body.String(), `"reason":"MGS9023"`, target)
 	}
 }
 
@@ -263,6 +267,7 @@ func TestDiagramOverBudgetIs422NamingTheFix(t *testing.T) {
 	}
 	w := get(t, ws, "/api/v1/diagrams/projects")
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), `"reason":"MGS9023"`)
 	assert.Contains(t, w.Body.String(), "10 nodes exceeds the budget of 9")
 	assert.Contains(t, w.Body.String(), "split into overview plus detail")
 
@@ -273,6 +278,7 @@ func TestDiagramOverBudgetIs422NamingTheFix(t *testing.T) {
 func TestDiagramImportsRefuseWithoutAnIndex(t *testing.T) {
 	w := get(t, chainWorkspace(), "/api/v1/diagrams/imports")
 	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), `"reason":"MGS9025"`)
 	assert.Contains(t, w.Body.String(), "magus graph build")
 
 	ws := chainWorkspace()

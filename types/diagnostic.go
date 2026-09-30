@@ -632,6 +632,30 @@ const (
 	// SocketPeerNotOwner is a connection to the server's MCP unix socket from a process whose
 	// uid is not the server's, or whose uid the kernel did not report, answered 403.
 	SocketPeerNotOwner DiagnosticCode = "MGS9022"
+	// RequestInvalid is a request to an /api/ route that the route cannot act on: a body that
+	// does not parse, a missing or malformed parameter, a name it does not know, a file it
+	// will not serve. Answered 400, or 413 and 422 where those name the refusal better.
+	RequestInvalid DiagnosticCode = "MGS9023"
+	// ResourceNotFound is a request naming a thing the server holds no record of: an
+	// attention request, a figure, a path outside the reviewed patch. Answered 404.
+	ResourceNotFound DiagnosticCode = "MGS9024"
+	// StateConflict is a well-formed request that contradicts the state it addresses: a
+	// request already closed, a snapshot gone stale, a session not yet attached. Re-reading
+	// the state is the fix, not retrying. Answered 409.
+	StateConflict DiagnosticCode = "MGS9025"
+	// WorkspaceNotWired is a route that needs a workspace, served by a process started
+	// without one. It never resolves by waiting; WorkspaceStillLoading is the transient one.
+	// Answered 503.
+	WorkspaceNotWired DiagnosticCode = "MGS9026"
+	// InternalFailure is the server failing to read its own state or build an answer. The
+	// body names what failed and never the cause; the server log carries that. Answered 500.
+	InternalFailure DiagnosticCode = "MGS9027"
+	// StreamingUnsupported is an event stream asked of a response writer that cannot flush,
+	// such as one wrapped by middleware that buffers. Answered 500.
+	StreamingUnsupported DiagnosticCode = "MGS9028"
+	// ReviewHostFailed is a publish or reply the code-review host refused or could not
+	// receive, so nothing reached the reviewer. Answered 502.
+	ReviewHostFailed DiagnosticCode = "MGS9029"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -705,6 +729,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
 	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
+	RequestInvalid, ResourceNotFound, StateConflict, WorkspaceNotWired, InternalFailure,
+	StreamingUnsupported, ReviewHostFailed,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

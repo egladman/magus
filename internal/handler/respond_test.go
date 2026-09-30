@@ -26,3 +26,15 @@ func TestAllowGetRefusesInTheAIPShape(t *testing.T) {
 
 	assert.True(t, AllowGet(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil)))
 }
+
+// A value that will not marshal is an internal failure: the body names the step and not the
+// json error.
+func TestWriteJSONAnswersAMarshalFailureAsInternal(t *testing.T) {
+	t.Parallel()
+	rr := httptest.NewRecorder()
+	WriteJSON(rr, httptest.NewRequest(http.MethodGet, "/api/v1/x", nil), make(chan int))
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Contains(t, rr.Body.String(), `"reason":"MGS9027"`)
+	assert.Contains(t, rr.Body.String(), "response failed")
+}

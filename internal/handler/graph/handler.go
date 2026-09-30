@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/httpx"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -65,21 +66,21 @@ func (h *GraphHandler) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if set > 1 {
-		http.Error(w, "at most one of flavor, level, select may be specified", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("at most one of flavor, level, select may be specified"))
 		return
 	}
 	if flavor != "" && flavor != "targets" {
-		http.Error(w, "flavor must be 'targets' or empty", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("flavor must be 'targets' or empty"))
 		return
 	}
 	if level != "" && level != "projects" {
-		http.Error(w, "level must be 'projects' or empty", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("level must be 'projects' or empty"))
 		return
 	}
 
 	body, err := h.body(r.Context(), flavor, level, sel)
 	if err != nil {
-		http.Error(w, "graph build error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "graph build", err)
 		return
 	}
 

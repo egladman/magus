@@ -202,6 +202,9 @@ func TestAttentionHandler_AmbiguousPrefixIsRefused(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "att-") {
 		t.Errorf("want the candidates named, got %s", w.Body.String())
 	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9023"`) {
+		t.Errorf("want the invalid-request reason, got %s", w.Body.String())
+	}
 	if _, out := getQueue(t, h); len(out.Requests) != 2 {
 		t.Errorf("want both requests still open after a refused disposal, got %+v", out.Requests)
 	}
@@ -211,8 +214,12 @@ func TestAttentionHandler_UnknownIDReturns404(t *testing.T) {
 	root, _ := plantStore(t)
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	if w := postDispose(t, h, `{"id":"att-000000000000"}`); w.Code != http.StatusNotFound {
+	w := postDispose(t, h, `{"id":"att-000000000000"}`)
+	if w.Code != http.StatusNotFound {
 		t.Errorf("want 404 for an id that names nothing, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9024"`) {
+		t.Errorf("want the resource-not-found reason, got %s", w.Body.String())
 	}
 }
 
@@ -229,6 +236,9 @@ func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 	w := postDispose(t, h, `{"id":"`+id+`"}`)
 	if w.Code != http.StatusConflict {
 		t.Errorf("want 409, got %d; body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9025"`) {
+		t.Errorf("want the state-conflict reason, got %s", w.Body.String())
 	}
 }
 
@@ -282,8 +292,12 @@ func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 	root, _ := plantStore(t)
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	if w := postDispose(t, h, `{`); w.Code != http.StatusBadRequest {
+	w := postDispose(t, h, `{`)
+	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9023"`) {
+		t.Errorf("want the invalid-request reason, got %s", w.Body.String())
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/rpcerr"
 )
 
 // liveGrace is how long the server keeps accepting connections after the run finishes,
@@ -81,7 +82,7 @@ func (ls *LiveServer) Stop(ctx context.Context) {
 func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		rpcerr.FormatJSON.Write(w, r, rpcerr.StreamingUnsupported())
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")

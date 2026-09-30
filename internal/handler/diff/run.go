@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -107,16 +108,16 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 			Target:  strings.TrimSpace(r.URL.Query().Get("target")),
 			Project: strings.TrimSpace(r.URL.Query().Get("project")),
 		}
-		h.answer(r.Context(), w, req, false)
+		h.answer(w, r, req, false)
 	case http.MethodPost:
 		handler.LimitRequestBody(w, r)
 		var req diffRunRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "malformed request", http.StatusBadRequest)
+			handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"target\": ..., \"project\": ...}"))
 			return
 		}
 		req.Target, req.Project = strings.TrimSpace(req.Target), strings.TrimSpace(req.Project)
-		h.answer(r.Context(), w, req, true)
+		h.answer(w, r, req, true)
 	default:
 		handler.RefuseMethod(w, r, http.MethodGet, http.MethodPost)
 	}
@@ -125,10 +126,11 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 // answer reports the state of req's target, submitting it first when start is set. Both verbs
 // share it because a submit's useful reply IS the poll's reply: the surface renders one shape
 // whether it just started the run or is watching one somebody else did.
-func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diffRunRequest, start bool) {
+func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunRequest, start bool) {
+	ctx := r.Context()
 	out := diffRunResponse{Target: req.Target, Project: req.Project, State: "unknown"}
 	if req.Target == "" || req.Project == "" {
-		http.Error(w, "target and project are required", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("target and project are required"))
 		return
 	}
 	var declared []string
@@ -138,7 +140,7 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 	if !slices.Contains(declared, req.Target) {
 		out.Undeclared = req.Project + " declares no target named " + req.Target
 		out.Available = declared
-		handler.WriteJSON(w, out)
+		handler.WriteJSON(w, r, out)
 		return
 	}
 
@@ -148,14 +150,14 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 		if err := h.submit(ctx, argv); err != nil {
 			out.State = "failed"
 			out.Error = err.Error()
-			handler.WriteJSON(w, out)
+			handler.WriteJSON(w, r, out)
 			return
 		}
 		out.Started, running = true, true
 	}
 	if running {
 		out.State = "running"
-		handler.WriteJSON(w, out)
+		handler.WriteJSON(w, r, out)
 		return
 	}
 	// Not in flight, so the trail holds whatever the last run of this exact target decided.
@@ -173,7 +175,7 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 		out.FinishedMs = ev.Ts + ev.DurationMs
 		out.DurationMs = ev.DurationMs
 	}
-	handler.WriteJSON(w, out)
+	handler.WriteJSON(w, r, out)
 }
 
 // submit hands argv to the server's own proc socket, the same self-dial the JobService uses, so

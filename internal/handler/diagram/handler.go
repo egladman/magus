@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -103,22 +104,22 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	out = append(out, Entry{ID: KindImports, Kind: KindImports, Title: "Package imports", Indexed: &idx.Indexed})
-	handler.WriteJSON(w, map[string][]Entry{"diagrams": out})
+	handler.WriteJSON(w, r, map[string][]Entry{"diagrams": out})
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	lens, err := parseLens(id, r.URL.Query())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid(err.Error()))
 		return
 	}
 	g, err := h.graph(r.Context(), lens)
 	switch {
 	case errors.Is(err, ErrNotIndexed):
-		http.Error(w, err.Error(), http.StatusConflict)
+		handler.Refuse(w, r, rpcerr.Conflict(err.Error()))
 		return
 	case errors.Is(err, errUnknownFigure):
-		http.NotFound(w, r)
+		handler.Refuse(w, r, rpcerr.NotFound("no figure named "+id))
 		return
 	case err != nil:
 		h.Fail(w, r, "figure source", err)
@@ -126,7 +127,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	g, err = g.cut(lens)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid(err.Error()))
 		return
 	}
 	sourceURL := h.sourceURL(r.Context())
@@ -136,7 +137,9 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	})
 	var findings *FindingsError
 	if errors.As(err, &findings) {
-		http.Error(w, findings.Findings, http.StatusUnprocessableEntity)
+		refusal := rpcerr.Invalid(findings.Findings)
+		refusal.HTTPStatus = http.StatusUnprocessableEntity
+		handler.Refuse(w, r, refusal)
 		return
 	}
 	if err != nil {
@@ -147,7 +150,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	if nodes == nil {
 		nodes = []Node{}
 	}
-	handler.WriteJSON(w, Rendered{
+	handler.WriteJSON(w, r, Rendered{
 		ID:        id,
 		Title:     fig.Title,
 		SVG:       fig.SVG,

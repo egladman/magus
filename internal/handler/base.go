@@ -3,6 +3,8 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+
+	"github.com/egladman/magus/internal/rpcerr"
 )
 
 // Base is the embedded core of every HTTP route handler: the http.Handler that
@@ -19,7 +21,7 @@ type Base struct {
 // can carry the server's absolute paths, so it goes to the log and never to the client.
 func (b Base) Fail(w http.ResponseWriter, r *http.Request, what string, err error) {
 	b.Log.ErrorContext(r.Context(), what+" failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
-	http.Error(w, what+" failed", http.StatusInternalServerError)
+	Refuse(w, r, rpcerr.Internal(what))
 }
 
 // New builds a Base wrapping serve, defaulting Log to slog.Default() when nil.
