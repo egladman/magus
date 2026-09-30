@@ -3,18 +3,25 @@
 // The figure has one claim: every source lands in a shard of its own, and every reader
 // asks the one merged graph the same four verbs. The accent is that graph.
 //
-// The adapters are files of one Go package, so the connectors between them claim flow:
-// an import graph cannot see a call inside a package. The two readers' connectors are
-// real imports and claim so. Five small file adapters share one box; each writes its own
-// @ shard, which the box's sub names.
+// The adapters are files of internal/graph/knowledge, so they are actors writing into the
+// package that stores and merges their shards. The readers' connectors are real imports:
+// the CLI and the MCP tools both reach the graph through the root package's verbs.
 namespace knowledgeGraph;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/knowledge-graph" as knowledgeGraphGen;
+import "magus";
+import "magus/figure";
 
-export fun knowledgeGraphDiagram() > Diagram !> str {
-    return flow("knowledge-graph", observed: knowledgeGraphGen\knowledgeGraphObserved())
+export fun knowledgeGraphFigure() > figure\Figure !> any {
+    final graph = magus\dir("internal/graph/knowledge");
+    final verbs = magus\dir(".");
+    final cli = magus\dir("cmd/magus");
+    final mcp = magus\dir("internal/handler/mcp");
+    final core = figure\external("Magusfiles + registry", sub: "@registry, one per project", look: figure\Look.plain);
+    final files = figure\external("File adapters", sub: "buzz, docs, dirs, links, owners", look: figure\Look.plain);
+    final symbols = figure\external("Symbols", sub: "SCIP index, lazy shards", look: figure\Look.input);
+    final vcs = figure\external("History", sub: "@vcs, from git", look: figure\Look.plain);
+    final notes = figure\external("Notes", sub: "@notes shared + private", look: figure\Look.plain);
+    return figure\of("knowledge-graph")
         .eyebrow("knowledge graph")
         .title("Every source writes a shard; every reader asks one graph")
         .desc("magus graph build assembles a shard per source: the registry and one per "
@@ -23,32 +30,25 @@ export fun knowledgeGraphDiagram() > Diagram !> str {
             + "git history and notes. The store fingerprints each shard and rewrites only "
             + "the ones whose content changed, then merges them into one graph. The CLI and "
             + "the MCP tools read that graph through the same query, explain, refs and path.")
-        .node("core", label: "Magusfiles + registry", sub: "@registry, one per project", anchor: "internal/graph/knowledge/assemble.go")
-        .node("files", label: "File adapters", sub: "buzz, docs, dirs, links, owners", anchor: "internal/graph/knowledge/buzz.go")
-        .node("symbols", label: "Symbols", sub: "SCIP index, lazy shards", role: Role.input, anchor: "internal/graph/knowledge/symbols.go")
-        .node("vcs", label: "History", sub: "@vcs, from git", anchor: "internal/graph/knowledge/vcs.go")
-        .node("notes", label: "Notes", sub: "@notes shared + private", anchor: "internal/graph/knowledge/notes.go")
-        .node("store", label: "Shard store", sub: "fingerprint, sync, merge", role: Role.store, anchor: "internal/graph/knowledge/store.go")
-        .node("graph", label: "One graph", sub: "query, explain, refs, path", role: Role.focal, anchor: "internal/graph/knowledge")
-        .node("cli", label: "magus CLI", sub: "text or -o json", tag: "reader", anchor: "cmd/magus")
-        .node("mcp", label: "MCP tools", sub: "magus_query and kin", tag: "reader", anchor: "internal/handler/mcp")
-        .edge("core", dst: "store")
-        .edge("files", dst: "store")
-        .edge("symbols", dst: "store")
-        .edge("vcs", dst: "store")
-        .edge("notes", dst: "store")
-        .edge("store", dst: "graph")
-        .edge("cli", dst: "graph", claim: Claim.imports)
-        .edge("mcp", dst: "graph", claim: Claim.imports)
-        // The readers sit a column past the adapters, so their connectors reach the graph
-        // without crossing the five into the store.
-        .rank(["store", "cli", "mcp"])
-        .zone("a shard per source", members: ["core", "files", "symbols", "vcs", "notes"])
-        .legend(Role.focal, label: "what every reader asks")
-        .legend(Role.input, label: "built by a SCIP indexer")
-        .legend(Role.store, label: "the cache directory")
-        .scope(["internal/graph/**"])
-        .omit("internal/graph/dependency", why: "the project DAG the build runs on; it reaches the graph as types inside the magusfiles box")
-        .omit("internal/graph/url", why: "formats Graph Explorer links a CLI command prints; it adds no node")
-        .diagram();
+        .actor(core)
+        .actor(files)
+        .actor(symbols)
+        .actor(vcs)
+        .actor(notes)
+        .box(graph, label: "One graph", sub: "fingerprint, sync, merge", focal: true)
+        .box(verbs, label: "The four verbs", sub: "query, explain, refs, path")
+        .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
+        .box(mcp, label: "MCP client", sub: "magus\\query and kin", tag: "reader")
+        .edgesFromGraph()
+        .hideEdges(figure\setOf([cli]), dst: figure\setOf([graph, mcp]),
+            why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
+        .flowIn(core, dst: graph)
+        .flowIn(files, dst: graph)
+        .flowIn(symbols, dst: graph)
+        .flowIn(vcs, dst: graph)
+        .flowIn(notes, dst: graph)
+        .zone("a shard per source", actors: [core, files, symbols, vcs, notes])
+        .legend(figure\Look.focal, label: "what every reader asks")
+        .legend(figure\Look.input, label: "built by a SCIP indexer")
+        .scope(figure\setOf([graph]));
 }

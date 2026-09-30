@@ -136,7 +136,7 @@ survives version bumps.
 
 ### Diagram figures (`--magus-diagram-*`)
 
-libs/diagram paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
+magus/figure paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
 the end of `tokens.css` maps all nine roles (paper, surface, ink, muted, soft, rule, accent,
 accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
 with no per-theme copy. `diagrams/view-dom.test.ts` fails if a role goes missing.

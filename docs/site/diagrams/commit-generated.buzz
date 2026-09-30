@@ -1,37 +1,42 @@
-// site/diagrams/commit-generated.buzz - whether a generated file belongs in the repo.
+// site/diagrams/commit-generated.buzz: whether a generated file belongs in the repo.
 // Four questions, two outcomes. The accent sits on "commit it" because that is the answer
 // that costs something later: a committed artifact needs a drift gate to stay honest,
 // while a skipped one needs nothing.
 namespace commitGenerated;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
+import "magus/figure";
 
-export fun commitGeneratedDiagram() > Diagram !> str {
-    return flow("commit-generated")
+export fun commitGeneratedFigure() > figure\Figure !> any {
+    final start = figure\external("A target writes a file", look: figure\Look.plain);
+    final pure = figure\external("pure function?", look: figure\Look.decision);
+    final needed = figure\external("build makes it?", look: figure\Look.decision);
+    final read = figure\external("read unbuilt?", look: figure\Look.decision);
+    final churn = figure\external("big or churns?", look: figure\Look.decision);
+    final skip = figure\external("Do not commit", sub: "CI builds it", look: figure\Look.plain);
+    final commit = figure\external("Commit it", sub: "generate is the gate", look: figure\Look.focal);
+    return figure\of("commit-generated")
         .down()
         .eyebrow("cache")
         .title("Whether a generated file belongs in the repo")
         .desc("A generated file is committed only when it is a pure function of committed "
             + "sources, is not already produced by the build, is read by something that "
             + "never runs the build, and is neither large nor churning.")
-        .node("start", label: "A target writes a file")
-        .node("pure", label: "pure function?", role: Role.decision)
-        .node("needed", label: "build makes it?", role: Role.decision)
-        .node("read", label: "read unbuilt?", role: Role.decision)
-        .node("churn", label: "big or churns?", role: Role.decision)
-        .node("skip", label: "Do not commit", sub: "CI builds it")
-        .node("commit", label: "Commit it", sub: "generate is the gate", role: Role.focal)
-        .edge("start", dst: "pure")
-        .edge("pure", dst: "needed", label: "yes")
-        .edge("needed", dst: "read", label: "no")
-        .edge("read", dst: "churn", label: "no")
-        .edge("pure", dst: "skip", label: "no")
-        .edge("needed", dst: "skip", label: "yes")
-        .edge("churn", dst: "skip", label: "yes")
-        .edge("read", dst: "commit", label: "yes")
-        .edge("churn", dst: "commit", label: "no")
-        .legend(Role.focal, label: "needs a drift gate")
-        .unscoped("a decision a person makes, not a Go package")
-        .diagram();
+        .actor(start)
+        .actor(pure)
+        .actor(needed)
+        .actor(read)
+        .actor(churn)
+        .actor(skip)
+        .actor(commit)
+        .flowAcross(start, dst: pure)
+        .flowAcross(pure, dst: needed, label: "yes")
+        .flowAcross(needed, dst: read, label: "no")
+        .flowAcross(read, dst: churn, label: "no")
+        .flowAcross(pure, dst: skip, label: "no")
+        .flowAcross(needed, dst: skip, label: "yes")
+        .flowAcross(churn, dst: skip, label: "yes")
+        .flowAcross(read, dst: commit, label: "yes")
+        .flowAcross(churn, dst: commit, label: "no")
+        .legend(figure\Look.focal, label: "needs a drift gate")
+        .unscoped(why: "a decision a person makes, not a Go package");
 }

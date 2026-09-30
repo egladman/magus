@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-309-g53fe82840-dirty (commit 53fe82840, 2026-09-29T21:35:28-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-310-g8cf75092a (commit 8cf75092a, 2026-09-29T22:06:17-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -77,6 +77,7 @@ coverage/buzz/coverage.txt merge=magus linguist-generated
 dist/** merge=magus linguist-generated
 docs/MAGUS.md merge=magus linguist-generated
 docs/active.urls.lock merge=magus linguist-generated
+docs/assets/gen/diagram-*.json merge=magus linguist-generated
 docs/assets/gen/diagram-*.svg merge=magus linguist-generated
 docs/benchmarks/**/*.md merge=magus linguist-generated
 docs/changelog.md merge=magus linguist-generated
@@ -94,7 +95,6 @@ docs/reference/config.md merge=magus linguist-generated
 docs/reference/manpage/*.md merge=magus linguist-generated
 docs/reference/rules/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
-docs/site/diagrams/gen/*.buzz merge=magus linguist-generated
 docs/src/gen/** merge=magus linguist-generated
 gen/knowledge-graph.json merge=magus linguist-generated
 gen/site/assets/buzz-coverage.svg merge=magus linguist-generated
@@ -119,7 +119,6 @@ libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
-libs/diagram/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/testlayout/MAGUS.md merge=magus linguist-generated

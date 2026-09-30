@@ -418,19 +418,9 @@ fun generateJsBundles() > void !> any {
     proc\exec("pnpm", ["run", "build"], ".", {});
 }
 
-// site_diagrams writes the committed light/dark SVG pair for the magusfile's
-// diagrams-generate target, forwarding to engine/page, which owns the registry import.
-export fun site_diagrams(dir: str) > void !> any {
-    writeDiagramPair(dir);
-}
-
-// site_diagram_drift forwards the diagram-to-code check, for the same reason
-// site_diagrams does: engine/page owns the single import of the registry.
-export fun site_diagram_drift(root: str, sourceGlobs: [str], verifyImports: bool) > [str] !> any {
-    return diagramDrift(root, sourceGlobs: sourceGlobs, verifyImports: verifyImports);
-}
-
-// site_diagrams_observe forwards the diagrams-observe target's write, for the same reason.
-export fun site_diagrams_observe(dir: str, graph: ImportGraph) > [str] !> any {
-    return observeDiagrams(dir, graph: graph);
+// site_figures writes every figure's committed SVGs and receipt for the magusfile's
+// diagrams-generate target and returns the findings, forwarding to engine/page, which owns
+// the registry import.
+export fun site_figures(dir: str) > [str] !> any {
+    return writeFigures(dir);
 }

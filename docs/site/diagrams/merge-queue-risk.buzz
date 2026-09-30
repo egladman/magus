@@ -5,56 +5,54 @@
 // the change back. The accent is on the classifier, the only step that reads what an edit is.
 //
 // The tier table gate sizing builds on the same classes is not drawn: this repository's
-// queue gate is `magus run ci:gha` on the change's projects (tools/gha-queue.buzz), which
-// runs no sizing, and a merge reads the class alone. Apply reaches GitHub through the
-// provider too; its edge is drawn straight to the forge so the loop closes on one box.
+// queue gate is `magus run ci:gha` on the change's projects (hack/ci/merge-queue.buzz), which
+// runs no sizing, and a merge reads the class alone. The gate is that Buzz script and the
+// verdict a value the queue applies, so both are actors, as is the decision.
 namespace mergeQueueRisk;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/merge-queue-risk" as mergeQueueRiskGen;
+import "magus";
+import "magus/figure";
 
-export fun mergeQueueRiskDiagram() > Diagram !> str {
-    return flow("merge-queue-risk", observed: mergeQueueRiskGen\mergeQueueRiskObserved())
+export fun mergeQueueRiskFigure() > figure\Figure !> any {
+    final provider = magus\dir("internal/queue/provider");
+    final queueDir = magus\dir("internal/queue");
+    final sdk = magus\dir(".");
+    final risk = magus\dir("internal/risk");
+    final nested: [magus\Dir] = magus\dirs("internal/queue/*");
+    final queue = figure\setOf(nested + [queueDir]).without([provider]);
+    final github = figure\external("GitHub", sub: "auto-merge or a label");
+    final low = figure\external("low risk?", look: figure\Look.decision);
+    final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
+    final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
+    return figure\of("merge-queue-risk")
         .down()
         .eyebrow("merge queue")
         .title("What a candidate's risk makes the queue run")
         .desc("For a conflicted file the queue asks the classifier which class the edit is "
             + "and settles only a low-risk one, kicking code back, then gates the projects "
             + "the magus SDK says the change reaches, or every project when that set is no proof.")
-        .node("github", label: "GitHub", sub: "auto-merge or a label", role: Role.external)
-        .node("provider", label: "Forge provider", sub: "github.buzz on a Buzz VM", anchor: "internal/queue/provider")
-        .node("queue", label: "Queue engine", sub: "plan, validate, apply", anchor: "internal/queue")
-        .node("sdk", label: "magus SDK", sub: "asked via queue/client", anchor: "magus.go")
-        .node("risk", label: "Classify each path", sub: "generated, prose, comment, code", role: Role.focal, anchor: "internal/risk")
-        .node("low", label: "low risk?", role: Role.decision)
-        .node("gate", label: "Gate the projects", sub: "every one when unbounded", anchor: "tools/gha-queue.buzz")
-        .node("verdict", label: "Verdict", sub: "green, red or kicked back", anchor: "internal/queue/verdicts.go")
-        .edge("github", dst: "provider", label: "merge intent", claim: Claim.calls)
-        .edge("provider", dst: "queue", label: "changes")
-        .edge("queue", dst: "risk", label: "a conflict")
-        .edge("queue", dst: "gate", label: "no conflict")
-        .edge("sdk", dst: "risk", claim: Claim.imports)
-        .edge("sdk", dst: "gate", label: "its projects")
-        .edge("risk", dst: "low", label: "the class", role: EdgeRole.focal)
-        .edge("low", dst: "gate", label: "yes: settled")
-        .edge("low", dst: "verdict", label: "no: kick back")
-        .edge("gate", dst: "verdict", label: "exit status")
-        .edge("verdict", dst: "github", label: "apply", claim: Claim.calls)
-        // The queue's own spine in one column, so the workspace's answers enter it from beside.
-        .row(["github", "provider", "queue", "low", "gate"])
-        .zone("the workspace", members: ["sdk", "risk"])
-        .legend(Role.focal, label: "reads what an edit is")
-        .legend(Role.external, label: "outside magus")
-        .legend(Role.decision, label: "the queue decides")
-        .scope(["internal/risk/**", "internal/ci/**", "internal/queue/**"])
-        .omit("internal/risk/golang", why: "the Go prover places code for gate sizing tiers; a merge reads the class alone")
-        .omit("internal/ci", why: "the shard packer the SDK's Plan runs; the queue keeps only the affected list, computed before packing")
-        .omit("internal/ci/annotate", why: "CI log folds and notices; it decides nothing")
-        .omit("internal/ci/forecast", why: "runtime history that sizes shards and memory claims, not which projects run")
-        .omit("internal/ci/volatility", why: "retries a failing target inside a run; it decides whether a red is believed, not what runs")
-        .omit("internal/queue/client", why: "the build-facts adapter over the SDK, drawn as the queue -> SDK edge")
-        .omit("internal/queue/types", why: "the documents and interfaces every step shares; drawn, every box would import it")
-        .omit("internal/queue/types/gen/mocks", why: "generated test doubles")
-        .diagram();
+        .actor(github)
+        .box(provider, label: "Forge provider", sub: "github.buzz on a Buzz VM")
+        .group(queue, label: "Queue engine", sub: "plan, validate, apply")
+        .box(sdk, label: "magus SDK", sub: "asked via queue/client")
+        .box(risk, label: "Classify each path", sub: "generated, prose, comment, code", focal: true)
+        .actor(low)
+        .actor(gate)
+        .actor(verdict)
+        .edgesFromGraph()
+        .markEdge(provider, dst: queueDir, label: "changes")
+        .markEdge(queueDir, dst: sdk, label: "a conflict")
+        .flowIn(github, dst: provider, label: "merge intent")
+        .flowOut(risk, dst: low, label: "the class", stroke: figure\Stroke.focal)
+        .flowOut(queueDir, dst: gate, label: "no conflict")
+        .flowOut(sdk, dst: gate, label: "its projects")
+        .flowAcross(low, dst: gate, label: "yes: settled")
+        .flowAcross(low, dst: verdict, label: "no: kick back")
+        .flowAcross(gate, dst: verdict, label: "exit status")
+        .flowAcross(verdict, dst: github, label: "apply")
+        .zone("the workspace", dirs: figure\setOf([sdk, risk]))
+        .legend(figure\Look.focal, label: "reads what an edit is")
+        .legend(figure\Look.external, label: "outside magus")
+        .legend(figure\Look.decision, label: "the queue decides")
+        .scope(queue.plus([provider, risk]));
 }

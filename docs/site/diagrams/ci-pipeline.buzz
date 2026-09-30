@@ -1,36 +1,30 @@
-// site/diagrams/ci-pipeline.buzz - the steps a ci target composes.
+// site/diagrams/ci-pipeline.buzz: the steps a ci target composes.
 //
 // Drawn as a fan-out, NOT a chain. `ci` is one `ctx.needs(...)` call, so the steps are
 // independent by default and order exists only where a step declares an edge of its own
 // (test depends on build, so build runs first because build says so, not because ci does).
 // An earlier version of this figure drew a six-long sequence, which read as magus owning a
-// fixed pipeline - the exact thing the surrounding page says it does not do.
+// fixed pipeline, the exact thing the surrounding page says it does not do.
 namespace ciPipeline;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
+import "magus/figure";
 
-export fun ciPipelineDiagram() > Diagram !> str {
-    // Left to right: six siblings in one rank would lay out as a single 1480px row.
-    return flow("ci-pipeline")
+export fun ciPipelineFigure() > figure\Figure !> any {
+    final cmd = figure\external("magus affected ci", look: figure\Look.focal);
+    final f = figure\of("ci-pipeline")
         .eyebrow("targets")
         .title("ci declares steps, not an order")
         .desc("A ci target names its steps in a single needs call, so they are independent "
             + "and run in parallel. Order comes from edges the steps themselves declare, "
             + "such as test depending on build. magus enforces none of this list.")
-        .node("cmd", label: "magus affected ci", role: Role.focal)
-        .node("generate")
-        .node("format")
-        .node("lint")
-        .node("build")
-        .node("test")
-        .node("security")
-        .edge("cmd", dst: "generate")
-        .edge("cmd", dst: "build")
-        .edge("cmd", dst: "format")
-        .edge("cmd", dst: "test")
-        .edge("cmd", dst: "lint")
-        .edge("cmd", dst: "security")
-        .unscoped("a magusfile convention, not a package: nothing in the tree to hold it to")
-        .diagram();
+        .actor(cmd)
+        .unscoped(why: "a magusfile convention, not a package: nothing in the tree to hold it to");
+    foreach (step in ["generate", "format", "lint", "build", "test", "security"]) {
+        f.actor(figure\external(step, look: figure\Look.plain));
+    }
+    // An actor is keyed by its name, so these join the boxes declared above.
+    foreach (step in ["generate", "build", "format", "test", "lint", "security"]) {
+        f.flowAcross(cmd, dst: figure\external(step, look: figure\Look.plain));
+    }
+    return f;
 }

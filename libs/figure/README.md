@@ -60,5 +60,4 @@ when handed something that is not a record.
 
 The module takes no host module. Its tests build `Dir`, `Layer` and `RefsResult` records
 as map literals, the shape the host returns, and run with
-`magus run test libs/figure`. The layout and renderer suites came over from
-`libs/diagram` unchanged.
+`magus run test libs/figure`.

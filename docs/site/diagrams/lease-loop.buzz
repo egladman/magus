@@ -1,4 +1,4 @@
-// site/diagrams/lease-loop.buzz - how work is split across several agents and put back
+// site/diagrams/lease-loop.buzz: how work is split across several agents and put back
 // together. The mechanism is a loop that closes: the checkpoint the orchestrator takes at
 // the start is the same one it diffs against at the end, so a lease is verified against what
 // it CLAIMED rather than against whatever the tree looks like later.
@@ -9,16 +9,26 @@
 //
 // The release connector is the one accent. Releasing a path early, so write_paths shrinks
 // while the lease is still held, is the move that makes the plan usable by a reader, and
-// it is the half people skip. It returns to the row the lease was declared in, so it and
-// the closing integrate -> checkpoint leg run against the flow and draw dashed.
+// it is the half people skip.
+//
+// The job store and the diff are packages; the rest are commands the orchestrator runs,
+// people, and a console page, so they are actors.
 namespace leaseLoop;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/lease-loop" as leaseLoopGen;
+import "magus";
+import "magus/figure";
 
-export fun leaseLoopDiagram() > Diagram !> str {
-    return flow("lease-loop", observed: leaseLoopGen\leaseLoopObserved())
+export fun leaseLoopFigure() > figure\Figure !> any {
+    final decl = magus\dir("internal/job");
+    final verify = magus\dir("internal/changeset");
+    final cp = figure\external("magus vcs checkpoint", sub: "revision + dirty digest", look: figure\Look.plain);
+    final part = figure\external("Partition by write set", sub: "refs, explain, affected", look: figure\Look.plain);
+    final work = figure\external("Workers edit", sub: "one write set each");
+    final integrate = figure\external("Integrate", sub: "magus affected ci", look: figure\Look.plain);
+    final plan = figure\external("Plan surface", sub: "/console/plan/, overlaps, stale", look: figure\Look.plain);
+    final human = figure\external("The human", sub: "watches and decides");
+    final doctrine = figure\external("magus records and answers", sub: "it enforces none of it", look: figure\Look.focal);
+    return figure\of("lease-loop")
         .down()
         .eyebrow("lease")
         .title("A declared plan, released early, verified by diff")
@@ -30,28 +40,28 @@ export fun leaseLoopDiagram() > Diagram !> str {
             + "orchestrator verifies each job by diffing since that job's checkpoint "
             + "against what it claimed, then integrates and runs magus affected ci. magus "
             + "records and answers; it enforces none of it.")
-        .node("cp", label: "magus vcs checkpoint", sub: "revision + dirty digest", anchor: "cmd/magus")
-        .node("part", label: "Partition by write set", sub: "refs, explain, affected", anchor: "internal/graph")
-        .node("decl", label: "Declare the plan", sub: "goal, checkpoint, paths", anchor: "internal/job")
-        .node("work", label: "Workers edit", sub: "one write set each", role: Role.external)
-        .node("verify", label: "Verify each lease", sub: "diff since its checkpoint", anchor: "internal/changeset")
-        .node("integrate", label: "Integrate", sub: "magus affected ci", anchor: "cmd/magus")
-        .node("plan", label: "Plan surface", sub: "/console/plan/, overlaps, stale", anchor: "internal/handler/status")
-        .node("human", label: "The human", sub: "watches and decides", role: Role.external)
-        .node("doctrine", label: "magus records and answers", sub: "it enforces none of it", role: Role.focal, anchor: "internal/job")
-        .edge("cp", dst: "part")
-        .edge("part", dst: "decl")
-        .edge("decl", dst: "work")
-        .edge("work", dst: "verify", label: "reports done")
-        .edge("verify", dst: "integrate")
-        .edge("integrate", dst: "cp")
-        .edge("work", dst: "decl", label: "release", role: EdgeRole.focal)
-        .edge("decl", dst: "plan", label: "job rows")
-        .edge("human", dst: "plan", label: "watches")
-        .zone("the loop the orchestrator runs", members: ["cp", "part", "decl", "work", "verify", "integrate"])
-        .zone("what a person watches", members: ["plan", "human"])
-        .legend(Role.focal, label: "the whole guarantee")
-        .legend(Role.external, label: "agents and people")
-        .scope(["internal/job", "internal/changeset"])
-        .diagram();
+        .actor(cp)
+        .actor(part)
+        .box(decl, label: "Declare the plan", sub: "goal, checkpoint, paths")
+        .actor(work)
+        .box(verify, label: "Verify each lease", sub: "diff since its checkpoint")
+        .actor(integrate)
+        .actor(plan)
+        .actor(human)
+        .actor(doctrine)
+        .edgesFromGraph()
+        .flowAcross(cp, dst: part)
+        .flowIn(part, dst: decl)
+        .flowOut(decl, dst: work)
+        .flowIn(work, dst: verify, label: "reports done")
+        .flowOut(verify, dst: integrate)
+        .flowAcross(integrate, dst: cp)
+        .flowIn(work, dst: decl, label: "release", stroke: figure\Stroke.focal)
+        .flowOut(decl, dst: plan, label: "job rows")
+        .flowAcross(human, dst: plan, label: "watches")
+        .zone("the loop the orchestrator runs", dirs: figure\setOf([decl, verify]), actors: [cp, part, work, integrate])
+        .zone("what a person watches", actors: [plan, human])
+        .legend(figure\Look.focal, label: "the whole guarantee")
+        .legend(figure\Look.external, label: "agents and people")
+        .scope(figure\setOf([decl, verify]));
 }

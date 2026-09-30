@@ -11,7 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	diagramsrc "github.com/egladman/magus/libs/diagram"
+	"github.com/egladman/magus/internal/interp/bindings"
+	figuresrc "github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/types"
@@ -43,15 +44,15 @@ type Node struct {
 	Label  string `json:"label"`
 }
 
-// Figure is a rendered figure: the SVG flow drew and the boxes in it.
+// Figure is a rendered figure: the SVG magus/figure drew and the boxes in it.
 type Figure struct {
 	Title string
 	SVG   string
 	Nodes []Node
 }
 
-// FindingsError is flow refusing to draw the figure, most often because it exceeds the node
-// or edge budget. Findings is flow's own text, which names the fix.
+// FindingsError is magus/figure refusing to draw the figure, most often because it exceeds
+// the node or edge budget. Findings is the module's own text, which names the fix.
 type FindingsError struct {
 	Findings string
 }
@@ -152,7 +153,7 @@ func importGraph(ig types.ImportGraph) graph {
 	return g
 }
 
-// ids turns paths and names into flow node ids that stay unique after sanitizing.
+// ids turns paths and names into figure ids that stay unique after sanitizing.
 type ids map[string]bool
 
 func (s ids) of(name string) string {
@@ -267,31 +268,22 @@ func (l Lens) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-// render lays g out with flow and returns the figure. The authored budgets always apply:
-// a figure served to a person is one a person reads, so an oversized one is a
+// render lays g out with magus/figure and returns the figure. The authored budgets always
+// apply: a figure served to a person is one a person reads, so an oversized one is a
 // FindingsError telling the reader to narrow the lens, never a generated() escape.
 //
-// TODO: cache the rendered figure per graph and lens; every request compiles flow anew.
-func render(ctx context.Context, g graph, desc string) (Figure, error) {
-	flowSrc, err := diagramsrc.Source.ReadFile("flow.buzz")
-	if err != nil {
-		return Figure{}, fmt.Errorf("diagram: read flow source: %w", err)
-	}
-	rendererSrc, err := diagramsrc.Source.ReadFile("diagram.buzz")
-	if err != nil {
-		return Figure{}, fmt.Errorf("diagram: read renderer source: %w", err)
-	}
-
+// TODO: cache the rendered figure per graph and lens; every request compiles figure anew.
+func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, io.Discard)
-	// flow.buzz imports the renderer by its workspace-root path; serve that path from the
-	// binary so no checkout is needed.
-	sess.SetModuleDecls("libs/diagram/diagram", string(rendererSrc))
+	// figure names magus\Dir and its kin, which only the magus mirrors declare.
+	bindings.DeclareMagusTypes(sess)
+	sess.SetModuleDecls("magus/figure", figuresrc.Source)
 
-	// The driver runs inside flow's own module: a flat import of flow from a separate
-	// program cannot reach the module-private layout helpers its methods call.
-	v, err := sess.Eval(ctx, string(flowSrc)+"\n"+driver(g, desc))
+	// The driver runs inside figure's own module: a program importing it cannot reach the
+	// module-private layout helpers its methods call.
+	v, err := sess.Eval(ctx, figuresrc.Source+"\n"+driver(g, desc, anchorHref))
 	if err != nil {
 		return Figure{}, fmt.Errorf("diagram: evaluate %s: %w", g.id, err)
 	}
@@ -305,25 +297,71 @@ func render(ctx context.Context, g graph, desc string) (Figure, error) {
 	return Figure{Title: g.title, SVG: items[0].AsString(), Nodes: g.nodes}, nil
 }
 
-// driver is the Buzz appended to flow.buzz that declares g and draws it. Every value is a
+// driver is the Buzz appended to figure.buzz that declares g and draws it. Every value is a
 // Buzz string literal built by buzzString; nothing from the workspace reaches the source
 // unquoted.
-func driver(g graph, desc string) string {
+//
+// An imports figure draws each package as a box from a Dir record carrying the imports g
+// holds, and edgesFromGraph derives the edges, as a docs figure's are. Projects and targets
+// are no directories, so they are actors joined by hand edges, and the figure says why it is
+// unscoped. A non-empty anchorHref links every box to its anchor.
+func driver(g graph, desc, anchorHref string) string {
 	var b strings.Builder
+	// A host hands a Dir over as a map, which no object literal can build; typing the map
+	// through any is how a record reaches figure without the magus module.
+	b.WriteString(`fun serveDir(path: str, imports: [str]) > magus\Dir {
+    final fields: {str: any} = {
+        "path": path, "id": "dir:" + path, "layer": "", "language": "go",
+        "imports": imports, "importedBy": [<str>], "importsIndexed": true,
+        "calls": [<magus\DirCall>], "calledBy": [<magus\DirCall>], "children": [<str>], "files": 1,
+    };
+    final record: any = fields;
+    return record;
+}
+
+`)
 	b.WriteString("fun serveFigure() > str !> str {\n")
-	fmt.Fprintf(&b, "    final f = flow(%s).title(%s).desc(%s);\n",
+	fmt.Fprintf(&b, "    final f = of(%s).title(%s).desc(%s);\n",
 		buzzString(ids{}.of(g.id)), buzzString(g.title), buzzString(desc))
+	anchor := map[string]string{}
 	for _, n := range g.nodes {
-		fmt.Fprintf(&b, "    f.node(%s, label: %s, anchor: %s);\n", buzzString(n.ID), buzzString(n.Label), buzzString(n.Anchor))
+		anchor[n.ID] = n.Anchor
 	}
-	for _, e := range g.edges {
-		fmt.Fprintf(&b, "    f.edge(%s, dst: %s, claim: %s);\n", buzzString(e.src), buzzString(e.dst), buzzString(g.claim))
-	}
-	if anchorHref == "" {
-		b.WriteString("    return f.svg(cssVarPalette());\n}\n")
+	if g.claim == "imports" {
+		imports := map[string][]string{}
+		for _, e := range g.edges {
+			imports[e.src] = append(imports[e.src], anchor[e.dst])
+		}
+		for _, n := range g.nodes {
+			quoted := make([]string, 0, len(imports[n.ID]))
+			for _, dst := range imports[n.ID] {
+				quoted = append(quoted, buzzString(dst))
+			}
+			list := "[<str>]"
+			if len(quoted) > 0 {
+				list = "[" + strings.Join(quoted, ", ") + "]"
+			}
+			fmt.Fprintf(&b, "    f.box(serveDir(%s, imports: %s), label: %s);\n", buzzString(n.Anchor), list, buzzString(n.Label))
+		}
+		b.WriteString("    f.edgesFromGraph();\n")
 	} else {
-		fmt.Fprintf(&b, "    return f.svg(cssVarPalette(), s: Style{ anchorHref = %s });\n}\n", buzzString(anchorHref))
+		// A served figure is a lens over the graph the server already holds, so nothing in
+		// the tree is left for a scope to check.
+		fmt.Fprintf(&b, "    f.unscoped(why: %s);\n", buzzString("served from the workspace graph: "+desc))
+		names := actorNames(g.nodes)
+		for i, n := range g.nodes {
+			fmt.Fprintf(&b, "    final a%d = external(%s, link: %s, look: Look.plain);\n    f.actor(a%d);\n",
+				i, buzzString(names[n.ID]), buzzString(linkTo(anchorHref, n.Anchor)), i)
+		}
+		index := map[string]int{}
+		for i, n := range g.nodes {
+			index[n.ID] = i
+		}
+		for _, e := range g.edges {
+			fmt.Fprintf(&b, "    f.flowAcross(a%d, dst: a%d);\n", index[e.src], index[e.dst])
+		}
 	}
+	fmt.Fprintf(&b, "    return f.svg(Theme.page, anchorHref: %s);\n}\n", buzzString(anchorHref))
 	b.WriteString(`var serveSvg = "";
 var serveFindings = "";
 try {
@@ -334,6 +372,31 @@ try {
 return [serveSvg, serveFindings];
 `)
 	return b.String()
+}
+
+// actorNames names each node's actor. figure keys an actor by its name, so a label two
+// nodes share takes the node's anchor to stay apart.
+func actorNames(nodes []Node) map[string]string {
+	count := map[string]int{}
+	for _, n := range nodes {
+		count[n.Label]++
+	}
+	out := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		out[n.ID] = n.Label
+		if count[n.Label] > 1 {
+			out[n.ID] = n.Label + " (" + n.Anchor + ")"
+		}
+	}
+	return out
+}
+
+// linkTo fills anchorHref for an actor, which figure paints as a plain link.
+func linkTo(anchorHref, anchor string) string {
+	if anchorHref == "" {
+		return ""
+	}
+	return strings.NewReplacer("{path}", anchor, "{line}", "").Replace(anchorHref)
 }
 
 // buzzString quotes s as a Buzz string literal. Braces are escaped because a bare one opens

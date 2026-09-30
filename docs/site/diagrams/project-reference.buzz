@@ -1,36 +1,38 @@
-// site/diagrams/project-reference.buzz - the four spellings of a project reference magus
+// site/diagrams/project-reference.buzz: the four spellings of a project reference magus
 // accepts, and the two it emits. The figure exists to make one point: input is forgiving
 // and output is not, so an agent can pass whatever it has and still get a stable string
 // back to key on.
 namespace projectReference;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
+import "magus/figure";
 
-export fun projectReferenceDiagram() > Diagram !> str {
-    return flow("project-reference")
+export fun projectReferenceFigure() > figure\Figure !> any {
+    final url = figure\external("workspace://pkg/api", look: figure\Look.plain);
+    final rel = figure\external("pkg/api", look: figure\Look.plain);
+    final dot = figure\external("./pkg/api", look: figure\Look.plain);
+    final root = figure\external("workspace://", sub: "the root alias", look: figure\Look.plain);
+    final parse = figure\external("parse", tag: "step", look: figure\Look.plain);
+    final ref = figure\external("One reference", sub: "path: pkg/api", look: figure\Look.focal);
+    final human = figure\external("Human output", sub: "pkg/api", look: figure\Look.plain);
+    final machine = figure\external("Machine output", sub: "workspace://pkg/api", look: figure\Look.plain);
+    return figure\of("project-reference")
         .eyebrow("agents")
         .title("Four spellings in, one reference out")
         .desc("magus accepts a workspace URL, a workspace-relative path, a dot-relative "
             + "path or the bare root alias, and parses them all to one project reference. "
             + "Human output prints the short path; machine output prints the workspace URL.")
-        .node("url", label: "workspace://pkg/api")
-        .node("rel", label: "pkg/api")
-        .node("dot", label: "./pkg/api")
-        .node("root", label: "workspace://", sub: "the root alias")
-        .node("parse", tag: "step")
-        .node("ref", label: "One reference", sub: "path: pkg/api", role: Role.focal)
-        .node("human", label: "Human output", sub: "pkg/api")
-        .node("machine", label: "Machine output", sub: "workspace://pkg/api")
-        .edge("rel", dst: "parse")
-        .edge("dot", dst: "parse")
-        .edge("url", dst: "parse")
-        .edge("root", dst: "parse")
-        .edge("parse", dst: "ref")
-        .edge("ref", dst: "human", label: "printed")
-        .edge("ref", dst: "machine", label: "-o json")
-        .zone("accepted as input, interchangeable", members: ["url", "rel", "dot", "root"])
-        .legend(Role.focal, label: "one canonical form")
-        .unscoped("an input and output contract, drawn with no anchors to hold a scope to")
-        .diagram();
+        .actor(url)
+        .actor(rel)
+        .actor(dot)
+        .actor(root)
+        .flowAcross(rel, dst: parse)
+        .flowAcross(dot, dst: parse)
+        .flowAcross(url, dst: parse)
+        .flowAcross(root, dst: parse)
+        .flowAcross(parse, dst: ref)
+        .flowAcross(ref, dst: human, label: "printed")
+        .flowAcross(ref, dst: machine, label: "-o json")
+        .zone("accepted as input, interchangeable", actors: [url, rel, dot, root])
+        .legend(figure\Look.focal, label: "one canonical form")
+        .unscoped(why: "an input and output contract, drawn with no directory to hold a scope to");
 }

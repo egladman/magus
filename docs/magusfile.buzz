@@ -6,14 +6,13 @@ import "../hack/drift" as drift;
 import "../hack/index" as index;
 import "../hack/changelog" as changelog;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
-// npm), vcs (drift gate), http (serve), flags (diagrams-generate's switch). render.buzz
+// npm), vcs (drift gate), http (serve). render.buzz
 // owns the rendering machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
 import "proc";
 import "vcs";
 import "http";
-import "flags";
 // build-playground compiles the gopherbuzz Buzz VM to wasm with the stock Go
 // toolchain, so it depends on
 // gopherbuzz's build. The path import binds its targets as cross-project handles
@@ -61,9 +60,9 @@ magus\project({
     // project writes. Without the edge the two generate targets are unordered, so a schema
     // change could regenerate the API reference from the PREVIOUS descriptor - and reading
     // another project's declared output with no dependency on it is what MGS4004 flags.
-    // ../libs/diagram for the same reason: diagrams-generate reads its renderer, and
-    // reading another project's file with no edge is unordered (MGS4004).
-    "depends_on": ["..", "../proto", "../libs/diagram"],
+    // ../libs/figure for the same reason: the render and diagrams-generate read its module,
+    // and reading another project's file with no edge is unordered (MGS4004).
+    "depends_on": ["..", "../proto", "../libs/figure"],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,
     // co-located with the markdown it renders, so the content and the generator share one
@@ -80,9 +79,9 @@ magus\project({
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
-                // render.buzz imports flow and diagram from libs/diagram, so buzz-test and
-                // every other target keyed on these sources has to move when they do.
-                "../libs/diagram/*.buzz",
+                // render.buzz imports magus/figure, which the binary embeds from this file,
+                // so buzz-test and every other target keyed on these sources moves with it.
+                "../libs/figure/figure.buzz",
                 // retired.urls.lock is hand-authored: a human lists URLs intentionally
                 // removed from the site, exempting them from abandonedLinkCheck (gates.buzz).
                 // Nothing generates it, so it belongs here as a source, not in "outputs" -
@@ -367,6 +366,8 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
+        // The page copy of each figure, which diagrams-generate committed and the render inlines.
+        "assets/gen/diagram-*-page.svg", workspace\file("libs/figure/figure.buzz"),
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
         workspace\file("assets/**"), workspace\file("releases/*.yaml"));
     ctx.writesFiles("gen/**", "active.urls.lock");
@@ -398,19 +399,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // and the missing declaration never fired.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "reference/config *.md");
-    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md,
-    // assets/gen (the README's diagram pair), and the derived Markdown in
-    // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so
-    // listing it would assert a check that silently passes. src/gen is absent because
-    // proto:generate declares and gates it - nothing in THIS chain regenerates it, so the
-    // hash either side would always match.
-    //
-    // The engine's drift gate does NOT make this one redundant. It hashes each target's
-    // declared OUTPUTS, and assets/gen is not one: `magus describe file` reports it as
-    // role=source, because it is written through an `update` declaration rather than
-    // ctx.writesFiles. A check keyed on outputs cannot see it however correct it is.
-    // MAGUS.md and CONTENT are covered twice over; assets/gen only here.
-    final GENERATED = ["MAGUS.md", "assets/gen"] + CONTENT;
+    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md and the derived
+    // Markdown in CONTENT. gen/ is absent because it is ignored, and an ignored path is never
+    // dirty, so listing it would assert a check that silently passes. src/gen is absent
+    // because proto:generate declares and gates it - nothing in THIS chain regenerates it, so
+    // the hash either side would always match. assets/gen is absent because diagrams-generate
+    // gates its own files: it needs the symbol index, which the shards running this never build.
+    final GENERATED = ["MAGUS.md"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
@@ -418,15 +413,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final before = drift\hashes(GENERATED);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
-    //
-    // diagrams-generate joins them rather than staying opt-in. It orders against nothing
-    // here - the site never reads its output - but it writes assets/gen, which is committed,
-    // so composing it is what puts those bytes inside the GENERATED gate above. Uncomposed,
-    // it ran only when typed by hand, so the committed SVGs README.md embeds could drift
-    // from libs/diagram indefinitely with every gate green. It declares its inputs, so an
-    // unchanged tree replays it and the 3s render is paid on a renderer or diagram edit
-    // rather than on every docs build.
-    ctx.needs(content_generate, index_generate, diagrams_generate);
+    ctx.needs(content_generate, index_generate);
     if (ctx.hasCharm("rw")) { return; }
     // Name the files, not the set. "MAGUS.md or generated docs Markdown drifted" tells a
     // reader only that one of nine things moved, and this gate fires
@@ -605,71 +592,44 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
-// diagrams-generate writes the committed light/dark SVG pair for every diagram under
-// diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render
-// time so a diagram follows the theme toggle. This pair is for GitHub, where the README
-// loads an image through <img> and cannot reach the page's CSS at all.
+// diagrams-generate lays every figure out from the knowledge graph and writes, per figure,
+// the dark and light pair the README loads through <img>, the page copy the site inlines,
+// and a receipt: the stamp, the claim counts, the findings and the symbol index it was
+// drawn at. The site render reads only the page copies, so it never needs the index.
 //
-// The pair lands under this project rather than beside the terminal recordings in the
+// The files land under this project rather than beside the terminal recordings in the
 // workspace's assets/gen: docs already depends on the root project, so writing there is
 // MGS1012, a target reading from and writing into the same project. The README reaches
-// them by relative path, which is all GitHub needs. Committed, and byte-gated by the
-// GENERATED list in generate - which only measures this tree because generate composes
-// this target; a gate cannot see bytes nothing moved.
-export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // --verify-imports checks each figure's imports claims against the symbol index, and
-    // refuses when there is none. Off by default: the index costs a graph build.
-    final parsed = flags\parse(args, switches: ["--verify-imports"], valued: [<str>]);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "diagrams-generate: unexpected arguments {args.join(" ")}; the only one is --verify-imports";
-    }
-    final verifyImports = parsed.values["--verify-imports"] == "true";
-    // workspace.file, not a project-relative path: the renderer moved out to
-    // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
-    // key blind to renderer edits - it replayed committed SVGs through a Style change.
-    // The Go sources are read because the verifier checks each figure's scope against the
-    // packages that exist; without them a new package would replay a cached pass.
-    ctx.readsFiles("site/diagrams/*.buzz", "site/diagrams/gen/*.buzz",
-        workspace\file("libs/diagram/diagram.buzz"), workspace\file("libs/diagram/flow.buzz"),
-        workspace\file("internal/**/*.go"), workspace\file("cmd/**/*.go"), workspace\file("broker/**/*.go"));
-    ctx.writesFiles("assets/gen/diagram-*.svg");
-    // Verified before writing, not after: a diagram that names a package which no longer
-    // exists should fail the target rather than ship a rendered picture of a tree that is
-    // gone. Scans the Go sources for back-references too, so deleting a diagram whose id a
-    // source file still marks is caught from the other side.
-    // Named anchors, not drift: this is the SEMANTIC check (does a diagram still name a
-    // real package), which is a different question from whether the rendered bytes moved.
-    // The old name also shadowed the hack/drift module this file imports, so reaching for
-    // drift.hashes inside this function would have failed on a list.
-    final anchors = renderer\site_diagram_drift(ROOT,
-        sourceGlobs: ["internal/**/*.go", "cmd/**/*.go"], verifyImports: verifyImports);
-    if (anchors.len() > 0) {
-        foreach (msg in anchors) { magus\log.error(msg); }
-        throw "diagrams drifted from the code: {anchors.len()} finding(s)";
-    }
-    renderer\site_diagrams("assets/gen");
-    magus\log.info("rendered the diagram pair into docs/assets/gen");
-}
-
-// diagrams-observe writes site/diagrams/gen/<id>.buzz, the observed half of every figure
-// that declares a scope: the packages the symbol index holds under it and the imports
-// between them, stamped so --verify-imports can tell a figure composed from a stale one.
-// Run by hand after `magus graph build`, and not one of generate's stages: generate runs
-// where no index is built, and this refuses rather than write an empty observation.
+// them by relative path, which is all GitHub needs.
+//
+// Not one of generate's stages: generate runs where no index is built. It is its own gate
+// instead, failing when the committed files move; :rw rewrites them.
 //
 // The index lives in the cache, outside file hashing, so the key reads the root's digest
-// of it instead: symbol-digest-generate is skip_cache and runs before any replay of this
-// one, and an index that moved turns the replay into a run.
-export fun diagrams_observe(ctx: magus\Context, args: [str]) > void !> any {
+// of it: symbol-digest-generate is skip_cache and runs before any replay of this one, and
+// an index that moved turns the replay into a run. The root magusfile declares the layers
+// a figure groups by.
+export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
-        throw "diagrams-observe: unexpected arguments {args.join(" ")}; it takes none";
+        throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
     }
     ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/*.buzz"),
-        workspace\file("gen/symbol-index.json"));
-    ctx.writesFiles("site/diagrams/gen/*.buzz");
-    final written = renderer\site_diagrams_observe("site/diagrams/gen", graph: magus\importGraph());
-    magus\log.info("observed {written.len()} figure(s) into docs/site/diagrams/gen");
+    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/figure/figure.buzz"),
+        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"));
+    ctx.writesFiles("assets/gen/diagram-*.svg", "assets/gen/diagram-*.json");
+    final GENERATED = ["assets/gen"];
+    final before = drift\hashes(GENERATED);
+    final findings = renderer\site_figures("assets/gen");
+    if (findings.len() > 0) {
+        foreach (msg in findings) { magus\log.error(msg); }
+        throw "diagrams-generate: {findings.len()} finding(s); each names the call to change";
+    }
+    if (ctx.hasCharm("rw")) { return; }
+    final moved = drift\changedSince(before, GENERATED);
+    if (moved.len() > 0) {
+        throw "diagrams-generate: the figures changed " + moved.join(", ")
+            + "; re-run `magus run diagrams-generate:rw docs` and commit" + drift\secondCause;
+    }
 }
 
 // build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)

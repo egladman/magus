@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
-	diagramsrc "github.com/egladman/magus/libs/diagram"
+	figuresrc "github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -180,6 +180,8 @@ func TestDiagramImportsRefuseWithoutAnIndex(t *testing.T) {
 	var out Rendered
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []string{"internal/handler/graph", "internal/server", "types"}, anchors(out.Nodes))
+	// Each package is a box built from a Dir record, so its group carries the directory.
+	assert.Contains(t, out.SVG, `data-anchor="internal/handler/graph"`)
 }
 
 func TestDiagramSourceURL(t *testing.T) {
@@ -213,14 +215,7 @@ func TestDiagramSourceServesTheEmbeddedLibrary(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var out Sources
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
-	flowSrc, err := diagramsrc.Source.ReadFile("flow.buzz")
-	require.NoError(t, err)
-	rendererSrc, err := diagramsrc.Source.ReadFile("diagram.buzz")
-	require.NoError(t, err)
-	assert.Equal(t, map[string]string{
-		"libs/diagram/flow.buzz":    string(flowSrc),
-		"libs/diagram/diagram.buzz": string(rendererSrc),
-	}, out.Files)
+	assert.Equal(t, map[string]string{"libs/figure/figure.buzz": figuresrc.Source}, out.Files)
 }
 
 func anchors(nodes []Node) []string {

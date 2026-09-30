@@ -1,38 +1,43 @@
-// site/diagrams/server-socket.buzz - the local path into the server: a CLI invocation over the
-// unix socket, and the shared state the socket dispatches into. The HTTP surface is a
+// site/diagrams/server-socket.buzz: the local path into the server, a CLI invocation over
+// the unix socket, and the shared state the socket dispatches into. The HTTP surface is a
 // separate figure (server-http); this one is deliberately silent about it, because the two
 // entry points share only the state at the far right.
+//
+// The pool and the registries are server state, not packages of their own, so they are
+// actors the socket hands work to. The broker is a separate daemon reached as a client.
 namespace serverSocket;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/server-socket" as serverSocketGen;
+import "magus";
+import "magus/figure";
 
-export fun serverSocketDiagram() > Diagram !> str {
-    return flow("server-socket", observed: serverSocketGen\serverSocketObserved())
+export fun serverSocketFigure() > figure\Figure !> any {
+    final sock = magus\dir("internal/proc");
+    final share = magus\dir("internal/share");
+    final cli = figure\external("magus CLI", sub: "run, status, query", tag: "shell");
+    final pool = figure\external("Concurrency pool", look: figure\Look.plain);
+    final ws = figure\external("Workspace registry", sub: "graph, SCIP, cache", look: figure\Look.store);
+    final runs = figure\external("Run registry", sub: "live runs", look: figure\Look.store);
+    final svc = figure\external("Broker", sub: "shared services");
+    return figure\of("server-socket")
         .eyebrow("magus server")
         .title("How a local command reaches the server")
         .desc("The magus CLI dispatches over a private unix domain socket into the "
             + "concurrency pool, the workspace registry and the run registry; shared services "
             + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
-        .node("cli", label: "magus CLI", sub: "run, status, query", tag: "shell", role: Role.external)
-        .node("sock", label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", role: Role.focal, anchor: "internal/proc")
-        .node("pool", label: "Concurrency pool")
-        .node("ws", label: "Workspace registry", sub: "graph, SCIP, cache", role: Role.store, anchor: "internal/graph")
-        .node("runs", label: "Run registry", sub: "live runs", role: Role.store)
-        .node("svc", label: "Broker client", sub: "shared services", role: Role.external, anchor: "broker")
+        .actor(cli)
+        .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
         // --open is the destination flag; --serve only changes how the graph is handed
         // over (a loopback server rather than a URL fragment), so naming --serve alone
         // would describe the transport and omit the command.
-        .node("serve", label: "Loopback server", sub: "graph export --open", role: Role.optional, anchor: "internal/share")
-        .edge("cli", dst: "sock", label: "dispatch")
-        .edge("sock", dst: "pool")
-        .edge("sock", dst: "ws")
-        .edge("sock", dst: "runs")
-        .edge("sock", dst: "svc")
-        .edge("cli", dst: "serve", label: "spawns", role: EdgeRole.optional)
-        .legend(Role.store, label: "shared server state")
-        .legend(Role.optional, label: "spawned on demand")
-        .scope(["internal/proc", "internal/share", "broker"])
-        .diagram();
+        .box(share, label: "Loopback server", sub: "graph export --open", look: figure\Look.optional)
+        .edgesFromGraph()
+        .flowIn(cli, dst: sock, label: "dispatch")
+        .flowOut(sock, dst: pool)
+        .flowOut(sock, dst: ws)
+        .flowOut(sock, dst: runs)
+        .flowOut(sock, dst: svc)
+        .flowIn(cli, dst: share, label: "spawns", stroke: figure\Stroke.optional)
+        .legend(figure\Look.store, label: "shared server state")
+        .legend(figure\Look.optional, label: "spawned on demand")
+        .scope(figure\setOf([sock, share]));
 }

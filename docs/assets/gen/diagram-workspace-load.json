@@ -1,0 +1,11 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 2,
+    "imports": 5
+  },
+  "figure": "workspace-load",
+  "findings": [],
+  "stamp": "sha256:034a4c302346c1c45b33537f84dc316a60fe049d5f52c371581da3a08434dbe3",
+  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+}

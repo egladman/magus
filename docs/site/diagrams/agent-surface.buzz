@@ -1,4 +1,4 @@
-// site/diagrams/agent-surface.buzz - what an agent host gets from magus, and the one gate
+// site/diagrams/agent-surface.buzz: what an agent host gets from magus, and the one gate
 // every call it makes crosses.
 //
 // The figure has one claim: skills and hook wiring are installed before a session, and from
@@ -7,16 +7,23 @@
 //
 // Hints sit last because three surfaces render through them: a skill may name only a
 // command or tool internal/hint registers, the guard's denials carry its invocations, and
-// the MCP replies carry its next fields. Those three connectors are imports and are checked.
-// The two install connectors and guard -> MCP are narrative: nothing in the code joins them.
+// the MCP replies carry its next fields. Those three connectors are imports. The harness
+// spells are Buzz and the host is outside magus, so they are actors.
 namespace agentSurface;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/agent-surface" as agentSurfaceGen;
+import "magus";
+import "magus/figure";
 
-export fun agentSurfaceDiagram() > Diagram !> str {
-    return flow("agent-surface", observed: agentSurfaceGen\agentSurfaceObserved())
+export fun agentSurfaceFigure() > figure\Figure !> any {
+    final skills = magus\dir("internal/agent");
+    final guard = magus\dir("internal/guard");
+    final hint = magus\dir("internal/hint");
+    final tools = magus\dir("internal/handler/mcp");
+    final nested: [magus\Dir] = magus\dirs("internal/handler/mcp/**");
+    final mcp = figure\setOf(nested + [tools]);
+    final harness = figure\external("Harness spells", sub: "hook entries per host", look: figure\Look.plain);
+    final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor", tag: "client");
+    return figure\of("agent-surface")
         .eyebrow("agents")
         .title("What an agent host gets, and the gate every call crosses")
         .desc("magus agent install writes the skills and the AGENTS.md block, and magus "
@@ -25,25 +32,25 @@ export fun agentSurfaceDiagram() > Diagram !> str {
             + "shell command, file edit and magus MCP call, and only an allowed call runs. "
             + "Skills, guard verdicts and MCP replies all name commands through internal/hint, "
             + "so a renamed command cannot leave one of them pointing at nothing.")
-        .node("skills", label: "Skills catalog", sub: "embedded skills, AGENTS.md", anchor: "internal/agent")
-        .node("harness", label: "Harness spells", sub: "hook entries per host", anchor: "spells/harness")
-        .node("host", label: "Agent host", sub: "Claude Code, Codex, Cursor", tag: "client", role: Role.external)
-        .node("guard", label: "Guard", sub: "deny, advise, ask", tag: "gate", role: Role.focal, anchor: "internal/guard")
-        .node("mcp", label: "MCP tools", sub: "./magus mcp or /mcp", anchor: "internal/handler/mcp")
-        .node("hint", label: "Hints", sub: "commands, next fields", anchor: "internal/hint")
-        .edge("skills", dst: "host", label: "agent install")
-        .edge("harness", dst: "host", label: "hooks to merge")
-        .edge("host", dst: "guard", label: "every call", role: EdgeRole.focal, claim: Claim.calls)
-        .edge("guard", dst: "mcp", label: "allowed")
-        .edge("skills", dst: "hint", label: "command names", claim: Claim.imports)
-        .edge("guard", dst: "hint", label: "denial hints", claim: Claim.imports)
-        .edge("mcp", dst: "hint", label: "next fields", claim: Claim.imports)
-        .zone("installed before a session", members: ["skills", "harness"])
-        .zone("on every call", members: ["guard", "mcp", "hint"])
-        .legend(Role.focal, label: "the gate")
-        .legend(Role.external, label: "outside magus")
-        .scope(["internal/agent", "internal/handler/mcp/**", "internal/hint"])
-        .omit("internal/handler/mcp/gen", why: "the tool catalog generated from std's module descriptors, inside the MCP tools box")
-        .omit("internal/handler/mcp/origin", why: "the calling client's name carried on the context for the activity trail, not a surface")
-        .diagram();
+        .box(skills, label: "Skills catalog", sub: "embedded skills, AGENTS.md")
+        .actor(harness)
+        .actor(host)
+        .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
+        .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
+        .box(hint, label: "Hints", sub: "commands, next fields")
+        .edgesFromGraph()
+        .hideEdges(figure\setOf([guard]), dst: figure\setOf([skills]),
+            why: "the guard names skills in its denials; the skills reach the host by install, drawn from the catalog")
+        .markEdge(skills, dst: hint, label: "command names")
+        .markEdge(guard, dst: hint, label: "denial hints")
+        .markEdge(tools, dst: hint, label: "next fields")
+        .flowOut(skills, dst: host, label: "agent install")
+        .flowAcross(harness, dst: host, label: "hooks to merge")
+        .flowIn(host, dst: guard, label: "every call", stroke: figure\Stroke.focal)
+        .flowIn(host, dst: tools, label: "if allowed")
+        .zone("installed before a session", dirs: figure\setOf([skills]), actors: [harness])
+        .zone("on every call", dirs: mcp.plus([guard, hint]))
+        .legend(figure\Look.focal, label: "the gate")
+        .legend(figure\Look.external, label: "outside magus")
+        .scope(mcp.plus([skills, hint]));
 }

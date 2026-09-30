@@ -19,8 +19,7 @@ import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
+import "magus/figure";
 import "lib/conventions" as _;
 // The single importer of the diagram registry. A module imported by two different paths
 // binds only once: the second import resolves to nothing, with no error at the import
@@ -802,27 +801,20 @@ test "substituteVersionTokens is a no-op before any release has shipped" {
     assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
 }
 
-// writeDiagramPair re-exports the standalone writer so the magusfile can reach it through
+
+// writeFigures re-exports the registry's writer so the magusfile can reach it through
 // render.buzz. It lives behind this module because the registry may have exactly one
-// importer, and the site render is the consumer that cannot give it up.
-export fun writeDiagramPair(dir: str) > void !> any {
-    diagrams\writeStandalonePair(dir);
+// importer, and the site render is the consumer that cannot give it up. Returns the
+// findings, which the caller fails on.
+export fun writeFigures(dir: str) > [str] !> any {
+    return diagrams\writeFigures(dir);
 }
 
-// diagramDrift runs the figure verifier, alongside writeDiagramPair. It logs each figure's
-// summary line and returns the findings, which the caller fails on.
-export fun diagramDrift(root: str, sourceGlobs: [str], verifyImports: bool) > [str] !> any {
-    final report = diagrams\verifyFigures(root, sourceGlobs: sourceGlobs,
-        opts: diagrams\DriftOptions{ verifyImports = verifyImports });
-    foreach (line in report.summaries) { magus\log.info(line); }
-    return report.findings;
-}
-
-// observeDiagrams writes each scoped figure's observed half from graph, forwarded for the
-// same reason writeDiagramPair is. Returns the paths written.
-export fun observeDiagrams(dir: str, graph: ImportGraph) > [str] !> any {
-    return diagrams\writeObservedFigures(dir,
-        imports: diagrams\ObservedImports{ indexed = graph.indexed, packages = graph.packages });
+// RunOrderItem is one box of a generated run-order figure: a target and the targets it
+// waits on.
+export object RunOrderItem {
+    name: str,
+    deps: [str],
 }
 
 // dependencyFigure renders a generated dependency DAG as inline SVG inside the page's
@@ -833,32 +825,34 @@ export fun observeDiagrams(dir: str, graph: ImportGraph) > [str] !> any {
 // the table immediately above already carries the same relationships. Returning "" there is
 // a deliberate omission, not a failure.
 //
-// Drawn through flow as generated(): the workspace's own graph has no author to hold to the
-// hand-authored budgets. An item carries a name, never a path, so no box is anchored.
+// A target is no directory, so each box is an actor and each edge a hand edge; generated()
+// lifts the hand-authored budgets, since the workspace's own graph has no author to hold to
+// them.
 final CapGeneratedNodes = 24;
 
-export fun dependencyFigure(id: str, title: str, items: [LayeredItem]) > str {
+export fun dependencyFigure(id: str, title: str, items: [RunOrderItem]) > str {
     if (items.len() == 0 or items.len() > CapGeneratedNodes) { return ""; }
-    final f = flow(id).generated();
-    f.title(title);
-    f.desc(title);
-    final known: mut {str: bool} = mut {<str: bool>};
+    final f = figure\of(id).generated().title(title).desc(title)
+        .unscoped(why: "a project's targets, which are declared in a magusfile, not directories");
+    final boxes: mut {str: figure\Actor} = mut {<str: figure\Actor>};
     foreach (it in items) {
-        f.node(it.id, label: it.label);
-        known[it.id] = true;
+        final a = figure\external(it.name, look: figure\Look.plain);
+        boxes[it.name] = a;
+        f.actor(a);
     }
     // Edges run from a dependency to what waits on it; a dependency outside the items has no
     // box to leave from.
     foreach (it in items) {
         foreach (dep in it.deps) {
-            if (known[dep] != null) { f.edge(dep, dst: it.id); }
+            final need = boxes[dep];
+            if (need != null) { f.flowAcross(need!, dst: boxes[it.name]!); }
         }
     }
     // A layout failure means the figure would be unreadable. Dropping it is the right
     // outcome, but SAY so: swallowing it silently is how eight run-order figures once
     // vanished unnoticed.
     try {
-        final svg = f.svg(cssVarPalette());
+        final svg = f.svg(figure\Theme.page);
         return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
     } catch (e) {
         magus\log.warn("skipped diagram {id}: {e}");
@@ -866,49 +860,11 @@ export fun dependencyFigure(id: str, title: str, items: [LayeredItem]) > str {
     return "";
 }
 
-// importFigure draws the Go packages under scope and the imports between them, as the
-// symbol index observed them: the picture a declared figure's scope is read against. Every
-// edge claims imports, since that is all the index can show. Returns "" when graph is not
-// indexed or the flow cannot be laid out, logging why, as dependencyFigure drops a figure.
-export fun importFigure(id: str, title: str, scope: [str], graph: ImportGraph) > str {
-    if (graph.indexed == false) {
-        magus\log.warn("skipped import figure {id}: no symbol index; build it with `magus graph build`");
-        return "";
-    }
-    try {
-        final svg = importFlow(id, title: title, scope: scope, graph: graph).svg(cssVarPalette());
-        return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
-    } catch (e) {
-        magus\log.warn("skipped import figure {id}: {e}");
-    }
-    return "";
-}
-
-// importFlow is importFigure's flow before it is painted, so a caller can pick the palette.
-export fun importFlow(id: str, title: str, scope: [str], graph: ImportGraph) > mut Flow !> any {
-    final pkgs: mut [str] = mut [<str>];
-    final inScope: mut {str: bool} = mut {<str: bool>};
-    foreach (pkg, _ in graph.packages) {
-        foreach (glob in scope) {
-            if (inScope[pkg] == null and diagrams\scopeMatches(pkg, glob: glob)) {
-                pkgs.append(pkg);
-                inScope[pkg] = true;
-            }
-        }
-    }
-    // The graph arrives as a host map, whose order is not the index's; sorted, the same
-    // index always draws the same figure.
-    final ordered = pkgs.sort(fun (a: str, b: str) > bool { return a < b; });
-    final f = flow(id);
-    f.title(title);
-    f.scope(scope);
-    foreach (pkg in ordered) { f.node(diagrams\observedNodeId(pkg), label: pkg, anchor: pkg); }
-    foreach (pkg in ordered) {
-        foreach (dep in graph.packages[pkg] ?? [<str>]) {
-            if (inScope[dep] != null) {
-                f.edge(diagrams\observedNodeId(pkg), dst: diagrams\observedNodeId(dep), claim: Claim.imports);
-            }
-        }
-    }
-    return f;
+test "a run-order figure draws each target once and each need as an edge" {
+    final svg = dependencyFigure("run-order-t", title: "t", items: [
+        RunOrderItem{ name = "build", deps = [<str>] },
+        RunOrderItem{ name = "test", deps = ["build", "outside"] },
+    ]);
+    assert\isTrue(svg.indexOf("<svg") != null, message: "it lays out: {svg}");
+    assert\isTrue(svg.indexOf(">build<") != null and svg.indexOf(">test<") != null, message: "both boxes");
 }

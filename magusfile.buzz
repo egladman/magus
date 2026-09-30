@@ -146,6 +146,18 @@ magus\project({
     // first, and keeps proto inside a lease focused here.
     // libs/figure: the go-build embeds figure.buzz as the magus/figure module.
     "depends_on": ["proto", "libs/figure"],
+    // The server's layering, which internal/handler/README.md explains. Arrows point down
+    // this list: nothing in a repository or in transport imports a handler. A figure groups
+    // by these names, so a new handler package joins its figure's group.
+    "layers": {
+        "internal/httpx": "transport",
+        "internal/handler/*": "handler",
+        "internal/service": "service",
+        "internal/service/*": "service",
+        "internal/cache": "repository",
+        "internal/graph/knowledge": "repository",
+        "internal/server": "composition",
+    },
     "spells": [go, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no
@@ -3279,7 +3291,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
                    "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
-                   "libs/diagnostics/magusfile.buzz", "libs/diagram/magusfile.buzz",
+                   "libs/diagnostics/magusfile.buzz",
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
@@ -3293,15 +3305,14 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
                    "docs/site/landing.buzz", "docs/src/styles/site.css",
-                   // figure-modules-type-check-strictly: the figures, the observed halves
-                   // and the renderer they import.
-                   "docs/site/diagrams/*.buzz", "docs/site/diagrams/gen/*.buzz",
-                   "libs/diagram/diagram.buzz", "libs/diagram/flow.buzz",
+                   // figure-modules-type-check-strictly: the figures and the module they
+                   // import.
+                   "docs/site/diagrams/*.buzz", "libs/figure/figure.buzz",
                    // prose-names-targets-that-exist: every page's fenced run commands.
                    "**/*.md", "console/**/*.md", "docs/**/*.md",
                    "docs/guides/integrations/agents/**/*.md",
                    "libs/coldread/**/*.md", "libs/conventions/**/*.md",
-                   "libs/diagnostics/**/*.md", "libs/diagram/**/*.md", "libs/figure/**/*.md",
+                   "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
                    "libs/textsearch/**/*.md", "proto/**/*.md");
     magus\cmd("buzz", args: ["hack/lint.buzz"]);

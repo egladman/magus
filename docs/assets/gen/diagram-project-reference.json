@@ -1,0 +1,11 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 7,
+    "imports": 0
+  },
+  "figure": "project-reference",
+  "findings": [],
+  "stamp": "sha256:77aa7ddd2f2d28c0a5442970f0d62485f1b3cfa68996179f78aa256cf73a0924",
+  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+}

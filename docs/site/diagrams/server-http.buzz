@@ -6,69 +6,45 @@
 // The accent pair (the guard box, the probe connector) is spent entirely on making that
 // one exception visible.
 //
-// The /api/v1 routes are drawn as two clusters rather than ten boxes, and the split is the
-// one internal/server itself makes: the read views a share link may also serve, and the
-// review-and-plan routes that stay loopback-only. Their contents are the mounting order in
-// internal/server/server.go's Serve; docs/reference/console.md is the prose twin.
+// The console's routes are the handler layer the root magusfile declares, less /mcp, so a
+// handler package added there joins that box. The server builds the guard and mounts every
+// route, and answers the probes itself.
 namespace serverHttp;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/server-http" as serverHttpGen;
+import "magus";
+import "magus/figure";
 
-export fun serverHttpDiagram() > Diagram !> str {
-    final connect = "a Connect service, inside the Connect RPC box";
-    final mounts = "the server mounts every handler; the figure draws the request path";
-    return flow("server-http", observed: serverHttpGen\serverHttpObserved())
+export fun serverHttpFigure() > figure\Figure !> any {
+    final guard = magus\dir("internal/httpx");
+    final mcp = magus\dir("internal/handler/mcp");
+    final server = magus\dir("internal/server");
+    final handlers = figure\layerSet(magus\layer("handler"));
+    final routes = handlers.without([mcp]);
+    final agent = figure\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: figure\Look.plain);
+    final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);
+    final probe = figure\external("kubelet", sub: "scripts, probes", tag: "client");
+    return figure\of("server-http")
         .eyebrow("magus server")
         .title("The HTTP surface, and the one route without a guard")
         .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
-            + "plan routes and eleven typed Connect services through the DNS-rebind, "
+            + "plan routes and the typed Connect services through the DNS-rebind, "
             + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
             + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
             + "are loopback only. The health endpoints answer probes directly, with no "
             + "authentication.")
-        .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
-        .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
-        .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: Role.external)
-        .node("guard", label: "Guard", sub: "rebind + token + CORS", tag: "gate", role: Role.focal, anchor: "internal/httpx")
-        .node("mcp", label: "/mcp", sub: "agent tools, SSE", anchor: "internal/handler/mcp")
-        .node("reads", label: "/api/v1 read views", sub: "graph, events, insight, outputs", anchor: "internal/handler/graph")
-        .node("review", label: "/api/v1 review + plans", sub: "diff, session, plan, review", anchor: "internal/handler/status")
-        .node("connect", label: "Connect RPC", sub: "eleven typed services", anchor: "internal/handler/metrics")
-        .node("health", label: "/livez /readyz", sub: "no authentication", role: Role.external, anchor: "internal/server")
-        .edge("agent", dst: "guard")
-        .edge("console", dst: "guard")
-        .edge("guard", dst: "mcp")
-        .edge("guard", dst: "reads")
-        .edge("guard", dst: "review")
-        .edge("guard", dst: "connect")
-        .edge("probe", dst: "health", label: "unguarded", role: EdgeRole.focal)
-        // Every route in one column, the unguarded one included, so the figure reads as
-        // five routes of which one skips the guard.
-        .rank(["mcp", "reads", "review", "connect", "health"])
-        .zone("through the guard", members: ["agent", "console", "guard", "mcp", "reads", "review", "connect"])
-        .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
-        .omitEdge("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
-        .omitEdge("health", dst: "reads", why: mounts)
-        .omitEdge("health", dst: "mcp", why: mounts)
-        .omitEdge("health", dst: "connect", why: mounts)
-        .omitEdge("health", dst: "review", why: mounts)
-        .legend(Role.focal, label: "authenticated")
-        .legend(Role.external, label: "open to any caller")
-        .scope(["internal/handler/*", "internal/httpx", "internal/server"])
-        .omit("internal/handler/activity", why: connect)
-        .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
-        .omit("internal/handler/diagram", why: "the /api/v1/diagrams read route, inside the read views box")
-        .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
-        .omit("internal/handler/insight", why: "a read route and Connect service, inside the read views box")
-        .omit("internal/handler/job", why: connect)
-        .omit("internal/handler/memory", why: connect)
-        .omit("internal/handler/notes", why: connect)
-        .omit("internal/handler/plan", why: "the plan route, inside the review + plans box")
-        .omit("internal/handler/token", why: connect)
-        .omit("internal/handler/tool", why: connect)
-        .omit("internal/handler/trailrpc", why: "the audit interceptor around Connect services, not a route")
-        .omit("internal/handler/viewer", why: "read routes and a Connect service, inside the read views box")
-        .diagram();
+        .actor(agent)
+        .actor(console)
+        .actor(probe)
+        .box(guard, label: "Guard", sub: "rebind + token + CORS", tag: "gate", focal: true)
+        .box(mcp, label: "/mcp", sub: "agent tools, SSE")
+        .group(routes, label: "Console routes", sub: "/api/v1 and Connect RPC")
+        .box(server, label: "Server", sub: "mounts routes, /livez /readyz", look: figure\Look.external)
+        .edgesFromGraph()
+        .flowIn(agent, dst: guard)
+        .flowIn(console, dst: guard)
+        .flowIn(probe, dst: server, label: "unguarded", stroke: figure\Stroke.focal)
+        .zone("through the guard", dirs: handlers.plus([guard]), actors: [agent, console])
+        .legend(figure\Look.focal, label: "authenticated")
+        .legend(figure\Look.external, label: "open to any caller")
+        .scope(handlers.plus([guard, server]));
 }

@@ -1,51 +1,51 @@
 // site/diagrams/diagram-pipeline.buzz: how a figure on this site gets drawn, including this one.
 //
-// The figure has one claim: every figure reaches its reader through flow, and the only
-// Go that touches the library is the server endpoint, which embeds the same source the
-// docs build reads. The accent is flow itself.
+// The figure has one claim: every figure reaches its reader through magus/figure, and the
+// Go that touches the module embeds the same source the figures import. The accent is
+// that module.
 //
-// The observed set supplies the one import the code carries, internal/handler/diagram ->
-// libs/diagram. Everything else is Buzz reading Buzz or a build writing files, which no
-// import graph records, so those connectors claim flow; the console's GET claims calls.
+// A figure's boxes are the graph's own records, read through the magus module; the Go
+// edges between std, the module and the server are imports. The figure sources, the
+// committed files and the site render are Buzz and files, so they are actors.
 namespace diagramPipeline;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/diagram-pipeline" as diagramPipelineGen;
+import "magus";
+import "magus/figure";
 
-export fun diagramPipelineDiagram() > Diagram !> str {
-    return flow("diagram-pipeline", observed: diagramPipelineGen\diagramPipelineObserved())
-        .eyebrow("flow")
+export fun diagramPipelineFigure() > figure\Figure !> any {
+    final module = magus\dir("libs/figure");
+    final host = magus\dir("std");
+    final server = magus\dir("internal/handler/diagram");
+    final source = figure\external("Figure source", sub: "records, sets, actors", tag: "buzz", look: figure\Look.plain);
+    final files = figure\external("SVGs + receipts", sub: "diagrams-generate", look: figure\Look.store);
+    final site = figure\external("Site render", sub: "inlines the page copy", look: figure\Look.plain);
+    final console = figure\external("Console view", sub: "static SVG, then wasm", look: figure\Look.plain);
+    return figure\of("diagram-pipeline")
+        .eyebrow("figures")
         .title("One library draws every figure, here and in the console")
-        .desc("A figure declares its boxes and connectors in docs/site/diagrams and composes "
-            + "them over the observed set diagrams_observe writes from the import graph. flow "
-            + "lays it out and the renderer validates and paints it; diagrams_generate writes "
-            + "the committed light and dark pair after the drift verifier checks every anchor, "
-            + "scope and imports claim. The server embeds the same flow source to draw live "
-            + "figures at /api/v1/diagrams, which the console fetches.")
-        .node("source", label: "Figure source", sub: "declared boxes + claims", tag: "buzz", anchor: "docs/site/diagrams")
-        .node("graph", label: "Import graph", sub: "magus\\importGraph()", role: Role.input, anchor: "internal/graph/knowledge/packagedeps.go")
-        .node("observed", label: "Observed set", sub: "gen/<id>.buzz, stamped", tag: "diagrams_observe", anchor: "docs/site/diagrams/gen")
-        .node("flow", label: "flow", sub: "compose, rank, route", role: Role.focal, anchor: "libs/diagram")
-        .node("renderer", label: "Renderer", sub: "validate, paint SVG", anchor: "libs/diagram/diagram.buzz")
-        .node("drift", label: "Drift verifier", sub: "anchors, scope, imports", anchor: "docs/site/diagrams/all.buzz")
-        .node("pair", label: "SVG pair", sub: "light + dark, committed", tag: "diagrams_generate", role: Role.store, anchor: "docs/assets/gen")
-        .node("server", label: "/api/v1/diagrams", sub: "flow embedded in-process", anchor: "internal/handler/diagram")
-        .node("console", label: "Console view", sub: "static SVG, then wasm", anchor: "console/src/console/diagrams")
-        .edge("graph", dst: "observed")
-        .edge("source", dst: "flow")
-        .edge("observed", dst: "flow")
-        .edge("flow", dst: "renderer")
-        .edge("renderer", dst: "pair")
-        .edge("graph", dst: "drift", label: "imports")
-        .edge("drift", dst: "pair", label: "gates")
-        .edge("server", dst: "flow", label: "embeds", claim: Claim.imports)
-        .edge("console", dst: "server", label: "GET", claim: Claim.calls)
-        .rank(["source", "observed", "drift"])
-        .order(["server", "source", "observed", "drift"])
-        .legend(Role.focal, label: "the one layout")
-        .legend(Role.input, label: "the symbol index")
-        .legend(Role.store, label: "committed output")
-        .scope(["libs/diagram", "internal/handler/diagram"])
-        .diagram();
+        .desc("A figure in docs/site/diagrams builds its boxes from the knowledge graph's own "
+            + "records, magus\\dir, magus\\dirs and magus\\layer, and draws the imports and "
+            + "declared calls between them. magus/figure lays it out and paints it; "
+            + "diagrams-generate writes the committed light, dark and page copies with a "
+            + "receipt beside each, and the site render inlines the page copy. The server "
+            + "embeds the same module to draw live figures at /api/v1/diagrams, which the "
+            + "console fetches.")
+        .actor(source)
+        .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: figure\Look.input)
+        .box(module, label: "magus/figure", sub: "sets, layout, paint", focal: true)
+        .actor(files)
+        .actor(site)
+        .box(server, label: "/api/v1/diagrams", sub: "the module in-process")
+        .actor(console)
+        .edgesFromGraph()
+        .markEdge(host, dst: module, label: "embeds")
+        .flowIn(source, dst: host, label: "records")
+        .flowIn(source, dst: module, label: "imports")
+        .flowOut(module, dst: files, label: "paints")
+        .flowAcross(files, dst: site, label: "page copy")
+        .flowIn(console, dst: server, label: "GET")
+        .legend(figure\Look.focal, label: "the one layout")
+        .legend(figure\Look.input, label: "reads the knowledge graph")
+        .legend(figure\Look.store, label: "committed output")
+        .scope(figure\setOf([module, server]));
 }

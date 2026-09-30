@@ -1,40 +1,50 @@
-// site/diagrams/volatility.buzz - what magus does with a failing target before it calls
+// site/diagrams/volatility.buzz: what magus does with a failing target before it calls
 // the failure a regression. The single accent is on "suspected regression": every other
 // path in the figure is magus absorbing noise, and that one is the path that wants a human.
+//
+// The retry is internal/retry; the questions and outcomes around it are steps of a run,
+// so they are actors.
 namespace volatility;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/volatility" as volatilityGen;
+import "magus";
+import "magus/figure";
 
-export fun volatilityDiagram() > Diagram !> str {
-    return flow("volatility", observed: volatilityGen\volatilityObserved())
+export fun volatilityFigure() > figure\Figure !> any {
+    final retry = magus\dir("internal/retry");
+    final fail = figure\external("Target fails", look: figure\Look.plain);
+    final det = figure\external("detection on?", look: figure\Look.decision);
+    final report = figure\external("Report failure", look: figure\Look.plain);
+    final hist = figure\external("enough history?", look: figure\Look.decision);
+    final rate = figure\external("over threshold?", look: figure\Look.decision);
+    final pass = figure\external("retry passed?", look: figure\Look.decision);
+    final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
+    final regress = figure\external("Suspected regression", sub: "chase with --bisect", look: figure\Look.focal);
+    return figure\of("volatility")
         .down()
         .eyebrow("volatility")
         .title("When a failure is retried, and when it is believed")
         .desc("A failing target is retried once if history is too thin to judge, or if its "
             + "measured volatility is above the threshold. A retry that passes is recorded "
             + "as volatile and the run continues; anything else is a suspected regression.")
-        .node("fail", label: "Target fails")
-        .node("det", label: "detection on?", role: Role.decision)
-        .node("report", label: "Report failure")
-        .node("hist", label: "enough history?", role: Role.decision)
-        .node("rate", label: "over threshold?", role: Role.decision)
-        .node("retry", label: "Retry once", sub: "the same target", anchor: "internal/retry")
-        .node("pass", label: "retry passed?", role: Role.decision)
-        .node("volatile", label: "Record volatile", sub: "the run continues")
-        .node("regress", label: "Suspected regression", sub: "chase with --bisect", role: Role.focal)
-        .edge("fail", dst: "det")
-        .edge("det", dst: "report", label: "no")
-        .edge("det", dst: "hist", label: "yes")
-        .edge("hist", dst: "retry", label: "bootstrap")
-        .edge("hist", dst: "rate", label: "yes")
-        .edge("rate", dst: "retry", label: "yes")
-        .edge("rate", dst: "regress", label: "no")
-        .edge("retry", dst: "pass")
-        .edge("pass", dst: "volatile", label: "yes")
-        .edge("pass", dst: "regress", label: "no")
-        .legend(Role.focal, label: "wants a human")
-        .scope(["internal/retry"])
-        .diagram();
+        .actor(fail)
+        .actor(det)
+        .actor(report)
+        .actor(hist)
+        .actor(rate)
+        .box(retry, label: "Retry once", sub: "the same target")
+        .actor(pass)
+        .actor(volatile)
+        .actor(regress)
+        .flowAcross(fail, dst: det)
+        .flowAcross(det, dst: report, label: "no")
+        .flowAcross(det, dst: hist, label: "yes")
+        .flowIn(hist, dst: retry, label: "bootstrap")
+        .flowAcross(hist, dst: rate, label: "yes")
+        .flowIn(rate, dst: retry, label: "yes")
+        .flowAcross(rate, dst: regress, label: "no")
+        .flowOut(retry, dst: pass)
+        .flowAcross(pass, dst: volatile, label: "yes")
+        .flowAcross(pass, dst: regress, label: "no")
+        .legend(figure\Look.focal, label: "wants a human")
+        .scope(figure\setOf([retry]));
 }

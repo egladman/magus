@@ -17,16 +17,23 @@
 //     project %q".
 //   describe.go:400 a cross-project input's owner "is also unioned into DependsOn".
 //
-// The snapshot's connector to the claim rule is a real import (internal/cache imports
-// types); every other connector is a declaration or a step, and claims flow.
+// The source walk, the key and the snapshot are one package, internal/cache, which imports
+// the claim rule from types. The globs are declarations in magusfiles and the tool probe is
+// a step of the run, so those are actors.
 namespace inputsOutputs;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/inputs-outputs" as inputsOutputsGen;
+import "magus";
+import "magus/figure";
 
-export fun inputsOutputsDiagram() > Diagram !> str {
-    return flow("inputs-outputs", observed: inputsOutputsGen\inputsOutputsObserved())
+export fun inputsOutputsFigure() > figure\Figure !> any {
+    final cache = magus\dir("internal/cache");
+    final audit = magus\dir("internal/audit");
+    final claims = magus\dir("types");
+    final reads = figure\external("readsFiles(\"**/*.go\")", sub: "matches nested files too", tag: "root", look: figure\Look.plain);
+    final writes = figure\external("writesFiles(\"**/gen/mocks/*.go\")", sub: "the root's gen/ only", tag: "root", look: figure\Look.plain);
+    final handle = figure\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: figure\Look.plain);
+    final probe = figure\external("Tool probe", sub: "the version, or UNPROBED", look: figure\Look.plain);
+    return figure\of("inputs-outputs")
         .eyebrow("inputs and outputs")
         .title("An output stops at a nested project; an input does not")
         .desc("A target's ctx.readsFiles and ctx.writesFiles globs resolve from its own "
@@ -38,29 +45,24 @@ export fun inputsOutputsDiagram() > Diagram !> str {
             + "tree through a project handle, workspace\\file, which also makes the root "
             + "its upstream. The matched files and the probed tool versions are the key; an "
             + "input nobody declared never reaches it.")
-        .node("reads", label: "readsFiles(\"**/*.go\")", sub: "matches nested files too", tag: "root", anchor: "magusfile.buzz")
-        .node("writes", label: "writesFiles(\"**/gen/mocks/*.go\")", sub: "the root's gen/ only", tag: "root", anchor: "magusfile.buzz")
-        .node("handle", label: "workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", anchor: "docs/magusfile.buzz")
-        .node("audit", label: "Descendant audit", sub: "MGS3001 on a write inside", anchor: "internal/audit")
-        .node("walk", label: "Source walk", sub: "every file a glob matches", anchor: "internal/cache/hash.go")
-        .node("probe", label: "Tool probe", sub: "the version, or UNPROBED", anchor: "run.go")
-        .node("key", label: "Cache key", sub: "src:, dep:, tool: lines", role: Role.focal, anchor: "internal/cache")
-        .node("snapshot", label: "Snapshot + replay", sub: "owned outputs only", anchor: "internal/cache/snapshot.go")
-        .node("claims", label: "Output claim", sub: "stops at a nested dir", anchor: "types/workspace.go")
-        .edge("reads", dst: "walk")
-        .edge("handle", dst: "walk", label: "+ depends_on", role: EdgeRole.focal)
-        .edge("walk", dst: "key", label: "src:")
-        .edge("probe", dst: "key", label: "tool:")
-        .edge("writes", dst: "snapshot")
-        .edge("key", dst: "snapshot", label: "hit replays")
-        .edge("snapshot", dst: "claims", claim: Claim.imports)
-        .edge("writes", dst: "audit", label: "stray write", role: EdgeRole.optional)
-        // Nested above root, so the handle's crossing and a stray write each cross the one
-        // zone edge between the two projects.
-        .zone("a nested project", members: ["handle", "audit"])
-        .zone("root project .", members: ["reads", "writes"])
-        .zone("the cache", members: ["walk", "probe", "key", "snapshot", "claims"])
-        .legend(Role.focal, label: "what a hit is keyed on")
-        .scope(["internal/cache"])
-        .diagram();
+        .actor(reads)
+        .actor(writes)
+        .actor(handle)
+        .box(audit, label: "Descendant audit", sub: "MGS3001 on a write inside")
+        .actor(probe)
+        .box(cache, label: "Cache key", sub: "source walk, key, snapshot", focal: true)
+        .box(claims, label: "Output claim", sub: "stops at a nested dir")
+        .edgesFromGraph()
+        .hideEdges(figure\setOf([audit]), dst: figure\setOf([claims]),
+            why: "the audit reads the same claim rule; the figure draws it from the snapshot")
+        .flowIn(reads, dst: cache, label: "src:")
+        .flowIn(handle, dst: cache, label: "+ depends_on", stroke: figure\Stroke.focal)
+        .flowIn(probe, dst: cache, label: "tool:")
+        .flowIn(writes, dst: cache, label: "snapshot")
+        .flowIn(writes, dst: audit, label: "stray write", stroke: figure\Stroke.optional)
+        .zone("root project .", actors: [reads, writes])
+        .zone("a nested project", dirs: figure\setOf([audit]), actors: [handle])
+        .zone("the cache", dirs: figure\setOf([cache, claims]), actors: [probe])
+        .legend(figure\Look.focal, label: "what a hit is keyed on")
+        .scope(figure\setOf([cache]));
 }

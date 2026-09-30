@@ -8,7 +8,6 @@ import "fs";
 import "io";
 import "os";
 import "template";
-import "../libs/diagram/diagram" as _;
 import "lib/text" as _;
 import "lib/html" as _;
 import "engine/meta" as _;
@@ -151,14 +150,12 @@ fun workspaceDependencies(graph: Graph) > str {
         + "depends on. Blast radius counts the projects a change here can reach, so it "
         + "is the cost of touching that project.\n\n"
         + "| project | depends on | blast radius |\n| --- | --- | --- |\n";
-    final items: mut [LayeredItem] = mut [<LayeredItem>];
     foreach (n in nodes) {
         final label = projectLabel(n);
         final slug = slugifyProject(label);
         // A typed empty list, not `[]`: joining a bare list literal with the declared
         // [str] collapses the element type to any (see the note in projectCatalog).
         final deps = graph.dependsOn[n] ?? [<str>];
-        final itemDeps: mut [str] = mut [<str>];
         var depCell = "-";
         if (deps.len() > 0) {
             var parts = "";
@@ -166,15 +163,11 @@ fun workspaceDependencies(graph: Graph) > str {
                 if (parts != "") { parts = parts + ", "; }
                 final dLabel = projectLabel(d);
                 parts = parts + "[`" + dLabel + "`](" + UP + slugifyProject(dLabel) + "/)";
-                // Edge direction matches the per-project run-order graphs: the arrow
-                // points from a dependency to what waits on it.
-                itemDeps.append(slugifyProject(dLabel));
             }
             depCell = parts;
         }
         buf = buf + "| [`" + label + "`](" + UP + slug + "/) | " + depCell + " | "
             + "{graph.blastRadius[n] ?? 0}" + " |\n";
-        items.append(LayeredItem{ id = slug, label = label, deps = itemDeps });
     }
     // No figure here on purpose. A layered placement of THIS graph is unreadable: most
     // projects are roots or wholly independent, so it draws a tall stack of disconnected
@@ -240,10 +233,10 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 
     // Run order. Only emitted when there is at least one edge - a flat list of
     // unconnected boxes tells a reader nothing.
-    final items: mut [LayeredItem] = mut [<LayeredItem>];
+    final items: mut [RunOrderItem] = mut [<RunOrderItem>];
     var edgeCount = 0;
     foreach (n in nodes) {
-        items.append(LayeredItem{ id = n.name, label = n.name, deps = n.dependencies });
+        items.append(RunOrderItem{ name = n.name, deps = n.dependencies });
         edgeCount = edgeCount + n.dependencies.len();
     }
     if (edgeCount > 0) {

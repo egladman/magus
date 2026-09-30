@@ -1,16 +1,17 @@
 ---
 title: Writing diagrams
-description: How to write an architecture figure with flow, compose it over the observed import graph, and keep it true with the drift check.
-tags: [diagrams, flow, buzz, docs, drift]
+description: How to write an architecture figure with magus/figure, from the knowledge graph's own directory and layer records, and keep it true.
+tags: [diagrams, figure, buzz, docs, drift]
 ---
 
 # Writing diagrams
 
 Every architecture figure on this site is a Buzz file in `docs/site/diagrams/`,
-laid out by `flow` (`libs/diagram/flow.buzz`) and painted by the renderer beside
-it. You declare what the figure shows and what each connector claims about the
-code; flow places everything, and the drift check fails the build when the code
-moves out from under the picture.
+drawn by `magus/figure`, a module embedded in the magus binary. A box is a
+directory the knowledge graph holds, a group is a set of them, and the edges
+between code boxes are the imports and declared calls those directories carry.
+You declare what the figure shows; the module places everything and refuses a
+figure it cannot draw, naming the call to change.
 
 <!--diagram:diagram-pipeline-->
 
@@ -19,122 +20,99 @@ moves out from under the picture.
 A figure makes one claim: the title states it, and the boxes and connectors are
 the evidence. There are hard budgets:
 at most 9 boxes, 12 connectors, 3 zones and 2 accented elements. A figure that
-needs more is two figures, an overview and a detail, each with its own `flow()`.
+needs more is two figures, an overview and a detail, each with its own
+`figure\of()`.
 
-## The twelve-line first figure
+## The first figure
 
 ```buzz
 namespace cacheRead;
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-export fun cacheReadDiagram() > Diagram !> str {
-    return flow("cache-read")
+
+import "magus";
+import "magus/figure";
+
+export fun cacheReadFigure() > figure\Figure !> any {
+    final cache = magus\dir("internal/cache");
+    final run = figure\external("Run target", look: figure\Look.plain);
+    return figure\of("cache-read")
         .title("A hit skips the run")
-        .node("key", label: "Cache key", anchor: "internal/cache")
-        .node("run", label: "Run target")
-        .edge("key", dst: "run", label: "miss")
-        .scope(["internal/cache"])
-        .diagram();
+        .box(cache, label: "Cache key", focal: true)
+        .flowOut(cache, dst: run, label: "miss")
+        .scope(figure\setOf([cache]));
 }
 ```
 
-Register it in `docs/site/diagrams/all.buzz` (the import and an `allDiagrams()`
-entry), then embed it on a page with `<!--diagram:cache-read-->`.
-`magus run diagrams-generate docs` checks it and writes the committed light and
-dark SVG pair to `docs/assets/gen/`.
+`magus\dir` raises MGS7005 when the graph holds no such directory, naming the
+nearest one, so a typo fails at the line that made it. Register the figure in
+`docs/site/diagrams/all.buzz` (the import and an `allFigures()` entry), then
+embed it on a page with `<!--diagram:cache-read-->`.
 
-## Roles and claims
+## Boxes, groups and actors
 
-A box's `role:` picks its treatment: `Role.focal` takes the accent, `store` is
-something persistent, `external` sits outside what the figure depicts, `input`
-is data arriving from outside, `optional` is dashed, and `decision` is a diamond
-with at most three exits. Add a `legend()` line for each role you use.
+- `box(dir, label:, sub:, focal:, look:)` draws one directory.
+- `group(set, label:)` draws every directory in a set as one box. Build the set
+  from records: `figure\layerSet(magus\layer("handler"))` is every directory a
+  declared layer covers, `figure\setOf(magus\dirs("internal/queue/*"))` every
+  directory a glob matches, and `.without([...])` and `.plus([...])` derive one.
+  A package added to the layer joins the group with no edit to the figure.
+- `figure\external(name, ...)` is an actor: a person, a vendor service, a step,
+  a Buzz file or a decision.
 
-Every connector claims what it asserts about the code:
+The layers this repository declares live under `"layers"` in the root
+`magusfile.buzz`: transport, handler, service, repository and composition.
 
-- `Claim.imports`: the source package imports the destination. Checked against
-  the import graph.
-- `Claim.calls`: a call across a process or network boundary, such as a hook
-  running magus or the console fetching an endpoint. Declared and counted; no
-  index can see it.
-- `Claim.flow`: narrative, the default. Never checked, but counted, so an
-  all-flow figure reads as unverified.
+A directory is drawn once, so a box inside a group's set is refused; drop it
+with `.without([...])`. `look:` takes `figure\Look.focal`, `store`, `external`,
+`input`, `optional`, `decision` (actors only) or `plain`. Add a `legend()` line
+for each look you use.
 
-## Scope and omits
+## Edges
 
-`scope([...])` names the directories the figure depicts, a whole-segment glob
-per entry (`internal/handler/*`, `internal/graph/**`). Every Go package under
-scope must be anchored by a box, or left out with `omit(path, why:)`; the
-reason is required. A figure with no code behind it says so with
-`unscoped(why:)` instead.
+`edgesFromGraph()` draws every import and every declared `magus:calls` marker
+between two drawn boxes, and a figure with two or more code boxes must call it.
+Every drawn directory needs a symbol index, so run `magus graph build` first.
 
-`anchor:` is a path in this repository, a package or a file; a file anchor
-covers its package. Anything outside the repository takes `link:`.
+- `hideEdges(src, dst:, why:)` drops graph edges from one set to another, with
+  a reason. A hide that matches nothing is a finding.
+- `markEdge(src, dst:, label:, stroke:)` labels or strokes one graph edge.
+- `flowIn`, `flowOut` and `flowAcross` are the only hand edges, and each has an
+  actor at one end. An edge between two packages is never drawn by hand.
 
-## Composing over an observed set
+## Scope
 
-`magus run diagrams-observe docs` reads the symbol index (build it with
-`magus graph build`) and writes `docs/site/diagrams/gen/<id>.buzz`: every package
-under the figure's scope and the imports between them, stamped. Import it
-aliased and pass it to `flow`:
-
-```buzz
-return flow("guard-path", observed: guardPathGen\guardPathObserved())
-```
-
-A declared box with an observed box's id or anchor merges with it, and your
-label, role and sub win. Observed boxes you do not declare are drawn as they
-are unless omitted. Hide an observed import with `omitEdge(src, dst:, why:)`,
-reason required. A declared connector over an observed import must claim
-`Claim.imports`.
-
-Register the observed half in `all.buzz` too: the aliased gen/ import and an
-`observedFor` entry.
-
-## rank, row and order
-
-flow takes no coordinates and no weights. Three declarations relate boxes
-instead: `rank([...])` puts boxes in one column, `row([...])` lines boxes up on
-one midline so the connectors between them run straight, and `order([...])`
-sorts boxes within their shared column. Zones stack as bands in declaration
-order. A constraint the layout cannot honor is refused with a finding, never
-ignored.
+`scope(set)` names the directories the figure answers for. Every one must be
+drawn by a box or a group, or left out with `except(set, why:)`, which is for a
+true exclusion. A figure with no code behind it says so with `unscoped(why:)`.
 
 ## Findings
 
 Nothing is drawn until the figure is clean. Each finding names the call to
 change:
 
-- `10 nodes exceeds the budget of 9; split into overview plus detail`: cut or
-  fold boxes, or make two figures.
-- `label "..." runs past 14 characters`: shorten it or move the words to
-  `desc()`.
-- `names no code; add scope([...]) or unscoped(why:)`: say what the figure
-  depicts.
-- `internal/x is under scope ... but no node anchors it`: anchor it or omit it
-  with a reason.
-- `edge a -> b replaces an observed import but claims flow`: claim
-  `Claim.imports` or hide it with `omitEdge`.
-- `omitEdge "a" -> "b" names no observed edge`: the code changed; drop the
-  override.
-- `rank([...]) contradicts the path "a" -> "b"`: a path already orders them;
-  drop one from the rank.
-- `observed set is stale`: rerun `magus run diagrams-observe docs`.
+- `10 nodes exceeds the budget of 9; split into overview plus detail, one figure\of() each`:
+  cut or fold boxes, or make two figures.
+- `"internal/x" is in scope(...) but nothing draws it`: draw it, or narrow the
+  scope.
+- `draws 2 boxes of code and no edge between them; call edgesFromGraph()`.
+- `"a" has no symbol index`: build it with `magus graph build`.
+- `hideEdges(...) hides no edge the graph draws`: the code changed; drop the
+  hide.
 
-## The drift check
+## Generating the files
 
-`magus run diagrams-generate docs` verifies every figure before it writes a
-byte: anchors exist, every package under scope is anchored or omitted, every
-omit names a real path. Add `-- --verify-imports` after `magus graph build` and
-it also checks each imports claim and each observed stamp against the index. A
-summary line per figure counts its anchors and claims.
+`magus run diagrams-generate docs` lays every figure out from the symbol index
+and writes into `docs/assets/gen/` the dark and light pair the README loads,
+the page copy the site inlines, and a receipt beside each: the stamp, the claim
+counts, the findings and the index digest it was drawn at. The stamp is also in
+each SVG's metadata. It fails when the committed files move; `:rw` rewrites
+them. The site render reads only the page copies, so it never needs the index.
 
 ## The console view
 
 The console's Diagrams page draws the project graph, one project's targets and
 the import graph from `/api/v1/diagrams`, each through a lens of scope, focus
-and depth. The server embeds the same flow source this site builds with, and
-anchored boxes link to their source.
+and depth. The server embeds the same module this site builds with, and boxes
+link to their source.
 
 ## Credit
 

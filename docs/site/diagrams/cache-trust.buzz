@@ -1,14 +1,21 @@
-// site/diagrams/cache-trust.buzz - who may write which cache tier in CI. The argument is
+// site/diagrams/cache-trust.buzz: who may write which cache tier in CI. The argument is
 // in the connectors that are missing: no pull request run writes the remote tier, and
 // nothing carries a pull request's local tier to the default branch.
+//
+// The runs and the local tier live in the CI workflow, not in a package, so they are
+// actors; the remote tier and its signature check are internal/cache.
 namespace cacheTrust;
 
-import "../libs/diagram/diagram" as _;
-import "../libs/diagram/flow" as _;
-import "site/diagrams/gen/cache-trust" as cacheTrustGen;
+import "magus";
+import "magus/figure";
 
-export fun cacheTrustDiagram() > Diagram !> str {
-    return flow("cache-trust", observed: cacheTrustGen\cacheTrustObserved())
+export fun cacheTrustFigure() > figure\Figure !> any {
+    final remote = magus\dir("internal/cache");
+    final pr = figure\external("PR run", sub: "no signing key", tag: "pull_request", look: figure\Look.plain);
+    final local = figure\external("Local tier", sub: "Actions cache, PR ref", look: figure\Look.store);
+    final main = figure\external("Default branch run", sub: "holds the signing key", tag: "push", look: figure\Look.plain);
+    final reject = figure\external("Unsigned entry", sub: "rejected, then rebuilt", look: figure\Look.optional);
+    return figure\of("cache-trust")
         .eyebrow("remote cache")
         .title("A pull request reads the shared cache and never writes it")
         .desc("A pull request run reads the signed remote tier and reads and writes a "
@@ -16,22 +23,19 @@ export fun cacheTrustDiagram() > Diagram !> str {
             + "the signing key, so only the default branch writes the remote tier. "
             + "Every read checks the signature "
             + "and rebuilds the target on an unsigned entry.")
-        .node("pr", label: "PR run", sub: "no signing key", tag: "pull_request", anchor: ".github/workflows/ci.yaml")
-        .node("local", label: "Local tier", sub: "Actions cache, PR ref", role: Role.store, anchor: ".github/workflows/ci.yaml")
-        // The package, not internal/cache/signing.go: the observed set names packages, and a
-        // box merges with the observation that carries its exact anchor.
-        .node("remote", label: "Remote tier", sub: "verified on every read", tag: "ed25519", role: Role.focal, anchor: "internal/cache")
-        .node("default", label: "Default branch run", sub: "holds the signing key", tag: "push", anchor: ".github/workflows/ci.yaml")
-        .node("reject", label: "Unsigned entry", sub: "rejected, then rebuilt", role: Role.optional)
-        .edge("pr", dst: "local", label: "read + write")
-        .edge("remote", dst: "pr", label: "read only")
-        .edge("default", dst: "remote", label: "sign + put", role: EdgeRole.focal)
-        .edge("remote", dst: "reject", label: "no signature", role: EdgeRole.optional)
-        .zone("pull request, untrusted code", members: ["pr", "local"])
-        .zone("default branch, trusted", members: ["default", "reject"])
-        .legend(Role.focal, label: "the one shared store")
-        .legend(Role.store, label: "one pull request only")
-        .legend(Role.optional, label: "never replayed")
-        .scope(["internal/cache"])
-        .diagram();
+        .actor(pr)
+        .actor(local)
+        .box(remote, label: "Remote tier", sub: "verified on every read", tag: "ed25519", focal: true)
+        .actor(main)
+        .actor(reject)
+        .flowAcross(pr, dst: local, label: "read + write")
+        .flowOut(remote, dst: pr, label: "read only")
+        .flowIn(main, dst: remote, label: "sign + put", stroke: figure\Stroke.focal)
+        .flowOut(remote, dst: reject, label: "no signature", stroke: figure\Stroke.optional)
+        .zone("pull request, untrusted code", actors: [pr, local])
+        .zone("default branch, trusted", actors: [main, reject])
+        .legend(figure\Look.focal, label: "the one shared store")
+        .legend(figure\Look.store, label: "one pull request only")
+        .legend(figure\Look.optional, label: "never replayed")
+        .scope(figure\setOf([remote]));
 }

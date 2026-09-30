@@ -1,0 +1,11 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 6,
+    "imports": 0
+  },
+  "figure": "image-build",
+  "findings": [],
+  "stamp": "sha256:bf8b60f90325f3af14bef8ca896149e57f8363946e6a2bf12ebf4277a8bceff3",
+  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+}
