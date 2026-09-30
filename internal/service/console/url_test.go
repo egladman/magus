@@ -91,6 +91,7 @@ func TestKnownSurfaces(t *testing.T) {
 	assert.True(t, IsSurfaceRoute("dashboard"))
 	assert.True(t, IsSurfaceRoute("logs"))
 	assert.True(t, IsSurfaceRoute("activity"))
+	assert.True(t, IsSurfaceRoute("tools"))
 	assert.False(t, IsSurfaceRoute("graph/explorer.js"), "a sub-path is a static file, not a surface route")
 	assert.False(t, IsSurfaceRoute(""), "the console root is not a surface route")
 	assert.False(t, IsSurfaceRoute("settings"), "settings is not a clean-path deep-link surface")

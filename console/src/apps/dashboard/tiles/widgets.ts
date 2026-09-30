@@ -91,20 +91,26 @@ export class SortableTable<T> {
   private wrap: HTMLElement;
   private unresolved: string | null = null;
 
-  constructor(cols: Column<T>[], opts: { sortKey?: string; emptyText?: string } = {}) {
+  // area names the stylesheet that owns the table's classes: the Dashboard's tiles take the
+  // default, and an app with its own sheet passes its id.
+  constructor(
+    cols: Column<T>[],
+    opts: { sortKey?: string; emptyText?: string; area?: string } = {},
+  ) {
+    const area = opts.area ?? "dashboard";
     this.cols = cols;
     this.sortKey = opts.sortKey ?? cols[0].key;
     this.sortDir = 1;
 
-    const wrap = h("div", "console-dashboard-table__wrap");
+    const wrap = h("div", `console-${area}-table__wrap`);
     this.wrap = wrap;
-    const table = h("table", "console-dashboard-table");
+    const table = h("table", `console-${area}-table`);
     const thead = h("thead");
     const tr = h("tr");
     for (const c of cols) {
       const th = h("th");
       if (c.numeric) th.dataset.num = "";
-      const btn = h("button", "console-dashboard-table__sort", c.label);
+      const btn = h("button", `console-${area}-table__sort`, c.label);
       btn.type = "button";
       btn.addEventListener("click", () => this.toggleSort(c.key));
       th.append(btn);
@@ -117,7 +123,7 @@ export class SortableTable<T> {
     wrap.append(table);
 
     this.emptyText = opts.emptyText ?? "No data yet.";
-    this.empty = h("p", "console-dashboard-row__empty", this.emptyText);
+    this.empty = h("p", `console-${area}-row__empty`, this.emptyText);
     this.empty.hidden = true;
 
     const host = h("div");
@@ -145,6 +151,13 @@ export class SortableTable<T> {
     this.empty.textContent = reason;
     this.empty.hidden = false;
     this.wrap.hidden = true;
+  }
+
+  // setEmptyText changes what an empty table says, for a caller whose reason for no rows varies
+  // (nothing exists, or a filter hides all of it).
+  setEmptyText(text: string): void {
+    this.emptyText = text;
+    if (this.unresolved === null) this.empty.textContent = text;
   }
 
   setRows(rows: T[]): void {

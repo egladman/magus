@@ -1,14 +1,14 @@
-// toolchain-dom.test.ts - the Toolchain tile. document/window come from test-setup.mjs
-// (node --import), the same harness alerts-dom.test.ts runs under.
+// toolchain-dom.test.ts - the Toolchain tile, a summary that opens the Tools app. document/window
+// come from test-setup.mjs (node --import), the same harness alerts-dom.test.ts runs under.
 //
-// The markup is not what is worth pinning. Two readings are, because both are wrong in a way
-// that looks fine on screen: a window whose `below` renders as a maximum (it is the first
-// version REJECTED, so "< 25" accepts 24.19.0), and a note that says "all inside their window"
-// while a violation sits in the table. A reader acts on the note before reading the rows.
+// Two readings are worth pinning, because both are wrong in a way that looks fine on screen: a note
+// that says "all inside their window" while a violation sits in the workspace, and a clean count
+// when the lifecycle provider never answered. A reader acts on the summary without opening the app.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { toolchainTile } from "./toolchain";
+import { surfaceNavigationEvent } from "../../../desktop/surface-navigation";
 import { initialState, type DashboardState, type LifecycleView, type ToolRowView } from "../state";
 
 function row(over: Partial<ToolRowView> = {}): ToolRowView {
@@ -39,9 +39,13 @@ function stateWith(rows: ToolRowView[], lifecycle: LifecycleView = unwired): Das
   };
 }
 
-function cells(el: HTMLElement): string[][] {
-  return [...el.querySelectorAll("tbody tr")].map((tr) =>
-    [...tr.querySelectorAll("td")].map((td) => td.textContent ?? ""),
+// counts reads the four cells as label -> value.
+function counts(el: HTMLElement): Record<string, string> {
+  return Object.fromEntries(
+    [...el.querySelectorAll(".console-dashboard-stat")].map((cell) => [
+      cell.querySelector(".console-dashboard-stat__key")?.textContent ?? "",
+      cell.querySelector(".console-dashboard-stat__value")?.textContent ?? "",
+    ]),
   );
 }
 
@@ -49,128 +53,101 @@ function note(el: HTMLElement): string {
   return el.querySelector(".console-dashboard-tile__note")?.textContent ?? "";
 }
 
-test("a violation is named with the code the CLI would raise", () => {
-  // The console and a terminal must not disagree about the same pair. If the tile says a
-  // version is fine and `magus run` fails on MGS3006, the tile is the thing that gets
-  // distrusted.
+const live: LifecycleView = {
+  provider: "endoflife-date",
+  state: "live",
+  sources: ["https://endoflife.date/api/v1/products/go"],
+  detail: "",
+};
+
+test("the summary counts what needs acting on, and states the zeros", () => {
   const tile = toolchainTile();
   tile.update(
-    stateWith([
-      row({
-        project: "console",
-        bin: "node",
-        spell: "typescript",
-        installed: "v26.5.0",
-        workspaceWindow: ">= 22, < 25",
-        effectiveWindow: ">= 22, < 25",
-        verdict: "too new",
-        code: "MGS3006",
-      }),
-    ]),
+    stateWith(
+      [
+        row({ installed: "v1.25.3", support: "eol", workspaceWindow: "" }),
+        row({ bin: "node", support: "supported" }),
+        row({ bin: "pnpm", support: "unannounced", workspaceWindow: "" }),
+        row({ bin: "buf", support: "unannounced" }),
+      ],
+      live,
+    ),
   );
-  const [r] = cells(tile.el);
-  assert.deepEqual(r.slice(0, 4), ["node", "console", "v26.5.0", ">= 22, < 25"]);
-  assert.equal(r[5], "too new (MGS3006)");
-  assert.match(note(tile.el), /^1 outside their window$/);
+  assert.deepEqual(counts(tile.el), {
+    "Past end of life": "1",
+    "Outside window": "0",
+    Unannounced: "2",
+    Unpinned: "2",
+  });
+});
+
+test("a violation is counted and named in the note with the lifecycle note after it", () => {
+  // The console and a terminal must not disagree about the same pair: the count is the rows that
+  // carry a diagnostic code, the same ones `magus run` would fail on.
+  const tile = toolchainTile();
+  tile.update(
+    stateWith(
+      [
+        row({ bin: "node", verdict: "too new", code: "MGS3006" }),
+        row({ support: "unknown" }),
+      ],
+      { provider: "endoflife-date", state: "unreached", sources: [], detail: "no route to host" },
+    ),
+  );
+  assert.equal(counts(tile.el)["Outside window"], "1");
+  assert.equal(
+    note(tile.el),
+    "1 outside their window; end of life unknown: endoflife-date did not answer (no route to host)",
+  );
 });
 
 test("the note reports zero violations rather than staying quiet about them", () => {
-  // Silence reads as "not checked". A workspace whose toolchain is current is a result, and
-  // the reader should be able to tell it apart from a tile that never loaded.
+  // Silence reads as "not checked". A workspace whose toolchain is current is a result, and the
+  // reader should be able to tell it apart from a tile that never loaded.
   const tile = toolchainTile();
   tile.update(stateWith([row(), row({ project: "docs", bin: "pnpm" })]));
   assert.equal(note(tile.el), "2 tools, all inside their window");
 });
 
-test("the declared-by column separates the spell's window from the project's", () => {
-  // Whose bound is failing is the first question, and Intersect has already discarded that by
-  // the time the CLI builds its message. This column is the only place the answer survives.
-  const tile = toolchainTile();
-  tile.update(
-    stateWith([
-      row({ bin: "a", spellWindow: ">= 1.26", workspaceWindow: "" }),
-      row({ bin: "b", spellWindow: "", workspaceWindow: ">= 22" }),
-      row({ bin: "c", spellWindow: ">= 1.26", workspaceWindow: ">= 1.27" }),
-      row({ bin: "d", spellWindow: "", workspaceWindow: "" }),
-    ]),
-  );
-  assert.deepEqual(
-    cells(tile.el).map((r) => r[4]),
-    ["spell", "workspace", "spell + workspace", "-"],
-  );
-});
-
-test("an unconstrained tool says so instead of rendering an empty window", () => {
-  // A blank cell reads as missing data. Nothing constraining a tool is a real, common state.
-  const tile = toolchainTile();
-  tile.update(stateWith([row({ workspaceWindow: "", effectiveWindow: "" })]));
-  assert.equal(cells(tile.el)[0][3], "unconstrained");
-});
-
-test("a tool that could not be probed reads as not found, not as a version", () => {
-  const tile = toolchainTile();
-  tile.update(stateWith([row({ installed: "", verdict: "unknown" })]));
-  const [r] = cells(tile.el);
-  assert.equal(r[2], "not found");
-  assert.equal(r[5], "unknown", "an unprobeable tool is not a violation");
-  assert.equal(r[6], "-", "and it has no probe age to show");
-});
-
-test("a cycle past its end of life is shown and counted in the note", () => {
-  const live: LifecycleView = {
-    provider: "endoflife-date",
-    state: "live",
-    sources: ["https://endoflife.date/api/v1/products/go"],
-    detail: "",
-  };
-  const tile = toolchainTile();
-  tile.update(
-    stateWith(
-      [
-        row({ installed: "v1.25.3", cycle: "1.25", eol: "2026-08-19", support: "eol" }),
-        row({ project: "docs", bin: "node", cycle: "24", eol: "2028-04-30", support: "supported" }),
-      ],
-      live,
-    ),
-  );
-  const [goRow, nodeRow] = cells(tile.el);
-  assert.deepEqual(goRow.slice(7), ["1.25", "2026-08-19", "eol"]);
-  assert.deepEqual(nodeRow.slice(7), ["24", "2028-04-30", "supported"]);
-  assert.equal(note(tile.el), "2 tools, all inside their window; 1 past end of life");
-});
-
-test("an unreached provider says so instead of leaving the columns to read as fine", () => {
-  // Every row reads unknown when the provider did not answer, and a note that only counted
-  // windows would let that pass as a clean toolchain.
-  const tile = toolchainTile();
-  tile.update(
-    stateWith([row({ support: "unknown" })], {
-      provider: "endoflife-date",
-      state: "unreached",
-      sources: [],
-      detail: "no route to host",
-    }),
-  );
-  assert.equal(cells(tile.el)[0][9], "unknown");
-  assert.equal(
-    note(tile.el),
-    "1 tools, all inside their window; end of life unknown: endoflife-date did not answer (no route to host)",
-  );
-});
-
-test("a tool whose spell names no product shows dashes, not unknown", () => {
+test("the tile holds no table: the rows live in the Tools app", () => {
   const tile = toolchainTile();
   tile.update(stateWith([row()]));
-  assert.deepEqual(cells(tile.el)[0].slice(7), ["-", "-", "-"]);
+  assert.equal(tile.el.querySelectorAll("table").length, 0);
+});
+
+test("Open Tools asks the shell to open the tools app", () => {
+  const tile = toolchainTile();
+  const opened: unknown[] = [];
+  const listen = (e: Event): void => {
+    opened.push((e as CustomEvent).detail);
+  };
+  window.addEventListener(surfaceNavigationEvent, listen);
+  try {
+    const open = tile.el.querySelector<HTMLButtonElement>("[data-open-surface]");
+    assert.equal(open?.dataset.openSurface, "tools");
+    assert.equal(open?.textContent, "Open Tools");
+    open?.click();
+  } finally {
+    window.removeEventListener(surfaceNavigationEvent, listen);
+  }
+  assert.deepEqual(opened, [{ pageId: "tools" }]);
 });
 
 test("an empty view keeps the tile's own note and offers the empty state", () => {
   const tile = toolchainTile();
   tile.update(initialState());
-  assert.equal(cells(tile.el).length, 0);
   assert.match(note(tile.el), /version window each is held to/);
+  assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-statstrip")?.hidden, true);
   assert.match(
     tile.el.querySelector(".console-dashboard-row__empty")?.textContent ?? "",
     /supported/,
   );
+});
+
+test("rows arriving hide the empty state and show the counts", () => {
+  const tile = toolchainTile();
+  tile.update(initialState());
+  tile.update(stateWith([row()]));
+  assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-statstrip")?.hidden, false);
+  assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-row__empty")?.hidden, true);
 });
