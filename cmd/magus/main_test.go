@@ -917,7 +917,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 // (e.g. internal/config.init's reflection walk, internal/interp/engine/lua/teal/spell
 // .init's JSON unmarshal) fire ONCE per `go test` binary, not per b.N
 // iteration. For those, see the spawn-based ground-truth measurement in
-// hack/bench_startup.sh — it builds a fresh release binary and times
+// hack/bench/time-startup.buzz — it builds a fresh release binary and times
 // real cold starts. The in-process benchmarks below still pick up the
 // per-call cost of FindRoot, config decode, server-socket lookup, flag
 // parse, and (when applicable) magus.Open.
