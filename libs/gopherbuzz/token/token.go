@@ -6,12 +6,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
 
 // Kind identifies the category of a lexical token.
-type Kind int
+type Kind uint8
 
 const (
 	// literals
@@ -326,15 +327,19 @@ type StringPart struct {
 
 // Token is a single lexical token.
 type Token struct {
-	Kind  Kind
+	// optimization: Kind is a byte and sits beside Raw, sharing one padded word.
+	//   measured: unsafe.Sizeof(Token{}) 88 -> 80 B; describe targets retains
+	//   the cached tokens of every module it loads, 1.6 MB less.
+	//   trade-off: fields are not in reading order.
+	Kind Kind
+	// Raw marks an Ident that was written in the free-identifier form @"...".
+	// Its spelling is whatever the quotes held, so the reserved-word rule that
+	// governs ordinary identifiers does not apply to it.
+	Raw   bool
 	Val   string       // raw text (ident, plain string, number)
 	Parts []StringPart // only for InterpStr
 	Line  int
 	Col   int
-	// Raw marks an Ident that was written in the free-identifier form @"...".
-	// Its spelling is whatever the quotes held, so the reserved-word rule that
-	// governs ordinary identifiers does not apply to it.
-	Raw bool
 	// Doc carries the documentation comment block immediately preceding this
 	// token — the contiguous run of // line comments (or a single /* */ block)
 	// on the lines directly above, with no blank line in between. It is "" for
@@ -351,10 +356,11 @@ type lexer struct {
 	line   int
 	col    int
 	tokens []Token
-	// pendingDoc accumulates the most recent contiguous comment block; pendingDocLine
-	// is the source line of its last comment line. tokenize attaches pendingDoc to the
-	// next token only when that token begins on pendingDocLine+1 (no blank-line gap).
-	pendingDoc     string
+	// pendingDoc holds the lines of the most recent contiguous comment block as
+	// slices of src; pendingDocLine is the source line of its last comment line.
+	// tokenize joins them onto the next token only when that token begins on
+	// pendingDocLine+1 (no blank-line gap).
+	pendingDoc     []string
 	pendingDocLine int
 	// lastTokenLine is the end line of the most recently emitted token. A comment
 	// that begins on this line is a trailing comment (code precedes it), not a
@@ -362,61 +368,99 @@ type lexer struct {
 	lastTokenLine int
 }
 
-func newLexer(src string) *lexer {
-	// optimization: pre-size the token slice to avoid repeated append regrowth+copy
-	// of the backing array; tokenize is ~88% of parse-time allocation (alloc_space
-	// pprof). len(src)/4 is a slight over-estimate of the token count for Buzz
-	// source (most tokens span ≥4 bytes incl. surrounding whitespace), so the
-	// common case never reallocs; a denser source just costs one growth.
-	//   measured: BenchmarkParse -25% sec/op, -47% B/op, -12% allocs/op;
-	//   BenchmarkCompile -19% sec/op, -30% B/op (benchstat, n=10, p<0.01). Off the
-	//   VM Exec dispatch path entirely, so no inner-loop regression risk.
-	//   trade-off: a tiny constant of slack capacity for short sources (+16).
-	return &lexer{src: src, line: 1, col: 1, tokens: make([]Token, 0, len(src)/4+16)}
-}
+// scratch holds token buffers between Tokenize calls. A buffer is returned zeroed,
+// so it pins no source text or doc string while it waits.
+var scratch = sync.Pool{New: func() any { return new([]Token) }}
 
-// Tokenize lexes src and returns the complete token stream including EOF.
+// maxScratch bounds the buffer the pool keeps to 1.3 MB, enough for about 64 KB
+// of source; describe targets lexes three modules larger than that. A bound of
+// 1<<16 kept 4 MB more live at exit for 2 MB less allocated.
+const maxScratch = 1 << 14
+
+// Tokenize lexes src and returns the complete token stream including EOF. The
+// returned slice has no spare capacity and belongs to the caller.
 func Tokenize(src string) ([]Token, error) {
-	return newLexer(src).tokenize()
+	// optimization: lex into a pooled buffer and return an exact-length copy.
+	//   measured: BenchmarkTokenize -44% B/op, BenchmarkParseCacheMiss -41% B/op
+	//   (benchstat, n=10); in describe targets the 50 MB newLexer allocated plus
+	//   the cache's 17 MB clone became 38 MB (GODEBUG=memprofilerate=1).
+	//   trade-off: one memmove of the tokens; a pooled buffer sized to the
+	//   largest recent source lives until the second GC after its last use.
+	buf := scratch.Get().(*[]Token)
+	// Magus's own sources average 8.1 bytes per token and none passes 4, so a
+	// buffer this size never regrows mid-lex.
+	if bound := len(src)/4 + 16; cap(*buf) < bound {
+		*buf = make([]Token, 0, bound)
+	}
+	l := lexer{src: src, line: 1, col: 1, tokens: (*buf)[:0]}
+	err := l.tokenize()
+	var out []Token
+	if err == nil {
+		out = make([]Token, len(l.tokens))
+		copy(out, l.tokens)
+	}
+	clear(l.tokens)
+	if cap(l.tokens) <= maxScratch {
+		*buf = l.tokens[:0]
+		scratch.Put(buf)
+	}
+	return out, err
 }
 
-func (l *lexer) tokenize() ([]Token, error) {
+func (l *lexer) tokenize() error {
 	for {
 		l.skipWhitespaceAndComments()
 		if l.pos >= len(l.src) {
 			l.tokens = append(l.tokens, Token{Kind: EOF, Line: l.line, Col: l.col})
-			return l.tokens, nil
+			return nil
 		}
 		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
 		tok, err := l.nextToken(r, size)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		// Attach a pending doc block only to the token directly below it (no blank
 		// line); either way the pending block is consumed so it can't leak onto a
 		// later token.
-		if l.pendingDoc != "" {
+		if l.hasPendingDoc() {
 			if tok.Line == l.pendingDocLine+1 {
-				tok.Doc = l.pendingDoc
+				tok.Doc = l.joinPendingDoc()
 			}
-			l.pendingDoc = ""
+			l.pendingDoc = l.pendingDoc[:0]
 		}
 		l.tokens = append(l.tokens, tok)
 		l.lastTokenLine = l.line
 	}
 }
 
-// recordDoc folds a just-scanned comment's text into pendingDoc. A line gap from
-// the previous comment line starts a fresh block, so only a contiguous run is kept.
+// hasPendingDoc reports whether the pending block joins to a non-empty doc. A
+// block that starts with an empty comment line restarts at its next line, so an
+// empty first line only ever appears alone.
+func (l *lexer) hasPendingDoc() bool {
+	return len(l.pendingDoc) > 0 && l.pendingDoc[0] != ""
+}
+
+func (l *lexer) joinPendingDoc() string {
+	if len(l.pendingDoc) == 1 {
+		return l.pendingDoc[0]
+	}
+	return strings.Join(l.pendingDoc, "\n")
+}
+
+// recordDoc adds a just-scanned comment's text to the pending block. A line gap
+// from the previous comment line starts a fresh block, so only a contiguous run is
+// kept.
 func (l *lexer) recordDoc(text string, line int) {
-	if l.pendingDoc != "" && line != l.pendingDocLine+1 {
-		l.pendingDoc = ""
+	// optimization: lines are joined once, and only for a block that lands on a
+	// token; most comments (headers, section notes, anything above a blank line)
+	// never do.
+	//   measured: describe targets doc text 4.8 MB -> 0.7 MB allocated
+	//   (GODEBUG=memprofilerate=1).
+	//   trade-off: a lexer-lifetime slice of line strings.
+	if !l.hasPendingDoc() || line != l.pendingDocLine+1 {
+		l.pendingDoc = l.pendingDoc[:0]
 	}
-	if l.pendingDoc == "" {
-		l.pendingDoc = text
-	} else {
-		l.pendingDoc += "\n" + text
-	}
+	l.pendingDoc = append(l.pendingDoc, text)
 	l.pendingDocLine = line
 }
 
@@ -718,13 +762,23 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 	l.pos++ // opening "
 	l.col++
 	var parts []StringPart
+	// optimization: a literal run is a slice of src until an escape rewrites it;
+	// only then is it copied into lit, which holds the run from there on. The
+	// raw string and captureInterpExpr slice src the same way.
+	//   measured: BenchmarkTokenize 1446 -> 575 allocs/op (benchstat, n=10).
+	//   trade-off: a literal pins its source text, as identifiers already do.
 	var lit strings.Builder
+	escaped := false
+	runStart := l.pos
 	hasExpr := false
 
 	flushLit := func() {
-		if lit.Len() > 0 {
+		if escaped {
 			parts = append(parts, StringPart{Text: lit.String()})
 			lit.Reset()
+			escaped = false
+		} else if l.pos > runStart {
+			parts = append(parts, StringPart{Text: validRunes(l.src[runStart:l.pos])})
 		}
 	}
 
@@ -732,9 +786,9 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
 		switch r {
 		case '"':
+			flushLit()
 			l.pos++
 			l.col++
-			flushLit()
 			if !hasExpr {
 				s := ""
 				if len(parts) == 1 {
@@ -745,6 +799,10 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			return Token{Kind: InterpStr, Parts: parts, Line: line, Col: col}, nil
 		case '\\':
 			if l.pos+1 < len(l.src) {
+				if !escaped {
+					lit.WriteString(validRunes(l.src[runStart:l.pos]))
+					escaped = true
+				}
 				l.pos++
 				l.col++
 				esc, esz := utf8.DecodeRuneInString(l.src[l.pos:])
@@ -796,20 +854,40 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 				return Token{}, err
 			}
 			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			runStart = l.pos
 			continue
 		case '\n':
 			l.line++
 			l.col = 1
-			lit.WriteRune(r)
+			if escaped {
+				lit.WriteRune(r)
+			}
 			l.pos += size
 			continue
 		default:
-			lit.WriteRune(r)
+			if escaped {
+				lit.WriteRune(r)
+			}
 			l.pos += size
 			l.col += size
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
+}
+
+// validRunes returns s, with each byte that is not valid UTF-8 replaced by
+// U+FFFD as decoding it rune by rune would. Valid input, the norm, is returned
+// without a copy.
+func validRunes(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for _, r := range s {
+		sb.WriteRune(r)
+	}
+	return sb.String()
 }
 
 // lexRawString scans a backtick-quoted raw string — upstream Buzz's multiline
@@ -826,12 +904,17 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 	// without doing this left `{3 + 12}` in the value as literal text.
 	var parts []StringPart
 	var lit strings.Builder
+	escaped := false
 	hasExpr := false
 	start := l.pos
+	runStart := l.pos
 	flushLit := func() {
-		if lit.Len() > 0 {
+		if escaped {
 			parts = append(parts, StringPart{Text: lit.String()})
 			lit.Reset()
+			escaped = false
+		} else if l.pos > runStart {
+			parts = append(parts, StringPart{Text: l.src[runStart:l.pos]})
 		}
 	}
 	for l.pos < len(l.src) {
@@ -841,6 +924,10 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 		// and a regex or Windows path inside one must survive intact. Handled before the
 		// switch so an escaped brace never opens an interpolation.
 		if c == '\\' && l.pos+1 < len(l.src) && (l.src[l.pos+1] == '{' || l.src[l.pos+1] == '}') {
+			if !escaped {
+				lit.WriteString(l.src[runStart:l.pos])
+				escaped = true
+			}
 			lit.WriteByte(l.src[l.pos+1])
 			l.pos += 2
 			l.col += 2
@@ -849,9 +936,9 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 		switch c {
 		case '`':
 			raw := l.src[start:l.pos]
+			flushLit()
 			l.pos++
 			l.col++
-			flushLit()
 			if !hasExpr {
 				s := ""
 				if len(parts) == 1 {
@@ -876,13 +963,18 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 				return Token{}, err
 			}
 			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			runStart = l.pos
 		case '\n':
 			l.line++
 			l.col = 1
-			lit.WriteByte(c)
+			if escaped {
+				lit.WriteByte(c)
+			}
 			l.pos++
 		default:
-			lit.WriteByte(c)
+			if escaped {
+				lit.WriteByte(c)
+			}
 			l.pos++
 			l.col++
 		}
@@ -943,35 +1035,33 @@ func (l *lexer) lexPattern(line, col int) (Token, error) {
 
 // captureInterpExpr reads source up to the matching closing brace, honoring
 // nested braces and embedded strings. The opening brace is already consumed.
+// The expression is returned exactly as written.
 func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 	depth := 1
-	var sb strings.Builder
+	start := l.pos
 	for l.pos < len(l.src) {
 		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
 		switch r {
 		case '{':
 			depth++
-			sb.WriteRune(r)
 		case '}':
 			depth--
 			if depth == 0 {
+				expr := validRunes(l.src[start:l.pos])
 				l.pos++
 				l.col++
-				return sb.String(), nil
+				return expr, nil
 			}
-			sb.WriteRune(r)
 		case '"', '`':
-			// Copy a nested string verbatim so its braces aren't miscounted. A BACKTICK
+			// Skip a nested string whole so its braces aren't miscounted. A BACKTICK
 			// string counts here too: an interpolation may hold a raw string, and its
 			// braces (or an unbalanced one in a zdef block) would otherwise close the
 			// interpolation early.
 			delim := r
-			sb.WriteRune(r)
 			l.pos += size
 			l.col += size
 			for l.pos < len(l.src) {
 				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
-				sb.WriteRune(r2)
 				l.pos += s2
 				if r2 == '\n' {
 					l.line++
@@ -980,8 +1070,7 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 					l.col += s2
 				}
 				if r2 == '\\' && l.pos < len(l.src) {
-					r3, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
-					sb.WriteRune(r3)
+					_, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
 					l.pos += s3
 					l.col += s3
 					continue
@@ -994,9 +1083,6 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 		case '\n':
 			l.line++
 			l.col = 1
-			sb.WriteRune(r)
-		default:
-			sb.WriteRune(r)
 		}
 		l.pos += size
 		l.col += size

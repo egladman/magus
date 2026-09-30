@@ -3,7 +3,6 @@ package buzz
 import (
 	"fmt"
 	"reflect"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -183,9 +182,6 @@ func (c *ParseCache) tokenize(src string) ([]token.Token, error) {
 	if size > c.maxBytes {
 		return toks, nil
 	}
-	// Trimmed to its length: the lexer over-allocates for comment-heavy source, and
-	// the bound counts length, not capacity.
-	toks = slices.Clone(toks)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if cached, ok := c.tokens[src]; ok {

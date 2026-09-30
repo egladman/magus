@@ -2,8 +2,11 @@ package buzz
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -300,6 +303,71 @@ export fun test(_args: [str]) > void {}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, err := ParseEmbedded(src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// benchModule is a spell-shaped module: doc comment blocks, a detached license
+// header, interpolated strings and nested calls, repeated to the size of the
+// larger spells magus ships.
+func benchModule(repeat int) string {
+	const unit = `
+// Package-level settings for the build.
+// They are read once per session and never mutated,
+// so every target sees the same values.
+object Settings{n} {
+    name: str = "default",
+    count: int = 0,
+
+    // describe renders a one-line summary.
+    fun describe() > str {
+        return "Settings({this.name}, {this.count}) at {host\env\get("HOME")}";
+    }
+}
+
+// Section: helpers.
+
+/* squared returns x*x+1; it exists for the benchmark only. */
+fun squared{n}(x: int) > int {
+    return x * x + 1; // trailing comment is not a doc
+}
+
+export fun build{n}(args: [str]) > void {
+    final res = proc\run(["go", "build", "-o", "bin/{args[0]}", "./..."], cwd: ".", env: {"CGO_ENABLED": "0"});
+    if (res.code != 0) {
+        throw "build failed: {res.stderr} ({res.code})";
+    }
+}
+`
+	var sb strings.Builder
+	sb.WriteString("// Copyright header, detached by the blank line below.\n\nimport \"host\";\n")
+	for i := range repeat {
+		sb.WriteString(strings.ReplaceAll(unit, "{n}", strconv.Itoa(i)))
+	}
+	return sb.String()
+}
+
+// BenchmarkTokenize measures the lexer alone on a module the size of a large spell.
+func BenchmarkTokenize(b *testing.B) {
+	src := benchModule(30)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := token.Tokenize(src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkParseCacheMiss measures a first parse through a ParseCache: the lex,
+// the copy the cache retains, and the parse, as every module costs once per process.
+func BenchmarkParseCacheMiss(b *testing.B) {
+	src := benchModule(30)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := NewParseCache(64 << 20).ParseEmbedded(src); err != nil {
 			b.Fatal(err)
 		}
 	}

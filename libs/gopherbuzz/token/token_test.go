@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,6 +158,56 @@ func TestLexer_DocComments(t *testing.T) {
 	t.Run("trailing comment on a line does not attach to the next token", func(t *testing.T) {
 		assert.Equal(t, "", tokenizedDoc(t, "x // trailing\nbuild", "build"))
 	})
+	t.Run("a leading empty comment line is dropped", func(t *testing.T) {
+		assert.Equal(t, "body", tokenizedDoc(t, "//\n// body\nbuild", "build"))
+	})
+	t.Run("inner and trailing empty comment lines are kept", func(t *testing.T) {
+		assert.Equal(t, "a\n\nb\n", tokenizedDoc(t, "// a\n//\n// b\n//\nbuild", "build"))
+	})
+	t.Run("an empty comment alone is no doc", func(t *testing.T) {
+		assert.Equal(t, "", tokenizedDoc(t, "//\nbuild", "build"))
+	})
+	t.Run("an empty comment line does not bridge a gap", func(t *testing.T) {
+		assert.Equal(t, "fresh", tokenizedDoc(t, "//\n\n// fresh\nbuild", "build"))
+	})
+	t.Run("a block comment joins the line comments above it", func(t *testing.T) {
+		assert.Equal(t, "lead\ntail", tokenizedDoc(t, "// lead\n/* tail */\nbuild", "build"))
+	})
+}
+
+// TestTokenSize pins Kind packed beside Raw: every cached module holds one Token
+// per lexeme, so a field that adds padding costs the whole cache. The unpacked
+// layout, an int Kind first and Raw after Col, is one word larger on any target.
+func TestTokenSize(t *testing.T) {
+	type unpacked struct {
+		Kind  int
+		Val   string
+		Parts []StringPart
+		Line  int
+		Col   int
+		Raw   bool
+		Doc   string
+	}
+	assert.Equal(t, unsafe.Sizeof(Kind(0)), unsafe.Offsetof(Token{}.Raw))
+	assert.Equal(t, unsafe.Sizeof(unpacked{})-unsafe.Sizeof(0), unsafe.Sizeof(Token{}))
+}
+
+// TestTokenize_ReusedBufferLeaksNothing lexes a doc-heavy source and then a bare
+// one: the second must not see a doc, value or extra token from the buffer the
+// first returned to the pool, and each result is exactly its token count.
+func TestTokenize_ReusedBufferLeaksNothing(t *testing.T) {
+	first, err := Tokenize("// doc\nfun a() > void {}\n// more\nfun b() > void {}")
+	require.NoError(t, err)
+	second, err := Tokenize("x")
+	require.NoError(t, err)
+
+	assert.Equal(t, []Token{
+		{Kind: Ident, Val: "x", Line: 1, Col: 1},
+		{Kind: EOF, Line: 1, Col: 2},
+	}, second)
+	assert.Equal(t, len(first), cap(first))
+	assert.Equal(t, len(second), cap(second))
+	assert.Equal(t, "doc", first[0].Doc)
 }
 
 // TestKindStringExhaustive drives Kind.String across every declared kind, Ident
@@ -234,6 +285,18 @@ func TestTokenizeStringEscapes(t *testing.T) {
 		{"quote", `"a\"b"`, `a"b`},
 		{"backslash", `"a\\b"`, `a\b`},
 		{"carriage return", `"a\rb"`, "a\rb"},
+		{"plain", `"plain text"`, "plain text"},
+		{"empty", `""`, ""},
+		{"escape after a run", `"run then \\ tail"`, `run then \ tail`},
+		{"decimal byte escape", `"\065B"`, "AB"},
+		{"unknown escape kept", `"a\qb"`, `a\qb`},
+		{"escaped braces", `"\{x\}"`, "{x}"},
+		{"multiline", "\"a\nb\"", "a\nb"},
+		{"invalid utf-8 byte", "\"a\xffb\"", "a\uFFFDb"},
+		{"invalid utf-8 after escape", "\"\\t\xff\"", "\t\uFFFD"},
+		{"raw", "`a\\nb`", `a\nb`},
+		{"raw escaped brace", "`a\\{b\\}`", "a{b}"},
+		{"raw keeps invalid utf-8", "`a\xffb`", "a\xffb"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -242,6 +305,33 @@ func TestTokenizeStringEscapes(t *testing.T) {
 			require.Len(t, toks, 2)
 			require.Equal(t, String, toks[0].Kind)
 			require.Equal(t, c.want, toks[0].Val)
+		})
+	}
+}
+
+// TestTokenizeInterpolationParts pins how literal runs and expressions split,
+// including a nested string whose braces must not close the expression.
+func TestTokenizeInterpolationParts(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []StringPart
+	}{
+		{"runs around an expression", `"a {x} b"`, []StringPart{{Text: "a "}, {IsExpr: true, Text: "x"}, {Text: " b"}}},
+		{"adjacent expressions", `"{a}{b}"`, []StringPart{{IsExpr: true, Text: "a"}, {IsExpr: true, Text: "b"}}},
+		{"escape in a run", `"\t{x}\n"`, []StringPart{{Text: "\t"}, {IsExpr: true, Text: "x"}, {Text: "\n"}}},
+		{"nested braces and string", `"{f({"k": "}"})} end"`, []StringPart{{IsExpr: true, Text: `f({"k": "}"})`}, {Text: " end"}}},
+		{"escaped quote in nested string", `"{g("a\"}")}"`, []StringPart{{IsExpr: true, Text: `g("a\"}")`}}},
+		{"invalid utf-8 in an expression", "\"{h(\"\xff\")}\"", []StringPart{{IsExpr: true, Text: "h(\"\uFFFD\")"}}},
+		{"raw", "`p {q} r`", []StringPart{{Text: "p "}, {IsExpr: true, Text: "q"}, {Text: " r"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			toks, err := Tokenize(c.src)
+			require.NoError(t, err)
+			require.Len(t, toks, 2)
+			require.Equal(t, InterpStr, toks[0].Kind)
+			require.Equal(t, c.want, toks[0].Parts)
 		})
 	}
 }
