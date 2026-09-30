@@ -4,7 +4,7 @@
 // workspace's own declarations: `magus describe file` names each path's project and role,
 // the project graph orders the stack so every branch builds only on those below it.
 //
-//	magus buzz hack/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]
+//	magus buzz hack/dev/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]
 //
 // The change is everything between the merge base of --base (the workspace's base ref by
 // default) and the working tree, untracked files included. Branches are named after
@@ -33,7 +33,7 @@ import "assert";
 // The group key for root-level workspace configuration, which every project builds on.
 final WORKSPACE = "(workspace)";
 
-final USAGE = "usage: magus buzz hack/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]";
+final USAGE = "usage: magus buzz hack/dev/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--min-files <n>] [-o json] [--apply]";
 final HELP = "cost: grows with tree size\n{USAGE}";
 
 export object Claim {

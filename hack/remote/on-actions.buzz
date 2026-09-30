@@ -3,10 +3,10 @@
 // of magus; docs/decisions/0004-running-a-branch-on-a-hosted-runner.md says what it is for
 // and what a run on a public repository leaves visible.
 //
-//	magus buzz hack/on-actions.buzz -- [options] magus <argv>
+//	magus buzz hack/remote/on-actions.buzz -- [options] magus <argv>
 //	    push HEAD to run-<sha12>, start .github/workflows/run.yaml there, wait, print the
 //	    command's output, exit with its exit code, then delete the run and the branch
-//	magus buzz hack/on-actions.buzz -- --result <run> | --delete <run> | --ls
+//	magus buzz hack/remote/on-actions.buzz -- --result <run> | --delete <run> | --ls
 //
 // Options come first; the first word that is not one of them starts the command, which
 // passes through untouched, so `-- --keep magus run test --keep` keeps the run and hands
@@ -28,7 +28,7 @@ import "assert";
 // WORKFLOW is the only workflow this script starts, reads or deletes: it holds no secret
 // beyond the job's read-only token.
 final WORKFLOW = ".github/workflows/run.yaml";
-final SCRIPT = "magus buzz hack/on-actions.buzz --";
+final SCRIPT = "magus buzz hack/remote/on-actions.buzz --";
 final SANDBOXES = ["required", "best-effort"];
 final SCRATCH_PREFIX = "run-";
 // ARTIFACT is what run.yaml uploads from the command step: `output` and `exit-code`.

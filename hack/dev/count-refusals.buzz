@@ -5,7 +5,7 @@
 // observations per rule and host session. Each rule's line says how many refusals, across
 // how many sessions, and in how many of those the agent went on to run magus.
 //
-//	magus buzz hack/count-refusals.buzz
+//	magus buzz hack/dev/count-refusals.buzz
 //
 // That reader keeps only what recurs, a rule refused three times in one session or in two
 // sessions, over the trail's most recent observations: a one-off refusal is a correction
@@ -19,7 +19,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/count-refusals.buzz";
+final USAGE = "usage: magus buzz hack/dev/count-refusals.buzz";
 final HELP = "cost: none\n{USAGE}";
 
 export object Rule {

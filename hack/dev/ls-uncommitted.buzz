@@ -5,7 +5,7 @@
 // output belongs with the source that generated it, and an unclaimed file is one no
 // project's globs mention: both read differently from an edited source.
 //
-//	magus buzz hack/ls-uncommitted.buzz
+//	magus buzz hack/dev/ls-uncommitted.buzz
 namespace lsuncommitted;
 
 import "flags";
@@ -16,7 +16,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/ls-uncommitted.buzz";
+final USAGE = "usage: magus buzz hack/dev/ls-uncommitted.buzz";
 final HELP = "cost: grows with tree size\n{USAGE}";
 
 export object Entry {

@@ -3,8 +3,8 @@ import "magus/spell/buf";
 import "magus/spell/go";
 import "project/../docs";
 import "project/../console";
-import "../hack/drift" as drift;
-import "../hack/index" as index;
+import "../hack/magusfile/drift" as drift;
+import "../hack/magusfile/index" as index;
 import "fs";
 import "vcs";
 

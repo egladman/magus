@@ -148,7 +148,7 @@ func (p *ImportProbes) MarkNotSpell(path string) {
 //	trade-off: a spell file edited during the load keeps its first descriptor
 //	  until the next load.
 //	assumes: the key is absolute; a relative import string such as
-//	  ../../hack/index names a different file from each project.
+//	  ../../hack/magusfile/index names a different file from each project.
 func (p *ImportProbes) SpellAt(path string) (spec *spells.Descriptor, known bool) {
 	if p == nil {
 		return nil, false

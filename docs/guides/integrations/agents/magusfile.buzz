@@ -3,8 +3,8 @@
 
 import "magus";
 import "./lib/embed" as embed;
-import "../../../../hack/drift" as drift;
-import "../../../../hack/index" as index;
+import "../../../../hack/magusfile/drift" as drift;
+import "../../../../hack/magusfile/index" as index;
 import "os";
 
 import "proc";

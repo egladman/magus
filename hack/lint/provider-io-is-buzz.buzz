@@ -1,7 +1,7 @@
 // provider-io-is-buzz holds every CI/VCS provider call - a real `gh` run, a `curl` at a
 // provider host, or the http module reaching one - to the Buzz files the boundary names: a
-// provider spell, the queue's own provider script, a top-level hack/*.buzz driver, or a
-// workflow action step. Elsewhere Go opens no provider socket either (the Go half of this
+// provider spell, the queue's own provider script, a hack/ driver a person or workflow
+// runs, or a workflow action step. Elsewhere Go opens no provider socket either (the Go half of this
 // rule is providerio in libs/conventions); see docs/doctrine.md, "provider I/O is Buzz",
 // and plans/inflight-view-2026-09-27.md sec 3.
 namespace providerio;
@@ -15,12 +15,12 @@ import "hack/lint/support" as support;
 // inside them at any depth.
 export final ALLOWED_DIRS = ["spells/github/", "spells/gitlab/", ".github/actions/"];
 
-// ALLOWED_FILES are individual files outside ALLOWED_DIRS and outside hack/*.buzz that
+// ALLOWED_FILES are individual files outside ALLOWED_DIRS and support\SCRIPT_DIRS that
 // reach a provider, each named with why.
 export final ALLOWED_FILES = {
     "internal/queue/provider/github.buzz": "the queue's own provider script",
     // Not the intended pattern - the boundary's table names only spells, the queue
-    // provider, hack/*.buzz and workflow actions - kept here with the plan named
+    // provider, the hack/ drivers and workflow actions - kept here with the plan named
     // rather than moved silently: release-index is the root magusfile, not one of
     // those four.
     "magusfile.buzz": "release-index opens and checks its own pull request with gh; not yet split out of the root magusfile",
@@ -71,15 +71,7 @@ fun allowed(path: str) > bool {
             return true;
         }
     }
-    // hack/*.buzz and hack/ci/*.buzz: the drivers a person or a workflow runs, not the
-    // other subdirectories (hack/lint/*, hack/policy/*), which carry no provider call of
-    // their own.
-    foreach (dir in ["hack/", "hack/ci/"]) {
-        if (path.startsWith(dir) and path.endsWith(".buzz") and path.indexOf("/", from: dir.len()) == null) {
-            return true;
-        }
-    }
-    return false;
+    return support\scriptDir(path) != "";
 }
 
 fun outOfScope(path: str) > bool {
@@ -108,7 +100,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (ghExec.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "runs gh outside the Buzz files that may reach a provider",
-                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a hack/*.buzz or hack/ci/*.buzz driver, "
+                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a script in " + support\SCRIPT_DIRS.join(", ") + ", "
                         + "or a workflow action; or add the path to ALLOWED_FILES in hack/lint/provider-io-is-buzz.buzz, naming why" });
             } else if (curlExec.match(line) != null and providerHost.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
@@ -208,13 +200,13 @@ fun ping() > void !> any \{
         message: "http\\get at a provider host");
 }
 
-test "the allowed dirs, top-level hack files and named files pass; a nested hack file does not" {
+test "the allowed dirs, hack/ drivers and named files pass; another hack/ file does not" {
     final got = check(support\fixture(withNamedStubs({
         "spells/github/actions/spell.buzz": `namespace x;
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
-        "hack/labels.buzz": `namespace x;
+        "hack/ci/labels.buzz": `namespace x;
 
 fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
@@ -232,7 +224,7 @@ fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
     })));
     assert\equal(support\messages(got), want: ["runs gh outside the Buzz files that may reach a provider"],
-        message: "only the nested hack/lint file, which hack/*.buzz does not cover, is reported");
+        message: "only the hack/lint file, outside the script directories, is reported");
 }
 
 test "a stale ALLOWED_FILES entry is reported" {

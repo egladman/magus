@@ -191,7 +191,7 @@ jobs:
     # workflow's shape: it changes when a THIRD PARTY cuts a tag, never when a diff
     # lands, so on the PR path it would be noise that fires on unrelated changes.
     #
-    # It reports and never fails. hack/toolchain.buzz makes no selection and keeps no
+    # It reports and never fails. hack/magusfile/toolchain.buzz makes no selection and keeps no
     # state by design - there is no "move to this version" here and no first-seen file,
     # because that is a lockfile with another name. So the job's value is the log, and
     # a red X would be claiming an authority the tool deliberately does not take.

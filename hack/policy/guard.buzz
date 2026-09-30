@@ -31,7 +31,7 @@
 //   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
 //   commit-subject (deny): a message recorded with -m by git, hg or sl commit, or jj commit
 //     or describe, that carries an attribution or a body, or whose subject breaks the form
-//     its branch takes: the conventional subject hack/commits.buzz defines on the base
+//     its branch takes: the conventional subject hack/magusfile/commits.buzz defines on the base
 //     branch, one lowercase imperative line anywhere else.
 //   pull-request-text (deny): a `gh pr create|edit` title or description that names a
 //     person, credits a tool, narrates its session, runs past the word budget its diff
@@ -66,7 +66,7 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/pull_requests" as pullRequests;
 import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
-import "./hack/commits" as conventional;
+import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {

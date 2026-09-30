@@ -8,9 +8,9 @@
 // facts and magus's own graph, so every indexed language reads the same way.
 // `magus diff --prompt` is the per-file view; this is the per-symbol one.
 //
-//	magus buzz hack/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->]
+//	magus buzz hack/dev/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->]
 //	    [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]
-//	magus buzz hack/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]
+//	magus buzz hack/dev/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]
 //
 // Every section says found, absent or unknown, and unknown says why. The bundle goes to
 // stdout and progress to stderr. It exits 0 whenever it produced a bundle: it is context,
@@ -27,7 +27,7 @@ import "strings";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->] [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]\n       magus buzz hack/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]";
+final USAGE = "usage: magus buzz hack/dev/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->] [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]\n       magus buzz hack/dev/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]";
 final HELP = "cost: needs the code index; about six graph reads per carded symbol, one query per vocabulary term, and one history walk for the architecture lens\n{USAGE}";
 
 final FOUND = "found";

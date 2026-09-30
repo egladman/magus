@@ -99,7 +99,7 @@ change after the one it is stacked on, then a table per section (in flight, queu
 could join, drafts and forks) with each one's reason and a person's command. It is
 rewritten whole after every apply run and on every label, review or auto-merge event,
 and the same page goes to the run's summary. To render it locally:
-`magus buzz hack/pull-requests.buzz -- dashboard --all`.
+`magus buzz hack/ci/pull-requests.buzz -- dashboard --all`.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label

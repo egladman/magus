@@ -2,15 +2,15 @@
 // queue, so an orchestrator spends judgment only where a pull request needs it. It is
 // this repository's glue, not part of magus:
 //
-//	magus buzz hack/pull-requests.buzz -- status [--all | --author <login>] [--pr <n>]...
+//	magus buzz hack/ci/pull-requests.buzz -- status [--all | --author <login>] [--pr <n>]...
 //	    one JSON line per pull request: its state (running, green, red-inherited or red),
 //	    its stage, the action it needs and the model that does it (none when this script
 //	    or nobody acts), and for a green or red-inherited one the merge command a person
 //	    runs
-//	magus buzz hack/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
+//	magus buzz hack/ci/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
 //	    take the actions that change no code: queue what is green on a current base, and
 //	    rerun a red run once per head when the failure is outside the change's files
-//	magus buzz hack/pull-requests.buzz -- dashboard [--all] [--base <b>] [--out <file>] [--issue <n>] [--console-base <url>]
+//	magus buzz hack/ci/pull-requests.buzz -- dashboard [--all] [--base <b>] [--out <file>] [--issue <n>] [--console-base <url>]
 //	    the queue as one markdown page: a link that draws the queue in the console
 //	    (--console-base, the hosted one by default), then a table per section with each
 //	    pull request's reason and a person's command; --issue replaces that issue's body
@@ -37,8 +37,8 @@ import "proc";
 import "serialize";
 import "std";
 import "time";
-import "hack/commits" as commits;
-import "../.github/actions/advice/figure-link" as figurelink;
+import "hack/magusfile/commits" as commits;
+import "../../.github/actions/advice/figure-link" as figurelink;
 
 import "assert";
 
@@ -1239,7 +1239,7 @@ export fun selected(open: [Pull], prs: [int], author: str) > [Pull] {
     return acc;
 }
 
-final usage = "usage: magus buzz hack/pull-requests.buzz -- <step> <flags>\n"
+final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
     + "  status [--all | --author <login>] [--pr <n>]...\n"
     + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]\n"
     + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] [--out <file>] [--issue <n>] [--run-url <url>] [--console-base <url>]";
@@ -2012,7 +2012,7 @@ export fun dashboardOf(b: Board) > str !> any {
     lines.append("---");
     lines.append("");
     lines.append("<sub>Rendered from GitHub and `magus queue ls`, whole each time: "
-        + "`magus buzz hack/pull-requests.buzz -- dashboard --all --base {cell(b.base)}`</sub>");
+        + "`magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {cell(b.base)}`</sub>");
     lines.append("");
     lines.append(DASHBOARD_MARKER);
     return lines.join("\n") + "\n";

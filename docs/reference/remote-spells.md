@@ -27,7 +27,7 @@ The path alone says where a spell comes from ([ADR 0002](../decisions/0002-remot
 | ----------------------------- | --------- | ----------------------------------------------------- |
 | `ghcr.io/team/spells/lint`    | remote    | a registry: the first element carries a dot or a port |
 | `magus/spell/go`              | embedded  | the magus binary                                      |
-| `spells/lint`, `./hack/drift` | workspace | a file in the workspace                               |
+| `spells/lint`, `./hack/magusfile/drift` | workspace | a file in the workspace                               |
 
 The import binds the path's last segment, as every Buzz import does; alias it
 (`as claude`) when that segment is not a Buzz identifier, such as `claude-code`.

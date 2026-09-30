@@ -171,7 +171,7 @@ private repository and pnpm the same way.
 
 ## 9. Copy this
 
-Copy `hack/advisories.buzz` from the magus repository into your workspace. It exports
+Copy `hack/magusfile/advisories.buzz` from the magus repository into your workspace. It exports
 three functions:
 
 | function                                                    | does                                                | needs               |
@@ -185,7 +185,7 @@ A Go project:
 ```buzz
 import "magus";
 import "magus/spell/go";
-import "./hack/advisories" as advisories;
+import "./hack/magusfile/advisories" as advisories;
 
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     advisories\govulncheck(ctx, go: go, inheritedFatal: advisories\inheritedFatal(args));
@@ -199,7 +199,7 @@ A pnpm project:
 
 ```buzz
 import "magus";
-import "../hack/advisories" as advisories;
+import "../hack/magusfile/advisories" as advisories;
 
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
@@ -208,7 +208,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 ```
 
 Keep the `test` blocks in the copied file and run them with `magus buzz -t --embedded
-hack/advisories.buzz`. They pin the parts you are most likely to edit:
+hack/magusfile/advisories.buzz`. They pin the parts you are most likely to edit:
 
 - `classify` provenance, including a version bump counting as introduced.
 - `isFatal`: inherited is fatal only where the base is the head.

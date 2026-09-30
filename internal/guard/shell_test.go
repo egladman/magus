@@ -1688,15 +1688,15 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal"), 0o755))
-	for _, f := range []string{"hack/rename-symbol.buzz", "hack/example-typed-results.buzz", "internal/x.go"} {
+	for _, f := range []string{"hack/dev/rename-symbol.buzz", "hack/dev/example-typed-results.buzz", "internal/x.go"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, f), nil, 0o644))
 	}
 	carries := Dependencies{scope: workspaceScope{root: root}}
 	bare := Dependencies{scope: workspaceScope{root: t.TempDir()}}
-	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
-	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/example-typed-results.buzz") + "`"
+	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
+	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/dev/example-typed-results.buzz") + "`"
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName

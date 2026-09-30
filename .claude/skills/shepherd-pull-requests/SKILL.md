@@ -1,13 +1,13 @@
 ---
 name: shepherd-pull-requests
-description: Shepherd a batch of open pull requests in THIS repository through the magus merge queue, spending agent work only on the pull requests that need code changes. Use when asked to shepherd, merge or ship open pull requests, or to keep a set of them moving until they reach main. hack/pull-requests.buzz decides each pull request's state, action and model; this skill routes to it and says who does what. Hand-authored for this repository and never shipped.
+description: Shepherd a batch of open pull requests in THIS repository through the magus merge queue, spending agent work only on the pull requests that need code changes. Use when asked to shepherd, merge or ship open pull requests, or to keep a set of them moving until they reach main. hack/ci/pull-requests.buzz decides each pull request's state, action and model; this skill routes to it and says who does what. Hand-authored for this repository and never shipped.
 metadata:
   source: workspace
 ---
 
 # Shepherding pull requests
 
-`hack/pull-requests.buzz` decides; the orchestrator acts on what it prints. Do not
+`hack/ci/pull-requests.buzz` decides; the orchestrator acts on what it prints. Do not
 work out a state, an action or a model from `gh` yourself. When a record looks
 wrong, fix the pure function that produced it and its test, then run it again.
 
@@ -15,11 +15,11 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 1. Read the pinned "Merge queue" issue first: every open pull request's place in
    the queue, with its reason and a person's command (`./magus buzz
-   hack/pull-requests.buzz -- dashboard --all` renders it locally). Then read
+   hack/ci/pull-requests.buzz -- dashboard --all` renders it locally). Then read
    the board:
 
    ```sh
-   ./magus buzz hack/pull-requests.buzz -- status [--pr <n>]... [--author <login>]
+   ./magus buzz hack/ci/pull-requests.buzz -- status [--pr <n>]... [--author <login>]
    ```
 
    With no selector it reads your own open pull requests; `--all` reads
@@ -44,7 +44,7 @@ wrong, fix the pure function that produced it and its test, then run it again.
 2. Take the actions that change no code, with the same selectors:
 
    ```sh
-   ./magus buzz hack/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
+   ./magus buzz hack/ci/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
    ```
 
    It queues what is `green` on a current base and reruns a `red` that is not

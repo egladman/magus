@@ -691,7 +691,7 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 // validates it against the host's hook-stdout schema.
 //
 // Nothing here reaches the network. testdata/hosts holds vendored copies and
-// records the provenance of each; hack/host-schemas.buzz is what refreshes them.
+// records the provenance of each; hack/dev/host-schemas.buzz is what refreshes them.
 
 const hostSchemaDir = repoRoot + "/testdata/hosts"
 

@@ -2516,11 +2516,11 @@ type referenceScript struct {
 var (
 	renameScript = referenceScript{
 		lead: "Renaming a symbol from a script?",
-		argv: []string{"hack/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"},
+		argv: []string{"hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"},
 	}
 	typedResultScript = referenceScript{
 		lead: "Reading magus output in a script?",
-		argv: []string{"hack/example-typed-results.buzz"},
+		argv: []string{"hack/dev/example-typed-results.buzz"},
 	}
 	referenceScripts = map[denyRuleName]referenceScript{
 		denyRuleSedInPlace:         renameScript,

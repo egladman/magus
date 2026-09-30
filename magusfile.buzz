@@ -1,11 +1,11 @@
 import "magus";
-import "./hack/toolchain-policy" as policy;
-import "./hack/drift" as drift;
+import "./hack/magusfile/toolchain-policy" as policy;
+import "./hack/magusfile/drift" as drift;
 // Aliased: a module and a target function cannot share a name.
-import "./hack/toolchain" as toolchains;
-import "./hack/commits" as commits;
-import "./hack/changelog" as changelog;
-import "./hack/advisories" as advisories;
+import "./hack/magusfile/toolchain" as toolchains;
+import "./hack/magusfile/commits" as commits;
+import "./hack/magusfile/changelog" as changelog;
+import "./hack/magusfile/advisories" as advisories;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
@@ -115,7 +115,7 @@ magus\project({
         "magus.yaml",
         "Dockerfile",
         "Dockerfile.static",
-        "hack/screenshot.mjs",
+        "hack/docs/screenshot.mjs",
         ".*/hooks.json",
         ".codex/rules/*.rules",
         "opencode.json",
@@ -1845,8 +1845,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/*.buzz", "hack/ci/*.buzz", "hack/policy/*.buzz",
-        "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
+        "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
@@ -1871,26 +1871,22 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
     // --embedded because it is a magusfile import.
     cover_for("releaser.buzz", ["--embedded"], {});
-    // The mode is per file: hack/ scripts run bare, so strict is the default. The named
-    // exceptions are magusfile imports, where strict would reject legal constructs.
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }
-    final embedded = ["hack/advisories.buzz", "hack/changelog.buzz", "hack/commits.buzz",
-        "hack/drift.buzz", "hack/index.buzz", "hack/toolchain-policy.buzz", "hack/toolchain.buzz"];
-    foreach (mod in fs\glob("hack/*.buzz")) {
-        if (embedded.indexOf(mod.value) != null) {
-            cover_for(mod.value, ["--embedded"], {});
-        } else {
+    // The mode follows the caller: a script a person or workflow runs is run bare, so it is
+    // gated strict, and a magusfile import parses embedded, where strict would reject legal
+    // constructs.
+    foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci"]) {
+        foreach (mod in fs\glob(dir + "/*.buzz")) {
             cover_for(mod.value, [], {});
         }
     }
-    // Workflow steps run bare, so they are gated strict.
-    foreach (mod in fs\glob("hack/ci/*.buzz")) {
-        cover_for(mod.value, [], {});
-    }
-    foreach (mod in fs\glob("hack/policy/*.buzz")) {
-        cover_for(mod.value, ["--embedded"], {});
+    cover_for("hack/lint/run.buzz", [], {});
+    foreach (dir in ["hack/magusfile", "hack/policy"]) {
+        foreach (mod in fs\glob(dir + "/*.buzz")) {
+            cover_for(mod.value, ["--embedded"], {});
+        }
     }
     // Globbed so a new spell is covered: a spell no magusfile imports reaches no other gate.
     // --embedded because these import magus/spell. The docs libraries need `dir` to resolve
@@ -1954,11 +1950,11 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Holds the repository's non-Go files to conventions no off-the-shelf linter checks;
-// each rule is hack/lint/<rule>.buzz, and hack/lint.buzz reports drift between their
+// each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
 export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    ctx.readsFiles("hack/lint.buzz", "hack/lint/*.buzz",
+    ctx.readsFiles("hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    "hack/README.md",
                    ".github/**/*.buzz",
@@ -1989,7 +1985,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
                    "libs/textsearch/**/*.md", "proto/**/*.md");
-    magus\cmd("buzz", args: ["hack/lint.buzz"]);
+    magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
@@ -2089,7 +2085,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
 export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
     // config-generate writes the completions this reads (MGS4008).
     ctx.needs(config_generate);
-    ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
+    ctx.readsFiles("hack/ci/completion-checks/*", "cmd/magus/completions/*");
     try {
         proc\which("docker");
     } catch (e) {
@@ -2097,8 +2093,8 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
     }
     // dotnet/sdk: Microsoft's own PowerShell images are deprecated in MCR.
     final checks = {
-        "bash:5": "bash hack/completion-checks/bash.sh",
-        "mcr.microsoft.com/dotnet/sdk:8.0": "pwsh -NoProfile -File hack/completion-checks/pwsh.ps1",
+        "bash:5": "bash hack/ci/completion-checks/bash.sh",
+        "mcr.microsoft.com/dotnet/sdk:8.0": "pwsh -NoProfile -File hack/ci/completion-checks/pwsh.ps1",
     };
     final root = vcs\root();
     foreach (image, cmd in checks) {

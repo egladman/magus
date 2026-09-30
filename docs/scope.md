@@ -109,7 +109,7 @@ read it, and `spells/endoflife-date` is one choice, shipped as source you copy
 rather than compiled in. The answer fills a column of `magus describe tools` and a
 doctor line. It never fails a build, never selects a version, and is never asked
 under `MAGUS_OFFLINE`. To act on it, write that in your own repo, the way
-`hack/advisories.buzz` wraps the advisory scanner. The binary supplies primitives.
+`hack/magusfile/advisories.buzz` wraps the advisory scanner. The binary supplies primitives.
 You supply knowledge about the world.
 
 ## The line

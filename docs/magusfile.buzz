@@ -1,9 +1,9 @@
 import "magus";
-import "../hack/toolchain-policy" as policy;
-import "../hack/advisories" as advisories;
-import "../hack/drift" as drift;
-import "../hack/index" as index;
-import "../hack/changelog" as changelog;
+import "../hack/magusfile/toolchain-policy" as policy;
+import "../hack/magusfile/advisories" as advisories;
+import "../hack/magusfile/drift" as drift;
+import "../hack/magusfile/index" as index;
+import "../hack/magusfile/changelog" as changelog;
 import "fs";
 import "os";
 import "proc";
@@ -183,8 +183,8 @@ fun isDecimalCopySuffix(suffix: str) > bool {
 // Uncommitted: a committed page would conflict in every pull request.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("templates/changelog.mustache", workspace\file("releases/*.yaml"),
-        workspace\file("changes/unreleased/*.md"), workspace\file("hack/changelog.buzz"),
-        workspace\file("hack/commits.buzz"));
+        workspace\file("changes/unreleased/*.md"), workspace\file("hack/magusfile/changelog.buzz"),
+        workspace\file("hack/magusfile/commits.buzz"));
     ctx.writesFiles("changelog.md");
     // Entry links resolve from the repo root for GitHub; this page sits inside docs/.
     final page = changelog\render(fs\readFile("templates/changelog.mustache"),

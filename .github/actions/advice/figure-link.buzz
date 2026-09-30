@@ -13,7 +13,7 @@
 // An edge runs from a dependency to its dependent. A seed is a node the change edited.
 // The console reads this shape, so a change here is a change there.
 //
-// Shared by the advisors here and by hack/pull-requests.buzz, which imports it by path:
+// Shared by the advisors here and by hack/ci/pull-requests.buzz, which imports it by path:
 // this directory ships with the action and is the one place both can reach.
 import "http";
 import "serialize";
