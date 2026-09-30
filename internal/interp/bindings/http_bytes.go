@@ -18,7 +18,7 @@ import (
 // providers this module targets.
 const maxChunk = 32 * 1024 * 1024
 
-// registerHTTPBytes builds the byte-level companion to the declarative http
+// registerHTTPBytes adds the byte-level companions to m, the declarative http
 // module: streaming a response body to a file, reading a file's byte length, and
 // uploading a file in Content-Range chunks. They can't be declarative std.Methods
 // (Buzz strings are rune-oriented: len() counts runes, strings can't be
@@ -27,12 +27,10 @@ const maxChunk = 32 * 1024 * 1024
 // protocol decisions — URLs, headers, auth, chunk size — to the calling Buzz
 // script. That split is what lets a remote cache backend (e.g. GitHub Actions
 // Cache) be written entirely in Buzz with no provider-specific Go code. This is
-// VM glue, hand-written against the gopherbuzz value API and merged onto the
+// VM glue, hand-written against the gopherbuzz value API and set on the
 // generated `http` module map at bind time (see registerMagusModules); it lives
 // here, not on the VM-agnostic std surface.
-func registerHTTPBytes() vm.Value {
-	m := vm.NewMap()
-
+func registerHTTPBytes(m vm.Value) {
 	// byteSize(path) -> int
 	// Byte length of the file at path. The companion to upload_chunked: a script
 	// needs the true byte count for a Content-Range total or a commit "size",
@@ -73,8 +71,6 @@ func registerHTTPBytes() vm.Value {
 		}
 		return vm.ListValue([]vm.Value{vm.IntValue(int64(status)), vm.StrValue(body)}), nil
 	}))
-
-	return m
 }
 
 func httpUploadChunked(ctx context.Context, method, url, src string, chunkSize int64, headers map[string]string) (int, string, error) {

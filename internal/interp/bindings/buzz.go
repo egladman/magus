@@ -158,7 +158,13 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 // assembleMagus is buildMagus without the withheld top-level members, which are
 // also dropped from what magus\describeModule lists.
 func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface, withheld ...string) vm.Value {
-	magus := vm.NewMap()
+	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
+	// magus.bust_cache) is generated from the std.Magus descriptor like every other
+	// module, so the two can't drift and a declared method can't be silently left
+	// unbound. The hand-built members below are the VM-infra ones (project/cache/
+	// pry/log, plus the magus.Context) that can't share a Go Impl across the
+	// boundary; the two sets are disjoint.
+	magus := bindinggen.RegisterMagus(ctx, sess)
 	cache := buildCache(ctx, obs)
 	ci := buildCI(ctx, obs)
 	magus.MapSet("project", buildProject(ctx, obs))
@@ -178,14 +184,6 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("guard", guard)
 	magus.MapSet("harness", harness)
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
-
-	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
-	// magus.bust_cache) is generated from the std.Magus descriptor like every other
-	// module, so the two can't drift and a declared method can't be silently left
-	// unbound. Merged onto the hand-built magus map above, which carries only the
-	// VM-infra members (project/cache/pry/log, plus the magus.Context) that can't
-	// share a Go Impl across the boundary.
-	mergeModuleMap(magus, bindinggen.RegisterMagus(ctx, sess))
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
 	// module registry: the same host.ModulesOutput core `magus describe module[s]`

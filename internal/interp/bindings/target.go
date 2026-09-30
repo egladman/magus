@@ -857,6 +857,23 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing: the
 	// guarantee a checked type would give once gopherbuzz has protocol conformance.
 	var execCtx func(env, cwd vm.Value) vm.Value
+	// Chainable: ctx.withEnv({...}).withCwd(".."). Each returns a fresh Exec, so a
+	// derivation hoisted into a variable is never mutated by a later one.
+	derivations := func(env, cwd vm.Value) (withEnv, withCwd vm.Value) {
+		withEnv = directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsMap() {
+				return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
+			}
+			return execCtx(args[0], cwd), nil
+		})
+		withCwd = directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsStr() {
+				return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
+			}
+			return execCtx(env, args[0]), nil
+		})
+		return withEnv, withCwd
+	}
 	execCtx = func(env, cwd vm.Value) vm.Value {
 		e := vm.NewMap()
 		e.MapSet(ctxMarker, vm.BoolValue(true))
@@ -866,20 +883,9 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 		if !cwd.IsNull() {
 			e.MapSet("cwd", cwd)
 		}
-		// Chainable: ctx.withEnv({...}).withCwd(".."). Each returns a fresh Exec, so a
-		// derivation hoisted into a variable is never mutated by a later one.
-		e.MapSet("withEnv", directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) == 0 || !args[0].IsMap() {
-				return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
-			}
-			return execCtx(args[0], cwd), nil
-		}))
-		e.MapSet("withCwd", directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) == 0 || !args[0].IsStr() {
-				return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
-			}
-			return execCtx(env, args[0]), nil
-		}))
+		withEnv, withCwd := derivations(env, cwd)
+		e.MapSet("withEnv", withEnv)
+		e.MapSet("withCwd", withCwd)
 		for _, decl := range execRefusedMembers {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
@@ -888,15 +894,12 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 		}
 		return e
 	}
-	// The base context's derivation pair IS the empty derivation's, so take it from
-	// execCtx rather than writing the two closures (and their two error strings) a
-	// second time. Only those keys are copied: the rest of an Exec is the refusal to
-	// declare, which the base context must not inherit.
-	for _, k := range []string{"withEnv", "withCwd"} {
-		if v, ok := execCtx(vm.Null, vm.Null).MapGet(k); ok {
-			c.MapSet(k, v)
-		}
-	}
+	// The base context's derivation pair IS the empty derivation's. Only the pair:
+	// the rest of an Exec is the refusal to declare, which the base context must
+	// not inherit.
+	withEnv, withCwd := derivations(vm.Null, vm.Null)
+	c.MapSet("withEnv", withEnv)
+	c.MapSet("withCwd", withCwd)
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("readsFiles", directVal(obs, "ctx.readsFiles", footprintDecl))
 	c.MapSet("writesFiles", directVal(obs, "ctx.writesFiles", footprintDecl))

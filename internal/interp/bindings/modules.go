@@ -93,7 +93,7 @@ func hostModuleBinds(modules ffi.Set) []buzz.Module {
 				// its HMAC and base64 methods became declared std.Module methods once
 				// TypeByteSlice existed, and this hook shrank by one domain as a result.
 				if name == "http" {
-					mergeModuleMap(mod, registerHTTPBytes())
+					registerHTTPBytes(mod)
 				}
 				// Layer this module's DECLARATIONS on as a source companion: the same
 				// "native value + declaration source under one import path" mechanism
@@ -108,15 +108,16 @@ func hostModuleBinds(modules ffi.Set) []buzz.Module {
 				if src, ok := spell.ModuleDecls(name); ok {
 					s.SetModuleDecls(importPath, src)
 				}
-				// Buzz's stdlib may already own this bare name (os, fs, crypto):
-				// overlay the magus methods onto it so callers see the union (magus
+				// Buzz's stdlib may already own this bare name (os, fs, crypto): take
+				// its members onto the magus module so callers see the union (magus
 				// wins on the few shared keys, e.g. os.exit/fs.exists, its forms
-				// being sandbox- and context-aware). Otherwise install fresh.
+				// being sandbox- and context-aware). The magus map is the one
+				// registered either way, so the session owns what it reads and the
+				// stdlib map it no longer needs dies with the session.
 				if base, ok := s.NativeModule(importPath); ok {
-					mergeModuleMap(base, mod)
-				} else {
-					s.SetNativeModule(importPath, mod)
+					mergeModuleMapMissing(mod, base)
 				}
+				s.SetNativeModule(importPath, mod)
 				return nil
 			},
 		})
@@ -205,10 +206,13 @@ func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error
 	return nil
 }
 
-// mergeModuleMap copies all keys from src into dst. On a key both define, src
-// wins — the order callers rely on when layering one module over another.
-func mergeModuleMap(dst, src vm.Value) {
+// mergeModuleMapMissing copies into dst every key of src that dst lacks, so dst
+// keeps winning where the two overlap.
+func mergeModuleMapMissing(dst, src vm.Value) {
 	for _, k := range src.MapKeys() {
+		if _, taken := dst.MapGet(k); taken {
+			continue
+		}
 		if v, ok := src.MapGet(k); ok {
 			dst.MapSet(k, v)
 		}

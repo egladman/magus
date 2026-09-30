@@ -288,8 +288,9 @@ var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Never closed: every later session reads these values, and Close would
+	// release their heap slots out from under it.
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	defer func() { _ = sess.Close() }()
 	if err := sess.Exec(context.Background(), body); err != nil {
 		return nil, err
 	}
