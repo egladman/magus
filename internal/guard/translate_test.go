@@ -15,7 +15,7 @@ import (
 // TestSearchTranslationDiagnostics pins the code-shaped arm: every row that denies names
 // the exact query, and each near miss is a pattern whose answer the graph does not hold.
 func TestSearchTranslationDiagnostics(t *testing.T) {
-	t.Chdir("../..") // relative operands name this repository's tree
+	t.Chdir(repoOperandTree(t)) // relative operands name this repository's layout
 	const mgs30 = `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`
 	for _, tt := range []struct {
 		command string
@@ -84,7 +84,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads
 // with the runnable query, says why it is the same answer, and carries the answer.
 func TestSearchTranslationShowsTheQuery(t *testing.T) {
-	t.Chdir("../..")
+	t.Chdir(repoOperandTree(t))
 	v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
@@ -349,7 +349,7 @@ func TestSearchPipelines(t *testing.T) {
 	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^func ' internal/store/store.go`))
 	assert.NotContains(t, v.Deny, "not reproduced")
 
-	t.Chdir("../..")
+	t.Chdir(repoOperandTree(t))
 	for _, command := range []string{`grep -rn 'MGS30[23]' . | head -3`, `grep -rn 'MGS30[23]' . | wc -l`} {
 		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, command)
 		assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name, command)
@@ -434,7 +434,7 @@ func TestGlobRegexp(t *testing.T) {
 // 2026-09-24 audit through Evaluate. Only the code-shaped ones have a provable answer
 // without a graph; the rest are text the translator must leave alone.
 func TestSearchTranslationAuditShapes(t *testing.T) {
-	t.Chdir("../..")
+	t.Chdir(repoOperandTree(t))
 	for _, tt := range []struct {
 		command string
 		deny    bool
@@ -502,4 +502,22 @@ func parseForTest(t *testing.T, command string) []hint.Invocation {
 	cmds, ok := ParseCommands(command)
 	require.True(t, ok, command)
 	return cmds
+}
+
+// repoOperandTree is a workspace holding, empty, the files these commands name, laid out
+// as in this repository. The translation reads their paths, never their bytes. Grading
+// them in the repository itself would read its live .magus, which every magus run
+// touches, and cost this package Go's test cache each time.
+func repoOperandTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	for _, rel := range []string{
+		"docs/reference/codes/sandbox/README.md", "types/diagnostic.go", "types/knowledge.go",
+		"internal/guard/guard.go", "internal/guard/shell.go",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), nil, 0o644))
+	}
+	return root
 }
