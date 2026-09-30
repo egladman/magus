@@ -12,6 +12,10 @@ import (
 
 func init() { Register(Charm) }
 
+// charmPredicate is the type of every *_func anchor: called with one argv element,
+// truthy on the one to anchor at.
+const charmPredicate = "fun (s: str) > bool !> any"
+
 // Charm is magus.extra.charm: the constructor set for the values a spell target
 // lists under `charms`. Each constructor returns an RFC 6902 JSON Patch (the
 // { ops = [...] } record Decode reads) over the target's base argv, treated as a
@@ -69,28 +73,28 @@ var Charm = Module{
 		{
 			Name:    "after_func",
 			Doc:     "Insert vals after the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "vals", Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "vals", Type: TypeStringSlice}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAfterFunc,
 		},
 		{
 			Name:    "before_func",
 			Doc:     "Insert vals before the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "vals", Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "vals", Type: TypeStringSlice}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmBeforeFunc,
 		},
 		{
 			Name:    "set_func",
 			Doc:     "Replace the first argv element for which fn(s) is truthy with val.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "val", Type: TypeString}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "val", Type: TypeString}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSetFunc,
 		},
 		{
 			Name:    "drop_func",
 			Doc:     "Drop (remove) the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmDropFunc,
 		},
@@ -104,7 +108,7 @@ var Charm = Module{
 		{
 			Name:    "path_func",
 			Doc:     `Return the JSON Pointer ("/N") of the first argv element for which fn(s) is truthy.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeString}}, Impl: CharmPathFunc,
 		},
@@ -118,7 +122,7 @@ var Charm = Module{
 		{
 			Name:    "move_func",
 			Doc:     `Move the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "to", Type: TypeString}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "to", Type: TypeString}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMoveFunc,
 		},
@@ -132,7 +136,7 @@ var Charm = Module{
 		{
 			Name:    "copy_func",
 			Doc:     `Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "to", Type: TypeString}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "to", Type: TypeString}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopyFunc,
 		},
@@ -146,7 +150,7 @@ var Charm = Module{
 		{
 			Name:    "test_func",
 			Doc:     `Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}},
+			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmTestFunc,
 		},

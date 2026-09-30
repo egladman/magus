@@ -574,7 +574,7 @@ var Magus = Module{
 						"naming the failure. When the magusfile is tracked, the committed and the " +
 						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
 						"another project, or with a non-function is MGS1045. magus ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc}},
+					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: SpawnRequest) > GuardVerdict !> any"}},
 					Extern: true,
 				},
 				{
@@ -586,7 +586,7 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.spawn is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc}},
+					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: CommandRequest) > GuardVerdict !> any"}},
 					Extern: true,
 				},
 				{
@@ -597,7 +597,7 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.command is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc}},
+					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: WriteRequest) > GuardVerdict !> any"}},
 					Extern: true,
 				},
 				{

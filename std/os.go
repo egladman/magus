@@ -71,7 +71,7 @@ var Os = Module{
 			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env", Type: TypeStringMap},
-				{Name: "callback", Type: TypeFunc},
+				{Name: "callback", Type: TypeFunc, Func: "fun () > void !> any"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -128,7 +128,7 @@ var Os = Module{
 			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
 			Args: []Arg{
 				{Name: "max", Type: TypeInt},
-				{Name: "fn", Type: TypeFunc},
+				{Name: "fn", Type: TypeFunc, Func: "fun () > any !> any"},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny}},

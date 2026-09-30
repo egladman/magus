@@ -22,4 +22,4 @@ export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: {st
 export extern fun shell(line: str, shell: str = "") > ShellCommand;
 export extern fun stdinIsTerminal() > bool;
 export extern fun which(cmd: str) > str !> any;
-export extern fun withSlots(n: int, callback: any) > void !> any;
+export extern fun withSlots(n: int, callback: fun () > void !> any) > void !> any;

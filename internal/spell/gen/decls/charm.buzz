@@ -28,20 +28,20 @@ export object Charm {
 }
 
 export extern fun after(argv: [str], anchor: str, vals: [str]) > Charm !> any;
-export extern fun afterFunc(argv: [str], fn: any, vals: [str]) > Charm !> any;
+export extern fun afterFunc(argv: [str], fn: fun (s: str) > bool !> any, vals: [str]) > Charm !> any;
 export extern fun append(vals: [str]) > Charm;
 export extern fun before(argv: [str], anchor: str, vals: [str]) > Charm !> any;
-export extern fun beforeFunc(argv: [str], fn: any, vals: [str]) > Charm !> any;
+export extern fun beforeFunc(argv: [str], fn: fun (s: str) > bool !> any, vals: [str]) > Charm !> any;
 export extern fun copy(argv: [str], anchor: str, to: str) > Charm !> any;
-export extern fun copyFunc(argv: [str], fn: any, to: str) > Charm !> any;
+export extern fun copyFunc(argv: [str], fn: fun (s: str) > bool !> any, to: str) > Charm !> any;
 export extern fun drop(argv: [str], anchor: str) > Charm !> any;
-export extern fun dropFunc(argv: [str], fn: any) > Charm !> any;
+export extern fun dropFunc(argv: [str], fn: fun (s: str) > bool !> any) > Charm !> any;
 export extern fun move(argv: [str], anchor: str, to: str) > Charm !> any;
-export extern fun moveFunc(argv: [str], fn: any, to: str) > Charm !> any;
+export extern fun moveFunc(argv: [str], fn: fun (s: str) > bool !> any, to: str) > Charm !> any;
 export extern fun path(argv: [str], anchor: str) > str !> any;
-export extern fun pathFunc(argv: [str], fn: any) > str !> any;
+export extern fun pathFunc(argv: [str], fn: fun (s: str) > bool !> any) > str !> any;
 export extern fun prepend(vals: [str]) > Charm;
 export extern fun set(argv: [str], anchor: str, val: str) > Charm !> any;
-export extern fun setFunc(argv: [str], fn: any, val: str) > Charm !> any;
+export extern fun setFunc(argv: [str], fn: fun (s: str) > bool !> any, val: str) > Charm !> any;
 export extern fun test(argv: [str], anchor: str) > Charm !> any;
-export extern fun testFunc(argv: [str], fn: any) > Charm !> any;
+export extern fun testFunc(argv: [str], fn: fun (s: str) > bool !> any) > Charm !> any;

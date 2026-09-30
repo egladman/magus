@@ -203,6 +203,12 @@ func externDecl(m std.Method) (string, error) {
 		if a.Enum != "" {
 			typ = a.Enum
 		}
+		if a.Func != "" {
+			if a.Type != std.TypeFunc {
+				return "", fmt.Errorf("arg %s: Func is set on a %v argument; it types only a TypeFunc", a.Name, a.Type)
+			}
+			typ = a.Func
+		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
 		// whose byte-list result keys the next one. Buzz cannot spell that union, so
