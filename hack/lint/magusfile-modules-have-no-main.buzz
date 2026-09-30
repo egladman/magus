@@ -1,0 +1,68 @@
+// magusfile-modules-have-no-main holds hack/ to one directory per caller from both sides:
+// a module in hack/magusfile/ is imported by a magusfile and never run, so it declares no
+// main; and a file in a script directory (support\SCRIPT_DIRS) is run, so it declares one.
+// A file that breaks either sits in the wrong directory.
+namespace magusfilemodules;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final MODULES = "hack/magusfile/";
+
+final MAIN = std\pattern(`^(export\s+)?fun\s+main\s*\(`);
+
+export fun reads() > [str] {
+    return ["hack/magusfile/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz", "hack/ci/*.buzz"];
+}
+
+// mainLine is the line declaring main in src, or 0.
+export fun mainLine(src: str) > int {
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        if (MAIN.match(line) != null) {
+            return n;
+        }
+    }
+    return 0;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        final line = mainLine(support\read(f));
+        if (f.value.startsWith(MODULES) and line > 0) {
+            found.append(Finding{ path = f.value, line = line,
+                message = "{f.value} declares main, but a module a magusfile imports is never run",
+                fix = "Move it to the directory of whoever runs it ({support\SCRIPT_DIRS.join(", ")}), or drop main." });
+        } else if (support\scriptDir(f.value) != "" and line == 0) {
+            found.append(Finding{ path = f.value, line = 1,
+                message = "{f.value} declares no main, so nothing runs it",
+                fix = "Move it to hack/magusfile/ if a magusfile imports it, or give it a main that calls its work." });
+        }
+    }
+    return found;
+}
+
+test "a module without main and a script with one pass" {
+    final got = check(support\fixture({
+        "hack/magusfile/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
+        "hack/dev/ls-things.buzz": "namespace x;\n\nexport fun main(args: [str]) > void \{}\n",
+        "hack/remote/on-mars.buzz": "namespace x;\n\nfun main(args: [str]) > void \{}\n",
+    }));
+    assert\equal(got.len(), want: 0, message: "clean");
+}
+
+test "a module with main and a script without one are each reported" {
+    final got = check(support\fixture({
+        "hack/magusfile/index.buzz": "namespace index;\n\nexport fun main(args: [str]) > void \{}\n",
+        "hack/ci/helpers.buzz": "namespace helpers;\n\nexport fun mainBranch() > str \{ return \"main\"; }\n",
+    }));
+    assert\equal(support\messages(got), want: [
+        "hack/ci/helpers.buzz declares no main, so nothing runs it",
+        "hack/magusfile/index.buzz declares main, but a module a magusfile imports is never run",
+    ], message: "findings");
+    assert\equal(got[1].line, want: 3, message: "the line declaring main");
+}
