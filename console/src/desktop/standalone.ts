@@ -1,6 +1,6 @@
 // standalone.ts - wrap a standalone console app (the log viewer, dashboard, graph explorer) as a
 // console PageModule without duplicating its scaffold or pulling its bundle into the console frame.
-// Each of these apps already ships as its own page + esm bundle under gen/console/<dir>/; this factory
+// Each of these apps already ships as its own page + esm bundle under gen/<id>/; this factory
 // mounts one as a surface: it lifts the app's <main> from its built page (the app's own .html stays
 // the ONE scaffold source, so the console never drifts from it), ensures the app's page-scoped
 // stylesheet, dynamically imports the prebuilt bundle BY URL, and boots it via the app's exported
@@ -19,9 +19,10 @@ import type { PageController, PageModule, SearchProvider, TitleSource } from "./
 export interface StandaloneSurface {
   id: string; // registry id / pageId, e.g. "logs"
   title: string; // tab title, e.g. "Log Viewer"
-  dir: string; // gen/console/<dir>/ holding index.html + the bundle + the css
-  bundle: string; // bundle filename that exports activate(), e.g. "log-viewer.js"
-  css: string; // page-scoped stylesheet filename, e.g. "logs.css"
+  // Path under gen/ of the bundle exporting activate(), e.g. "logs/logs.js"; scaffold.html sits
+  // beside it.
+  bundle: string;
+  css: string; // page-scoped stylesheet path under gen/, e.g. "logs/logs.css"
 }
 
 // The console owns one shared search box, but these apps carry their own filter controls, so a
@@ -49,12 +50,13 @@ interface BootModule {
 }
 
 // A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
-// for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
+// for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/.
 export interface ModuleSurface {
   id: string; // registry id / pageId, e.g. "activity"
   title: string; // tab title, e.g. "Activity"
-  bundle: string; // bundle path under gen/console/ whose activate(host) builds the DOM, e.g. "activity/activity.js"
-  css: string; // page-scoped stylesheet path under gen/console/, e.g. "logs/logs.css" (the trail reuses it)
+  // Path under gen/ of the bundle whose activate(host) builds the DOM, e.g. "activity/activity.js".
+  bundle: string;
+  css: string; // page-scoped stylesheet path under gen/, e.g. "logs/logs.css" (the trail reuses it)
 }
 
 // What a host-building bundle's activate(host) may hand back for ONE mount: nothing (a static
@@ -114,11 +116,12 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
 }
 
 export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> {
-  // artUrl resolves an artifact under gen/console/<dir>/ relative to THIS module's URL at runtime, so
+  // artUrl resolves an artifact under gen/ relative to THIS module's URL at runtime, so
   // the same code works wherever the console is served (a dev port, or the site's /magus/ base path).
   // Computed (not a string literal) so esbuild leaves it a runtime load instead of bundling the built
   // artifact at compile time.
-  const artUrl = (file: string): string => new URL("./" + s.dir + "/" + file, import.meta.url).href;
+  const artUrl = (file: string): string => new URL("./" + file, import.meta.url).href;
+  const scaffold = s.bundle.replace(/[^/]*$/, "scaffold.html");
   const cssId = "surface-css-" + s.id;
 
   return {
@@ -138,15 +141,15 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
       const mod = (await import(artUrl(s.bundle))) as BootModule;
-      // Fetch the surface's co-located scaffold - a `<main>` fragment (gen/<dir>/scaffold.html) that
+      // Fetch the surface's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
       // surface's own body, appended into the pane host.
-      const res = await fetch(artUrl("scaffold.html"));
+      const res = await fetch(artUrl(scaffold));
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const main = doc.querySelector("main");
       if (!main)
-        throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + s.dir + "/)");
+        throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + scaffold + ")");
       host.append(document.importNode(main, true));
       mod.activate();
       return {

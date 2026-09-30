@@ -13,36 +13,16 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// KnownSurfaces is the CANONICAL list of the console's deep-linkable surfaces, by their clean
-// URL path segment. It is the single source of truth shared by the two producers of the clean
-// /console/<surface>/ grammar: Link/GraphLink mint these segments, and the server's static
-// handler serves the console shell for a bare /console/<surface>/ request (SPA fallback) so the
-// console's own boot router can open that surface from the path. The decoupled console is a
-// single shell page; these clean paths are its public surface URLs (there is no ?app= query form
-// in canonical links). Keep it in step with the console's own surface registry.
-var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes", "diff", "plan", "runs"}
+// KnownSurfaces is every clean /console/<surface>/ segment magus may mint a link to or present
+// (Link, GraphLink, JobLink, Present). The console's app manifests decide the set: each app's path
+// plus the segments that open one of its modes, and console/src/apps/apps.test.ts fails when this
+// list and theirs differ in either direction. It stays a list because the CLI mints links where no
+// console bundle exists to read; the server's routes come from the bundle it serves (surfaceRoute).
+var KnownSurfaces = []string{"activity", "dashboard", "diagrams", "diff", "graph", "logs", "notes", "plan", "runs"}
 
-// IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path), i.e. a
-// bare /console/<surface>/ route the server must serve the shell for rather than a static file.
+// IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path).
 func IsSurfaceRoute(seg string) bool {
 	return slices.Contains(KnownSurfaces, seg)
-}
-
-// CanonicalSurfacePath returns the canonical trailing-slash URL for a surface segment, built
-// from the ENTRY IN KnownSurfaces rather than from the caller's string.
-//
-// The distinction is the point. A redirect assembled from a request path is a redirect whose
-// destination the requester influenced, which is both a real hazard class and one a taint
-// analyzer is right to flag (gosec G710). Returning the matched constant means the destination
-// is drawn from this file's own list and can be nothing else, so the property holds by
-// construction rather than by the caller having validated first.
-func CanonicalSurfacePath(seg string) (string, bool) {
-	for _, s := range KnownSurfaces {
-		if s == seg {
-			return "/console/" + s + "/", true
-		}
-	}
-	return "", false
 }
 
 // LogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded

@@ -1,6 +1,6 @@
-// The Diagrams surface: one server-drawn figure at a time, through a declared lens. The server's
-// SVG is the figure as soon as it arrives. The Buzz runtime (wasm.ts), loaded only on request,
-// lays out later lens changes in the page without a round trip.
+// The Graph's Figures mode: one server-drawn figure at a time, through a declared lens. The
+// server's SVG is the figure as soon as it arrives. The Buzz runtime (wasm.ts), loaded only on
+// request, lays out later lens changes in the page without a round trip.
 
 import { reportFailure } from "../../../lib/notifications";
 import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/server";

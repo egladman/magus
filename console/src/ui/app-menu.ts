@@ -8,7 +8,7 @@
 import { dispatchCommand } from "../desktop/commands";
 
 export interface AppMenuItem {
-  pageId: string;
+  id: string;
   label: string;
 }
 
@@ -27,7 +27,7 @@ export function initAppMenu(items: readonly AppMenuItem[]): void {
       open.className = "pf-v6-c-menu__item";
       open.type = "button";
       open.setAttribute("role", "menuitem");
-      open.dataset.appOpen = item.pageId;
+      open.dataset.appOpen = item.id;
       const main = document.createElement("span");
       main.className = "pf-v6-c-menu__item-main";
       const text = document.createElement("span");

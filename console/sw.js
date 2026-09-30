@@ -22,10 +22,10 @@ const PRECACHE = [
   BASE + "tokens.css",
   BASE + "overrides.css",
   BASE + "theme.js",
-  BASE + "logs/log-viewer.js",
+  BASE + "logs/logs.js",
   BASE + "logs/logs.css",
   BASE + "logs/scaffold.html",
-  BASE + "graph/explorer.js",
+  BASE + "graph/graph.js",
   BASE + "graph/graph.css",
   BASE + "graph/scaffold.html",
   // Not the demo graph JSON: a server refuses to serve it (it is a workspace's data), and one

@@ -30,7 +30,7 @@ import (
 // object-src, frame-ancestors, base-uri, nor form-action inherits from default-src, so each is set
 // explicitly. style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles
 // inline; img-src allows data: for the inline SVG/data-URI icons the bundle embeds.
-// 'wasm-unsafe-eval' lets the Diagrams surface compile the playground's Buzz runtime; it
+// 'wasm-unsafe-eval' lets the Graph's Figures mode compile the playground's Buzz runtime; it
 // admits WebAssembly compilation only, not eval or inline script.
 const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
@@ -41,7 +41,7 @@ const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; st
 // origins carry the same CSP.
 //
 // The decoupled console is a single shell page that reads its surface from the URL PATH, so a
-// bare /console/<surface>/ request (one of KnownSurfaces) must return the shell (not the static
+// bare /console/<surface>/ request (see surfaceRoute) must return the shell (not the static
 // directory listing that physically lives there), so the console's boot router can open that
 // surface. A real file serves through the FileServer only when it is part of the app shell
 // (see shellExtensions); anything else in consoleDir, and any directory listing, is a 404.
@@ -56,7 +56,7 @@ func StaticHandler(consoleDir string) http.Handler {
 		// seg is the single path element under /console/ ("graph"), or "" for the root, or a
 		// multi-element sub-path ("graph/explorer.js"); only a bare known surface is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
-		if target, ok := CanonicalSurfacePath(seg); ok {
+		if target, ok := surfaceRoute(consoleDir, seg); ok {
 			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
 			// served with <base href="../"> and that only lands on /console/ when the URL
 			// already ends in a slash. Without the redirect, /console/diff resolves every asset
@@ -64,24 +64,24 @@ func StaticHandler(consoleDir string) http.Handler {
 			// root, and the surface renders unstyled and never boots. The trim above hides the
 			// difference from the surface lookup, so the check has to happen on the raw path.
 			//
-			// KnownSurfaces documents the canonical grammar as /console/<surface>/ and Link
-			// mints it that way, so this only affects a URL a person typed, which is exactly
-			// the case worth being kind about. Redirecting rather than making the base absolute
-			// keeps the shell servable from a prefix it does not know, which is what the
-			// relative base is for. StatusFound, matching share.go's redirect to /console/.
+			// The canonical grammar is /console/<surface>/ and Link mints it that way, so this
+			// only affects a URL a person typed, which is exactly the case worth being kind
+			// about. Redirecting rather than making the base absolute keeps the shell servable
+			// from a prefix it does not know, which is what the relative base is for.
+			// StatusFound, matching share.go's redirect to /console/.
 			if !strings.HasSuffix(r.URL.Path, "/") {
-				// The destination comes from KnownSurfaces itself, not from the request; see
-				// CanonicalSurfacePath. It also normalizes an odd but legal /console//diff.
+				// The destination is the console directory's own entry, not the request; see
+				// surfaceRoute. It also normalizes an odd but legal /console//diff.
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
 				// The fragment carries the server host and token and is never sent to a server,
 				// so there is nothing to preserve here; the browser reattaches it itself.
 				//
-				//nolint:gosec // G710: the destination is an element of KnownSurfaces, returned by
-				// CanonicalSurfacePath, so it cannot be influenced by the request; only the
+				//nolint:gosec // G710: the destination is a directory entry name, returned by
+				// surfaceRoute, so it cannot be influenced by the request; only the
 				// optional query rides along. gosec's taint analysis cannot see through the
-				// allow-list lookup and flags any redirect downstream of a request path.
+				// directory lookup and flags any redirect downstream of a request path.
 				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
 				http.Redirect(w, r, target, http.StatusFound)
 				return
@@ -130,8 +130,37 @@ var shellExtensions = map[string]bool{
 	".html": true, ".js": true, ".css": true, ".webmanifest": true,
 	".svg": true, ".png": true, ".ico": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
-	// The Diagrams surface's Buzz runtime (gen/wasm/buzz.wasm); FileServer types it application/wasm.
+	// The Figures mode's Buzz runtime (gen/wasm/buzz.wasm); FileServer types it application/wasm.
 	".wasm": true,
+}
+
+// surfaceRoute returns the canonical /console/<seg>/ path when the console in consoleDir has a
+// surface there: a top-level directory holding an index.html stub. The console build writes one
+// stub per app path and mode (console/scripts/surface-stubs.mjs), so the served routes are the
+// bundle's own and a surface the console adds needs no change here.
+//
+// The path is built from the directory entry read off disk, never from seg. A redirect assembled
+// from a request path is one the requester influenced (gosec G710); this one can only name a
+// directory the build wrote.
+func surfaceRoute(consoleDir, seg string) (string, bool) {
+	if seg == "" || strings.HasPrefix(seg, ".") || strings.ContainsAny(seg, `/\`) {
+		return "", false
+	}
+	entries, err := os.ReadDir(consoleDir)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() != seg {
+			continue
+		}
+		fi, err := os.Stat(filepath.Join(consoleDir, e.Name(), "index.html"))
+		if err != nil || !fi.Mode().IsRegular() {
+			return "", false
+		}
+		return "/console/" + e.Name() + "/", true
+	}
+	return "", false
 }
 
 // isShellFile reports whether urlPath (under /console/) names part of the app shell that

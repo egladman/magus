@@ -20,8 +20,8 @@ function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>
   const deps: TileDeps = {
     seed: { kind: "leaf", id: "p1", pageId: "logs" },
     surfaces: [
-      { pageId: "logs", label: "Log Viewer", hint: "" },
-      { pageId: "graph", label: "Graph Explorer", hint: "" },
+      { id: "logs", label: "Log Viewer", hint: "" },
+      { id: "graph", label: "Graph Explorer", hint: "" },
     ],
     async mountSurface(pageId): Promise<PageController<unknown, unknown>> {
       return {

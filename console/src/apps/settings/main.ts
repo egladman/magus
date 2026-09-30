@@ -1,5 +1,5 @@
 import { must } from "../../lib/guards";
-// surface.ts - the Settings surface: a console tab gathering every browser-side console setting under a
+// The Settings app: a console tab gathering every browser-side console setting under a
 // TRANSACTIONAL, staged-config model. Controls edit an in-memory DRAFT seeded from the
 // committed (live) values; the page shows the pending diff and three actions - Save & Apply (persist +
 // hot-reload now), Save (persist for the next load), Reset (discard the draft). Nothing reaches the

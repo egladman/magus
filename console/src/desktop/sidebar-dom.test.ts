@@ -5,16 +5,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createSidebar } from "./sidebar";
-import { buildLauncher, type Launchable } from "./home";
+import { buildLauncher } from "./home";
+import { dashboard } from "../apps/dashboard/app";
+import { logs } from "../apps/logs/app";
+import { settings } from "../apps/settings/app";
 import type { Workspace } from "./tabs";
 import type { PulseView } from "./pulse";
 import type { Badge } from "./badges";
 import { signal } from "./view";
-const SURFACES: Launchable[] = [
-  { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
-  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
-  { pageId: "settings", label: "Settings", hint: "Console settings", utility: true },
-];
+const SURFACES = [dashboard, logs, settings];
 
 function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
   const host = document.createElement("nav");
@@ -78,9 +77,9 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
       : [];
 
   for (const s of SURFACES) {
-    const rail = geometry(link(host, s.pageId).querySelector("svg"));
+    const rail = geometry(link(host, s.id).querySelector("svg"));
     const card = geometry(
-      launcher.querySelector(`[data-open="${s.pageId}"] .console-launcher-card__icon svg`),
+      launcher.querySelector(`[data-open="${s.id}"] .console-launcher-card__icon svg`),
     );
     assert.ok(rail.length > 0, `the rail drew no glyph for ${s.label}`);
     assert.deepEqual(rail, card, `the rail and the launcher disagree on the ${s.label} glyph`);

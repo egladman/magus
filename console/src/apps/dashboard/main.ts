@@ -38,7 +38,7 @@ import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { agentsTile } from "./tiles/agents";
 import { jobsTile } from "./tiles/jobs";
-import { openSurface } from "../../desktop/surface-navigation";
+import { onModeRequest, openSurface, takeModeIntent } from "../../desktop/surface-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
 import { brokerTile } from "./tiles/broker";
@@ -107,7 +107,6 @@ function setConn(conn: ConnView): void {
 let surfaceHidden = false;
 let lastState: DashboardState | null = null;
 type DashboardMode = "overview" | "jobs";
-type DashboardViewWindow = Window & { __magusConsoleDashboardView?: DashboardMode };
 let dashboardMode: DashboardMode = "overview";
 let jobsMount: SurfaceInstance | null = null;
 
@@ -163,11 +162,8 @@ const COMMANDS: readonly { id: string; label: string; key: string; run: () => vo
   },
 ];
 
-function takeDashboardViewIntent(): DashboardMode | null {
-  const win = window as DashboardViewWindow;
-  const mode = win.__magusConsoleDashboardView;
-  delete win.__magusConsoleDashboardView;
-  return mode === "jobs" || mode === "overview" ? mode : null;
+function isDashboardMode(mode: string | null): mode is DashboardMode {
+  return mode === "jobs" || mode === "overview";
 }
 
 export function setVisible(visible: boolean): void {
@@ -741,15 +737,15 @@ export function activate(): void {
     signal: lifecycleAbort?.signal,
   });
 
-  window.addEventListener(
-    "console:dashboard-view",
-    (event) => {
-      const mode = (event as CustomEvent<{ mode?: DashboardMode }>).detail?.mode;
-      if (mode === "jobs" || mode === "overview") setDashboardMode(mode);
+  onModeRequest(
+    "dashboard",
+    (mode) => {
+      if (isDashboardMode(mode)) setDashboardMode(mode);
     },
-    { signal: lifecycleAbort?.signal },
+    lifecycleAbort?.signal,
   );
-  setDashboardMode(takeDashboardViewIntent() ?? "overview");
+  const intent = takeModeIntent("dashboard");
+  setDashboardMode(isDashboardMode(intent) ? intent : "overview");
 
   document.querySelectorAll<HTMLElement>("#dash-main [data-open-surface]").forEach((button) => {
     button.addEventListener(

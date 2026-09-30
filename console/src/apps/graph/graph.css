@@ -15,6 +15,9 @@
  * bespoke-class scoped, repointed to tokens. The bare custom <button>s carry the --node-fg + color
  * resets so they read as plain text controls in the regular text color in both themes. */
 
+/* The Figures mode's own sheet, bundled in at build time. */
+@import "./diagrams/diagrams.css";
+
 :root {
   --pad: clamp(0.75rem, 2vw, 1.25rem);
 }
@@ -994,3 +997,19 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__caps { margin: 0 0 0.7rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 /* A detach that the browser refused: keep the control, mark it spent. */
 .console-graph-qb__detach[data-detach-failed] { opacity: 0.45; }
+
+/* Figures mode (setGraphMode in main.ts): the diagrams view fills the pane in the explorer's place,
+   under a bar carrying the way back. */
+#graph-figures-host:not([hidden]) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+.console-graph-figures-controls {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--console-surface-bar-h);
+  padding-inline: var(--console-pad);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}

@@ -15,26 +15,10 @@ import {
   renderConnectPrompt,
   type ConnectPromptOptions,
   type ConnectPromptState,
-  type ServerNeed,
 } from "./connectPrompt";
+import { isWholeMotion, type AppManifest } from "../apps/manifest";
 import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
-
-// A surface the launcher can open: the pageId the console registered it under, and a human label.
-export interface Launchable {
-  pageId: string;
-  label: string;
-  hint: string;
-  // A meta surface rather than a lens on the workspace - Settings and Shortcuts, the two you consult
-  // rather than work in. The navigation rail pins these to its foot, away from the six you switch
-  // between constantly; the launcher grid and the Applications menu ignore the flag and list
-  // everything, because neither has a foot to pin them to.
-  utility?: boolean;
-  // Set on a surface with nothing to show without a server: the shell opens its connect page in the
-  // surface's place until an address is applied (requireServer). Omit it for a surface that works
-  // offline, from a file or a snapshot.
-  server?: ServerNeed;
-}
 
 // The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
 // Each entry is dry and tool-flavored (magus is a build tool; the server keeps the graph warm),
@@ -159,92 +143,18 @@ export function launcherTagline(now: Date = new Date(), pick: () => number = Mat
   return eligible[Math.floor(pick() * eligible.length)].text;
 }
 
-// Each launcher card carries its OWN earthy palette hue (--card-accent, set per card below): the small
-// icon takes it (a pop of color per tool). Decorative only - the functional UI keeps PatternFly's brand
-// accent, and semantic status color stays reserved for health.
-const SURFACE_ACCENTS: Record<string, string> = {
-  dashboard: "--console-moss", // green: live/healthy status
-  activity: "--console-rust", // terracotta: warm history trail
-  logs: "--console-indigo", // restrained indigo: cool, reading captured output
-  // Plum because Runs has to read as neither of the two surfaces it sits between: it is not the
-  // trail of what happened (Activity, rust) and not the output you sit and read (Log Viewer,
-  // indigo), it is the ledger you pick a run out of.
-  runs: "--console-plum",
-  graph: "--console-slate", // steel blue: nodes and connections
-  // Clay, not one of the greens: the greens in this palette already mean "live/healthy" (moss on the
-  // dashboard), and a note is not a status. A warm earth tone reads as something a person left behind.
-  notes: "--console-clay", // soft terracotta: human prose, warm and hand-placed
-  actions: "--console-gold", // ocher yellow: the warm, worn key-cap tone of a keyboard
-  settings: "--console-stone", // neutral gray: utility
-  // The two review surfaces take the remaining greens, kept clear of moss so neither reads
-  // as health: spruce for the diff (deeper - the thing you sit and read), sage for the plan
-  // (lighter - a sketch of work not done yet).
-  diff: "--console-spruce",
-  plan: "--console-sage",
-};
-
-// One representative glyph per surface, drawn in the console's shared icon idiom (24x24, stroked
-// currentColor, round caps). It is used for BOTH the small tinted-tile icon and the large corner
-// watermark, so a card's two marks match. Keyed by pageId; a surface with no entry falls back to a
-// neutral square. A single inner element per animated icon carries data-motion="<kind>": on card hover
-// the SMALL icon plays ONE in-character micro-motion (gauge needle sweeps, node pulses, waveform
-// breathes, spacebar presses) - see the @keyframes in console.css, all one-shot and reduced-motion gated;
-// the watermark reuses the same markup but never animates (the motion CSS is icon-scoped). Two glyphs
-// animate WHOLE and so hook the icon slot instead (buildLauncher sets it): the gear turns, and the note
-// settles - a note's page and its prose have to move as one thing or it tears.
-const SURFACE_ICONS: Record<string, string> = {
-  // Log viewer: stacked text lines.
-  logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
-  // Graph explorer: three connected nodes; the lead node pulses on hover.
-  graph:
-    '<circle data-motion="pulse" cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><path d="M8 8l6 9M8 7l8-1"/>',
-  // Dashboard: a small bar chart on a baseline (live stats); the tall bar grows on hover.
-  dashboard:
-    '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
-  // Activity: a waveform; it breathes on hover.
-  activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
-  // Runs: a stopwatch, and deliberately not another stack of rows - the Log Viewer already owns
-  // "lines of text" and Activity owns the trail, so a third one would say nothing about which
-  // surface you are looking at. A run STARTED, took time, and ended, which is what a dial says at
-  // 16px. The hand sweeps a FULL turn on hover so the one-shot animation ends where it began; a
-  // partial sweep snaps back.
-  runs: '<path d="M10 2.5h4"/><path d="M12 2.5v2.2"/><circle cx="12" cy="13.5" r="7.2"/><path data-motion="sweep" d="M12 13.5V9"/>',
-  // Notes: a page of prose lying ASKEW - the one glyph in this set that is not square to the grid,
-  // because a note is the one thing in the graph a person put there by hand. The tilt is the whole
-  // idea; drawn upright it is just the generic document icon and says "file", not "someone wrote
-  // this". The folded corner and two short lines survive down to 16px. The motion rides the icon
-  // SLOT (like the gear) rather than an inner element: the page and its prose must settle together.
-  notes:
-    '<path d="M13.6 3.1 7.4 4.8a2 2 0 0 0-1.4 2.45l3 11a2 2 0 0 0 2.45 1.4l6.8-1.85a2 2 0 0 0 1.4-2.45L17.2 6.6z"/><path d="m13.6 3.1 1 3.6 3.6-1"/><path d="m10.5 11.8 5-1.35"/><path d="m11.4 15.1 3.4-.9"/>',
-  // Shortcuts: a keyboard, deliberately not a lightning bolt - a bolt reads as "fast", which is the
-  // Palette's job, not this surface's. The spacebar presses on hover. (Key is still the "actions"
-  // pageId - see main.ts.)
-  actions:
-    '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/><path data-motion="press" d="M8.5 14h7"/>',
-  // Diff: a split view - a center rule with shorter lines either side. The left column grows
-  // on hover, the one motion that reads as text arriving.
-  diff: '<path d="M12 4v16"/><path data-motion="bars" d="M4 8h5M4 12h6M4 16h4"/><path d="M15 8h5M15 12h4M15 16h5"/>',
-  // Jobs: one job branching into two, the shape of the job tree. The root pulses,
-  // matching the graph's lead node - both say "this is where it starts".
-  plan: '<circle data-motion="pulse" cx="12" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="M12 7.2v3.8M6 17v-6h12v6"/>',
-  // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.
-  settings:
-    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
-};
-
-// surfaceIconSvg renders one surface's glyph at `size` px. Exported because the shell's navigation
-// rail (sidebar.ts) marks the same surfaces with the same marks: two hand-kept copies of eight
-// glyphs would drift the first time one is redrawn. `size` omitted leaves the svg unsized, which is
-// what the card's corner watermark wants (it is scaled by CSS). A surface with no glyph of its own
-// falls back to a neutral square, so the rail is never left with a hole where an icon should be.
-export function surfaceIconSvg(pageId: string, size?: number): string {
+// surfaceIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
+// currentColor, round caps. The rail and the launcher both draw through it so the marks match.
+// `size` omitted leaves the svg unsized, which is what the card's corner watermark wants (it is
+// scaled by CSS).
+export function surfaceIconSvg(glyph: string, size?: number): string {
   const dims = size == null ? "" : ' width="' + size + '" height="' + size + '"';
   return (
     '<svg viewBox="0 0 24 24"' +
     dims +
     ' fill="none" stroke="currentColor" stroke-width="1.7" ' +
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    (SURFACE_ICONS[pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
+    glyph +
     "</svg>"
   );
 }
@@ -378,7 +288,10 @@ export function syncLauncherChord(root: HTMLElement, chord: string): void {
   hint.append(key, document.createTextNode(" for the palette."));
 }
 
-export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void): HTMLElement {
+export function buildLauncher(
+  surfaces: readonly AppManifest[],
+  open: (pageId: string) => void,
+): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
@@ -408,25 +321,22 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   for (const s of surfaces) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
-    card.dataset.open = s.pageId;
-    // This card's palette hue drives its icon, watermark, and hover border. Settings sets none and
+    card.dataset.open = s.id;
+    // This card's palette hue drives its icon, watermark, and hover border. An app with no accent
     // inherits the shared spruce accent via the --card-accent fallback in console.css.
-    const accentVar = SURFACE_ACCENTS[s.pageId];
-    if (accentVar) card.style.setProperty("--card-accent", `var(${accentVar})`);
+    if (s.accent) card.style.setProperty("--card-accent", `var(${s.accent})`);
     // A real clickable button: role=button + tabindex make it keyboard-reachable and announce it
     // as a button; the Enter/Space handler below completes the contract.
     card.setAttribute("role", "button");
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", "Open " + s.label);
     // The representative glyph, drawn in the card's hue. Decorative (the accessible name is the card's
-    // aria-label), so aria-hidden. The gear and the note animate as a WHOLE glyph on hover, so their
-    // motion hook rides the icon slot; the other surfaces mark a single inner element (data-motion, in
-    // SURFACE_ICONS).
+    // aria-label), so aria-hidden. A whole motion rides the icon slot; a part motion is already on
+    // one inner element of the glyph.
     const icon = document.createElement("span");
     icon.className = "console-launcher-card__icon";
-    if (s.pageId === "settings") icon.dataset.motion = "gear";
-    if (s.pageId === "notes") icon.dataset.motion = "settle";
-    icon.innerHTML = surfaceIconSvg(s.pageId, 24);
+    if (isWholeMotion(s.motion)) icon.dataset.motion = s.motion;
+    icon.innerHTML = surfaceIconSvg(s.glyph, 24);
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -442,20 +352,17 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     // drawn behind the text (z-index in console.css) in a neutral (colorless) tint that drifts on hover.
     // Decorative, aria-hidden. It reuses the icon markup (motion attrs and all), but the motion CSS is
     // icon-scoped so the watermark never animates.
-    const glyph = SURFACE_ICONS[s.pageId];
-    if (glyph) {
-      const mark = document.createElement("span");
-      mark.className = "console-launcher-card__watermark";
-      mark.innerHTML = surfaceIconSvg(s.pageId);
-      card.append(mark);
-    }
-    card.addEventListener("click", () => open(s.pageId));
+    const mark = document.createElement("span");
+    mark.className = "console-launcher-card__watermark";
+    mark.innerHTML = surfaceIconSvg(s.glyph);
+    card.append(mark);
+    card.addEventListener("click", () => open(s.id));
     // Enter/Space open the surface only when the CARD itself is focused - a key press on the kebab or a
     // menu item bubbles here too, so guard on the target to avoid a stray open.
     card.addEventListener("keydown", (ev) => {
       if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) {
         ev.preventDefault();
-        open(s.pageId);
+        open(s.id);
       }
     });
 
@@ -510,7 +417,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     openWin.addEventListener("click", (ev) => {
       ev.stopPropagation();
       closeMenu();
-      openSurfaceWindow(s.pageId);
+      openSurfaceWindow(s.id);
     });
     card.append(kebab, menu);
 

@@ -205,7 +205,7 @@ export function runtimeFrom(g: unknown): BuzzRuntime | null {
   };
 }
 
-// wasmRoot is gen/wasm/ beside this bundle's gen/diagrams/, where the console build copies the
+// wasmRoot is gen/wasm/ beside the graph bundle's gen/graph/, where the console build copies the
 // playground's buzz.wasm and wasm_exec.js.
 export function wasmRoot(moduleUrl: string = import.meta.url): string {
   return new URL("../wasm/", moduleUrl).href;

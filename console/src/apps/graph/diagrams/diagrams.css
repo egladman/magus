@@ -1,4 +1,4 @@
-/* diagrams.css - the Diagrams surface: a bar (figure and lens) over the figure's own control row,
+/* diagrams.css - the Graph's Figures mode: a bar (figure and lens) over the figure's own control row,
    then the figure beside its node list. A CHROME surface: the bars run full bleed and the figure
    meets the pane edge. The figure's colours are the --magus-diagram-* tokens in tokens.css. */
 

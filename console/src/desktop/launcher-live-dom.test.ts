@@ -5,13 +5,12 @@
 
 import assert from "node:assert/strict";
 import { describe, test, beforeEach } from "node:test";
-import { buildLauncher, syncLauncherPulse, type Launchable } from "./home";
+import { buildLauncher, syncLauncherPulse } from "./home";
+import { dashboard } from "../apps/dashboard/app";
+import { logs } from "../apps/logs/app";
 import type { PulseView } from "./pulse";
 
-const SURFACES: Launchable[] = [
-  { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
-  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
-];
+const SURFACES = [dashboard, logs];
 
 // Scoped, not top-level: with --test-isolation=none a root hook runs before every other file's tests.
 describe("the launcher's live reading", () => {

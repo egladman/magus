@@ -34,8 +34,8 @@ import {
   syncLauncherConnectPrompt,
   syncLauncherPulse,
   buildLauncher,
-  type Launchable,
 } from "./home";
+import { APPS } from "../apps/index";
 import { REQUEST_SERVER_SETTINGS_EVENT, requireServer } from "./connectPrompt";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
@@ -52,7 +52,7 @@ import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
 import { settingsSurface } from "../apps/settings/main";
 import { createCheatsheet } from "./cheatsheet";
-import { createActionsSurface } from "../apps/shortcuts/main";
+import { createShortcutsSurface } from "../apps/shortcuts/main";
 import { createTileView, type TileView } from "./tileView";
 import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
@@ -65,7 +65,7 @@ import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
-import { surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
+import { requestMode, surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
 import { signal } from "./view";
 import {
   parseHash,
@@ -213,107 +213,30 @@ const registry = new Map<string, PageModule<unknown, unknown>>();
 // Every mount resolves through the registry (a launcher pick, a restored layout, a deep link, app
 // mode), so wrapping here is what keeps each of them off a server surface with no server.
 function register(m: PageModule<unknown, unknown>): void {
-  registry.set(m.id, requireServer(m, SURFACES.find((s) => s.pageId === m.id)?.server));
+  registry.set(m.id, requireServer(m, APPS.find((app) => app.id === m.id)?.server));
 }
 
-// The surfaces the home launcher offers (and the console can open). Ordered to tell the
-// operator's story: what is magus doing now (dashboard), what just happened (activity),
-// drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
-//
-// server marks a surface with nothing to show without one; register() wraps those in requireServer.
-// The Log Viewer and Graph Explorer open files and snapshots offline, so they carry no mark.
-const SURFACES: Launchable[] = [
-  {
-    pageId: "dashboard",
-    label: "Dashboard",
-    hint: "What magus is doing right now",
-    server: { purpose: "The dashboard streams a running server's pool, cache, and health." },
-  },
-  {
-    pageId: "activity",
-    // The bare noun, never "Trail": "audit trail" is the phrase it summons, and that frames the
-    // surface as governance, which it is not. It also matches the service behind it
-    // (magus.activity.v1alpha1) and survives what is coming - once sessions group and replay, and an
-    // agent's reasoning hangs off the command it led to, "activity" still covers it.
-    label: "Activity",
-    hint: "Everything that happened here, and what led to it",
-    server: { purpose: "Activity records what the server did: MCP calls, jobs, config changes." },
-  },
-  // Runs before Log Viewer, because it is the one you reach for FIRST: the viewer reads a run you
-  // already have, this finds the run. The pair is deliberate - browsing history and reading one
-  // run's output are different jobs, and the viewer's own side panel covers only "the next one"
-  // while you are already reading.
-  {
-    pageId: "runs",
-    label: "Runs",
-    hint: "Every run this workspace kept, no ref needed",
-    server: { purpose: "Runs reads the runs your local server has kept." },
-  },
-  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
-  { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
-  {
-    pageId: "diagrams",
-    label: "Diagrams",
-    hint: "Figures drawn from the workspace graph",
-    server: { purpose: "Diagrams are drawn by a running server from this workspace's graph." },
-  },
-  {
-    pageId: "diff",
-    label: "Diff",
-    hint: "Read what you have changed but not committed",
-    server: { purpose: "Diff reads the working tree through a local server." },
-  },
-  // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
-  // that someone who was here before you left it for you, at the spot where it matters.
-  {
-    pageId: "notes",
-    label: "Notes",
-    hint: "What people left here for whoever comes next",
-    server: {
-      purpose: "Notes are prose a person wrote about this workspace, anchored to what it is about.",
-    },
-  },
-  // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it) while the
-  // LABEL is Shortcuts, because "actions" collides with both the Command Palette and the Activity
-  // feed. Prior art splits the two roles cleanly and this surface is the second one: VS Code's
-  // Keyboard Shortcuts editor (and GNOME's, and KDE's) is the list of every command with its
-  // binding, while the palette is the thing that runs one.
-  {
-    pageId: "actions",
-    label: "Shortcuts",
-    hint: "Every command, its keys, and where to change them",
-    utility: true,
-  },
-  {
-    pageId: "settings",
-    label: "Settings",
-    hint: "Console settings and keybindings",
-    utility: true,
-  },
-];
+// CLEAN_PATHS maps each clean path /console/<segment>/ to what it opens: an app, or one of its
+// modes. The server serves the shell for the stubs the build writes from the same manifests.
+const CLEAN_PATHS = new Map<string, { pageId: string; mode?: string }>();
+for (const app of APPS) {
+  if (app.path) CLEAN_PATHS.set(app.path, { pageId: app.id });
+  for (const [segment, mode] of Object.entries(app.modes ?? {})) {
+    CLEAN_PATHS.set(segment, { pageId: app.id, mode });
+  }
+}
 
-// CLEAN_PATH_SURFACES are the surfaces reachable by the canonical clean path /console/<surface>/,
-// the form magus mints its server-origin deep links into. It mirrors the server's shared list
-// (internal/service/console KnownSurfaces): the server serves the console shell for exactly these
-// paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
-// lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "runs"];
-// JOBS_PATH is served by the server but is no surface of its own: it is the Dashboard's Jobs view,
-// the page every `magus job` console link prints. Routed apart so it opens that view.
-const JOBS_PATH = "plan";
-
-// consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
-// the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
-// the last path segment being a known surface whose parent segment is "console", so it holds at
-// both the server origin (/console/graph/) and the hosted origin (/magus/console/graph/).
-function consoleSurfaceFromPath(): string | null {
+// consoleSurfaceFromPath returns what a /console/<segment>/ entry path opens, or null when the page
+// did not boot on such a path (the bare console root, or any other path). It keys on the last path
+// segment being a clean path whose parent segment is "console", so it holds at both the server
+// origin (/console/graph/) and the hosted origin (/magus/console/graph/).
+function consoleSurfaceFromPath(): { pageId: string; mode?: string } | null {
   if (typeof location === "undefined") return null;
   const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   const last = segs[segs.length - 1];
   const parent = segs[segs.length - 2];
   if (parent !== "console" || !last) return null;
-  if (CLEAN_PATH_SURFACES.includes(last) || last === JOBS_PATH) return last;
-  return null;
+  return CLEAN_PATHS.get(last) ?? null;
 }
 
 // consoleBasePath is the console root for the current origin: the entry path with its trailing
@@ -812,7 +735,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
 // tab, focusing it if already open - open() is single-instance) then focus + scroll the server-address
 // field once it exists. Settings activates asynchronously (its host pane mounts synchronously, but the
 // controller - and the DOM inside it - resolves via mountSurface's awaited activate() a tick or more
-// later; see settings/surface.ts), so the field is not guaranteed to exist the instant dispatchCommand
+// later; see apps/settings/main.ts), so the field is not guaranteed to exist the instant dispatchCommand
 // returns. Poll a few animation frames rather than assume a fixed delay, and give up quietly past the
 // deadline - the tab is open either way, so a user who does not get auto-focus can still find the field.
 function openServerSettings(): void {
@@ -1027,7 +950,7 @@ export function startConsole(
     for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
     notifications.seedDemo(); // populate the history panel for the offline demo (history tier only)
   };
-  const launcher = buildLauncher(SURFACES, open);
+  const launcher = buildLauncher(APPS, open);
   launcher.hidden = true;
   outlet.append(launcher);
   let launcherChordWired = false;
@@ -1059,7 +982,7 @@ export function startConsole(
     const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
     const tile = createTileView({
       seed,
-      surfaces: SURFACES,
+      surfaces: APPS,
       mountSurface,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
       onTitleChange: (title, pageId) => {
@@ -1298,7 +1221,7 @@ export function startConsole(
 
   // The app grid derives from the same registry as the launcher and Open commands. Settings keeps
   // its dedicated gear, while every user-openable workspace surface remains in the escape hatch.
-  initAppMenu(SURFACES.filter((surface) => surface.pageId !== "settings"));
+  initAppMenu(APPS.filter((app) => app.id !== "settings"));
 
   // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
   // Applications menu can never offer different sets. This runs before the ?app branch below, so an
@@ -1392,7 +1315,7 @@ export function startConsole(
         pulse,
         focused: focusedSurface,
         badges: railBadges,
-        surfaces: SURFACES,
+        surfaces: APPS,
       },
       { onOpen: (id) => open(id) },
     );
@@ -1457,12 +1380,12 @@ export function startConsole(
   // Opening a surface is a command per surface (group "Open"): the launcher's cards cover the empty
   // state, and once a tab is open the command bar is how another surface is launched. Each opens
   // (or focuses, if already open) that single-instance surface as a tab.
-  for (const s of SURFACES) {
+  for (const app of APPS) {
     registerCommand({
-      id: "console.open." + s.pageId,
-      label: "Open " + s.label,
+      id: "console.open." + app.id,
+      label: "Open " + app.label,
       group: "Open",
-      run: () => open(s.pageId),
+      run: () => open(app.id),
     });
   }
   // mod+w closes the smallest thing: the focused PANE, falling through to the whole tab only when
@@ -1729,7 +1652,7 @@ export function startConsole(
   // leaf (a fresh split's launcher pane, before the operator picks a surface for it).
   function surfaceLabel(pageId: string): string {
     if (pageId === "") return "Empty";
-    return SURFACES.find((s) => s.pageId === pageId)?.label ?? pageId;
+    return APPS.find((app) => app.id === pageId)?.label ?? pageId;
   }
 
   // wirePaneCellDrag turns a map cell into both a tap target (focus) and a drag source/target (swap
@@ -2313,101 +2236,39 @@ export function startConsole(
     mount(tab);
   }
 
-  // Dashboard owns the live Jobs view. The ephemeral intent reaches a lazily loaded Dashboard
-  // bundle even on its first mount; the event switches an already-mounted Dashboard immediately.
-  function openJobs(): void {
-    (window as Window & { __magusConsoleDashboardView?: "jobs" }).__magusConsoleDashboardView =
-      "jobs";
-    open("dashboard");
-    window.dispatchEvent(new CustomEvent("console:dashboard-view", { detail: { mode: "jobs" } }));
+  // openMode opens an app on one of its modes (the Dashboard's jobs, the Graph's figures). The
+  // intent reaches a lazily loaded bundle even on its first mount; the event switches an
+  // already-mounted one immediately.
+  function openMode(pageId: string, mode: string): void {
+    requestMode(pageId, mode);
+    open(pageId);
   }
 
   // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
   // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
   window.addEventListener(surfaceNavigationEvent, (event) => {
     const detail = surfaceNavigation(event);
-    if (detail?.pageId === "dashboard" && detail.dashboardMode === "jobs") openJobs();
+    if (detail?.mode) openMode(detail.pageId, detail.mode);
     else if (detail?.pageId) open(detail.pageId);
   });
 
+  // Every app with a bundle of its own loads it lazily from gen/<id>/<id>.js, the name the build
+  // derives from apps/<id>/main.ts. A page app lifts its <main> from gen/<id>/scaffold.html first.
+  for (const app of APPS) {
+    const { load } = app;
+    if (load.kind === "shell") continue;
+    const bundle = app.id + "/" + app.id + ".js";
+    register(
+      load.kind === "page"
+        ? standaloneSurface({ id: app.id, title: app.label, bundle, css: load.css })
+        : moduleSurface({ id: app.id, title: app.label, bundle, css: load.css }),
+    );
+  }
+  // Shortcuts is registered from the shell bundle (not a lazy surface bundle) - it is a thin,
+  // static catalogue over the console's own live command list + keymap, the same deps the keyboard
+  // cheat sheet above reads, so a separate bundle would get nothing but import overhead.
   register(
-    standaloneSurface({
-      id: "logs",
-      title: "Log Viewer",
-      dir: "logs",
-      bundle: "log-viewer.js",
-      css: "logs.css",
-    }),
-  );
-  register(
-    standaloneSurface({
-      id: "dashboard",
-      title: "Dashboard",
-      dir: "dashboard",
-      bundle: "dashboard.js",
-      css: "dashboard.css",
-    }),
-  );
-  register(
-    standaloneSurface({
-      id: "graph",
-      title: "Graph Explorer",
-      dir: "graph",
-      bundle: "explorer.js",
-      css: "graph.css",
-    }),
-  );
-  register(
-    moduleSurface({
-      id: "activity",
-      title: "Activity",
-      bundle: "activity/activity.js",
-      css: "logs/logs.css",
-    }),
-  );
-  // Notes authors its own sheet. It shares a panel-frame shape with the log viewer and the
-  // trail, but not their typography: .console-render-body is a monospace grid sized for log
-  // lines, and a note is human prose that has to wrap to a reading measure.
-  register(
-    moduleSurface({
-      id: "notes",
-      title: "Notes",
-      bundle: "notes/notes.js",
-      css: "notes/notes.css",
-    }),
-  );
-  // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized
-  // against a fixed row height, so its geometry rules are part of the scroll math and must not
-  // drift with another surface's typography.
-  register(
-    moduleSurface({
-      id: "diff",
-      title: "Diff",
-      bundle: "diff/diff.js",
-      css: "diff/diff.css",
-    }),
-  );
-  register(
-    moduleSurface({
-      id: "runs",
-      title: "Runs",
-      bundle: "runs/runs.js",
-      css: "runs/runs.css",
-    }),
-  );
-  register(
-    moduleSurface({
-      id: "diagrams",
-      title: "Diagrams",
-      bundle: "diagrams/diagrams.js",
-      css: "diagrams/diagrams.css",
-    }),
-  );
-  // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static
-  // catalogue over the console's own live command list + keymap, the same deps the keyboard cheat
-  // sheet above reads, so a separate bundle would get nothing but import overhead.
-  register(
-    createActionsSurface({
+    createShortcutsSurface({
       commands: listCommands,
       keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
       mac: isMac(),
@@ -2427,7 +2288,7 @@ export function startConsole(
       install: installStore,
     }),
   );
-  // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in SURFACES:
+  // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in APPS:
   // no launcher card, no app-menu row, no Open command - reachable only via that button, single-instance.
   register(referenceSurface());
 
@@ -2437,14 +2298,14 @@ export function startConsole(
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
   const launchApp = new URLSearchParams(location.search).get("app");
-  const appSurface = launchApp ? SURFACES.find((s) => s.pageId === launchApp) : undefined;
-  if (appSurface && registry.has(appSurface.pageId)) {
-    document.documentElement.dataset.appmode = appSurface.pageId;
+  const appSurface = launchApp ? APPS.find((app) => app.id === launchApp) : undefined;
+  if (appSurface && registry.has(appSurface.id)) {
+    document.documentElement.dataset.appmode = appSurface.id;
     // Must be set before mount(): its show() titles the window, and would otherwise read the
     // workspace, which has no tab for this surface.
     appModeTitle = appSurface.label;
     syncWindowTitle();
-    mount({ id: "app-" + appSurface.pageId, pageId: appSurface.pageId, title: appSurface.label });
+    mount({ id: "app-" + appSurface.id, pageId: appSurface.id, title: appSurface.label });
     return;
   }
 
@@ -2491,8 +2352,8 @@ export function startConsole(
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
   // only the surface segment is dropped.
   if (entrySurface) {
-    if (entrySurface === JOBS_PATH) openJobs();
-    else if (registry.has(entrySurface)) open(entrySurface);
+    if (entrySurface.mode) openMode(entrySurface.pageId, entrySurface.mode);
+    else open(entrySurface.pageId);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 

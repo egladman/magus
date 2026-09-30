@@ -22,11 +22,12 @@
 //
 // The hook is data-RAIL-surface, not data-surface: the console already uses data-surface to mark a
 // mounted SURFACE ROOT, and the rail lives inside #console-outlet where those rules apply - a row
-// named data-surface="actions" picks up the Shortcuts surface's own layout and breaks.
+// named data-surface="shortcuts" picks up the Shortcuts surface's own layout and breaks.
 
 import { tabHostsSurface, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
-import { surfaceIconSvg, type Launchable } from "./home";
+import { surfaceIconSvg } from "./home";
+import type { AppManifest } from "../apps/manifest";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { dispatchCommand } from "./commands";
 import type { PulseView } from "./pulse";
@@ -88,15 +89,15 @@ export interface Sidebar {
 // (tileView's onTitleChange), because the persisted Workspace does not carry runtime focus.
 export function sidebarItems(
   ws: Workspace,
-  surfaces: readonly Launchable[],
+  surfaces: readonly AppManifest[],
   focusedPageId: string | null,
 ): SidebarItem[] {
   return surfaces.map((s) => ({
-    pageId: s.pageId,
+    pageId: s.id,
     label: s.label,
     hint: s.hint,
-    open: ws.tabs.some((t) => tabHostsSurface(t, s.pageId)),
-    current: focusedPageId === s.pageId,
+    open: ws.tabs.some((t) => tabHostsSurface(t, s.id)),
+    current: focusedPageId === s.id,
   }));
 }
 
@@ -175,7 +176,7 @@ export interface SidebarState {
   pulse: Signal<PulseView | null>;
   focused: Signal<string | null>;
   badges: Signal<Record<string, Badge>>;
-  surfaces: readonly Launchable[];
+  surfaces: readonly AppManifest[];
 }
 
 // createSidebar fills `host` (the #console-sidebar element the page supplies) and keeps it in step
@@ -298,7 +299,7 @@ export function createSidebar(
     const link = document.createElement("button");
     link.type = "button";
     link.className = "pf-v6-c-nav__link";
-    link.dataset.railSurface = s.pageId;
+    link.dataset.railSurface = s.id;
     // The accessible name is on the button and stays there in BOTH states, so collapsing the rail to
     // icons never leaves a row unnamed. The visible text below is therefore decorative.
     link.setAttribute("aria-label", s.label);
@@ -306,7 +307,7 @@ export function createSidebar(
 
     const icon = document.createElement("span");
     icon.className = "pf-v6-c-nav__link-icon";
-    icon.innerHTML = surfaceIconSvg(s.pageId, 18);
+    icon.innerHTML = surfaceIconSvg(s.glyph, 18);
 
     const text = document.createElement("span");
     text.className = "pf-v6-c-nav__link-text";
@@ -316,19 +317,19 @@ export function createSidebar(
     badge.dataset.railBadge = "";
     badge.hidden = true;
     link.append(icon, text, badge);
-    link.addEventListener("click", () => cb.onOpen(s.pageId));
+    link.addEventListener("click", () => cb.onOpen(s.id));
     // Right-click for the one thing a row cannot say on its own. The launcher card carried this on a
     // kebab and the tab strip carries it on its own context menu; without it here the rail would be
     // the only way to reach a surface that could not also send it to its own window.
     link.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
-      openMenu(s.pageId, s.label, ev.clientX, ev.clientY);
+      openMenu(s.id, s.label, ev.clientX, ev.clientY);
     });
     item.append(link);
     (s.utility ? utilityList : list).append(item);
-    links.set(s.pageId, link);
-    badgeEls.set(s.pageId, badge);
-    labels.set(s.pageId, s.label);
+    links.set(s.id, link);
+    badgeEls.set(s.id, badge);
+    labels.set(s.id, s.label);
   }
 
   // The live reading sits at the foot, between the apps and the toggle: it is about the workspace

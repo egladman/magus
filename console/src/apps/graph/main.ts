@@ -1,5 +1,7 @@
 import { must, errMessage } from "../../lib/guards";
-import { openSurface } from "../../desktop/surface-navigation";
+import { onModeRequest, openSurface, takeModeIntent } from "../../desktop/surface-navigation";
+import type { SurfaceInstance } from "../../desktop/standalone";
+import { activate as activateFigures } from "./diagrams/main";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
@@ -14,7 +16,7 @@ import { openSurface } from "../../desktop/surface-navigation";
 //   4. the site's own committed knowledge or target demo graph, shown on demand.
 //
 // Rendering is canvas + d3-force (bundled locally by esbuild into
-// gen/graph/explorer.js - no CDN, so it works offline once the PWA has cached
+// gen/graph/graph.js - no CDN, so it works offline once the PWA has cached
 // it). Colors come from the console's PatternFly-native CSS tokens read off the
 // live page (readTheme), re-read on a theme toggle. The canvas is progressive
 // enhancement over a semantic node list; the explain card is plain HTML.
@@ -5549,6 +5551,8 @@ export async function activate() {
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
   // works in the live/empty states as well.
   wireToolbarOverflow();
+  // Before any early return too: the Figures mode works whether or not a graph loads.
+  wireGraphModes(lifecycleAbort.signal);
 
   // Register file-open listeners before any early return so the installed PWA
   // can open a .json file even when the demo graph fails to load (no #data/#src
@@ -5795,8 +5799,7 @@ function bootWireEvents() {
     group: "Graph",
     run: () => changeFocusDepth(1),
   });
-  uninstallKeys?.();
-  uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
+  if (graphMode === "explore") installGraphKeys();
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
@@ -6192,6 +6195,74 @@ async function bootLive() {
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
+// Figures is the Graph's second mode: the diagrams view (./diagrams), drawn by the server from the
+// same workspace graph, mounted in the explorer's place the way the Dashboard mounts its Jobs
+// view. /console/diagrams/ opens it.
+type GraphMode = "explore" | "figures";
+let graphMode: GraphMode = "explore";
+let figuresMount: SurfaceInstance | null = null;
+// The console's word on this pane; the explorer is shown only while it is true AND in front.
+let paneVisible = true;
+
+function isGraphMode(mode: string | null): mode is GraphMode {
+  return mode === "explore" || mode === "figures";
+}
+
+function installGraphKeys(): void {
+  uninstallKeys?.();
+  uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
+}
+
+function disposeFigures(): void {
+  figuresMount?.deactivate();
+  figuresMount = null;
+}
+
+function setGraphMode(mode: GraphMode): void {
+  const app = document.querySelector<HTMLElement>(".console-graph-app");
+  const host = el("graph-figures-host");
+  if (!app || !host) return;
+  graphMode = mode;
+  app.hidden = mode !== "explore";
+  host.hidden = mode !== "figures";
+  const controls = el("graph-figures-controls");
+  if (controls) controls.hidden = mode !== "figures";
+  showExplorer(paneVisible && mode === "explore");
+  if (mode === "figures") {
+    // The figure reads f, +, - and 0 on its own frame; the explorer's single keys would fire too.
+    uninstallKeys?.();
+    uninstallKeys = null;
+    if (!figuresMount) figuresMount = activateFigures(host);
+    figuresMount.setVisible?.(paneVisible);
+    return;
+  }
+  // Rebuilt on return rather than kept hidden, the Jobs view's reason: no stale poll or listener.
+  disposeFigures();
+  installGraphKeys();
+}
+
+function wireGraphModes(signal: AbortSignal): void {
+  document
+    .querySelector("[data-graph-mode='figures']")
+    ?.addEventListener("click", () => setGraphMode("figures"), { signal });
+  el("graph-figures-back")?.addEventListener("click", () => setGraphMode("explore"), { signal });
+  registerCommand({
+    id: "graph.figures.toggle",
+    label: "Graph: show the figures",
+    group: "Graph",
+    run: () => setGraphMode(graphMode === "figures" ? "explore" : "figures"),
+  });
+  onModeRequest(
+    "graph",
+    (mode) => {
+      if (isGraphMode(mode)) setGraphMode(mode);
+    },
+    signal,
+  );
+  const intent = takeModeIntent("graph");
+  if (isGraphMode(intent)) setGraphMode(intent);
+}
+
 // setVisible is the console's surface contract (page.ts). Here it is not a formality: a graph
 // backgrounded mid-settle would go on ticking and repainting a canvas nobody could see, and until
 // this existed only CLOSING the tab stopped it.
@@ -6199,6 +6270,12 @@ async function bootLive() {
 // Stopped rather than throttled, so what comes back is the layout the reader left rather than one
 // that drifted while they were elsewhere.
 export function setVisible(visible: boolean): void {
+  paneVisible = visible;
+  figuresMount?.setVisible?.(visible && graphMode === "figures");
+  showExplorer(visible && graphMode === "explore");
+}
+
+function showExplorer(visible: boolean): void {
   surfaceVisible = visible;
   if (visible) {
     if (sim) sim.restart(); // finishes an interrupted settle; a no-op on one that finished
@@ -6214,6 +6291,9 @@ export function setVisible(visible: boolean): void {
 }
 
 export function deactivate(): void {
+  disposeFigures();
+  graphMode = "explore";
+  paneVisible = true;
   // Forget the selected node: this module is a singleton the console re-activates on reopen, so a
   // stale label left here would name the reopened tab after a node it is no longer showing.
   docTitle.set(null);

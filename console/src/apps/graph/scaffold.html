@@ -170,6 +170,7 @@
           <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graph-mode="figures" title="Figures a running server draws from this workspace's graph. Opens in place of the explorer."><span class="pf-v6-c-toggle-group__text">Figures</span></button></div>
           </div>
           </div>
           </div>
@@ -311,6 +312,13 @@
         </div>
       </div>
     </section>
+
+    <!-- Figures mode (setGraphMode in main.ts) replaces the explorer above with the diagrams view,
+         the Dashboard Jobs shape: a way back, then the host the view builds into. -->
+    <nav id="graph-figures-controls" class="console-graph-figures-controls" aria-label="Graph detail" hidden>
+      <button type="button" id="graph-figures-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__text">Back to graph</span></button>
+    </nav>
+    <section id="graph-figures-host" aria-label="Figures" hidden></section>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 

@@ -4,14 +4,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pulseLabel, pulseTitle, sidebarItems } from "./sidebar";
-import type { Launchable } from "./home";
+import { dashboard } from "../apps/dashboard/app";
+import { logs } from "../apps/logs/app";
+import { graph } from "../apps/graph/app";
 import type { Workspace } from "./tabs";
 
-const SURFACES: Launchable[] = [
-  { pageId: "dashboard", label: "Dashboard", hint: "now" },
-  { pageId: "logs", label: "Log Viewer", hint: "output" },
-  { pageId: "graph", label: "Graph Explorer", hint: "graph" },
-];
+const SURFACES = [dashboard, logs, graph];
 
 test("every surface gets a row, in the surface list's order", () => {
   const items = sidebarItems({ tabs: [], activeId: null }, SURFACES, null);

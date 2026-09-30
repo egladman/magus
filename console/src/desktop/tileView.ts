@@ -41,7 +41,7 @@ const DIVIDER = 5;
 
 // A surface the in-pane launcher can drop into an empty pane.
 export interface TileSurface {
-  pageId: string;
+  id: string;
   label: string;
   hint: string;
 }
@@ -51,7 +51,7 @@ export interface TileSurface {
 // is unknown), which tileView drives for visibility and teardown.
 export interface TileDeps {
   seed: Pane; // the tab's initial tree: a single leaf, or a restored split tree
-  surfaces: TileSurface[];
+  surfaces: readonly TileSurface[];
   mountSurface(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
   onLayoutChange(tree: Pane): void; // persist (the console writes it into the tab's layout)
   // The FOCUSED pane's open document changed (page.ts's TitleSource), or focus moved to a pane
@@ -294,9 +294,9 @@ export function createTileView(deps: TileDeps): TileView {
     wrap.append(h("p", undefined, "Open a surface in this pane"));
     const list = h("div", "pf-v6-l-gallery pf-m-gutter");
     for (const s of deps.surfaces) {
-      if (treeHasSurface(s.pageId)) continue;
+      if (treeHasSurface(s.id)) continue;
       const item = h("div", "pf-v6-c-card pf-m-clickable pf-m-compact");
-      item.dataset.open = s.pageId;
+      item.dataset.open = s.id;
       // A real clickable button (role + tabindex + the Enter/Space handler below); Pico's old
       // [role=button] white-on-white bleed was dropped at the W4 cutover, so this is safe now.
       item.setAttribute("role", "button");
@@ -306,7 +306,7 @@ export function createTileView(deps: TileDeps): TileView {
       titleEl.append(h("span", "pf-v6-c-card__title-text", s.label));
       item.append(titleEl, h("div", "pf-v6-c-card__body", s.hint));
       const choose = (): void => {
-        tree = setLeafPage(tree, leafId, s.pageId);
+        tree = setLeafPage(tree, leafId, s.id);
         commit();
         render();
       };

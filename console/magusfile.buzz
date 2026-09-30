@@ -114,35 +114,22 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
                      "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
-// Each surface's ESM bundle: [entry, outfile].
-final ESM_BUNDLES = [
-    ["src/desktop/main.ts", "gen/console.js"],
-    ["src/apps/logs/main.ts", "gen/logs/log-viewer.js"],
-    ["src/apps/graph/main.ts", "gen/graph/explorer.js"],
-    ["src/apps/dashboard/main.ts", "gen/dashboard/dashboard.js"],
-    ["src/apps/activity/main.ts", "gen/activity/activity.js"],
-    ["src/apps/notes/main.ts", "gen/notes/notes.js"],
-    ["src/apps/diff/main.ts", "gen/diff/diff.js"],
-    ["src/apps/runs/main.ts", "gen/runs/runs.js"],
-    ["src/apps/graph/diagrams/main.ts", "gen/diagrams/diagrams.js"],
-];
+// The shared stylesheets, minified alone.
+final SHELL_CSS = ["tokens.css", "overrides.css", "console.css"];
 
-// Stylesheets minified alone, then the two whose @imports bundle.
-final CSS_MINIFIED = [
-    ["src/styles/tokens.css", "gen/tokens.css"],
-    ["src/styles/overrides.css", "gen/overrides.css"],
-    ["src/styles/console.css", "gen/console.css"],
-    ["src/apps/graph/graph.css", "gen/graph/graph.css"],
-    ["src/apps/settings/settings.css", "gen/settings/settings.css"],
-    ["src/apps/diff/diff.css", "gen/diff/diff.css"],
-    ["src/apps/notes/notes.css", "gen/notes/notes.css"],
-    ["src/apps/runs/runs.css", "gen/runs/runs.css"],
-    ["src/apps/graph/diagrams/diagrams.css", "gen/diagrams/diagrams.css"],
-];
-final CSS_BUNDLED = [
-    ["src/apps/logs/logs.css", "gen/logs/logs.css"],
-    ["src/apps/dashboard/dashboard.css", "gen/dashboard/dashboard.css"],
-];
+// appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
+// gen/<id>/<id>.js, the path the shell loads it from. An app whose manifest (app.ts) says
+// kind: "shell" ships inside console.js, so it gets none. apps.test.ts pins the pairing.
+fun appBundles() > [[str]] !> any {
+    final bundles = mut [<[str]>];
+    foreach (entry in fs\glob("src/apps/*/main.ts")) {
+        final dir = fs\dirname(entry.value);
+        if (fs\readFile(fs\join(dir, "app.ts")).indexOf("kind: \"shell\"") != null) { continue; }
+        final id = fs\basename(dir);
+        bundles.append([entry.value, "gen/" + id + "/" + id + ".js"]);
+    }
+    return bundles;
+}
 
 fun copyInto(files: [str], dir: str) > void !> any {
     fs\mkdirAll(dir);
@@ -157,18 +144,13 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
-    // The Diagrams runtime control loads gen/wasm/.
+    // The Graph's Figures runtime control loads gen/wasm/.
     ctx.needs(docs\build_playground);
     ctx.writesFiles(
-        "gen/console.js", "gen/logs/log-viewer.js", "gen/graph/explorer.js",
-        "gen/dashboard/dashboard.js", "gen/activity/activity.js", "gen/notes/notes.js",
-        "gen/diff/diff.js", "gen/runs/runs.js", "gen/diagrams/diagrams.js", "gen/theme.js",
+        "gen/console.js", "gen/theme.js",
         "gen/patternfly.css", "gen/tokens.css", "gen/overrides.css", "gen/console.css",
-        "gen/logs/logs.css", "gen/graph/graph.css", "gen/dashboard/dashboard.css",
-        "gen/settings/settings.css", "gen/diff/diff.css", "gen/notes/notes.css",
-        "gen/runs/runs.css", "gen/diagrams/diagrams.css",
+        "gen/*/*.js", "gen/*/*.css", "gen/*/scaffold.html",
         "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
-        "gen/logs/scaffold.html", "gen/graph/scaffold.html", "gen/dashboard/scaffold.html",
         "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",
         "gen/wasm/buzz.wasm", "gen/wasm/wasm_exec.js",
         "gen/*/index.html");
@@ -176,7 +158,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
              dir: fs\join("gen", "graph"));
 
-    foreach (b in ESM_BUNDLES) {
+    foreach (b in [["src/desktop/main.ts", "gen/console.js"]] + appBundles()) {
         typescript["esbuild"](ctx, {"args": [b[0], "--bundle", "--minify", "--format=esm", "--outfile=" + b[1]]});
     }
     typescript["esbuild"](ctx, {"args": ["src/theme.ts", "--minify", "--outfile=gen/theme.js"]});
@@ -185,19 +167,22 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
         "--external:*.woff2", "--external:*.woff", "--external:*.ttf", "--external:*.svg",
         "--external:*.png", "--external:*.jpg", "--external:*.gif",
         "--outfile=gen/patternfly.css"]});
-    foreach (c in CSS_MINIFIED) {
-        typescript["esbuild"](ctx, {"args": [c[0], "--minify", "--outfile=" + c[1]]});
+    foreach (c in SHELL_CSS) {
+        typescript["esbuild"](ctx, {"args": [fs\join("src", "styles", c), "--minify", "--outfile=" + fs\join("gen", c)]});
     }
-    foreach (c in CSS_BUNDLED) {
-        typescript["esbuild"](ctx, {"args": [c[0], "--bundle", "--minify", "--outfile=" + c[1]]});
+    // An app's own sheets sit at the top of its directory; a view's sheet below it is @imported by
+    // one of those, so every app sheet bundles.
+    foreach (c in fs\glob("src/apps/*/*.css")) {
+        final outfile = fs\join("gen", fs\basename(fs\dirname(c.value)), fs\basename(c.value));
+        typescript["esbuild"](ctx, {"args": [c.value, "--bundle", "--minify", "--outfile=" + outfile]});
     }
 
     copyInto(["index.html", "manifest.webmanifest", "sw.js"], dir: "gen");
     final assets = mut [<str>];
     foreach (a in fs\glob("src/assets/*")) { assets.append(a.value); }
     copyInto(assets, dir: fs\join("gen", "assets"));
-    foreach (surface in ["logs", "graph", "dashboard"]) {
-        copyInto([fs\join("src", "apps", surface, "scaffold.html")], dir: fs\join("gen", surface));
+    foreach (scaffold in fs\glob("src/apps/*/scaffold.html")) {
+        copyInto([scaffold.value], dir: fs\join("gen", fs\basename(fs\dirname(scaffold.value))));
     }
     copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
               fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
