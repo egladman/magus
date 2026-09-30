@@ -12,7 +12,7 @@
 // which server).
 //
 // On top of that, the caller can pre-apply the fragment directives the page honors
-// on load (console/src/console/graph/main.ts applyDeepLinks): `q=` auto-runs a
+// on load (console/src/apps/graph/main.ts applyDeepLinks): `q=` auto-runs a
 // search, and `view=` activates a named view with optional `node=`/`to=` foci.
 // Only directives that are set are emitted; the bearer token, when present, rides
 // the fragment as `token=` (never transmitted on the document GET).

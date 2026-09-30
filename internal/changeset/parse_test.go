@@ -183,7 +183,7 @@ func TestHunkDigestMatchesTheConsoleImplementation(t *testing.T) {
 	require.Len(t, files, 2)
 
 	assert.Equal(t, "ff7da6903e60ab8d", files[0].Hunks[0].Digest,
-		"Go and the console must agree byte for byte; see console/src/console/diff/session.ts")
+		"Go and the console must agree byte for byte; see console/src/apps/diff/session.ts")
 	assert.Equal(t, HunkDigest("a.go", []string{" ctx", "-old", "+new", " tail"}),
 		files[0].Hunks[0].Digest)
 }

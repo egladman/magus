@@ -1721,8 +1721,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift reads these console sources.
-    ctx.readsFiles("console/src/styles/tokens.css", "console/src/console/graph/graph.css",
-                   "console/src/console/graph/main.ts", "console/src/console/graph/shapes.ts");
+    ctx.readsFiles("console/src/styles/tokens.css", "console/src/apps/graph/graph.css",
+                   "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts");
     ctx.readsFiles("MAGUS.md");
     ctx.needs(format, buzz_test);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence

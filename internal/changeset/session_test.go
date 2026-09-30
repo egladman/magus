@@ -57,7 +57,7 @@ func TestHunkDigestSeparatesIdenticalHunksInDifferentFiles(t *testing.T) {
 func TestHunkDigestMatchesTheConsoleGoldenVector(t *testing.T) {
 	assert.Equal(t, "9a0125a4f7864894",
 		HunkDigest("a.go", []string{" ctx", "-old", "+new"}),
-		"digest drift from console/src/console/diff/session.ts would desynchronize viewed state")
+		"digest drift from console/src/apps/diff/session.ts would desynchronize viewed state")
 }
 
 func TestHunkDigestChangesWhenTheBodyDoes(t *testing.T) {

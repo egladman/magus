@@ -104,9 +104,9 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	}
 
 	tokens := read("console", "src", "styles", "tokens.css")
-	graphCSS := read("console", "src", "console", "graph", "graph.css")
-	mainTS := read("console", "src", "console", "graph", "main.ts")
-	shapesTS := read("console", "src", "console", "graph", "shapes.ts")
+	graphCSS := read("console", "src", "apps", "graph", "graph.css")
+	mainTS := read("console", "src", "apps", "graph", "main.ts")
+	shapesTS := read("console", "src", "apps", "graph", "shapes.ts")
 
 	// KINDS is a plain array literal; slice it out so a kind named in a comment elsewhere in
 	// the file cannot satisfy the check.
