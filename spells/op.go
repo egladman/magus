@@ -74,8 +74,14 @@ type Command struct {
 	// so the trailing package pattern can only be safe on the no-args invocation.
 	// DefaultArgs cannot express this (it always applies over forwarding), and a
 	// fixed Args entry cannot either (forwarded args land after Args too).
-	TrailingArgs []string         `json:"trailing_args,omitempty"`
-	Charms       map[string]Charm `json:"charms,omitempty"`
+	TrailingArgs []string `json:"trailing_args,omitempty"`
+	// NeedsArgs, when non-empty, marks a command that is meaningless without caller
+	// args and holds the error naming the fix. The runner refuses to run it, before
+	// anything spawns, when the invocation passes none: absent, an empty list, and
+	// an empty `magus run <t> -- <extra>` all count as none. Args and DefaultArgs do
+	// not satisfy it, since the point is the operand only the caller knows.
+	NeedsArgs string           `json:"needs_args,omitempty"`
+	Charms    map[string]Charm `json:"charms,omitempty"`
 	// Sources, when non-empty, are doublestar globs (relative to the project
 	// directory this command runs in) that the RUNNER expands into a file list
 	// at EXECUTION time, via the same walk that builds the cache key

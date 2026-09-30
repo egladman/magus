@@ -1748,6 +1748,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 		itemsTrailingArgs[indexTrailingArgs] = vm.StrValue(v.TrailingArgs[indexTrailingArgs])
 	}
 	out.MapSet("trailingArgs", vm.ListValue(itemsTrailingArgs))
+	out.MapSet("needsArgs", vm.StrValue(v.NeedsArgs))
 	mappedCharms := vm.NewMap()
 	for keyCharms, itemCharms := range v.Charms {
 		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms))

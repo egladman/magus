@@ -530,6 +530,9 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
+	if msg, ok := o.Str("needsArgs"); ok {
+		c.NeedsArgs = msg
+	}
 	if e, ok := o.Str("external"); ok {
 		c.External = spells.External(e)
 		// Rejected at LOAD, not read leniently at doctor time: an op that meant to say

@@ -322,14 +322,17 @@ fun nodeTest(target: Target) > Command {
                    defaultArgs = ["--test-reporter-destination=coverage.lcov"],
                    hints = PACKAGE_MANAGER_HINTS};
 }
-// dev-server runs the project's package.json "dev" script via the package
-// manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No
-// readiness probe is declared: the port and startup signal vary by framework,
-// so guessing one would be wrong more often than right (readiness is
-// optional - see services.md). A magusfile that needs to block on readiness
-// for its specific dev server can declare its own service op instead.
+// dev-server runs the server command the caller names, through pnpm exec so the project's
+// own binary wins: typescript["dev-server"](ctx, {"args": ["vite"]}). The manifest says what
+// the package is and the magusfile how it runs, so the package.json dev script is not read.
+// No readiness probe: the port and startup signal vary by server (see services.md); a
+// magusfile that must block on readiness declares its own service op.
 fun devServer(target: Target) > Service {
-    return Service{command = Command{bin = "pnpm", args = ["run", "dev"]}};
+    return Service{command = Command{
+        bin = "pnpm",
+        args = ["exec"],
+        needsArgs = "dev-server runs the command you name; pass it as args: typescript[\"dev-server\"](ctx, \{\"args\": [\"vite\"]})",
+    }};
 }
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.

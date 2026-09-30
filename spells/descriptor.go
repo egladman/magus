@@ -367,7 +367,7 @@ func ValidateScriptRunners(runners []Command) error {
 		if slices.Contains(r.Args, "") {
 			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): args %q holds a blank token", i, r.Bin, r.Args)
 		}
-		if len(r.DefaultArgs)+len(r.TrailingArgs)+len(r.Charms)+len(r.Sources)+len(r.Secrets)+len(r.EnvKeys)+len(r.Hints) > 0 ||
+		if len(r.DefaultArgs)+len(r.TrailingArgs)+len(r.Charms)+len(r.Sources)+len(r.Secrets)+len(r.EnvKeys)+len(r.Hints) > 0 || r.NeedsArgs != "" ||
 			r.External != ExternalNone || r.SourcesEach || r.Capture {
 			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): a runner is an argv prefix; set only bin and args", i, r.Bin)
 		}

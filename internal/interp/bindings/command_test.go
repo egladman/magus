@@ -371,6 +371,50 @@ func TestRunCommandGoCleanTrailingArgs(t *testing.T) {
 	})
 }
 
+// TestRunCommandNeedsArgs pins the refusal: no caller args, absent or empty, stops the
+// command before it spawns, and the op's own Args and DefaultArgs do not satisfy it.
+func TestRunCommandNeedsArgs(t *testing.T) {
+	const msg = "name the command"
+	invoke := func(t *testing.T, opts commandOpts) ([]string, error) {
+		t.Helper()
+		dir := t.TempDir()
+		logFile := filepath.Join(dir, "calls.log")
+		op := spells.Op{Command: spells.Command{
+			Bin:         "sh",
+			Args:        []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "exec"},
+			DefaultArgs: []string{"default"},
+			NeedsArgs:   msg,
+		}}
+		opts.op = "serve"
+		opts.env = map[string]string{"LOGFILE": logFile}
+		_, err := runCommand(std.WithCwd(context.Background(), dir), op, opts)
+		if err != nil {
+			assert.NoFileExists(t, logFile, "a refused command must not spawn")
+			return nil, err
+		}
+		lines := logLines(t, logFile)
+		require.Len(t, lines, 1)
+		return strings.Fields(lines[0]), nil
+	}
+
+	for name, opts := range map[string]commandOpts{
+		"no args":             {},
+		"an explicit empty":   {hasArgs: true, args: []string{}},
+		"empty forwarded set": {args: []string{}},
+	} {
+		t.Run("refuses "+name, func(t *testing.T) {
+			_, err := invoke(t, opts)
+			require.EqualError(t, err, "serve: "+msg)
+		})
+	}
+
+	t.Run("runs with args", func(t *testing.T) {
+		argv, err := invoke(t, commandOpts{hasArgs: true, args: []string{"vite"}})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"exec", "vite"}, argv)
+	})
+}
+
 // logInvocationOp is a Command that appends one line per invocation to a log
 // file (every arg of that invocation, space-separated) so a test can tell
 // how many times it ran and with what argv, without a real tool on PATH.
