@@ -1,0 +1,365 @@
+// Cost: none; reads the OS log.
+//
+// Reports the processes the OS killed or suspended under memory pressure in a window, one
+// line each as `time  action  process[pid]  reason`, under a one-line verdict. It exists
+// because a run that died with no error of its own was killed from outside, and the
+// evidence sits in a log nobody reads until they dig it out by hand.
+//
+//	magus buzz hack/dev/show-memory-kills.buzz -- [--since <duration|timestamp>] [--until <timestamp>] [--name <substring>] [--all]
+//
+// macOS reads the kernel's memorystatus lines from `log show`: jetsam kills, suspensions
+// for swap exhaustion, the compressor and swap flags when they change, and a swap file
+// that could not be created or grown. An idle daemon exiting on its own schedule
+// (idle-exit) is not memory pressure and is left out unless --all. Linux reads the kernel's
+// OOM-killer lines from `journalctl -k`, or from `dmesg` when the journal is unreadable;
+// dmesg keeps no window, so every kill since boot is listed.
+namespace showmemorykills;
+
+import "flags";
+import "os";
+import "proc";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/show-memory-kills.buzz -- [--since <duration|timestamp>] [--until <timestamp>] [--name <substring>] [--all]";
+final HELP = "cost: none; reads the OS log\n{USAGE}\n"
+    + "  --since   how far back: 1h, 30m or 2d, or a local timestamp like \"2026-09-30 14:25:00\" (default 1h)\n"
+    + "  --until   a local timestamp to stop at (default now); needs --since as a timestamp\n"
+    + "  --name    only the kills and suspensions of processes whose name contains this\n"
+    + "  --all     keep idle daemons exiting on schedule, which are not memory pressure";
+
+final DURATION = std\pattern(`^\d+[mhd]$`);
+
+// Window is the span a report covers, as the person gave it.
+export object Window {
+    since: str,
+    stop: str,
+}
+
+export object Options {
+    window: Window,
+    name: str,
+    all: bool,
+}
+
+// Event is one line of the report. action is kill, suspend, state (the compressor and swap
+// flags changed) or swap (a swap file could not be created or grown). count is how many
+// identical lines in a row it stands for.
+export object Event {
+    time: str,
+    action: str,
+    process: str = "",
+    pid: str = "",
+    reason: str,
+    count: int = 1,
+}
+
+export object Report {
+    window: Window,
+    source: str,
+    events: [Event],
+}
+
+export fun parse(args: [str]) > Options? !> any {
+    final parsed = flags\parse(args, switches: ["--all", "--help"], valued: ["--since", "--until", "--name"]);
+    if (parsed.values["--help"] != null) {
+        return null;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-memory-kills: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final since = parsed.values["--since"] ?? "1h";
+    final stop = parsed.values["--until"] ?? "";
+    if (since == "") {
+        throw "show-memory-kills: --since needs a duration or a timestamp\n{USAGE}";
+    }
+    // `log show --last` counts back from the end of the log, not from --end, so a duration
+    // with --until would name a window the log does not read.
+    if (stop != "" and DURATION.match(since) != null) {
+        throw "show-memory-kills: --until needs --since as a timestamp, not a duration";
+    }
+    return Options{
+        window = Window{ since = since, stop = stop },
+        name = parsed.values["--name"] ?? "",
+        all = parsed.values["--all"] != null,
+    };
+}
+
+final MAC_KILL = std\pattern(`^(\S+ \S+)\s.*memorystatus: killing_\w+ pid (\d+) \[([^\]]+)\] \(([\w-]+)`);
+final MAC_SUSPEND = std\pattern(`^(\S+ \S+)\s.*memorystatus: suspending (.+) \[(\d+)\] due to (.+)$`);
+final MAC_FLAGS = std\pattern(`^(\S+ \S+)\s.*memorystatus: (\{.*"swap_exhausted".*\})`);
+final MAC_FLAG = std\pattern(`"(\w+)": 1`);
+final MAC_SWAPFILE = std\pattern(`^(\S+ \S+)\s.*kernel\[.*\] (low swap: failed to create swapfile|vnode_setsize for swap files failed: \d+)`);
+
+// raised is the compressor and swap flags a memorystatus flags line sets, joined, or "clear".
+fun raised(json: str) > str {
+    final names = mut [<str>];
+    foreach (m in MAC_FLAG.matchAll(json) ?? [<[str]>]) {
+        names.append(m[1]);
+    }
+    return if (names.len() == 0) "clear" else names.join(", ");
+}
+
+// macEvents reads `log show --style compact` output. A flags line is an event only when
+// the set of raised flags changes, since the kernel repeats it on every pressure check.
+export fun macEvents(output: str, all: bool) > [Event] {
+    final events = mut [<Event>];
+    var flags = "clear";
+    foreach (line in output.split("\n")) {
+        final kill = MAC_KILL.match(line);
+        if (kill != null) {
+            if (all or kill![4] != "idle-exit") {
+                events.append(Event{ time = kill![1], action = "kill", process = kill![3], pid = kill![2], reason = kill![4] });
+            }
+            continue;
+        }
+        final suspend = MAC_SUSPEND.match(line);
+        if (suspend != null) {
+            events.append(Event{ time = suspend![1], action = "suspend", process = suspend![2], pid = suspend![3], reason = suspend![4] });
+            continue;
+        }
+        final state = MAC_FLAGS.match(line);
+        if (state != null) {
+            final now = raised(state![2]);
+            if (now != flags) {
+                flags = now;
+                events.append(Event{ time = state![1], action = "state", reason = now });
+            }
+            continue;
+        }
+        final swap = MAC_SWAPFILE.match(line);
+        if (swap != null) {
+            events.append(Event{ time = swap![1], action = "swap", reason = swap![2] });
+        }
+    }
+    return events;
+}
+
+final LINUX_KILL = std\pattern(`^(\S+).*kernel: (Memory cgroup out of memory|Out of memory)[^:]*: Kill(?:ed)? process (\d+) \(([^)]+)\)`);
+final DMESG_KILL = std\pattern(`^\[?\s*([^\]\s]+)\]?\s.*(Memory cgroup out of memory|Out of memory)[^:]*: Kill(?:ed)? process (\d+) \(([^)]+)\)`);
+
+// linuxEvents reads `journalctl -k -o short-iso` or `dmesg --time-format iso` output.
+export fun linuxEvents(output: str) > [Event] {
+    final events = mut [<Event>];
+    foreach (line in output.split("\n")) {
+        final kill = LINUX_KILL.match(line) ?? DMESG_KILL.match(line);
+        if (kill != null) {
+            final reason = if (kill![2] == "Out of memory") "oom-killer" else "cgroup memory limit";
+            events.append(Event{ time = kill![1], action = "kill", process = kill![4], pid = kill![3], reason = reason });
+        }
+    }
+    return events;
+}
+
+// named keeps the kills and suspensions of processes whose name contains name, and every
+// state and swap line, which say why the kills happened.
+export fun named(events: [Event], name: str) > [Event] {
+    if (name == "") {
+        return events;
+    }
+    final kept = mut [<Event>];
+    foreach (e in events) {
+        if ((e.action != "kill" and e.action != "suspend") or e.process.indexOf(name) != null) {
+            kept.append(e);
+        }
+    }
+    return kept;
+}
+
+// collapse folds each run of identical lines into one, counted: the kernel logs a failing
+// swap file several times a second.
+export fun collapse(events: [Event]) > [Event] {
+    final folded = mut [<mut Event>];
+    foreach (e in events) {
+        if (folded.len() > 0) {
+            final last = folded[folded.len() - 1];
+            if (last.action == e.action and last.process == e.process and last.pid == e.pid and last.reason == e.reason) {
+                last.count = last.count + e.count;
+                continue;
+            }
+        }
+        folded.append(mut Event{ time = e.time, action = e.action, process = e.process, pid = e.pid, reason = e.reason, count = e.count });
+    }
+    return folded;
+}
+
+export fun render(e: Event) > str {
+    final who = if (e.process == "") "-" else "{e.process}[{e.pid}]";
+    final times = if (e.count > 1) " (x{e.count})" else "";
+    return "{e.time}  {e.action}  {who}  {e.reason}{times}";
+}
+
+fun span(w: Window) > str {
+    final start = if (DURATION.match(w.since) != null) "{w.since} ago" else w.since;
+    final to = if (w.stop == "") "now" else w.stop;
+    return "between {start} and {to}";
+}
+
+export fun verdict(r: Report) > str {
+    var kills = 0;
+    var suspends = 0;
+    foreach (e in r.events) {
+        if (e.action == "kill") {
+            kills = kills + e.count;
+        } else if (e.action == "suspend") {
+            suspends = suspends + e.count;
+        }
+    }
+    if (kills + suspends == 0) {
+        return "no memory-pressure kills {span(r.window)} in {r.source}";
+    }
+    return "memory pressure killed {kills} and suspended {suspends} process(es) {span(r.window)} in {r.source}";
+}
+
+fun readMac(w: Window) > str !> any {
+    final args = mut ["show", "--style", "compact",
+        "--predicate", `process == "kernel" AND (eventMessage CONTAINS "memorystatus" OR eventMessage CONTAINS "swap")`];
+    if (DURATION.match(w.since) != null) {
+        args.append("--last");
+        args.append(w.since);
+    } else {
+        args.append("--start");
+        args.append(w.since);
+    }
+    if (w.stop != "") {
+        args.append("--end");
+        args.append(w.stop);
+    }
+    return proc\exec("log", args: args, opts: {"quiet": true}).stdout;
+}
+
+// readLinux returns the kernel log and which command it came from.
+fun readLinux(w: Window) > obj{ output: str, source: str } !> any {
+    // systemd.time reads "-1h" as an hour before now.
+    final since = if (DURATION.match(w.since) != null) "-" + w.since else w.since;
+    final args = mut ["-k", "--no-pager", "-o", "short-iso", "--since", since];
+    if (w.stop != "") {
+        args.append("--until");
+        args.append(w.stop);
+    }
+    final journal = proc\exec("journalctl", args: args, opts: {"quiet": true, "allow_failure": true});
+    if (journal.ok) {
+        return .{ output = journal.stdout, source = "journalctl -k" };
+    }
+    final ring = proc\exec("dmesg", args: ["--time-format", "iso"], opts: {"quiet": true, "allow_failure": true});
+    if (!ring.ok) {
+        throw "show-memory-kills: neither journalctl -k nor dmesg is readable here; run it as a user in the systemd-journal group, or with sudo";
+    }
+    return .{ output = ring.stdout, source = "dmesg, which keeps no window: every kill since boot" };
+}
+
+// memoryKills reads this host's OS log for the window o names.
+export fun memoryKills(o: Options) > Report !> any {
+    final host = os\platform()[0];
+    var events = [<Event>];
+    var source = "";
+    if (host == "darwin") {
+        events = macEvents(readMac(o.window), all: o.all);
+        source = "log show";
+    } else if (host == "linux") {
+        final kernel = readLinux(o.window);
+        events = linuxEvents(kernel.output);
+        source = kernel.source;
+    } else {
+        throw "show-memory-kills: reads macOS and Linux logs, and this host is {host}";
+    }
+    return Report{ window = o.window, source = source, events = collapse(named(events, name: o.name)) };
+}
+
+export fun main(args: [str]) > void !> any {
+    final o = parse(args);
+    if (o == null) {
+        std\print(HELP);
+        return;
+    }
+    final report = memoryKills(o!);
+    std\print(verdict(report));
+    foreach (e in report.events) {
+        std\print(render(e));
+    }
+}
+
+final MAC_LOG = [
+    "Timestamp               Ty Process[PID:TID]",
+    "2026-09-30 14:09:36.677 Df kernel[0:75a] memorystatus: killing (idle) historicalaudiod [84653] due to idle-exit (9)",
+    "2026-09-30 14:09:36.719 Df kernel[0:75a] memorystatus: killing_idle_process pid 84653 [historicalaudiod] (idle-exit 0 39830s rf:high type:daemon) 3776KB - memorystatus_available_pages: 692359 compressor_size:677453",
+    "2026-09-30 14:30:05.337 Df kernel[0:77] vnode_setsize for swap files failed: 28",
+    "2026-09-30 14:30:05.337 Df kernel[0:77] vnode_setsize for swap files failed: 28",
+    "2026-09-30 14:30:05.337 Df kernel[0:77] low swap: failed to create swapfile",
+    "2026-09-30 14:30:29.370 Df kernel[0:303] memorystatus: System is unhealthy. memorystatus_available_pages: 552801 compressor_size:829599",
+    `2026-09-30 14:30:29.370 Df kernel[0:303] memorystatus: {"compressor_exhausted": 0, "zone_map_is_exhausted": 0, "swap_low": 1, "swap_exhausted": 0}`,
+    "2026-09-30 14:30:29.375 Df kernel[0:303] memorystatus: killing_idle_process pid 1502 [mediaanalysisd] (jettisoned 0 857s rf:low type:daemon) 27136KB - memorystatus_available_pages: 551688 compressor_size:829424",
+    `2026-09-30 14:30:39.996 Df kernel[0:303] memorystatus: {"compressor_exhausted": 0, "zone_map_is_exhausted": 0, "swap_low": 1, "swap_exhausted": 0}`,
+    "2026-09-30 14:30:40.301 Df kernel[0:303] memorystatus: suspending firefox [720] due to swap exhaustion",
+    `2026-09-30 14:30:41.000 Df kernel[0:303] memorystatus: {"compressor_exhausted": 0, "zone_map_is_exhausted": 0, "swap_low": 0, "swap_exhausted": 0}`,
+    "2026-09-30 14:31:00.000 Df kernel[0:303] memorystatus: killing_specific_process pid 4242 [go] (per-process-limit 3 12s rf:- type:app) 4194304KB - memorystatus_available_pages: 1 compressor_size:2",
+].join("\n");
+
+fun lines(events: [Event]) > [str] {
+    final rendered = mut [<str>];
+    foreach (e in events) {
+        rendered.append(render(e));
+    }
+    return rendered;
+}
+
+test "macOS: pressure kills, the swap suspension and flag changes, idle exits left out" {
+    assert\equal(lines(collapse(macEvents(MAC_LOG, all: false))), want: [
+        "2026-09-30 14:30:05.337  swap  -  vnode_setsize for swap files failed: 28 (x2)",
+        "2026-09-30 14:30:05.337  swap  -  low swap: failed to create swapfile",
+        "2026-09-30 14:30:29.370  state  -  swap_low",
+        "2026-09-30 14:30:29.375  kill  mediaanalysisd[1502]  jettisoned",
+        "2026-09-30 14:30:40.301  suspend  firefox[720]  swap exhaustion",
+        "2026-09-30 14:30:41.000  state  -  clear",
+        "2026-09-30 14:31:00.000  kill  go[4242]  per-process-limit",
+    ], message: "events");
+}
+
+test "macOS: --all keeps an idle exit, once" {
+    final idle = macEvents(MAC_LOG, all: true)[0];
+    assert\equal(render(idle), want: "2026-09-30 14:09:36.719  kill  historicalaudiod[84653]  idle-exit", message: "idle exit");
+}
+
+test "Linux: the OOM killer and a cgroup limit, from the journal and from dmesg" {
+    final journal = [
+        "2026-09-30T14:30:40+0000 box kernel: go invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=0",
+        "2026-09-30T14:30:40+0000 box kernel: oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),task=go,pid=4242,uid=1000",
+        "2026-09-30T14:30:40+0000 box kernel: Out of memory: Killed process 4242 (go) total-vm:9000000kB, anon-rss:8000000kB",
+        "2026-09-30T14:31:02+0000 box kernel: Memory cgroup out of memory: Killed process 77 (node) total-vm:1kB",
+    ].join("\n");
+    assert\equal(lines(linuxEvents(journal)), want: [
+        "2026-09-30T14:30:40+0000  kill  go[4242]  oom-killer",
+        "2026-09-30T14:31:02+0000  kill  node[77]  cgroup memory limit",
+    ], message: "journal");
+    final ring = "[2026-09-30T14:30:40,123456+00:00] Out of memory: Kill process 4242 (go) score 900 or sacrifice child";
+    assert\equal(lines(linuxEvents(ring)), want: ["2026-09-30T14:30:40,123456+00:00  kill  go[4242]  oom-killer"], message: "dmesg");
+}
+
+test "--name keeps that process's kills and every state line" {
+    final got = lines(named(macEvents(MAC_LOG, all: false), name: "fire"));
+    assert\equal(got.len(), want: 6, message: "one suspension, no kills, and the five state and swap lines");
+    assert\contains(got, item: "2026-09-30 14:30:40.301  suspend  firefox[720]  swap exhaustion", message: "firefox");
+}
+
+test "the verdict counts kills and suspensions over the window" {
+    final w = Window{ since = "1h", stop = "" };
+    assert\equal(verdict(Report{ window = w, source = "log show", events = macEvents(MAC_LOG, all: false) }),
+        want: "memory pressure killed 2 and suspended 1 process(es) between 1h ago and now in log show", message: "some");
+    assert\equal(verdict(Report{ window = Window{ since = "2026-09-30 14:00:00", stop = "2026-09-30 15:00:00" }, source = "log show", events = [<Event>] }),
+        want: "no memory-pressure kills between 2026-09-30 14:00:00 and 2026-09-30 15:00:00 in log show", message: "none");
+}
+
+test "flags: defaults, --help, and a duration --since refused beside --until" {
+    final o = parse([<str>])!;
+    assert\equal(o.window.since, want: "1h", message: "default window");
+    assert\equal(parse(["--help"]), want: null, message: "help");
+    assert\isTrue(HELP.startsWith("cost: "), message: "the first help line is the cost");
+    var refused = "";
+    try {
+        parse(["--since", "2h", "--until", "2026-09-30 15:00:00"]);
+    } catch (e) {
+        refused = "{e}";
+    }
+    assert\equal(refused, want: "show-memory-kills: --until needs --since as a timestamp, not a duration", message: "until");
+}
