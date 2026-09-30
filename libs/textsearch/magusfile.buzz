@@ -44,8 +44,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // lint runs the TypeScript type-check and Biome.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    proc\exec("pnpm", ["run", "typecheck"], ".", {});
-    proc\exec("pnpm", ["run", "biome"], ".", {});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.
@@ -53,23 +53,20 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     // Declared so a cache hit restores the report the console merges.
     ctx.writesFiles("coverage.lcov");
+    fs\removeAll(".testcache");
 
-    final tests = fs\glob("src/**/*.test.ts");
-    var bundle = mut ["exec", "esbuild"];
-    foreach (t in tests) { bundle.append(t.value); }
-    bundle.append("--bundle"); bundle.append("--platform=node");
-    bundle.append("--format=esm"); bundle.append("--sourcemap");
-    bundle.append("--outdir=.testcache");
-    proc\exec("pnpm", bundle, ".", {});
+    final bundle = mut [<str>];
+    foreach (t in fs\glob("src/**/*.test.ts")) { bundle.append(t.value); }
+    // Without --sourcemap, lcov names the .testcache bundle instead of src/*.ts.
+    foreach (flag in ["--bundle", "--platform=node", "--format=esm", "--sourcemap",
+                      "--outdir=.testcache"]) {
+        bundle.append(flag);
+    }
+    typescript["esbuild"](ctx, {"args": bundle});
 
-    // Without --sourcemap above and --enable-source-maps here, lcov names the
-    // .testcache bundle instead of src/*.ts.
-    var run = mut ["--enable-source-maps", "--experimental-test-coverage",
-        "--test-reporter=spec", "--test-reporter-destination=stdout",
-        "--test-reporter=lcov", "--test-reporter-destination=coverage.lcov",
-        "--test"];
+    final run = mut ["--test-reporter-destination=coverage.lcov"];
     foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b.value); }
-    proc\exec("node", run, ".", {});
+    typescript["node-test"](ctx, {"args": run});
 }
 
 // The anchor `magus affected ci` keys off.

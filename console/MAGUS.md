@@ -4,7 +4,7 @@
 
 Up: [workspace index](../MAGUS.md)
 
-Depends on: [(workspace root)](../MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
+Depends on: [(workspace root)](../MAGUS.md), [docs](../docs/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
 
 Query: `magus query project=console`
 
@@ -12,7 +12,7 @@ Query: `magus query project=console`
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `generate`          | Regenerates MAGUS.md and fails on drift.                                                                          |
 | `test`              | test runs the node:test suite and holds the merged TypeScript line coverage above a floor.                        |
-| `build`             | build bundles the app into gen/ with esbuild.                                                                     |
+| `build`             | build bundles the app into gen/ with esbuild, copies the static shell beside it, and stamps the service worker.   |
 | `lint`              | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.                              |
 | `format`            | `format:rw` maintains declared source inputs.                                                                     |
 | `security`          | security audits the dependency tree against the npm advisory database.                                            |

@@ -7,8 +7,8 @@ import "fs";
 import "os";
 import "proc";
 import "std";
-import "vcs";
 import "project/../libs/textsearch";
+import "project/../docs";
 import "project/.." as root;
 
 import "lcov";
@@ -32,7 +32,6 @@ magus\project({
     "outputs": ["gen/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
-        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the check"},
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         "ci": {"skip_cache": "composes the gates and reads nothing itself; its key is the whole project, so it can never replay"},
@@ -56,14 +55,41 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // test runs the node:test suite and holds the merged TypeScript line coverage above a floor.
-// The test script launches Node three times (happy-dom's getter-only localStorage breaks the
-// tests that stub it), so the reports merge by DA: record; summing LF/LH double-counts.
-// Its --splitting and --experimental-test-isolation=none keep the figure deterministic.
+// Node runs three times (happy-dom's getter-only localStorage breaks the tests that stub
+// it), so the reports merge by DA: record; summing LF/LH double-counts. esbuild's
+// --splitting and --experimental-test-isolation=none keep the figure deterministic.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install, textsearch\test);
     // Declared so a cache hit restores coverage.txt for the root's coverage-render.
     ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
-    proc\exec("pnpm", ["run", "test"], ".", {});
+    fs\removeAll(".testcache");
+    fs\remove("coverage.plain.lcov");
+    fs\remove("coverage.dom.lcov");
+
+    final bundle = mut [<str>];
+    foreach (t in fs\glob("src/**/*.test.ts")) { bundle.append(t.value); }
+    foreach (flag in ["--bundle", "--splitting", "--platform=node", "--format=esm",
+                      "--sourcemap", "--outdir=.testcache"]) {
+        bundle.append(flag);
+    }
+    typescript["esbuild"](ctx, {"args": bundle});
+
+    final plain = mut ["--test-reporter-destination=coverage.plain.lcov", "--experimental-test-isolation=none"];
+    final dom = mut ["--test-reporter-destination=coverage.dom.lcov", "--experimental-test-isolation=none",
+                     "--import", "./test-setup.mjs"];
+    foreach (b in fs\glob(".testcache/**/*.test.js")) {
+        if (b.value.endsWith("-dom.test.js")) {
+            dom.append(b.value);
+        } else {
+            plain.append(b.value);
+        }
+    }
+    typescript["node-test"](ctx, {"args": plain});
+    typescript["node-test"](ctx, {"args": dom});
+
+    final scripts = mut ["--test"];
+    foreach (s in fs\glob("scripts/*.test.mjs")) { scripts.append(s.value); }
+    proc\exec("node", scripts, ".", {});
 
     // Both projects name their files src/..., so textsearch's paths get a prefix before the merge.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
@@ -88,34 +114,108 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
                      "-out", "src/console/diff/gen/demo.ts"], ".", {});
 }
 
-// build bundles the app into gen/ with esbuild.
+// Each surface's ESM bundle: [entry, outfile].
+final ESM_BUNDLES = [
+    ["src/console/main.ts", "gen/console.js"],
+    ["src/console/logs/main.ts", "gen/logs/log-viewer.js"],
+    ["src/console/graph/main.ts", "gen/graph/explorer.js"],
+    ["src/console/dashboard/main.ts", "gen/dashboard/dashboard.js"],
+    ["src/console/activity/main.ts", "gen/activity/activity.js"],
+    ["src/console/notes/main.ts", "gen/notes/notes.js"],
+    ["src/console/diff/main.ts", "gen/diff/diff.js"],
+    ["src/console/runs/main.ts", "gen/runs/runs.js"],
+    ["src/console/diagrams/main.ts", "gen/diagrams/diagrams.js"],
+];
+
+// Stylesheets minified alone, then the two whose @imports bundle.
+final CSS_MINIFIED = [
+    ["src/styles/tokens.css", "gen/tokens.css"],
+    ["src/styles/overrides.css", "gen/overrides.css"],
+    ["src/styles/console.css", "gen/console.css"],
+    ["src/console/graph/graph.css", "gen/graph/graph.css"],
+    ["src/console/settings/settings.css", "gen/settings/settings.css"],
+    ["src/console/diff/diff.css", "gen/diff/diff.css"],
+    ["src/console/notes/notes.css", "gen/notes/notes.css"],
+    ["src/console/runs/runs.css", "gen/runs/runs.css"],
+    ["src/console/diagrams/diagrams.css", "gen/diagrams/diagrams.css"],
+];
+final CSS_BUNDLED = [
+    ["src/console/logs/logs.css", "gen/logs/logs.css"],
+    ["src/console/dashboard/dashboard.css", "gen/dashboard/dashboard.css"],
+];
+
+fun copyInto(files: [str], dir: str) > void !> any {
+    fs\mkdirAll(dir);
+    foreach (f in files) {
+        fs\copyFile(f, fs\join(dir, fs\basename(f)));
+    }
+}
+
+// build bundles the app into gen/ with esbuild, copies the static shell beside it, and
+// stamps the service worker.
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
-    // FIXME: gen/ is gitignored and isDirty reports ignored paths clean, so this gate never fires.
-    final clean_before = vcs\isDirty(["gen"]) == false;
-    // Copied before the build: stamp-build.mjs hashes every precached file.
-    fs\mkdirAll(fs\join("gen", "graph"));
-    foreach (name in ["knowledge-graph.json", "target-graph.json"]) {
-        fs\copyFile(fs\join("..", "gen", name), fs\join("gen", "graph", name));
+    // The Diagrams runtime control loads gen/wasm/.
+    ctx.needs(docs\build_playground);
+    ctx.writesFiles(
+        "gen/console.js", "gen/logs/log-viewer.js", "gen/graph/explorer.js",
+        "gen/dashboard/dashboard.js", "gen/activity/activity.js", "gen/notes/notes.js",
+        "gen/diff/diff.js", "gen/runs/runs.js", "gen/diagrams/diagrams.js", "gen/theme.js",
+        "gen/patternfly.css", "gen/tokens.css", "gen/overrides.css", "gen/console.css",
+        "gen/logs/logs.css", "gen/graph/graph.css", "gen/dashboard/dashboard.css",
+        "gen/settings/settings.css", "gen/diff/diff.css", "gen/notes/notes.css",
+        "gen/runs/runs.css", "gen/diagrams/diagrams.css",
+        "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
+        "gen/logs/scaffold.html", "gen/graph/scaffold.html", "gen/dashboard/scaffold.html",
+        "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",
+        "gen/wasm/buzz.wasm", "gen/wasm/wasm_exec.js",
+        "gen/*/index.html");
+    // Copied before the bundles: stamp-build.mjs hashes every precached file.
+    copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
+             dir: fs\join("gen", "graph"));
+
+    foreach (b in ESM_BUNDLES) {
+        typescript["esbuild"](ctx, {"args": [b[0], "--bundle", "--minify", "--format=esm", "--outfile=" + b[1]]});
     }
-    proc\exec("pnpm", ["run", "build"], ".", {});
-    if (ctx.hasCharm("rw")) {
-        return;
+    typescript["esbuild"](ctx, {"args": ["src/theme.ts", "--minify", "--outfile=gen/theme.js"]});
+    typescript["esbuild"](ctx, {"args": [
+        "src/styles/patternfly.css", "--bundle", "--minify",
+        "--external:*.woff2", "--external:*.woff", "--external:*.ttf", "--external:*.svg",
+        "--external:*.png", "--external:*.jpg", "--external:*.gif",
+        "--outfile=gen/patternfly.css"]});
+    foreach (c in CSS_MINIFIED) {
+        typescript["esbuild"](ctx, {"args": [c[0], "--minify", "--outfile=" + c[1]]});
     }
-    if (clean_before and vcs\isDirty(["gen"])) {
-        throw "build: gen/ drifted; re-run `magus run build:rw console` and commit";
+    foreach (c in CSS_BUNDLED) {
+        typescript["esbuild"](ctx, {"args": [c[0], "--bundle", "--minify", "--outfile=" + c[1]]});
     }
+
+    copyInto(["index.html", "manifest.webmanifest", "sw.js"], dir: "gen");
+    final assets = mut [<str>];
+    foreach (a in fs\glob("src/assets/*")) { assets.append(a.value); }
+    copyInto(assets, dir: fs\join("gen", "assets"));
+    foreach (surface in ["logs", "graph", "dashboard"]) {
+        copyInto([fs\join("src", "console", surface, "scaffold.html")], dir: fs\join("gen", surface));
+    }
+    copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
+              fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
+             dir: fs\join("gen", "wasm"));
+
+    proc\exec("node", ["scripts/surface-stubs.mjs"], ".", {});
+    // Last: it hashes every file above into sw.js's precache stamp.
+    proc\exec("node", ["scripts/stamp-build.mjs"], ".", {});
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(textsearch\lint);
-    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
-    proc\exec("pnpm", ["run", "stylelint"], ".", {});
+    proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".", {});
     proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
 }
 

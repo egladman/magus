@@ -47,19 +47,19 @@ magus graph export -o json  # the whole graph
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
 | target     |     100+ | `magus query kind=target`     | `lint-files`, `content-generate`, `site-generate`                                                                |
-| spell      | built in | `magus query kind=spell`      | `go`, `buzz`, `markdown`                                                                                         |
+| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                       |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                             |
 | module     | built in | `magus query kind=module`     |                                                                                                                  |
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
-| doc        |     900+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
+| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                         |
 | file       |     300+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
 | function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
-| rationale  |        9 | `magus query kind=rationale`  | `FIXME`, `TODO`, `TODO`                                                                                          |
+| rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
 | marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
@@ -67,7 +67,7 @@ magus graph export -o json  # the whole graph
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
 | [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
-| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
+| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
 | [libs/coldread](libs/coldread/MAGUS.md)                                     |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
@@ -76,7 +76,7 @@ magus graph export -o json  # the whole graph
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                     |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
-| [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
+| [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `test`, `install`                                |
 | [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `ci`, `lint`                                 |
 
 ## Project: magus

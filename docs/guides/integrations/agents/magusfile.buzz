@@ -81,15 +81,15 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
-    proc\exec("pnpm", ["run", "cursor-schemas"], ".", {});
+    proc\exec("node", ["cursor-schemas.ts"], ".", {});
 }
 
 
 // lint runs the TypeScript type-check, Biome, and a Buzz type-check of the templates.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    proc\exec("pnpm", ["run", "typecheck"], ".", {});
-    proc\exec("pnpm", ["run", "biome"], ".", {});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
+    typescript["biome-check"](ctx);
     checkBuzz();
 }
 
@@ -112,7 +112,9 @@ fun checkBuzz() > void !> any {
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    proc\exec("pnpm", ["run", "test"], ".", {});
+    final run = mut ["--test"];
+    foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
+    proc\exec("node", run, ".", {});
 }
 
 // host_integration drives real local agent hosts, spending the caller's auth and quota,
@@ -124,9 +126,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // An all-skip run exits nonzero. MAGUS_HOST_E2E_KEEP=1 keeps passing workspaces.
 export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    var command = mut ["run", "e2e", "--"];
+    var command = mut ["host-e2e.ts"];
     foreach (arg in args) { command.append(arg); }
-    proc\exec("pnpm", args: command, dir: ".", opts: {});
+    proc\exec("node", args: command, dir: ".", opts: {});
 }
 
 // The anchor `magus affected ci` keys off.

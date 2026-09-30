@@ -277,7 +277,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(agents\lint);
     ctx.needs(workspace\lint_files);
     markdown.typos(ctx);
-    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
 // build renders the site cd.yaml publishes. It is uncommitted, so no drift gate applies.
@@ -357,9 +357,9 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
 // build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // Declares the real artifact rather than inheriting the spell's `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
-    proc\exec("pnpm", ["run", "build-hljs"], ".", {});
+    typescript["esbuild"](ctx, {"args": ["src/vendor/hljs.ts", "--bundle", "--minify", "--format=esm",
+                                         "--outfile=gen/assets/hljs.js"]});
     magus\log.info("rebuilt gen/assets/hljs.js");
 }
 
@@ -367,9 +367,9 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
 // gen/playground/editor.js.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // Declares the real artifact rather than inheriting the spell's `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
-    proc\exec("pnpm", ["run", "build-editor"], ".", {});
+    typescript["esbuild"](ctx, {"args": ["src/playground/editor.js", "--bundle", "--minify", "--format=esm",
+                                         "--outfile=gen/playground/editor.js"]});
 }
 
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
