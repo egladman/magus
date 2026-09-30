@@ -453,7 +453,7 @@ channel cannot carry a verdict.
 stdin nobody writes to, so a stray reader (grep with no file operand, `read`, a
 prompt, ssh, a pager) waits forever, and Claude Code backgrounds a timed-out
 command rather than killing it. On a pass or an advise, the reply hands the
-command back as `updatedInput`, prefixed `exec </dev/null; `, with every other
+command back as `updatedInput`, prefixed `exec </dev/null;`, with every other
 `tool_input` field kept, since `updatedInput` replaces the whole input. It sets no
 `permissionDecision`, so the rewritten call still meets your permission rules. A
 heredoc, a pipe or a `<` still feed their command. A denied or asked call is never

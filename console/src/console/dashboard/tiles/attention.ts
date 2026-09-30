@@ -583,7 +583,11 @@ export function attentionTile(): Tile {
       li.append(line);
     }
 
-    const message = h("p", "console-dashboard-attention__message", opened ? req.message : firstLine(req.message));
+    const message = h(
+      "p",
+      "console-dashboard-attention__message",
+      opened ? req.message : firstLine(req.message),
+    );
     // The full text, unflattened, for the reader who needs more than the summary line. The row
     // stays one line tall either way; `magus session attention -o json` is the unabridged copy.
     if (req.message) message.title = req.message;
@@ -696,7 +700,9 @@ export function attentionTile(): Tile {
   // words - see verdictFor - so an unknown queue never renders as a calm one.
   function renderQueue(read: AttentionRead): void {
     const openedIDs = new Set(
-      Array.from(queueList.querySelectorAll<HTMLElement>(".console-dashboard-attention__row[data-open]"))
+      Array.from(
+        queueList.querySelectorAll<HTMLElement>(".console-dashboard-attention__row[data-open]"),
+      )
         .map((row) => row.dataset.requestId)
         .filter((id): id is string => id !== undefined),
     );

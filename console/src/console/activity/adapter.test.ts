@@ -89,9 +89,7 @@ test("clockTime formats HH:MM:SS and empties a null instant", () => {
 });
 
 test("an ok mcp call accents pass and heads with action+actor", () => {
-  const sec = eventSection(
-    ev({ action: "client", actor: "agent:claude", outcome: Outcome.OK }),
-  );
+  const sec = eventSection(ev({ action: "client", actor: "agent:claude", outcome: Outcome.OK }));
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);

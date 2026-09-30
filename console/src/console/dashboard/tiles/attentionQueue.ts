@@ -76,7 +76,9 @@ function filesOf(v: unknown): AttentionFile[] {
 // subjectLine is what a row leads with: the paths the event named, in order.
 // Empty when it named none, and the caller keeps the message as the line.
 export function subjectLine(files: readonly AttentionFile[]): string {
-  return files.map((f) => (f.is_dir && !f.value.endsWith("/") ? f.value + "/" : f.value)).join(", ");
+  return files
+    .map((f) => (f.is_dir && !f.value.endsWith("/") ? f.value + "/" : f.value))
+    .join(", ");
 }
 
 // disposeStartsHidden is true for a permission. The close control appears after
