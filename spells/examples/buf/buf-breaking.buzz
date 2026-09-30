@@ -1,7 +1,6 @@
 // buf-breaking gates backward-incompatible schema changes, so it composes into the
-// read-only `lint` target alongside buf-lint. `magus run lint` forks `buf lint` then
-// `buf breaking --against .git#branch=main`, failing on a wire- or JSON-incompatible
-// .proto edit the same way go-vet fails a static-analysis violation.
+// read-only `lint` target alongside buf-lint. The op takes no baseline of its own: the
+// caller names the one to compare against, here the main branch of this repository.
 import "magus";
 import "magus/spell/buf";
 
@@ -9,5 +8,5 @@ magus\project({ "spells": [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"](ctx);
-    buf["buf-breaking"](ctx);
+    buf["buf-breaking"](ctx, {"args": ["--against", ".git#branch=main"]});
 }
