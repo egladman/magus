@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -651,7 +652,28 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 // sources, an artifact that moved turns the parent's hit into a miss, so the parent
 // re-runs against what the gate below actually produced instead of replaying an
 // entry recorded against different bytes.
+//
+// A target that declares its inputs with ctx.readsFiles keys only on the artifacts those
+// declarations can read. The explicit footprint is the target's claim of everything it
+// reads, so an artifact outside it would move the key for a file the target never opens:
+// the root test suite reran on every docs edit because the knowledge graph it composes,
+// and never reads, holds the docs.
 func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []Glob {
+	out := chainSkipCacheArtifacts(p, target, lookup)
+	inputs := p.TargetInputs[target]
+	if len(inputs) == 0 {
+		return out
+	}
+	return slices.DeleteFunc(out, func(g Glob) bool {
+		return !slices.ContainsFunc(inputs, func(in InputRef) bool {
+			return GlobsOverlap(g.Pattern, in.Rooted(p.Path).Pattern)
+		})
+	})
+}
+
+// chainSkipCacheArtifacts is ChainSkipCacheOutputs before the composer's footprint
+// narrows it.
+func chainSkipCacheArtifacts(p *Project, target string, lookup func(path string) *Project) []Glob {
 	var out []Glob
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
@@ -722,12 +744,22 @@ func chainKey(projectPath, target string) string { return projectPath + "\x00" +
 // produces: `generate` composing `index-generate` directly, and root `ci` reaching
 // `generate` through `lint` and again through `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+	keyed := ChainSkipCacheOutputs(p, target, lookup)
+	inKey := func(artifacts []Glob) bool {
+		return slices.ContainsFunc(artifacts, func(a Glob) bool {
+			return slices.ContainsFunc(keyed, func(k Glob) bool { return GlobsOverlap(a.Pattern, k.Pattern) })
+		})
+	}
 	var out []ChainStep
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
 			return nil
 		}
-		if len(v.Project.TargetOutputs[v.Target]) == 0 && len(ChainSkipCacheOutputs(v.Project, v.Target, lookup)) == 0 {
+		own := make([]Glob, 0, len(v.Project.TargetOutputs[v.Target]))
+		for _, ref := range v.Project.TargetOutputs[v.Target] {
+			own = append(own, ref.Rooted(v.Project.Path))
+		}
+		if !inKey(own) && !inKey(chainSkipCacheArtifacts(v.Project, v.Target, lookup)) {
 			return nil
 		}
 		out = append(out, ChainStep{Project: v.Project.Path, Target: v.Target})

@@ -367,3 +367,27 @@ func TestLayerFor(t *testing.T) {
 	_, ok := LayerFor(map[string]string{"internal": "engine"}, "internal/cache")
 	assert.False(t, ok, "an exact path names one directory, not its subtree")
 }
+
+func TestGlobsOverlap(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"docs/changelog.md", "**/*.md", true},
+		{"docs/changelog.md", "docs/changelog.md", true},
+		{"docs/changelog.md", "CHANGELOG.md", false},
+		{"proto/gen/descriptor.binpb", "gen/*.json", false},
+		{"gen/*.json", "**/*.md", false},
+		{"gen/*.json", "gen/**", true},
+		{"reference/buzz/*.md", "**/*.md", true},
+		{"docs/**", "docs/gen/site/index.html", true},
+		{"a/*.md", "b/*.md", false},
+		{"**", "anything/at/all.txt", true},
+		{"dist", "dist/**", true},
+		{"dist/a.js", "dist/b.js", false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, GlobsOverlap(tc.a, tc.b), "GlobsOverlap(%q, %q)", tc.a, tc.b)
+		assert.Equal(t, tc.want, GlobsOverlap(tc.b, tc.a), "GlobsOverlap(%q, %q)", tc.b, tc.a)
+	}
+}

@@ -423,6 +423,55 @@ func (g Glob) Excludes(path string) bool {
 	return slices.ContainsFunc(g.Except, func(e string) bool { return claims(e, path) })
 }
 
+// GlobsOverlap conservatively reports whether two doublestar patterns can match a common
+// path. False only when provable: a literal path one side rejects, diverging literal
+// prefixes, or incompatible literal filename suffixes. Everything else answers true, so a
+// caller ordering on it or keying on it errs toward more, never less.
+func GlobsOverlap(a, b string) bool {
+	aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b)
+	switch {
+	case !aMeta && !bMeta:
+		return a == b
+	case !aMeta:
+		ok, err := doublestar.Match(b, a)
+		return ok || err != nil
+	case !bMeta:
+		ok, err := doublestar.Match(a, b)
+		return ok || err != nil
+	}
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if IsGlobMeta(as[i]) || IsGlobMeta(bs[i]) {
+			break
+		}
+		if as[i] != bs[i] {
+			return false
+		}
+		// Both consumed a literal segment. The shorter side, exhausted, may name a
+		// directory the longer one descends into, which this cannot rule out.
+		if i == len(as)-1 || i == len(bs)-1 {
+			return true
+		}
+	}
+	if as[len(as)-1] == "**" || bs[len(bs)-1] == "**" {
+		return true
+	}
+	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
+	return strings.HasSuffix(sa, sb) || strings.HasSuffix(sb, sa)
+}
+
+// IsGlobMeta reports whether s holds a doublestar metacharacter.
+func IsGlobMeta(s string) bool { return strings.ContainsAny(s, "*?[{") }
+
+// literalSuffix returns the literal tail of one glob segment: everything after the last
+// metacharacter ("" when the segment ends in one).
+func literalSuffix(seg string) string {
+	if i := strings.LastIndexAny(seg, "*?[]{}"); i >= 0 {
+		return seg[i+1:]
+	}
+	return seg
+}
+
 // Root roots g, declared against projectPath, at the workspace (see [RootGlob]).
 func (g Glob) Root(projectPath string) Glob {
 	out := Glob{Pattern: RootGlob(projectPath, g.Pattern)}

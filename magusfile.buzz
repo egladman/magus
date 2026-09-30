@@ -2886,6 +2886,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // entry from tokens.css left `magus run test .` passing.
     ctx.readsFiles("console/src/styles/tokens.css", "console/src/console/graph/graph.css",
                    "console/src/console/graph/main.ts", "console/src/console/graph/shapes.ts");
+    // The routing index the root package's tests open. The graph JSON format's generators
+    // write is not here, and so not in this key: no test reads it, and it holds the docs.
+    ctx.readsFiles("MAGUS.md");
     ctx.needs(format, buzz_test);
     // Explicit args replace go-test's `./...` default, so the whole-tree scope this
     // suite exists for has to be stated alongside the flags. They also replace the

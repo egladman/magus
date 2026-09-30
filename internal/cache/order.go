@@ -228,7 +228,7 @@ func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
 			continue
 		}
 		for _, rg := range r.Reads {
-			if globsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
+			if types.GlobsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
 				return wg.Pattern, rg.Pattern, true
 			}
 		}
@@ -240,7 +240,7 @@ func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
 // either glob, so the one path the pair can share is declared by neither.
 func excludedLiteral(wg, rg types.Glob) bool {
 	for _, lit := range []string{wg.Pattern, rg.Pattern} {
-		if !isMetaSegment(lit) && (wg.Excludes(lit) || rg.Excludes(lit)) {
+		if !types.IsGlobMeta(lit) && (wg.Excludes(lit) || rg.Excludes(lit)) {
 			return true
 		}
 	}
@@ -280,7 +280,7 @@ func underIgnoredDir(glob string, ignore []string) bool {
 		return false
 	}
 	for seg := range strings.SplitSeq(glob, "/") {
-		if isMetaSegment(seg) {
+		if types.IsGlobMeta(seg) {
 			return false
 		}
 		if slices.Contains(ignore, seg) {
@@ -288,56 +288,6 @@ func underIgnoredDir(glob string, ignore []string) bool {
 		}
 	}
 	return false
-}
-
-func isMetaSegment(seg string) bool { return strings.ContainsAny(seg, "*?[{") }
-
-// globsOverlap conservatively reports whether two doublestar globs can match a
-// common path. False only when provable: a literal path one side rejects,
-// diverging literal prefixes, or incompatible literal filename suffixes.
-// Everything else answers true; over-ordering is safe, a missed edge is not.
-func globsOverlap(a, b string) bool {
-	aMeta, bMeta := isMetaSegment(a), isMetaSegment(b)
-	switch {
-	case !aMeta && !bMeta:
-		return a == b
-	case !aMeta:
-		ok, err := doublestar.Match(b, a)
-		return ok || err != nil
-	case !bMeta:
-		ok, err := doublestar.Match(a, b)
-		return ok || err != nil
-	}
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
-	for i := 0; i < len(as) && i < len(bs); i++ {
-		if isMetaSegment(as[i]) || isMetaSegment(bs[i]) {
-			break
-		}
-		if as[i] != bs[i] {
-			return false
-		}
-		// Both consumed a literal segment. The shorter side, exhausted, may name a
-		// directory the longer one descends into, which is an overlap this cannot
-		// rule out; conservative, since over-ordering is cheap and a refusal stands on
-		// a witnessed file besides.
-		if i == len(as)-1 || i == len(bs)-1 {
-			return true
-		}
-	}
-	if as[len(as)-1] == "**" || bs[len(bs)-1] == "**" {
-		return true
-	}
-	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
-	return strings.HasSuffix(sa, sb) || strings.HasSuffix(sb, sa)
-}
-
-// literalSuffix returns the literal tail of one glob segment: everything after
-// the last metacharacter ("" when the segment ends in one).
-func literalSuffix(seg string) string {
-	if i := strings.LastIndexAny(seg, "*?[]{}"); i >= 0 {
-		return seg[i+1:]
-	}
-	return seg
 }
 
 // resolveFineCycles moves edges out of Edges until no cycle remains. A weak

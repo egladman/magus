@@ -185,28 +185,6 @@ func TestDeriveTargetOrderIgnoredDirInvisibleToFallbackReader(t *testing.T) {
 	assert.Empty(t, d.Edges, "a fallback reader never walks its ignored dirs, so writes confined there derive nothing")
 }
 
-func TestGlobsOverlap(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want bool
-	}{
-		{"docs/changelog.md", "**/*.md", true},
-		{"docs/changelog.md", "docs/changelog.md", true},
-		{"docs/changelog.md", "CHANGELOG.md", false},
-		{"proto/gen/descriptor.binpb", "gen/*.json", false},
-		{"gen/*.json", "**/*.md", false},
-		{"gen/*.json", "gen/**", true},
-		{"reference/buzz/*.md", "**/*.md", true},
-		{"docs/**", "docs/gen/site/index.html", true},
-		{"a/*.md", "b/*.md", false},
-		{"**", "anything/at/all.txt", true},
-	}
-	for _, tc := range cases {
-		assert.Equal(t, tc.want, globsOverlap(tc.a, tc.b), "globsOverlap(%q, %q)", tc.a, tc.b)
-		assert.Equal(t, tc.want, globsOverlap(tc.b, tc.a), "globsOverlap(%q, %q)", tc.b, tc.a)
-	}
-}
-
 func TestTopoNodesWritersFirst(t *testing.T) {
 	steps := orderSteps()
 	root, docs := stepKeys(steps)
@@ -587,12 +565,6 @@ func TestOrderingDoesNotDependOnWhichPairAsksFirst(t *testing.T) {
 		assert.True(t, o.runsAfter(DepKey("docs", "site-generate"), DepKey("docs", "content-generate")), "rotation %d", shift)
 		assert.Empty(t, o.preceded[DepKey("docs", "preflight")], "nothing precedes preflight, whichever composer reaches it first")
 	}
-}
-
-func TestGlobsOverlapTreatsAnExhaustedLiteralAsADirectory(t *testing.T) {
-	t.Parallel()
-	assert.True(t, globsOverlap("dist", "dist/**"), "a bare output directory against a reader descending into it")
-	assert.False(t, globsOverlap("dist/a.js", "dist/b.js"))
 }
 
 func TestProjectOfANodeKey(t *testing.T) {
