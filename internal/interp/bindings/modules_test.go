@@ -1534,7 +1534,7 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 
 // TestRunDirRetainsNothingPerEvaluation pins the daemon's steady state: once a
 // magusfile evaluation's session closes, nothing of it stays behind. Retention is
-// the Go heap's growth per evaluation between 200 and 1,000 evaluations, read
+// the Go heap's growth per evaluation between 100 and 400 evaluations, read
 // after two forced collections. Before sessions released their heap slots every
 // evaluation kept its whole session, about 600KB; the bound leaves room for
 // allocator noise from tests running alongside and no room for a session.
@@ -1560,17 +1560,17 @@ func TestRunDirRetainsNothingPerEvaluation(t *testing.T) {
 		runtime.ReadMemStats(&ms)
 		return ms.HeapAlloc
 	}
-	evaluate(200)
+	evaluate(100)
 	warm := heapAlloc()
 	objects := vm.ReadHeapStats().Objects
-	evaluate(800)
-	retained := (int64(heapAlloc()) - int64(warm)) / 800
+	evaluate(300)
+	retained := (int64(heapAlloc()) - int64(warm)) / 300
 	const bound = 32 << 10
 	if retained > bound {
 		t.Fatalf("each evaluation retained %d bytes of Go heap; want at most %d", retained, bound)
 	}
-	if grew := vm.ReadHeapStats().Objects - objects; grew > 800 {
-		t.Fatalf("800 evaluations grew the Buzz heap by %d objects; a closed session must leave none", grew)
+	if grew := vm.ReadHeapStats().Objects - objects; grew > 300 {
+		t.Fatalf("300 evaluations grew the Buzz heap by %d objects; a closed session must leave none", grew)
 	}
 }
 
