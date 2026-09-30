@@ -12,7 +12,7 @@
 // outcome here rather than an error: loadAttention reports "absent" so the tile can say the
 // route is missing instead of showing an empty queue, which would read as "nobody is blocked".
 
-import { authHeaders } from "../../../lib/server";
+import { authHeaders, readRefusal } from "../../../lib/server";
 
 // ---- the wire shape --------------------------------------------------------
 
@@ -240,7 +240,7 @@ export async function disposeAttention(
   // The server's own sentence, which names the candidates on an ambiguous prefix and says who
   // closed an already-closed request. Replacing it with a status code would throw away the
   // only part a person can act on.
-  const detail = (await res.text().catch(() => "")).trim() || "HTTP " + res.status;
+  const detail = (await readRefusal(res))?.message ?? "HTTP " + res.status;
   if (res.status >= 400 && res.status < 500) return { kind: "refused", detail };
   return { kind: "unreadable", detail };
 }

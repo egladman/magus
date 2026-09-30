@@ -25,9 +25,8 @@ import {
   resolveServerHost,
   authHeaders,
   getLiveToken,
-  parseRefusal,
+  readRefusal,
   reportHttpStatus,
-  type Refusal,
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
@@ -289,12 +288,7 @@ export function mountSharePanel(): SharePanel {
         reportHttpStatus(host, "the share", res.status);
         return;
       }
-      let refusal: Refusal | null = null;
-      try {
-        refusal = parseRefusal(await res.json());
-      } catch {
-        // reported: a non-JSON error body keeps the generic message reported below
-      }
+      const refusal = await readRefusal(res);
       // Keyed per attempt: a retried share that fails again is a new failure, not a repeat poll.
       reportFailure(
         "Share",

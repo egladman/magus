@@ -72,6 +72,18 @@ test("a 422 comes back as refused with the finding, never as an empty figure", a
   assert.deepEqual(seen, ["http://127.0.0.1:7391/api/v1/diagrams/projects"]);
 });
 
+test("an envelope body reaches the view as its message, not as JSON", async () => {
+  const envelope = JSON.stringify({
+    error: { code: 422, message: "MGS9021: 10 nodes exceeds the budget of 9", status: "X" },
+  });
+  const read = await renderDiagram({ host: HOST, fetch: respond(422, envelope) }, "projects", {
+    scope: [],
+    focus: "",
+    depth: null,
+  });
+  assert.deepEqual(read, { kind: "refused", detail: "MGS9021: 10 nodes exceeds the budget of 9" });
+});
+
 test("a network failure is unreadable and an abort is not a failure", async () => {
   const refused = (async () => {
     throw new TypeError("Failed to fetch");

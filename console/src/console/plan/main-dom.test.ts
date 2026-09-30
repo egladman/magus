@@ -1025,7 +1025,7 @@ test("the default read names no target, and the override is what adds one", asyn
 
 // The console holds no list of the workspace's targets, so any sentence it wrote itself would be a
 // guess. The server named what it could not resolve; that is what reaches the screen. The body is
-// what the route actually sends - http.Error, so plain text, not a JSON envelope.
+// what the route actually sends: the error envelope, whose message is the sentence.
 test("an unknown target shows the server's own message, verbatim", async () => {
   serve({
     jobs: okJobs([]),
@@ -1035,7 +1035,15 @@ test("an unknown target shows the server's own message, verbatim", async () => {
             ok: false,
             status: 400,
             text: () =>
-              Promise.resolve('unknown target "cli"; run `magus describe targets` to list them\n'),
+              Promise.resolve(
+                JSON.stringify({
+                  error: {
+                    code: 400,
+                    message: 'unknown target "cli"; run `magus describe targets` to list them',
+                    status: "INVALID_ARGUMENT",
+                  },
+                }),
+              ),
           }
         : okPlan(RUN_BODY)(),
   });

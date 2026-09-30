@@ -17,7 +17,7 @@
 // FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the surface can
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
-import { authHeaders } from "../../lib/server";
+import { authHeaders, readRefusal } from "../../lib/server";
 import { str } from "./jobs";
 
 // ---- states ----------------------------------------------------------------
@@ -226,15 +226,10 @@ export function runPlanUrl(host: string, target: string): string {
 
 // unknownTargetDetail carries the server's OWN words for a 400 through to the screen. The console
 // does not hold the workspace's target list, so any sentence it wrote here itself would be a guess;
-// the server named what it could not resolve, and that is what a reader can act on. The body IS the
-// message: the route writes it with http.Error, so it arrives as plain text and is used verbatim.
+// the server named what it could not resolve, and that is what a reader can act on. The words are
+// the error envelope's message, or the body itself when it is not one.
 async function unknownTargetDetail(res: Response): Promise<string> {
-  try {
-    return (await res.text()).trim();
-  } catch {
-    // not-a-failure: the caller already reports the refused run; this only adds the server's words
-    return "";
-  }
+  return (await readRefusal(res))?.message ?? "";
 }
 
 // loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the outputs feed.

@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   ageLabel,
+  disposeAttention,
   disposeStartsHidden,
   firstLine,
   parseRequests,
@@ -141,4 +142,36 @@ test("firstLine bounds a very long line", () => {
   const out = firstLine("x".repeat(500));
   assert.ok(out.length <= 140, "got " + out.length);
   assert.ok(out.endsWith("..."), "a cut line has to say it was cut");
+});
+
+// The suite shares one process, so a stubbed fetch is restored before the next test.
+async function withResponse<T>(res: Response, body: () => Promise<T>): Promise<T> {
+  const real = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(res)) as typeof fetch;
+  try {
+    return await body();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test("disposeAttention shows an envelope refusal as its message", async () => {
+  const envelope = JSON.stringify({
+    error: { code: 404, message: "MGS9004: no request matches att-0123", status: "NOT_FOUND" },
+  });
+  const result = await withResponse(new Response(envelope, { status: 404 }), () =>
+    disposeAttention("127.0.0.1:7391", "att-0123", "done"),
+  );
+  assert.deepEqual(result, { kind: "refused", detail: "MGS9004: no request matches att-0123" });
+});
+
+test("disposeAttention keeps a plain-text refusal and words an empty one by status", async () => {
+  const text = await withResponse(new Response("already closed by eli\n", { status: 409 }), () =>
+    disposeAttention("127.0.0.1:7391", "att-0123", "done"),
+  );
+  assert.deepEqual(text, { kind: "refused", detail: "already closed by eli" });
+  const empty = await withResponse(new Response("", { status: 500 }), () =>
+    disposeAttention("127.0.0.1:7391", "att-0123", "done"),
+  );
+  assert.deepEqual(empty, { kind: "unreadable", detail: "HTTP 500" });
 });

@@ -310,7 +310,26 @@ test("a 501 is absent too - an unimplemented route is a missing one", async () =
 
 // The console holds no list of the workspace's targets, so anything it wrote here itself would be a
 // guess. The server named what it could not resolve, and that sentence is what a reader can act on.
-// The route writes it with http.Error, so the body IS the message: plain text, taken verbatim.
+// The route answers with the error envelope, so its message is the sentence; a body that is not an
+// envelope is taken verbatim.
+test("a 400 envelope is an unknown target, carrying its message and not the JSON", async () => {
+  const envelope = JSON.stringify({
+    error: {
+      code: 400,
+      message: 'MGS9007: unknown target "cli"; run `magus describe targets` to list them',
+      status: "INVALID_ARGUMENT",
+    },
+  });
+  const read = await stubFetch(
+    () => new Response(envelope, { status: 400 }),
+    () => loadRunPlan("127.0.0.1:7391", "cli"),
+  );
+  assert.deepEqual(read, {
+    kind: "unknown-target",
+    detail: 'MGS9007: unknown target "cli"; run `magus describe targets` to list them',
+  });
+});
+
 test("a 400 is an unknown target, carrying the server's own words", async () => {
   const read = await stubFetch(
     () => ({

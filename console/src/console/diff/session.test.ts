@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchContext } from "./session";
+import { fetchContext, publish, reply } from "./session";
 
 // The SAME golden vector internal/diff/session_test.go asserts.
 //
@@ -26,5 +26,42 @@ test("context requests carry the reviewed patch identity", async () => {
     assert.equal(query.get("as_of"), "snapshot-a");
   } finally {
     globalThis.fetch = realFetch;
+  }
+});
+
+async function withResponse<T>(res: Response, body: () => Promise<T>): Promise<T> {
+  const real = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(res)) as typeof fetch;
+  try {
+    return await body();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+const noPullRequest = JSON.stringify({
+  error: { code: 409, message: "MGS9012: no pull request for this branch", status: "ABORTED" },
+});
+
+test("publish throws the envelope's message, not the raw JSON", async () => {
+  await withResponse(new Response(noPullRequest, { status: 409 }), () =>
+    assert.rejects(
+      publish("127.0.0.1:7391", "", "comment", new AbortController().signal),
+      new Error("MGS9012: no pull request for this branch"),
+    ),
+  );
+});
+
+test("reply throws the envelope's message, and a plain body or none still shows", async () => {
+  const signal = new AbortController().signal;
+  const reasons: [string, number, string][] = [
+    [noPullRequest, 409, "MGS9012: no pull request for this branch"],
+    ["no credential\n", 403, "no credential"],
+    ["", 502, "server answered 502"],
+  ];
+  for (const [body, status, message] of reasons) {
+    await withResponse(new Response(body, { status }), () =>
+      assert.rejects(reply("127.0.0.1:7391", "t1", "hi", signal), new Error(message)),
+    );
   }
 });

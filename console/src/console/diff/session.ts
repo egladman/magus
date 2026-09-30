@@ -10,7 +10,12 @@
 // review. Pairing therefore needs no setup step anyone has to remember: opening the surface is
 // joining.
 
-import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/server";
+import {
+  authHeaders,
+  readRefusal,
+  reportFetchFailure,
+  reportHttpStatus,
+} from "../../lib/server";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -438,7 +443,7 @@ export async function publish(
     // The server's body is the reason - "no pull request for this branch", "no credential",
     // an HTTP status from the host - and it is the only thing that tells the reader which of
     // several unrelated situations they are in.
-    throw new Error((await res.text()).trim() || `server answered ${res.status}`);
+    throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
   }
   return (await res.json()) as DiffReview;
 }
@@ -463,7 +468,9 @@ export async function reply(
     body: JSON.stringify({ op: "reply", id: thread, body }),
     signal,
   });
-  if (!res.ok) throw new Error((await res.text()).trim() || `server answered ${res.status}`);
+  if (!res.ok) {
+    throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
+  }
 }
 
 // BranchChange is one other line of work and the paths it changes, as of the reader's LAST FETCH.

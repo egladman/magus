@@ -770,6 +770,27 @@ export function parseRefusal(body: unknown): Refusal | null {
   return refusal;
 }
 
+// readRefusal reads the body of a non-2xx /api/ answer: the envelope's message and Help link when
+// the body is one, the trimmed text otherwise. Null when the body is empty or unreadable, so the
+// caller words the status itself. Every plain fetch to /api/ reads a failure body through here.
+export async function readRefusal(res: Response): Promise<Refusal | null> {
+  let text: string;
+  try {
+    text = (await res.text()).trim();
+  } catch {
+    // not-a-failure: the caller reports the status; an unread body only loses the server's words
+    return null;
+  }
+  if (text === "") return null;
+  try {
+    const refusal = parseRefusal(JSON.parse(text));
+    if (refusal) return refusal;
+  } catch {
+    // not-a-failure: a body that is not JSON is the message itself
+  }
+  return { message: text };
+}
+
 // makeFailureInterceptor reports every failed call, a server stream's mid-stream failure included:
 // that one surfaces while the caller iterates, after next() has already returned.
 function makeFailureInterceptor(host: string): Interceptor {

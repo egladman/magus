@@ -2,7 +2,12 @@
 // figure is reported here (a toast at minimum) and also returned as a read the view shows inline.
 
 import { reportFailure } from "../../lib/notifications";
-import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/server";
+import {
+  authHeaders,
+  readRefusal,
+  reportFetchFailure,
+  reportHttpStatus,
+} from "../../lib/server";
 import { errMessage, errName } from "../../lib/guards";
 import { lensQuery, type Lens } from "./lens";
 
@@ -77,8 +82,8 @@ export function renderDiagram(
   return read(opts, diagramUrl(opts.host, id, lens), "diagram " + id, parseRendered);
 }
 
-// readFailure maps a non-2xx status to a failure. The server's plain-text body is used verbatim,
-// since it names the fix.
+// readFailure maps a non-2xx status to a failure. body is the server's message (see readRefusal),
+// used verbatim since it names the fix.
 export function readFailure(status: number, body: string, what: string): DiagramFailure {
   const detail = body.trim();
   switch (status) {
@@ -118,14 +123,7 @@ async function read<T>(
     return { kind: "unreadable", detail: errMessage(e) };
   }
   if (!res.ok) {
-    let body = "";
-    try {
-      body = await res.text();
-    } catch (e) {
-      // reported: by the status below; an unread body only loses words
-      body = errMessage(e);
-    }
-    const failure = readFailure(res.status, body, what);
+    const failure = readFailure(res.status, (await readRefusal(res))?.message ?? "", what);
     if (res.status === 401 || failure.kind === "unreadable")
       reportHttpStatus(opts.host, what, res.status);
     else reportFailure(SOURCE, failure.detail, "diagrams:" + failure.kind + ":" + url);
