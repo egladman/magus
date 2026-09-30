@@ -113,6 +113,10 @@ type Shard struct {
 	// content: fingerprintShardContent never reads it, so it cannot make an unchanged
 	// shard look dirty. Sync logs it; only @session sets it today.
 	Dropped int
+
+	// Err is a declaration the assembler refuses to index, such as an unknown marker
+	// family. Build fails on it; like Dropped it is never fingerprinted.
+	Err error
 }
 
 // AssembleShards builds every shard from the gathered inputs: the registry shard
@@ -184,6 +188,17 @@ func AssembleShards(in Inputs) []Shard {
 		// graph), so its edges never outlive their endpoints.
 		if l := assembleLinks(in.Root, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
 			shards = append(shards, l)
+		}
+		// Markers resolve a figure id against the doc shard's pages and sections, so they
+		// run once those are known.
+		var docPages []string
+		for _, n := range docNodes {
+			if n.Kind == types.KindDoc {
+				docPages = append(docPages, n.Source)
+			}
+		}
+		if m := assembleMarkers(in.Root, in.Graph.Projects, docPages, newDocIndex(docNodes)); len(m.Nodes) > 0 || m.Err != nil {
+			shards = append(shards, m)
 		}
 		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
 			shards = append(shards, o)

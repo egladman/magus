@@ -23,6 +23,11 @@ type BuildOptions struct {
 // build; steady state writes only the shards whose content changed.
 func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, log *slog.Logger) (*Graph, error) {
 	shards := AssembleShards(in)
+	for _, sh := range shards {
+		if sh.Err != nil {
+			return nil, sh.Err
+		}
+	}
 
 	// optimization: fingerprint shards in parallel. Each fingerprint builds a
 	// temp graph, sorts, marshals, and hashes: independent CPU work done for

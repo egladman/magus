@@ -426,7 +426,6 @@ var raiseSiteSkipDirs = map[string]bool{
 // mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
 // today, listed rather than tolerated so the gate is green and the debt is named.
 var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{
-	types.UnknownMarkerFamily: "the marker scanner raises it; lands with the markers adapter",
 	types.DirNotInGraph:       "magus\\dir raises it; lands with the dir client members",
 	types.LayerNotDeclared:    "magus\\layer raises it; lands with the dir client members",
 }

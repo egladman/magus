@@ -546,6 +546,11 @@ fun helper() > void {
 	write("docs/spells/go.md", "# go\n\nThe go spell.\n")
 	// owns: CODEOWNERS is read from the root and matched against the path-bearing nodes.
 	write("CODEOWNERS", "pkg/a @platform\n")
+	// contains file->marker, references marker->docsection and marker->dir, and calls
+	// dir->dir: a diagram marker naming a figure a page embeds, and a calls marker.
+	write("docs/figures.md", "# Figures\n\n## Share\n\n<!--diagram:share-->\n")
+	write("pkg/b/b.go", "package b\n")
+	write("pkg/a/client.go", "package a\n\n// magus:diagram share\n// magus:calls pkg/b http\n")
 
 	// produces and consumes: both resolve a target's declared globs against the file and
 	// doc nodes already minted, so each glob here names a path written above.

@@ -1,0 +1,110 @@
+// prose-names-targets-that-exist: a fenced `magus run <target> <project>` in a doc must
+// name a target that project defines. A reader copies the line and gets "unknown target",
+// or worse, trusts a gate the page describes and nothing runs.
+//
+// The docs adapter resolves each fenced run command against the workspace's targets: a
+// resolved one is a `documents` edge, and one naming a real project that lacks the target
+// is recorded on the doc node as unknown_targets. This rule reads those records through
+// magus\query. A command naming no project, or a project this workspace does not have, is
+// an illustration and is never a finding.
+namespace prosetargets;
+
+import "assert";
+import "std";
+import "magus";
+import "magus/lint";
+
+// UNKNOWN_TARGETS is the doc node attr the docs adapter writes, one
+// "<project>:<target>@<line>" per claim, comma separated.
+final UNKNOWN_TARGETS = "unknown_targets";
+
+// Claim is one run command naming a target its project does not define.
+export object Claim {
+    doc: str,
+    line: int,
+    project: str,
+    target: str,
+}
+
+export fun reads() > [str] {
+    return ["**/*.md", "**/magusfile.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final probe: magus\QueryResult = magus\query("kind=doc", opts: {"limit": 1, "budget": 1});
+    if (probe.matchCount == 0) {
+        return [Finding{ path = ".", message = "the graph holds no doc node",
+            fix = "The docs adapter indexed nothing, so nothing was checked; run `magus graph build`." }];
+    }
+    final all: magus\QueryResult = magus\query("kind=doc", opts: {"limit": probe.matchCount, "budget": probe.matchCount});
+    final found = mut [<Claim>];
+    foreach (n in all.nodes) {
+        final raw = n.attrs[UNKNOWN_TARGETS];
+        if (n.kind != "doc" or raw == null) {
+            continue;
+        }
+        foreach (c in claims(n.source, raw: raw!)) {
+            found.append(c);
+        }
+    }
+    return findings(found);
+}
+
+// claims reads one doc's unknown_targets record.
+export fun claims(doc: str, raw: str) > [Claim] {
+    final found = mut [<Claim>];
+    foreach (entry in raw.split(",")) {
+        final at = entry.split("@");
+        final ref = at[0];
+        final colon = ref.indexOf(":");
+        if (colon == null) {
+            continue;
+        }
+        found.append(Claim{ doc = doc,
+            line = if (at.len() > 1) std\parseInt(at[1]) ?? 0 else 0,
+            project = ref.sub(0, len: colon!),
+            target = ref.sub(colon! + 1) });
+    }
+    return found;
+}
+
+export fun findings(claims: [Claim]) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (c in claims) {
+        final which = if (c.project == "/") "no project defines" else "project \"{c.project}\" does not define";
+        found.append(Finding{ path = c.doc, line = c.line,
+            message = "runs target \"{c.target}\", which {which}",
+            fix = "Name a target `magus ls targets {c.project}` lists, or define \"{c.target}\" there." });
+    }
+    return found;
+}
+
+test "each entry of a record is one claim at its line" {
+    final got = claims("docs/a.md", raw: "docs:nope@13,.:gone@40,/:none@41");
+    assert\equal(got.len(), want: 3, message: "three claims");
+    assert\equal(got[2].project, want: "/", message: "every project");
+    assert\equal(got[2].target, want: "none", message: "target after the slash");
+    assert\equal(got[0].doc, want: "docs/a.md", message: "doc");
+    assert\equal(got[0].line, want: 13, message: "line");
+    assert\equal(got[0].project, want: "docs", message: "project");
+    assert\equal(got[0].target, want: "nope", message: "target");
+    assert\equal(got[1].project, want: ".", message: "root project");
+    assert\equal(got[1].target, want: "gone", message: "root target");
+}
+
+test "a claim is reported at the doc line with the project it names" {
+    final got = findings([Claim{ doc = "docs/a.md", line = 13, project = "docs", target = "nope" }]);
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: "docs/a.md", message: "path");
+    assert\equal(got[0].line, want: 13, message: "line");
+    assert\equal(got[0].message, want: "runs target \"nope\", which project \"docs\" does not define", message: "message");
+}
+
+test "a claim over every project says no project defines the target" {
+    final got = findings([Claim{ doc = "README.md", line = 2, project = "/", target = "nope" }]);
+    assert\equal(got[0].message, want: "runs target \"nope\", which no project defines", message: "message");
+}
+
+test "no claims, no findings" {
+    assert\equal(findings([<Claim>]).len(), want: 0, message: "clean");
+}

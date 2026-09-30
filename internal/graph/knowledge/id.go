@@ -63,6 +63,11 @@ func rationaleID(relPath string, line int) string {
 	return types.KindRationale + ":" + relPath + ":" + strconv.Itoa(line)
 }
 
+// markerID keys a folded begin/end block by its begin line.
+func markerID(relPath string, line int) string {
+	return types.KindMarker + ":" + relPath + ":" + strconv.Itoa(line)
+}
+
 func ownerID(name string) string { return types.KindOwner + ":" + name }
 
 func authorID(name string) string { return types.KindAuthor + ":" + name }

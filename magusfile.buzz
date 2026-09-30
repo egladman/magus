@@ -3276,7 +3276,14 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    // figure-modules-type-check-strictly: the figures, the observed halves
                    // and the renderer they import.
                    "docs/site/diagrams/*.buzz", "docs/site/diagrams/gen/*.buzz",
-                   "libs/diagram/diagram.buzz", "libs/diagram/flow.buzz");
+                   "libs/diagram/diagram.buzz", "libs/diagram/flow.buzz",
+                   // prose-names-targets-that-exist: every page's fenced run commands.
+                   "**/*.md", "console/**/*.md", "docs/**/*.md",
+                   "docs/guides/integrations/agents/**/*.md",
+                   "libs/coldread/**/*.md", "libs/conventions/**/*.md",
+                   "libs/diagnostics/**/*.md", "libs/diagram/**/*.md",
+                   "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
+                   "libs/textsearch/**/*.md", "proto/**/*.md");
     magus\cmd("buzz", args: ["hack/lint.buzz"]);
 }
 

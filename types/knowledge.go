@@ -298,7 +298,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
 		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
 		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
-		endpointShapes(KindFile, KindFunction, KindMarker), endpointShapes(KindDoc, KindDocSection),
+		endpointShapes(KindFile, KindFunction, KindMarker), endpointShapes(KindDoc, KindDocSection, KindMarker),
 		endpointShapes(KindDocSection, KindDocSection))},
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},

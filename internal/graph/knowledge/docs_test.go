@@ -339,3 +339,71 @@ func TestAssembleDocs_DeclaredNotesProduceNoDocNode(t *testing.T) {
 	_, ok = nodeByID(out, "doc:notes/cache-pairing.md")
 	assert.False(t, ok, "a note must never become a doc node")
 }
+
+func TestRunCommands(t *testing.T) {
+	cases := []struct {
+		line string
+		want []runCommand
+	}{
+		{"magus run lint docs", []runCommand{{target: "lint", projects: []string{"docs"}}}},
+		{"$ ./magus run go-build:rw ./ # writes ./magus", []runCommand{{target: "go-build", projects: []string{"."}}}},
+		{"magus run ci:gha . -- --inherited=fatal", []runCommand{{target: "ci", projects: []string{"."}}}},
+		{"magus run build -o jsonl --tee build.jsonl", []runCommand{{target: "build"}}},
+		{"magus run test web/ api --broker off", []runCommand{{target: "test", projects: []string{"web", "api"}}}},
+		{"magus run generate:rw . | magus run test .", []runCommand{{target: "generate", projects: []string{"."}}, {target: "test", projects: []string{"."}}}},
+		{"magus run sync && magus run GoBuild /", []runCommand{{target: "sync"}, {target: "go-build", projects: []string{"/"}}}},
+		{"magus run go::go-test .", nil},
+		{"magus run <target> [project...]", nil},
+		{"magus run generate:rw <project>", nil},
+		{"magus run test \"$dir\"", nil},
+		{"magus run --stdin --shard 2", nil},
+		{"magus run ls", nil},
+		{"# magus run lint docs", nil},
+		{"go run ./cmd/magus run go-build .", nil},
+		{"magus buzz hack/lint.buzz", nil},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, runCommands(c.line), c.line)
+	}
+}
+
+func TestParseDocBodyReadsShellFencesOnly(t *testing.T) {
+	body := "intro\n\n```sh\nmagus run a .\n```\n\n# Top\n\n```text\nmagus run b .\n```\n\n- item\n\n  ```bash\n  magus run c docs\n  ```\n\n```\nmagus run d .\n```\n"
+	heads, runs := parseDocBody([]byte(body))
+	require.Len(t, heads, 1)
+	assert.Equal(t, []docRun{
+		{anchor: "", line: 4, cmd: runCommand{target: "a", projects: []string{"."}}},
+		{anchor: "top", line: 16, cmd: runCommand{target: "c", projects: []string{"docs"}}},
+	}, runs)
+}
+
+func TestAssembleDocsDocumentsTheTargetsARunNames(t *testing.T) {
+	root := t.TempDir()
+	projects := []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{{Name: "go-build"}, {Name: "ci"}}},
+		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "lint"}}},
+	}
+	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n```sh\nmagus run go-build\n```\n\n## Checks\n\n"+
+		"```sh\nmagus run lint docs\nmagus run lint:rw ./docs\nmagus run nope docs\nmagus run build api\nmagus run nope\nmagus run ci:gha /\n```\n")
+
+	s, _ := assembleDocs(root, nil, projects, "")
+	out := mergeAll([]Shard{s}).Output()
+
+	e, ok := findEdge(out, "doc:docs/guide.md", "target:.:go-build", types.RelationDocuments)
+	require.True(t, ok, "a run before any heading documents from the page, resolved at the root project")
+	assert.Equal(t, types.ConfidenceExtracted, e.Confidence)
+	assert.True(t, hasEdge(out, "docsection:docs/guide.md#checks", "target:docs:lint", types.RelationDocuments), "a run under a heading documents from its section")
+	assert.True(t, hasEdge(out, "docsection:docs/guide.md#checks", "target:.:ci", types.RelationDocuments), "/ resolves to every project defining the target")
+
+	var documents int
+	for _, e := range s.Edges {
+		if e.Relation == types.RelationDocuments && e.Source == "docsection:docs/guide.md#checks" {
+			documents++
+		}
+	}
+	assert.Equal(t, 2, documents, "a target run twice is documented once; an unknown project and a missing target document nothing")
+
+	d, ok := nodeByID(out, "doc:docs/guide.md")
+	require.True(t, ok)
+	assert.Equal(t, "docs:nope@13", d.Attrs[attrUnknownTargets], "only a named project of this workspace missing the target is a claim, at its file line")
+}
