@@ -245,11 +245,9 @@ func heapRelease(o *Owner, roots []Value) {
 		s[idx] = nil
 		gHeapOwner[idx] = nil
 	}
-	// Under the race detector a released slot is poisoned instead of recycled,
-	// as sync.Pool drops instead of reusing there: a Value read after its
-	// session closed then panics in gHeapGet, where a recycled slot would have
-	// quietly read as some later object.
-	if raceEnabled {
+	// See owner_race.go: a poisoned slot panics in gHeapGet instead of being
+	// handed out again.
+	if poisonReleased {
 		for _, idx := range o.slots {
 			s[idx] = released{}
 		}
@@ -285,7 +283,7 @@ func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
 			if s[idx] == nil {
 				continue
 			}
-			if raceEnabled {
+			if poisonReleased {
 				if _, gone := s[idx].(released); gone {
 					continue
 				}
@@ -348,7 +346,7 @@ func alloc[T heapVal](vm *VM, tag valueTag, ptr T) Value {
 // of the slice header and indexes it directly.
 func gHeapGet(idx uint64) heapVal {
 	o := (*gHeapPtr.Load())[idx]
-	if raceEnabled {
+	if poisonReleased {
 		if _, ok := o.(released); ok {
 			panic("buzz: value used after its session closed")
 		}

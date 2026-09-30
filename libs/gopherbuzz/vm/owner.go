@@ -27,6 +27,10 @@ type Owner struct {
 	slots []uint64 // guarded by gHeapMu
 }
 
+// poisonReleased makes a released slot unusable instead of recyclable, so a
+// Value read after its session closed panics; owner_race.go sets it.
+var poisonReleased bool
+
 // Claim takes each of vals and everything reachable from it that no owner
 // holds yet, stopping at any slot already held.
 func (o *Owner) Claim(vals ...Value) {

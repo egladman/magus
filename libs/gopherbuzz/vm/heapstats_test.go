@@ -84,7 +84,7 @@ func TestOwnerReleaseFreesAndReusesSlots(t *testing.T) {
 	if got := ReadHeapStats().Objects; got != before {
 		t.Fatalf("live count after release: %d, want %d", got, before)
 	}
-	if raceEnabled {
+	if poisonReleased {
 		if again := gHeapAlloc(&listObj{}, nil); again == idx {
 			t.Fatalf("the race build recycled released slot %d; it must stay poisoned", idx)
 		}
@@ -150,7 +150,7 @@ func freed(v Value) bool {
 // Under the race detector a released slot is never recycled, and reading a
 // Value into one panics by name instead of quietly reading a later object.
 func TestReleasedSlotReadPanicsUnderRace(t *testing.T) {
-	if !raceEnabled {
+	if !poisonReleased {
 		t.Skip("released slots are poisoned only under -race")
 	}
 	var a Owner
