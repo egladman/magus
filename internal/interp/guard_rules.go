@@ -307,7 +307,7 @@ func (sc *scope) add(name string) {
 // ns, so only ns is a name in scope; a built-in type word is not one at all.
 func (sc *scope) addType(annot string) {
 	for _, qualified := range strings.FieldsFunc(annot, func(r rune) bool {
-		return r != '_' && r != '\\' && !('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9')
+		return r != '_' && r != '\\' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
 	}) {
 		name, _, _ := strings.Cut(qualified, `\`)
 		if name == "" || name == "mut" || buzz.IsReservedIdent(name) || '0' <= name[0] && name[0] <= '9' {

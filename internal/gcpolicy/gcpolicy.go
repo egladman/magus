@@ -11,7 +11,7 @@ import (
 //
 //	measured: gctrace: the one GC before main is gone on `magus version` and both hooks.
 //	          hyperfine, 600 runs per arm, arms alternating: version 18.6->17.0ms, commit-msg
-//	          hook 58.8->57.4ms, claude hook 72.6->70.6ms mean wall; about 3ms less CPU each.
+//	          hook 58.8->57.4ms, tool-call hook 72.6->70.6ms mean wall; about 3ms less CPU each.
 //	trade-off: the linker places this init after about 1MB of other packages' init.
 //	assumes:  darwin arm64, 10 P; cmd/magus's relaxStartupGC owns the restore.
 const Percent = 400

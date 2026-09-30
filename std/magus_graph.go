@@ -12,7 +12,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -245,53 +244,4 @@ func intOptions(member string, opts map[string]any, keys ...string) (map[string]
 		out[k] = n
 	}
 	return out, nil
-}
-
-// recordMap converts a record to the map a Buzz caller receives, keyed exactly as its
-// `-o json` form so a script and the CLI read one shape. Whole numbers decode as int64:
-// a JSON count decoded to float64 would reach Buzz as a double.
-func recordMap(v any) (map[string]any, error) {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var out map[string]any
-	if err := json.UnmarshalLossless(raw, &out); err != nil {
-		return nil, err
-	}
-	// numbersToBuzz's map[string]any case always hands the same map back.
-	converted, ok := numbersToBuzz(out).(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("recordMap: numbersToBuzz returned %T, not a map", converted)
-	}
-	return converted, nil
-}
-
-// jsonNumber is encoding/json.Number's method set, named here because this tree reaches
-// encoding/json only through internal/json.
-type jsonNumber interface {
-	Int64() (int64, error)
-	Float64() (float64, error)
-}
-
-func numbersToBuzz(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, e := range x {
-			x[k] = numbersToBuzz(e)
-		}
-		return x
-	case []any:
-		for i, e := range x {
-			x[i] = numbersToBuzz(e)
-		}
-		return x
-	case jsonNumber:
-		if n, err := x.Int64(); err == nil {
-			return n
-		}
-		f, _ := x.Float64()
-		return f
-	}
-	return v
 }

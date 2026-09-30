@@ -48,8 +48,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
-	// Init order puts its GOGC raise ahead of ~2.5MB of init allocation: no GC at the 4MB floor.
-	_ "github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp/mcpclient"

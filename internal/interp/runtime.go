@@ -408,10 +408,10 @@ func (s sealedBytecodeStore) Store(key string, blob []byte) error {
 func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
 	m := hmac.New(sha256.New, s.secret)
 	for _, part := range []string{s.scope, key} {
-		m.Write([]byte(part))
-		m.Write([]byte{0})
+		_, _ = m.Write([]byte(part))
+		_, _ = m.Write([]byte{0})
 	}
-	m.Write(blob)
+	_, _ = m.Write(blob)
 	return m.Sum(nil)
 }
 

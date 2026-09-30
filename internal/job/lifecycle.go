@@ -428,7 +428,7 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 		}
 		f = *cur
 		if len(dead) == 0 {
-			return file.SkipWrite
+			return file.ErrSkipWrite
 		}
 		return nil
 	})
@@ -504,7 +504,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) 
 			return err
 		}
 		if opts.DryRun || len(out) == 0 {
-			return file.SkipWrite
+			return file.ErrSkipWrite
 		}
 		for _, e := range out {
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })

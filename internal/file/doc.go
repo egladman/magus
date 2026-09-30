@@ -9,9 +9,9 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-// SkipWrite, returned by a [Doc.Update] fn, ends the update without writing and
+// ErrSkipWrite, returned by a [Doc.Update] fn, ends the update without writing and
 // without an error: the fn looked and found nothing to change.
-var SkipWrite = errors.New("skip this write")
+var ErrSkipWrite = errors.New("skip this write")
 
 // Doc is a document of type T kept whole in one file that several processes rewrite:
 // a ledger, a history, a watermark. Reads take no lock, because every write replaces
@@ -56,7 +56,7 @@ func (d Doc[T]) Load() (T, error) {
 // [WriteFileAtomic]. A change another process made between this caller's last Load and
 // its Update is therefore in what fn sees, never overwritten.
 //
-// Nothing is written when fn fails; fn returning [SkipWrite] is success without a
+// Nothing is written when fn fails; fn returning [ErrSkipWrite] is success without a
 // write. ctx bounds only the wait for the lock.
 func (d Doc[T]) Update(ctx context.Context, fn func(v *T) error) error {
 	return WithLock(ctx, d.Path+".lock", LockWait, func() error {
@@ -65,7 +65,7 @@ func (d Doc[T]) Update(ctx context.Context, fn func(v *T) error) error {
 			return err
 		}
 		if err := fn(&v); err != nil {
-			if errors.Is(err, SkipWrite) {
+			if errors.Is(err, ErrSkipWrite) {
 				return nil
 			}
 			return err
