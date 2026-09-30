@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
@@ -24,6 +26,8 @@ type fakeWorkspace struct {
 	imports types.ImportGraph
 	remote  string
 	head    string
+	// importLoads counts ImportGraph calls, the expensive read a listing must avoid.
+	importLoads *atomic.Int32
 }
 
 func (f fakeWorkspace) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
@@ -31,7 +35,14 @@ func (f fakeWorkspace) TargetGraph(context.Context) (types.TargetGraphOutput, er
 }
 
 func (f fakeWorkspace) ImportGraph(context.Context) (types.ImportGraph, error) {
+	if f.importLoads != nil {
+		f.importLoads.Add(1)
+	}
 	return f.imports, nil
+}
+
+func (f fakeWorkspace) SymbolIndex(context.Context) (types.SymbolIndexDigest, error) {
+	return types.SymbolIndexDigest{Indexed: f.imports.Indexed}, nil
 }
 
 func (f fakeWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
@@ -90,6 +101,96 @@ func TestDiagramsListing(t *testing.T) {
 		{"id": "targets:tools", "kind": "targets", "title": "Targets in tools", "project": "tools"},
 		{"id": "imports", "kind": "imports", "title": "Package imports", "indexed": false},
 	}, out.Diagrams)
+}
+
+func TestDiagramsListingProbesTheIndexWithoutLoadingTheImportGraph(t *testing.T) {
+	ws := chainWorkspace()
+	ws.importLoads = new(atomic.Int32)
+	ws.imports = types.ImportGraph{Indexed: true}
+	w := get(t, ws, "/api/v1/diagrams")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var out struct {
+		Diagrams []Entry `json:"diagrams"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	yes := true
+	assert.Equal(t, Entry{ID: "imports", Kind: "imports", Title: "Package imports", Indexed: &yes}, out.Diagrams[len(out.Diagrams)-1])
+	assert.Zero(t, ws.importLoads.Load())
+}
+
+func TestDiagramSecondRequestIsServedFromTheCache(t *testing.T) {
+	h := NewHandler(chainWorkspace(), nil)
+	var compiles atomic.Int32
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+		compiles.Add(1)
+		return render(ctx, g, desc, href)
+	}
+	serve := func(target string) string {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, target, nil))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		return w.Body.String()
+	}
+
+	first := serve("/api/v1/diagrams/projects")
+	assert.Equal(t, first, serve("/api/v1/diagrams/projects"))
+	assert.Equal(t, int32(1), compiles.Load())
+
+	serve("/api/v1/diagrams/projects?focus=libs/core&depth=1")
+	assert.Equal(t, int32(2), compiles.Load(), "another lens is another figure")
+
+	h.ws = func() fakeWorkspace {
+		ws := chainWorkspace()
+		ws.targets.Projects = ws.targets.Projects[:4]
+		return ws
+	}()
+	serve("/api/v1/diagrams/projects")
+	assert.Equal(t, int32(3), compiles.Load(), "a changed graph is a new key")
+}
+
+func TestDiagramConcurrentRequestsRenderOnce(t *testing.T) {
+	h := NewHandler(chainWorkspace(), nil)
+	var compiles atomic.Int32
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+		compiles.Add(1)
+		return render(ctx, g, desc, href)
+	}
+	var wg sync.WaitGroup
+	codes := make([]int, 8)
+	for i := range codes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diagrams/projects", nil))
+			codes[i] = w.Code
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, []int{200, 200, 200, 200, 200, 200, 200, 200}, codes)
+	assert.Equal(t, int32(1), compiles.Load())
+}
+
+func TestDiagramRefusalIsNotCached(t *testing.T) {
+	ws := chainWorkspace()
+	ws.targets.Projects = nil
+	for i := range 10 {
+		p := "p" + strconv.Itoa(i)
+		ws.targets.Projects = append(ws.targets.Projects, types.TargetGraphProject{Path: p, Name: p})
+	}
+	h := NewHandler(ws, nil)
+	var compiles atomic.Int32
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+		compiles.Add(1)
+		return render(ctx, g, desc, href)
+	}
+	for range 2 {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diagrams/projects", nil))
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	}
+	assert.Equal(t, int32(2), compiles.Load())
 }
 
 func TestDiagramRendersProjects(t *testing.T) {

@@ -1,7 +1,10 @@
 package diagram
 
 import (
+	"container/list"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/figure"
@@ -153,6 +157,152 @@ func importGraph(ig types.ImportGraph) graph {
 	return g
 }
 
+// fingerprint identifies g's content, so two graphs that draw alike share a key and any
+// change to a node, an edge or their order does not.
+func (g graph) fingerprint() string {
+	h := sha256.New()
+	field := func(parts ...string) {
+		for _, p := range parts {
+			fmt.Fprintf(h, "%d:%s", len(p), p)
+		}
+		h.Write([]byte{'\n'})
+	}
+	field(g.id, g.title, g.claim)
+	for _, n := range g.nodes {
+		field("n", n.ID, n.Anchor, n.Label)
+	}
+	for _, e := range g.edges {
+		field("e", e.src, e.dst)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Bounds on renderCache. A lens is client-chosen, so keys are unbounded; a figure's node
+// and edge budgets bound each entry, and these bound the sum.
+const (
+	renderCacheEntries = 64
+	renderCacheBytes   = 32 << 20
+)
+
+// renderCache holds rendered figures for a long-running server, keyed on the graph's
+// fingerprint, the lens and the anchor template. It is safe for concurrent use. Only a
+// success is stored: a findings refusal is recomputed, and so is anything computed under a
+// context that ended, since that result reflects one client leaving, not the graph.
+type renderCache struct {
+	mu       sync.Mutex
+	order    *list.List // front is most recently used
+	entries  map[string]*list.Element
+	bytes    int
+	inflight map[string]*renderFlight
+}
+
+type renderEntry struct {
+	key string
+	fig Figure
+}
+
+// renderFlight is a render in progress that concurrent requests for the same key wait on.
+// abandoned stays true unless the leader finished under a live context.
+type renderFlight struct {
+	done      chan struct{}
+	fig       Figure
+	err       error
+	abandoned bool
+}
+
+func newRenderCache() *renderCache {
+	return &renderCache{
+		order:    list.New(),
+		entries:  map[string]*list.Element{},
+		inflight: map[string]*renderFlight{},
+	}
+}
+
+func renderKey(g graph, desc, anchorHref string) string {
+	return g.fingerprint() + "\x00" + desc + "\x00" + anchorHref
+}
+
+// get returns the figure for key, calling compute at most once across concurrent callers of
+// the same key. A caller waiting on another's render returns when its own ctx ends. If the
+// computing caller's ctx ended, waiters compute for themselves rather than inherit its
+// cancellation.
+func (c *renderCache) get(ctx context.Context, key string, compute func(context.Context) (Figure, error)) (Figure, error) {
+	for {
+		c.mu.Lock()
+		if el, ok := c.entries[key]; ok {
+			c.order.MoveToFront(el)
+			fig := el.Value.(*renderEntry).fig
+			c.mu.Unlock()
+			return cloneFigure(fig), nil
+		}
+		if fl, ok := c.inflight[key]; ok {
+			c.mu.Unlock()
+			select {
+			case <-fl.done:
+			case <-ctx.Done():
+				return Figure{}, ctx.Err()
+			}
+			if fl.abandoned {
+				continue
+			}
+			return cloneFigure(fl.fig), fl.err
+		}
+		fl := &renderFlight{done: make(chan struct{}), abandoned: true}
+		c.inflight[key] = fl
+		c.mu.Unlock()
+
+		return c.lead(ctx, key, fl, compute)
+	}
+}
+
+// lead runs compute for fl and publishes the outcome. The deferred release also runs on a
+// panic, so waiters are never left blocked on a flight that will not finish.
+func (c *renderCache) lead(ctx context.Context, key string, fl *renderFlight, compute func(context.Context) (Figure, error)) (Figure, error) {
+	defer func() {
+		c.mu.Lock()
+		delete(c.inflight, key)
+		c.mu.Unlock()
+		close(fl.done)
+	}()
+	fig, err := compute(ctx)
+	if err != nil && ctx.Err() != nil {
+		return Figure{}, err
+	}
+	fl.fig, fl.err, fl.abandoned = fig, err, false
+	if err == nil {
+		c.store(key, fig)
+	}
+	return cloneFigure(fig), err
+}
+
+func (c *renderCache) store(key string, fig Figure) {
+	size := len(fig.SVG)
+	if size > renderCacheBytes {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.entries[key]; ok {
+		c.bytes -= len(el.Value.(*renderEntry).fig.SVG)
+		c.order.Remove(el)
+	}
+	c.entries[key] = c.order.PushFront(&renderEntry{key: key, fig: cloneFigure(fig)})
+	c.bytes += size
+	for c.order.Len() > renderCacheEntries || c.bytes > renderCacheBytes {
+		oldest := c.order.Back()
+		e := oldest.Value.(*renderEntry)
+		c.order.Remove(oldest)
+		delete(c.entries, e.key)
+		c.bytes -= len(e.fig.SVG)
+	}
+}
+
+// cloneFigure copies the slice a caller could otherwise share with the cache.
+func cloneFigure(f Figure) Figure {
+	f.Nodes = slices.Clone(f.Nodes)
+	return f
+}
+
 // ids turns paths and names into figure ids that stay unique after sanitizing.
 type ids map[string]bool
 
@@ -270,9 +420,7 @@ func (l Lens) describe() string {
 
 // render lays g out with magus/figure. The authored budgets always apply: an oversized
 // figure is a FindingsError telling the reader to narrow the lens, never a generated()
-// escape.
-//
-// TODO: cache the rendered figure per graph and lens; every request compiles figure anew.
+// escape. Every call compiles figure anew; the server reaches it through renderCache.
 func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()

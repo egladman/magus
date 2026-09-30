@@ -16,10 +16,13 @@ import (
 // Path is the listing route; a figure is served at Path + "/" + its id.
 const Path = "/api/v1/diagrams"
 
-// workspace is what the figures read. *magus.Magus supplies all but ImportGraph.
+// workspace is what the figures read. *magus.Magus supplies all but ImportGraph and
+// SymbolIndex.
 type workspace interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
 	ImportGraph(ctx context.Context) (types.ImportGraph, error)
+	// SymbolIndex reports whether a symbol index exists without loading its shards.
+	SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error)
 	ReviewOrigin(ctx context.Context) types.ReviewOrigin
 	RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error)
 }
@@ -27,18 +30,22 @@ type workspace interface {
 // Handler serves the figures the workspace can draw, rendered server-side by the embedded
 // magus/figure module. GET /api/v1/diagrams lists them: projects, targets:<project> per
 // project, and imports. GET /api/v1/diagrams/{id}?scope=&focus=&depth= renders one through
-// its lens; scope repeats, and depth defaults to 1 when focus is set.
+// its lens; scope repeats, and depth defaults to 1 when focus is set. A rendered figure is
+// cached by the graph's content and the lens, so an unchanged graph is drawn once.
 //
 // A figure the module refuses to draw, most often one over its node or edge budget, is a
 // 422 whose body is its finding. An import figure without a symbol index is a 409.
 type Handler struct {
 	handler.Base
 	ws workspace
+	// cache holds rendered figures across requests; compile is what fills it.
+	cache   *renderCache
+	compile func(ctx context.Context, g graph, desc, anchorHref string) (Figure, error)
 }
 
 // NewHandler returns the diagrams handler reading from ws.
 func NewHandler(ws workspace, log *slog.Logger) *Handler {
-	h := &Handler{ws: ws}
+	h := &Handler{ws: ws, cache: newRenderCache(), compile: render}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -81,10 +88,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.Fail(w, r, "target graph", err)
 		return
 	}
-	// TODO: this loads the symbol shards only to report indexed; a cheaper probe would do.
-	ig, err := h.ws.ImportGraph(r.Context())
+	idx, err := h.ws.SymbolIndex(r.Context())
 	if err != nil {
-		h.Fail(w, r, "import graph", err)
+		h.Fail(w, r, "symbol index", err)
 		return
 	}
 	out := []Entry{{ID: KindProjects, Kind: KindProjects, Title: "Workspace projects"}}
@@ -96,7 +102,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			Project: p.Path,
 		})
 	}
-	out = append(out, Entry{ID: KindImports, Kind: KindImports, Title: "Package imports", Indexed: &ig.Indexed})
+	out = append(out, Entry{ID: KindImports, Kind: KindImports, Title: "Package imports", Indexed: &idx.Indexed})
 	handler.WriteJSON(w, map[string][]Entry{"diagrams": out})
 }
 
@@ -124,7 +130,10 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	sourceURL := h.sourceURL(r.Context())
-	fig, err := render(r.Context(), g, lens.describe(), anchorTemplate(sourceURL))
+	desc, href := lens.describe(), anchorTemplate(sourceURL)
+	fig, err := h.cache.get(r.Context(), renderKey(g, desc, href), func(ctx context.Context) (Figure, error) {
+		return h.compile(ctx, g, desc, href)
+	})
 	var findings *FindingsError
 	if errors.As(err, &findings) {
 		http.Error(w, findings.Findings, http.StatusUnprocessableEntity)
