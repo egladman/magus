@@ -149,6 +149,77 @@ func absAll(t *testing.T, paths []string) []string {
 	return out
 }
 
+// A host declares a module's types lazily, from its resolver, into the session it
+// holds. An aliased import runs in a sub-session that copied the root's types
+// before that call, and must still see them, however deep the alias sits.
+func TestSession_HostTypesReachAnAliasedImport(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	for name, src := range map[string]string{
+		"good":  `import "host"; export fun f(s: host\Site) > str { return s.file; }`,
+		"bad":   `import "host"; fun f(s: host\Site) > str { return s.file; } export final n = f("x");`,
+		"outer": `import "bad" as bad; export final n = 1;`,
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+".buzz"), []byte(src), 0o644))
+	}
+	exec := func(src string) error {
+		s := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(filepath.Join(dir, "?.buzz")))
+		declared := false
+		s.SetModuleResolver(func(importPath string) (vm.Value, bool) {
+			if importPath != "host" {
+				return vm.Null, false
+			}
+			if !declared {
+				declared = true
+				s.DeclareModuleTypes("host", `export object Site { file: str = "" }`)
+			}
+			return vm.NewMap(), true
+		})
+		return s.Exec(ctx, src)
+	}
+
+	require.NoError(t, exec(`import "good" as good;`))
+	for _, src := range []string{`import "bad" as bad;`, `import "outer" as outer;`} {
+		err := exec(src)
+		require.Error(t, err, src)
+		assert.Contains(t, err.Error(), `cannot pass str as argument "s" of type Site`, src)
+	}
+}
+
+func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
+	ctx := context.Background()
+	exec := func(src string) (*buzz.Session, error) {
+		s := buzz.NewSession(ctx, buzz.WithEmbedded())
+		buzzstd.Register(s)
+		return s, s.Exec(ctx, src)
+	}
+	s, err := exec(`import "serialize";
+fun amount(b: serialize\Boxed) > int { return b.q(["a"]).integerValue() + b.q("a").integerValue(); }
+final n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+final m = amount(serialize\Boxed.init({"a": 4}));`)
+	require.NoError(t, err)
+	assert.Equal(t, int64(6), s.Globals()["n"].AsInt())
+	assert.Equal(t, int64(8), s.Globals()["m"].AsInt())
+
+	_, err = exec(`import "serialize"; fun amount(b: serialize\Boxed) > int { return b.integerValue(); } final _n = amount(42);`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `cannot pass int as argument "b" of type Boxed`)
+}
+
+// Each aliased import runs in its own sub-session, and the second to import a native
+// module with declarations still needs its types after the first collected them.
+func TestSession_SiblingAliasImportsEachCollectModuleDecls(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	lib := `import "serialize"; export fun amount(b: serialize\Boxed) > int { return b.integerValue(); }`
+	for _, name := range []string{"first", "second"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+".buzz"), []byte(lib), 0o644))
+	}
+	s := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(filepath.Join(dir, "?.buzz")))
+	buzzstd.Register(s)
+	require.NoError(t, s.Exec(ctx, `import "first" as first; import "second" as second;`))
+}
+
 func TestSession_Compile_And_ExecChunk(t *testing.T) {
 	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	chunk, err := s.Compile(`var y: str = "hello";`)

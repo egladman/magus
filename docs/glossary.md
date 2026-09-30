@@ -45,6 +45,14 @@ middle of the work hierarchy (Spell to Op to Target). See
 A language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a
 toolchain's real commands. See [spells.md](concepts/spells.md).
 
+### Manifest
+
+The file that declares what a package is: its name, dependencies, entry points
+and tool config (`go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`). How
+the workspace builds, tests and lints the package belongs in the magusfile, not
+in the manifest's scripts. See
+[spells.md](concepts/spells.md#manifests-and-magusfiles).
+
 ### Charm
 
 An execution modifier attached with `:` (`lint:rw`) that changes _how_ a target

@@ -434,7 +434,7 @@ curl -s <asset-url> | sha256sum
 ```
 
 The JavaScript is unminified enough to read; start at the console's
-`console/src/console/graph/main.ts` - `loadGraph` and `readGraphFile` are the
+`console/src/apps/graph/main.ts` - `loadGraph` and `readGraphFile` are the
 functions that ingest a graph (the `#data=`/`#src=`/demo fallback chain, and
 drag-drop/file-input/`launchQueue` respectively), and there is no function
 that sends it out.

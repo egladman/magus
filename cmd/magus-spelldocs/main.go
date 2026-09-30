@@ -188,13 +188,17 @@ func main() {
 // target forks (`go tool golangci-lint run ./...`). The declared defaults trail
 // the fixed args, and TrailingArgs (an operand safe only on a fully bare call,
 // see spells.Command.TrailingArgs) trail those, as the runner appends them on a
-// no-args invocation, the invocation this page documents. Empty for a marker op
-// with no command (an opaque spell's aggregate target).
+// no-args invocation, the invocation this page documents. A NeedsArgs op has no
+// runnable bare form, so it ends in the <args> placeholder for the caller's part.
+// Empty for a marker op with no command (an opaque spell's aggregate target).
 func resolvedArgv(op spells.Op) string {
 	if op.Bin == "" {
 		return ""
 	}
 	argv := slices.Concat([]string{op.Bin}, op.Args, op.DefaultArgs, op.TrailingArgs)
+	if op.NeedsArgs != "" {
+		argv = append(argv, "<args>")
+	}
 	return strings.TrimSpace(strings.Join(argv, " "))
 }
 

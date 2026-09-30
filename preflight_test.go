@@ -157,12 +157,13 @@ func TestPreflightCountsAsTheComposedGateRun(t *testing.T) {
 
 	require.NoError(t, f.m.Run(ctx, targets))
 	require.Equal(t, 1, f.count("a:composer"))
+	require.Equal(t, 1, f.count("a:gate"), "a miss runs the skip_cache member before the key")
 	key, _, err := f.m.ComputeTargetKey(ctx, "a", "composer", nil)
 	require.NoError(t, err)
 
 	require.NoError(t, f.m.Run(ctx, targets, WithPreflight("gate")))
 	assert.Equal(t, 1, f.count("a:composer"), "the composer replays the entry a run without the flag wrote")
-	assert.Equal(t, 1, f.count("a:gate"), "the gate ran once, in the preflight pass")
+	assert.Equal(t, 2, f.count("a:gate"), "the gate ran once more, in the preflight pass")
 
 	after, _, err := f.m.ComputeTargetKey(ctx, "a", "composer", nil)
 	require.NoError(t, err)

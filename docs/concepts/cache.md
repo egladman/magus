@@ -91,6 +91,8 @@ magusfiles and any spell sources specific to that target, but it does not inheri
 the broad project baseline. This is what lets one target be precise without making
 its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-target)).
 
+<!--diagram:inputs-outputs-->
+
 ### Excluding files from a glob
 
 A `!` argument excludes. It narrows every glob of the same call, wherever it sits in

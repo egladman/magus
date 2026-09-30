@@ -3928,3 +3928,47 @@ func TestGitObjectBatchFailureIsSticky(t *testing.T) {
 type nopWriteCloser struct{ io.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
+
+// A rebase stopped on a pick that applied cleanly has no conflict and is still underway,
+// in the linked worktree that runs it and in no other checkout of the repository. A root
+// holding .git is read with no git started; a directory under it asks git.
+func TestGitOperationInProgressWithoutAConflict(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
+	require.NoError(t, os.WriteFile(filepath.Join(linked, "a.txt"), []byte("two\n"), 0o644))
+	gitRun(t, linked, "commit", "-q", "-am", "two")
+	cmd := exec.Command("git", "-C", linked, "rebase", "--exec", "false", "HEAD~1")
+	cmd.Env = gitEnv()
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "the rebase was expected to stop: %s", out)
+
+	op, err := gitVCS{}.OperationInProgress(t.Context(), filepath.Join(linked, "sub"))
+	require.NoError(t, err)
+	assert.Equal(t, types.OperationRebase, op)
+
+	t.Setenv("PATH", "")
+	for at, want := range map[string]string{linked: types.OperationRebase, dir: ""} {
+		op, err := gitVCS{}.OperationInProgress(t.Context(), at)
+		require.NoError(t, err)
+		assert.Equal(t, want, op, at)
+	}
+}
+
+// A revert that conflicts leaves REVERT_HEAD, which names it apart from a cherry-pick.
+func TestGitOperationInProgressNamesARevert(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	gitRun(t, dir, "commit", "-q", "-am", "two")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("three\n"), 0o644))
+	gitRun(t, dir, "commit", "-q", "-am", "three")
+	cmd := exec.Command("git", "-C", dir, "revert", "--no-edit", "HEAD~1")
+	cmd.Env = gitEnv()
+	require.Error(t, cmd.Run(), "the revert was expected to conflict")
+
+	op, err := gitVCS{}.OperationInProgress(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, types.OperationRevert, op)
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -23,6 +24,10 @@ import (
 // docsShardName is the singleton shard holding markdown doc nodes and the edges
 // that tie them to what they document.
 const docsShardName = "@docs"
+
+// attrUnknownTargets lists, on a doc node, each "<project>:<target>@<line>" a fenced run
+// command names in a project of this workspace that does not define it.
+const attrUnknownTargets = "unknown_targets"
 
 var (
 	// mgsRe finds MGS#### diagnostic-code mentions in doc bodies.
@@ -70,6 +75,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 	// "magus <sub>" -> the manpage doc documenting it; a doc mentioning `magus run` then
 	// references that manpage (the command's doc IS its node). Sorted keys -> deterministic.
 	manCmds, manDoc := manpageCommands(files)
+	targets := newRunIndex(projects)
 
 	for _, rel := range files {
 		src, err := os.ReadFile(filepath.Join(root, rel))
@@ -144,6 +150,31 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			node.Attrs[attrDiagnostic] = string(types.DanglingDocReference)
 			node.Attrs["unknown_codes"] = strings.Join(unknownCodes, ",")
 		}
+
+		body := docs.StripFrontmatter(content)
+		headings, runs := parseDocBody([]byte(body))
+		bodyLine := strings.Count(content[:len(content)-len(body)], "\n")
+		seenRun := map[[2]string]bool{}
+		var unknownTargets []string
+		for _, r := range runs {
+			from := dID
+			if r.anchor != "" {
+				from = docSectionID(rel, r.anchor)
+			}
+			ids, missing := targets.resolve(r.cmd)
+			for _, id := range ids {
+				if k := [2]string{from, id}; !seenRun[k] {
+					seenRun[k] = true
+					s.Edges = append(s.Edges, extractedEdge(from, id, types.RelationDocuments, rel))
+				}
+			}
+			for _, m := range missing {
+				unknownTargets = append(unknownTargets, m+"@"+strconv.Itoa(bodyLine+r.line))
+			}
+		}
+		if len(unknownTargets) > 0 {
+			node.Attrs[attrUnknownTargets] = strings.Join(unknownTargets, ",")
+		}
 		s.Nodes = append(s.Nodes, node)
 
 		// Index each markdown heading as its own node so an agent retrieves the relevant
@@ -157,7 +188,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			id    string
 		}
 		stack := []frame{{level: 0, id: dID}}
-		for _, h := range docHeadings([]byte(docs.StripFrontmatter(content))) {
+		for _, h := range headings {
 			sID := docSectionID(rel, h.anchor)
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{
 				ID:     sID,
@@ -235,25 +266,212 @@ type docHeading struct {
 // with the anchor the site renders and the plain text of the heading. Content inside a fenced
 // code block is not a heading, because the parser does not treat it as one.
 func docHeadings(body []byte) []docHeading {
+	h, _ := parseDocBody(body)
+	return h
+}
+
+// docRun is one `magus run` command in a fenced shell block, under the heading whose
+// anchor it carries (empty before the first heading), at a 1-based line of the body.
+type docRun struct {
+	anchor string
+	line   int
+	cmd    runCommand
+}
+
+// shellFences are the fence languages whose lines are commands a reader types. An
+// unlabeled or text fence may hold output as well as input, so it states no command.
+var shellFences = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "shell": true, "console": true,
+	"shell-session": true, "powershell": true, "pwsh": true,
+}
+
+// parseDocBody parses a markdown body once for its headings and its fenced run commands.
+func parseDocBody(body []byte) ([]docHeading, []docRun) {
 	root := headingMD.Parser().Parse(text.NewReader(body))
-	var out []docHeading
+	var heads []docHeading
+	var runs []docRun
+	var lineStarts []int
+	anchor := ""
 	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		h, ok := n.(*ast.Heading)
-		if !ok || !entering {
+		if !entering {
 			return ast.WalkContinue, nil
 		}
-		raw, ok := h.AttributeString("id")
-		if !ok {
+		switch t := n.(type) {
+		case *ast.Heading:
+			raw, ok := t.AttributeString("id")
+			if !ok {
+				return ast.WalkSkipChildren, nil
+			}
+			id, _ := raw.([]byte)
+			if len(id) == 0 {
+				return ast.WalkSkipChildren, nil
+			}
+			anchor = string(id)
+			heads = append(heads, docHeading{level: t.Level, text: headingText(t, body), anchor: anchor})
+			return ast.WalkSkipChildren, nil
+		case *ast.FencedCodeBlock:
+			if !shellFences[strings.ToLower(string(t.Language(body)))] {
+				return ast.WalkSkipChildren, nil
+			}
+			for i := 0; i < t.Lines().Len(); i++ {
+				seg := t.Lines().At(i)
+				cmds := runCommands(string(seg.Value(body)))
+				if len(cmds) == 0 {
+					continue
+				}
+				if lineStarts == nil {
+					lineStarts = newlineOffsets(body)
+				}
+				line, _ := slices.BinarySearch(lineStarts, seg.Start)
+				for _, c := range cmds {
+					runs = append(runs, docRun{anchor: anchor, line: line + 1, cmd: c})
+				}
+			}
 			return ast.WalkSkipChildren, nil
 		}
-		id, _ := raw.([]byte)
-		if len(id) == 0 {
-			return ast.WalkSkipChildren, nil
-		}
-		out = append(out, docHeading{level: h.Level, text: headingText(h, body), anchor: string(id)})
-		return ast.WalkSkipChildren, nil
+		return ast.WalkContinue, nil
 	})
+	return heads, runs
+}
+
+// newlineOffsets returns the byte offset of every newline in b, so the count of those
+// before an offset is its 0-based line.
+func newlineOffsets(b []byte) []int {
+	var out []int
+	for i, c := range b {
+		if c == '\n' {
+			out = append(out, i)
+		}
+	}
 	return out
+}
+
+// runCommand is one `magus run <target> [project...]`: the target without its charms,
+// and the projects named before the first flag. Past a flag a token may be that flag's
+// value, so nothing after one is read as a project.
+type runCommand struct {
+	target   string
+	projects []string
+}
+
+// shellSplit cuts a shell line at the operators that start another command.
+var shellSplit = strings.NewReplacer("&&", "\n", "||", "\n", "|", "\n", ";", "\n")
+
+// runCommands returns the `magus run` and `./magus run` commands on one shell line,
+// leaving out a spell op (`go::go-test`), a --stdin target, and any command whose target
+// or project is a placeholder or variable.
+func runCommands(line string) []runCommand {
+	line = strings.TrimPrefix(strings.TrimSpace(line), "$ ")
+	var out []runCommand
+	for _, seg := range strings.Split(shellSplit.Replace(line), "\n") {
+		f := strings.Fields(seg)
+		if i := slices.IndexFunc(f, func(s string) bool { return strings.HasPrefix(s, "#") }); i >= 0 {
+			f = f[:i]
+		}
+		if len(f) < 3 || (f[0] != "magus" && f[0] != "./magus") || f[1] != "run" {
+			continue
+		}
+		if c, ok := parseRunArgs(f[2:]); ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func parseRunArgs(args []string) (runCommand, bool) {
+	ref := args[0]
+	if strings.HasPrefix(ref, "-") || strings.Contains(ref, "::") || !shellLiteral(ref) {
+		return runCommand{}, false
+	}
+	t, err := types.ParseTarget(ref)
+	// `magus run ls` lists the selection; it is the CLI's, not a magusfile's.
+	if err != nil || t.Name == "ls" {
+		return runCommand{}, false
+	}
+	c := runCommand{target: t.Name}
+	for _, a := range args[1:] {
+		if strings.HasPrefix(a, "-") {
+			break
+		}
+		if !shellLiteral(a) {
+			return runCommand{}, false
+		}
+		if a != "/" {
+			a = path.Clean(a)
+		}
+		c.projects = append(c.projects, a)
+	}
+	return c, true
+}
+
+// shellLiteral reports whether a token is the same word after the shell expands it.
+func shellLiteral(s string) bool {
+	return !strings.ContainsAny(s, "<>$\"'`{}()*?[]~\\")
+}
+
+// runIndex answers which target nodes a run command selects, from the workspace root:
+// the targets each project defines, keyed by project path.
+type runIndex struct {
+	defines map[string]map[string]bool
+	paths   []string
+}
+
+func newRunIndex(projects []types.TargetGraphProject) runIndex {
+	ix := runIndex{defines: make(map[string]map[string]bool, len(projects))}
+	for _, p := range projects {
+		names := make(map[string]bool, len(p.Nodes))
+		for _, n := range p.Nodes {
+			names[n.Name] = true
+		}
+		ix.defines[p.Path] = names
+		ix.paths = append(ix.paths, p.Path)
+	}
+	slices.Sort(ix.paths)
+	return ix
+}
+
+// resolve returns the target nodes c runs, and as "<project>:<target>" each target it
+// names in a workspace project that does not define it. With no project named, a missing
+// target claims nothing; a project this workspace lacks is an illustration and resolves
+// to nothing.
+func (ix runIndex) resolve(c runCommand) (ids, missing []string) {
+	all := func() []string {
+		var out []string
+		for _, p := range ix.paths {
+			if ix.defines[p][c.target] {
+				out = append(out, targetID(p, c.target))
+			}
+		}
+		return out
+	}
+	if len(c.projects) == 0 {
+		if root, ok := ix.defines["."]; ok {
+			if root[c.target] {
+				ids = append(ids, targetID(".", c.target))
+			}
+			return ids, nil
+		}
+		return all(), nil
+	}
+	for _, p := range c.projects {
+		if p == "/" {
+			found := all()
+			if len(found) == 0 {
+				missing = append(missing, "/:"+c.target)
+			}
+			ids = append(ids, found...)
+			continue
+		}
+		names, ok := ix.defines[p]
+		switch {
+		case !ok:
+		case names[c.target]:
+			ids = append(ids, targetID(p, c.target))
+		default:
+			missing = append(missing, p+":"+c.target)
+		}
+	}
+	return ids, missing
 }
 
 // headingText is the plain text of a heading: every text and code-span segment under it,

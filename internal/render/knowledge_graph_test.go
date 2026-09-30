@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/require"
 )
 
 func knowledgeSubgraph() types.KnowledgeGraphOutput {
@@ -27,32 +26,6 @@ func knowledgeSubgraph() types.KnowledgeGraphOutput {
 			// An edge to a node outside the subgraph is dropped by both formats.
 			{Source: "target:pkg/a:build", Target: "spell:missing", Relation: "uses", Confidence: "extracted", Score: 1},
 		},
-	}
-}
-
-func TestWriteKnowledgeMermaid(t *testing.T) {
-	var buf bytes.Buffer
-	if err := WriteKnowledgeMermaid(&buf, knowledgeSubgraph()); err != nil {
-		t.Fatal(err)
-	}
-	got := buf.String()
-
-	for _, want := range []string{
-		"graph TD",
-		`|"contains"|`,        // relation rides the edge label
-		`|"uses"|`,            // both intra-subgraph relations present
-		"classDef kind_spell", // nodes colored by kind
-		"classDef kind_op",
-		"classDef kind_target",
-		`("go")`, // spell shape is rounded
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("mermaid output missing %q\n%s", want, got)
-		}
-	}
-	// The edge to a node outside the subgraph must not appear.
-	if strings.Contains(got, "spell:missing") || strings.Contains(got, "spell_missing") {
-		t.Errorf("mermaid leaked an out-of-subgraph edge target\n%s", got)
 	}
 }
 
@@ -153,50 +126,5 @@ func TestWriteKnowledgeGraphMLDeterministic(t *testing.T) {
 	}
 	if a.String() != b.String() {
 		t.Fatal("two writes of the same graph differ")
-	}
-}
-
-// knowledgeClassDefNames are kind_<kind> names from knowledgeKindPalette in
-// knowledge_graph.go.
-var knowledgeClassDefNames = []string{
-	"kind_project",
-	"kind_spell",
-	"kind_target",
-	"kind_op",
-	"kind_charm",
-	"kind_module",
-	"kind_method",
-	"kind_diagnostic",
-	"kind_doc",
-}
-
-// TestKnowledgeMermaidClassDefs asserts WriteKnowledgeMermaid writes a kind_* classDef
-// for every kind in knowledgeKindPalette, via knowledgeGraphIR.
-func TestKnowledgeMermaidClassDefs(t *testing.T) {
-	// Build a KnowledgeGraphOutput with one node of every kind in the palette
-	// so that all kind_* classDefs appear in the output.
-	var nodes []types.KnowledgeNode
-	var links []types.KnowledgeEdge
-	prev := ""
-	for i, k := range []string{
-		types.KindProject, types.KindSpell, types.KindTarget, types.KindOp,
-		types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,
-		types.KindDoc,
-	} {
-		id := k + ":test"
-		nodes = append(nodes, types.KnowledgeNode{ID: id, Kind: k, Label: k})
-		if i > 0 {
-			links = append(links, types.KnowledgeEdge{Source: prev, Target: id, Relation: "references"})
-		}
-		prev = id
-	}
-	out := types.KnowledgeGraphOutput{Nodes: nodes, Links: links}
-	var buf bytes.Buffer
-	require.NoError(t, WriteKnowledgeMermaid(&buf, out))
-	got := buf.String()
-	for _, name := range knowledgeClassDefNames {
-		require.True(t, strings.Contains(got, "classDef "+name+" "),
-			"WriteKnowledgeMermaid output missing classDef %q - "+
-				"update knowledgeClassDefNames in this test to match knowledge_graph.go", name)
 	}
 }

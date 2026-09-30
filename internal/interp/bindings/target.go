@@ -425,7 +425,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	target := types.Normalize(ref.Target)
 	lim := cache.LimiterFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
-		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep.Dir, target)
+		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep, target)
 	})
 }
 
@@ -436,7 +436,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 // ctx.glob (ctx.needs(ctx.glob("*-generate"))). A string is never accepted:
 // a name pattern becomes handles through ctx.glob, so needs only ever sees target
 // functions and stays monomorphic. Same-project targets are awaited through the VM
-// pool / TargetMemo path (runBuzzDependencies); a cross-project handle dispatches via
+// pool / TargetRuns path (runBuzzDependencies); a cross-project handle dispatches via
 // CrossDispatch.
 func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -734,7 +734,7 @@ func advisoryMembers(ctx context.Context, names []string) map[string]string {
 }
 
 // dispatchBuzzTargets awaits names: via the Buzz VM pool when one is in ctx (parallel,
-// TargetMemo-deduped), else inline sequential.
+// TargetRuns-deduped), else inline sequential.
 func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
 	if len(names) == 0 {
 		return nil

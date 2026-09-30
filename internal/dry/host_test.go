@@ -2,16 +2,64 @@ package dry
 
 import (
 	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
 	"github.com/egladman/magus/internal/describe"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"slices"
-	"strings"
-	"testing"
 )
+
+// TestDryCheckParityWithEngine holds this host to the engine's checker: every tour and
+// spell example compiles under both, or both refuse it with the same first error. The
+// engine side is the session interp builds with the bindings registered, compiled
+// without running, so a verdict here is the checker's alone.
+func TestDryCheckParityWithEngine(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "..", "docs", "tour", "*.buzz"))
+	require.NoError(t, err)
+	err = filepath.WalkDir(filepath.Join("..", "..", "spells", "examples"), func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".buzz") {
+			files = append(files, path)
+		}
+		return err
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+
+	verdict := func(err error) string {
+		if err == nil {
+			return "ok"
+		}
+		return err.Error()
+	}
+	for _, path := range files {
+		t.Run(filepath.ToSlash(path), func(t *testing.T) {
+			src, err := os.ReadFile(path)
+			require.NoError(t, err)
+			ctx := context.Background()
+
+			engine, err := interp.NewBuzzReplSession(ctx, t.TempDir(), false)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = engine.Close() })
+			_, engineErr := engine.LoadString(string(src))
+
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			t.Cleanup(func() { _ = sess.Close() })
+			installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
+			_, dryErr := sess.Compile(string(src))
+
+			assert.Equal(t, verdict(engineErr), verdict(dryErr))
+		})
+	}
+}
 
 // TestMagusSurfaceMatchesBindings is the drift guard between the two host
 // implementations of the magus.* surface: the real Buzz bindings

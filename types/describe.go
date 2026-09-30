@@ -1,6 +1,7 @@
 package types
 
 import (
+	"cmp"
 	"path"
 	"slices"
 	"strings"
@@ -303,6 +304,24 @@ type TargetGraphNode struct {
 	FootprintErr error `json:"-" yaml:"-" buzz:"-"`
 }
 
+// TargetRef names one target in the workspace: its project's workspace-relative path,
+// never empty, and its name. It is comparable, so it keys what an invocation records about
+// the targets it ran.
+type TargetRef struct {
+	Project string `json:"project" yaml:"project"`
+	Target  string `json:"target"  yaml:"target"`
+}
+
+// Ref spells the reference the way the CLI takes a target ref, "project:target".
+func (r TargetRef) Ref() string {
+	return r.Project + ":" + r.Target
+}
+
+// Compare orders refs by project, then target.
+func (r TargetRef) Compare(o TargetRef) int {
+	return cmp.Or(strings.Compare(r.Project, o.Project), strings.Compare(r.Target, o.Target))
+}
+
 // CrossTargetRef names one target in another project: a target-level cross-project
 // dependency. Project is workspace-relative (resolved from the dot-/repo-relative
 // path written in the magusfile); Target is the kebab-normalized target name.
@@ -495,6 +514,8 @@ type TargetGraphProject struct {
 	Engine string            `json:"engine,omitempty" yaml:"engine,omitempty"`
 	Nodes  []TargetGraphNode `json:"nodes,omitempty"  yaml:"nodes,omitempty"`
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
+	// Layers is magus.project's "layers" key (Project.Layers), stamped onto dir nodes.
+	Layers map[string]string `json:"layers,omitempty" yaml:"layers,omitempty" buzz:"-"`
 	// DependsOn are the workspace-relative paths of the projects this project
 	// depends on (its project-level deps, declared in magus.project).
 	// They draw the project -> project arrows in the combined workspace graph;
@@ -687,7 +708,10 @@ type EvaluatedTarget struct {
 	Outputs []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	// Chain is the targets this one composes, in invocation order; empty when it
 	// composes nothing. See TargetGraphNode.Chain, which it is copied from.
-	Chain     []ChainStep      `json:"chain,omitempty"      yaml:"chain,omitempty"`
+	Chain []ChainStep `json:"chain,omitempty"      yaml:"chain,omitempty"`
+	// BeforeKey is the skip_cache members of the chain that run before this target's key
+	// is taken, because the key reads what they write; see ChainSkipCacheSteps.
+	BeforeKey []TargetRef      `json:"before_key,omitempty" yaml:"before_key,omitempty"`
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`

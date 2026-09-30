@@ -10,6 +10,7 @@ import {
   isReadOnly,
   mayLoadBundledDemo,
   parseRefusal,
+  readRefusal,
   signInCommand,
 } from "./server";
 
@@ -193,4 +194,34 @@ test("parseRefusal keeps a body without a Help link and rejects any other shape"
   assert.equal(parseRefusal({ error: { message: "" } }), null);
   assert.equal(parseRefusal("plain text"), null);
   assert.equal(parseRefusal(null), null);
+});
+
+const envelopeBody = JSON.stringify({
+  error: {
+    code: 400,
+    message: 'MGS9007: unknown target "cli"',
+    status: "INVALID_ARGUMENT",
+    details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "MGS9007" }],
+  },
+});
+
+test("readRefusal takes the envelope's message, not the raw JSON", async () => {
+  assert.deepEqual(await readRefusal(new Response(envelopeBody, { status: 400 })), {
+    message: 'MGS9007: unknown target "cli"',
+  });
+});
+
+test("readRefusal shows a body that is not an envelope as text", async () => {
+  assert.deepEqual(await readRefusal(new Response("  no pull request for this branch\n")), {
+    message: "no pull request for this branch",
+  });
+  assert.deepEqual(await readRefusal(new Response('{"error":"the old string shape"}')), {
+    message: '{"error":"the old string shape"}',
+  });
+});
+
+test("readRefusal answers null for an empty or unreadable body", async () => {
+  assert.equal(await readRefusal(new Response("  ")), null);
+  const unreadable = { text: () => Promise.reject(new Error("aborted")) } as unknown as Response;
+  assert.equal(await readRefusal(unreadable), null);
 });

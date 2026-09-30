@@ -1,0 +1,113 @@
+// figure-modules-type-check-strictly holds every docs figure module to `magus buzz --check`
+// in upstream-strict mode, and reports its warnings as well as its errors: --check exits 0
+// on a warning, so a BZZ3002 in a figure would otherwise ship. The check runs from docs/,
+// where a figure's `site/diagrams/...` imports resolve.
+namespace figurecheck;
+
+import "assert";
+import "magus";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final FIGURES = "docs/site/diagrams/";
+
+// DIAGNOSTIC matches one line --check prints: an optional code, the file as passed, its
+// position and the message. Unanchored, because a raised magus\cmd prefixes the first one.
+final DIAGNOSTIC = std\pattern(`(\[BZZ\d+\] )?buzz: (\S+?\.buzz):(\d+):(\d+): (.*)`);
+
+final FIX = "Label every argument after the first (name: value) and clear the warning: a figure is pure Buzz, "
+    + "checked as `magus buzz --check` runs it from docs/.";
+
+// reads keys the figure module too: every figure imports it, so an edit there can change
+// its verdict.
+export fun reads() > [str] {
+    return ["docs/site/diagrams/*.buzz", "libs/figure/figure.buzz"];
+}
+
+// findings turns --check's output into one finding per diagnostic, taking the `see:` line
+// under it as the url.
+export fun findings(output: str) > [Finding] {
+    final found = mut [<Finding>];
+    final lines = output.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final m = DIAGNOSTIC.match(lines[i]);
+        i = i + 1;
+        if (m == null) {
+            continue;
+        }
+        var url = "";
+        if (i < lines.len() and lines[i].trim().startsWith("see: ")) {
+            url = lines[i].trim().sub(5);
+        }
+        found.append(Finding{ path = "docs/" + m![2], line = std\parseInt(m![3]) ?? 0, col = std\parseInt(m![4]) ?? 0,
+            message = m![1] + m![5], fix = FIX, url = url });
+    }
+    return found;
+}
+
+// check runs one --check over the figures.
+export fun check(files: [Path]) > [Finding] !> any {
+    final argv = mut [<str>];
+    argv.append("--check");
+    var base = "";
+    foreach (f in files) {
+        if (f.value.startsWith(FIGURES)) {
+            argv.append(f.value.sub("docs/".len()));
+            base = f.base;
+        }
+    }
+    if (argv.len() == 1) {
+        return [<Finding>];
+    }
+    final dir = if (base == "") "docs" else base + "/docs";
+    var output = "";
+    var raised = "";
+    try {
+        output = magus\cmd("buzz", args: argv, opts: {"dir": dir, "quiet": true}).stderr;
+    } catch (e) {
+        raised = "{e}";
+        output = raised;
+    }
+    final found = findings(output);
+    if (found.len() == 0 and raised != "") {
+        return [Finding{ path = FIGURES, message = "magus buzz --check failed without a diagnostic: " + raised,
+            fix = "Run `magus buzz --check site/diagrams/<figure>.buzz` from docs/ and fix what it reports." }];
+    }
+    return found;
+}
+
+test "findings reads each diagnostic, its code and its see line" {
+    final output = "magus.cmd: buzz --check site/diagrams/a.buzz exited with code 1: buzz: site/diagrams/a.buzz:88:48: argument 2 must be labeled (name: value) (strict mode)\n"
+        + "[BZZ3002] buzz: site/diagrams/b.buzz:12:9: warning: \"s\" is rebuilt from itself inside a loop\n"
+        + "  see: https://example.test/BZZ3002.md\n";
+    final got = findings(output);
+    assert\equal(support\messages(got), want: [
+        "argument 2 must be labeled (name: value) (strict mode)",
+        "[BZZ3002] warning: \"s\" is rebuilt from itself inside a loop",
+    ], message: "one finding per diagnostic");
+    assert\equal(got[0].path, want: "docs/site/diagrams/a.buzz", message: "workspace path");
+    assert\equal(got[0].line, want: 88, message: "line");
+    assert\equal(got[0].col, want: 48, message: "col");
+    assert\equal(got[0].url, want: "", message: "no see line under the first");
+    assert\equal(got[1].url, want: "https://example.test/BZZ3002.md", message: "see line");
+}
+
+test "a figure with an unlabeled argument or a warning is reported, a clean one is not" {
+    final lib = "fun add(a: int, b: int) > int \{\n    return a + b;\n}\n\n";
+    final got = check(support\fixture({
+        "docs/site/diagrams/clean.buzz": "namespace clean;\n\n" + lib + "fun sum() > int \{\n    return add(1, b: 2);\n}\n",
+        "docs/site/diagrams/positional.buzz": "namespace positional;\n\n" + lib + "fun sum() > int \{\n    return add(1, 2);\n}\n",
+        "docs/site/diagrams/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
+            + "    foreach (p in parts) \{\n        s = s + p;\n    }\n    return s;\n}\n",
+    }));
+    final paths = mut [<str>];
+    foreach (f in got) {
+        paths.append("{f.path}:{f.line}");
+    }
+    assert\equal(paths.len(), want: 2, message: "two findings: {paths} {support\messages(got)}");
+    assert\contains(paths, item: "docs/site/diagrams/positional.buzz:8", message: "the unlabeled argument");
+    assert\isTrue(got[0].path == "docs/site/diagrams/rebuilt.buzz" or got[1].path == "docs/site/diagrams/rebuilt.buzz",
+        message: "the warning fails too");
+}

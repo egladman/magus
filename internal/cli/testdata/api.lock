@@ -119,7 +119,6 @@ flag agent/dir
 flag agent/dry-run
 flag agent/force
 flag agent/global
-flag agent/prune
 flag agent/skill-form
 flag agent/tar
 flag broker/idle-exit

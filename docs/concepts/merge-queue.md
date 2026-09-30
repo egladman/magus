@@ -94,8 +94,8 @@ and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squa
 and read `queue:`, so none ever reads as intent.
 
 In this repository a `queue dashboard` job keeps one pinned issue, "Merge queue", whose
-body shows every open pull request: a Mermaid chart of the queue with each stack boxed,
-then a table per section (in flight, queued, needs the author, needs a manual merge,
+body shows every open pull request: a link that draws the queue in the console, each
+change after the one it is stacked on, then a table per section (in flight, queued, needs the author, needs a manual merge,
 could join, drafts and forks) with each one's reason and a person's command. It is
 rewritten whole after every apply run and on every label, review or auto-merge event,
 and the same page goes to the run's summary. To render it locally:
@@ -661,6 +661,8 @@ Nothing is opted in by default. `--facts` answers the same question with an
 `auto_resolve` query, given the path, the merge base's content and the merge; a command
 that cannot answer it settles nothing. The same files settle the same way in a local
 merge, through magus's [merge driver](../guides/integrations/git.md#auto-resolving-source-files).
+
+<!--diagram:merge-queue-risk-->
 
 A settled candidate is gated like any other; the gate's own format check is the only one
 it gets, so a resolution that breaks formatting is a red kick-back. Planning, validation

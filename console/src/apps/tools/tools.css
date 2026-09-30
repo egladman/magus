@@ -1,0 +1,69 @@
+/* tools.css - the Tools surface: a bar of filters over one full-width table.
+   Its own sheet rather than the Dashboard's: dashboard.css loads only with the Dashboard, and the
+   table here is a page, not a tile. Shares the console's semantic tokens, the layer meant to be
+   shared. */
+
+.console-tools {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+
+/* --- Bar ------------------------------------------------------------------------
+   The console's one bar height and one surface gutter, as a floor: the row wraps on a narrow pane. */
+.console-tools__bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: var(--console-surface-bar-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-chrome);
+}
+.console-tools__label {
+  flex: 0 0 auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-tools__filters { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+/* A pressed filter takes the surface accent, so the ones narrowing the table are readable at a
+   glance without reading their counts. */
+.console-tools__filter[aria-pressed="true"] {
+  background: var(--console-accent);
+  border-color: var(--console-accent);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}
+.console-tools__count {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-tools__refresh { margin-inline-start: auto; }
+
+/* Says where the end-of-life columns came from when that is not a live answer. Empty when there is
+   nothing to say, so it takes no room then. */
+.console-tools__note {
+  margin: 0;
+  padding-inline: var(--console-pad);
+  font-size: 0.8rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-tools__note:not(:empty) { padding-block: 0.4rem; border-block-end: 1px solid var(--pf-t--global--border--color--default); }
+
+/* --- Table ----------------------------------------------------------------------
+   The table itself is the shared one (styles/table.css); this box scrolls it, so a wide one never
+   scrolls the page. */
+.console-tools__table { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding-inline: var(--console-pad); }
+
+/* --- Connect prompt -------------------------------------------------------------- */
+.console-tools__empty { padding: 2.5rem var(--console-pad); max-inline-size: 34rem; }
+.console-tools__empty-title { margin: 0; font-size: 1rem; font-weight: 600; }

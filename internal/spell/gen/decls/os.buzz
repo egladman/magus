@@ -11,6 +11,6 @@ export extern fun exit(code: int) > void !> any;
 export extern fun hostname() > str !> any;
 export extern fun numCpu() > int;
 export extern fun platform() > [str];
-export extern fun retry(max: int, fn: Function, opts: {str: any} = {<str: any>}) > any !> any;
+export extern fun retry(max: int, fn: fun () > any !> any, opts: {str: any} = {<str: any>}) > any !> any;
 export extern fun sleep(ms: double) > void !> any;
-export extern fun withEnv(env: {str: str}, callback: Function) > void !> any;
+export extern fun withEnv(env: {str: str}, callback: fun () > void !> any) > void !> any;

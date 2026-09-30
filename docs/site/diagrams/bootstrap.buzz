@@ -1,0 +1,66 @@
+// site/diagrams/bootstrap.buzz: how a checkout gets its first ./magus. The guard allows go run
+// once, in a checkout root with no magus binary, and even then it runs the real go-build
+// target (internal/guard/catalog.go). The accent is that command and the escape back to it.
+//
+// The escape (hack/policy/stale.buzz: move the stale binary aside, then the same go run) is the
+// one edge against the flow. Commands, Buzz and embedded files are not packages, so they are
+// actors.
+namespace bootstrap;
+
+import "magus";
+import "magus/figure";
+
+export fun bootstrapFigure() > figure\Figure !> any {
+    final cli = magus\dir("cmd/magus");
+    final rule = magus\dir("internal/guard");
+    final stamp = magus\dir("internal/interp/bindings");
+    final person = figure\external("Person or hook", sub: "shell or PreToolUse");
+    final exempt = figure\external("go run ./cmd/magus", sub: "run go-build, alone", look: figure\Look.focal);
+    final target = figure\external("go-build", sub: "generate, link, stamp", tag: "target", look: figure\Look.plain);
+    final spells = figure\external("Spell bytecode", sub: "spells-generate", look: figure\Look.store);
+    final stale = figure\external("Stale policy", sub: "stamp vs sources", look: figure\Look.input);
+    final escape = figure\external("Relink escape", sub: "mv magus magus.old", look: figure\Look.plain);
+    return figure\of("bootstrap",
+            title: "One go run, then magus builds magus",
+            eyebrow: "bootstrap",
+            desc: "In a checkout with no ./magus, the guard's raw-tool rule advises exactly one "
+                + "command through, alone on its line: go run -trimpath ./cmd/magus run go-build "
+                + "--no-cache ., which runs the real go-build target. It regenerates the spell "
+                + "bytecode first and links a stamp of the sources the binary was built from. "
+                + "Every other raw go command, a bare go build included, is refused and served that "
+                + "command; once ./magus exists the rule names ./magus run go-build . instead. The "
+                + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
+                + "the checkout, and when a binary can no longer load the tree the escape moves it "
+                + "aside, which is the one way back to the bootstrap.",
+            direction: figure\Direction.down)
+        .actor(person)
+        .box(cli, label: "magus on PATH", sub: "re-execs ./magus")
+        .box(rule, label: "Raw-tool rule", sub: "refuses a raw go build")
+        .actor(exempt)
+        .actor(target)
+        .actor(spells)
+        .box(stamp, label: "Build stamp", sub: "linked into ./magus")
+        .actor(stale)
+        .actor(escape)
+        .edgesFromGraph()
+        .hideEdges(figure\setOf([cli]), dst: figure\setOf([stamp]),
+            why: "the CLI imports the bindings to run any magusfile; the stamp reaches them by go-build's -X flag, drawn from go-build")
+        .markEdge(cli, dst: rule, label: "judges")
+        .flowIn(person, dst: cli, label: "runs magus")
+        .flowOut(rule, dst: exempt, label: "no ./magus")
+        .flowAcross(exempt, dst: target, label: "runs")
+        .flowAcross(target, dst: spells, label: "first")
+        .flowIn(target, dst: stamp, label: "-X link")
+        .flowAcross(target, dst: stale, label: "buildStamp")
+        .flowIn(stale, dst: stamp, label: "reads")
+        .flowAcross(stale, dst: escape, label: "decls moved")
+        .flowAcross(escape, dst: exempt, label: "mv magus.old", stroke: figure\Stroke.focal)
+        .zone("no ./magus yet", dirs: figure\setOf([rule]), actors: [exempt])
+        .zone("magus builds magus", dirs: figure\setOf([stamp]), actors: [target, spells])
+        .zone("kept fresh", actors: [stale, escape])
+        .legend(figure\Look.focal, label: "the one go run")
+        .legend(figure\Look.external, label: "outside magus")
+        .legend(figure\Look.store, label: "embedded in the binary")
+        .legend(figure\Look.input, label: "this repo's rules")
+        .scope(figure\setOf([cli, rule, stamp]));
+}

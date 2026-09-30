@@ -121,6 +121,30 @@ func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sou
 	return moved, len(moved) == 0
 }
 
+// movedInputsNotice explains why the run was not cached. A moved input matching a declared
+// output was rewritten by this step's own chain after the key was taken, so the step never
+// caches (MGS4010); any other moved input came from outside and the next run caches.
+func movedInputsNotice(s Step, hash string, moved []string) string {
+	declared := compileGlobs(s.OwnedOutputs)
+	var generated []string
+	for _, rel := range moved {
+		for _, g := range declared {
+			if g.Match(rel) {
+				generated = append(generated, rel)
+				break
+			}
+		}
+	}
+	if len(generated) == 0 {
+		return fmt.Sprintf("magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
+			s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5))
+	}
+	return types.FormatDiagnostic(types.SelfInvalidatingKey, fmt.Sprintf(
+		"%s:%s is never cached: its key reads %s its own run generates after the key is taken: %s. "+
+			"Generate them before this target's key, as a skip_cache target it composes or a target it depends on",
+		s.ProjectPath, s.Target, pluralFiles(len(generated)), joinCapped(generated, 5)))
+}
+
 func pluralFiles(n int) string {
 	if n == 1 {
 		return "1 file"

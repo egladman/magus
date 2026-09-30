@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, toolservice]
 
 ToolService serves the toolchain view. Read-only: nothing here installs, selects, or moves a version. ListTools reaches the network through the lifecycle provider; the server memoizes that answer, and Lifecycle names what it read.
 
-Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:134](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L134). Part of the [server API](../../index.md).
+Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L146). Part of the [server API](../../index.md).
 
 ## Methods
 
@@ -19,7 +19,7 @@ ListTools returns every project's tools with their windows and verdicts.
 
 The name does not match the repeated field (projects), which AIP-132 would have it do. Left deliberately: this returns a two-level view, projects each carrying their tools, because a tool version is a per-project fact and the dashboard renders it grouped that way. Flattening to `repeated Tool` to satisfy the rule would make every Tool carry its own project path and lose the grouping; renaming this ListProjects would leave the toolchain service with no RPC that mentions a tool. AIP-132 governs a collection of one resource, and this is not one.
 
-`POST /magus.tool.v1alpha1.ToolService/ListTools`: unary. Source: [tool.proto:144](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L144).
+`POST /magus.tool.v1alpha1.ToolService/ListTools`: unary. Source: [tool.proto:156](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L156).
 
 Takes [ListToolsRequest](#listtoolsrequest), returns [ListToolsResponse](#listtoolsresponse).
 
@@ -44,7 +44,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 ### ListToolsRequest
 
-Source: [tool.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L147).
+Source: [tool.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L159).
 
 | Field    | Type   | # | Description                                                                                                                                                                                                                                           |
 | -------- | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -54,7 +54,7 @@ Used by: [ListTools (request)](tool.md#listtools).
 
 ### ListToolsResponse
 
-Source: [tool.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L154).
+Source: [tool.proto:166](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L166).
 
 | Field       | Type                         | # | Description |
 | ----------- | ---------------------------- | - | ----------- |
@@ -67,7 +67,7 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 Project groups the tools one project drives, since a window is declared per project and the same binary can be held to different bounds in different projects.
 
-Source: [tool.proto:125](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L125).
+Source: [tool.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L137).
 
 | Field   | Type                   | # | Description                          |
 | ------- | ---------------------- | - | ------------------------------------ |
@@ -98,6 +98,10 @@ Source: [tool.proto:80](https://github.com/egladman/magus/blob/main/proto/magus/
 | `cycle`             | string                          | 12 |                                                                                                                                                                                                                                                                    |
 | `eol`               | string                          | 13 |                                                                                                                                                                                                                                                                    |
 | `support`           | [Support](#support)             | 14 |                                                                                                                                                                                                                                                                    |
+| `violation`         | bool                            | 15 | violation is true when the version sits outside its effective window (TOO\_OLD or TOO\_NEW), the rows the CLI raises MGS3005/MGS3006 for. UNKNOWN is never a violation. A client counts these rather than re-deriving the rule from verdict or diagnostic\_code.   |
+| `spell_window`      | string                          | 16 | The three windows rendered the way `magus describe tools` prints them: ">= 22, < 25". Empty when that window constrains nothing. Clients show these as given; below is the first version rejected, so it renders as "< x", never as a max.                         |
+| `workspace_window`  | string                          | 17 |                                                                                                                                                                                                                                                                    |
+| `effective_window`  | string                          | 18 |                                                                                                                                                                                                                                                                    |
 
 _Reserved: 10; `enforced`._
 

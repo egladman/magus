@@ -60,6 +60,7 @@ func usedSchemaKeys(projects []*types.Project) []gatedKey {
 		addProject("gate_low_risk", p.GateLowRiskDeclared)
 		addProject("gate_inherit", p.GateInheritOff)
 		addProject("merge_low_risk", len(p.MergeLowRisk) > 0)
+		addProject("layers", len(p.Layers) > 0)
 		for _, policy := range p.TargetPolicies {
 			addPolicy("timeout", policy.Timeout != "")
 			addPolicy("retry_on_volatile", policy.RetryOnVolatile)

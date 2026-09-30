@@ -200,6 +200,7 @@ guides/agents/
 guides/authoring-spells/
 guides/daemon/
 guides/debugging/
+guides/diagrams/
 guides/download/
 guides/download/container-image/
 guides/download/docker/
@@ -243,6 +244,7 @@ guides/profiling/
 guides/quickstart/
 guides/releasing/
 guides/reviewing-changes/
+guides/security-scanning/
 guides/testing/
 guides/tips/
 index.html
@@ -647,6 +649,7 @@ reference/rules/throwaway-copy/
 reference/rules/token-state/
 reference/rules/unknown-env/
 reference/rules/unleased-write/
+reference/rules/vcs-off-switch/
 reference/rules/whole-tree/
 reference/rules/worktree-remove/
 reference/skills/
@@ -722,6 +725,7 @@ tags/attribution/
 tags/audit/
 tags/auth/
 tags/authoring/
+tags/base-ref/
 tags/bash/
 tags/bearer/
 tags/benchmarks/

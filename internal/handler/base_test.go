@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -43,4 +44,18 @@ func TestBaseServeHTTP(t *testing.T) {
 	assert.True(t, served, "ServeHTTP must dispatch to the wrapped serve func")
 	assert.Equal(t, http.StatusTeapot, w.Code)
 	assert.Equal(t, "ok", w.Body.String())
+}
+
+// Fail answers with the internal-failure reason and the step, and keeps the cause, which can
+// carry the server's paths, in the log.
+func TestBaseFailKeepsTheCauseOutOfTheBody(t *testing.T) {
+	t.Parallel()
+	b := New(func(http.ResponseWriter, *http.Request) {}, slog.New(slog.DiscardHandler))
+	w := httptest.NewRecorder()
+	b.Fail(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil), "plan", errors.New("open /Users/dev/repo/magusfile.buzz: denied"))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), `"reason":"MGS9027"`)
+	assert.Contains(t, w.Body.String(), "plan failed")
+	assert.NotContains(t, w.Body.String(), "/Users/dev")
 }

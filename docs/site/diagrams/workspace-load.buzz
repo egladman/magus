@@ -1,0 +1,55 @@
+// site/diagrams/workspace-load.buzz: how magus reads a workspace in before any target runs. A
+// target exists only because a magusfile exported it, and the project model built from those
+// magusfiles, which takes the accent, is what the cache, describe and a command's directory
+// context read.
+//
+// Every edge is an import into types, where the model lives. The root package's edges to each
+// step are hidden; drawn, every box would hang off it.
+namespace workspaceLoad;
+
+import "magus";
+import "magus/figure";
+
+export fun workspaceLoadFigure() > figure\Figure !> any {
+    final discover = magus\dir("project");
+    final interp = magus\dir("internal/interp");
+    final extract = magus\dir("internal/describe");
+    final model = magus\dir("types");
+    final cache = magus\dir("internal/cache");
+    final root = magus\dir(".");
+    final rootMf = figure\external("Root magusfile", sub: "declares project .", look: figure\Look.input);
+    final nestedMf = figure\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: figure\Look.input);
+    final steps = figure\setOf([discover, interp, extract, cache]);
+    return figure\of("workspace-load",
+            title: "A target exists because a magusfile exported it",
+            eyebrow: "workspace",
+            desc: "Discovery walks the tree from the root marker and registers one project per "
+                + "magusfile: the root's is project ., each nested one declares its own. Every "
+                + "magusfile is evaluated: its exported functions are its targets and "
+                + "magus\\project layers policy on. A static read of each target body recovers "
+                + "ctx.readsFiles, ctx.writesFiles and cross-project ctx.needs as literals. The "
+                + "project model that results is what the cache keys, what describe answers "
+                + "from, and what a command resolves its project against from the current "
+                + "directory.")
+        .actor(rootMf)
+        .actor(nestedMf)
+        .box(discover, label: "Projects", sub: "discovery, Where(cwd)")
+        .box(interp, label: "Evaluate", sub: "export fun is a target")
+        .box(extract, label: "Static read", sub: "literal reads, writes, needs")
+        .box(model, label: "Projects and targets", sub: "sources, outputs, depends_on", focal: true)
+        .box(cache, label: "Cache key", sub: "one step per target")
+        .box(root, label: "magus describe", sub: "targets, claims, the graph")
+        .edgesFromGraph()
+        .hideEdges(figure\setOf([root]), dst: steps,
+            why: "the root package runs the load; its calls into each step are the order, not the model")
+        .hideEdges(figure\setOf([interp, cache]), dst: figure\setOf([discover]),
+            why: "they read project options and project paths; the model they fill is types")
+        .markEdge(interp, dst: model, label: "targets")
+        .markEdge(extract, dst: model, label: "footprints")
+        .flowIn(rootMf, dst: discover, label: "registers .")
+        .flowIn(nestedMf, dst: discover, label: "registers dir")
+        .zone("written by hand", actors: [rootMf, nestedMf])
+        .legend(figure\Look.focal, label: "what every reader reads")
+        .legend(figure\Look.input, label: "the only declarations")
+        .scope(figure\setOf([discover, interp, extract]));
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,7 @@ import (
 // TestSearchTranslationDiagnostics pins the code-shaped arm: every row that denies names
 // the exact query, and each near miss is a pattern whose answer the graph does not hold.
 func TestSearchTranslationDiagnostics(t *testing.T) {
-	t.Chdir("../..") // relative operands name this repository's tree
+	t.Chdir(repoOperandTree(t)) // relative operands name this repository's layout
 	const mgs30 = `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`
 	for _, tt := range []struct {
 		command string
@@ -71,7 +72,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'MGS30[23]' /tmp/other-repo`, denyRule{}},
 	} {
-		v := Evaluate(Dependencies{}, tt.command)
+		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, tt.command)
 		if tt.rule == (denyRule{}) {
 			assert.Empty(t, v.Deny, "%q must not deny", tt.command)
 			continue
@@ -83,8 +84,8 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads
 // with the runnable query, says why it is the same answer, and carries the answer.
 func TestSearchTranslationShowsTheQuery(t *testing.T) {
-	t.Chdir("../..")
-	v := Evaluate(Dependencies{}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
+	t.Chdir(repoOperandTree(t))
+	v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
 	assert.Contains(t, v.Deny, "MGS3020, MGS3021")
@@ -107,6 +108,47 @@ func writeTree(t *testing.T, files map[string]string) string {
 
 func graphOf(ids map[string][]string) func(context.Context, string) ([]string, bool) {
 	return func(_ context.Context, kind string) ([]string, bool) { return ids[kind], true }
+}
+
+// diagnosticGraph is the diagnostic nodes a graph built from this binary's tree holds,
+// with no answer for any other kind.
+func diagnosticGraph(_ context.Context, kind string) ([]string, bool) {
+	if kind != types.KindDiagnostic {
+		return nil, false
+	}
+	var ids []string
+	for _, code := range types.AllDiagnosticCodes() {
+		ids = append(ids, types.KindDiagnostic+":"+string(code))
+	}
+	return ids, true
+}
+
+// The codes a diagnostic search is answered from are the graph's, whatever this binary
+// registers: an index of another tree, or one that cannot vouch for itself, denies nothing.
+func TestSearchTranslationDiagnosticsFollowTheGraph(t *testing.T) {
+	root := writeTree(t, map[string]string{"docs/codes.md": "MGS9901 and MGS9902\n"})
+	t.Chdir(root)
+	const command = `grep -rn 'MGS99[0-9][0-9]' docs/`
+	const query = `query kind=diagnostic 'id=~^diagnostic:MGS99[0-9][0-9]$' -o name`
+
+	graph := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901", "diagnostic:MGS9902"}})
+	v := Evaluate(Dependencies{GraphIDs: graph}, command)
+	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: query}, v.Rule)
+	assert.Contains(t, v.Deny, "\n  diagnostic:MGS9902\n")
+
+	const registered = `grep -rn 'MGS30[23][0-9]' docs/`
+	require.Equal(t, denyRuleSearchTranslation, Evaluate(Dependencies{GraphIDs: diagnosticGraph}, registered).Rule.Name)
+	unsure := func(ctx context.Context, kind string) ([]string, bool) {
+		ids, _ := diagnosticGraph(ctx, kind)
+		return ids, false
+	}
+	for name, deps := range map[string]Dependencies{
+		"no graph":          {},
+		"a graph it doubts": {GraphIDs: unsure},
+		"another tree's":    {GraphIDs: graph},
+	} {
+		assert.Empty(t, Evaluate(deps, registered).Deny, name)
+	}
 }
 
 // TestSearchTranslationHeadings pins the Markdown arm against a real tree: a deny needs
@@ -307,14 +349,14 @@ func TestSearchPipelines(t *testing.T) {
 	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^func ' internal/store/store.go`))
 	assert.NotContains(t, v.Deny, "not reproduced")
 
-	t.Chdir("../..")
+	t.Chdir(repoOperandTree(t))
 	for _, command := range []string{`grep -rn 'MGS30[23]' . | head -3`, `grep -rn 'MGS30[23]' . | wc -l`} {
-		v := Evaluate(Dependencies{}, command)
+		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, command)
 		assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name, command)
 		assert.Contains(t, v.Deny, "Its answer (", command)
 		assert.Contains(t, v.Deny, "not reproduced", command)
 	}
-	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{}, `grep -rn MGS1046 . | wc -l`).Rule.Name)
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -rn MGS1046 . | wc -l`).Rule.Name)
 }
 
 // TestFindTranslation pins the find arm: a name search whose files are, one for one, the
@@ -392,7 +434,7 @@ func TestGlobRegexp(t *testing.T) {
 // 2026-09-24 audit through Evaluate. Only the code-shaped ones have a provable answer
 // without a graph; the rest are text the translator must leave alone.
 func TestSearchTranslationAuditShapes(t *testing.T) {
-	t.Chdir("../..")
+	t.Chdir(repoOperandTree(t))
 	for _, tt := range []struct {
 		command string
 		deny    bool
@@ -419,7 +461,7 @@ func TestSearchTranslationAuditShapes(t *testing.T) {
 		{`grep -rn "\"kind\": \"diagnostic\"" docs/`, false},
 		{`rg -l "MGS30[23]"`, false},
 	} {
-		v := Evaluate(Dependencies{}, tt.command)
+		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, tt.command)
 		isTranslation := v.Rule.Name == denyRuleSearchTranslation
 		assert.Equal(t, tt.deny, isTranslation, tt.command)
 	}
@@ -460,4 +502,22 @@ func parseForTest(t *testing.T, command string) []hint.Invocation {
 	cmds, ok := ParseCommands(command)
 	require.True(t, ok, command)
 	return cmds
+}
+
+// repoOperandTree is a workspace holding, empty, the files these commands name, laid out
+// as in this repository. The translation reads their paths, never their bytes. Grading
+// them in the repository itself would read its live .magus, which every magus run
+// touches, and cost this package Go's test cache each time.
+func repoOperandTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	for _, rel := range []string{
+		"docs/reference/codes/sandbox/README.md", "types/diagnostic.go", "types/knowledge.go",
+		"internal/guard/guard.go", "internal/guard/shell.go",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), nil, 0o644))
+	}
+	return root
 }

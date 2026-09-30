@@ -6,6 +6,32 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export enum<str> CheckStatus {
+    none = "",
+    ok = "ok",
+    fail = "fail",
+    advice = "advice",
+}
+
+export enum<str> DiffUncoveredReason {
+    none = "",
+    noIndexer = "no-indexer",
+}
+
+export enum<str> KnowledgeResolution {
+    none = "",
+    id = "id",
+    path = "path",
+    fuzzy = "fuzzy",
+}
+
+export enum<str> SymbolIndexFreshness {
+    none = "",
+    upToDate = "up-to-date",
+    outOfDate = "out-of-date",
+    notIndexed = "not-indexed",
+}
+
 export object Affected {
     base: str = "",
     changed: [str] = [],
@@ -105,19 +131,27 @@ export object Check {
     fix: [str] = [],
 }
 
+export object DiffPublicPath {
+    id: str = "",
+    qualified: str = "",
+    via: [str] = [],
+    boundary: str = "",
+}
+
 export object DiffSymbol {
     id: str = "",
     label: str = "",
     refCount: int = 0,
     fileCount: int = 0,
-    externalProjects: [str] = [],
-    externalFileCount: int = 0,
-    moduleAPI: bool = false,
+    publicTo: [str] = [],
+    publicFileCount: int = 0,
+    publicBeyondWorkspace: bool = false,
     change: str = "",
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
     checks: [Check] = [],
+    publicThrough: [DiffPublicPath] = [],
 }
 
 export object DiffTouch {
@@ -209,6 +243,33 @@ export object Diff {
     uncovered: [DiffUncovered] = [],
 }
 
+export object DirCall {
+    dir: str = "",
+    transport: str = "",
+    marker: str = "",
+    source: str = "",
+}
+
+export object Dir {
+    path: str = "",
+    id: str = "",
+    layer: str = "",
+    language: str = "",
+    imports: [str] = [],
+    importedBy: [str] = [],
+    importsIndexed: bool = false,
+    calls: [DirCall] = [],
+    calledBy: [DirCall] = [],
+    children: [str] = [],
+    files: int = 0,
+}
+
+export object DirsOptions {
+    layer: str = "",
+    language: str = "",
+    depth: int = 0,
+}
+
 export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
@@ -238,6 +299,7 @@ export object EdgeRef {
     otherKind: str = "",
     otherLabel: str = "",
     provenance: str = "",
+    attrs: {str: str} = {},
 }
 
 export object ExplainResult {
@@ -248,6 +310,7 @@ export object ExplainResult {
     @"out": [EdgeRef] = [],
     @"in": [EdgeRef] = [],
     docsURL: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
 }
 
 export object ImpactSymbol {
@@ -273,6 +336,12 @@ export object Impact {
     changedSymbols: [ImpactSymbol] = [],
     changedFileCoverage: [ImpactFileCoverage] = [],
     notes: [str] = [],
+}
+
+export object ImportGraph {
+    indexed: bool = false,
+    packages: {str: [str]} = {},
+    languages: {str: str} = {},
 }
 
 export object Node {
@@ -458,6 +527,47 @@ export object InsightReport {
     duplication: Duplication = Duplication{},
 }
 
+export object Layer {
+    name: str = "",
+    declared: [str] = [],
+    dirs: [Dir] = [],
+}
+
+export object NeighborhoodOptions {
+    depth: int = 0,
+    relations: [str] = [],
+    direction: str = "",
+    collapse: [str] = [],
+}
+
+export object KnowledgeEdge {
+    source: str = "",
+    target: str = "",
+    relation: str = "",
+    confidence: str = "",
+    score: double = 0.0,
+    provenance: str = "",
+    attrs: {str: str} = {},
+}
+
+export object KnowledgeFold {
+    prefix: str = "",
+    node: str = "",
+    folded: int = 0,
+}
+
+export object NeighborhoodResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    focus: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
+    options: NeighborhoodOptions = NeighborhoodOptions{},
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    folds: [KnowledgeFold] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object OutputRecord {
     ref: str = "",
     project: str = "",
@@ -465,6 +575,10 @@ export object OutputRecord {
     failed: bool = false,
     durationMs: int = 0,
     output: str = "",
+}
+
+export object PathOptions {
+    relations: [str] = [],
 }
 
 export object PathStep {
@@ -516,15 +630,6 @@ export object Match {
     score: int = 0,
     staleness: str = "",
     outrunDays: int = 0,
-}
-
-export object KnowledgeEdge {
-    source: str = "",
-    target: str = "",
-    relation: str = "",
-    confidence: str = "",
-    score: double = 0.0,
-    provenance: str = "",
 }
 
 export object QueryResult {
@@ -601,6 +706,13 @@ export object KnowledgeStats {
     isolatedCount: int = 0,
     componentCount: int = 0,
     largestComponentSize: int = 0,
+}
+
+export object SymbolIndexDigest {
+    digest: str = "",
+    indexed: bool = false,
+    projects: [str] = [],
+    gaps: [KnowledgeSymbolGap] = [],
 }
 
 export object TargetSpellUse {
@@ -1062,14 +1174,19 @@ export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > 
 export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
+export extern fun dir(path: str) > Dir !> any;
+export extern fun dirs(glob: str, opts: DirsOptions = {<str: any>}) > [Dir] !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
 export extern fun impact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
+export extern fun importGraph() > ImportGraph !> any;
 export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun layer(name: str) > Layer !> any;
+export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = {<str: any>}) > NeighborhoodResult !> any;
 export extern fun output(ref: str) > OutputRecord !> any;
-export extern fun path(node: str, to: str) > PathResult !> any;
+export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > PathResult !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun projects() > Projects !> any;
@@ -1080,6 +1197,7 @@ export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > RefsResul
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
+export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun tools() > ToolReport !> any;
 export extern fun where(dir: str) > str !> any;
@@ -1107,13 +1225,13 @@ export object guard {
     static extern fun advise(text: str) > GuardVerdict;
     static extern fun allow() > GuardVerdict;
     static extern fun binary() > GuardBinary;
-    static extern fun command(rule: Function) > void;
+    static extern fun command(rule: fun (req: CommandRequest) > GuardVerdict !> any) > void;
     static extern fun count(key: str) > int;
     static extern fun deny(text: str) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
-    static extern fun spawn(rule: Function) > void;
-    static extern fun write(rule: Function) > void;
+    static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
+    static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.

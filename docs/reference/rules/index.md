@@ -35,7 +35,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                             |
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                   |
 | [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                  |
-| [lease-undeclared](lease-undeclared.md)           | a call graded under a well-formed lease id the job store has no row for                           |
+| [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned           |
 | [lease-vcs](lease-vcs.md)                         | a worker lease committing, pushing, stashing or reverting the tree it is landed from              |
 | [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns        |
 | [magus-timeout](magus-timeout.md)                 | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside            |
@@ -60,6 +60,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [unknown-env](unknown-env.md)                     | a retired or misspelled MAGUS_* variable handed to a command                                      |
 | [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                  |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
+| [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths         |
 | [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                           |
 
 ## Explains
@@ -75,7 +76,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [gate-repeat](gate-repeat.md)               | the gate run again soon after it passed, repeating work already done                           |
 | [generated-write](generated-write.md)       | a hand edit to a declared output, which the next run overwrites                                |
 | [graph-pipe](graph-pipe.md)                 | a read-only graph verb piped into a text filter, when magus projects the record itself         |
-| [graph-stale](graph-stale.md)               | a graph read while the index is older than the sources it describes                            |
+| [graph-stale](graph-stale.md)               | a graph read, or a graph-backed deny, while the graph describes another tree                   |
 | [hook-wiring](hook-wiring.md)               | a write to the host wiring that decides whether these rules run at all                         |
 | [installed-skill](installed-skill.md)       | a write to an installed skill copy, which re-installing discards                               |
 | [instruction-write](instruction-write.md)   | a write to a cross-host instruction file, which every session loads whole                      |

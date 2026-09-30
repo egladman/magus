@@ -206,6 +206,22 @@ type VersionBounds struct {
 // IsZero reports whether the window constrains nothing.
 func (b VersionBounds) IsZero() bool { return b.Min == "" && b.Below == "" }
 
+// Window prints the window the way the docs write it: ">= 22, < 25". Below is the first
+// version REJECTED, so it renders as "< x" and never as a max. Empty when the window
+// constrains nothing. The CLI table and the console's ListTools reply both print this.
+func (b VersionBounds) Window() string {
+	switch {
+	case b.Min != "" && b.Below != "":
+		return ">= " + b.Min + ", < " + b.Below
+	case b.Min != "":
+		return ">= " + b.Min
+	case b.Below != "":
+		return "< " + b.Below
+	default:
+		return ""
+	}
+}
+
 // Verdict names how a probed version relates to a window.
 type Verdict int
 

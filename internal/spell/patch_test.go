@@ -191,7 +191,11 @@ var (
 	// goldenGoPlatformEnv mirrors GO_PLATFORM_ENV in spells/golang/spell.buzz: the ops
 	// whose result depends on the target platform (build, vet, test, golangci-lint's
 	// go compile) key on it.
-	goldenGoPlatformEnv       = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"}
+	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"}
+
+	goldenDevServerCommand = spells.Command{Bin: "pnpm", Args: []string{"exec"},
+		NeedsArgs: `dev-server runs the command you name; pass it as args: typescript["dev-server"](ctx, {"args": ["vite"]})`}
+
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
 		{Contains: "ERR_PNPM_NO_SCRIPT", Advise: "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
@@ -555,8 +559,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
-			"dev-server": {Kind: "service", Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &spells.Service{
-				Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}},
+			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
+				Command: goldenDevServerCommand,
 			}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},

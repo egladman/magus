@@ -206,6 +206,9 @@ func validateCmdFields(m vm.Value) error {
 	if bin, ok := m.MapGet("bin"); ok && !bin.IsStr() {
 		return fmt.Errorf("command bin must be a string")
 	}
+	if msg, ok := m.MapGet("needsArgs"); ok && !msg.IsStr() {
+		return fmt.Errorf("command needsArgs must be a string")
+	}
 	if args, ok := m.MapGet("args"); ok && args.IsList() {
 		for _, a := range args.ListItems() {
 			if !a.IsStr() {

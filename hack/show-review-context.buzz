@@ -1,0 +1,1123 @@
+// Cost: needs the code index; about six graph reads per carded symbol, one query per
+// vocabulary term, and one history walk for the architecture lens.
+//
+// Turns a change into the context a reviewer needs and a diff alone does not give. Each
+// changed symbol gets a card: its signature, who can see it, callers, callees, the members
+// beside it, tests, the diagnostics it cites and the notes on it. The change as a whole gets
+// the projects and dependencies it moves and the words it introduces. It reads only SCIP
+// facts and magus's own graph, so every indexed language reads the same way.
+// `magus diff --prompt` is the per-file view; this is the per-symbol one.
+//
+//	magus buzz hack/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->]
+//	    [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]
+//	magus buzz hack/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]
+//
+// Every section says found, absent or unknown, and unknown says why. The bundle goes to
+// stdout and progress to stderr. It exits 0 whenever it produced a bundle: it is context,
+// not a verdict.
+namespace showreviewcontext;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "io";
+import "magus";
+import "std";
+import "strings";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->] [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]\n       magus buzz hack/show-review-context.buzz -- symbol --symbol <name|id> [--depth <n>] [-o json]";
+final HELP = "cost: needs the code index; about six graph reads per carded symbol, one query per vocabulary term, and one history walk for the architecture lens\n{USAGE}";
+
+final FOUND = "found";
+final ABSENT = "absent";
+final UNKNOWN = "unknown";
+
+// ITEM_CAP bounds every listed section; its total still counts what was cut.
+final ITEM_CAP = 10;
+// TERM_CAP bounds the vocabulary, one graph query per term.
+final TERM_CAP = 15;
+final DEPTH_CAP = 4;
+final SIGNATURE_CAP = 200;
+final LENSES = ["architecture", "code", "all"];
+final UNKNOWN_KIND = "unknown kind";
+// CALLABLE are the SCIP symbol kinds a call can target.
+final CALLABLE = ["Function", "Method", "Constructor", "StaticMethod", "AbstractMethod", "Getter", "Setter",
+    "Macro", "Lambda", "MethodSpecification", "ProtocolMethod", "PureVirtualMethod", "TraitMethod",
+    "TypeClassMethod", "Delegate", "SingletonMethod", "MethodAlias", "Accessor"];
+
+// Input names the changeset: at most one of rev, patch and saved, each as given.
+export object Input {
+    rev: str,
+    patch: str,
+    saved: str,
+    baseline: str,
+}
+
+// Reach is one caller through which a changed symbol reaches code other packages use.
+export object Reach {
+    qualified: str,
+    boundary: str,
+    via: [str],
+}
+
+// Candidate is one touched symbol, as the diff annotated it.
+export object Candidate {
+    id: str,
+    label: str,
+    qualified: str,
+    path: str,
+    project: str,
+    change: str,
+    signature: str,
+    refCount: int,
+    fileCount: int,
+    publicBeyondWorkspace: bool,
+    publicTo: [str],
+    reaches: [Reach],
+}
+
+// Section is one answer on a card or about the change. note explains an absent or unknown
+// verdict, and qualifies a found one.
+export object Section {
+    name: str,
+    verdict: str,
+    note: str,
+    items: [str],
+    total: int,
+}
+
+export object Card {
+    symbol: Candidate,
+    kind: str,
+    span: str,
+    sections: [Section],
+}
+
+export object Term {
+    term: str,
+    verdict: str,
+    note: str,
+    meanings: [str],
+}
+
+export object Selection {
+    carded: [Candidate],
+    omitted: [Candidate],
+}
+
+export object FileRow {
+    path: str,
+    project: str,
+    role: str,
+    surface: str,
+}
+
+export object Bundle {
+    base: str,
+    rev: str,
+    lens: str,
+    files: [FileRow],
+    notes: [str],
+    selection: Selection,
+    cards: [Card],
+    architecture: [Section],
+    vocabulary: [Term],
+}
+
+fun say(line: str) > void {
+    io\stderr.write(line + "\n") catch void;
+}
+
+fun readStdin() > str !> any {
+    final text = io\stdin.readAll();
+    if (text == null) {
+        return "";
+    }
+    return "{text}";
+}
+
+// readDiff reads the changeset once. A patch or saved diff of - is read from stdin.
+export fun readDiff(input: Input) > magus\Diff !> any {
+    final opts = mut {<str: any>};
+    if (input.baseline != "") {
+        opts["baseline"] = input.baseline;
+    }
+    if (input.saved != "") {
+        var path = input.saved;
+        if (path == "-") {
+            path = fs\tempFile("show-review-context-");
+            fs\writeFile(path, content: readStdin());
+        }
+        opts["from"] = path;
+    } else if (input.patch != "") {
+        final patch = if (input.patch == "-") readStdin() else fs\readFile(input.patch);
+        if (patch.trim() == "") {
+            throw "show-review-context: the patch in {input.patch} is empty\n{USAGE}";
+        }
+        opts["patch"] = patch;
+    } else if (input.rev != "") {
+        opts["rev"] = input.rev;
+    }
+    return magus\diff(opts);
+}
+
+// namespaceSymbol reports a package or namespace, whose SCIP descriptor ends in a slash in
+// every language.
+export fun namespaceSymbol(id: str) > bool {
+    return id.endsWith("/");
+}
+
+// candidates are the touched symbols worth a card. A symbol with no change had no changed
+// line the diff could place, and a generated file's symbols are its generator's to review.
+export fun candidates(d: magus\Diff) > [Candidate] {
+    final acc = mut [<Candidate>];
+    foreach (f in d.files) {
+        if (f.role == "output") {
+            continue;
+        }
+        foreach (s in f.symbols) {
+            if (s.change == "" or s.change == "removed" or namespaceSymbol(s.id)) {
+                continue;
+            }
+            final reaches = mut [<Reach>];
+            foreach (r in s.publicThrough) {
+                reaches.append(Reach{ qualified = if (r.qualified != "") r.qualified else r.id, boundary = r.boundary, via = r.via });
+            }
+            acc.append(Candidate{
+                id = s.id, label = s.label, qualified = if (s.qualified != "") s.qualified else s.label,
+                path = f.path, project = f.project, change = s.change, signature = s.signature,
+                refCount = s.refCount, fileCount = s.fileCount, publicBeyondWorkspace = s.publicBeyondWorkspace,
+                publicTo = s.publicTo, reaches = reaches,
+            });
+        }
+    }
+    return acc;
+}
+
+fun tier(c: Candidate) > int {
+    if (c.change == "added" or c.change == "signature") {
+        return 0;
+    }
+    return 1;
+}
+
+fun exposed(c: Candidate) > bool {
+    return c.publicBeyondWorkspace or c.publicTo.len() > 0;
+}
+
+// before orders candidates widest blast radius first: added or re-signed before a body edit,
+// then visible outside the project or module, then files reached, then references.
+export fun before(a: Candidate, b: Candidate) > bool {
+    if (tier(a) != tier(b)) {
+        return tier(a) < tier(b);
+    }
+    if (exposed(a) != exposed(b)) {
+        return exposed(a);
+    }
+    if (a.fileCount != b.fileCount) {
+        return a.fileCount > b.fileCount;
+    }
+    if (a.refCount != b.refCount) {
+        return a.refCount > b.refCount;
+    }
+    return a.id < b.id;
+}
+
+export fun select(all: [Candidate], budget: int) > Selection {
+    final ranked = mut [<Candidate>];
+    foreach (c in all) {
+        ranked.append(c);
+    }
+    ranked.sort(fun (a: Candidate, b: Candidate) > bool => before(a, b: b));
+    final carded = mut [<Candidate>];
+    final omitted = mut [<Candidate>];
+    foreach (i, c in ranked) {
+        if (i < budget) {
+            carded.append(c);
+        } else {
+            omitted.append(c);
+        }
+    }
+    return Selection{ carded = carded, omitted = omitted };
+}
+
+export fun unknownSection(name: str, note: str) > Section {
+    return Section{ name = name, verdict = UNKNOWN, note = note, items = [<str>], total = 0 };
+}
+
+// listed is found with the first ITEM_CAP items, or absent with note.
+export fun listed(name: str, items: [str], note: str) > Section {
+    if (items.len() == 0) {
+        return Section{ name = name, verdict = ABSENT, note = note, items = [<str>], total = 0 };
+    }
+    final shown = mut [<str>];
+    foreach (i, it in items) {
+        if (i < ITEM_CAP) {
+            shown.append(it);
+        }
+    }
+    return Section{ name = name, verdict = FOUND, note = "", items = shown, total = items.len() };
+}
+
+// guarded runs one section's reads; a read magus cannot answer is an unknown, never a gap.
+fun guarded(name: str, read: fun () > Section !> any) > Section {
+    try {
+        return read();
+    } catch (e: any) {
+        return unknownSection(name, note: "magus could not answer: {e}");
+    }
+    return unknownSection(name, note: "unreachable");
+}
+
+fun around(focus: str, relation: str, direction: str, depth: int) > magus\NeighborhoodResult !> any {
+    return magus\neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [relation], direction = direction, collapse = [<str>] });
+}
+
+fun others(n: magus\NeighborhoodResult, focus: str) > [magus\KnowledgeNode] {
+    final acc = mut [<magus\KnowledgeNode>];
+    foreach (x in n.nodes) {
+        if (x.id != focus and x.id != n.focus) {
+            acc.append(x);
+        }
+    }
+    return acc;
+}
+
+// fromGraph is listed, except that nothing found where the graph admits a blind spot is
+// unknown rather than absent.
+fun fromGraph(name: str, n: magus\NeighborhoodResult, items: [str], note: str) > Section {
+    if (items.len() == 0 and n.answer.verdict == UNKNOWN) {
+        return unknownSection(name, note: "the graph cannot vouch for an empty answer: {n.answer.reason}");
+    }
+    return listed(name, items: items, note: note);
+}
+
+export fun signatureSection(c: Candidate, node: magus\KnowledgeNode) > Section {
+    final sig = strings\collapseWs(if (c.signature != "") c.signature else node.attrs["signature"] ?? "");
+    if (sig == "") {
+        return listed("signature", items: [<str>], note: "the indexer rendered no declaration");
+    }
+    if (sig.len() > SIGNATURE_CAP) {
+        return listed("signature", items: ["{sig.sub(0, len: SIGNATURE_CAP)} ..."], note: "");
+    }
+    return listed("signature", items: [sig], note: "");
+}
+
+// callable reports a SCIP kind that calls edges can connect. An unrecorded kind is left to
+// the graph to answer.
+export fun callable(kind: str) > bool {
+    return CALLABLE.indexOf(kind) != null or kind == "" or kind == "UnspecifiedKind" or kind == UNKNOWN_KIND;
+}
+
+// foldMembers drops the members of a type the change adds: that type's card lists them.
+export fun foldMembers(all: [Candidate]) > [Candidate] {
+    final added = mut [<str>];
+    foreach (c in all) {
+        if (c.change == "added") {
+            added.append(c.id);
+        }
+    }
+    final acc = mut [<Candidate>];
+    foreach (c in all) {
+        final owner = memberPrefix(c.id);
+        if (owner == "" or owner == c.id or added.indexOf(owner) == null) {
+            acc.append(c);
+        }
+    }
+    return acc;
+}
+
+export fun exposureSection(c: Candidate) > Section {
+    if (c.change == "") {
+        return unknownSection("exposure", note: "exposure comes from magus diff; run the diff step for it");
+    }
+    final items = mut [<str>];
+    if (c.publicBeyondWorkspace) {
+        items.append("module API: reachable from outside the module");
+    }
+    if (c.publicTo.len() > 0) {
+        items.append("referenced from projects: {c.publicTo.join(", ")}");
+    }
+    foreach (r in c.reaches) {
+        final via = if (r.via.len() > 0) ", via {r.via.join(" <- ")}" else "";
+        items.append("reaches {r.qualified}, referenced across a {r.boundary} boundary{via}");
+    }
+    return listed("exposure", items: items,
+        note: "referenced only inside its own project, and no caller within {DEPTH_CAP} calls crosses a package or project boundary");
+}
+
+export fun callersSection(id: str, depth: int) > Section !> any {
+    final n = around(id, relation: "calls", direction: "in", depth: 1);
+    final items = mut [<str>];
+    foreach (x in others(n, focus: id)) {
+        items.append("{x.label} ({x.source})");
+    }
+    final s = fromGraph("callers", n: n, items: items, note: "no indexed call reaches it");
+    if (depth < 2 or s.verdict != FOUND) {
+        return s;
+    }
+    final wide = around(id, relation: "calls", direction: "in", depth: depth);
+    return Section{ name = s.name, verdict = s.verdict, note = "{others(wide, focus: id).len()} callers within {depth} calls", items = s.items, total = s.total };
+}
+
+// calleesSection also returns the callees' signatures, where citations look for codes.
+export fun calleesSection(id: str, signatures: mut [str]) > Section !> any {
+    final n = around(id, relation: "calls", direction: "out", depth: 1);
+    final items = mut [<str>];
+    foreach (x in others(n, focus: id)) {
+        items.append("{x.label} ({x.source})");
+        signatures.append(x.attrs["signature"] ?? "");
+    }
+    return fromGraph("callees", n: n, items: items, note: "it calls nothing the index recorded");
+}
+
+// memberPrefix is a symbol ID up to its last type descriptor, which SCIP spells `#`, or ""
+// when no type encloses the symbol.
+export fun memberPrefix(id: str) > str {
+    final parts = id.split("#");
+    if (parts.len() < 2) {
+        return "";
+    }
+    return id.sub(0, len: id.len() - parts[parts.len() - 1].len());
+}
+
+export fun neighboursSection(c: Candidate) > Section !> any {
+    final prefix = memberPrefix(c.id);
+    if (prefix == "") {
+        return listed("neighbours", items: [<str>], note: "no type encloses it");
+    }
+    final n = around("file:{c.path}", relation: "defines", direction: "out", depth: 1);
+    final items = mut [<str>];
+    foreach (x in n.nodes) {
+        if (x.id.startsWith(prefix) and x.id != c.id and x.id != prefix) {
+            items.append(x.label);
+        }
+    }
+    final s = fromGraph("neighbours", n: n, items: items, note: "no other member of its type is defined in {c.path}");
+    return Section{ name = s.name, verdict = s.verdict, note = if (s.verdict == FOUND) "members of its type in {c.path}" else s.note, items = s.items, total = s.total };
+}
+
+export fun testsSection(node: magus\KnowledgeNode) > Section {
+    final n = node.attrs["test_refs"];
+    if (n == null) {
+        return listed("tests", items: [<str>], note: "no test file names it directly; a caller's test may still run it");
+    }
+    return Section{ name = "tests", verdict = FOUND, note = "which files: unknown until symbol nodes carry a test attribute",
+        items = ["{n!} test files name it directly"], total = 1 };
+}
+
+// diagnosticCodes are the diagnostic codes the signatures spell, each once, in order.
+export fun diagnosticCodes(signatures: [str]) > [str] !> any {
+    // Four digits spelled out: a brace in a Buzz string interpolates, backticks included.
+    final code = std\pattern(`(?:MGS|BZZ)[0-9][0-9][0-9][0-9]`);
+    final acc = mut [<str>];
+    foreach (s in signatures) {
+        foreach (m in code.matchAll(s) ?? [<[str]>]) {
+            if (acc.indexOf(m[0]) == null) {
+                acc.append(m[0]);
+            }
+        }
+    }
+    return acc;
+}
+
+export fun citationsSection(signatures: [str]) > Section !> any {
+    final items = mut [<str>];
+    foreach (code in diagnosticCodes(signatures)) {
+        final n = around("diagnostic:{code}", relation: "documents", direction: "in", depth: 1);
+        final docs = mut [<str>];
+        foreach (x in others(n, focus: "diagnostic:{code}")) {
+            docs.append(x.label);
+        }
+        items.append(if (docs.len() > 0) "{code}, documented by {docs.join(", ")}" else "{code}, which no doc documents");
+    }
+    return listed("citations", items: items, note: "no diagnostic code in its or its callees' signatures");
+}
+
+export fun notesSection(id: str) > Section !> any {
+    final n = around(id, relation: "annotates", direction: "in", depth: 1);
+    final items = mut [<str>];
+    foreach (x in others(n, focus: id)) {
+        items.append(x.label);
+    }
+    return listed("notes", items: items, note: "no note annotates it");
+}
+
+// card reads one symbol's sections. Each read that fails becomes that section's unknown.
+export fun card(c: Candidate, depth: int) > Card {
+    var node = magus\KnowledgeNode{ id = c.id, kind = "symbol", label = c.label, doc = "", source = "", attrs = {<str: str>} };
+    var explained = "";
+    try {
+        final e: magus\ExplainResult = magus\explain(c.id);
+        node = e.node;
+    } catch (e: any) {
+        explained = "{e}";
+    }
+    final kind = node.attrs["symbol_kind"] ?? UNKNOWN_KIND;
+    final signatures = mut [c.signature];
+    final sections = mut [<Section>];
+    sections.append(signatureSection(c, node: node));
+    sections.append(exposureSection(c));
+    if (callable(kind)) {
+        sections.append(guarded("callers", read: fun () > Section !> any => callersSection(c.id, depth: depth)));
+        sections.append(guarded("callees", read: fun () > Section !> any => calleesSection(c.id, signatures: signatures)));
+    } else {
+        final why = "calls connect callables, and a {kind} is referenced rather than called";
+        sections.append(listed("callers", items: [<str>], note: why));
+        sections.append(listed("callees", items: [<str>], note: why));
+    }
+    sections.append(guarded("neighbours", read: fun () > Section !> any => neighboursSection(c)));
+    sections.append(unknownSection("implementers", note: "SCIP implementation relationships are not ingested yet"));
+    sections.append(if (explained == "") testsSection(node) else unknownSection("tests", note: "magus could not explain it: {explained}"));
+    sections.append(guarded("citations", read: fun () > Section !> any => citationsSection(signatures)));
+    sections.append(unknownSection("docs", note: "the graph records no doc-to-symbol edge, and a text match would guess"));
+    sections.append(guarded("notes", read: fun () > Section !> any => notesSection(c.id)));
+    var span = node.source;
+    if (node.attrs["def_end_line"] != null) {
+        span = "{span}-{node.attrs["def_end_line"]!}";
+    }
+    return Card{ symbol = c, kind = kind, span = if (span != "") span else c.path, sections = sections };
+}
+
+// symbolCandidate resolves a name or ID to the one symbol the symbol step cards.
+export fun symbolCandidate(name: str) > Candidate !> any {
+    final r: magus\RefsResult = magus\refs(name, opts: {"limit": 1});
+    if (r.symbol == "") {
+        throw "show-review-context: no indexed symbol answers to {name} ({r.answer.verdict} {r.answer.reason})";
+    }
+    return Candidate{
+        id = r.symbol, label = r.label, qualified = r.label, path = if (r.defs.len() > 0) r.defs[0].file else "",
+        project = "", change = "", signature = "", refCount = r.refCount, fileCount = r.fileCount,
+        publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>],
+    };
+}
+
+fun changedDirs(d: magus\Diff) > [str] {
+    final acc = mut [<str>];
+    foreach (f in d.files) {
+        final dir = fs\dirname(f.path);
+        if (f.role != "output" and acc.indexOf(dir) == null) {
+            acc.append(dir);
+        }
+    }
+    return acc;
+}
+
+fun dependsOn(projects: magus\Projects) > {str: [str]} {
+    final acc = mut {<str: [str]>};
+    foreach (p in projects.projects) {
+        acc[p.path] = p.dependsOn;
+    }
+    return acc;
+}
+
+export fun projectsSection(d: magus\Diff, deps: {str: [str]}) > Section {
+    final items = mut [<str>];
+    foreach (p in d.seedProjects) {
+        final declared = deps[p] ?? [<str>];
+        items.append(if (declared.len() > 0) "{p} depends on {declared.join(", ")}" else "{p} declares no dependency");
+    }
+    return listed("projects", items: items, note: "the change edits no project");
+}
+
+// dependenciesSection lists the package imports the change adds, against the baseline's.
+export fun dependenciesSection(d: magus\Diff, baseline: str) > Section !> any {
+    if (baseline == "") {
+        return unknownSection("dependencies", note: "needs --baseline <graph.json>, a `magus graph export --symbols -o json` of the base");
+    }
+    final base = mut {<str: bool>};
+    foreach (l in json\parse(fs\readFile(baseline))["links"] ?? []) {
+        final src = "{l["source"]}";
+        final dst = "{l["target"]}";
+        if (l["relation"] == "imports" and src.startsWith("dir:") and dst.startsWith("dir:")) {
+            base["{src.sub(4)}>{dst.sub(4)}"] = true;
+        }
+    }
+    if (base.size() == 0) {
+        return unknownSection("dependencies", note: "the baseline {baseline} carries no directory imports to compare against");
+    }
+    final head: magus\ImportGraph = magus\importGraph();
+    if (!head.indexed) {
+        return unknownSection("dependencies", note: "no symbol index was ingested for this tree");
+    }
+    final items = mut [<str>];
+    foreach (dir in changedDirs(d)) {
+        foreach (t in head.packages[dir] ?? [<str>]) {
+            if (base["{dir}>{t}"] == null) {
+                items.append("{dir} now imports {t}");
+            }
+        }
+    }
+    return listed("dependencies", items: items, note: "no changed directory imports a package it did not import at the base");
+}
+
+export fun coChangeSection(d: magus\Diff, deps: {str: [str]}) > Section !> any {
+    final report: magus\InsightReport = magus\insight();
+    final items = mut [<str>];
+    foreach (p in report.affinity.pairs) {
+        final touched = d.seedProjects.indexOf(p.a) != null or d.seedProjects.indexOf(p.b) != null;
+        final declared = (deps[p.a] ?? [<str>]).indexOf(p.b) != null or (deps[p.b] ?? [<str>]).indexOf(p.a) != null;
+        if (touched and !declared) {
+            items.append("{p.a} and {p.b} changed together in {p.count} commits, and neither declares the other");
+        }
+    }
+    return listed("co-change", items: items, note: "every project this change edits co-changes only with projects it declares");
+}
+
+export fun ownersSection(d: magus\Diff) > Section !> any {
+    final count = mut {<str: int>};
+    var read = 0;
+    foreach (i, f in d.files) {
+        if (i >= ITEM_CAP * 2) {
+            break;
+        }
+        // A file the graph has no node for, a new one, has no owner edge to read.
+        try {
+            final n = around("file:{f.path}", relation: "owns", direction: "in", depth: 1);
+            read = read + 1;
+            foreach (x in others(n, focus: "file:{f.path}")) {
+                count[x.label] = (count[x.label] ?? 0) + 1;
+            }
+        } catch {
+            continue;
+        }
+    }
+    if (read == 0) {
+        return unknownSection("owners", note: "the graph holds none of the changed files");
+    }
+    final items = mut [<str>];
+    foreach (owner, n in count) {
+        items.append("{owner} owns {n} changed files");
+    }
+    return listed("owners", items: items, note: "no CODEOWNERS entry covers the changed files");
+}
+
+// apiGrowthSection counts, per directory, the symbols the change adds and how many of them
+// another project already references.
+export fun apiGrowthSection(all: [Candidate]) > Section {
+    final added = mut {<str: int>};
+    final external = mut {<str: int>};
+    foreach (c in all) {
+        if (c.change != "added") {
+            continue;
+        }
+        final dir = fs\dirname(c.path);
+        added[dir] = (added[dir] ?? 0) + 1;
+        if (c.publicTo.len() > 0) {
+            external[dir] = (external[dir] ?? 0) + 1;
+        }
+    }
+    final items = mut [<str>];
+    foreach (dir, n in added) {
+        items.append("{dir}: {n} added, {external[dir] ?? 0} referenced from another project");
+    }
+    return listed("api growth", items: items, note: "the change adds no symbol");
+}
+
+export fun layersSection(d: magus\Diff) > Section !> any {
+    final items = mut [<str>];
+    foreach (dir in changedDirs(d)) {
+        final info: magus\Dir = magus\dir(dir) catch magus\Dir{ path = dir, id = "", layer = "", language = "", imports = [<str>], importedBy = [<str>], importsIndexed = false, calls = [<magus\DirCall>], calledBy = [<magus\DirCall>], children = [<str>], files = 0 };
+        if (info.layer != "") {
+            items.append("{dir} is in layer {info.layer}");
+        }
+    }
+    if (items.len() == 0) {
+        return unknownSection("layers", note: "the workspace declares no layer for these directories");
+    }
+    return listed("layers", items: items, note: "");
+}
+
+export fun architecture(d: magus\Diff, all: [Candidate], baseline: str) > [Section] {
+    var deps = {<str: [str]>};
+    try {
+        deps = dependsOn(magus\projects());
+    } catch {
+        say("show-review-context: the project list could not be read; dependencies read as undeclared");
+    }
+    return [
+        projectsSection(d, deps: deps),
+        guarded("dependencies", read: fun () > Section !> any => dependenciesSection(d, baseline: baseline)),
+        guarded("co-change", read: fun () > Section !> any => coChangeSection(d, deps: deps)),
+        guarded("owners", read: fun () > Section !> any => ownersSection(d)),
+        apiGrowthSection(all),
+        guarded("layers", read: fun () > Section !> any => layersSection(d)),
+    ];
+}
+
+fun isUpper(ch: str) > bool {
+    return ch >= "A" and ch <= "Z";
+}
+
+fun isLower(ch: str) > bool {
+    return (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9");
+}
+
+// splitWords splits a camelCase, PascalCase or snake_case name into lowercase words, an
+// acronym kept whole: reachesAPI is reaches and api, HTTPServer is http and server.
+export fun splitWords(name: str) > [str] {
+    final words = mut [<str>];
+    final n = name.len();
+    var start = -1;
+    for (i: int = 0; i <= n; i = i + 1) {
+        final ch = if (i < n) name.sub(i, len: 1) else " ";
+        final letter = isUpper(ch) or isLower(ch);
+        var cut = !letter;
+        if (letter and isUpper(ch) and start >= 0 and i > start) {
+            final nextLower = i + 1 < n and isLower(name.sub(i + 1, len: 1));
+            cut = !isUpper(name.sub(i - 1, len: 1)) or nextLower;
+        }
+        if (cut and start >= 0) {
+            words.append(name.sub(start, len: i - start).lower());
+            start = -1;
+        }
+        if (start < 0 and letter) {
+            start = i;
+        }
+    }
+    return words;
+}
+
+// terms are the words the change's added names introduce, three letters or longer, each once.
+export fun terms(all: [Candidate]) > [str] {
+    final acc = mut [<str>];
+    foreach (c in all) {
+        if (c.change != "added") {
+            continue;
+        }
+        foreach (w in splitWords(c.label)) {
+            if (w.len() >= 3 and acc.indexOf(w) == null and acc.len() < TERM_CAP) {
+                acc.append(w);
+            }
+        }
+    }
+    return acc;
+}
+
+// vocabularyTerm is what a word already means in the workspace: the glossary entries and the
+// targets, spells, ops, diagnostics and docs whose names carry it.
+export fun vocabularyTerm(term: str) > Term !> any {
+    final q: magus\QueryResult = magus\query(term, opts: {"limit": 20});
+    final meanings = mut [<str>];
+    foreach (m in q.matches) {
+        if (m.kind == "symbol" or m.kind == "file" or splitWords(m.label).indexOf(term) == null) {
+            continue;
+        }
+        final meaning = if (m.id.startsWith("docsection:docs/glossary.md#")) "glossary: {m.label}" else "{m.kind} {m.label}";
+        if (meanings.indexOf(meaning) == null) {
+            meanings.append(meaning);
+        }
+    }
+    if (meanings.len() > 0) {
+        final shown = mut [<str>];
+        foreach (i, m in meanings) {
+            if (i < ITEM_CAP) {
+                shown.append(m);
+            }
+        }
+        return Term{ term = term, verdict = FOUND, note = "already names {meanings.len()} things here", meanings = shown };
+    }
+    if (q.answer.verdict == UNKNOWN) {
+        return Term{ term = term, verdict = UNKNOWN, note = q.answer.reason, meanings = [<str>] };
+    }
+    return Term{ term = term, verdict = ABSENT, note = "nothing in the workspace is named with it yet", meanings = [<str>] };
+}
+
+export fun vocabulary(all: [Candidate]) > [Term] {
+    final acc = mut [<Term>];
+    foreach (t in terms(all)) {
+        acc.append(vocabularyTerm(t) catch Term{ term = t, verdict = UNKNOWN, note = "the query failed", meanings = [<str>] });
+    }
+    return acc;
+}
+
+// Unknown is one thing magus could not measure, named by where it sits.
+export object Unknown {
+    section: str,
+    reason: str,
+}
+
+// unknowns are every unknown the bundle carries: the diff's own notes, then each section.
+export fun unknowns(b: Bundle) > [Unknown] {
+    final acc = mut [<Unknown>];
+    foreach (n in b.notes) {
+        acc.append(Unknown{ section = "diff", reason = n });
+    }
+    foreach (s in b.architecture) {
+        if (s.verdict == UNKNOWN) {
+            acc.append(Unknown{ section = "architecture {s.name}", reason = s.note });
+        }
+    }
+    foreach (c in b.cards) {
+        foreach (s in c.sections) {
+            if (s.verdict == UNKNOWN) {
+                acc.append(Unknown{ section = "`{c.symbol.qualified}` {s.name}", reason = s.note });
+            }
+        }
+    }
+    foreach (t in b.vocabulary) {
+        if (t.verdict == UNKNOWN) {
+            acc.append(Unknown{ section = "vocabulary `{t.term}`", reason = t.note });
+        }
+    }
+    return acc;
+}
+
+export fun headline(b: Bundle) > str {
+    if (b.base == "" and b.files.len() == 0 and b.selection.carded.len() == 1) {
+        return "read-only: carded `{b.selection.carded[0].qualified}`";
+    }
+    final touched = b.selection.carded.len() + b.selection.omitted.len();
+    final against = if (b.base != "") " against {b.base}" else "";
+    return "read-only: carded {b.selection.carded.len()} of {touched} touched symbols in {b.files.len()} files{against}";
+}
+
+fun sectionLines(s: Section, lines: mut [str]) > void {
+    final note = if (s.note != "") ": {s.note}" else "";
+    lines.append("- **{s.name}** ({s.verdict}){note}");
+    foreach (it in s.items) {
+        lines.append("  - {it}");
+    }
+    if (s.total > s.items.len()) {
+        lines.append("  - and {s.total - s.items.len()} more");
+    }
+}
+
+export fun renderMarkdown(b: Bundle) > str {
+    final lines = mut [headline(b), "", "# Review context", ""];
+    lines.append("## What magus could not measure");
+    lines.append("");
+    final unknown = unknowns(b);
+    if (unknown.len() == 0) {
+        lines.append("- nothing: every section below was answered");
+    }
+    foreach (u in unknown) {
+        lines.append("- {u.section}: {u.reason}");
+    }
+    if (b.lens != "code") {
+        lines.append("");
+        lines.append("## Architecture");
+        lines.append("");
+        foreach (s in b.architecture) {
+            sectionLines(s, lines: lines);
+        }
+    }
+    if (b.lens != "architecture") {
+        lines.append("");
+        lines.append("## Symbols");
+        foreach (c in b.cards) {
+            lines.append("");
+            final change = if (c.symbol.change != "") ", {c.symbol.change}" else "";
+            lines.append("### `{c.symbol.qualified}`");
+            lines.append("");
+            lines.append("{c.kind} at {c.span}{change}");
+            lines.append("");
+            foreach (s in c.sections) {
+                sectionLines(s, lines: lines);
+            }
+        }
+    }
+    if (b.lens != "code") {
+        lines.append("");
+        lines.append("## Vocabulary");
+        lines.append("");
+        if (b.vocabulary.len() == 0) {
+            lines.append("- the change adds no name");
+        }
+        foreach (t in b.vocabulary) {
+            final note = if (t.note != "") ": {t.note}" else "";
+            lines.append("- `{t.term}` ({t.verdict}){note}");
+            foreach (m in t.meanings) {
+                lines.append("  - {m}");
+            }
+        }
+    }
+    if (b.selection.omitted.len() > 0) {
+        lines.append("");
+        lines.append("## Not carded");
+        lines.append("");
+        foreach (c in b.selection.omitted) {
+            lines.append("- `{c.qualified}` ({c.change}, reach {c.fileCount}) in {c.path}");
+        }
+        final all = b.selection.carded.len() + b.selection.omitted.len();
+        lines.append("");
+        lines.append("Rerun with `--budget {all}` to card them all.");
+    }
+    lines.append("");
+    lines.append("## Use what is already installed");
+    lines.append("");
+    if (b.lens != "code") {
+        lines.append("- architecture: load `magus-architecture-review` to weigh where this code belongs.");
+    }
+    if (b.lens != "architecture") {
+        lines.append("- code: load your language's review skill, and `magus-query` for what references what.");
+    }
+    return lines.join("\n");
+}
+
+fun sectionJSON(s: Section) > {str: any} {
+    return {"name": s.name, "verdict": s.verdict, "note": s.note, "items": s.items, "total": s.total};
+}
+
+// bundleJSON is the -o json shape, schema 1.
+export fun bundleJSON(b: Bundle) > {str: any} {
+    final files = mut [<any>];
+    foreach (f in b.files) {
+        files.append({"path": f.path, "project": f.project, "role": f.role, "surface": f.surface});
+    }
+    final cards = mut [<any>];
+    foreach (c in b.cards) {
+        final sections = mut [<any>];
+        foreach (s in c.sections) {
+            sections.append(sectionJSON(s));
+        }
+        cards.append({"id": c.symbol.id, "qualified": c.symbol.qualified, "kind": c.kind, "span": c.span,
+            "path": c.symbol.path, "change": c.symbol.change, "sections": sections});
+    }
+    final architecture = mut [<any>];
+    foreach (s in b.architecture) {
+        architecture.append(sectionJSON(s));
+    }
+    final vocabulary = mut [<any>];
+    foreach (t in b.vocabulary) {
+        vocabulary.append({"term": t.term, "verdict": t.verdict, "note": t.note, "meanings": t.meanings});
+    }
+    final omitted = mut [<any>];
+    foreach (c in b.selection.omitted) {
+        omitted.append({"id": c.id, "label": c.label, "reach": c.fileCount});
+    }
+    final unknown = mut [<any>];
+    foreach (u in unknowns(b)) {
+        unknown.append({"section": u.section, "reason": u.reason});
+    }
+    return {"schema": 1, "base": b.base, "rev": b.rev, "lens": b.lens, "files": files, "cards": cards,
+        "architecture": architecture, "vocabulary": vocabulary, "omitted": omitted, "unknowns": unknown};
+}
+
+fun fileRows(d: magus\Diff) > [FileRow] {
+    final acc = mut [<FileRow>];
+    foreach (f in d.files) {
+        acc.append(FileRow{ path = f.path, project = f.project, role = f.role, surface = f.surface });
+    }
+    return acc;
+}
+
+// diffBundle builds the bundle for one changeset.
+export fun diffBundle(d: magus\Diff, rev: str, lens: str, budget: int, depth: int, baseline: str) > Bundle !> any {
+    final all = foldMembers(candidates(d));
+    final selection = select(all, budget: budget);
+    final cards = mut [<Card>];
+    if (lens != "architecture") {
+        foreach (i, c in selection.carded) {
+            say("carding {i + 1} of {selection.carded.len()}: {c.qualified}");
+            cards.append(card(c, depth: depth));
+        }
+    }
+    var arch = [<Section>];
+    var vocab = [<Term>];
+    if (lens != "code") {
+        say("reading the architecture lens");
+        arch = architecture(d, all: all, baseline: baseline);
+        vocab = vocabulary(all);
+    }
+    return Bundle{ base = d.base, rev = rev, lens = lens, files = fileRows(d), notes = d.notes,
+        selection = selection, cards = cards, architecture = arch, vocabulary = vocab };
+}
+
+fun positive(parsed: flags\FlagParse, flag: str, fallback: int) > int !> any {
+    final raw = parsed.values[flag];
+    if (raw == null) {
+        return fallback;
+    }
+    final n = std\parseInt(raw!);
+    if (n == null or n! < 1) {
+        throw "show-review-context: {flag} takes a positive integer\n{USAGE}";
+    }
+    return n!;
+}
+
+export fun main(args: [str]) > void !> any {
+    var step = "diff";
+    final rest = mut [<str>];
+    foreach (i, a in args) {
+        if (i == 0 and (a == "diff" or a == "symbol")) {
+            step = a;
+        } else {
+            rest.append(a);
+        }
+    }
+    final parsed = flags\parse(rest, switches: ["--help"],
+        valued: ["--rev", "--patch", "--from", "--baseline", "--budget", "--depth", "--lens", "-o", "--symbol"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-review-context: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final input = Input{ rev = parsed.values["--rev"] ?? "", patch = parsed.values["--patch"] ?? "",
+        saved = parsed.values["--from"] ?? "", baseline = parsed.values["--baseline"] ?? "" };
+    var sources = 0;
+    foreach (s in [input.rev, input.patch, input.saved]) {
+        if (s != "") {
+            sources = sources + 1;
+        }
+    }
+    if (sources > 1) {
+        throw "show-review-context: --rev, --patch and --from each name a changeset, so give one\n{USAGE}";
+    }
+    final budget = positive(parsed, flag: "--budget", fallback: 12);
+    final asked = positive(parsed, flag: "--depth", fallback: 2);
+    final depth = if (asked > DEPTH_CAP) DEPTH_CAP else asked;
+    final lens = parsed.values["--lens"] ?? "all";
+    if (LENSES.indexOf(lens) == null) {
+        throw "show-review-context: --lens is architecture, code or all\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "markdown";
+    if (format != "markdown" and format != "json") {
+        throw "show-review-context: -o is json, or omitted for markdown\n{USAGE}";
+    }
+    final symbol = parsed.values["--symbol"];
+    if ((step == "symbol") != (symbol != null)) {
+        throw "show-review-context: --symbol goes with the symbol step, and only there\n{USAGE}";
+    }
+
+    var bundle: Bundle? = null;
+    if (step == "symbol") {
+        if (sources > 0) {
+            throw "show-review-context: the symbol step reads no changeset\n{USAGE}";
+        }
+        final c = symbolCandidate(symbol!);
+        say("carding {c.qualified}");
+        bundle = Bundle{ base = "", rev = "", lens = "code", files = [<FileRow>], notes = [<str>],
+            selection = Selection{ carded = [c], omitted = [<Candidate>] }, cards = [card(c, depth: depth)],
+            architecture = [<Section>], vocabulary = [<Term>] };
+    } else {
+        say("reading the change");
+        bundle = diffBundle(readDiff(input), rev: input.rev, lens: lens, budget: budget, depth: depth, baseline: input.baseline);
+    }
+    if (format == "json") {
+        say(headline(bundle!));
+        std\print(json\stringify(bundleJSON(bundle!), indent: "  "));
+        return;
+    }
+    std\print(renderMarkdown(bundle!));
+}
+
+final FIXTURE = "hack/testdata/show-review-context-diff.json";
+
+fun labels(cs: [Candidate]) > [str] {
+    final acc = mut [<str>];
+    foreach (c in cs) {
+        acc.append(c.label);
+    }
+    return acc;
+}
+
+test "a card goes only to a touched symbol: never unchanged, generated or a package" {
+    final d = magus\diff({"from": FIXTURE});
+    assert\equal(labels(candidates(d)), want: ["Render", "NewWidget", "parse_widget_name"], message: "carded");
+}
+
+test "the budget cuts the narrowest and names what it cut" {
+    final d = magus\diff({"from": FIXTURE});
+    final s = select(candidates(d), budget: 2);
+    assert\equal(labels(s.carded), want: ["NewWidget", "parse_widget_name"], message: "added or re-signed first");
+    assert\equal(labels(s.omitted), want: ["Render"], message: "cut");
+    final b = Bundle{ base = d.base, rev = "", lens = "code", files = fileRows(d), notes = [<str>], selection = s,
+        cards = [<Card>], architecture = [<Section>], vocabulary = [<Term>] };
+    final md = renderMarkdown(b);
+    assert\equal(md.indexOf("## Not carded") != null, want: true, message: md);
+    assert\equal(md.indexOf("`Widget.Render` (body, reach 5)") != null, want: true, message: md);
+    assert\equal(md.indexOf("--budget 3") != null, want: true, message: md);
+    assert\equal(headline(b), want: "read-only: carded 2 of 3 touched symbols in 2 files against main", message: "headline");
+}
+
+test "an unknown section renders as unknown and is listed as not measured" {
+    final c = Candidate{ id = "x", label = "x", qualified = "pkg.X", path = "x.go", project = ".", change = "body",
+        signature = "", refCount = 0, fileCount = 0, publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>] };
+    final b = Bundle{ base = "main", rev = "", lens = "code", files = [<FileRow>], notes = [<str>],
+        selection = Selection{ carded = [c], omitted = [<Candidate>] },
+        cards = [Card{ symbol = c, kind = "Function", span = "x.go:3-9", sections = [unknownSection("callers", note: "no calls index")] }],
+        architecture = [<Section>], vocabulary = [<Term>] };
+    final md = renderMarkdown(b);
+    assert\equal(md.indexOf("- **callers** (unknown): no calls index") != null, want: true, message: md);
+    final u = unknowns(b);
+    assert\equal(u.len(), want: 1, message: "not measured");
+    assert\equal("{u[0].section}: {u[0].reason}", want: "`pkg.X` callers: no calls index", message: "named by where it sits");
+}
+
+test "exposure reads module API, projects and the path to the API" {
+    final c = Candidate{ id = "x", label = "x", qualified = "pkg.x", path = "x.go", project = ".", change = "body",
+        signature = "", refCount = 1, fileCount = 1, publicBeyondWorkspace = false, publicTo = ["docs"],
+        reaches = [Reach{ qualified = "pkg.Open", boundary = "package", via = ["pkg.load"] }] };
+    assert\equal(exposureSection(c).items, want: ["referenced from projects: docs",
+        "reaches pkg.Open, referenced across a package boundary, via pkg.load"], message: "exposure");
+}
+
+test "names split on case and underscores into lowercase words" {
+    assert\equal(splitWords("reachesAPI"), want: ["reaches", "api"], message: "trailing acronym");
+    assert\equal(splitWords("HTTPServer"), want: ["http", "server"], message: "leading acronym");
+    assert\equal(splitWords("parse_widget_name"), want: ["parse", "widget", "name"], message: "snake_case");
+    assert\equal(splitWords("NewWidget2"), want: ["new", "widget2"], message: "digits stay with their word");
+}
+
+test "a diagnostic code is read from a signature, once" {
+    assert\equal(diagnosticCodes(["func f() error // MGS1022 or MGS1022", "func g() // BZZ1006", "func h()"]),
+        want: ["MGS1022", "BZZ1006"], message: "codes");
+}
+
+test "an added type's members fold into its card" {
+    fun cand(id: str, change: str) > Candidate {
+        return Candidate{ id = id, label = id, qualified = id, path = "w.go", project = ".", change = change,
+            signature = "", refCount = 0, fileCount = 0, publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>] };
+    }
+    final all = [cand("m/Widget#", change: "added"), cand("m/Widget#size.", change: "added"),
+        cand("m/Other#", change: "body"), cand("m/Other#Draw().", change: "body")];
+    assert\equal(labels(foldMembers(all)), want: ["m/Widget#", "m/Other#", "m/Other#Draw()."], message: "folded");
+}
+
+test "only callable kinds are asked for calls" {
+    assert\equal(callable("Method"), want: true, message: "method");
+    assert\equal(callable("Struct"), want: false, message: "struct");
+    assert\equal(callable("UnspecifiedKind"), want: true, message: "the graph decides an unrecorded kind");
+}
+
+test "a member's prefix is its ID through the enclosing type" {
+    assert\equal(memberPrefix("symbol:gomod m `m/pkg`/Widget#Render()."), want: "symbol:gomod m `m/pkg`/Widget#", message: "method");
+    assert\equal(memberPrefix("symbol:gomod m `m/pkg`/NewWidget()."), want: "", message: "function");
+}
+
+test "-o json keeps its shape" {
+    final d = magus\diff({"from": FIXTURE});
+    final b = Bundle{ base = d.base, rev = "main...HEAD", lens = "all", files = fileRows(d), notes = d.notes,
+        selection = select(candidates(d), budget: 1), cards = [<Card>], architecture = [<Section>], vocabulary = [<Term>] };
+    final shape = json\parse(json\stringify(bundleJSON(b)));
+    final keys = mut [<str>];
+    foreach (k, v in shape) {
+        keys.append("{k}");
+    }
+    keys.sort(fun (a: str, b: str) > bool => a < b);
+    assert\equal(keys, want: ["architecture", "base", "cards", "files", "lens", "omitted", "rev", "schema", "unknowns", "vocabulary"], message: "keys");
+    assert\equal(shape["schema"], want: 1, message: "schema");
+    assert\equal(shape["omitted"][0]["label"], want: "parse_widget_name", message: "omitted");
+    assert\equal(shape["files"][0]["path"], want: "internal/widget/widget.go", message: "files");
+    assert\equal(shape["unknowns"][0]["section"], want: "diff", message: "a diff note is an unknown");
+}
+
+test "a patch is read as the changeset" {
+    final d = readDiff(Input{ rev = "", patch = "hack/testdata/show-review-context.patch", saved = "", baseline = "" });
+    assert\equal(d.files[0].path, want: "hack/README.md", message: "the patch's file");
+}
+
+test "a live card answers every section, in order" {
+    final c = symbolCandidate("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/project/impact`/Enrich().");
+    final names = mut [<str>];
+    foreach (s in card(c, depth: 1).sections) {
+        names.append(s.name);
+        assert\equal([FOUND, ABSENT, UNKNOWN].indexOf(s.verdict) != null, want: true, message: "{s.name}: {s.verdict}");
+    }
+    assert\equal(names, want: ["signature", "exposure", "callers", "callees", "neighbours", "implementers", "tests", "citations", "docs", "notes"], message: "sections");
+}

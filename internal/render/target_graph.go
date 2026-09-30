@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/url"
 	"path"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -125,7 +123,7 @@ func magnitude(n int) string {
 // catalog. It leads with the knowledge-graph "query first" section, then lists
 // every project's targets with a one-line summary each, and points the reader at
 // `magus describe target <name>` for a target's fully-evaluated dispatch plan. The
-// per-target dispatch plan and the Mermaid graphs deliberately do
+// per-target dispatch plan and any drawn graph deliberately do
 // not live here: their bulk made the file useless as in-context routing, and both
 // are one command (or the Graph Explorer link) away. It is engine- and
 // repo-agnostic: `magus describe graph -o markdown` produces it for any magus
@@ -207,8 +205,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing 
 		" for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy).")
 
 	// Prefer a picture: a link to the hosted Graph Explorer preloaded with this
-	// repo's committed graph.json (emitted only when that link resolves). The
-	// interactive view replaces the Mermaid graphs this file used to embed.
+	// repo's committed graph.json (emitted only when that link resolves).
 	if explorerURL != "" {
 		b.Paragraph("Prefer a picture? Explore this graph in the " + md.Link("Graph Explorer", explorerURL) +
 			" - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).")
@@ -382,191 +379,28 @@ func catalogOrder(nodes []types.TargetGraphNode) []types.TargetGraphNode {
 	return append(primary, workers...)
 }
 
-// targetRoleClasses style target nodes by role in the target dependency graph.
-//
-// ANTI-DRIFT: the classDef names below ("anchor", "target") are mirrored verbatim
-// in console/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename
-// here must be matched there. TestTargetGraphMermaidClassDefs asserts this in CI.
-var targetRoleClasses = []renderClass{
-	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
-	{Name: "target", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
-}
-
-// WriteTargetGraphMermaid emits a target dependency graph as a Mermaid flowchart.
-// It is the one Mermaid emitter for the target graph: `magus describe graph -o
-// mermaid` routes through it. See targetGraphIR for the stage-boxing and
-// role-styling rules.
-func WriteTargetGraphMermaid(w io.Writer, out types.TargetGraphOutput) error {
-	return writeMermaid(w, targetGraphIR(out))
-}
-
-// targetGraphIR maps the target dependency graph onto the shared renderGraph. With
-// more than one project, each is a subgraph and its node IDs are prefixed (so a
-// `build` in two projects stays distinct). Worker targets sharing a trailing
-// `-<segment>` (e.g. `man-generate`, `content-generate`) are boxed into a collapsing
-// stage subgraph, so an edge lands on the box rather than a worker inside it; the
-// bare composite (`generate`) stays loose. Nodes are classed by role: top-level
-// targets (nothing depends on them) versus plain targets pulled in as dependencies.
-// Edges point in run order — a dependency to the target that needs it.
-func targetGraphIR(out types.TargetGraphOutput) renderGraph {
-	projects := nonEmptyProjects(out)
-	multi := len(projects) > 1
-	// LR so the graph reads left-to-right like a pipeline. The extra rank/node
-	// spacing gives dagre room to route around the per-target spell boxes (GitHub
-	// has no ELK engine to lean on). DOT ignores these layout hints.
-	g := renderGraph{DOTName: "targets", Direction: "LR", NodeSpacing: 50, RankSpacing: 80}
-
-	// projGroupOf maps a project path to its wrapper-subgraph id, filled as each
-	// project is emitted below; the cross-project edge pass (after the loop) reads
-	// the completed map so a dependency on a later-listed project still resolves.
-	projGroupOf := make(map[string]string, len(projects))
-
-	for i, p := range projects {
-		prefix, projGroup := "", ""
-		if multi {
-			prefix = fmt.Sprintf("p%d_", i)
-			projGroup = fmt.Sprintf("p%d", i)
-			projGroupOf[p.Path] = projGroup
-			g.Groups = append(g.Groups, renderGroup{ID: projGroup, Label: p.Label()})
-		}
-
-		known := make(map[string]bool, len(p.Nodes))
-		for _, n := range p.Nodes {
-			known[n.Name] = true
-		}
-		incoming := map[string]bool{}
-		for _, n := range p.Nodes {
-			for _, d := range n.Dependencies {
-				if known[d] {
-					incoming[d] = true
-				}
-			}
-		}
-
-		stageOf, stageOrder := stageGroups(p.Nodes)
-		for _, stage := range stageOrder {
-			g.Groups = append(g.Groups, renderGroup{
-				ID:       prefix + "stage_" + mermaidID(stage),
-				Label:    stage,
-				Parent:   projGroup,
-				Collapse: true,
-			})
-		}
-
-		for _, n := range p.Nodes {
-			group := projGroup
-			if s := stageOf[n.Name]; s != "" {
-				group = prefix + "stage_" + mermaidID(s)
-			}
-			// Every target is a single node colored by role; spells are not boxed
-			// inside it. Two roles only: a top-level target (nothing depends on it — a
-			// typical entry point) versus a plain target pulled in as a dependency.
-			// Both are runnable; the split is a hint, not a rule.
-			role := "target"
-			if !incoming[n.Name] {
-				role = "anchor"
-			}
-			g.Nodes = append(g.Nodes, renderNode{
-				ID:      prefix + mermaidID(n.Name),
-				DOTID:   p.Path + ":" + n.Name,
-				Label:   n.Name,
-				Shape:   shapeRounded,
-				Classes: []string{role},
-				Group:   group,
-			})
-		}
-		// Edges point in run order, not dependency order: an arrow from a target's
-		// dependency to the target itself, so the graph reads "what runs first" left
-		// to right (generate → … → ci), the inverse of the "depends on" relation.
-		for _, n := range p.Nodes {
-			to := prefix + mermaidID(n.Name)
-			for _, d := range n.Dependencies {
-				g.Edges = append(g.Edges, renderEdge{From: prefix + mermaidID(d), To: to})
-			}
-		}
-	}
-
-	// Cross-project edges, in run order: a project a depends on runs first, so its
-	// box points at the project that needs it. Endpoints are the wrapper-subgraph
-	// ids; an edge from a project that contributed no nodes (dropped) is skipped.
-	if multi {
-		for _, p := range projects {
-			to := projGroupOf[p.Path]
-			for _, dep := range p.DependsOn {
-				if from, ok := projGroupOf[dep]; ok {
-					g.Edges = append(g.Edges, renderEdge{From: from, To: to})
-				}
-			}
-		}
-	}
-
-	g.Classes = slices.Clone(targetRoleClasses)
-	return g
-}
-
-// stageGroups buckets a project's *worker* targets into a collapsing stage
-// subgraph named for their shared trailing `-<segment>` (e.g. `man-generate`,
-// `content-generate` → a `generate` box). A worker joins stage `seg` only when a
-// composite target named `seg` exists *and directly depends on it* — the box reads
-// as "the steps `seg` runs", so a same-suffix target the composite does not run
-// (e.g. a standalone `pgo-generate`) stays loose rather than landing in the box.
-// A stage needs two or more such workers; a lone one (or a unique suffix like
-// `release`) stays loose. The composite itself is left out of its own box so an
-// edge lands on the box, not a `generate` node nested in a `generate` subgraph.
-func stageGroups(nodes []types.TargetGraphNode) (map[string]string, []string) {
-	present := make(map[string]bool, len(nodes))
-	deps := make(map[string]map[string]bool, len(nodes))
-	for _, n := range nodes {
-		present[n.Name] = true
-		set := make(map[string]bool, len(n.Dependencies))
-		for _, d := range n.Dependencies {
-			set[d] = true
-		}
-		deps[n.Name] = set
-	}
-
-	members := map[string][]string{} // segment -> workers the composite depends on
-	for _, n := range nodes {
-		seg := lastSegment(n.Name)
-		if n.Name == seg || !present[seg] || !deps[seg][n.Name] {
-			continue
-		}
-		members[seg] = append(members[seg], n.Name)
-	}
-
-	stageOf := map[string]string{}
-	var order []string
-	for seg, ms := range members {
-		if len(ms) < 2 {
-			continue // a lone boxed worker doesn't earn a subgraph
-		}
-		order = append(order, seg)
-		for _, m := range ms {
-			stageOf[m] = seg
-		}
-	}
-	slices.Sort(order)
-	return stageOf, order
-}
-
-// uniqSorted returns s sorted with duplicates removed.
-func uniqSorted(s []string) []string {
-	slices.Sort(s)
-	return slices.Compact(s)
-}
-
-// lastSegment returns the text after the final '-', or the whole name if none.
-func lastSegment(name string) string {
-	if i := strings.LastIndexByte(name, '-'); i >= 0 {
-		return name[i+1:]
-	}
-	return name
-}
-
 // WriteTargetGraphDOT emits the target graph as Graphviz DOT, nodes qualified by
 // project path so cross-project name clashes stay distinct.
 func WriteTargetGraphDOT(w io.Writer, out types.TargetGraphOutput) error {
 	return writeDOT(w, targetGraphIR(out))
+}
+
+// targetGraphIR maps the target dependency graph onto a dotGraph. Edges point in run
+// order, from a dependency to the target that needs it. A dependency the project does
+// not declare has no node, so writeDOT drops its edge.
+func targetGraphIR(out types.TargetGraphOutput) dotGraph {
+	g := dotGraph{Name: "targets"}
+	for _, p := range nonEmptyProjects(out) {
+		for _, n := range p.Nodes {
+			g.Nodes = append(g.Nodes, p.Path+":"+n.Name)
+		}
+		for _, n := range p.Nodes {
+			for _, d := range n.Dependencies {
+				g.Edges = append(g.Edges, [2]string{p.Path + ":" + d, p.Path + ":" + n.Name})
+			}
+		}
+	}
+	return g
 }
 
 // nonEmptyProjects drops projects with no extracted targets (e.g. a not-yet-

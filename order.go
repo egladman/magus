@@ -48,7 +48,7 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 		slog.WarnContext(ctx, advice)
 	}
 	for i := range steps {
-		key := cache.DepKey(steps[i].ProjectPath, steps[i].Target)
+		key := types.TargetRef{Project: steps[i].ProjectPath, Target: steps[i].Target}
 		for _, up := range order.RunAfter[key] {
 			if !slices.Contains(steps[i].RunAfter, up) {
 				steps[i].RunAfter = append(steps[i].RunAfter, up)
@@ -56,7 +56,7 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 		}
 	}
 	// Answers "why did these steps serialize" / "why did that target re-run" at -vv
-	// without a debugger, like the barrier's schedule.wait trace.
+	// without a debugger, like the upstream wait's schedule.wait trace.
 	trace := func(e cache.DerivedEdge, dropped string) {
 		slog.DebugContext(ctx, "schedule.derived",
 			slog.String("writer", order.Nodes[e.Writer].Project+":"+order.Nodes[e.Writer].Target),
@@ -77,11 +77,11 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 // their bodies compose (ctx.needs, extracted statically). Globs are
 // workspace-rooted the same way the cache keys them.
 func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
-	byKey := map[string]*cache.TargetNode{}
-	var order []string
+	byKey := map[types.TargetRef]*cache.TargetNode{}
+	var order []types.TargetRef
 
-	add := func(p *types.Project, target, stepKey string) *cache.TargetNode {
-		key := cache.DepKey(p.Path, target)
+	add := func(p *types.Project, target string, stepKey types.TargetRef) *cache.TargetNode {
+		key := types.TargetRef{Project: p.Path, Target: target}
 		n, ok := byKey[key]
 		if !ok {
 			// The target's OWN declarations, not buildStep's folded view: the step
@@ -113,7 +113,7 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 	}
 
 	for _, s := range steps {
-		stepKey := cache.DepKey(s.ProjectPath, s.Target)
+		stepKey := types.TargetRef{Project: s.ProjectPath, Target: s.Target}
 		_ = types.WalkChain(m.ws.Get(s.ProjectPath), s.Target, m.ws.Get, func(v types.ChainVisit) error {
 			add(v.Project, v.Target, stepKey)
 			return nil
@@ -187,10 +187,10 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 	// through the same seam as any other body (internal/interp.declaredTimeout).
 	order := st.order
 
-	replayed := map[string]bool{}
-	stepKeys := map[string]bool{}
+	replayed := map[types.TargetRef]bool{}
+	stepKeys := map[types.TargetRef]bool{}
 	for i, s := range steps {
-		k := cache.DepKey(s.ProjectPath, s.Target)
+		k := types.TargetRef{Project: s.ProjectPath, Target: s.Target}
 		stepKeys[k] = true
 		if i < len(results) && results[i].Hit {
 			replayed[k] = true
@@ -224,7 +224,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		if stepKeys[node.Key()] {
 			continue
 		}
-		if slices.ContainsFunc(node.Steps, func(s string) bool { return replayed[s] }) {
+		if slices.ContainsFunc(node.Steps, func(s types.TargetRef) bool { return replayed[s] }) {
 			continue
 		}
 		// Verifiers (no declared writes) never re-run here. Settling exists to fix
@@ -275,7 +275,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		// result event with its captured log. Dispatched bare it was invisible to all
 		// four, and a stalled settle read as a finished run that forgot to exit.
 		if _, err := m.cache.RunAside(ctx, newStep(p, node.Target), func(ctx context.Context) error {
-			_, err := interp.RunDir(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), p.Dir, node.Target, nil)
+			_, err := interp.RunDir(buzz.WithTargetRuns(ctx, buzz.NewTargetRuns()), p.Dir, node.Target, nil)
 			return err
 		}, opts...); err != nil {
 			return fmt.Errorf("magus: derived ordering: settle %s:%s: %w", node.Project, node.Target, err)

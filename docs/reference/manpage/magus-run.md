@@ -203,10 +203,10 @@ magus run ci
 magus run build --graph
 ```
 
-*Graph in Mermaid format*
+*Graph in DOT format*
 
 ```sh
-magus run build --graph -o mermaid
+magus run build --graph -o dot
 ```
 
 *Graph dependents of api/gateway*

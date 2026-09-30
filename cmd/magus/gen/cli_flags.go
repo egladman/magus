@@ -75,8 +75,6 @@ const (
 	FlagAgentForce = "force"
 	// agent: --global
 	FlagAgentGlobal = "global"
-	// agent: --prune
-	FlagAgentPrune = "prune"
 	// agent: --skill-form
 	FlagAgentSkillForm = "skill-form"
 	// agent: --tar
@@ -979,7 +977,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
 	fs.StringVar(&f.URL, FlagGraphExportURL, d.URL, "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
-	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
+	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot")
 	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
 	fs.BoolVar(&f.Symbols, FlagGraphExportSymbols, false, "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them")
 	return &f
@@ -2027,7 +2025,6 @@ func BindSpellLock(fs *flag.FlagSet) *SpellLockFlags {
 type AgentFlags struct {
 	Dir       string // --dir
 	Force     bool   // --force
-	Prune     bool   // --prune
 	DryRun    bool   // --dry-run
 	Tar       bool   // --tar
 	Global    bool   // --global
@@ -2039,7 +2036,6 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	var f AgentFlags
 	fs.StringVar(&f.Dir, FlagAgentDir, ".", "Repo directory to install into (agent install)")
 	fs.BoolVar(&f.Force, FlagAgentForce, false, "Overwrite existing installed skill files (agent install)")
-	fs.BoolVar(&f.Prune, FlagAgentPrune, false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")

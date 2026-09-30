@@ -1,6 +1,10 @@
 package knowledge
 
 import (
+	"cmp"
+	"maps"
+	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -125,6 +129,147 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 	}
 	return s
+}
+
+// assembleSymbolShards builds one symbol shard per project in symbols, in sorted project
+// order, and stores in each the dir -imports-> dir edges foldImports read from that
+// project's index. A project whose index yields no node gets no shard.
+func assembleSymbolShards(symbols map[string][]types.KnowledgeSymbol, projects []types.TargetGraphProject) []Shard {
+	imports := foldImports(symbols)
+	var out []Shard
+	for _, project := range slices.Sorted(maps.Keys(symbols)) {
+		s := assembleSymbols(project, symbols[project], projects)
+		if len(s.Nodes) == 0 {
+			continue
+		}
+		s.Nodes = append(s.Nodes, imports[project].nodes...)
+		s.Edges = append(s.Edges, imports[project].edges...)
+		out = append(out, s)
+	}
+	return out
+}
+
+// foldedImports is one project's share of foldImports: the edges its index recorded and a
+// dir node per endpoint carrying the package's language, so an edge never outlives its
+// endpoints when only some symbol shards are loaded.
+type foldedImports struct {
+	nodes []types.KnowledgeNode
+	edges []types.KnowledgeEdge
+}
+
+// foldImports turns the package imports every index recorded into dir -imports-> dir
+// edges, keyed by the project whose index read each import. An indexer emits an import as
+// a reference to the package's namespace symbol, which every file of a package defines,
+// so a file defining A and referencing B is A importing B. No import syntax is parsed.
+//
+// A namespace's package is the lowest directory holding a non-test file that defines it,
+// read across every index, since an import's target is often in another project's index.
+// Test files are left out (a test may import what its package cannot), as are
+// self-imports and namespaces no workspace file defines. Each edge carries AttrLanguage
+// and, as provenance, the lexically first source it was read from.
+func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedImports {
+	nsDir := map[string]string{}
+	nsLang := map[string]string{}
+	fileNS := map[string]map[string]bool{}
+	symNS := map[string]string{}
+	for _, syms := range symbols {
+		for _, sym := range syms {
+			if sym.Namespace != "" {
+				symNS[sym.Key] = sym.Namespace
+			}
+			if sym.Key == "" || sym.Namespace != sym.Key {
+				continue
+			}
+			if l := sym.Language; l != "" && (nsLang[sym.Key] == "" || l < nsLang[sym.Key]) {
+				nsLang[sym.Key] = l
+			}
+			for _, def := range sym.Defs {
+				if isTestSource(def) {
+					continue
+				}
+				if fileNS[def] == nil {
+					fileNS[def] = map[string]bool{}
+				}
+				fileNS[def][sym.Key] = true
+				if d, cur := path.Dir(def), nsDir[sym.Key]; cur == "" || d < cur {
+					nsDir[sym.Key] = d
+				}
+			}
+		}
+	}
+
+	type fold struct{ lang, evidence string }
+	found := map[string]map[[2]string]fold{}
+	add := func(project, from, to, evidence string) {
+		fd, td := nsDir[from], nsDir[to]
+		if fd == "" || td == "" || fd == td {
+			return
+		}
+		k := [2]string{fd, td}
+		if found[project] == nil {
+			found[project] = map[[2]string]fold{}
+		}
+		f, seen := found[project][k]
+		if lang := nsLang[from]; !seen || lang != "" && (f.lang == "" || lang < f.lang) {
+			f.lang = lang
+		}
+		if !seen || evidence < f.evidence {
+			f.evidence = evidence
+		}
+		found[project][k] = f
+	}
+	for project, syms := range symbols {
+		for _, sym := range syms {
+			if sym.Key != "" && sym.Namespace == sym.Key {
+				for _, ref := range sym.Refs {
+					if isTestSource(ref.Path) {
+						continue
+					}
+					for from := range fileNS[ref.Path] {
+						add(project, from, sym.Key, ref.Path)
+					}
+				}
+			}
+			if sym.Namespace == "" || isTestSource(sym.Source) {
+				continue
+			}
+			for _, c := range sym.Calls {
+				add(project, sym.Namespace, symNS[c.Key], sym.Source)
+			}
+		}
+	}
+
+	dirLang := map[string]string{}
+	for ns, d := range nsDir {
+		if l := nsLang[ns]; l != "" && (dirLang[d] == "" || l < dirLang[d]) {
+			dirLang[d] = l
+		}
+	}
+	out := make(map[string]foldedImports, len(found))
+	for project, pairs := range found {
+		var fi foldedImports
+		ends := map[string]bool{}
+		for _, k := range slices.SortedFunc(maps.Keys(pairs), func(a, b [2]string) int {
+			return cmp.Or(cmp.Compare(a[0], b[0]), cmp.Compare(a[1], b[1]))
+		}) {
+			f := pairs[k]
+			e := extractedEdge(dirID(k[0]), dirID(k[1]), types.RelationImports, f.evidence)
+			if f.lang != "" {
+				e.Attrs = map[string]string{types.AttrLanguage: f.lang}
+			}
+			fi.edges = append(fi.edges, e)
+			ends[k[0]], ends[k[1]] = true, true
+		}
+		for _, d := range slices.Sorted(maps.Keys(ends)) {
+			n := types.KnowledgeNode{ID: dirID(d), Kind: types.KindDir, Label: d, Source: d}
+			if dirLang[d] != "" {
+				n.Attrs = map[string]string{types.AttrLanguage: dirLang[d]}
+			}
+			fi.nodes = append(fi.nodes, n)
+		}
+		out[project] = fi
+	}
+	return out
 }
 
 // testRefCount counts the referencing files that are test files. One entry per file (SCIP

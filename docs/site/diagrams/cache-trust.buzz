@@ -1,56 +1,41 @@
-// site/diagrams/cache-trust.buzz - who may write which cache tier in CI. The argument is
+// site/diagrams/cache-trust.buzz: who may write which cache tier in CI. The argument is
 // in the connectors that are missing: no pull request run writes the remote tier, and
 // nothing carries a pull request's local tier to the default branch.
+//
+// The runs and the local tier live in the CI workflow, not in a package, so they are
+// actors; the remote tier and its signature check are internal/cache.
 namespace cacheTrust;
 
-import "../libs/diagram/diagram" as _;
+import "magus";
+import "magus/figure";
 
-export fun cacheTrustDiagram() > Diagram {
-    return Diagram{
-        id = "cache-trust",
-        eyebrow = "remote cache",
-        title = "A pull request reads the shared cache and never writes it",
-        desc = "A pull request run reads the signed remote tier and reads and writes a "
-            + "local tier scoped to its own ref. Only a run on the default branch holds "
-            + "the signing key, so only the default branch writes the remote tier. "
-            + "Every read checks the signature "
-            + "and rebuilds the target on an unsigned entry.",
-        width = 960,
-        height = 520,
-        zones = [
-            Zone{ label = "pull request, untrusted code", x = 32, y = 88, w = 280, h = 352 },
-            Zone{ label = "default branch, trusted", x = 648, y = 88, w = 280, h = 352 },
-        ],
-        nodes = [
-            Node{ id = "pr", anchor = ".github/workflows/ci.yaml", label = "PR run",
-                  sub = "no signing key", tag = "pull_request",
-                  x = 56, y = 128, w = 232, h = 64 },
-            Node{ id = "local", anchor = ".github/workflows/ci.yaml", label = "Local tier",
-                  sub = "Actions cache, PR ref", role = "store",
-                  x = 56, y = 344, w = 232, h = 64 },
-            Node{ id = "remote", anchor = "internal/cache/signing.go", label = "Remote tier",
-                  sub = "verified on every read", tag = "ed25519", role = "focal",
-                  x = 376, y = 232, w = 208, h = 64 },
-            Node{ id = "default", anchor = ".github/workflows/ci.yaml", label = "Default branch run",
-                  sub = "holds the signing key", tag = "push",
-                  x = 672, y = 128, w = 232, h = 64 },
-            Node{ id = "reject", label = "Unsigned entry", sub = "rejected, then rebuilt",
-                  role = "optional", x = 672, y = 344, w = 232, h = 64 },
-        ],
-        edges = [
-            Edge{ src = "pr", dst = "local", label = "read + write",
-                  srcSide = "bottom", dstSide = "top" },
-            Edge{ src = "remote", dst = "pr", label = "read only",
-                  srcSide = "left", dstSide = "right", bend = 332 },
-            Edge{ src = "default", dst = "remote", label = "sign + put", kind = "accent",
-                  srcSide = "left", dstSide = "right", dstSlot = 1, dstSlots = 2, bend = 628 },
-            Edge{ src = "remote", dst = "reject", label = "no signature", dashed = true,
-                  srcSide = "right", srcSlot = 2, srcSlots = 2, dstSide = "left", bend = 612 },
-        ],
-        legend = [
-            LegendItem{ role = "focal", label = "the one shared store" },
-            LegendItem{ role = "store", label = "one pull request only" },
-            LegendItem{ role = "optional", label = "never replayed" },
-        ],
-    };
+export fun cacheTrustFigure() > figure\Figure !> any {
+    final remote = magus\dir("internal/cache");
+    final pr = figure\external("PR run", sub: "no signing key", tag: "pull_request", look: figure\Look.plain);
+    final local = figure\external("Local tier", sub: "Actions cache, PR ref", look: figure\Look.store);
+    final main = figure\external("Default branch run", sub: "holds the signing key", tag: "push", look: figure\Look.plain);
+    final reject = figure\external("Unsigned entry", sub: "rejected, then rebuilt", look: figure\Look.optional);
+    return figure\of("cache-trust",
+            title: "A pull request reads the shared cache and never writes it",
+            eyebrow: "remote cache",
+            desc: "A pull request run reads the signed remote tier and reads and writes a "
+                + "local tier scoped to its own ref. Only a run on the default branch holds "
+                + "the signing key, so only the default branch writes the remote tier. "
+                + "Every read checks the signature "
+                + "and rebuilds the target on an unsigned entry.")
+        .actor(pr)
+        .actor(local)
+        .box(remote, label: "Remote tier", sub: "verified on every read", tag: "ed25519", focal: true)
+        .actor(main)
+        .actor(reject)
+        .flowAcross(pr, dst: local, label: "read + write")
+        .flowOut(remote, dst: pr, label: "read only")
+        .flowIn(main, dst: remote, label: "sign + put", stroke: figure\Stroke.focal)
+        .flowOut(remote, dst: reject, label: "no signature", stroke: figure\Stroke.optional)
+        .zone("pull request, untrusted code", actors: [pr, local])
+        .zone("default branch, trusted", actors: [main, reject])
+        .legend(figure\Look.focal, label: "the one shared store")
+        .legend(figure\Look.store, label: "one pull request only")
+        .legend(figure\Look.optional, label: "never replayed")
+        .scope(figure\setOf([remote]));
 }

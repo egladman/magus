@@ -419,6 +419,7 @@
   --console-node-package:    #668249;  /* 4.33:1 */
   --console-node-symbol:     #7d9664;  /* 3.27:1 */
   /* Declarations - h 190 */
+  --console-node-marker:     #003f3c;  /* 11.82:1 */
   --console-node-target:     #00524e;  /* 9.06:1 */
   --console-node-spell:      #006763;  /* 6.73:1 */
   --console-node-op:         #007e79;  /* 4.93:1 */
@@ -493,6 +494,7 @@
   --console-node-package:    #bed8a5;  /* 9.39:1 */
   --console-node-symbol:     #d6eec1;  /* 11.68:1 */
   /* Declarations - h 190 */
+  --console-node-marker:     #4f8e89;  /* 3.85:1 */
   --console-node-target:     #61a5a0;  /* 5.13:1 */
   --console-node-spell:      #6cbdb7;  /* 6.65:1 */
   --console-node-op:         #83d4ce;  /* 8.50:1 */
@@ -511,4 +513,24 @@
   /* People - neutral */
   --console-node-owner:      #b4a9ac;  /* 6.38:1 */
   --console-node-author:     #cbbfc2;  /* 8.15:1 */
+}
+
+/* --- Diagram figures ------------------------------------------------------------------------
+   magus/figure's cssVarPalette paints an inlined figure with var(--magus-diagram-*, <light hex>),
+   so without this block every figure is the light palette on a dark console. Each role maps onto
+   a theme-aware slot, which is why there is no dark copy: the PF tokens and --console-* already
+   resolve per theme on the same element. soft is subtle text unmixed, because it is the figure's
+   smallest type and a mix toward the paper fell under 4.5:1. accent-tint is a mix because the
+   console has no tinted-brand ground to borrow. The Diagrams surface's tests pin that all nine
+   are defined. */
+:root {
+  --magus-diagram-paper: var(--pf-t--global--background--color--primary--default);
+  --magus-diagram-surface: var(--console-chrome);
+  --magus-diagram-ink: var(--pf-t--global--text--color--regular);
+  --magus-diagram-muted: var(--pf-t--global--text--color--subtle);
+  --magus-diagram-soft: var(--pf-t--global--text--color--subtle);
+  --magus-diagram-rule: var(--pf-t--global--border--color--default);
+  --magus-diagram-accent: var(--console-accent);
+  --magus-diagram-accent-tint: color-mix(in srgb, var(--console-accent) 10%, transparent);
+  --magus-diagram-link: var(--pf-t--global--text--color--link--default);
 }

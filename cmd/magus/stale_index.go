@@ -128,14 +128,33 @@ func staleIndexProjects(ctx context.Context, root string) []string {
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index
 // older than the tree, or "" when every built index is current.
 func staleGraphAdvice(ctx context.Context) string {
-	stale := staleIndexProjects(ctx, "")
-	if len(stale) == 0 {
+	reason, _ := withinBudget(guardLookupBudget, func() string {
+		if idx := guardIndex(); idx != nil {
+			return idx.Stale()
+		}
+		return ""
+	})
+	return staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+}
+
+// staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
+// symbol indexes, "" when neither is stale.
+func staleGraphAdviceFor(reason string, stale []string) string {
+	var b strings.Builder
+	switch {
+	case reason != "":
+		fmt.Fprintf(&b, "magus workspace: the graph is stale, %s. Run `%s` once any merge or rebase is finished, then ask again. The answer you are about to get describes another tree than the checkout's.\n", reason, hint.GraphBuild)
+	case len(stale) > 0:
+		fmt.Fprintf(&b, "magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", hint.GraphBuild)
+	default:
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", hint.GraphBuild) +
-		fmt.Sprintf("%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
-			plural(len(stale), "One project", "Several projects"), hint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
-		"This is an advisory: a stale index still holds true facts, so the read is worth running either way."
+	if len(stale) > 0 {
+		fmt.Fprintf(&b, "%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
+			plural(len(stale), "One project", "Several projects"), hint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", "))
+	}
+	b.WriteString("This is an advisory: a stale index still holds true facts, so the read is worth running either way.")
+	return b.String()
 }
 
 // unverifiedNotice renders what a caller of `refs --occurrences` must do when the index

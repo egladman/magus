@@ -348,23 +348,24 @@ func (who hookAttribution) caller() job.Caller {
 	return job.Caller{Host: who.Host, Session: who.Session, Agent: who.Agent}
 }
 
-// boundJob is the job the caller's own record names: for an identified caller the one
-// keyed on exactly its host, session and agent, and for a caller with neither id this
-// checkout's. "" when no record answers.
-func boundJob(who hookAttribution, at location) string {
+// boundJob is the caller's own record, tombstone included: for an identified caller the
+// one keyed on exactly its host, session and agent, and for a caller with neither id this
+// checkout's. Zero when no record answers.
+func boundJob(who hookAttribution, at location) job.Binding {
 	if who.caller().Identified() && at.workspace == "" {
-		return ""
+		return job.Binding{}
 	}
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bound(who.caller())
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Binding(who.caller())
 }
 
 // actingLeaseFor is the lease a call acts under. See [resolveLease].
 func actingLeaseFor(who hookAttribution, at location, explicit string) (string, types.LeaseSource) {
-	return resolveLease(who, explicit, boundJob(who, at))
+	return resolveLease(who, explicit, boundJob(who, at).Job)
 }
 
 // resolveLease resolves by job.LeaseQuery with the answer only the guard holds: the
-// caller's record, bound.
+// caller's record, bound. A tombstone's job answers too, so the verdict names the job the
+// binding ended on rather than reading as unbound.
 //
 // Exact, with no fallback between keys. A host that reports subagents hands them their
 // parent's session id, so a subagent that read its session's record would be graded as

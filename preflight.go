@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/cache"
-	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/types"
 )
 
@@ -196,37 +195,10 @@ func chainOrNone(chain []types.ChainStep) string {
 	return types.Chain(chain).String()
 }
 
-// preflightDone is the set of (project, target) pairs a passed preflight covered.
-type preflightDone map[string]bool
-
-func preflightKey(project, target string) string { return project + "\x00" + target }
-
-// targets lists the done target names in project, the names a memo is seeded with.
-func (d preflightDone) targets(project string) []string {
-	var out []string
-	for key := range d {
-		if p, t, _ := strings.Cut(key, "\x00"); p == project {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-type preflightDoneKey struct{}
-
-func withPreflightDone(ctx context.Context, d preflightDone) context.Context {
-	return context.WithValue(ctx, preflightDoneKey{}, d)
-}
-
-func preflightDoneFrom(ctx context.Context) preflightDone {
-	d, _ := ctx.Value(preflightDoneKey{}).(preflightDone)
-	return d
-}
-
-// runPreflight runs the preflight stages as one batch and returns the pairs that passed.
-// runStep is the main batch's step function, so a preflight step is keyed, admitted and
-// reported exactly as the same target named on the command line would be.
-func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*types.Project, string) cache.Step, opts run, runStep func(map[string]TargetHandler, map[string]*types.Project) func(context.Context, cache.Step) error, cacheOpts []cache.RunOption) (preflightDone, error) {
+// runPreflight runs the preflight stages as one batch and marks each passed target done
+// in the run's TargetRuns, so nothing runs it again. runStep is the main batch's step
+// function, so a preflight step is keyed, admitted and reported like a command-line target.
+func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*types.Project, string) cache.Step, opts run, runStep func(map[string]TargetHandler, map[string]*types.Project) func(context.Context, cache.Step) error, cacheOpts []cache.RunOption) error {
 	var steps []cache.Step
 	handlerOf := make(map[string]TargetHandler, len(stages))
 	byPath := map[string]*types.Project{}
@@ -261,21 +233,14 @@ func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*
 		return err
 	}, append(slices.Clone(cacheOpts), cache.WithMaxFailures(1))...)
 	if len(failures) > 0 {
-		return nil, newPreflightError(failures)
+		return newPreflightError(failures)
 	}
 	if runErr != nil {
-		return nil, runErr
+		return runErr
 	}
-	done := preflightDone{}
+	runs := cache.TargetRunsFromContext(ctx)
 	for _, s := range steps {
-		done[preflightKey(s.ProjectPath, s.Target)] = true
+		runs.MarkDone(types.TargetRef{Project: s.ProjectPath, Target: s.Target})
 	}
-	if cd := interp.CrossDispatchFromContext(ctx); cd != nil {
-		for _, s := range steps {
-			if p := byPath[s.ProjectPath]; p != nil {
-				cd.MarkDone(p.Dir, s.Target)
-			}
-		}
-	}
-	return done, nil
+	return nil
 }

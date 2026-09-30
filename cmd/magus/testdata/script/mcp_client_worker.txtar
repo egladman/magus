@@ -2,21 +2,25 @@
 # on stdout. A script's magus\ calls start nested magus commands: each must run
 # as the ordinary CLI rather than as another worker, and its output must stay off
 # the response line, whatever the sandbox mode.
+#
+# The workspace sits under ws/ because testscript's TMPDIR is $WORK/.tmp, and the
+# sandbox refuses a private temp dir inside the workspace.
 
+cd ws
 env MAGUS_MCP_CLIENT=1
-stdin describe.json
+stdin ../describe.json
 exec magus
 stdout -count=1 '\n'
 stdout '^\{"stdout":"","json":\{"ok":true,"listed":true\}\}$'
 
 env MAGUS_SANDBOX=best-effort
-stdin describe.json
+stdin ../describe.json
 exec magus
 stdout -count=1 '\n'
 stdout '^\{"stdout":"","json":\{"ok":true,"listed":true\}\}$'
 
 # a failure reports the diagnostic once, on stderr, and exits nonzero
-stdin denied.json
+stdin ../denied.json
 ! exec magus
 ! stdout .
 stderr -count=1 '\[MGS3034\]'
@@ -25,6 +29,6 @@ stderr -count=1 '\[MGS3034\]'
 {"script": "import \"magus\"; fun main(args: [str]) > any !> any { final r = magus\\describe([\"projects\", \"-o\", \"name\"]); return {\"ok\": r.ok, \"listed\": r.stdout.len() > 0}; }"}
 -- denied.json --
 {"script": "import \"fs\"; fun main(args: [str]) > int { return 0; }"}
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 magus.project({});

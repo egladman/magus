@@ -6,14 +6,14 @@ Up: [workspace index](../../../../MAGUS.md)
 
 Query: `magus query project=docs/guides/integrations/agents`
 
-| Target                    | What it does                                                                                                                                                                                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
-| `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                                                                                                                                                                          |
-| `lint`                    | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
-| `test`                    | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |
-| `host-integration`        | host-integration is deliberately NOT a dependency of ci.                                                                                                                                                                                                             |
-| `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
-| `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
-| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                        |
-| `index-generate`          | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                     |
+| Target                    | What it does                                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names. |
+| `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                       |
+| `lint`                    | lint runs the TypeScript type-check, Biome, and a Buzz type-check of the templates.                               |
+| `test`                    | test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.                          |
+| `host-integration`        | host_integration drives real local agent hosts, spending the caller's auth and quota, so it stays out of ci.      |
+| `ci`                      | The anchor `magus affected ci` keys off.                                                                          |
+| `format`                  | format owns this directory's Markdown; the docs project formatting it would be MGS3001.                           |
+| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                     |
+| `index-generate`          | Renders MAGUS.md, this project's target catalog.                                                                  |

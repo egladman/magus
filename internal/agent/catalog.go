@@ -93,8 +93,8 @@ import (
 // 52: that skill is magus-memory again, and the agent-industry name it carried is
 // gone from every surface a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
-// always been called. Pre-1.0, so the old directory is not carried: `--prune`
-// removes it, which is what the stale report already names it for.
+// always been called. Pre-1.0, so the old directory is not carried: install
+// removes it.
 // 53: the SHORT/FULL axis answers to one word per end everywhere: the constants,
 // the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
 // installed file's stamp changes from `simple` to `short`, so every tree grades
@@ -256,7 +256,10 @@ import (
 // magus-workspace-rules forks a harness spell with `magus spell pull`.
 // 101: magus-architecture-review's insight fence is followed by a blank line, which
 // markdownlint requires.
-const SkillVersion = 101
+// 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
+// 103: magus-diagram teaches magus/figure: boxes from Dir records, groups by layer or dirs set, edges from the graph.
+// 104: magus-diagram passes title, eyebrow, desc and direction to figure\of and paints with figure\draw.
+const SkillVersion = 104
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -618,6 +621,13 @@ type Status struct {
 	Installed bool
 	Stale     bool
 	Detail    string
+	// Leftovers are the <Location>-relative directories a reinstall cannot clear: not
+	// shipped, and without a readable stamp to prove magus wrote them, so install
+	// never prunes them. Detail names each one with the command that removes it.
+	Leftovers []string
+	// OnlyLeftovers is set when Leftovers are the whole finding, so a reinstall would
+	// change nothing here.
+	OnlyLeftovers bool
 }
 
 type skillSource struct {
@@ -663,6 +673,7 @@ var skillSources = []skillSource{
 	{name: "magus-test-design", description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior. Use when designing, writing, or reviewing tests that require a real/fake/stub decision, complete observable assertions, or a coverage-gap assessment. Do not use merely to execute or diagnose tests (magus-run), or to choose package seams (magus-architecture-review).", bodyPath: "skills/magus-test-design/SKILL.md"},
 	{name: "magus-buzz-write", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz-write/SKILL.md"},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
+	{name: "magus-diagram", description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-write.", bodyPath: "skills/magus-diagram/SKILL.md"},
 	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md"},
 	{name: "magus-commit-composition", description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. Use when a branch has accumulated commits in the order the work occurred, before opening a PR, when asked to reconsolidate/squash/reword/clean up commits, or when a reviewer would meet a rename split across commits and a fix buried in a regeneration. Do NOT use on pushed commits, and do NOT use it to write a single message - that is idiomatic-commit-messages; this decides what goes IN each commit.", bodyPath: "skills/magus-commit-composition/SKILL.md"},
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
@@ -1029,7 +1040,7 @@ func (c *Catalog) checkInstalledNotNewer(path string) error {
 // by the host, still teaching whatever it said the day it was orphaned. Nothing
 // reported it either: a drift gate compares the files a generator DECLARES against
 // what it wrote, and an extra file is in neither set. This is what makes it
-// reportable; PruneSkillTree is what acts on it, and only when asked.
+// reportable; PruneSkillTree is what acts on it.
 //
 // The stamp is the authority on what is a candidate at all, and that is the whole
 // safety story: magus considers only files it can prove it wrote. A directory with
@@ -1068,11 +1079,9 @@ func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) 
 // PruneSkillTree removes the stale skill directories under <dir>/<dest> and returns
 // what it removed.
 //
-// Never a side effect of installing. Install writes files it can name in advance;
-// this deletes files the caller has not seen, chosen by a rule that lives in a
-// binary they may have just upgraded. Those are different enough acts that the
-// second one asks, so install reports what is stale and names this, and a person
-// decides. The stamp makes the deletion safe; it does not make it expected.
+// Install runs it after writing, and reports every directory it returns: the deletion
+// is chosen by a rule inside a binary the caller may have just upgraded, so the
+// report is what keeps it from being silent. The stamp makes the deletion safe.
 func (c *Catalog) PruneSkillTree(dir, dest string, form Form) ([]string, error) {
 	stale, err := c.StaleSkillDirs(dir, dest, form)
 	if err != nil {
@@ -1394,10 +1403,18 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	if expectedErr != nil {
 		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
 	}
-	var reasons []string
+	var reasons, leftovers []string
 	seen := make(map[string]bool, len(expected))
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
+		if err != nil && shippedErr == nil && !shipped[name] {
+			// Install prunes what it can prove it wrote, and no stamp can be read here, so
+			// the reinstall the other reasons name would leave this directory as it is.
+			leftover := filepath.Join(dest, name)
+			leftovers = append(leftovers, leftover)
+			reasons = append(reasons, name+": "+leftoverReason(filepath.Join(dir, leftover), leftover, err))
+			continue
+		}
 		if err != nil {
 			// A skill magus cannot READ is not a skill magus can vouch for; record it and
 			// move on rather than silently dropping it, which is the one answer that stops
@@ -1439,7 +1456,24 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
 	}
 	sortReasons(reasons)
-	return Status{Location: dest, Installed: true, Stale: true, Detail: strings.Join(reasons, "; ")}
+	return Status{
+		Location:      dest,
+		Installed:     true,
+		Stale:         true,
+		Detail:        strings.Join(reasons, "; "),
+		Leftovers:     leftovers,
+		OnlyLeftovers: len(leftovers) == len(reasons),
+	}
+}
+
+// leftoverReason names a directory install cannot prune and the command that removes
+// it. An empty one has nothing in it to lose; one whose SKILL.md cannot be read may
+// hold someone's files, so it is removed by the person after a look.
+func leftoverReason(abs, rel string, readErr error) string {
+	if entries, err := os.ReadDir(abs); err == nil && len(entries) == 0 {
+		return "empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir " + rel
+	}
+	return "cannot read its SKILL.md (" + readErr.Error() + "), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r " + rel
 }
 
 // sortReasons orders gradeDest's collected reasons so a version/schema mismatch

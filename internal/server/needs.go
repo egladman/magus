@@ -77,13 +77,16 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]types.Need{
 }
 
 // apiNeeds is the Need of every JSON route under /api/. Only the routes the share listener
-// also serves, and the graph document GraphService reads at the same level, are console=read.
+// also serves, the graph document GraphService reads at the same level, and the figures drawn
+// from that graph are console=read.
 // The rest serve unreviewed source, every target's name, or an action, so they need
 // console=write.
 var apiNeeds = map[string]types.Need{
 	"/api/v1/events":        needConsoleRead,
 	"/api/v1/insight":       needConsoleRead,
 	"/api/v1/graph":         needConsoleRead,
+	"/api/v1/diagrams":      needConsoleRead,
+	"/api/v1/diagrams/":     needConsoleRead,
 	"/api/v1/diff":          needConsoleWrite,
 	"/api/v1/diff/patch":    needConsoleWrite,
 	"/api/v1/diff/context":  needConsoleWrite,

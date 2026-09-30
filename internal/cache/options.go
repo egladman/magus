@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"log/slog"
+
+	"github.com/egladman/magus/types"
 )
 
 // Option configures a Cache at open time.
@@ -160,6 +162,14 @@ func OnResult(fn func(*Step, *Result, error)) RunOption {
 // the first REAL failure rather than at whichever cascade victim reports first.
 func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }
+}
+
+// WithTargetRunner sets how RunAll runs a step's BeforeKey targets: after the step's
+// upstreams finish and before its key is hashed, holding no slot. An error fails the step
+// and counts against the failure budget. Without it BeforeKey is ignored. RunAside never
+// runs BeforeKey, so its caller runs those targets first.
+func WithTargetRunner(fn func(context.Context, types.TargetRef) error) RunOption {
+	return func(rc *runCtx) { rc.runTarget = fn }
 }
 
 // WithLimiter shares an external Limiter with RunAll instead of creating a private one,

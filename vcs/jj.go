@@ -926,6 +926,12 @@ func (v jjVCS) mergeInProgress(ctx context.Context, root string) (bool, error) {
 	return len(splitLines([]byte(out))) > 1, nil
 }
 
+// OperationInProgress implements types.OperationReporter and always answers "": a jj
+// rebase or merge completes in one operation and records any conflict in the commit. A
+// merge working copy does not count; it lasts as long as the user builds on it, and
+// reporting it would keep anything built from the tree stale that long.
+func (jjVCS) OperationInProgress(context.Context, string) (string, error) { return "", nil }
+
 // AbortMerge implements types.MergeStarter by abandoning the merge commit. `jj abandon @`
 // removes it and moves the working copy back onto its first parent, which is the state
 // StartMerge found.

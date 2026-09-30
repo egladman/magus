@@ -1,5 +1,5 @@
 {
-  "//": "Type-check gate for the decoupled console app (src/**/*.ts). esbuild does the actual compilation (strips types, no checking); this drives `pnpm run typecheck`. Same shape as the website's TS gate, standalone.",
+  "//": "Type-check gate for the decoupled console app (src/**/*.ts). esbuild does the actual compilation (strips types, no checking); this drives the tsc run in `magus run lint console`. Same shape as the website's TS gate, standalone.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

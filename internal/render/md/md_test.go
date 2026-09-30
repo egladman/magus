@@ -124,14 +124,14 @@ func TestAlignedCodeBlock(t *testing.T) {
 func TestFencedClosesOnError(t *testing.T) {
 	var b Builder
 	sentinel := errors.New("emit failed")
-	err := b.Fenced("mermaid", func(w io.Writer) error {
-		io.WriteString(w, "graph LR\n")
+	err := b.Fenced("dot", func(w io.Writer) error {
+		io.WriteString(w, "digraph g {\n")
 		return sentinel
 	})
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want sentinel", err)
 	}
-	if got := string(b.Bytes()); got != "```mermaid\ngraph LR\n```\n\n" {
+	if got := string(b.Bytes()); got != "```dot\ndigraph g {\n```\n\n" {
 		t.Fatalf("fence not closed: %q", got)
 	}
 }

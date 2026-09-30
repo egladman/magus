@@ -11,10 +11,10 @@ namespace os;
 /// SocketProtocol, Socket and TcpServer ARE declared below, and they describe THIS
 /// implementation rather than upstream's:
 ///
-///   - Socket.connect is a reordering: (protocol, host, port) here,
+///   - Socket.connect is a reordering: (kind, host, port) here,
 ///     (address, port, netProtocol) upstream. Same function, different order.
 ///   - TcpServer.init is NOT a reordering, and calling it one misleads: (port,
-///     protocol) here against (address, port, reuseAddr) upstream - different arity,
+///     kind) here against (address, port, reuseAddr) upstream: different arity,
 ///     no address, no reuseAddr, and a protocol upstream does not take.
 ///   - Every raise here is widened to `!> any`; upstream names concrete sets
 ///     (errors\SocketError, errors\UnexpectedError, errors\InvalidArgumentError).
@@ -58,12 +58,12 @@ export enum SocketProtocol {
 /// A socket.
 ///
 /// Declared with gopherbuzz's OWN argument order, which diverges from upstream:
-/// connect takes (protocol, host, port) where upstream's takes (address, port,
+/// connect takes (kind, host, port) where upstream's takes (address, port,
 /// protocol). Declaring upstream's order would describe a function this
 /// implementation does not have. Reconciling the two is a separate change; this file
-/// states what is actually callable.
+/// states what is actually callable. The first parameter is not `protocol`, a reserved word.
 export object Socket {
-    static extern fun connect(protocol: SocketProtocol, host: str, port: int) > Socket !> any;
+    static extern fun connect(kind: SocketProtocol, host: str, port: int) > Socket !> any;
 
     extern fun send(payload: str) > void !> any;
     extern fun receive() > str? !> any;
@@ -74,7 +74,7 @@ export object Socket {
 /// A TCP server. See the header: init is a different function from upstream's, not
 /// a reordering of it.
 export object TcpServer {
-    static extern fun init(port: int, protocol: SocketProtocol) > TcpServer !> any;
+    static extern fun init(port: int, kind: SocketProtocol) > TcpServer !> any;
 
     extern fun accept() > Socket !> any;
     extern fun close() > void;

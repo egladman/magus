@@ -1,0 +1,38 @@
+// No build target: std/lib.go embeds figure.buzz into the binary.
+import "magus";
+
+magus\project({
+    // No spell claims .buzz, so this line declares figure.buzz a source.
+    "sources": ["*.buzz"],
+});
+
+// test runs the in-file test blocks upstream-strict.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("figure.buzz");
+    magus\cmd("buzz", args: ["-t", "figure.buzz"]);
+}
+
+// lint type-checks the module upstream-strict and fails on any BZZ diagnostic.
+// --check exits 0 on a warning, so lint grades the output itself.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("figure.buzz");
+    final res = magus\cmd("buzz", args: ["--check", "figure.buzz"], opts: {"quiet": true});
+    final found = mut [<str>];
+    foreach (line in res.stderr.split("\n")) {
+        if (line.indexOf("[BZZ") != null) {
+            found.append(line);
+        }
+    }
+    if (found.len() > 0) {
+        foreach (line in found) {
+            magus\log.error(line);
+        }
+        throw "lint: buzz --check reported {found.len()} diagnostic(s)";
+    }
+}
+
+// ci runs lint, then test.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
+    ctx.needs(test);
+}

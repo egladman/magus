@@ -13,7 +13,9 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -265,9 +267,10 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 		}
 	})
 
+	// denyLeaseGate alone: every other target is worker-check-only's, graded below.
 	t.Run("a command that is not the gate", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go-build ."))
-		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
+		assert.Empty(t, denyLeaseGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go-build ."))
+		assert.Empty(t, denyLeaseGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
 	})
 
 	t.Run("no trail location", func(t *testing.T) {
@@ -276,6 +279,116 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 		assert.Empty(t, denyLeaseScopedGate(nowhere, Dependencies{}, "harness/lease-scoped-deny", "./magus affected ci"))
 	})
+}
+
+// figuresLease is a figure worker whose one check regenerates diagrams: the row shape the
+// 2026-09-29 incident ran under.
+func figuresLease() types.Job {
+	return types.Job{
+		ID:         "figures/flow",
+		Criteria:   "draw the flow figure",
+		WritePaths: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"},
+		Check:      &types.LeaseCheck{Target: "diagrams_generate", Project: "docs"},
+		State:      types.StateRunning,
+		Registered: 1,
+	}
+}
+
+// figuresWorkspace declares figures-generate as the producer of the row's figure. No other
+// target the cases run declares an output among its write paths.
+func figuresWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := mocks.NewMockWorkspaceRepository(t)
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
+		Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
+		Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
+	}}, nil).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// TestWorkerCheckOnly pins what a bound worker may run and what the refusal hands back: the
+// check verbatim, the orchestrator as the one who runs the rest, and the check's command as
+// the next.
+func TestWorkerCheckOnly(t *testing.T) {
+	row := figuresLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := figuresWorkspace(t)
+
+	for _, tt := range []struct {
+		name, command string
+		deny          bool
+	}{
+		{"the check", "./magus run diagrams_generate docs", false},
+		{"the check with a charm and forwarded args", "./magus run diagrams-generate:rw docs --server-enabled=false -- --verbose", false},
+		{"the check with a flag value before its project", "magus run diagrams-generate --timeout 5m docs", false},
+		{"a target declaring an output in the write paths", "./magus run figures-generate:rw docs", false},
+		{"a run that only reports", "./magus run lint docs --dry-run", false},
+		{"a shard plan", "./magus affected ci --plan", false},
+		{"a read", "./magus describe file docs/figures/flow.md", false},
+		{"iteration in Buzz", "./magus buzz -t scratch.buzz", false},
+		{"the job verbs", "./magus job exit figures/flow --stdin", false},
+		{"lint", "./magus run lint docs", true},
+		{"lint behind a wrapper", "mise exec -- ./magus run lint docs", true},
+		{"the check's target on another project", "./magus run diagrams-generate .", true},
+		{"a generator whose outputs are elsewhere", "./magus run generate:rw docs", true},
+		{"affected", "./magus affected test", true},
+		{"affected of the check's own target", "./magus affected diagrams-generate", true},
+		{"a pipe whose second stage is not the check", "./magus run diagrams-generate docs | ./magus run lint docs", true},
+		{"the binary rebuild outside magus's own checkout", "./magus run go-build .", true},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if !tt.deny {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason, "`magus run diagrams_generate docs`", "%s: the verdict names the check verbatim", tt.name)
+		assert.Contains(t, reason, "The orchestrator runs every other target serially", tt.name)
+		assert.Contains(t, reason, "\nnext:\n  ", tt.name)
+		assert.Contains(t, reason, "run diagrams_generate docs --no-default-charms\n", "%s: the next is the check's command", tt.name)
+		assert.True(t, strings.HasSuffix(reason, "\nsee: "+ruleDocsBase+"worker-check-only/"), tt.name)
+	}
+
+	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
+	assert.Contains(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci"), "gates once", "the gate keeps its own refusal")
+}
+
+// TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.
+func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
+	deps := figuresWorkspace(t)
+	ctx, _ := fleetFixture(t, figuresLease())
+
+	t.Run("an unbound caller", func(t *testing.T) {
+		assert.Empty(t, denyWorkerCheckOnly(ctx, deps, "", "./magus run lint docs"))
+	})
+	t.Run("a lease with no row", func(t *testing.T) {
+		assert.Empty(t, denyWorkerCheckOnly(ctx, deps, "figures/absent", "./magus run lint docs"))
+	})
+	for name, change := range map[string]func(*types.Job){
+		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
+		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
+		"a row declaring no check": func(j *types.Job) { j.Check = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			row := figuresLease()
+			change(&row)
+			ctx, _ := fleetFixture(t, row)
+			assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run lint docs"))
+		})
+	}
+	t.Run("a workspace that cannot load falls back to the producer spelling", func(t *testing.T) {
+		row := figuresLease()
+		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs"))
+		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run figures-generate docs"))
+		assert.NotEmpty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run lint docs"))
+	})
+}
+
+// TestWorkerCheckOnlyNextQuotesTheCheck: a forwarded pattern holding `|` is a pipe unless
+// quoted, and the next is a command a reader runs as printed.
+func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
+	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 }
 
 // TestIdentityLessCallersShareTheCheckoutRecord pins the one binding keyed on the checkout:
@@ -402,6 +515,51 @@ func TestUndeclaredLeaseRepairsReadsGitsSubcommand(t *testing.T) {
 	} {
 		assert.Equal(t, want, undeclaredLeaseRepairs(command), "%q", command)
 	}
+}
+
+// A worker whose checkout was removed while it ran reads as bound to the job the sweep
+// ended, never as unbound: its work is refused with the reason and the one command that
+// binds it again, and that command still runs and rebinds over the tombstone.
+func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	gone := t.TempDir()
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, CheckoutRoot: gone, Registered: 1, ReportedBase: "77aa01c"}
+	next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
+	ctx, root := fleetFixture(t, held, next)
+	at := hookLocation(ctx, Dependencies{})
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(t, ctx, who, held.ID)
+	require.NoError(t, os.RemoveAll(gone))
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	require.NoError(t, err)
+	b := boundJob(who, at)
+	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+
+	type outcome struct {
+		Decision, Rule, Lease string
+	}
+	var reason string
+	judge := func(input string) outcome {
+		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
+		reason = v.Reason
+		return outcome{v.Decision, v.Rule, v.Lease}
+	}
+	refused := outcome{"deny", string(denyRuleLeaseUndeclared), held.ID}
+	edit := map[string]any{"file_path": filepath.Join(root, "internal", "held", "a.go"), "old_string": "a", "new_string": "b"}
+	write := hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": root,
+		"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
+
+	assert.Equal(t, refused, judge(write), "a write")
+	assert.Equal(t, "magus workspace: your binding to job held-job ended when its checkout was removed; run `magus job exec <job>` from a checkout that exists to bind again.\n"+
+		"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
+		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.\n"+
+		"see: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/", reason)
+	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
+	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
+
+	assert.NotEqual(t, "deny", judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
+	assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, at), "the exec rebinds over the tombstone")
+	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
 }
 
 // TestDenyLeaseScopedHarnessSeesPastGlobalFlags pins the two bypasses the harness rule had:

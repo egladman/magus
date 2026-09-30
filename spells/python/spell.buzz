@@ -87,6 +87,17 @@ export fun mgs_listManifests() > [Manifest] {
             Manifest{value = "setup.cfg"}];
 }
 
+// Each resolves its argument against a task table before the environment: poe's
+// [tool.poe.tasks], hatch's env scripts, [tool.pdm.scripts], Pipfile's [scripts].
+// uv and poetry are absent: `uv run` and `poetry run` reach only what is installed,
+// and [project.scripts] entry points are installed binaries, not tasks.
+export fun mgs_listScriptRunners() > [Command] {
+    return [Command{bin = "poe"},
+            Command{bin = "hatch", args = ["run"]},
+            Command{bin = "pdm", args = ["run"]},
+            Command{bin = "pipenv", args = ["run"]}];
+}
+
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
 fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }

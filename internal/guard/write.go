@@ -242,8 +242,9 @@ type writeGrade struct {
 // not happen.
 //
 // Every uncertainty fails OPEN with at most an advisory: no job store, no live leases, a file
-// that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
-// not block a tool call.
+// that will not parse, a path outside every magus checkout. A rule the guard cannot evaluate
+// must not block a tool call. A lease's write into a DIFFERENT magus checkout is not an
+// uncertainty, and is denied; see denyOtherCheckout.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
 	return gradeLeasedEdit(ctx, deps, actingLease, writePath, writeFields{})
 }
@@ -260,11 +261,14 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if location.cacheDir == "" {
 		return writeGrade{}
 	}
-	// The store's paths are workspace-relative, so a write outside the workspace has
-	// nothing to be graded against, and nothing to be told about the store either.
-	rel, inside := workspaceRelative(location.workspace, writePath)
+	// The store's paths are relative to the checkout a lease was taken in, which for a
+	// worker isolated in its own worktree is not the checkout its hooks resolve. A write
+	// outside that checkout has nothing to be graded against, unless it lands in another
+	// magus checkout; see denyOtherCheckout.
+	checkout := leaseCheckout(ctx, location, actingLease)
+	rel, inside := workspaceRelative(checkout, writePath)
 	if !inside {
-		return writeGrade{}
+		return denyOtherCheckout(checkout, actingLease, writePath)
 	}
 	leases, err := leaseRows(ctx, location)
 	if err != nil {
@@ -300,7 +304,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		if g.Decision == "deny" {
 			return g
 		}
-		if claimed := gradeClaimedDeclarations(ctx, location.workspace, me, owners, rel, fields); claimed.Decision != "" {
+		if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
 			return claimed
 		}
 		return g
@@ -685,6 +689,55 @@ func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 		"magus workspace: fix the path pattern with the client tool (magus\\job\\put), then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
+}
+
+// leaseCheckout is the checkout the acting lease's paths are relative to: the one its row
+// records it was taken in, or the hook's when the lease records none or is not live. A
+// worker isolated in its own worktree has its hooks resolve the session's checkout, where
+// every one of its paths would read as outside its lease.
+func leaseCheckout(ctx context.Context, at location, lease string) string {
+	if lease == "" {
+		return at.workspace
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return at.workspace
+	}
+	if me, live := liveLease(liveLeases(rows), lease); live && me.CheckoutRoot != "" {
+		return me.CheckoutRoot
+	}
+	return at.workspace
+}
+
+// denyOtherCheckout refuses a lease's write into a magus checkout other than the one its
+// paths are relative to: the same relative path there is not the file the orchestrator
+// handed out. Only a checkout holding a magusfile counts, so a scratch directory, even one
+// holding a go.mod, stays nobody's to grade.
+func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
+	if lease == "" || !filepath.IsAbs(writePath) {
+		return writeGrade{}
+	}
+	other := magusCheckoutOf(filepath.Dir(writePath))
+	if other == "" || samePath(other, checkout) {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+		"magus workspace: write %s in %s, the checkout lease %s was taken in.\n"+
+			"%s is in another checkout, %s, and the lease's write paths name files in its own.",
+		filepath.Base(writePath), checkout, lease, writePath, other)}
+}
+
+// magusCheckoutOf is the nearest directory at or above dir holding a magusfile, "" when
+// none does. dir need not exist yet: a write may create it.
+func magusCheckoutOf(dir string) string {
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if info, err := os.Stat(filepath.Join(d, "magusfile.buzz")); err == nil && info.Mode().IsRegular() {
+			return d
+		}
+		if filepath.Dir(d) == d {
+			return ""
+		}
+	}
 }
 
 // workspaceRelative resolves an incoming path to a workspace-relative, slash-separated

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1305,4 +1306,43 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 			assert.Equal(t, "read+write", mode)
 		})
 	}
+}
+
+// A step's BeforeKey targets run after its upstreams and before its key, and one that
+// fails fails that step alone: its body never runs, its dependents are held back, and a
+// peer with nothing to do with it still runs.
+func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
+	root, c := openCache(t)
+	up := depStep(root, "up")
+	failing := depStep(root, "failing")
+	failing.DependsOn = []string{"up"}
+	failing.BeforeKey = []types.TargetRef{{Project: "gen", Target: "broken"}}
+	after := depStep(root, "after")
+	after.DependsOn = []string{"failing"}
+	after.BeforeKey = []types.TargetRef{{Project: "gen", Target: "after-member"}}
+	peer := depStep(root, "peer")
+	peer.BeforeKey = []types.TargetRef{{Project: "gen", Target: "peer-member"}}
+	steps := []Step{up, failing, after, peer}
+
+	var mu sync.Mutex
+	var order []string
+	note := func(s string) { mu.Lock(); order = append(order, s); mu.Unlock() }
+	runTarget := func(_ context.Context, ref types.TargetRef) error {
+		note("before-key:" + ref.Target)
+		if ref.Target == "broken" {
+			return errors.New("skip_cache member failed")
+		}
+		return nil
+	}
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		note("run:" + s.ProjectPath)
+		return nil
+	}, WithTargetRunner(runTarget))
+
+	require.ErrorContains(t, err, "skip_cache member failed")
+	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "before-key:broken"), "a step's BeforeKey waits for its upstreams")
+	assert.NotContains(t, order, "run:failing", "a failed hook fails its step")
+	assert.NotContains(t, order, "before-key:after-member", "and holds back its dependents")
+	assert.Contains(t, order, "before-key:peer-member", "an unrelated step still runs its own")
+	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }

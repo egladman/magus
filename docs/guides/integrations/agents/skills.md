@@ -37,7 +37,7 @@ destination directory.
 ```sh
 magus agent install .claude/skills          # write to a repo-relative dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
-magus agent install .claude/skills --prune  # also remove skills this binary no longer ships
+magus agent install .claude/skills --dry-run  # list what would be written and removed
 magus agent install --tar                   # stream a tar of every skill to stdout
 magus agent starter                         # print a whole starter AGENTS.md
 magus doctor                                # are the installed skills current? (per location)
@@ -47,11 +47,12 @@ magus doctor --fix                          # reinstall whatever it reports stal
 Commit what install writes, so every teammate's agent shares the same
 instructions.
 
-`--prune` is not implied by `--force`, on purpose. `--force` overwrites files
-the command is about to write and can name; `--prune` deletes directories you
-have not seen, chosen by a rule inside a binary you may have just upgraded.
-Without it, install still reports what is stale. Only skills magus wrote are
-candidates - a hand-authored one beside them is never touched.
+Install also removes the skills this binary no longer ships, and prints each
+removal on stdout. Only skills magus wrote are candidates, proven by the stamp
+in their `SKILL.md`; a hand-authored one beside them is never touched. Pass
+`--dry-run` to see the removals first. A leftover directory with no readable
+stamp, such as an empty one, is not removed: `magus doctor` names it and the
+command that clears it.
 
 Write-mode destinations are relative to `--dir` (default `.`). Absolute paths
 and `~` prefixes are refused unless `--global` is set, to keep magus from

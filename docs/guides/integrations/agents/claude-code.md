@@ -12,6 +12,8 @@ reach the model, so nothing in the contract is lost here. It is also the setup
 this repository dogfoods and the only one executed end to end against a real
 event.
 
+<!--diagram:agent-surface-->
+
 | what             | where                                                         |
 | ---------------- | ------------------------------------------------------------- |
 | skills           | `.claude/skills/`                                             |

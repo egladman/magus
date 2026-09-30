@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 )
 
@@ -32,11 +33,11 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	view, err := h.src.Insight(r.Context())
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			handler.Refuse(w, r, rpcerr.WorkspaceNotWired())
 			return
 		}
 		h.Fail(w, r, "insight", err)
 		return
 	}
-	handler.WriteJSON(w, view)
+	handler.WriteJSON(w, r, view)
 }

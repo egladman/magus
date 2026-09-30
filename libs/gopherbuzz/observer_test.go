@@ -59,7 +59,7 @@ func TestPoolObserverFiresPerTarget(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	obs := newObserverStub()
-	ctx := WithObserver(WithTargetMemo(context.Background(), NewTargetMemo()), obs)
+	ctx := WithObserver(WithTargetRuns(context.Background(), NewTargetRuns()), obs)
 
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil))
 	require.Error(t, p.Dispatch(ctx, []string{"boom"}, nil))
@@ -78,7 +78,7 @@ func TestPoolObserverDedupedByMemo(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	obs := &countingObserver{}
-	ctx := WithObserver(WithTargetMemo(context.Background(), NewTargetMemo()), obs)
+	ctx := WithObserver(WithTargetRuns(context.Background(), NewTargetRuns()), obs)
 
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil))
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil)) // second need: memo serves the cached result
@@ -162,7 +162,7 @@ func TestPoolObserverUnsetNoop(t *testing.T) {
 	p := observerTestPool(t)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil))
 	require.Error(t, p.Dispatch(ctx, []string{"boom"}, nil))
 }

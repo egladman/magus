@@ -140,6 +140,22 @@ func TestFocusVerdictWideningIsWhatTheLeaseDeclares(t *testing.T) {
 	assert.Empty(t, focusVerdict(wide, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
 }
 
+// A lease's read paths widen its write paths; they never replace them. A worker leased
+// to edit app that also declares libs/ui readable reads both, and the dependencies of each.
+func TestLeaseFocusReadPathsWidenTheWritePaths(t *testing.T) {
+	ws := newFocusFixture()
+	focus, ok := leaseFocus(ws, types.Job{WritePaths: []string{"app/**"}, ReadPaths: []string{"libs/ui"}})
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"app", "libs/core", "libs/ui"}, focus.Projects)
+
+	writesOnly, ok := leaseFocus(ws, types.Job{WritePaths: []string{"app/**"}})
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"app", "libs/core"}, writesOnly.Projects, "no read paths: the write paths are the boundary")
+
+	_, ok = leaseFocus(ws, types.Job{ReadOnly: true})
+	assert.False(t, ok, "a lease that declares neither has no focus")
+}
+
 func TestFocusVerdictReportsTheFirstOperandThatLeaves(t *testing.T) {
 	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
 	assert.Equal(t, "advise", got.Decision)

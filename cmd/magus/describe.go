@@ -148,7 +148,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// Like `magus graph`, accept the graph-only -o formats on top of the common
 	// set; markdown renders the full MAGUS.md doc (the catalog + the graph).
-	opts, err := ResolveOutput(global.output, outputDot, outputMermaid, outputMarkdown)
+	opts, err := ResolveOutput(global.output, outputDot, outputMarkdown)
 	if err != nil {
 		return err
 	}
@@ -166,8 +166,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	// leaves out of the render.
 	indexes := declareIndexes(ws, out.Projects)
 
-	// A trailing list of project paths scopes the graph to those projects; the
-	// cross-project edge pass in the renderer drops edges to projects left out.
+	// A trailing list of project paths scopes the graph to those projects.
 	if len(pos) > 0 {
 		known := namesOf(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
 		for _, a := range pos {
@@ -193,8 +192,6 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		return emitNames(names)
 	case outputDot:
 		return render.WriteTargetGraphDOT(os.Stdout, out)
-	case outputMermaid:
-		return render.WriteTargetGraphMermaid(os.Stdout, out)
 	case outputMarkdown:
 		// `magus.cmd(["describe","graph","-o","markdown"])` captures this to generate
 		// MAGUS.md, a routing index. It deliberately omits each target's evaluated
@@ -1276,6 +1273,13 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		// to ask for it (docs/recommendations.md, fold don't add).
 		if len(e.Chain) > 0 {
 			fmt.Printf("  chain:   %s\n", types.Chain(e.Chain))
+		}
+		if len(e.BeforeKey) > 0 {
+			refs := make([]string, len(e.BeforeKey))
+			for i, r := range e.BeforeKey {
+				refs[i] = r.Ref()
+			}
+			fmt.Printf("  before key: %s\n", strings.Join(refs, ", "))
 		}
 		if len(e.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", e.DependsOn)

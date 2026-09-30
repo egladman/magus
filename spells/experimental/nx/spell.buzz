@@ -52,7 +52,7 @@ export fun mgs_listTargets() > any {
 }
 
 // list_projects is the workspace-provider contract magus invokes by name.
-export fun list_projects(target: Target, cb: fun(any)) > [Project] {
+export fun list_projects(target: Target, cb: fun(any)) > [Project] !> any {
     final io = {<str: any>};
     cb(io);
     final r = (io["root"] as? str) ?? "";

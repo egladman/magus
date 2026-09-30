@@ -171,3 +171,61 @@ func TestWriteJSONHonorsTheHTTPStatusOverride(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, body.Error.Code)
 	assert.Equal(t, "UNIMPLEMENTED", body.Error.Status)
 }
+
+// Each constructor pairs one reason with the google.rpc code whose HTTP mapping the /api/
+// routes have always answered, so moving a route onto it changes no status.
+func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		err        Error
+		wantReason types.DiagnosticCode
+		wantStatus int
+		wantName   string
+	}{
+		{"Invalid", Invalid("bad"), types.RequestInvalid, http.StatusBadRequest, "INVALID_ARGUMENT"},
+		{"NotFound", NotFound("gone"), types.ResourceNotFound, http.StatusNotFound, "NOT_FOUND"},
+		{"Conflict", Conflict("stale"), types.StateConflict, http.StatusConflict, "ABORTED"},
+		{"WorkspaceNotWired", WorkspaceNotWired(), types.WorkspaceNotWired, http.StatusServiceUnavailable, "UNAVAILABLE"},
+		{"Internal", Internal("plan"), types.InternalFailure, http.StatusInternalServerError, "INTERNAL"},
+		{"StreamingUnsupported", StreamingUnsupported(), types.StreamingUnsupported, http.StatusInternalServerError, "INTERNAL"},
+		{"ReviewHostFailed", ReviewHostFailed("publish: no token"), types.ReviewHostFailed, http.StatusBadGateway, "UNAVAILABLE"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rr := httptest.NewRecorder()
+			FormatJSON.Write(rr, httptest.NewRequest(http.MethodGet, "/api/v1/x", nil), tc.err)
+
+			var body struct {
+				Error struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+					Status  string `json:"status"`
+					Details []struct {
+						Type   string `json:"@type"`
+						Reason string `json:"reason"`
+					} `json:"details"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+			assert.Equal(t, tc.wantStatus, rr.Code)
+			assert.Equal(t, tc.wantStatus, body.Error.Code)
+			assert.Equal(t, tc.wantName, body.Error.Status)
+			assert.Equal(t, types.FormatDiagnostic(tc.wantReason, tc.err.Message), body.Error.Message)
+			require.NotEmpty(t, body.Error.Details)
+			assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", body.Error.Details[0].Type)
+			assert.Equal(t, string(tc.wantReason), body.Error.Details[0].Reason)
+		})
+	}
+}
+
+// An internal failure names the step and never the cause, which can carry server paths.
+func TestInternalNamesOnlyTheStep(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, Error{
+		Code:    connect.CodeInternal,
+		Reason:  types.InternalFailure,
+		Message: "target graph failed",
+	}, Internal("target graph"))
+}

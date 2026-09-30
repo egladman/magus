@@ -133,24 +133,27 @@ type DiffSymbol struct {
 	// RefCount and FileCount are occurrences and distinct referencing files.
 	RefCount  int `json:"ref_count"  yaml:"ref_count"`
 	FileCount int `json:"file_count" yaml:"file_count"`
-	// ExternalProjects are the OTHER projects that reference this symbol, sorted. Non-empty
+	// PublicTo are the other workspace projects that reference this symbol, sorted. Non-empty
 	// is what makes a file's surface public, and naming them answers the reader's actual next
 	// question (who breaks) rather than only how many.
-	ExternalProjects []string `json:"external_projects,omitempty" yaml:"external_projects,omitempty"`
-	// ExternalFileCount is how many referencing files sit outside the defining project.
-	ExternalFileCount int `json:"external_file_count" yaml:"external_file_count"`
-	// ModuleAPI reports that this symbol is exported from the MODULE: reachable by a
-	// consumer outside the workspace entirely.
+	PublicTo []string `json:"public_to,omitempty" yaml:"public_to,omitempty"`
+	// PublicFileCount is how many referencing files sit outside the defining project.
+	PublicFileCount int `json:"public_file_count" yaml:"public_file_count"`
+	// PublicBeyondWorkspace reports that this symbol is exported from the module, so a
+	// consumer outside the workspace can import it.
 	//
-	// It is a separate question from ExternalProjects and neither implies the other, which is
-	// the whole reason both exist. A symbol can be referenced by no other project and still be
+	// It is a separate question from PublicTo and neither implies the other, which is the
+	// whole reason both exist. A symbol can be referenced by no other project and still be
 	// public API that a downstream module imports; measured on this repository, every referent
 	// of the root package sits in the root project, so cross-project exposure alone reported
 	// the published SDK surface as internal. Conflating the two answers the wrong question:
 	// "who in this workspace breaks" is not "who in the world breaks".
-	ModuleAPI bool `json:"module_api,omitempty" yaml:"module_api,omitempty"`
-	// Change is what this changeset did to the symbol, one of the DiffChange constants, or
-	// empty when the review had no base graph.
+	PublicBeyondWorkspace bool `json:"public_beyond_workspace,omitempty" yaml:"public_beyond_workspace,omitempty"`
+	// Change is what this changeset did to the symbol, one of the DiffChange constants. A
+	// base graph decides it where one was given. Otherwise the patch does: added when the
+	// definition line is new and no removed line of its file names the symbol, signature
+	// when one does, body when only lines inside the definition moved. Empty when neither
+	// could be read.
 	Change string `json:"change,omitempty" yaml:"change,omitempty"`
 	// Qualified names the symbol through its enclosing declarations (`DiffAPI.Signature`),
 	// read from the ID, so two members sharing a Label stay distinguishable. Set alongside
@@ -166,6 +169,32 @@ type DiffSymbol struct {
 	// thing, with its counts, reported as CheckAdvice. Only findings that clear the checks' own
 	// bar appear, strongest first.
 	Checks []Check `json:"checks,omitempty" yaml:"checks,omitempty"`
+	// PublicThrough are the callers of this symbol that are referenced across a package or
+	// project boundary, each with the chain of calls leading into the symbol, nearest first. At
+	// most 10, walked at most 4 calls deep, each path stopping at its first such caller. Empty
+	// when no index recorded calls into the symbol.
+	PublicThrough []DiffPublicPath `json:"public_through,omitempty" yaml:"public_through,omitempty"`
+}
+
+// The DiffBoundary constants name the boundary a DiffPublicPath caller's referents cross.
+const (
+	// DiffBoundaryProject is a caller referenced from a file another project owns.
+	DiffBoundaryProject = "project"
+	// DiffBoundaryPackage is a caller referenced from a file that defines symbols only in
+	// other namespaces, as the SCIP monikers name them.
+	DiffBoundaryPackage = "package"
+)
+
+// DiffPublicPath is one caller through which a changed symbol reaches code used outside its
+// package or project.
+type DiffPublicPath struct {
+	ID        string `json:"id" yaml:"id"`
+	Qualified string `json:"qualified,omitempty" yaml:"qualified,omitempty"`
+	// Via are the callers between the changed symbol and this one, nearest first, by
+	// qualified name. Empty when this one calls the changed symbol directly.
+	Via []string `json:"via,omitempty" yaml:"via,omitempty"`
+	// Boundary is one of the DiffBoundary constants.
+	Boundary string `json:"boundary" yaml:"boundary"`
 }
 
 // DiffOptions is what a review reads beyond its changed paths.
@@ -307,8 +336,9 @@ type DiffFile struct {
 	// Coverage is the file's observed coverage, nil when none was measured. Nil is DISTINCT
 	// from zero: "no coverage run has happened" must not render as "this code is untested".
 	Coverage *ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
-	// Symbols are the changed symbols this file defines, each carrying how widely it is
-	// referenced. Empty when no symbol index covers the file.
+	// Symbols are the symbols this file defines whose lines the patch changed, each carrying
+	// how widely it is referenced. A package or namespace symbol is never one. Empty when no
+	// symbol index covers the file.
 	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
 	// Layout is what the package checks found about the directory this change creates around
 	// this file: its file count, test files and name against the directories beside it, as

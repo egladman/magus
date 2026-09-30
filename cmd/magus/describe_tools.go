@@ -84,12 +84,8 @@ func describeTools(ctx context.Context, root string, args []string) error {
 	fmt.Printf("  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n",
 		"PROJECT/TOOL", "INSTALLED", "WINDOW", "DECLARED BY", "VERDICT", "CYCLE", "EOL", "SUPPORT")
 	for _, t := range report.Tools {
-		verdict := t.Verdict
-		if t.DiagnosticCode != "" {
-			verdict += " (" + t.DiagnosticCode + ")"
-		}
 		fmt.Printf("  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n",
-			t.Project+"/"+t.Bin, installedCell(t), windowCell(t), declaredByCell(t), verdict,
+			t.Project+"/"+t.Bin, installedCell(t), windowCell(t), declaredByCell(t), verdictCell(t),
 			orDash(t.Cycle), orDash(t.EOL), supportCell(t, report.Lifecycle.State))
 	}
 	return nil
@@ -152,6 +148,16 @@ func installedCell(t types.ToolRow) string {
 	default:
 		return "unreadable"
 	}
+}
+
+// verdictCell spaces the verdict the way the console words the enum (too_old reads "too
+// old"); the JSON value keeps its underscore so a shell comparison needs no quoting.
+func verdictCell(t types.ToolRow) string {
+	v := strings.ReplaceAll(t.Verdict, "_", " ")
+	if t.DiagnosticCode != "" {
+		v += " (" + t.DiagnosticCode + ")"
+	}
+	return v
 }
 
 func windowCell(t types.ToolRow) string {

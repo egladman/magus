@@ -77,21 +77,6 @@ func sortToolRows(rows []types.ToolRow) {
 	})
 }
 
-// renderWindow prints a window the way the docs write it. below is the first version
-// REJECTED, so it renders as "< x" and never as a max.
-func renderWindow(b spells.VersionBounds) string {
-	switch {
-	case b.Min != "" && b.Below != "":
-		return ">= " + b.Min + ", < " + b.Below
-	case b.Min != "":
-		return ">= " + b.Min
-	case b.Below != "":
-		return "< " + b.Below
-	default:
-		return ""
-	}
-}
-
 // buildToolRow turns one probe outcome into a row. Pure (no context, no exec) because
 // welding this state machine inside the fork loop is what let four distinct outcomes
 // collapse into one blank "not found".
@@ -99,9 +84,9 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 	window := t.Supported.Intersect(projBounds)
 	row := types.ToolRow{
 		Project: project, Bin: bin, Spell: spell,
-		SpellBounds:     renderWindow(t.Supported),
-		WorkspaceBounds: renderWindow(projBounds),
-		Effective:       renderWindow(window),
+		SpellBounds:     t.Supported.Window(),
+		WorkspaceBounds: projBounds.Window(),
+		Effective:       window.Window(),
 		Lifecycle:       t.Lifecycle,
 	}
 	if probeErr != nil {

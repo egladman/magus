@@ -91,7 +91,10 @@ import (
 // v15 adds `lines` and `bytes` attrs to file nodes an extractor read (buzz sources, and the
 // defining files of a SCIP index), so a reader can size a file before paging through it.
 // Additive; the bump is for a v14 store whose buzz and symbol shards predate them.
-const KnowledgeSchemaVersion = 15
+// v16 adds `marker` nodes with `declared` edges, dir -imports-> dir and dir -calls-> dir
+// edges, edge attrs, and the `layer` and `language` attrs on dir nodes. The bump is for a
+// v15 store whose shards predate them.
+const KnowledgeSchemaVersion = 16
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -187,6 +190,11 @@ const (
 	// the first), and the graph never fetches it. A link node asserts that something
 	// here points there, never that anything is at the other end.
 	KindLink = "link"
+
+	// KindMarker is one `magus:<family>[:<verb>] <args>` token written into a source or
+	// doc line, keyed "marker:<rel path>:<line>". It is a declaration, so its edges carry
+	// ConfidenceDeclared. A begin/end pair folds into one node with a line range.
+	KindMarker = "marker"
 )
 
 // RelationID is a stable directed predicate in the knowledge graph. It is string-backed
@@ -199,13 +207,13 @@ const (
 	RelationDependsOn    RelationID = "depends_on"    // project->project/package; target->target
 	RelationContains     RelationID = "contains"      // structural containment; see KnowledgeRelationDefinitions
 	RelationUses         RelationID = "uses"          // target->spell/op; spell/op->tool
-	RelationReferences   RelationID = "references"    // charm->target; file->symbol; doc->doc
-	RelationDocuments    RelationID = "documents"     // doc->spell/diagnostic/module
-	RelationCalls        RelationID = "calls"         // function->function; symbol->symbol
-	RelationImports      RelationID = "imports"       // file->file/import
+	RelationReferences   RelationID = "references"    // charm->target; file->symbol; doc->doc; marker->dir/doc
+	RelationDocuments    RelationID = "documents"     // doc->spell/diagnostic/module; doc/docsection->target
+	RelationCalls        RelationID = "calls"         // function->function; symbol->symbol; dir->dir, declared
+	RelationImports      RelationID = "imports"       // file->file/import; dir->dir, folded from package imports
 	RelationRationaleFor RelationID = "rationale_for" // rationale->function/file
 	RelationEmits        RelationID = "emits"         // project/target->diagnostic, runtime
-	RelationOwns         RelationID = "owns"          // owner->project/file, from CODEOWNERS
+	RelationOwns         RelationID = "owns"          // owner->project/dir/file, from CODEOWNERS
 	RelationDefines      RelationID = "defines"       // file->symbol, from a SCIP index
 	RelationProduces     RelationID = "produces"      // target->file/doc, from magus.outputs
 	RelationConsumes     RelationID = "consumes"      // target->file/doc, from magus.inputs
@@ -288,7 +296,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
 		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
 		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
-		endpointShapes(KindFile, KindFunction), endpointShapes(KindDoc, KindDocSection),
+		endpointShapes(KindFile, KindFunction, KindMarker), endpointShapes(KindDoc, KindDocSection, KindMarker),
 		endpointShapes(KindDocSection, KindDocSection))},
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
@@ -298,20 +306,32 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		// (link), at this workspace's own prose (doc, docsection), or at another path in
 		// the tree (file, dir). Code references what it cites; it never documents it.
 		endpointShapes(KindFile, KindLink, KindDoc, KindDocSection, KindFile, KindDir),
-		endpointShapes(KindDoc, KindDoc, KindLink, KindDocSection))},
+		endpointShapes(KindDoc, KindDoc, KindLink, KindDocSection),
+		// A marker's first argument resolved: a figure page or section for diagram, the
+		// destination package's directory for calls.
+		endpointShapes(KindMarker, KindDir, KindDoc, KindDocSection))},
 	// A page that cites a source path is claiming to describe it, which is what
 	// `documents` already means, so the docs-to-source direction reuses it rather than
 	// minting a near-synonym. The subject kind is what separates the two: a doc
 	// documents source, a comment in that source only references what it cites.
-	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: endpointShapes(KindDoc,
-		KindSpell, KindDiagnostic, KindModule, KindFile, KindDir, KindDoc)},
-	{ID: RelationCalls, Description: "invokes another callable", ForwardLabel: "calls", ReverseLabel: "called by", Shapes: joinEndpointShapes(
-		endpointShapes(KindFunction, KindFunction), endpointShapes(KindSymbol, KindSymbol))},
-	{ID: RelationImports, Description: "imports another source file or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: endpointShapes(KindFile, KindFile, KindImport)},
+	//
+	// A fenced `magus run <target>` in prose documents that target, so a drift check can
+	// hold the page to a target that exists.
+	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: joinEndpointShapes(
+		endpointShapes(KindDoc, KindSpell, KindDiagnostic, KindModule, KindFile, KindDir, KindDoc, KindTarget),
+		endpointShapes(KindDocSection, KindTarget))},
+	// dir->dir is a `magus:calls` marker's claim about the package holding it, so it is
+	// the one calls shape whose edges are ConfidenceDeclared and carry AttrTransport.
+	{ID: RelationCalls, Description: "invokes another callable, or declares a call into another package", ForwardLabel: "calls", ReverseLabel: "called by", Shapes: joinEndpointShapes(
+		endpointShapes(KindFunction, KindFunction), endpointShapes(KindSymbol, KindSymbol), endpointShapes(KindDir, KindDir))},
+	// dir->dir folds every language's package imports once at ingest, so a reader walks
+	// stored edges instead of refolding the symbol shard.
+	{ID: RelationImports, Description: "imports another source file, package, or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: joinEndpointShapes(
+		endpointShapes(KindFile, KindFile, KindImport), endpointShapes(KindDir, KindDir))},
 	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile)},
 	{ID: RelationEmits, Description: "has emitted a diagnostic in an observed run", ForwardLabel: "emits", ReverseLabel: "emitted by", Shapes: joinEndpointShapes(
 		endpointShapes(KindProject, KindDiagnostic), endpointShapes(KindTarget, KindDiagnostic))},
-	{ID: RelationOwns, Description: "declares ownership through CODEOWNERS", ForwardLabel: "owns", ReverseLabel: "owned by", Shapes: endpointShapes(KindOwner, KindProject, KindFile)},
+	{ID: RelationOwns, Description: "declares ownership through CODEOWNERS", ForwardLabel: "owns", ReverseLabel: "owned by", Shapes: endpointShapes(KindOwner, KindProject, KindDir, KindFile)},
 	{ID: RelationDefines, Description: "defines an indexed code symbol", ForwardLabel: "defines", ReverseLabel: "defined by", Shapes: endpointShapes(KindFile, KindSymbol)},
 	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
@@ -320,7 +340,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
 		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
-		KindNote, KindPackage, KindLink)},
+		KindNote, KindPackage, KindLink, KindMarker)},
 }
 
 // KnowledgeRelationDefinitions returns a deep copy of the canonical relation
@@ -396,10 +416,53 @@ func KnowledgeRelationFingerprint() string {
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
 // 1.0); inferred edges come from a documented rubric (fuzzy doc mentions, etc.)
-// and carry a sub-1.0 score. Phase 1 emits only extracted edges.
+// and carry a sub-1.0 score. Declared edges come from a marker (score 1.0): the fact is
+// the author's claim, and nothing in the code verifies it.
 const (
 	ConfidenceExtracted = "extracted"
 	ConfidenceInferred  = "inferred"
+	ConfidenceDeclared  = "declared"
+)
+
+// MarkerFamily is the <family> segment of a `magus:<family>[:<verb>]` marker. The set is
+// closed: a scanner meeting any other family raises UnknownMarkerFamily rather than
+// skipping the line.
+type MarkerFamily string
+
+const (
+	MarkerDiagram  MarkerFamily = "diagram"  // a backref to a figure id
+	MarkerCalls    MarkerFamily = "calls"    // a declared network call: <dst dir> <transport>
+	MarkerSkills   MarkerFamily = "skills"   // the AGENTS.md skills block; stamp pairs only
+	MarkerObserved MarkerFamily = "observed" // a generated diagram block; stamp pairs only
+)
+
+// MarkerVerb is a marker node's shape after folding: a point marker is one line, and a
+// `:begin`/`:end` pair folds into one block node spanning AttrLine through AttrEndLine.
+type MarkerVerb string
+
+const (
+	MarkerPoint MarkerVerb = "point"
+	MarkerBlock MarkerVerb = "block"
+)
+
+// Attribute keys the marker, import and layer facts write. Values are strings, as every
+// node attr is. A marker's `k=v;` stamp pairs ride as one attr per pair under their own
+// keys, so no key here may be used as a stamp key.
+const (
+	AttrMarkerFamily = "family" // marker: a MarkerFamily
+	AttrMarkerVerb   = "verb"   // marker: a MarkerVerb
+	AttrMarkerArgs   = "args"   // marker: the raw argument text after the token
+	AttrLine         = "line"   // marker: the 1-based line of the token, or of :begin
+	AttrEndLine      = "end_line"
+	AttrTransport    = "transport" // dir->dir calls edge: how the call travels (http, grpc, exec, ...)
+	AttrLayer        = "layer"     // dir: the layer magus.project's "layers" key declares for it
+	// AttrLanguage is single-valued: on a dir, the language of the package the directory
+	// holds (the one its imports were folded from); on an imports edge, the language that
+	// import was read in. dir_languages is the separate multi-valued roll-up.
+	AttrLanguage = "language"
+	// AttrBuildTags is the comma-joined build constraint a symbol fact was indexed under
+	// ("js,wasm"). Absent on a fact from the default pass.
+	AttrBuildTags = "build_tags"
 )
 
 // KnowledgeTiming is one target's observed run cost, gathered from the local
@@ -780,6 +843,10 @@ type KnowledgeEdge struct {
 	Confidence string     `json:"confidence"           yaml:"confidence"`
 	Score      float64    `json:"score"                yaml:"score"`
 	Provenance string     `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+	// Attrs are relation-specific facts about the edge itself (AttrTransport on a declared
+	// call, AttrLanguage on a folded import). Not part of the edge's identity: two edges
+	// with one (source, target, relation) are one edge.
+	Attrs map[string]string `json:"attrs,omitempty" yaml:"attrs,omitempty"`
 }
 
 // Retrieval-subcommand definitions (query/explain/path). These complement describe
@@ -1088,6 +1155,8 @@ type KnowledgeEdgeRef struct {
 	OtherKind  string        `json:"other_kind"           yaml:"other_kind"`
 	OtherLabel string        `json:"other_label"          yaml:"other_label"`
 	Provenance string        `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+	// Attrs is the edge's own Attrs, carried so a card shows a call's transport.
+	Attrs map[string]string `json:"attrs,omitempty" yaml:"attrs,omitempty"`
 }
 
 // KnowledgeExplainOutput is a single node's context card: its data, grouped
@@ -1105,7 +1174,23 @@ type KnowledgeExplainOutput struct {
 	// stored or fetched. Empty for other kinds, a replaced package, and a manager with
 	// no known docs site.
 	DocsURL string `json:"docs_url,omitempty" yaml:"docs_url,omitempty"`
+	// Resolution says how the name asked about became Node. A fuzzy card may describe
+	// something other than what was named, so a caller anchoring by path refuses one.
+	Resolution KnowledgeResolution `json:"resolution,omitempty" yaml:"resolution,omitempty"`
 }
+
+// KnowledgeResolution is how a lookup turned the name it was given into one node.
+type KnowledgeResolution string
+
+const (
+	// ResolvedID means the name was a node ID.
+	ResolvedID KnowledgeResolution = "id"
+	// ResolvedPath means the name parsed as a workspace path and matched a dir or file
+	// node exactly. A path-shaped name tries this before any ranked match.
+	ResolvedPath KnowledgeResolution = "path"
+	// ResolvedFuzzy means no node matched exactly and the best ranked match was taken.
+	ResolvedFuzzy KnowledgeResolution = "fuzzy"
+)
 
 // KnowledgePathStep is one hop along a path, oriented as walked (From -> To).
 // Forward reports whether the underlying edge's own direction is From -> To
@@ -1126,6 +1211,143 @@ type KnowledgePathOutput struct {
 	To            string              `json:"to"             yaml:"to"`
 	Found         bool                `json:"found"          yaml:"found"`
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
+}
+
+// KnowledgePathOptions narrows `magus path` and magus\path.
+type KnowledgePathOptions struct {
+	// Relations are the only relations a hop may walk. Empty walks every relation, so
+	// Found false under a filter means no path of those relations, not no path at all.
+	Relations []RelationID `json:"relations,omitempty" yaml:"relations,omitempty"`
+}
+
+// KnowledgeNeighborhoodDefinition is the human-readable description of magus\neighborhood.
+const KnowledgeNeighborhoodDefinition = "neighborhood walks outward from one focus node " +
+	"up to a depth, along the chosen relations only, and optionally folds every node under " +
+	"a path prefix into that prefix's directory, so a figure or a reader sees a subsystem at " +
+	"the grain they asked for."
+
+// KnowledgeNeighborhoodOptions bounds magus\neighborhood.
+type KnowledgeNeighborhoodOptions struct {
+	// Depth is the most hops from the focus; 0 means 1.
+	Depth int `json:"depth,omitempty" yaml:"depth,omitempty"`
+	// Relations are the only relations walked. Empty walks every relation.
+	Relations []RelationID `json:"relations,omitempty" yaml:"relations,omitempty"`
+	// Direction limits the walk to edges leaving (EdgeOut) or entering (EdgeIn) each
+	// node reached. Empty walks both.
+	Direction EdgeDirection `json:"direction,omitempty" yaml:"direction,omitempty"`
+	// Collapse are workspace-relative path prefixes. Every node whose path lies under
+	// one folds into that prefix's dir node: edges are re-pointed at it, duplicates
+	// merge, and an edge folded onto itself is dropped. The longest prefix wins.
+	Collapse []string `json:"collapse,omitempty" yaml:"collapse,omitempty"`
+}
+
+// KnowledgeNeighborhoodOutput is magus\neighborhood's result: the subgraph within Depth
+// hops of Focus, in the node-link shape KnowledgeQueryOutput uses, so it is itself a
+// valid export.
+type KnowledgeNeighborhoodOutput struct {
+	Definition    string `json:"definition"     yaml:"definition"`
+	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	// Focus is the resolved node ID, and Resolution how the requested name reached it.
+	Focus      string                       `json:"focus"      yaml:"focus"`
+	Resolution KnowledgeResolution          `json:"resolution" yaml:"resolution"`
+	Options    KnowledgeNeighborhoodOptions `json:"options"    yaml:"options"`
+	Nodes      []KnowledgeNode              `json:"nodes"      yaml:"nodes"`
+	Links      []KnowledgeEdge              `json:"links"      yaml:"links"`
+	// Folds lists each Collapse prefix that absorbed at least one node.
+	Folds []KnowledgeFold `json:"folds,omitempty" yaml:"folds,omitempty"`
+	// Answer says whether a thin neighborhood is the whole truth or a blind spot: an
+	// imports walk with no symbol index loaded is unknown, not absent.
+	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
+}
+
+// KnowledgeFold is one collapse prefix and what it absorbed.
+type KnowledgeFold struct {
+	Prefix string `json:"prefix" yaml:"prefix"`
+	// Node is the dir node standing in for the fold, "dir:<prefix>".
+	Node string `json:"node" yaml:"node"`
+	// Folded counts the nodes merged into Node, Node itself excluded.
+	Folded int `json:"folded" yaml:"folded"`
+}
+
+// Dir is one workspace directory as the graph holds it, the record magus\dir, magus\dirs
+// and magus\layer return. It carries every fact a figure needs for a box and its edges.
+//
+// Every path in it is workspace-relative with forward slashes, "." for the root. Lists
+// are sorted and never nil.
+type Dir struct {
+	Path string `json:"path" yaml:"path"`
+	// ID is the dir node's ID, "dir:<path>".
+	ID string `json:"id" yaml:"id"`
+	// Layer is the layer magus.project's "layers" key declares for this directory, or
+	// empty when no declaration covers it.
+	Layer string `json:"layer" yaml:"layer"`
+	// Language is AttrLanguage: the language of the package this directory holds, or
+	// empty when it holds no indexed package.
+	Language string `json:"language" yaml:"language"`
+	// Imports and ImportedBy are the dir->dir imports edges out of and into this
+	// directory. ImportsIndexed false means no symbol index covered it, so both lists
+	// being empty says nothing.
+	Imports        []string `json:"imports"         yaml:"imports"`
+	ImportedBy     []string `json:"imported_by"     yaml:"imported_by"`
+	ImportsIndexed bool     `json:"imports_indexed" yaml:"imports_indexed"`
+	// Calls and CalledBy are the declared dir->dir calls edges out of and into this
+	// directory, one per `magus:calls` marker.
+	Calls    []DirCall `json:"calls"     yaml:"calls"`
+	CalledBy []DirCall `json:"called_by" yaml:"called_by"`
+	// Children are the immediate child directories the graph holds.
+	Children []string `json:"children" yaml:"children"`
+	// Files counts the file nodes this directory contains directly, the ones a figure
+	// can anchor to here.
+	Files int `json:"files" yaml:"files"`
+}
+
+// DirCall is one declared call seen from a Dir.
+type DirCall struct {
+	// Dir is the directory at the other end: the callee on Dir.Calls, the caller on
+	// Dir.CalledBy.
+	Dir string `json:"dir" yaml:"dir"`
+	// Transport is AttrTransport as the marker wrote it.
+	Transport string `json:"transport" yaml:"transport"`
+	// Marker is the declaring marker's node ID and Source its "<path>:<line>".
+	Marker string `json:"marker" yaml:"marker"`
+	Source string `json:"source" yaml:"source"`
+}
+
+// DirsOptions narrows magus\dirs.
+type DirsOptions struct {
+	// Layer keeps only directories declared in this layer. An undeclared name raises
+	// LayerNotDeclared rather than matching nothing.
+	Layer string `json:"layer,omitempty" yaml:"layer,omitempty"`
+	// Language keeps only directories whose Language equals it.
+	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	// Depth is the most path segments a match may sit below the glob's literal prefix;
+	// 0 is unbounded.
+	Depth int `json:"depth,omitempty" yaml:"depth,omitempty"`
+}
+
+// Layer is one layer name magus.project's "layers" key declares and every directory it
+// covers, the record magus\layer returns. An undeclared name raises LayerNotDeclared.
+type Layer struct {
+	Name string `json:"name" yaml:"name"`
+	// Declared are the directories and globs the declarations name for this layer,
+	// sorted.
+	Declared []string `json:"declared" yaml:"declared"`
+	// Dirs are the directories the declarations cover, sorted by path.
+	Dirs []Dir `json:"dirs" yaml:"dirs"`
+}
+
+// SymbolIndexDigest identifies the symbol index a graph read loaded, so a target whose
+// answer depends on the index can key its cache on this instead of skipping the cache.
+type SymbolIndexDigest struct {
+	// Digest is a hex SHA-256 over every loaded project's index fingerprint in project
+	// path order, or empty when Indexed is false.
+	Digest  string `json:"digest"  yaml:"digest"`
+	Indexed bool   `json:"indexed" yaml:"indexed"`
+	// Projects are the workspace-relative project paths whose index went into Digest.
+	Projects []string `json:"projects" yaml:"projects"`
+	// Gaps are the projects that declare an index magus could not read. A digest with
+	// gaps is stable but partial.
+	Gaps []KnowledgeSymbolGap `json:"gaps,omitempty" yaml:"gaps,omitempty"`
 }
 
 // KnowledgeStats is the knowledge-graph analytics behind `magus graph stats`:

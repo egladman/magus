@@ -47,6 +47,8 @@ import (
 // that rescans a string it is also rewriting.
 var scanLoopRe = regexp.MustCompile(`while\s*\([^)]*\.indexOf\([^)]*\)\s*!=\s*null`)
 
+var scanLoopSkipDirs = skipDirs("worktrees", "gen")
+
 // buzzScanOptOut lets a genuine case through, and demands a reason in the same
 // breath: the same shape as the repo's other acknowledged suppressions.
 const buzzScanOptOut = "buzz-scan-ok:"
@@ -81,8 +83,7 @@ func TestNoRescanningStringLoops(t *testing.T) {
 			return nil //nolint:nilerr // deliberate: skip, do not abort the walk
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case "node_modules", "worktrees", "gen", ".git":
+			if scanLoopSkipDirs[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -269,14 +270,22 @@ var environmentDetectionAllowed = map[string]string{
 	"spells/github/actions/spell.buzz:GITHUB_WORKFLOW_REF": "input, not detection: the Actions provider, wired only when the workflow asks, reads which workflow's runs last_green_run should search",
 }
 
+// skipDirs is the set of directory names a walk in this file skips: version control, cache
+// and installed agent state and dependencies, which no convention governs, plus extra.
+// .magus changes on every magus run, so a walk that entered it would cost this package
+// Go's test cache every time.
+func skipDirs(extra ...string) map[string]bool {
+	out := map[string]bool{}
+	for _, name := range slices.Concat([]string{".git", ".magus", ".claude", ".agents", ".opencode", ".testcache", "node_modules"}, extra) {
+		out[name] = true
+	}
+	return out
+}
+
 // environmentDetectionSkipDirs are trees the rule does not govern: generated output,
 // vendored code, fixtures, and history. docs is scanned, because the agent glue a reader
 // installs lives there; its pages are checked by the docs project instead.
-var environmentDetectionSkipDirs = map[string]bool{
-	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
-	"node_modules": true, "gen": true, "testdata": true, "blog": true, "releases": true,
-	"manpage": true, "schema": true,
-}
+var environmentDetectionSkipDirs = skipDirs("gen", "testdata", "blog", "releases", "manpage", "schema")
 
 var (
 	environmentDetectionNames = strings.Join(environmentDetectionVars, "|")
@@ -418,10 +427,7 @@ var mgsCodeRe = regexp.MustCompile(`MGS[0-9]{4}`)
 
 // raiseSiteSkipDirs are trees a raise site cannot live in: version control and cache
 // state, generated output, fixtures, and vendored code.
-var raiseSiteSkipDirs = map[string]bool{
-	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
-	"node_modules": true, "gen": true, "testdata": true,
-}
+var raiseSiteSkipDirs = skipDirs("gen", "testdata")
 
 // mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
 // today, listed rather than tolerated so the gate is green and the debt is named.
@@ -792,6 +798,8 @@ func editDistance(a, b string) int {
 	return prev[len(b)]
 }
 
+var symbolIndexSkipDirs = skipDirs("worktrees", "gen", "vendor", "testdata", "dist")
+
 // buildSymbolIndex walks the tree once and returns the index plus the Go files to scan.
 //
 // Packages sharing a name have their symbols UNIONED, and each is indexed under its
@@ -813,8 +821,7 @@ func buildSymbolIndex(t *testing.T) (symbolIndex, []string) {
 			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case "node_modules", "worktrees", "gen", ".git", "vendor", "testdata", "dist":
+			if symbolIndexSkipDirs[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -925,10 +932,7 @@ var buzzEnvLiteralRe = regexp.MustCompile("[\"`](MAGUS_[A-Z0-9_]*[A-Z0-9])(?:=[^
 // envRegistrySkipDirs are trees whose MAGUS_* names are not reads: VCS and cache state,
 // installed agent copies, dependencies, and fixtures. gen/ is walked on purpose, since the
 // generated ApplyEnv is where every config-derived variable is read.
-var envRegistrySkipDirs = map[string]bool{
-	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
-	"node_modules": true, "testdata": true,
-}
+var envRegistrySkipDirs = skipDirs("testdata")
 
 // envNamesNeverInEnvironment are MAGUS_* literals in shipped code that name something other
 // than a variable magus reads, each with what it is. Registering one would admit a
@@ -1115,10 +1119,7 @@ var storeMechanicsAllowed = map[string]string{
 
 // storeMechanicsSkipDirs are trees the rule does not govern. libs/ holds modules of their
 // own, which cannot import internal/file.
-var storeMechanicsSkipDirs = map[string]bool{
-	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
-	"node_modules": true, "gen": true, "testdata": true,
-}
+var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 
 // storeMechanicsSites returns "<path>:<func>" for every function in f that renames a file
 // it also creates or writes (a hand-rolled atomic write) or constructs an flock.

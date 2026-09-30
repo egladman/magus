@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -184,17 +185,18 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 	if !enrolled {
 		return project.Focus{}, "", false
 	}
-	declared := me.ReadPaths
-	if len(declared) == 0 {
-		// The write paths double as the read boundary when nothing widened it: a worker
-		// leased to edit a project is a worker that was pointed at that project.
-		declared = me.WritePaths
-	}
-	focus, ok := project.FocusForPaths(ws, declared)
+	focus, ok := leaseFocus(ws, me)
 	if !ok {
 		return project.Focus{}, "", false
 	}
 	return focus, me.ID, true
+}
+
+// leaseFocus is the focus a lease row declares: the projects of its write paths and its
+// read paths, which only widen. It is the job store's own read boundary, so the store's
+// subset check and this deny agree on what a lease may read.
+func leaseFocus(ws types.WorkspaceReader, me types.Job) (project.Focus, bool) {
+	return project.FocusForPaths(ws, job.ReadBoundary(me))
 }
 
 // focusReadOperands is every path a read-shaped command in the line was pointed at.

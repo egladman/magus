@@ -36,6 +36,20 @@ We document this order; we don't enforce it. Chain steps with `magus\needs` wher
 
 <!--diagram:ci-pipeline-->
 
+Of the steps below, only `ci` is enforced. `magus run ci` and `magus affected ci` fail
+with [MGS1001](../../reference/codes/magusfile/MGS1001.md) when no project in scope
+declares one, and `magus doctor` fails its `ci-target` check when no project in the
+workspace does; a project without `ci` is skipped, not refused. The rest is convention:
+`install`, `generate`, `format`, `lint`, `build`, `test` and `security`, in the order this
+repository's root project composes them. The `cd` charm is required by nothing; magus
+reserves the name and leaves it on a `ci` run, so `ci:cd` can deliver. The convention is
+worth following because it makes `magus run lint <project>` mean the same thing in every
+project, the way two services agree on names before they agree on anything else. Lint
+reports and format rewrites, so they stay two targets; `security` reads advisory data from
+outside the tree, so it is a step of its own rather than a lint rule.
+
+<!--diagram:target-order-->
+
 ## Common pitfalls
 
 Each of these is a way a pipeline goes wrong slowly enough that nobody notices

@@ -793,6 +793,11 @@ func ObjectKnowledgeEdge(v types.KnowledgeEdge) vm.Value {
 	out.MapSet("confidence", vm.StrValue(v.Confidence))
 	out.MapSet("score", vm.FloatValue(float64(v.Score)))
 	out.MapSet("provenance", vm.StrValue(v.Provenance))
+	mappedAttrs := vm.NewMap()
+	for keyAttrs, itemAttrs := range v.Attrs {
+		mappedAttrs.MapSet(keyAttrs, vm.StrValue(itemAttrs))
+	}
+	out.MapSet("attrs", mappedAttrs)
 	return out
 }
 
@@ -831,6 +836,11 @@ func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef) vm.Value {
 	out.MapSet("otherKind", vm.StrValue(v.OtherKind))
 	out.MapSet("otherLabel", vm.StrValue(v.OtherLabel))
 	out.MapSet("provenance", vm.StrValue(v.Provenance))
+	mappedAttrs := vm.NewMap()
+	for keyAttrs, itemAttrs := range v.Attrs {
+		mappedAttrs.MapSet(keyAttrs, vm.StrValue(itemAttrs))
+	}
+	out.MapSet("attrs", mappedAttrs)
 	return out
 }
 
@@ -851,6 +861,7 @@ func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput) vm.Value {
 	}
 	out.MapSet("in", vm.ListValue(itemsIn))
 	out.MapSet("docsURL", vm.StrValue(v.DocsURL))
+	out.MapSet("resolution", vm.StrValue(string(v.Resolution)))
 	return out
 }
 
@@ -969,6 +980,155 @@ func ObjectKnowledgeStats(v types.KnowledgeStats) vm.Value {
 	out.MapSet("isolatedCount", vm.IntValue(int64(v.IsolatedCount)))
 	out.MapSet("componentCount", vm.IntValue(int64(v.ComponentCount)))
 	out.MapSet("largestComponentSize", vm.IntValue(int64(v.LargestComponentSize)))
+	return out
+}
+
+func ObjectImportGraph(v types.ImportGraph) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("indexed", vm.BoolValue(v.Indexed))
+	mappedPackages := vm.NewMap()
+	for keyPackages, itemPackages := range v.Packages {
+		itemsPackagesValue := make([]vm.Value, len(itemPackages))
+		for indexPackagesValue := range itemPackages {
+			itemsPackagesValue[indexPackagesValue] = vm.StrValue(itemPackages[indexPackagesValue])
+		}
+		mappedPackages.MapSet(keyPackages, vm.ListValue(itemsPackagesValue))
+	}
+	out.MapSet("packages", mappedPackages)
+	mappedLanguages := vm.NewMap()
+	for keyLanguages, itemLanguages := range v.Languages {
+		mappedLanguages.MapSet(keyLanguages, vm.StrValue(itemLanguages))
+	}
+	out.MapSet("languages", mappedLanguages)
+	return out
+}
+
+func ObjectSymbolIndexDigest(v types.SymbolIndexDigest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("digest", vm.StrValue(v.Digest))
+	out.MapSet("indexed", vm.BoolValue(v.Indexed))
+	itemsProjects := make([]vm.Value, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = vm.StrValue(v.Projects[indexProjects])
+	}
+	out.MapSet("projects", vm.ListValue(itemsProjects))
+	itemsGaps := make([]vm.Value, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps])
+	}
+	out.MapSet("gaps", vm.ListValue(itemsGaps))
+	return out
+}
+
+func ObjectDirCall(v types.DirCall) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	out.MapSet("transport", vm.StrValue(v.Transport))
+	out.MapSet("marker", vm.StrValue(v.Marker))
+	out.MapSet("source", vm.StrValue(v.Source))
+	return out
+}
+
+func ObjectDir(v types.Dir) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("layer", vm.StrValue(v.Layer))
+	out.MapSet("language", vm.StrValue(v.Language))
+	itemsImports := make([]vm.Value, len(v.Imports))
+	for indexImports := range v.Imports {
+		itemsImports[indexImports] = vm.StrValue(v.Imports[indexImports])
+	}
+	out.MapSet("imports", vm.ListValue(itemsImports))
+	itemsImportedBy := make([]vm.Value, len(v.ImportedBy))
+	for indexImportedBy := range v.ImportedBy {
+		itemsImportedBy[indexImportedBy] = vm.StrValue(v.ImportedBy[indexImportedBy])
+	}
+	out.MapSet("importedBy", vm.ListValue(itemsImportedBy))
+	out.MapSet("importsIndexed", vm.BoolValue(v.ImportsIndexed))
+	itemsCalls := make([]vm.Value, len(v.Calls))
+	for indexCalls := range v.Calls {
+		itemsCalls[indexCalls] = ObjectDirCall(v.Calls[indexCalls])
+	}
+	out.MapSet("calls", vm.ListValue(itemsCalls))
+	itemsCalledBy := make([]vm.Value, len(v.CalledBy))
+	for indexCalledBy := range v.CalledBy {
+		itemsCalledBy[indexCalledBy] = ObjectDirCall(v.CalledBy[indexCalledBy])
+	}
+	out.MapSet("calledBy", vm.ListValue(itemsCalledBy))
+	itemsChildren := make([]vm.Value, len(v.Children))
+	for indexChildren := range v.Children {
+		itemsChildren[indexChildren] = vm.StrValue(v.Children[indexChildren])
+	}
+	out.MapSet("children", vm.ListValue(itemsChildren))
+	out.MapSet("files", vm.IntValue(int64(v.Files)))
+	return out
+}
+
+func ObjectLayer(v types.Layer) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	itemsDeclared := make([]vm.Value, len(v.Declared))
+	for indexDeclared := range v.Declared {
+		itemsDeclared[indexDeclared] = vm.StrValue(v.Declared[indexDeclared])
+	}
+	out.MapSet("declared", vm.ListValue(itemsDeclared))
+	itemsDirs := make([]vm.Value, len(v.Dirs))
+	for indexDirs := range v.Dirs {
+		itemsDirs[indexDirs] = ObjectDir(v.Dirs[indexDirs])
+	}
+	out.MapSet("dirs", vm.ListValue(itemsDirs))
+	return out
+}
+
+func ObjectKnowledgeNeighborhoodOptions(v types.KnowledgeNeighborhoodOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("depth", vm.IntValue(int64(v.Depth)))
+	itemsRelations := make([]vm.Value, len(v.Relations))
+	for indexRelations := range v.Relations {
+		itemsRelations[indexRelations] = vm.StrValue(string(v.Relations[indexRelations]))
+	}
+	out.MapSet("relations", vm.ListValue(itemsRelations))
+	out.MapSet("direction", vm.StrValue(string(v.Direction)))
+	itemsCollapse := make([]vm.Value, len(v.Collapse))
+	for indexCollapse := range v.Collapse {
+		itemsCollapse[indexCollapse] = vm.StrValue(v.Collapse[indexCollapse])
+	}
+	out.MapSet("collapse", vm.ListValue(itemsCollapse))
+	return out
+}
+
+func ObjectKnowledgeFold(v types.KnowledgeFold) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("prefix", vm.StrValue(v.Prefix))
+	out.MapSet("node", vm.StrValue(v.Node))
+	out.MapSet("folded", vm.IntValue(int64(v.Folded)))
+	return out
+}
+
+func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("focus", vm.StrValue(v.Focus))
+	out.MapSet("resolution", vm.StrValue(string(v.Resolution)))
+	out.MapSet("options", ObjectKnowledgeNeighborhoodOptions(v.Options))
+	itemsNodes := make([]vm.Value, len(v.Nodes))
+	for indexNodes := range v.Nodes {
+		itemsNodes[indexNodes] = ObjectKnowledgeNode(v.Nodes[indexNodes])
+	}
+	out.MapSet("nodes", vm.ListValue(itemsNodes))
+	itemsLinks := make([]vm.Value, len(v.Links))
+	for indexLinks := range v.Links {
+		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks])
+	}
+	out.MapSet("links", vm.ListValue(itemsLinks))
+	itemsFolds := make([]vm.Value, len(v.Folds))
+	for indexFolds := range v.Folds {
+		itemsFolds[indexFolds] = ObjectKnowledgeFold(v.Folds[indexFolds])
+	}
+	out.MapSet("folds", vm.ListValue(itemsFolds))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
 	return out
 }
 
@@ -1154,19 +1314,32 @@ func ObjectCheck(v types.Check) vm.Value {
 	return out
 }
 
+func ObjectDiffPublicPath(v types.DiffPublicPath) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("qualified", vm.StrValue(v.Qualified))
+	itemsVia := make([]vm.Value, len(v.Via))
+	for indexVia := range v.Via {
+		itemsVia[indexVia] = vm.StrValue(v.Via[indexVia])
+	}
+	out.MapSet("via", vm.ListValue(itemsVia))
+	out.MapSet("boundary", vm.StrValue(v.Boundary))
+	return out
+}
+
 func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("refCount", vm.IntValue(int64(v.RefCount)))
 	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
-	itemsExternalProjects := make([]vm.Value, len(v.ExternalProjects))
-	for indexExternalProjects := range v.ExternalProjects {
-		itemsExternalProjects[indexExternalProjects] = vm.StrValue(v.ExternalProjects[indexExternalProjects])
+	itemsPublicTo := make([]vm.Value, len(v.PublicTo))
+	for indexPublicTo := range v.PublicTo {
+		itemsPublicTo[indexPublicTo] = vm.StrValue(v.PublicTo[indexPublicTo])
 	}
-	out.MapSet("externalProjects", vm.ListValue(itemsExternalProjects))
-	out.MapSet("externalFileCount", vm.IntValue(int64(v.ExternalFileCount)))
-	out.MapSet("moduleAPI", vm.BoolValue(v.ModuleAPI))
+	out.MapSet("publicTo", vm.ListValue(itemsPublicTo))
+	out.MapSet("publicFileCount", vm.IntValue(int64(v.PublicFileCount)))
+	out.MapSet("publicBeyondWorkspace", vm.BoolValue(v.PublicBeyondWorkspace))
 	out.MapSet("change", vm.StrValue(v.Change))
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
@@ -1176,6 +1349,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsPublicThrough := make([]vm.Value, len(v.PublicThrough))
+	for indexPublicThrough := range v.PublicThrough {
+		itemsPublicThrough[indexPublicThrough] = ObjectDiffPublicPath(v.PublicThrough[indexPublicThrough])
+	}
+	out.MapSet("publicThrough", vm.ListValue(itemsPublicThrough))
 	return out
 }
 
@@ -1570,6 +1748,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 		itemsTrailingArgs[indexTrailingArgs] = vm.StrValue(v.TrailingArgs[indexTrailingArgs])
 	}
 	out.MapSet("trailingArgs", vm.ListValue(itemsTrailingArgs))
+	out.MapSet("needsArgs", vm.StrValue(v.NeedsArgs))
 	mappedCharms := vm.NewMap()
 	for keyCharms, itemCharms := range v.Charms {
 		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms))

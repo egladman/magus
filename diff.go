@@ -130,11 +130,11 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		case listed >= 0:
 			s := &f.Symbols[listed]
 			s.Change, s.Qualified, s.Signature, s.BaseSignature = change, qualified, sig, baseSig
-			public = public || s.ModuleAPI || len(s.ExternalProjects) > 0
+			public = public || s.PublicBeyondWorkspace || len(s.PublicTo) > 0
 		case public:
 			f.Symbols = append(f.Symbols, types.DiffSymbol{
-				ID: def.node.ID, Label: label, ModuleAPI: exported,
-				ExternalProjects: external, ExternalFileCount: externalFiles,
+				ID: def.node.ID, Label: label, PublicBeyondWorkspace: exported,
+				PublicTo: external, PublicFileCount: externalFiles,
 				Change: change, Qualified: qualified, Signature: sig, BaseSignature: baseSig,
 			})
 		}

@@ -28,6 +28,8 @@ It exists so agents and humans can ask "what is this, what touches it, how do
 these relate" and get a precise answer instead of grepping. Agents reach it over
 MCP; humans reach it through three verbs and the `magus graph` home.
 
+<!--diagram:knowledge-graph-->
+
 ## What this graph is not
 
 "Knowledge graph" now names architectures this one deliberately is not, and the
@@ -811,11 +813,11 @@ magus graph export -o graphml > graph.graphml  # GraphML (Gephi, yEd, ...)
 ```
 
 For a specific neighborhood rather than the whole graph, `--select` reuses the
-query engine, and the layout formats become available (they are unreadable on the
-full graph, so they require a scope):
+query engine, and the layout format, DOT, becomes available (it is unreadable on the
+full graph, so it requires a scope):
 
 ```sh
-magus graph export --select "kind=spell go" -o mermaid
+magus graph export --select "kind=spell go" -o dot
 magus graph export --select "project=pkg/foo" --budget 80 -o dot
 ```
 

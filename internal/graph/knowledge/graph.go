@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"sync"
 
@@ -73,20 +74,7 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Label = sanitize(n.Label, maxLabelLen)
 	n.Doc = sanitize(n.Doc, maxDocLen)
 	n.Source = sanitize(n.Source, maxSrcLen)
-	// Attr values now carry file-derived text (doc frontmatter title/tags), so they
-	// get the same control-char strip and length cap as the other free-form fields.
-	// Sanitize into a FRESH map rather than in place: on the read paths (Output,
-	// Select, Neighborhood) AddNode is fed nodes straight from g.Nodes(), whose
-	// Attrs alias the live graph's own maps; mutating them there would write shared
-	// state during what is logically a query. (maxLabelLen is a short cap; attrs are
-	// keys and small scalars, so a label's budget is ample.)
-	if len(n.Attrs) > 0 {
-		clean := make(map[string]string, len(n.Attrs))
-		for k, v := range n.Attrs {
-			clean[k] = sanitize(v, maxLabelLen)
-		}
-		n.Attrs = clean
-	}
+	n.Attrs = sanitizeAttrs(n.Attrs)
 	existing, ok := g.nodes[n.ID]
 	if !ok {
 		g.nodes[n.ID] = n
@@ -101,27 +89,59 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	if existing.Label == "" {
 		existing.Label = n.Label
 	}
-	if len(n.Attrs) > 0 {
-		if existing.Attrs == nil {
-			existing.Attrs = map[string]string{}
-		}
-		for k, v := range n.Attrs {
-			if _, has := existing.Attrs[k]; !has {
-				existing.Attrs[k] = v
-			}
-		}
-	}
+	existing.Attrs = fillAttrs(existing.Attrs, n.Attrs)
 	g.nodes[n.ID] = existing
+}
+
+// sanitizeAttrs copies attrs with every value stripped of control chars and capped, nil
+// when empty. The copy is fresh because the read paths (Output, Select, Neighborhood)
+// return maps that alias the live graph, and a query must not write shared state.
+func sanitizeAttrs(attrs map[string]string) map[string]string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	clean := make(map[string]string, len(attrs))
+	for k, v := range attrs {
+		clean[k] = sanitize(v, maxLabelLen)
+	}
+	return clean
+}
+
+// fillAttrs adds to dst every key only src carries and returns dst; dst's own values win.
+// dst must be a map the caller owns.
+func fillAttrs(dst, src map[string]string) map[string]string {
+	for k, v := range src {
+		if _, has := dst[k]; has {
+			continue
+		}
+		if dst == nil {
+			dst = make(map[string]string, len(src))
+		}
+		dst[k] = v
+	}
+	return dst
 }
 
 // AddEdge inserts a directed edge, deduplicating by (source, target, relation).
 // On collision the higher-confidence edge (extracted over inferred, then higher
 // score) is kept, so the merged graph is independent of shard load order.
+//
+// Attrs are not part of the key. The kept edge takes any attr key only the other
+// carries, the way AddNode fills a node, so a fact rides whichever copy wins.
 func (g *Graph) AddEdge(e types.KnowledgeEdge) {
 	e.Provenance = sanitize(e.Provenance, maxSrcLen)
+	e.Attrs = sanitizeAttrs(e.Attrs)
 	k := edgeKey{e.Source, e.Target, e.Relation}
-	if prev, ok := g.edges[k]; ok && edgeStronger(prev, e) {
-		return
+	if prev, ok := g.edges[k]; ok {
+		if edgeStronger(prev, e) {
+			if len(e.Attrs) == 0 {
+				return
+			}
+			prev.Attrs, e = fillAttrs(maps.Clone(prev.Attrs), e.Attrs), prev
+		} else {
+			e.Attrs = fillAttrs(e.Attrs, prev.Attrs)
+		}
+		e.Attrs = fillAttrs(e.Attrs, prev.Attrs)
 	}
 	g.edges[k] = e
 	g.out, g.in, g.projPaths = nil, nil, nil // invalidate lazy indices; rebuilt on next query

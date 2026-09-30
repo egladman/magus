@@ -494,8 +494,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A line-bounded read already has a range; refs is not the next step.
 		{command: "sed -n '10,40p' cmd/magus/main.go"},
 	}
+	deps := testDependencies()
+	deps.GraphIDs = diagnosticGraph
 	for _, tt := range tests {
-		v := Evaluate(testDependencies(), tt.command)
+		v := Evaluate(deps, tt.command)
 		if (tt.rule != denyRule{}) {
 			// assert rather than require: a require here stops the loop at the first
 			// wrong row, and a rule change that moves seven of them should name all
@@ -846,6 +848,35 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 	assert.False(t, rawToolDenied(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
 }
 
+// Two ops rendering one subcommand, listed so that the first in catalog order and the
+// first by name are both the wrong one: the invocation carries every argument of the
+// second and misses the first's `^$`.
+func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
+	const spellName = "guard-shared-subcommand-test"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
+		spellName,
+		spells.WithTargets("alpha-fuzz", "beta-test"),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+			switch target {
+			case "alpha-fuzz":
+				return "shared-tool", []string{"test", "-run", "^$"}, true, nil
+			case "beta-test":
+				return "shared-tool", []string{"test", "./..."}, true, nil
+			}
+			return "", nil, false, nil
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "shared-tool", Args: []string{"test", "./...", "-run", "TestFocused"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "beta-test"}, match)
+
+	match, ok = rawToolMatch(testDependencies(), hint.Invocation{Name: "shared-tool", Args: []string{"test", "-run", "^$", "./pkg"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "alpha-fuzz"}, match)
+}
+
 // The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
 // ships in a binary and a workspace calls its targets whatever it likes, so the
 // message points at discovery. The resolved spell op appears only as the
@@ -966,6 +997,40 @@ func TestRawToolPassesAGofmtListing(t *testing.T) {
 		}
 		assert.NotEqual(t, denyRuleRawTool, v.Rule.Name, tc.command)
 	}
+}
+
+// TestRawToolReadsModeArgs: node has no subcommand and many uses, so its node-test op
+// declares --test as what selects it. Only a node carrying --test ahead of its script is
+// refused; single-purpose checks, which declare none, stay refused in every spelling.
+func TestRawToolReadsModeArgs(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{command: `node -e "console.log(1)"`},
+		{command: "node script.mjs"},
+		{command: "node --enable-source-maps dist/cli.js"},
+		{command: "node app.mjs --test"},
+		{command: "node -- --test"},
+
+		{command: "node --test", denied: true},
+		{command: "node --test src/a.test.mjs", denied: true},
+		{command: "node --enable-source-maps --test --test-reporter=spec", denied: true},
+		{command: "govulncheck ./...", denied: true},
+		{command: "govulncheck -json ./...", denied: true},
+		{command: "shellcheck scripts/release.sh", denied: true},
+		{command: "shellcheck -x scripts/release.sh", denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleRawTool, v.Rule.Name, tc.command)
+	}
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "node", Args: []string{"--test", "a.test.mjs"}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: "typescript", operation: "node-test"}, match)
 }
 
 func TestGuardAdversarial(t *testing.T) {

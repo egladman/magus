@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -122,4 +123,103 @@ func TestAssembleDirsRefusesEscape(t *testing.T) {
 	for _, n := range s.Nodes {
 		assert.True(t, workspaceContainsPath(n.Source), "dir node %q stays inside the workspace", n.Source)
 	}
+}
+
+// Every source package directory gets a node whatever other shard ran: the root, a nested
+// project's own directory, and a directory holding a mix of languages. The chain to its
+// project is minted too, and every dir takes the layer the declarations give it.
+func TestPackageDirsMintsEverySourcePackage(t *testing.T) {
+	t.Parallel()
+
+	projects := []types.TargetGraphProject{{Path: "."}, {Path: "libs/buzz"}, {Path: "console"}}
+	sources := []string{
+		"magus.go",
+		"internal/graph/g.go",
+		"internal/graph/knowledge/a.go", "internal/graph/knowledge/b.go",
+		"internal/only/only_test.go",
+		"libs/buzz/vm.go",
+		"console/src/a.ts", "console/src/b.mjs", "console/src/c.go",
+		"docs/x.md",
+		"../escape/x.go",
+	}
+	layers := map[string]string{"internal/**": "engine", "internal/graph/knowledge": "graph", "console/**": "ui"}
+
+	contains := func(from, to string) types.KnowledgeEdge {
+		return extractedEdge(from, to, types.RelationContains, strings.TrimPrefix(to, "dir:"))
+	}
+	dir := func(d string, attrs map[string]string) types.KnowledgeNode {
+		return types.KnowledgeNode{ID: "dir:" + d, Kind: types.KindDir, Label: d, Source: d, Attrs: attrs}
+	}
+	assert.Equal(t, Shard{
+		Name: packageDirsShardName,
+		Nodes: []types.KnowledgeNode{
+			dir(".", map[string]string{types.AttrLanguage: "go"}),
+			dir("console/src", map[string]string{types.AttrLanguage: "typescript", types.AttrLayer: "ui"}),
+			dir("internal", map[string]string{types.AttrLayer: "engine"}),
+			dir("internal/graph", map[string]string{types.AttrLanguage: "go", types.AttrLayer: "engine"}),
+			dir("internal/graph/knowledge", map[string]string{types.AttrLanguage: "go", types.AttrLayer: "graph"}),
+			dir("libs/buzz", map[string]string{types.AttrLanguage: "go"}),
+		},
+		Edges: []types.KnowledgeEdge{
+			contains("dir:internal", "dir:internal/graph"),
+			contains("dir:internal/graph", "dir:internal/graph/knowledge"),
+			contains("project:.", "dir:."),
+			contains("project:.", "dir:internal"),
+			contains("project:console", "dir:console/src"),
+			contains("project:libs/buzz", "dir:libs/buzz"),
+		},
+	}, packageDirs(sources, projects, layers))
+
+	g := mergeAll([]Shard{packageDirs(sources, projects, layers)})
+	for _, p := range projects {
+		g.AddNode(types.KnowledgeNode{ID: projectID(p.Path), Kind: types.KindProject, Label: p.Path, Source: p.Path})
+	}
+	assert.Empty(t, g.UndeclaredEdges())
+}
+
+func TestPackageDirsMajorityLanguageTiesToTheLexicallyFirst(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "go", majorityLanguage(map[string]int{"typescript": 2, "go": 2, "python": 1}))
+	assert.Equal(t, "python", majorityLanguage(map[string]int{"typescript": 2, "go": 2, "python": 3}))
+}
+
+// gen is walked because a generated package is imported like any other; dependency trees,
+// fixtures, dot-dirs, tests and files no indexer reads are not.
+func TestFindPackageSourcesWalksIndexedLanguages(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, rel := range []string{
+		"a.go", "a_test.go", "gen/g.go", "src/app.tsx", "src/app.test.ts", "lib/m.py", "crate/src/lib.rs",
+		"node_modules/x/y.js", "testdata/t.go", ".hidden/h.go", "vendor/v.go", "README.md", "src/style.css",
+	} {
+		writeFile(t, root, rel, "")
+	}
+
+	assert.Equal(t, []string{"a.go", "crate/src/lib.rs", "gen/g.go", "lib/m.py", "src/app.tsx"}, findPackageSources(root))
+}
+
+func TestUnionLayersJoinsProjectsAndRefusesTwoNames(t *testing.T) {
+	t.Parallel()
+
+	got, err := unionLayers(map[string]map[string]string{
+		".":    {"internal/**": "engine", "cmd/*": "cli"},
+		"docs": {"docs/site": "site", "cmd/*": "cli"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"internal/**": "engine", "cmd/*": "cli", "docs/site": "site"}, got)
+
+	empty, err := unionLayers(nil)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+
+	_, err = unionLayers(map[string]map[string]string{
+		".":    {"internal/handler": "handler"},
+		"docs": {"internal/handler": "transport"},
+	})
+	require.ErrorIs(t, err, types.LayerDeclarationInvalid)
+	assert.ErrorContains(t, err, `"internal/handler"`)
+	assert.ErrorContains(t, err, `"handler" by project .`)
+	assert.ErrorContains(t, err, `"transport" by project docs`)
 }

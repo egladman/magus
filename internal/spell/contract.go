@@ -63,10 +63,12 @@ var OptionalContract = []contractEntry{
 	{Name: "mgs_listClaimedGlobs", Field: "claims", Shape: ShapePaths},
 	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs", Shape: ShapePaths},
 	{Name: "mgs_listManifests", Field: "manifests", Shape: ShapeManifests},
+	{Name: "mgs_listScriptRunners", Field: "script_runners"},
 	{Name: "mgs_getTools", Field: "tools"},
 	{Name: "mgs_getLanguage", Field: "language"},
 	{Name: "mgs_getSymbolIndexer", Field: "symbol_indexer"},
 	{Name: "mgs_getSandbox", Field: "sandbox"},
 	{Name: "mgs_isOpaque", Field: "opaque"},
+	{Name: "mgs_getModeArgs", Field: "mode_args"},
 	{Name: "mgs_listTargets", Field: "ops"},
 }

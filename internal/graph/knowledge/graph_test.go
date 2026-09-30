@@ -34,6 +34,41 @@ func TestQualified(t *testing.T) {
 	}
 }
 
+// Edge attrs get the control-char strip node attrs get, never alias the caller's map, and
+// fold across copies of one edge the way node attrs do: the kept edge's values win and it
+// takes the keys only the other carries.
+func TestDirEdgeAttrsAreSanitizedAndFilledOnMerge(t *testing.T) {
+	g := NewGraph()
+	in := map[string]string{types.AttrTransport: "ht\x1btp"}
+	declared := types.KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: types.RelationImports,
+		Confidence: types.ConfidenceInferred, Score: 0.5, Attrs: in}
+	g.AddEdge(declared)
+	in[types.AttrTransport] = "mutated"
+	require.Len(t, g.Edges(), 1)
+	assert.Equal(t, map[string]string{types.AttrTransport: "http"}, g.Edges()[0].Attrs)
+
+	g.AddEdge(types.KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: types.RelationImports,
+		Confidence: types.ConfidenceExtracted, Score: 1, Attrs: map[string]string{types.AttrLanguage: "go", types.AttrTransport: "grpc"}})
+	assert.Equal(t, types.KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: types.RelationImports,
+		Confidence: types.ConfidenceExtracted, Score: 1,
+		Attrs: map[string]string{types.AttrLanguage: "go", types.AttrTransport: "grpc"}}, g.Edges()[0])
+
+	g.ensureAdj()
+	g.AddEdge(declared)
+	assert.Equal(t, map[string]string{types.AttrLanguage: "go", types.AttrTransport: "grpc"}, g.Edges()[0].Attrs,
+		"a weaker copy fills nothing the kept edge already holds")
+	g.AddEdge(types.KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: types.RelationImports,
+		Confidence: types.ConfidenceInferred, Score: 0.1, Attrs: map[string]string{types.AttrBuildTags: "js,wasm"}})
+	want := map[string]string{types.AttrLanguage: "go", types.AttrTransport: "grpc", types.AttrBuildTags: "js,wasm"}
+	assert.Equal(t, want, g.Edges()[0].Attrs)
+	g.ensureAdj()
+	assert.Equal(t, want, g.out["dir:a"][0].Attrs, "the adjacency index sees the filled attrs")
+
+	g.AddEdge(types.KnowledgeEdge{Source: "dir:a", Target: "dir:c", Relation: types.RelationImports,
+		Confidence: types.ConfidenceExtracted, Score: 1, Attrs: map[string]string{}})
+	assert.Nil(t, g.Edges()[1].Attrs, "an empty map normalizes to absent")
+}
+
 func TestUnionIntoDistinctWorkspaces(t *testing.T) {
 	a := NewGraph()
 	a.AddNode(types.KnowledgeNode{ID: "spell:go", Kind: types.KindSpell})

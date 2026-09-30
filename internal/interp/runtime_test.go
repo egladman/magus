@@ -20,8 +20,10 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -285,6 +287,11 @@ func (p *stepProbe) RecordBuzzJITRun(context.Context) {}
 // step: here ci is the caller, as when ci composes test, and only test declares the
 // grant, as the root magusfile's test declares /proc.
 func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
+	prev := buzzHostBindingsFn
+	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) {
+		spell.DeclareMagusTypes(sess, nil)
+	}
+	t.Cleanup(func() { buzzHostBindingsFn = prev })
 	root := t.TempDir()
 	const magusfile = "export fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
 		"export fun test(ctx: magus\\Context, args: [str]) > void {}\n"

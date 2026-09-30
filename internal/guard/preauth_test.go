@@ -340,7 +340,9 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		for _, f := range denyRemedyFixtures() {
 			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
 				command, want := f.setup(t, root)
-				v := Judge(ctx, testDependencies(), Request{Input: command, Lease: role.lease})
+				deps := testDependencies()
+				deps.GraphIDs = diagnosticGraph
+				v := Judge(ctx, deps, Request{Input: command, Lease: role.lease})
 				require.Equal(t, "deny", v.Decision, command)
 				require.Equal(t, string(f.rule), v.Rule, command)
 				if role.lease == "" {

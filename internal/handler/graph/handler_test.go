@@ -101,6 +101,43 @@ func TestGraph_SnakeCaseFieldNames(t *testing.T) {
 	}
 }
 
+type declaredCallSource struct{ fakeSource }
+
+func (declaredCallSource) Graph(context.Context, string, string) (types.KnowledgeGraphOutput, error) {
+	return types.KnowledgeGraphOutput{
+		Nodes: []types.KnowledgeNode{
+			{ID: "dir:cmd/magus", Kind: types.KindDir, Label: "cmd/magus"},
+			{ID: "dir:internal/server", Kind: types.KindDir, Label: "internal/server"},
+		},
+		Links: []types.KnowledgeEdge{{
+			Source: "dir:cmd/magus", Target: "dir:internal/server", Relation: types.RelationCalls,
+			Confidence: types.ConfidenceDeclared, Score: 1, Provenance: "cmd/magus/main.go:12",
+			Attrs: map[string]string{types.AttrTransport: "grpc,http"},
+		}},
+	}, nil
+}
+
+// The explorer dashes a declared call and labels it with its transport, so the edge's attrs
+// must reach the browser under the same key the domain JSON uses.
+func TestGraph_EdgeAttrsCrossTheWire(t *testing.T) {
+	w := get(t, NewGraphHandler(declaredCallSource{}, nil), "/api/v1/graph")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var out struct {
+		Links []map[string]any `json:"links"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	assert.Equal(t, []map[string]any{{
+		"source":     "dir:cmd/magus",
+		"target":     "dir:internal/server",
+		"relation":   "calls",
+		"confidence": "declared",
+		"score":      float64(1),
+		"provenance": "cmd/magus/main.go:12",
+		"attrs":      map[string]any{"transport": "grpc,http"},
+	}}, out.Links)
+}
+
 func keys(m map[string]json.RawMessage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -127,6 +164,7 @@ func TestGraph_BadParams_Return400(t *testing.T) {
 	for _, target := range []string{"/api/v1/graph?flavor=bogus", "/api/v1/graph?level=all", "/api/v1/graph?flavor=targets&level=projects"} {
 		w := get(t, h, target)
 		assert.Equalf(t, http.StatusBadRequest, w.Code, "target %s", target)
+		assert.Containsf(t, w.Body.String(), `"reason":"MGS9023"`, "target %s", target)
 	}
 }
 
@@ -160,6 +198,8 @@ func TestGraph_BuildError_Returns500(t *testing.T) {
 	for _, target := range []string{"/api/v1/graph", "/api/v1/graph?flavor=targets"} {
 		w := get(t, h, target)
 		assert.Equalf(t, http.StatusInternalServerError, w.Code, "target %s", target)
+		assert.Containsf(t, w.Body.String(), `"reason":"MGS9027"`, "target %s", target)
+		assert.NotContainsf(t, w.Body.String(), "boom", "target %s: the cause stays in the log", target)
 	}
 }
 

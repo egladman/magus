@@ -41,7 +41,7 @@ magus\project({
 // Narrow on purpose. readsFiles replaces the project baseline for this target, so editing
 // something outside data/ does not re-run it. Name every input the target reads:
 // a glob you forget is a file whose change magus cannot see, and a stale hit is the result.
-export fun report(ctx: magus\Context, args: [str]) > void {
+export fun report(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("data/**");
     ctx.writesFiles("gen/report.txt");
     fs\mkdirAll("gen");
@@ -56,7 +56,7 @@ export fun report(ctx: magus\Context, args: [str]) > void {
 // `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has
 // one owner. If two targets both need to contribute, they write separate files
 // and a third target combines them.
-export fun stamp(ctx: magus\Context, args: [str]) > void {
+export fun stamp(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/report.txt");
     fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "stamp");
@@ -65,7 +65,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 // Editing rather than producing. This page is hand-written and only a region of it is
 // generated, so it is NOT an output magus owns - declaring it with writesFiles would let
 // `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.
-export fun inject(ctx: magus\Context, args: [str]) > void {
+export fun inject(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("data/**");
     ctx.modifiesExistingFiles("README.md");
     magus\log.info("would rewrite the generated block in README.md, leaving the rest alone");
@@ -86,7 +86,7 @@ export fun inject(ctx: magus\Context, args: [str]) > void {
 // for checking quietly edits your tree. Worse when the charm is a workspace default
 // (magus.yaml default_charms), because the local run carries it and CI strips it: the same
 // target has opposite behavior on the two machines and neither run can reveal the other.
-export fun tidy(ctx: magus\Context, args: [str]) > void {
+export fun tidy(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("data/**");
     fs\writeFile("data/notes.txt", "rewritten in place");
 }

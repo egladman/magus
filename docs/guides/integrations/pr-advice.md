@@ -153,6 +153,19 @@ by them, as this repository's `queue-advice.yaml` does:
 change must reach before it says anything. It is a share rather than a count because
 five projects is most of a small workspace and a rounding error in a large one.
 
+Its comment shows the reached projects as an image, then links them to the console's graph
+view, which draws them in the browser. `console-base` (default
+`https://eli.gladman.cc/magus/console/`) points the link at another console. The graph
+rides in the link's fragment, which the browser never sends to a server, so the link sends
+a private workspace's project names nowhere.
+
+The image is an SVG the advisor draws and uploads as a comment attachment with the step's
+`GITHUB_TOKEN`, which puts the project names on GitHub beside the table that already lists
+them. GitHub documents no API for attachments: the upload uses the endpoint its web editor
+and `gh --attach` use, which can change or refuse a token without notice. When the drawing
+or the upload fails, the comment says so in one line with the reason, and the link stays.
+A local `magus diff` run attaches nothing.
+
 ## Conformance on code
 
 The symbol half of `conformance` reads `magus diff`'s `checks` on each symbol the change

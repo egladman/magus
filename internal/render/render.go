@@ -1,5 +1,5 @@
-// Package render contains graph presentation helpers: ASCII tree, DOT, and
-// Mermaid formatters. These were moved out of the public magus package so the
+// Package render contains graph presentation helpers: ASCII tree and DOT
+// formatters. These were moved out of the public magus package so the
 // public surface stays free of formatting details.
 package render
 
@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -179,101 +177,14 @@ func renderStringNode(w io.Writer, path string, adjFn func(string) []string,
 	return nil
 }
 
-// spellPalette maps spell names to fill colors. Unknown spells fall back
-// to the unspelled color.
-var spellPalette = map[string]struct{ fill, text string }{
-	"go":         {"#00ADD8", "#fff"},
-	"rust":       {"#DEA584", "#000"},
-	"typescript": {"#3178C6", "#fff"},
-	"docker":     {"#2496ED", "#fff"},
-	"bash":       {"#4EAA25", "#000"},
-	"teal":       {"#5d4d7a", "#fff"},
-	"unspelled":  {"#888888", "#fff"},
-}
-
-func spellColor(name string) (fill, text string) {
-	if c, ok := spellPalette[name]; ok {
-		return c.fill, c.text
-	}
-	return spellPalette["unspelled"].fill, spellPalette["unspelled"].text
-}
-
-// mermaidID converts a project path into a valid Mermaid node identifier.
-func mermaidID(path string) string {
-	var b strings.Builder
-	for _, r := range path {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune('_')
-		}
-	}
-	return b.String()
-}
-
-// mermaidIDs assigns each path a unique Mermaid-safe node id, de-duplicated with a
-// numeric suffix on collision. It sorts first so the path that keeps the bare id on
-// a sanitized-name collision is deterministic regardless of input order (the output
-// feeds the MAGUS.md drift gate).
-func mermaidIDs(paths []string) map[string]string {
-	sorted := slices.Clone(paths)
-	slices.Sort(sorted)
-	ids := make(map[string]string, len(sorted))
-	seen := make(map[string]int)
-	for _, p := range sorted {
-		base := mermaidID(p)
-		id := base
-		if count := seen[base]; count > 0 {
-			id = fmt.Sprintf("%s_%d", base, count)
-		}
-		seen[base]++
-		ids[p] = id
-	}
-	return ids
-}
-
-// FormatDuration formats a duration as a human-readable string.
-func FormatDuration(d time.Duration) string {
-	ms := d.Milliseconds()
-	switch {
-	case ms < 1000:
-		return fmt.Sprintf("%dms", ms)
-	case ms < 60000:
-		s := float64(ms) / 1000
-		return fmt.Sprintf("%.4gs", s)
-	default:
-		sec := ms / 1000
-		m := sec / 60
-		s := sec % 60
-		if s == 0 {
-			return fmt.Sprintf("%dm", m)
-		}
-		return fmt.Sprintf("%dm%ds", m, s)
-	}
-}
-
 // WriteGraphDOT emits a deterministic Graphviz DOT digraph to w (rankdir=LR, paths quoted).
 func WriteGraphDOT(w io.Writer, out types.GraphOutput) error {
 	return writeDOT(w, projectGraphIR(out))
 }
 
-// WriteGraphMermaid emits a Mermaid flowchart with spell subgraphs, BR/duration labels,
-// cross-spell edge labels, exclusive hexagons, and click-to-dir handlers.
-func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
-	return writeMermaid(w, projectGraphIR(out))
-}
-
-// projectGraphIR maps the project dependency graph onto the shared renderGraph:
-// spell buckets become subgraphs (and classes), blast-radius/duration ride in the
-// node label, exclusive nodes become hexagons, a cross-spell edge carries the
-// dependency's spell as its label, and a project dir becomes a click handler.
-func projectGraphIR(out types.GraphOutput) renderGraph {
-	paths := make([]string, len(out.Nodes))
-	for i, n := range out.Nodes {
-		paths[i] = n.Path
-	}
-	ids := mermaidIDs(paths)
-
+// projectGraphIR maps the project dependency graph onto a dotGraph. Nodes are grouped
+// by spell and sorted by path within a group, which keeps the output stable.
+func projectGraphIR(out types.GraphOutput) dotGraph {
 	spellOf := make(map[string]string, len(out.Nodes))
 	bucketSet := map[string]bool{}
 	for _, n := range out.Nodes {
@@ -290,72 +201,21 @@ func projectGraphIR(out types.GraphOutput) renderGraph {
 	}
 	slices.Sort(bucketKeys)
 
-	rootSet := make(map[string]bool, len(out.Roots))
-	for _, r := range out.Roots {
-		rootSet[r] = true
-	}
-
-	title := "magus dependency graph (" + out.Direction
-	if out.SpellName != "" {
-		title += ", spell=" + out.SpellName
-	}
-	title += ")"
-	g := renderGraph{Title: title, DOTName: "magus"}
-
+	g := dotGraph{Name: "magus"}
 	for _, key := range bucketKeys {
-		g.Groups = append(g.Groups, renderGroup{ID: "spell_" + mermaidID(key), Label: key})
-	}
-	// Nodes, bucket by bucket and sorted within, for deterministic output.
-	for _, key := range bucketKeys {
-		group := "spell_" + mermaidID(key)
-		var bucket []types.Node
+		var bucket []string
 		for _, n := range out.Nodes {
 			if spellOf[n.Path] == key {
-				bucket = append(bucket, n)
+				bucket = append(bucket, n.Path)
 			}
 		}
-		slices.SortFunc(bucket, func(a, b types.Node) int { return strings.Compare(a.Path, b.Path) })
-		for _, n := range bucket {
-			label := n.Label()
-			if n.BlastRadius > 0 {
-				label += fmt.Sprintf("<br/>BR=%d", n.BlastRadius)
-			}
-			if n.DurationMs > 0 {
-				label += "<br/>~" + FormatDuration(time.Duration(n.DurationMs)*time.Millisecond)
-			}
-			shape := shapeBox
-			classes := []string{group}
-			if rootSet[n.Path] {
-				classes = append(classes, "root")
-			}
-			rn := renderNode{ID: ids[n.Path], DOTID: n.Path, Label: label, Shape: shape, Classes: classes, Group: group}
-			if n.Dir != "" {
-				rn.ClickURL = "file://" + n.Dir
-				rn.ClickTip = n.Path
-			}
-			g.Nodes = append(g.Nodes, rn)
-		}
+		slices.Sort(bucket)
+		g.Nodes = append(g.Nodes, bucket...)
 	}
-	// Edges: skip dangling children (not declared as nodes), matching prior behavior.
 	for _, n := range out.Nodes {
 		for _, child := range n.Children {
-			cid, ok := ids[child]
-			if !ok {
-				continue
-			}
-			label := ""
-			if spellOf[n.Path] != spellOf[child] {
-				label = spellOf[child]
-			}
-			g.Edges = append(g.Edges, renderEdge{From: ids[n.Path], To: cid, Label: label})
+			g.Edges = append(g.Edges, [2]string{n.Path, child})
 		}
-	}
-	for _, key := range bucketKeys {
-		fill, text := spellColor(key)
-		g.Classes = append(g.Classes, renderClass{Name: "spell_" + mermaidID(key), Style: fmt.Sprintf("fill:%s,color:%s", fill, text)})
-	}
-	if len(out.Roots) > 0 {
-		g.Classes = append(g.Classes, renderClass{Name: "root", Style: "stroke-width:3px,stroke:#000"})
 	}
 	return g
 }

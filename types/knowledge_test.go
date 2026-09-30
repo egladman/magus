@@ -89,7 +89,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	kinds := []string{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir, KindFunction, KindImport,
-		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink,
+		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker,
 	}
 
 	// go test's cwd is this package dir, regardless of -trimpath.
@@ -104,9 +104,9 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	}
 
 	tokens := read("console", "src", "styles", "tokens.css")
-	graphCSS := read("console", "src", "console", "graph", "graph.css")
-	mainTS := read("console", "src", "console", "graph", "main.ts")
-	shapesTS := read("console", "src", "console", "graph", "shapes.ts")
+	graphCSS := read("console", "src", "apps", "graph", "graph.css")
+	mainTS := read("console", "src", "apps", "graph", "main.ts")
+	shapesTS := read("console", "src", "apps", "graph", "shapes.ts")
 
 	// KINDS is a plain array literal; slice it out so a kind named in a comment elsewhere in
 	// the file cannot satisfy the check.
@@ -249,4 +249,91 @@ func TestBodyDigest(t *testing.T) {
 		_, ok := BodyDigest(lines, r[0], r[1])
 		assert.Falsef(t, ok, "range %v does not fit the file", r)
 	}
+}
+
+func TestMarkerFamilyIsClosed(t *testing.T) {
+	assert.Equal(t, []string{"diagram", "calls", "skills", "observed"}, MarkerFamily("").Values())
+	assert.True(t, MarkerCalls.Valid())
+	assert.False(t, MarkerFamily("bogus").Valid())
+	assert.Equal(t, []string{"point", "block"}, MarkerVerb("").Values())
+	assert.False(t, MarkerVerb("begin").Valid(), "begin/end fold into block; neither is a node verb")
+	assert.Equal(t, []string{"id", "path", "fuzzy"}, KnowledgeResolution("").Values())
+}
+
+// The shapes later producers emit must be declared before they emit them, or
+// Graph.UndeclaredEdges reports every one.
+func TestKnowledgeRelationShapesForMarkersAndPackages(t *testing.T) {
+	for _, tc := range []struct {
+		rel            RelationID
+		source, target string
+	}{
+		{RelationContains, KindFile, KindMarker},
+		{RelationReferences, KindMarker, KindDir},
+		{RelationReferences, KindMarker, KindDoc},
+		{RelationReferences, KindMarker, KindDocSection},
+		{RelationCalls, KindDir, KindDir},
+		{RelationImports, KindDir, KindDir},
+		{RelationOwns, KindOwner, KindDir},
+		{RelationDocuments, KindDoc, KindTarget},
+		{RelationDocuments, KindDocSection, KindTarget},
+		{RelationAnnotates, KindNote, KindMarker},
+	} {
+		assert.Truef(t, KnowledgeRelationAllows(tc.rel, tc.source, tc.target),
+			"%s %s->%s is undeclared", tc.rel, tc.source, tc.target)
+	}
+	assert.False(t, KnowledgeRelationAllows(RelationReferences, KindMarker, KindTarget))
+	assert.False(t, KnowledgeRelationAllows(RelationCalls, KindDir, KindSymbol))
+	assert.False(t, KnowledgeRelationAllows(RelationDocuments, KindDocSection, KindSpell))
+}
+
+// Edge attrs are additive: an edge without any marshals exactly as it did before them.
+func TestKnowledgeEdgeAttrsJSONKeys(t *testing.T) {
+	e := KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: RelationCalls, Confidence: ConfidenceDeclared, Score: 1}
+	b, err := json.Marshal(e)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"source":"dir:a","target":"dir:b","relation":"calls","confidence":"declared","score":1}`, string(b))
+
+	e.Attrs = map[string]string{AttrTransport: "http"}
+	b, err = json.Marshal(e)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"source":"dir:a","target":"dir:b","relation":"calls","confidence":"declared","score":1,"attrs":{"transport":"http"}}`, string(b))
+}
+
+// Dir is what figures build boxes and edges from, so its wire keys are pinned, and an
+// empty list stays a list: absence is ImportsIndexed's to say.
+func TestKnowledgeDirJSONKeys(t *testing.T) {
+	d := Dir{
+		Path: "internal/handler", ID: "dir:internal/handler", Layer: "handler", Language: "go",
+		Imports: []string{"types"}, ImportedBy: []string{}, ImportsIndexed: true,
+		Calls:    []DirCall{{Dir: "internal/httpx", Transport: "http", Marker: "marker:internal/handler/a.go:3", Source: "internal/handler/a.go:3"}},
+		CalledBy: []DirCall{}, Children: []string{"internal/handler/mcp"}, Files: 4,
+	}
+	b, err := json.Marshal(d)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"path": "internal/handler", "id": "dir:internal/handler", "layer": "handler", "language": "go",
+		"imports": ["types"], "imported_by": [], "imports_indexed": true,
+		"calls": [{"dir": "internal/httpx", "transport": "http", "marker": "marker:internal/handler/a.go:3", "source": "internal/handler/a.go:3"}],
+		"called_by": [], "children": ["internal/handler/mcp"], "files": 4
+	}`, string(b))
+}
+
+func TestKnowledgeNeighborhoodJSONKeys(t *testing.T) {
+	out := KnowledgeNeighborhoodOutput{
+		Definition: KnowledgeNeighborhoodDefinition, SchemaVersion: KnowledgeSchemaVersion,
+		Focus: "dir:internal", Resolution: ResolvedPath,
+		Options: KnowledgeNeighborhoodOptions{Depth: 2, Relations: []RelationID{RelationImports}, Collapse: []string{"internal/graph"}},
+		Nodes:   []KnowledgeNode{}, Links: []KnowledgeEdge{},
+		Folds:  []KnowledgeFold{{Prefix: "internal/graph", Node: "dir:internal/graph", Folded: 3}},
+		Answer: ClassifyAnswer(true, "", nil),
+	}
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.JSONEq(t, fmt.Sprintf(`{
+		"definition": %q, "schema_version": %d, "focus": "dir:internal", "resolution": "path",
+		"options": {"depth": 2, "relations": ["imports"], "collapse": ["internal/graph"]},
+		"nodes": [], "links": [],
+		"folds": [{"prefix": "internal/graph", "node": "dir:internal/graph", "folded": 3}],
+		"answer": {"verdict": "found"}
+	}`, KnowledgeNeighborhoodDefinition, KnowledgeSchemaVersion), string(b))
 }

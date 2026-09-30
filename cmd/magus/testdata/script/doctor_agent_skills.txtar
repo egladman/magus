@@ -30,21 +30,37 @@ stdout 'agent-skills: installed skills are behind this binary: \.claude/skills'
 exec magus doctor --fix --dry-run
 stdout 'would fix agent-skills: magus agent harness install --id script-host'
 
-# A skill a RENAME orphaned is different, and the difference is the whole reason this
-# check declares no Fix for it. magus wrote the file, so it is graded; but --force
-# rewrites only the names magus ships, so the reinstall it would otherwise name can
-# never clear the finding and --fix would run forever. The remedy needs --prune, which
-# deletes directories the caller has not reviewed - a judgment call the Fix contract
-# reserves for a report.
+# A skill a RENAME orphaned carries the stamp, so the same reinstall clears it: install
+# removes what magus wrote and no longer ships. The finding says nothing about a
+# reinstall falling short, and the Fix is still the harness install.
 mkdir .claude/skills/magus-renamed-away
 cp orphan.md .claude/skills/magus-renamed-away/SKILL.md
 ! exec magus doctor
-stdout 'a reinstall alone will not fix it'
-stdout 'a rename left these behind'
-stdout '\.claude/skills/magus-renamed-away'
-stdout '--force --prune --dir /'
+stdout 'agent-skills: installed skills are behind this binary: \.claude/skills'
+! stdout 'a reinstall alone will not fix it'
+! stdout 'a reinstall leaves'
 exec magus doctor --fix --dry-run
-! stdout 'would fix agent skills'
+stdout 'would fix agent-skills: magus agent harness install --id script-host'
+exec magus agent harness install --id script-host
+stdout 'removed skill this binary no longer ships: \.claude/skills/magus-renamed-away'
+! exists .claude/skills/magus-renamed-away
+! exec magus doctor
+stdout 'agent-skills: 2 install location\(s\) current'
+
+# An empty directory has no stamp to prove magus wrote it, so install leaves it. The
+# finding stays a failure, names the directory as stale with the command that removes
+# it, and offers no --fix: a reinstall would change nothing.
+mkdir .claude/skills/magus-empty
+! exec magus doctor
+stdout 'agent-skills: installed skills are behind this binary: \.claude/skills; a reinstall leaves these directories, remove them by hand: \.claude/skills/magus-empty'
+stdout 'rmdir \.claude/skills/magus-empty'
+exec magus doctor --fix --dry-run
+! stdout 'would fix agent-skills'
+exec magus agent harness install --id script-host
+exists .claude/skills/magus-empty
+rm .claude/skills/magus-empty
+! exec magus doctor
+stdout 'agent-skills: 2 install location\(s\) current'
 
 -- orphan.md --
 ---

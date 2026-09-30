@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"cmp"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -23,10 +24,10 @@ import (
 type TargetNode struct {
 	Project string
 	Target  string
-	// Steps are the node keys (DepKey) of the batch steps whose execution runs this
-	// target. Usually one; a target composed by several steps' chains carries all of
-	// them, and derivation treats an edge as ordered only when every owner is.
-	Steps []string
+	// Steps are the batch steps whose execution runs this target. Usually one; a target
+	// composed by several steps' chains carries all of them, and derivation treats an
+	// edge as ordered only when every owner is.
+	Steps []types.TargetRef
 	// Reads is the target's source globs; Writes its output plus in-place-update
 	// globs. Updates count as writes here even though describe.go derives no
 	// DependsOn edge from them: within one batch, ordering a reader after an
@@ -53,8 +54,8 @@ type TargetNode struct {
 	Needs Calls
 }
 
-// Call is one ctx.needs call: the node keys it fans out, in argument order.
-type Call []string
+// Call is one ctx.needs call: the members it fans out, in argument order.
+type Call []types.TargetRef
 
 // Calls is a target's ctx.needs calls in body order, built the way the body reads:
 // Needs(a, b) is one call, .Needs(c) the call after it. ChainCalls builds the real thing
@@ -62,14 +63,13 @@ type Call []string
 type Calls []Call
 
 // Needs starts the calls with the first ctx.needs call.
-func Needs(keys ...string) Calls { return Calls{Call(keys)} }
+func Needs(members ...types.TargetRef) Calls { return Calls{Call(members)} }
 
 // Needs appends one more ctx.needs call, ordered after every call before it.
-func (c Calls) Needs(keys ...string) Calls { return append(c, Call(keys)) }
+func (c Calls) Needs(members ...types.TargetRef) Calls { return append(c, Call(members)) }
 
-// members is every node key the calls dispatch, in body order.
-func (c Calls) members() []string {
-	var out []string
+func (c Calls) members() []types.TargetRef {
+	var out []types.TargetRef
 	for _, call := range c {
 		out = append(out, call...)
 	}
@@ -79,8 +79,8 @@ func (c Calls) members() []string {
 // before lists the members of the calls before the one naming member: the nodes that
 // have completed before member starts, by this composer's own sequencing. Nil when
 // member is in the first call or is not a member at all.
-func (c Calls) before(member string) []string {
-	var out []string
+func (c Calls) before(member types.TargetRef) []types.TargetRef {
+	var out []types.TargetRef
 	for _, call := range c {
 		if slices.Contains(call, member) {
 			return out
@@ -90,8 +90,10 @@ func (c Calls) before(member string) []string {
 	return nil
 }
 
-// Key returns the node's scheduling identity, shared with the step barrier.
-func (n TargetNode) Key() string { return DepKey(n.Project, n.Target) }
+// Key returns the node's scheduling identity, shared with RunAll's upstream waits.
+func (n TargetNode) Key() types.TargetRef {
+	return types.TargetRef{Project: n.Project, Target: n.Target}
+}
 
 // DerivedEdge records that Writer's declared writes intersect Reader's declared
 // reads, so Reader's result depends on running after Writer. Indices into
@@ -126,9 +128,9 @@ type DerivedOrder struct {
 	// schedule and out of TopoNodes, but the caller folds them back in as
 	// permanently unordered edges so their readers can still settle.
 	Dropped []DroppedEdge
-	// RunAfter maps a step's node key to the step node keys it must wait for,
-	// beyond its coarse DependsOn. RunAll's barrier waits these exactly.
-	RunAfter map[string][]string
+	// RunAfter maps a step to the steps it must wait for, beyond its coarse DependsOn.
+	// RunAll waits these exactly.
+	RunAfter map[types.TargetRef][]types.TargetRef
 	// SameStep holds the overlaps inside one step that nothing sequences. They are not
 	// edges: no schedule can express them, and settling cannot repair them either, since
 	// both targets run in one window. The caller refuses the run over them.
@@ -153,7 +155,7 @@ type DerivedOrder struct {
 // DependsOn edges always win over derived ones: project-level ordering (and the
 // affected set) is never widened or narrowed here.
 func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
-	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}, SameStep: FindSameStepConflicts(nodes, witness)}
+	d := &DerivedOrder{Nodes: nodes, RunAfter: map[types.TargetRef][]types.TargetRef{}, SameStep: FindSameStepConflicts(nodes, witness)}
 
 	for w := range nodes {
 		for r := range nodes {
@@ -228,7 +230,7 @@ func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
 			continue
 		}
 		for _, rg := range r.Reads {
-			if globsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
+			if types.GlobsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
 				return wg.Pattern, rg.Pattern, true
 			}
 		}
@@ -240,21 +242,21 @@ func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
 // either glob, so the one path the pair can share is declared by neither.
 func excludedLiteral(wg, rg types.Glob) bool {
 	for _, lit := range []string{wg.Pattern, rg.Pattern} {
-		if !isMetaSegment(lit) && (wg.Excludes(lit) || rg.Excludes(lit)) {
+		if !types.IsGlobMeta(lit) && (wg.Excludes(lit) || rg.Excludes(lit)) {
 			return true
 		}
 	}
 	return false
 }
 
-// sharedStep returns the first step key (in n's order) that runs both nodes.
-func (n TargetNode) sharedStep(other TargetNode) (string, bool) {
+// sharedStep returns the first step (in n's order) that runs both nodes.
+func (n TargetNode) sharedStep(other TargetNode) (types.TargetRef, bool) {
 	for _, s := range n.Steps {
 		if slices.Contains(other.Steps, s) {
 			return s, true
 		}
 	}
-	return "", false
+	return types.TargetRef{}, false
 }
 
 // identicalSteps reports that the two nodes run in exactly the same steps, so no step
@@ -280,7 +282,7 @@ func underIgnoredDir(glob string, ignore []string) bool {
 		return false
 	}
 	for seg := range strings.SplitSeq(glob, "/") {
-		if isMetaSegment(seg) {
+		if types.IsGlobMeta(seg) {
 			return false
 		}
 		if slices.Contains(ignore, seg) {
@@ -288,56 +290,6 @@ func underIgnoredDir(glob string, ignore []string) bool {
 		}
 	}
 	return false
-}
-
-func isMetaSegment(seg string) bool { return strings.ContainsAny(seg, "*?[{") }
-
-// globsOverlap conservatively reports whether two doublestar globs can match a
-// common path. False only when provable: a literal path one side rejects,
-// diverging literal prefixes, or incompatible literal filename suffixes.
-// Everything else answers true; over-ordering is safe, a missed edge is not.
-func globsOverlap(a, b string) bool {
-	aMeta, bMeta := isMetaSegment(a), isMetaSegment(b)
-	switch {
-	case !aMeta && !bMeta:
-		return a == b
-	case !aMeta:
-		ok, err := doublestar.Match(b, a)
-		return ok || err != nil
-	case !bMeta:
-		ok, err := doublestar.Match(a, b)
-		return ok || err != nil
-	}
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
-	for i := 0; i < len(as) && i < len(bs); i++ {
-		if isMetaSegment(as[i]) || isMetaSegment(bs[i]) {
-			break
-		}
-		if as[i] != bs[i] {
-			return false
-		}
-		// Both consumed a literal segment. The shorter side, exhausted, may name a
-		// directory the longer one descends into, which is an overlap this cannot
-		// rule out; conservative, since over-ordering is cheap and a refusal stands on
-		// a witnessed file besides.
-		if i == len(as)-1 || i == len(bs)-1 {
-			return true
-		}
-	}
-	if as[len(as)-1] == "**" || bs[len(bs)-1] == "**" {
-		return true
-	}
-	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
-	return strings.HasSuffix(sa, sb) || strings.HasSuffix(sb, sa)
-}
-
-// literalSuffix returns the literal tail of one glob segment: everything after
-// the last metacharacter ("" when the segment ends in one).
-func literalSuffix(seg string) string {
-	if i := strings.LastIndexAny(seg, "*?[]{}"); i >= 0 {
-		return seg[i+1:]
-	}
-	return seg
 }
 
 // resolveFineCycles moves edges out of Edges until no cycle remains. A weak
@@ -370,20 +322,21 @@ func (d *DerivedOrder) resolveFineCycles() {
 }
 
 // cycleBackEdge picks the edge that breaks a cycle of explicit declarations: the
-// one whose writer key sorts after its reader key, greatest (writer, reader)
-// pair when several qualify. Walking a cycle the keys must both rise and fall,
-// so one always qualifies and the loop always shrinks. The choice reads keys
-// rather than node indices, which shift with the batch's composition.
+// one whose writer sorts after its reader, greatest (writer, reader) pair when several
+// qualify. Walking a cycle the keys must both rise and fall, so one always qualifies
+// and the loop always shrinks. The choice reads keys rather than node indices, which
+// shift with the batch's composition.
 func (d *DerivedOrder) cycleBackEdge(cycle []int) int {
-	best, bestPair := cycle[0], ""
+	best, found := cycle[0], false
+	var bestW, bestR types.TargetRef
 	for _, ei := range cycle {
 		w := d.Nodes[d.Edges[ei].Writer].Key()
 		r := d.Nodes[d.Edges[ei].Reader].Key()
-		if w < r {
+		if w.Compare(r) < 0 {
 			continue
 		}
-		if pair := w + "\x00" + r; pair > bestPair {
-			best, bestPair = ei, pair
+		if !found || cmp.Or(w.Compare(bestW), r.Compare(bestR)) > 0 {
+			best, bestW, bestR, found = ei, w, r, true
 		}
 	}
 	return best
@@ -442,24 +395,24 @@ func (d *DerivedOrder) findCycle() []int {
 // combined step graph stays acyclic, and marks the rest unordered. Coarse
 // DependsOn edges are never dropped: where a derived direction conflicts with
 // them (the entangled shape hand-wiring used to be the only answer for), the
-// fine edge is left to post-batch settling instead of deadlocking the barrier.
+// fine edge is left to post-batch settling instead of deadlocking the upstream waits.
 func (d *DerivedOrder) projectOntoSteps(steps []Step) {
-	inScope := make(map[string]bool, len(steps))
+	inScope := make(map[types.TargetRef]bool, len(steps))
 	for _, s := range steps {
-		inScope[stepKey(s)] = true
+		inScope[stepRef(s)] = true
 	}
-	// coarse holds today's barrier edges (upstream -> dependent, same target).
-	coarse := map[string][]string{}
+	// coarse holds the DependsOn edges (upstream -> dependent, same target).
+	coarse := map[types.TargetRef][]types.TargetRef{}
 	for _, s := range steps {
 		for _, dep := range s.DependsOn {
-			k := DepKey(dep, s.Target)
-			if inScope[k] && k != stepKey(s) {
-				coarse[k] = append(coarse[k], stepKey(s))
+			k := types.TargetRef{Project: dep, Target: s.Target}
+			if inScope[k] && k != stepRef(s) {
+				coarse[k] = append(coarse[k], stepRef(s))
 			}
 		}
 	}
 
-	type stepEdge struct{ from, to string }
+	type stepEdge struct{ from, to types.TargetRef }
 	induced := map[stepEdge][]int{}
 	for ei, e := range d.Edges {
 		for _, sw := range d.Nodes[e.Writer].Steps {
@@ -474,9 +427,9 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 	// Admit induced edges one at a time, keeping the combined graph acyclic.
 	// Deterministic order so the same batch always schedules the same way.
 	kept := map[stepEdge]bool{}
-	reachable := func(from, to string) bool {
-		seen := map[string]bool{from: true}
-		queue := []string{from}
+	reachable := func(from, to types.TargetRef) bool {
+		seen := map[types.TargetRef]bool{from: true}
+		queue := []types.TargetRef{from}
 		for len(queue) > 0 {
 			n := queue[0]
 			queue = queue[1:]
@@ -503,10 +456,7 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 		edges = append(edges, e)
 	}
 	slices.SortFunc(edges, func(a, b stepEdge) int {
-		if a.from != b.from {
-			return strings.Compare(a.from, b.from)
-		}
-		return strings.Compare(a.to, b.to)
+		return cmp.Or(a.from.Compare(b.from), a.to.Compare(b.to))
 	})
 	for _, e := range edges {
 		if !reachable(e.to, e.from) {
@@ -534,7 +484,7 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 		}
 	}
 	for k := range d.RunAfter {
-		slices.Sort(d.RunAfter[k])
+		slices.SortFunc(d.RunAfter[k], types.TargetRef.Compare)
 	}
 }
 
@@ -546,10 +496,9 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 // the sequencing belongs to the composing body, and ctx.needs is the only thing that can
 // express it.
 type SameStepConflict struct {
-	// Step is the node key of the step whose chain runs both targets.
-	Step string
-	// Writer and Reader are node keys (DepKey).
-	Writer, Reader string
+	// Step is the step whose chain runs both targets.
+	Step           types.TargetRef
+	Writer, Reader types.TargetRef
 	// WriteGlob and ReadGlob are the overlapping pair of declared globs, workspace-rooted.
 	WriteGlob, ReadGlob string
 }
@@ -558,7 +507,7 @@ type SameStepConflict struct {
 // ctx.needs in the file that composes both. A cross-project pair is real too, but its
 // sequencing may belong to another project's magusfile, so it advises rather than
 // refuses (see SameStepConflicts.Refusal).
-func (c SameStepConflict) SameProject() bool { return projectOf(c.Writer) == projectOf(c.Reader) }
+func (c SameStepConflict) SameProject() bool { return c.Writer.Project == c.Reader.Project }
 
 // SameStepConflicts is one plan's unordered pairs, sorted; the refusal and the advice are
 // two readings of the same list.
@@ -721,10 +670,8 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) SameStepC
 			})
 		}
 	}
-	// Joined on a byte no key carries, the way cycleBackEdge keys a pair, so fields
-	// cannot transpose across the boundary.
 	slices.SortFunc(out, func(a, b SameStepConflict) int {
-		return strings.Compare(a.Step+"\x00"+a.Writer+"\x00"+a.Reader, b.Step+"\x00"+b.Writer+"\x00"+b.Reader)
+		return cmp.Or(a.Step.Compare(b.Step), a.Writer.Compare(b.Writer), a.Reader.Compare(b.Reader))
 	})
 	return out
 }
@@ -743,30 +690,30 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) SameStepC
 // the iteration climbs to the least sets consistent with all of them and stops, and the
 // least sets are the ones that order nothing a rule cannot prove.
 type nodeOrder struct {
-	byKey map[string]TargetNode
+	byKey map[types.TargetRef]TargetNode
 	// done holds, per key, everything complete once the key has completed: the key, its
 	// members transitively, and whatever preceded each of them.
-	done map[string]map[string]bool
+	done map[types.TargetRef]map[types.TargetRef]bool
 	// preceded holds, per key, everything complete before the key STARTS. A node is
 	// dispatched by whichever composer reaches it first and runs once, so only what
 	// EVERY composer puts before it is certain: the intersection, over its composers,
 	// of what that composer's earlier calls completed plus what preceded the composer
 	// itself. A composer's other members never count; those are the key's siblings,
 	// fanned out unordered beside it.
-	preceded map[string]map[string]bool
+	preceded map[types.TargetRef]map[types.TargetRef]bool
 }
 
 func newNodeOrder(nodes []TargetNode) *nodeOrder {
 	o := &nodeOrder{
-		byKey:    make(map[string]TargetNode, len(nodes)),
-		done:     make(map[string]map[string]bool, len(nodes)),
-		preceded: make(map[string]map[string]bool, len(nodes)),
+		byKey:    make(map[types.TargetRef]TargetNode, len(nodes)),
+		done:     make(map[types.TargetRef]map[types.TargetRef]bool, len(nodes)),
+		preceded: make(map[types.TargetRef]map[types.TargetRef]bool, len(nodes)),
 	}
-	composers := map[string][]string{}
+	composers := map[types.TargetRef][]types.TargetRef{}
 	for _, n := range nodes {
 		o.byKey[n.Key()] = n
-		o.done[n.Key()] = map[string]bool{n.Key(): true}
-		o.preceded[n.Key()] = map[string]bool{}
+		o.done[n.Key()] = map[types.TargetRef]bool{n.Key(): true}
+		o.preceded[n.Key()] = map[types.TargetRef]bool{}
 		for _, member := range n.Needs.members() {
 			composers[member] = append(composers[member], n.Key())
 		}
@@ -783,9 +730,9 @@ func newNodeOrder(nodes []TargetNode) *nodeOrder {
 			maps.Copy(done, o.preceded[key])
 			changed = changed || len(done) > before
 
-			var preceded map[string]bool
+			var preceded map[types.TargetRef]bool
 			for _, c := range composers[key] {
-				via := map[string]bool{}
+				via := map[types.TargetRef]bool{}
 				for _, m := range o.byKey[c].Needs.before(key) {
 					maps.Copy(via, o.done[m])
 				}
@@ -812,7 +759,7 @@ func newNodeOrder(nodes []TargetNode) *nodeOrder {
 // runsAfter reports whether later's own work runs after earlier has completed, so the
 // body's sequencing already puts earlier first: earlier precedes later, or completes
 // with one of later's own members.
-func (o *nodeOrder) runsAfter(later, earlier string) bool {
+func (o *nodeOrder) runsAfter(later, earlier types.TargetRef) bool {
 	if o.preceded[later][earlier] {
 		return true
 	}
@@ -852,8 +799,8 @@ func (cs SameStepConflicts) Refusal() error {
 			" can start before the writer finishes and can wedge the run waiting for a slot the"+
 			" writer needs. Declare ctx.needs(%s) in %s so it runs after the writer, or narrow %s's"+
 			" ctx.readsFiles so it no longer matches what the writer produces.%s",
-		DisplayNodeKey(c.Step), DisplayNodeKey(c.Reader), c.ReadGlob, DisplayNodeKey(c.Writer), c.WriteGlob,
-		DisplayNodeKey(c.Step), targetOf(c.Writer), DisplayNodeKey(c.Reader), DisplayNodeKey(c.Reader), more)
+		DisplayRef(c.Step), DisplayRef(c.Reader), c.ReadGlob, DisplayRef(c.Writer), c.WriteGlob,
+		DisplayRef(c.Step), c.Writer.Target, DisplayRef(c.Reader), DisplayRef(c.Reader), more)
 }
 
 // Advice is the one-line notice for the CROSS-project conflicts, or "" for none: the
@@ -870,8 +817,8 @@ func (cs SameStepConflicts) Advice() string {
 		more = fmt.Sprintf("; %d more such pair(s)", n)
 	}
 	return fmt.Sprintf("[%s] %s reads %q inside %s's chain, which %s writes as %q, and nothing orders the two across projects%s; `magus doctor` lists them (see %s)",
-		types.UnorderedSameStepWrite, DisplayNodeKey(c.Reader), c.ReadGlob, DisplayNodeKey(c.Step),
-		DisplayNodeKey(c.Writer), c.WriteGlob, more, types.CodeURL(types.UnorderedSameStepWrite))
+		types.UnorderedSameStepWrite, DisplayRef(c.Reader), c.ReadGlob, DisplayRef(c.Step),
+		DisplayRef(c.Writer), c.WriteGlob, more, types.CodeURL(types.UnorderedSameStepWrite))
 }
 
 // within selects the pairs whose SameProject answer is same.
@@ -883,21 +830,6 @@ func (cs SameStepConflicts) within(same bool) SameStepConflicts {
 		}
 	}
 	return out
-}
-
-// targetOf is a node key's target half, which is what a ctx.needs call names.
-func targetOf(key string) string {
-	_, target, ok := strings.Cut(key, nodeKeySep)
-	if !ok {
-		return key
-	}
-	return target
-}
-
-// projectOf is a node key's project half.
-func projectOf(key string) string {
-	project, _, _ := strings.Cut(key, nodeKeySep)
-	return project
 }
 
 // DeclaredNodes builds the nodes of one composer's ctx.needs closure: the composer itself
@@ -915,7 +847,7 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 	if p == nil {
 		return nil
 	}
-	step := DepKey(p.Path, composer)
+	step := types.TargetRef{Project: p.Path, Target: composer}
 	var nodes []TargetNode
 	_ = types.WalkChain(p, composer, lookup, func(v types.ChainVisit) error {
 		nodes = append(nodes, DeclaredNode(v.Project, v.Target, step, lookup))
@@ -927,7 +859,7 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 // DeclaredNode is one target's node as its declarations describe it, run inside step:
 // workspace-rooted reads, writes and in-place updates, and its ctx.needs calls resolved
 // through lookup.
-func DeclaredNode(proj *types.Project, target, step string, lookup func(path string) *types.Project) TargetNode {
+func DeclaredNode(proj *types.Project, target string, step types.TargetRef, lookup func(path string) *types.Project) TargetNode {
 	updates := make([]types.Glob, 0, len(proj.TargetUpdates[target]))
 	for _, ref := range proj.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(proj.Path))
@@ -946,7 +878,7 @@ func DeclaredNode(proj *types.Project, target, step string, lookup func(path str
 	}
 	writes = types.CompactGlobs(append(writes, updates...))
 	return TargetNode{
-		Project: proj.Path, Target: target, Steps: []string{step},
+		Project: proj.Path, Target: target, Steps: []types.TargetRef{step},
 		Reads: reads, Writes: writes,
 		DeclaredReads:  declaredReads,
 		DeclaredWrites: len(proj.TargetOutputs[target]) > 0 || len(updates) > 0,
@@ -984,7 +916,7 @@ func lookupOwner(proj *types.Project, cs types.ChainStep, lookup func(path strin
 }
 
 // ChainCalls groups target's chain by the ctx.needs call that named each step, in body
-// order, as the node keys the steps resolve to. A step lookup cannot resolve neither
+// order, as the targets the steps resolve to. A step lookup cannot resolve neither
 // orders nor is ordered, and a call left with no member is dropped.
 func ChainCalls(proj *types.Project, target string, lookup func(path string) *types.Project) Calls {
 	var out Calls
@@ -1005,7 +937,7 @@ func ChainCalls(proj *types.Project, target string, lookup func(path string) *ty
 			flush()
 			index = cs.CallIndex
 		}
-		call = append(call, DepKey(owner.Path, cs.Target))
+		call = append(call, types.TargetRef{Project: owner.Path, Target: cs.Target})
 	}
 	flush()
 	return out

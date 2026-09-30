@@ -47,3 +47,49 @@ func TestPackageDepsFileNamespacesAreSorted(t *testing.T) {
 		assert.Equal(t, map[string][]string{"file:internal/a/x.go": {nss[0], nss[1], nss[2]}}, f.g.fileNamespaces())
 	}
 }
+
+// ImportGraph reads the stored fold: every language's packages keyed by directory, each
+// named with its language, the default graph's dir node winning over the edge's.
+func TestImportGraphReadsTheFoldedEdges(t *testing.T) {
+	t.Parallel()
+
+	projects := []types.TargetGraphProject{{Path: "."}, {Path: "libs/x"}, {Path: "console"}}
+	g := mergeAll(append([]Shard{packageDirs([]string{"libs/x/x.go", "libs/x/y.py", "libs/x/z.py"}, projects, nil)},
+		assembleSymbolShards(foldFixture(), projects)...))
+
+	assert.Equal(t, types.ImportGraph{
+		Indexed: true,
+		Packages: map[string][]string{
+			"cmd/app":     {"libs/x"},
+			"console/src": {"console/src/lib"},
+			"internal/a":  {"internal/b"},
+			"internal/c":  {"libs/x"},
+		},
+		Languages: map[string]string{
+			"cmd/app": "go", "console/src": "typescript", "console/src/lib": "typescript",
+			"internal/a": "go", "internal/b": "go", "internal/c": "go", "libs/x": "python",
+		},
+	}, g.ImportGraph())
+}
+
+// A refold would find the file -references-> namespace edges; the stored fold is the only
+// thing ImportGraph reads.
+func TestImportGraphDoesNotRefold(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 1)
+	f.pkg("internal/b", 1)
+	f.imports("internal/a", "internal/b")
+
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}, Languages: map[string]string{}}, f.g.ImportGraph())
+}
+
+func TestImportGraphUnindexedIsEmptyNotNil(t *testing.T) {
+	t.Parallel()
+
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "file:internal/a/a.go", Kind: types.KindFile, Label: "internal/a/a.go", Source: "internal/a/a.go"})
+
+	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}, Languages: map[string]string{}}, g.ImportGraph())
+}

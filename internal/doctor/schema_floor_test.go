@@ -80,6 +80,7 @@ func TestEveryGatedKeyIsDetectable(t *testing.T) {
 		GateLowRiskDeclared: true,
 		GateInheritOff:      true,
 		MergeLowRisk:        []string{"testdata/golden/**"},
+		Layers:              map[string]string{"internal/handler": "handler"},
 		TargetPolicies:      map[string]types.Target{"ci": {Timeout: "45m", RetryOnVolatile: true, Advisory: true, Sandbox: &spells.Sandbox{}}},
 	}}
 	detected := labels(usedSchemaKeys(all))

@@ -1,0 +1,56 @@
+// package-manifests-carry-no-scripts refuses a "scripts" key in any package.json: the
+// manifest says what a package is, and how the workspace builds, tests or lints it lives
+// in the magusfile as spell ops, where the cache and sandbox see it.
+namespace manifests;
+
+import "assert";
+import "encoding/json";
+import "path";
+import "serialize";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+export fun reads() > [str] {
+    return ["**/package.json"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        final src = support\read(f);
+        if (support\has(serialize\Boxed.init(json\parse(src)), key: "scripts")) {
+            found.append(Finding{ path = f.value, line = support\lineOf(src, needle: "\"scripts\""),
+                message = "package.json carries scripts, but a manifest declares the package, not how to build it",
+                fix = "Move each script into the project's magusfile as a spell op call (typescript[\"esbuild\"], typescript[\"node-test\"], ...) and delete the scripts key." });
+        }
+    }
+    return found;
+}
+
+test "a manifest with scripts is reported at the key's line" {
+    final got = check(support\fixture({
+        "console/package.json": "\{\n  \"name\": \"x\",\n  \"scripts\": \{\"build\": \"esbuild\"}\n}\n",
+    }));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: "console/package.json", message: "path");
+    assert\equal(got[0].line, want: 3, message: "line of the scripts key");
+}
+
+test "an empty scripts map is still reported" {
+    assert\equal(check(support\fixture({"package.json": "\{\"scripts\": \{}}\n"})).len(), want: 1, message: "empty map");
+}
+
+test "a manifest without scripts passes, even when a dependency is named scripts" {
+    final files = support\fixture({
+        "libs/a/package.json": "\{\"name\": \"a\", \"type\": \"module\"}\n",
+        "libs/b/package.json": "\{\"dependencies\": \{\"scripts\": \"1.0.0\"}}\n",
+    });
+    assert\equal(check(files).len(), want: 0, message: "clean");
+}
+
+test "reads() matches every package.json, at the root and nested" {
+    final globs = reads();
+    assert\equal(path\matchesAny(globs, path: "package.json"), want: true, message: "root");
+    assert\equal(path\matchesAny(globs, path: "docs/guides/integrations/agents/package.json"), want: true, message: "nested");
+    assert\equal(path\matchesAny(globs, path: "console/tsconfig.json"), want: false, message: "other json");
+}

@@ -51,13 +51,22 @@ inputs:
     description: >
       Comment when a change reaches a large share of the workspace, naming the dependency
       chain that pulled each project in. Threshold is `fanout-share`, not a count: five
-      projects is most of a small workspace and a rounding error in a large one.
+      projects is most of a small workspace and a rounding error in a large one. The
+      reached projects are drawn as an image uploaded through GitHub's undocumented
+      attachment endpoint; when that fails the comment says why and keeps the console link.
     required: false
     default: 'true'
   fanout-share:
     description: Share of the workspace a change must reach before blast-radius comments.
     required: false
     default: '0.5'
+  console-base:
+    description: >
+      The console a comment links to for a graph it cannot draw itself. The graph travels in
+      the link's fragment, which the browser never sends to a server, so project names stay
+      private. Point it at your own console to keep the link inside your network.
+    required: false
+    default: 'https://eli.gladman.cc/magus/console/'
   unclaimed:
     description: >
       Comment when the pull request changes files no project declares, which the checks

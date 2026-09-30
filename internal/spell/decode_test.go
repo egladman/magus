@@ -305,6 +305,45 @@ func TestDecode_CommandDefaultArgs(t *testing.T) {
 	assert.Nil(t, m.Ops["test"].DefaultArgs)
 }
 
+func TestDecode_CommandNeedsArgs(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"serve": map[string]any{"bin": "pnpm", "args": []string{"exec"}, "needsArgs": "name a command"},
+			"build": map[string]any{"bin": "go", "args": []string{"build"}},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	assert.Equal(t, "name a command", m.Ops["serve"].NeedsArgs)
+	assert.Empty(t, m.Ops["build"].NeedsArgs)
+}
+
+func TestDecode_ModeArgs(t *testing.T) {
+	ops := func() map[string]any {
+		return map[string]any{
+			"node_test": map[string]any{"bin": "node", "args": []string{"--enable-source-maps", "--test"}},
+			"build":     map[string]any{"bin": "go", "args": []string{"build"}},
+		}
+	}
+	m, err := Decode(mapObj{"name": "myspell", "ops": ops(), "mode_args": map[string]any{"node_test": []string{"--test"}}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--test"}, m.Ops["node-test"].ModeArgs)
+	assert.Nil(t, m.Ops["build"].ModeArgs)
+
+	for _, tc := range []struct {
+		modes map[string]any
+		want  string
+	}{
+		{modes: map[string]any{"lint": []string{"--test"}}, want: `names op "lint", which the spell does not declare`},
+		{modes: map[string]any{"node-test": []string{"--watch"}}, want: `"--watch" is not in the op's args`},
+		{modes: map[string]any{"node-test": []string{}}, want: "names no args"},
+	} {
+		_, err := Decode(mapObj{"name": "myspell", "ops": ops(), "mode_args": tc.modes})
+		require.ErrorContains(t, err, tc.want)
+	}
+}
+
 // TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
 // provider reference) decodes onto Op.Secrets untouched: no resolution happens at
 // decode time, only at spawn.

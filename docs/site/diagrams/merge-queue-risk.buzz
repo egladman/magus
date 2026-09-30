@@ -1,0 +1,55 @@
+// site/diagrams/merge-queue-risk.buzz: how a candidate's risk decides what the merge queue
+// runs. The queue asks which projects a change reaches and, for a conflicted file, whether the
+// edit is low risk; the answers pick between gating those projects, gating every project, and
+// kicking the change back. The accent is on the classifier.
+//
+// Gate sizing's tier table is not drawn: this repository's queue gate
+// (hack/ci/merge-queue.buzz) runs no sizing. The gate, verdict and decision are actors.
+namespace mergeQueueRisk;
+
+import "magus";
+import "magus/figure";
+
+export fun mergeQueueRiskFigure() > figure\Figure !> any {
+    final provider = magus\dir("internal/queue/provider");
+    final queueDir = magus\dir("internal/queue");
+    final sdk = magus\dir(".");
+    final risk = magus\dir("internal/risk");
+    final nested: [magus\Dir] = magus\dirs("internal/queue/*");
+    final queue = figure\setOf(nested + [queueDir]).without([provider]);
+    final github = figure\external("GitHub", sub: "auto-merge or a label");
+    final low = figure\external("low risk?", look: figure\Look.decision);
+    final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
+    final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
+    return figure\of("merge-queue-risk",
+            title: "What a candidate's risk makes the queue run",
+            eyebrow: "merge queue",
+            desc: "For a conflicted file the queue asks the classifier which class the edit is "
+                + "and settles only a low-risk one, kicking code back, then gates the projects "
+                + "the magus SDK says the change reaches, or every project when that set is no proof.",
+            direction: figure\Direction.down)
+        .actor(github)
+        .box(provider, label: "Forge provider", sub: "github.buzz on a Buzz VM")
+        .group(queue, label: "Queue engine", sub: "plan, validate, apply")
+        .box(sdk, label: "magus SDK", sub: "asked via queue/client")
+        .box(risk, label: "Classify each path", sub: "generated, prose, comment, code", focal: true)
+        .actor(low)
+        .actor(gate)
+        .actor(verdict)
+        .edgesFromGraph()
+        .markEdge(provider, dst: queueDir, label: "changes")
+        .markEdge(queueDir, dst: sdk, label: "a conflict")
+        .flowIn(github, dst: provider, label: "merge intent")
+        .flowOut(risk, dst: low, label: "the class", stroke: figure\Stroke.focal)
+        .flowOut(queueDir, dst: gate, label: "no conflict")
+        .flowOut(sdk, dst: gate, label: "its projects")
+        .flowAcross(low, dst: gate, label: "yes: settled")
+        .flowAcross(low, dst: verdict, label: "no: kick back")
+        .flowAcross(gate, dst: verdict, label: "exit status")
+        .flowAcross(verdict, dst: github, label: "apply")
+        .zone("the workspace", dirs: figure\setOf([sdk, risk]))
+        .legend(figure\Look.focal, label: "reads what an edit is")
+        .legend(figure\Look.external, label: "outside magus")
+        .legend(figure\Look.decision, label: "the queue decides")
+        .scope(queue.plus([provider, risk]));
+}

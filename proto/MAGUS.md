@@ -6,9 +6,9 @@ Up: [workspace index](../MAGUS.md)
 
 Query: `magus query project=proto`
 
-| Target           | What it does                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
-| `ci`             |                                                                                                                                 |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                |
-| `lint`           |                                                                                                                                 |
+| Target           | What it does                                                               |
+| ---------------- | -------------------------------------------------------------------------- |
+| `generate`       | generate runs buf codegen and fails if a committed generated tree drifted. |
+| `ci`             |                                                                            |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                           |
+| `lint`           |                                                                            |

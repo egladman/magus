@@ -277,7 +277,7 @@ type agentCommandResponse struct {
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
-	StdinClosed     bool          `json:"stdin_closed,omitempty"`
+	StdinClosed     bool          `json:"stdin_closed,omitzero"`
 }
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may

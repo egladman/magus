@@ -36,6 +36,45 @@ func TestDiagnostics_ArrowBodyClean(t *testing.T) {
 	assert.Empty(t, got, "arrow-body function should lint clean, got %+v", got)
 }
 
+func TestExecs(t *testing.T) {
+	const src = `
+import "magus";
+import "proc";
+
+fun delegate(script: str) > void !> any { proc\exec("pnpm", ["run", script]); }
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final r = proc\exec("go", ["build", "./..."]);
+    if (r.ok) {
+        delegate("bundle");
+    }
+}
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    final sh = proc\shell("npm run lint && echo done");
+    proc\exec(sh.bin, sh.args);
+}
+export fun fmt(ctx: magus\Context, args: [str]) > void {}
+`
+	got, diag := Execs(context.Background(), src)
+	require.Nil(t, diag)
+	assert.Equal(t, []Op{
+		{Target: "build", Kind: "exec", Name: "go", Detail: "build ./...", Argv: []string{"go", "build", "./..."}},
+		{Target: "build", Kind: "exec", Name: "pnpm", Detail: "run bundle", Argv: []string{"pnpm", "run", "bundle"}},
+		{Target: "lint", Kind: "exec", Name: "/bin/sh", Detail: "-c npm run lint && echo done",
+			Argv: []string{"/bin/sh", "-c", "npm run lint && echo done"}},
+	}, got)
+}
+
+func TestExecs_spellBufferAndFailure(t *testing.T) {
+	got, diag := Execs(context.Background(), twoOpSpell)
+	assert.Nil(t, diag)
+	assert.Empty(t, got, "a spell buffer's ops are declared, not traced")
+
+	got, diag = Execs(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
+	assert.Empty(t, got)
+	assert.NotNil(t, diag)
+}
+
 func TestDiagnostics_ParseError(t *testing.T) {
 	got := Diagnostics(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
 	require.Len(t, got, 1)

@@ -18,7 +18,7 @@ package spells
 // neither. Its signature matches every other contract function, and the input
 // callback yields {root}, the absolute workspace root:
 //
-//	fun list_projects(target: Target, cb: fun(any)) > [Project]
+//	fun list_projects(target: Target, cb: fun(any)) > [Project] !> any
 const ListProjectsContract = "list_projects"
 
 // ProvidedProject is one project a workspace provider supplies: the same facts a

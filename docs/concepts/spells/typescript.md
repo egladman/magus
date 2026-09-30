@@ -137,15 +137,15 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 ## dev-server
 
-dev-server runs the project's package.json "dev" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.
+dev-server runs the server command the caller names, through pnpm exec so the project's own binary wins: typescript["dev-server"](ctx, {"args": ["vite"]}). The manifest says what the package is and the magusfile how it runs, so the package.json dev script is not read. No readiness probe: the port and startup signal vary by server (see services.md); a magusfile that must block on readiness declares its own service op.
 
-**Command:** `pnpm run dev`
+**Command:** `pnpm exec <args>`
 
 ### Example
 
 <!-- magus-run-recorder -->
 ```buzz
-// dev-server runs the project's package.json dev script (pnpm run dev) as a
+// dev-server runs the server command the caller names (here vite, through pnpm exec) as a
 // supervised background process when reached via ctx.needs, or foreground
 // when run directly.
 import "magus";
@@ -154,9 +154,15 @@ import "magus/spell/typescript";
 magus\project({ "spells": [typescript] });
 
 export fun serve(ctx: magus\Context, args: [str]) > void {
-    typescript["dev-server"](ctx);
+    typescript["dev-server"](ctx, { "args": ["vite"] });
 }
 ```
+
+## esbuild
+
+esbuild takes its entry points and flags from the caller, and the composing target declares the files it writes. Through pnpm exec so a project's own esbuild wins over the one on PATH.
+
+**Command:** `pnpm exec esbuild`
 
 ## eslint
 
@@ -216,6 +222,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     typescript["eslint"](ctx);
 }
 ```
+
+## node-test
+
+node-test runs node:test with source maps and coverage, spec to stdout and lcov to the file the caller names: node pairs reporters with destinations in order, so a caller passing args leads with --test-reporter-destination=<file>, then the test files.
+
+**Command:** `node --enable-source-maps --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test --test-reporter-destination=coverage.lcov`
 
 ## npm-ci
 

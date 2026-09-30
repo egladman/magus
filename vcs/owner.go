@@ -29,6 +29,9 @@ func pathDevice(path string) (dev uint64, ok bool) {
 	if !isStat {
 		return 0, false
 	}
-	// Dev is int32 on darwin and uint64 on linux.
-	return uint64(st.Dev), true
+	return deviceID(st.Dev), true
 }
+
+// deviceID widens a Stat_t.Dev, whose width differs by platform: int32 on darwin,
+// uint64 on linux.
+func deviceID[T ~int32 | ~int64 | ~uint32 | ~uint64](dev T) uint64 { return uint64(dev) }

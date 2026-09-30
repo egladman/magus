@@ -265,3 +265,26 @@ func TestKeySignaturesMatch(t *testing.T) {
 		_ interface{ Key() []string } = Target{}
 	)
 }
+
+// A composer that declares its inputs keys only on the gate artifacts those inputs can
+// read, and a gate whose artifacts all fall outside is not one it must run ahead.
+func TestChainSkipCacheOutputsHonorsAnExplicitFootprint(t *testing.T) {
+	p := &Project{
+		Path: ".",
+		TargetPolicies: map[string]Target{
+			"graph": {SkipCache: true},
+			"index": {SkipCache: true},
+		},
+		TargetOutputs: map[string][]OutputRef{
+			"graph": {{Glob: "gen/graph.json"}},
+			"index": {{Glob: "MAGUS.md"}},
+		},
+		TargetChains: map[string][]ChainStep{"test": {{Target: "graph"}, {Target: "index"}}},
+	}
+	assert.Equal(t, MustParseGlobs("MAGUS.md", "gen/graph.json"), ChainSkipCacheOutputs(p, "test", nil),
+		"no declared footprint keys every artifact")
+
+	p.TargetInputs = map[string][]InputRef{"test": {{Glob: "**/*.go"}, {Glob: "MAGUS.md"}}}
+	assert.Equal(t, MustParseGlobs("MAGUS.md"), ChainSkipCacheOutputs(p, "test", nil))
+	assert.Equal(t, []ChainStep{{Project: ".", Target: "index"}}, ChainSkipCacheSteps(p, "test", nil))
+}

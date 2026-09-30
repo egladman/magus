@@ -284,6 +284,7 @@ type Edge struct {
 	Confidence    string                 `protobuf:"bytes,4,opt,name=confidence,proto3" json:"confidence,omitempty"`
 	Score         float64                `protobuf:"fixed64,5,opt,name=score,proto3" json:"score,omitempty"`
 	Provenance    string                 `protobuf:"bytes,6,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	Attrs         map[string]string      `protobuf:"bytes,7,rep,name=attrs,proto3" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // relation-specific (transport on a declared call, ...)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -358,6 +359,13 @@ func (x *Edge) GetProvenance() string {
 		return x.Provenance
 	}
 	return ""
+}
+
+func (x *Edge) GetAttrs() map[string]string {
+	if x != nil {
+		return x.Attrs
+	}
+	return nil
 }
 
 type QueryNodesRequest struct {
@@ -1863,7 +1871,7 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\n" +
 	"AttrsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9f\x02\n" +
 	"\x04Edge\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x1a\n" +
@@ -1874,7 +1882,12 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\x05score\x18\x05 \x01(\x01R\x05score\x12\x1e\n" +
 	"\n" +
 	"provenance\x18\x06 \x01(\tR\n" +
-	"provenance\"v\n" +
+	"provenance\x12;\n" +
+	"\x05attrs\x18\a \x03(\v2%.magus.graph.v1alpha1.Edge.AttrsEntryR\x05attrs\x1a8\n" +
+	"\n" +
+	"AttrsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"v\n" +
 	"\x11QueryNodesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
 	"\x06budget\x18\x02 \x01(\x05R\x06budget\x12\x16\n" +
@@ -2019,7 +2032,7 @@ func file_magus_graph_v1alpha1_graph_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_graph_v1alpha1_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
 	(EdgeDirection)(0),            // 0: magus.graph.v1alpha1.EdgeDirection
 	(*Graph)(nil),                 // 1: magus.graph.v1alpha1.Graph
@@ -2048,44 +2061,46 @@ var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
 	(*Answer)(nil),                // 24: magus.graph.v1alpha1.Answer
 	(*SymbolGap)(nil),             // 25: magus.graph.v1alpha1.SymbolGap
 	nil,                           // 26: magus.graph.v1alpha1.Node.AttrsEntry
+	nil,                           // 27: magus.graph.v1alpha1.Edge.AttrsEntry
 }
 var file_magus_graph_v1alpha1_graph_proto_depIdxs = []int32{
 	2,  // 0: magus.graph.v1alpha1.Graph.nodes:type_name -> magus.graph.v1alpha1.Node
 	3,  // 1: magus.graph.v1alpha1.Graph.links:type_name -> magus.graph.v1alpha1.Edge
 	26, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
-	8,  // 3: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
-	2,  // 4: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
-	3,  // 5: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
-	24, // 6: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
-	8,  // 7: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
-	2,  // 8: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
-	11, // 9: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
-	11, // 10: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
-	0,  // 11: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
-	18, // 12: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
-	21, // 13: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
-	22, // 14: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
-	23, // 15: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
-	25, // 16: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
-	4,  // 17: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
-	6,  // 18: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
-	9,  // 19: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
-	12, // 20: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
-	13, // 21: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
-	15, // 22: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
-	19, // 23: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
-	5,  // 24: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
-	7,  // 25: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
-	10, // 26: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
-	17, // 27: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
-	14, // 28: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
-	16, // 29: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
-	20, // 30: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
-	24, // [24:31] is the sub-list for method output_type
-	17, // [17:24] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	27, // 3: magus.graph.v1alpha1.Edge.attrs:type_name -> magus.graph.v1alpha1.Edge.AttrsEntry
+	8,  // 4: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 5: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
+	3,  // 6: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
+	24, // 7: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
+	8,  // 8: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 9: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
+	11, // 10: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
+	11, // 11: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
+	0,  // 12: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
+	18, // 13: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
+	21, // 14: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
+	22, // 15: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
+	23, // 16: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
+	25, // 17: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
+	4,  // 18: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
+	6,  // 19: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
+	9,  // 20: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
+	12, // 21: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
+	13, // 22: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
+	15, // 23: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
+	19, // 24: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
+	5,  // 25: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
+	7,  // 26: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
+	10, // 27: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
+	17, // 28: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
+	14, // 29: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
+	16, // 30: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
+	20, // 31: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
+	25, // [25:32] is the sub-list for method output_type
+	18, // [18:25] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_magus_graph_v1alpha1_graph_proto_init() }
@@ -2099,7 +2114,7 @@ func file_magus_graph_v1alpha1_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_graph_v1alpha1_graph_proto_rawDesc), len(file_magus_graph_v1alpha1_graph_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

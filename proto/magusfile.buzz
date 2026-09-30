@@ -1,109 +1,35 @@
-// The protobuf API contract between magus and the docs log viewer
-// (magus.runlog.v1). This project dogfoods magus's own `buf` spell: buf-generate
-// runs the codegen (picked up by the root `generate` target's `*-generate` glob, so
-// committed gen/ stays fresh and drift-gated), and buf-lint / buf-breaking gate the
-// wire contract - buf-breaking is the API-contract guard so a backward-incompatible
-// .proto change fails ci the same way go-vet does.
-//
-// The buf spell declares the sources (**/*.proto, buf.yaml, buf.gen.yaml) and the
-// generated outputs (gen/**) itself, so a .proto edit reruns codegen and invalidates
-// everything downstream that consumes the generated code.
-
 import "magus";
 import "magus/spell/buf";
 import "magus/spell/go";
-// Handles for the two projects buf.gen.yaml writes the TS client into, so generate can name
-// their trees as its own outputs (see below).
 import "project/../docs";
 import "project/../console";
-// The shared generated-file gate (hack/drift.buzz) and the fs helpers it takes paths from.
 import "../hack/drift" as drift;
 import "../hack/index" as index;
 import "fs";
 import "vcs";
 
 magus\project({
-    // go because buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go through `go
-    // tool`: codegen depends on the Go toolchain, and runs under its sandbox grants.
+    // go because buf.gen.yaml runs its plugins through `go tool`.
     "spells": [buf, go],
     "outputs": ["gen/**"],
-    // generate declares NO skip_cache, which is where it deliberately parts from root
-    // generate and libs/textsearch test. Those gates fork local tools; this one calls a
-    // REMOTE buf plugin twice, and buf.gen.yaml records that this project was split out
-    // precisely to keep that off unrelated edits: a day of doc edits once exhausted the
-    // BSR rate limit. Keeping the cache costs coverage, since a HIT skips the body, so the
-    // gate arms only when a declared input moves. That still covers the case that actually
-    // bites, a .proto edit whose regenerated client was never committed, and it leaves the
-    // KNOWN GAP below exactly where it already sat: a plugin bump moves no declared input,
-    // so nothing reruns and nothing is compared. The fix for that is the version probe
-    // described there, not paying the BSR on every run.
+    "targets": {
+        "ci": {"skip_cache": "buf-breaking compares against the default branch, which moves without touching this tree"},
+    },
+    // generate stays cached, unlike the other drift gates: it calls a remote buf
+    // plugin, and uncached runs exhaust the BSR rate limit.
 });
 
-// Self-contained project targets, so `magus affected ci` gates the contract when the
-// proto changes - no other project reaches in. lint checks the schema's shape; ci
-// regenerates first so committed gen/ can never drift from the .proto.
-//
-// buf-breaking (the backward-compat gate) is DEFERRED until it can be wired correctly.
-// Requirements, all load-bearing:
-//   1. NO hardcoded "main" - resolve the default branch dynamically via the existing
-//      types.DefaultBranchReporter (vcs/git.go DefaultBranch, from origin/HEAD).
-//   2. GRACEFUL BOOTSTRAP - the very first ci (before proto/ is on the baseline) has
-//      nothing to compare against; it must SKIP, not error. Check whether the proto
-//      module (buf.yaml) exists at the default-branch ref first - this needs a NEW VCS
-//      capability (a sibling of DefaultBranchReporter, e.g. a "path exists at ref" via
-//      `git cat-file -e <ref>:proto/buf.yaml` / ls-tree / ls-remote). Absent -> skip.
-//   3. SUBDIR baseline - the module is in proto/, not the git root, so the against ref
-//      is `<gitroot>/.git#branch=<default>,subdir=proto`; resolve the git root (mind the
-//      worktree .git FILE, not a dir). The stock buf spell hardcodes ".git#branch=main"
-//      and assumes project==gitroot, so this needs a custom target, not the bare op.
-// KNOWN GAP, deliberately left rather than papered over: buf.gen.yaml runs its
-// codegen plugins as `local: [go, tool, protoc-gen-go]`, so the plugin versions are
-// pinned by the ROOT go.mod - nothing in this project. A plugin bump therefore
-// regenerates nothing, and the committed .pb.go replays from a cache built by the
-// older plugin.
-//
-// Declaring ../go.mod an input WOULD close it, and that is the anti-pattern: go.mod
-// moves on every dependency bump, so this target would re-run for changes that
-// cannot affect it.
-//
-// The right fix is a version PROBE, which moves only when the plugin does
-// (`go tool protoc-gen-go --version` reports v1.36.11). Probes are declared per
-// SPELL today, and which plugins a buf project runs is decided by ITS buf.gen.yaml,
-// so the built-in spell cannot name them. This wants a per-target declaration - a
-// ctx.versions sibling to ctx.readsFiles.
-// buf-build alongside the codegen emits a descriptor set carrying SourceCodeInfo - the proto
-// comments, which protoc-gen-go strips from the rawDesc it embeds. cmd/magus-protodocs reads
-// that file to generate the server API reference. It is produced HERE, not shelled out to from
-// the generator, so the chain (.proto -> descriptor -> docs pages) is visible to the graph and
-// buf's own version probe enters this project's cache key rather than nothing's.
-// It lands in gen/, which the declaration below restates.
-//
-// buf.gen.yaml writes THREE trees: gen/go here, and the TS client twice, into docs/src/gen and
-// console/src/gen, where esbuild can resolve @bufbuild/protobuf from each consumer's own
-// node_modules. Only the first sits in this project; the other two are declared here, against
-// their owners, rather than by the projects that receive them. A consumer cannot own what it has
-// no target to produce: its own cache hit would replay its own tree and leave the client stale,
-// and `magus clean` would delete a tree it cannot rebuild.
-//
-// Declared here, each is a RequiredOutput - a foreign glob matching nothing is MGS1014 rather
-// than an empty result - each owner gains an ordering edge onto this project, and clean, drift
-// and the merge driver reach the tree through the owner's inbound record. The consumers must NOT
-// also declare them: one path claimed by two projects is MGS4002.
-//
-// gen/** is restated because ctx.writesFiles REPLACES the project and spell baseline for this
-// target rather than adding to it, so the buf spell's own gen/** would otherwise drop out.
+// generate runs buf codegen and fails if a committed generated tree drifted.
+// buf-build keeps the proto comments protoc-gen-go strips; cmd/magus-protodocs reads them.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    // TODO: a protoc-gen-go bump (pinned by the root go.mod) reruns nothing. Declaring
+    // ../go.mod would rerun on every dependency bump; this wants a per-target version probe.
     ctx.needs(index_generate);
+    // The TS client trees are declared here, not by docs and console: only this target
+    // produces them, and two claims on one path is MGS4002. gen/** is restated because
+    // writesFiles replaces the spell baseline.
     ctx.writesFiles("gen/**", docs\file("src/gen/**"), console\file("src/gen/**"));
-    // Gate the same three trees the declaration above names, because nothing else does.
-    // The root generate gate looks whole-tree but composes only its own *-generate
-    // siblings, so it never runs buf; and when this target runs first it hashes AFTER
-    // these bytes moved, reading the result as somebody else's uncommitted work. The two
-    // foreign trees were therefore measured by no gate at all, and docs/src/gen sat stale
-    // in HEAD across nine AIP-131 wrapper removals while every gate stayed green.
-    //
-    // Hashing before and after - rather than asking whether the tree is clean - keeps the
-    // gate armed on a dirty tree, which is the state the documented pre-push check runs in.
+    // The root generate gate never runs buf, so this gates all three trees itself.
     final GENERATED = ["gen", fs\join("..", "docs", "src", "gen"),
                        fs\join("..", "console", "src", "gen")];
     final before = drift\hashes(GENERATED);
@@ -112,9 +38,6 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     if (ctx.hasCharm("rw")) { return; }
     final changed = drift\changedSince(before, GENERATED);
     if (changed.len() > 0) {
-        // Print the diff, not just the names. This fires on a runner, where the reader has
-        // the log and not the tree, and two of the three trees are ~30 generated .ts files
-        // apiece; root's gate records that a name alone was not enough twice running.
         var body = vcs\dirtyDiff(changed);
         if (body.len() > 4000) {
             body = body.sub(0, len: 4000)
@@ -123,17 +46,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         if (body != "") {
             magus\log.info("generate: what changed on this runner:\n" + body);
         }
-        // A file buf should have DELETED is invisible here: it is byte-identical before and
-        // after, so changedSince cannot see it. A .proto rename leaves the old tree behind
-        // and someone removes it by hand, as 01da2b4e9 did for the v1 -> v1alpha1 move.
+        // Blind to a file buf should have deleted: a .proto rename's old tree is unchanged.
         throw "generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw proto` and commit: " + changed.join(", ")
             + drift\secondCause;
     }
 }
 
-// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in hack/index.buzz.
+// Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
@@ -142,6 +62,18 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
-export fun ci(ctx: magus\Context, args: [str]) > void {
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);
+    // buf reads the baseline from git only.
+    if (vcs\name() != "git") { return; }
+    final base = vcs\base();
+    // A ref from before the module existed has no schema to break.
+    final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
+                           opts: {"allow_failure": true, "quiet": true});
+    if (base == "" or !schema["ok"]) {
+        magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
+        return;
+    }
+    buf["buf-breaking"](ctx, {"args": ["--against",
+        vcs\root() + "/.git#ref={base},subdir=proto"]});
 }

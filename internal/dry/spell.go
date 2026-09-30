@@ -174,6 +174,11 @@ func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
 	if op.decodeErr != nil {
 		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + op.decodeErr.Error()}}
 	}
+	// The dry run passes no call-site args, so a NeedsArgs op is always refused, as
+	// runCommand refuses it before anything spawns.
+	if op.cmd.NeedsArgs != "" {
+		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + op.cmd.NeedsArgs}}
+	}
 	detail, err := op.renderCommand(charms)
 	if err != nil {
 		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + err.Error()}}

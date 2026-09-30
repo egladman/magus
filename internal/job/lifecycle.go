@@ -110,22 +110,16 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		}
 	}
 
-	// authorizeRow lets a bound writer touch no existing row but its own, so the verdict on
-	// a descendant, admitted by Verifies above, is written unbound.
-	// TODO: grade verdicts in authorizeRow so the store stays the backstop for this write.
-	writer := store
-	if actor.Bound() {
-		writer = &Store{
-			path: store.path, err: store.err, root: store.root, actor: &Actor{}, cacheDir: store.cacheDir,
-			clock: store.clock, staleAfter: store.staleAfter, notices: store.notices,
-		}
-	}
 	var status types.JobStatus
-	_, err = writer.Update(ctx, id, func(row *types.Job) {
+	_, err = store.mutate(ctx, id, asVerdict, func(row *types.Job, exists bool, _ int64) error {
+		if !exists {
+			return fmt.Errorf("job: there is no job %q", id)
+		}
 		status = VerifyGates(inheritGates(*row, jobs), *result, attempt, gateAttempts, jobs, seen)
 		if status.Verified {
 			row.State = types.StatePass
 		}
+		return nil
 	})
 	if err != nil {
 		return types.JobStatus{}, err
@@ -400,10 +394,8 @@ func (w *sweeper) checkoutGone(root string) bool {
 	return gone
 }
 
-// sweep ends every row in f the [sweeper] proves dead, and returns the plan as written.
-// The verdict is reached twice: once lock-free, so a plan with nothing to end costs no
-// lock, and again under the file lock against a fresh read, so a row another process
-// revived in between is not ended on a stale view.
+// sweep ends every row in f the [sweeper] proves dead, tombstones the binding records
+// whose job's checkout is gone (see [Store.sweepRecords]), and returns the plan as written.
 func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	clock := s.clock
 	if clock == nil {
@@ -411,6 +403,19 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	}
 	w := &sweeper{now: clock().Unix(), window: sync.OnceValues(s.resolveStaleAfter), gone: map[string]bool{}}
 	w.landed = s.landings(f.Jobs, w.now)
+	f, err := s.endDead(w, f)
+	if err != nil {
+		return jobsFile{}, err
+	}
+	s.sweepRecords(w, f.Jobs)
+	return f, nil
+}
+
+// endDead ends every row in f that w proves dead. The verdict is reached twice: once
+// lock-free, so a plan with nothing to end costs no lock, and again under the file lock
+// against a fresh read, so a row another process revived in between is not ended on a
+// stale view.
+func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, error) {
 	dead, err := w.dead(f.Jobs)
 	if err != nil || len(dead) == 0 {
 		return f, err

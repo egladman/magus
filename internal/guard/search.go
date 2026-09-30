@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -10,8 +11,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -24,6 +26,77 @@ import (
 type searchRoute struct {
 	name string // the symbol or the diagnostic node, as the rule's Arg records it
 	run  string
+	// indexed reports a route the graph found or answers, rather than a parse of a file the
+	// search names.
+	indexed bool
+}
+
+// graphMovedBudget bounds reading the checkout, which starts version control processes.
+// Past it the checkout counts as unmoved.
+const graphMovedBudget = 150 * time.Millisecond
+
+// staleGraph is why the graph describes another tree than the one on disk.
+type staleGraph struct {
+	reason string
+	// underway reports a history rewrite still in progress, which a rebuild now would
+	// describe before it moves the tree again.
+	underway bool
+}
+
+// graphMoved reports why the graph a deny would route to no longer describes this
+// checkout: a merge, rebase, cherry-pick or revert is underway, or the guard index was
+// built at another revision. A deny over a stale graph would push the reader from a
+// correct grep to a wrong answer. With no revision to compare, the index's stamps decide.
+func graphMoved(deps Dependencies) staleGraph {
+	if deps.scope.root == "" {
+		return staleGraph{}
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok {
+		return staleGraph{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), graphMovedBudget)
+	defer cancel()
+	if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
+		return staleGraph{reason: knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), underway: true}
+	}
+	// The index header is a file read; the revision starts processes, so it waits on one.
+	cacheDir, err := deps.cacheDir(root)
+	if err != nil {
+		return staleGraph{}
+	}
+	built, err := knowledge.ReadGuardIndexCheckout(cacheDir, root)
+	if err != nil {
+		return staleGraph{}
+	}
+	if built.Operation != "" {
+		return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
+	}
+	rev := deps.revision(ctx, root, "")
+	if rev == "" {
+		return staleGraph{}
+	}
+	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{Revision: rev})}
+}
+
+// verdict is graph-stale's advice in place of the deny: the search runs, and the rebuild
+// is named with when it is worth running.
+func (s staleGraph) verdict() ShellVerdict {
+	rebuild := "`" + hint.GraphBuild.String() + "` refreshes it"
+	if s.underway {
+		rebuild += " once that is finished"
+	}
+	return ShellVerdict{
+		Context: "magus workspace: the graph is stale, " + s.reason + ", so no graph answer replaces this search and it runs as typed. " +
+			rebuild + ", and the graph answers exactly again.",
+		Kind:  advisoryGraphStale,
+		Brief: "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
+	}
+}
+
+// routesIndexed reports whether any route rests on the graph.
+func routesIndexed(routes []searchRoute) bool {
+	return slices.ContainsFunc(routes, func(r searchRoute) bool { return r.indexed })
 }
 
 // searchVerdict judges the searches on a line against the index, reporting false when no
@@ -56,6 +129,9 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		}
 		inScope = append(inScope, c)
 		if routes, ok := provableRoutes(deps, c); ok {
+			if stale := graphMoved(deps); stale.reason != "" {
+				return stale.verdict(), true
+			}
 			return treeSymbolVerdict(deps, dir, c, routes, pipedInto(cmds[i+1:])), true
 		}
 	}
@@ -72,6 +148,9 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 	// It matters most on a branch that is ADDING symbols: the index lags exactly there, so
 	// the rule is quietest on the code most likely to need it.
 	if _, definitive := deps.symbolDefined(ident); !definitive {
+		if stale := graphMoved(deps); stale.reason != "" {
+			return stale.verdict(), true
+		}
 		return ShellVerdict{
 			Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
 			Kind:    advisoryPrecedent,
@@ -114,6 +193,11 @@ func grepReaderVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict,
 		routes, ok := declarationRoutes(deps, root, dir, c, idents)
 		if !ok {
 			continue
+		}
+		if routesIndexed(routes) {
+			if stale := graphMoved(deps); stale.reason != "" {
+				return stale.verdict(), true
+			}
 		}
 		v := ShellVerdict{Deny: denyGrepReader(routes) + pipeNote(pipedInto(cmds[i+1:])), Rule: denyRule{Name: denyRuleGrepReader, Arg: strings.Join(idents, ",")}}
 		next := make([]hint.Next, 0, len(routes))
@@ -210,7 +294,7 @@ func declarationRoutes(deps Dependencies, root, dir string, c hint.Invocation, i
 	var routes []searchRoute
 	for _, ident := range idents {
 		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
-			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source")})
+			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true})
 			continue
 		}
 		found := liveDeclarations(deps, root, dir, c, ident)
@@ -231,6 +315,7 @@ func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, id
 		operands = []string{"."}
 	}
 	var files []string
+	fromIndex := map[string]bool{}
 	for _, p := range operands {
 		matches := []string{p}
 		if strings.ContainsAny(p, "*?[") {
@@ -249,6 +334,7 @@ func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, id
 				for _, s := range sites {
 					if underAny([]string{rel}, s.File) && path.Ext(s.File) == ".go" {
 						files = append(files, s.File)
+						fromIndex[s.File] = true
 					}
 				}
 				continue
@@ -267,7 +353,7 @@ func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, id
 		}
 		for _, e := range entries {
 			if e.name[strings.LastIndexByte(e.name, '.')+1:] == ident {
-				routes = append(routes, searchRoute{name: ident, run: sedRangeCommand(rel, e.first, e.last)})
+				routes = append(routes, searchRoute{name: ident, run: sedRangeCommand(rel, e.first, e.last), indexed: fromIndex[rel]})
 			}
 		}
 	}
@@ -322,6 +408,9 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 	}
 	if _, ok := sc.lineRegexp(); !ok {
 		return ShellVerdict{}, false
+	}
+	if stale := graphMoved(deps); stale.reason != "" {
+		return stale.verdict(), true
 	}
 	return ShellVerdict{
 		Context: routeClause(routes) + " this for every file, checked against the tree, including the generated and cross-language sites a pattern misses. " +
@@ -642,22 +731,30 @@ var definitionLookupRe = regexp.MustCompile(`^(?:func|type) (?:\\?\([^()]*\\?\) 
 // mistaken for a symbol, and never provable: the graph carries no node for one.
 var diagnosticCodeRe = regexp.MustCompile(`^(?:MGS|BZZ)[0-9]{4}$`)
 
-// registeredDiagnostics are the codes the graph builds a diagnostic node for.
-var registeredDiagnostics = sync.OnceValue(func() map[string]bool {
-	out := map[string]bool{}
-	for _, code := range types.AllDiagnosticCodes() {
-		out[string(code)] = true
+// graphDiagnostics are the codes of the graph's diagnostic nodes, definitive on graphIDs'
+// terms. They come from the graph and not this binary's catalog: the two differ once the
+// checkout moves past the build the graph describes, as it does mid-rebase.
+func graphDiagnostics(deps Dependencies) ([]string, bool) {
+	ids, definitive := deps.graphIDs(context.Background(), types.KindDiagnostic)
+	if !definitive {
+		return nil, false
 	}
-	return out
-})
+	codes := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if code, ok := strings.CutPrefix(id, types.KindDiagnostic+":"); ok {
+			codes = append(codes, code)
+		}
+	}
+	return codes, true
+}
 
 func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 	if diagnosticCodeRe.MatchString(alt) {
-		if !registeredDiagnostics()[alt] {
+		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
 			return searchRoute{}, false
 		}
 		node := string(types.KindDiagnostic) + ":" + alt
-		return searchRoute{name: node, run: hint.Explain.With(node)}, true
+		return searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, true
 	}
 	var ident string
 	definition := false
@@ -675,9 +772,9 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 	if definition {
 		// A `func X` lookup wants the body next; --source prints it in place of the
 		// grep-then-sed pair.
-		return searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source")}, true
+		return searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true}, true
 	}
-	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences")}, true
+	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences"), indexed: true}, true
 }
 
 func routeNames(routes []searchRoute) string {

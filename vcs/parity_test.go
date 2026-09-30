@@ -486,6 +486,132 @@ func TestParityAbortMergeRefusesWithNoMergeInProgress(t *testing.T) {
 	})
 }
 
+// operationFork commits a.txt as "main" on one line and as "side" on another from a
+// common root, so every operation combining the two conflicts, and leaves the checkout
+// on main with an untracked sub/ to ask from.
+func operationFork(t *testing.T, b parityBackend) (dir, main, side string) {
+	t.Helper()
+	dir = t.TempDir()
+	b.init(t, dir, map[string]string{"a.txt": "one\n"})
+	root := initialCommitID(t, b, dir)
+	commitLine := func(body string) string {
+		writeRepoFile(t, dir, "a.txt", body)
+		commitAll(t, b, dir, body)
+		c, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoError(t, err)
+		return c.ID
+	}
+	main = commitLine("main\n")
+	checkoutRev(t, b, dir, root)
+	side = commitLine("side\n")
+	checkoutRev(t, b, dir, main)
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
+	return dir, main, side
+}
+
+// tryRun runs one command that is expected to stop on a conflict, so its status is not
+// the test's to judge.
+func tryRun(dir, bin string, args ...string) {
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	_ = cmd.Run()
+}
+
+// Every backend names the operation a checkout is stopped in, from its root and from a
+// directory under it, and nothing once the operation is concluded. jj's operations are
+// atomic, so a jj merge or rebase leaves none underway.
+func TestParityOperationInProgress(t *testing.T) {
+	type step struct {
+		bin  string
+		args func(main, side string) []string
+	}
+	fixed := func(bin string, args ...string) step {
+		return step{bin, func(string, string) []string { return args }}
+	}
+	for _, tt := range []struct {
+		name  string
+		want  string
+		steps map[string][]step
+		// conclude finishes the operation, for the backends where one stays underway.
+		conclude map[string][]step
+	}{
+		{
+			name: "merge", want: types.OperationMerge,
+			steps: map[string][]step{
+				"git": {{"git", func(_, side string) []string { return []string{"merge", "--no-edit", side} }}},
+				"hg":  {{"hg", func(_, side string) []string { return []string{"merge", "-r", side, "--tool", "internal:merge"} }}},
+				"sl":  {{"sl", func(_, side string) []string { return []string{"merge", "-r", side, "--tool", "internal:merge"} }}},
+				"jj":  {{"jj", func(main, side string) []string { return []string{"new", main, side} }}},
+			},
+			conclude: map[string][]step{
+				"git": {fixed("git", "add", "a.txt"), fixed("git", "commit", "--no-edit")},
+				"hg":  {fixed("hg", "resolve", "--mark", "a.txt"), fixed("hg", "commit", "-m", "merged", "-u", "test")},
+				"sl":  {fixed("sl", "resolve", "--mark", "a.txt"), fixed("sl", "commit", "-m", "merged")},
+			},
+		},
+		{
+			name: "rebase", want: types.OperationRebase,
+			steps: map[string][]step{
+				"git": {{"git", func(_, side string) []string { return []string{"checkout", "-q", side} }},
+					{"git", func(main, _ string) []string { return []string{"rebase", main} }}},
+				"hg": {{"hg", func(main, side string) []string {
+					return []string{"--config", "extensions.rebase=", "rebase", "-s", side, "-d", main, "--tool", "internal:merge"}
+				}}},
+				"sl": {{"sl", func(main, side string) []string {
+					return []string{"rebase", "-s", side, "-d", main, "--tool", "internal:merge"}
+				}}},
+				"jj": {{"jj", func(main, side string) []string { return []string{"rebase", "-r", side, "-o", main} }}},
+			},
+		},
+		{
+			name: "cherry-pick", want: types.OperationCherryPick,
+			steps: map[string][]step{
+				"git": {{"git", func(_, side string) []string { return []string{"cherry-pick", side} }}},
+				"hg":  {{"hg", func(_, side string) []string { return []string{"graft", "-r", side, "--tool", "internal:merge"} }}},
+				"sl":  {{"sl", func(_, side string) []string { return []string{"graft", "-r", side, "--tool", "internal:merge"} }}},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			eachBackend(t, func(t *testing.T, b parityBackend) {
+				steps, ok := tt.steps[b.name]
+				if !ok {
+					t.Skipf("%s has no %s", b.name, tt.name)
+				}
+				dir, main, side := operationFork(t, b)
+				got, err := b.drv.OperationInProgress(t.Context(), dir)
+				require.NoError(t, err)
+				require.Empty(t, got, "%s names an operation on a clean checkout", b.name)
+
+				for _, s := range steps {
+					tryRun(dir, s.bin, s.args(main, side)...)
+				}
+				want := tt.want
+				if b.name == "jj" {
+					want = ""
+				}
+				for _, at := range []string{dir, filepath.Join(dir, "sub")} {
+					got, err := b.drv.OperationInProgress(t.Context(), at)
+					require.NoError(t, err)
+					assert.Equal(t, want, got, "%s from %s", b.name, at)
+				}
+
+				conclude, ok := tt.conclude[b.name]
+				if !ok {
+					return
+				}
+				writeRepoFile(t, dir, "a.txt", "resolved\n")
+				for _, s := range conclude {
+					vcsTestRun(t, dir, s.bin, s.args(main, side)...)
+				}
+				got, err = b.drv.OperationInProgress(t.Context(), dir)
+				require.NoError(t, err)
+				assert.Empty(t, got, "%s once the %s is concluded", b.name, tt.name)
+			})
+		})
+	}
+}
+
 // commitAll records every pending change in dir.
 func commitAll(t *testing.T, b parityBackend, dir, msg string) {
 	t.Helper()
@@ -1186,6 +1312,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapCheckoutStateReporter: {"git": true},
+	types.CapOperationReporter:     {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
 	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
@@ -1244,6 +1371,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRemoteConfigReporter, "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
 		{types.CapDefaultRefReporter, "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
 		{types.CapCheckoutStateReporter, "CheckoutState", func(d types.VCSDriver, dir string) error { return errOf(d.CheckoutState(ctx, dir)) }},
+		{types.CapOperationReporter, "OperationInProgress", func(d types.VCSDriver, dir string) error { return errOf(d.OperationInProgress(ctx, dir)) }},
 		{types.CapPushStatusReporter, "CommitPushed", func(d types.VCSDriver, dir string) error {
 			_, _, err := d.CommitPushed(ctx, dir, "-x")
 			return err

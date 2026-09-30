@@ -1,0 +1,58 @@
+// site/diagrams/target-order.buzz: the order a project's targets compose in. magus requires
+// only that ci exists (MGS1001 when no project in scope declares it; doctor's ci-target check);
+// the rest is the order this workspace recommends. Only ci takes the accent.
+//
+// A shared order keeps `magus run <verb> <project>` meaning one thing across projects. Lint
+// reports and format rewrites, so they stay two targets; security reads advisory data outside
+// the tree, so it is its own step.
+//
+// Edges are the root magusfile's ctx.needs calls, except install -> generate, which is docs':
+// the root declares no install. Other projects deviate; see `magus describe target ci <project>`.
+//
+// A target is a declaration in a magusfile, not a directory, so every box is an actor.
+namespace targetOrder;
+
+import "magus/figure";
+
+export fun targetOrderFigure() > figure\Figure !> any {
+    final install = figure\external("install", sub: "fetch dependencies", look: figure\Look.plain);
+    final generate = figure\external("generate", sub: "committed output", look: figure\Look.plain);
+    final format = figure\external("format", sub: "rewrites source", look: figure\Look.plain);
+    final lint = figure\external("lint", sub: "reports, never writes", look: figure\Look.plain);
+    final build = figure\external("build", sub: "uncommitted artifacts", look: figure\Look.plain);
+    final test = figure\external("test", look: figure\Look.plain);
+    final security = figure\external("security", sub: "advisory data, uncached", look: figure\Look.plain);
+    final ci = figure\external("ci", sub: "MGS1001 when absent", look: figure\Look.focal);
+    final cd = figure\external("cd charm", sub: "ci:cd delivers", look: figure\Look.optional);
+    return figure\of("target-order",
+            title: "Only ci is required; the rest is an order",
+            eyebrow: "targets",
+            desc: "magus refuses a ci run when no project in scope declares ci. Every other "
+                + "step, and the order between them, is the convention this workspace follows "
+                + "so each verb means the same thing in every project.",
+            direction: figure\Direction.down)
+        .actor(install)
+        .actor(generate)
+        .actor(format)
+        .actor(lint)
+        .actor(build)
+        .actor(test)
+        .actor(security)
+        .actor(ci)
+        .actor(cd)
+        .flowAcross(install, dst: generate)
+        .flowAcross(generate, dst: format)
+        .flowAcross(generate, dst: security)
+        .flowAcross(format, dst: lint)
+        .flowAcross(format, dst: build)
+        .flowAcross(format, dst: test)
+        .flowAcross(lint, dst: ci)
+        .flowAcross(build, dst: ci)
+        .flowAcross(test, dst: ci)
+        .flowAcross(security, dst: ci)
+        .flowAcross(ci, dst: cd, stroke: figure\Stroke.optional)
+        .legend(figure\Look.focal, label: "enforced")
+        .legend(figure\Look.plain, label: "recommended")
+        .legend(figure\Look.optional, label: "opt-in, required by nothing")
+        .unscoped(why: "targets are conventions declared in a magusfile, not packages; nothing in the tree holds a scope");
+}

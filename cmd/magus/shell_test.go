@@ -1626,7 +1626,8 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, "Name a model.", v.Reason)
+	assert.True(t, strings.HasPrefix(v.Reason, "Name a model.\n\n"), v.Reason)
+	assert.Contains(t, v.Reason, "The working tree's magus\\guard.spawn rule judged nothing: the magusfile failed to load")
 
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	v = guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: "ls -la", Host: "claude-code"})

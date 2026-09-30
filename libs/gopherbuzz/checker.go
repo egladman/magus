@@ -307,6 +307,7 @@ func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPr
 	}
 	c.collectTopLevel(prog)
 	c.inferUnannotatedReturns(prog)
+	c.checkTypeNames(prog)
 	for _, s := range prog.Stmts {
 		c.checkStmt(s)
 	}
@@ -652,31 +653,49 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
+// A qualified `ns\T` resolves through the namespace bound to ns, except while a
+// namespace type is being memoized: that type is shared by checks whose scopes
+// may bind ns differently.
 func (c *checker) resolveAnnot(s string) types.Type {
 	t := types.ParseAnnot(s)
+	if c.typeRefs == nil {
+		return c.resolveTypeIn(t, qualifiedTypeNames(s))
+	}
 	return c.resolveType(t)
 }
 
-func (c *checker) resolveType(t types.Type) types.Type {
+func (c *checker) resolveType(t types.Type) types.Type { return c.resolveTypeIn(t, nil) }
+
+// resolveTypeIn resolves t, reading a name in quals through the namespace its
+// qualifier binds; see qualifiedTypeNames.
+func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Type {
 	switch v := t.(type) {
 	case *types.NamedType:
 		if c.typeRefs != nil {
 			c.typeRefs[v.Name] = true
+		}
+		if qual := quals[v.Name]; qual != "" {
+			if member, known := c.namespaceMemberType(qual, v.Name); known {
+				if member != nil {
+					return member
+				}
+				return v
+			}
 		}
 		if resolved, ok := c.namedType(v.Name); ok {
 			return resolved
 		}
 		return v
 	case *types.ListType:
-		return &types.ListType{Elem: c.resolveType(v.Elem), Mut: v.Mut}
+		return &types.ListType{Elem: c.resolveTypeIn(v.Elem, quals), Mut: v.Mut}
 	case *types.MapType:
-		return &types.MapType{Key: c.resolveType(v.Key), Val: c.resolveType(v.Val), Mut: v.Mut}
+		return &types.MapType{Key: c.resolveTypeIn(v.Key, quals), Val: c.resolveTypeIn(v.Val, quals), Mut: v.Mut}
 	case *types.FuncType:
 		params := make([]types.Type, len(v.Params))
 		for i, p := range v.Params {
-			params[i] = c.resolveType(p)
+			params[i] = c.resolveTypeIn(p, quals)
 		}
-		return &types.FuncType{Params: params, Ret: c.resolveType(v.Ret)}
+		return &types.FuncType{Params: params, Ret: c.resolveTypeIn(v.Ret, quals)}
 	}
 	return t
 }

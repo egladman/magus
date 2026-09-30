@@ -272,6 +272,16 @@ const (
 	// outside the workspace root. A load that followed it would read another checkout's
 	// files, so the same magusfile would load differently in a worktree than in main.
 	SpellImportEscapesWorkspace DiagnosticCode = "MGS1047"
+	// LayerDeclarationInvalid is a magus.project "layers" entry magus cannot honor: a
+	// directory that does not exist, a glob matching no directory, a path escaping the
+	// workspace, or a blank or malformed layer name. The load stops rather than let a
+	// layer silently cover nothing.
+	LayerDeclarationInvalid DiagnosticCode = "MGS1048"
+	// ManifestScriptDelegation is a target whose body runs a script a manifest defines
+	// (`pnpm run build`, `poe lint`). The script's steps, inputs and outputs live in the
+	// manifest, where the cache key and the affected set cannot see them. Which argv
+	// shapes delegate is declared by each spell's mgs_listScriptRunners.
+	ManifestScriptDelegation DiagnosticCode = "MGS1049"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -538,7 +548,11 @@ const (
 	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
 	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
 	// an undeclared source, checked after a target runs, not after a commit is made).
-	UnformattedCommit     DiagnosticCode = "MGS4009"
+	UnformattedCommit DiagnosticCode = "MGS4009"
+	// SelfInvalidatingKey is a target whose key reads a file its own run generates after the
+	// key is taken, so every run succeeds and none is cached. A moved input no target
+	// declares as an output is a concurrent writer instead, and stays an uncoded notice.
+	SelfInvalidatingKey   DiagnosticCode = "MGS4010"
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
 	CommandOpNeverExits   DiagnosticCode = "MGS5003"
@@ -552,7 +566,16 @@ const (
 	// SymbolIndexNotCurrent is a review whose symbol index could not be brought up to date
 	// for the projects the change touched, so the conformance checks did not run: the
 	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
-	SymbolIndexNotCurrent    DiagnosticCode = "MGS7003"
+	SymbolIndexNotCurrent DiagnosticCode = "MGS7003"
+	// UnknownMarkerFamily is a `magus:<family>` token whose family is not a MarkerFamily.
+	// The graph build fails naming the file, the line and the known families.
+	UnknownMarkerFamily DiagnosticCode = "MGS7004"
+	// DirNotInGraph is magus\dir asked for a path the graph holds no dir node for. A typo
+	// and a directory outside every project both land here; neither is an empty Dir.
+	DirNotInGraph DiagnosticCode = "MGS7005"
+	// LayerNotDeclared is a layer name no magus.project "layers" key declares, asked for
+	// through magus\layer or a DirsOptions filter.
+	LayerNotDeclared         DiagnosticCode = "MGS7006"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
 	OutputRefMalformed       DiagnosticCode = "MGS8003"
@@ -609,6 +632,30 @@ const (
 	// SocketPeerNotOwner is a connection to the server's MCP unix socket from a process whose
 	// uid is not the server's, or whose uid the kernel did not report, answered 403.
 	SocketPeerNotOwner DiagnosticCode = "MGS9022"
+	// RequestInvalid is a request to an /api/ route that the route cannot act on: a body that
+	// does not parse, a missing or malformed parameter, a name it does not know, a file it
+	// will not serve. Answered 400, or 413 and 422 where those name the refusal better.
+	RequestInvalid DiagnosticCode = "MGS9023"
+	// ResourceNotFound is a request naming a thing the server holds no record of: an
+	// attention request, a figure, a path outside the reviewed patch. Answered 404.
+	ResourceNotFound DiagnosticCode = "MGS9024"
+	// StateConflict is a well-formed request that contradicts the state it addresses: a
+	// request already closed, a snapshot gone stale, a session not yet attached. Re-reading
+	// the state is the fix, not retrying. Answered 409.
+	StateConflict DiagnosticCode = "MGS9025"
+	// WorkspaceNotWired is a route that needs a workspace, served by a process started
+	// without one. It never resolves by waiting; WorkspaceStillLoading is the transient one.
+	// Answered 503.
+	WorkspaceNotWired DiagnosticCode = "MGS9026"
+	// InternalFailure is the server failing to read its own state or build an answer. The
+	// body names what failed and never the cause; the server log carries that. Answered 500.
+	InternalFailure DiagnosticCode = "MGS9027"
+	// StreamingUnsupported is an event stream asked of a response writer that cannot flush,
+	// such as one wrapped by middleware that buffers. Answered 500.
+	StreamingUnsupported DiagnosticCode = "MGS9028"
+	// ReviewHostFailed is a publish or reply the code-review host refused or could not
+	// receive, so nothing reached the reviewer. Answered 502.
+	ReviewHostFailed DiagnosticCode = "MGS9029"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -657,6 +704,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
+	LayerDeclarationInvalid, ManifestScriptDelegation,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
@@ -669,10 +717,11 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
-	UnformattedCommit,
+	UnformattedCommit, SelfInvalidatingKey,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
+	UnknownMarkerFamily, DirNotInGraph, LayerNotDeclared,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, TokenStoreTooNew,
 	NoAuthToken, TokenNameExists, TokenNotFound,
@@ -680,6 +729,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
 	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
+	RequestInvalid, ResourceNotFound, StateConflict, WorkspaceNotWired, InternalFailure,
+	StreamingUnsupported, ReviewHostFailed,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

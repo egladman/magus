@@ -682,15 +682,19 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 		name, title, isolation, lease string
 		row                           types.Job
 		want                          outcome
+		// elsewhere is a call whose reported directory is outside the checkout magus
+		// resolved, which says nothing about where the child runs.
+		elsewhere bool
 	}{
-		{"a live job, shared checkout", title, "", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}},
-		{"an isolated child's base is recorded all the same", title, "worktree", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}},
-		{"a job forked beneath the title's parent", "orchestrator/integrator facts", "", "", nested, outcome{Lease: "orchestrator/facts", ReportedBase: base, Registered: true}},
-		{"a base already reported is kept", title, "", "", reported, outcome{Lease: "guard-facts", ReportedBase: "77aa01c", Registered: true}},
-		{"a finished job attributes nothing", title, "", "", finished, outcome{}},
-		{"a title in another form attributes nothing", "orchestrator/brisk-heron/implement adr 0002", "", "", running, outcome{}},
-		{"a title naming no role attributes nothing", "orchestrator guard-facts", "", "", running, outcome{}},
-		{"an explicit lease outranks the attribution", title, "", "other", running, outcome{Lease: "other", Denied: true}},
+		{"a live job, shared checkout", title, "", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}, false},
+		{"a call placed outside the resolved checkout registers nothing", title, "worktree", "", running, outcome{Lease: "guard-facts", Denied: true}, true},
+		{"an isolated child's base is recorded all the same", title, "worktree", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}, false},
+		{"a job forked beneath the title's parent", "orchestrator/integrator facts", "", "", nested, outcome{Lease: "orchestrator/facts", ReportedBase: base, Registered: true}, false},
+		{"a base already reported is kept", title, "", "", reported, outcome{Lease: "guard-facts", ReportedBase: "77aa01c", Registered: true}, false},
+		{"a finished job attributes nothing", title, "", "", finished, outcome{}, false},
+		{"a title in another form attributes nothing", "orchestrator/brisk-heron/implement adr 0002", "", "", running, outcome{}, false},
+		{"a title naming no role attributes nothing", "orchestrator guard-facts", "", "", running, outcome{}, false},
+		{"an explicit lease outranks the attribution", title, "", "other", running, outcome{Lease: "other", Denied: true}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -706,7 +710,11 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 
 			Judge(ctx, deps, Request{Input: finishedSpawn(t, tc.title, "brisk-heron", "sonnet", tc.isolation, "a1b2c3"), Host: "claude-code"})
 			edit := map[string]any{"file_path": target, "old_string": "package guard", "new_string": "package guard // edited"}
-			write := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": "/Users/dev/repo", "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
+			cwd := root
+			if tc.elsewhere {
+				cwd = t.TempDir()
+			}
+			write := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": cwd, "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
 			v := Judge(ctx, deps, Request{Input: write, Host: "claude-code", Lease: tc.lease})
 
 			rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
@@ -1024,7 +1032,7 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 
 			v := Judge(ctx, Dependencies{}, Request{Input: "magus job exec next-job", Host: who.Host, Session: who.Session, Agent: who.Agent})
 			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, gradedAs(v))
-			assert.Equal(t, next.ID, boundJob(who, hookLocation(ctx, Dependencies{})))
+			assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, hookLocation(ctx, Dependencies{})))
 		})
 	}
 }
@@ -1047,7 +1055,7 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec other-job"))
 			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("client op=register id=other-job"))
 			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec held-job"))
-			assert.Equal(t, held.ID, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
+			assert.Equal(t, job.Binding{Job: held.ID}, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
 		})
 	}
 }

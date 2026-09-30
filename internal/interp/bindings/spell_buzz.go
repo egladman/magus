@@ -94,6 +94,7 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 		spells.WithSources(spec.Needs...),
 		spells.WithIgnoreDirs(spec.IgnoreDirs...),
 		spells.WithManifests(spec.Manifests...),
+		spells.WithScriptRunners(spec.ScriptRunners...),
 		spells.WithOutputs(spec.Provides...),
 		spells.WithTargets(spec.OpNames()...),
 		spells.WithServiceTargets(spec.ServiceOpNames()...),
@@ -162,14 +163,15 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	sess.AddCompileObserver(buzz.ProfileFromContext(ctx))
-	registerMagusModules(ctx, sess)
 	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
 	// `import "magus"` fails outright with BZZ2001, which reads as "the module does not
 	// exist": the failure mode buildMagus explicitly rejects for the script surface.
 	// Note the in-process readers (ls, targets, graph) still raise here: a spell has no
 	// workspace on its context, so it must reach for the forking members (cmd, describe).
+	// It registers before the modules, which set the magus enums on this namespace.
 	RegisterMagusNamespace(ctx, sess)
+	registerMagusModules(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return spells.Descriptor{}, err
 	}
@@ -224,10 +226,10 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
-	registerMagusModules(ctx, sess)
 	// Same script surface as the descriptor-extraction session above, so a handler op
 	// body and the spell's top level see one `magus` namespace rather than two.
 	RegisterMagusNamespace(ctx, sess)
+	registerMagusModules(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return nil, fmt.Errorf("spell handler op %q: exec: %w", fn, err)
 	}

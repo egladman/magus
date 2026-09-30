@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
@@ -18,7 +19,7 @@ import (
 // TestCrossDispatchRunOnce verifies a (dir, target) runs once even when many
 // callers race for it, and that they all observe the same result.
 func TestCrossDispatchRunOnce(t *testing.T) {
-	cd := NewCrossDispatch()
+	cd := NewCrossDispatch(cache.NewTargetRuns())
 	var runs atomic.Int32
 	wantErr := errors.New("boom")
 	cd.run = func(_ context.Context, _, _ string) error {
@@ -31,7 +32,7 @@ func TestCrossDispatchRunOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := cd.Dispatch(context.Background(), "/ws/gopherbuzz", "build")
+			err := cd.Dispatch(context.Background(), fakeProject("gopherbuzz"), "build")
 			assert.ErrorIs(t, err, wantErr)
 		}()
 	}
@@ -43,12 +44,12 @@ func TestCrossDispatchRunOnce(t *testing.T) {
 // than deadlocking: the runner re-dispatches the same (dir, target) it was given,
 // which must be caught as an ancestor.
 func TestCrossDispatchCycle(t *testing.T) {
-	cd := NewCrossDispatch()
-	cd.run = func(ctx context.Context, dir, target string) error {
+	cd := NewCrossDispatch(cache.NewTargetRuns())
+	cd.run = func(ctx context.Context, _, target string) error {
 		// Simulate the remote target depending back on itself across the boundary.
-		return cd.Dispatch(ctx, dir, target)
+		return cd.Dispatch(ctx, fakeProject("a"), target)
 	}
-	err := cd.Dispatch(context.Background(), "/ws/a", "build")
+	err := cd.Dispatch(context.Background(), fakeProject("a"), "build")
 	assert.Error(t, err, "expected a cross-project cycle error")
 	assert.ErrorIs(t, err, types.TargetDependencyCycle, "a cycle carries the MGS1007 diagnostic code")
 }
@@ -57,7 +58,7 @@ func TestCrossDispatchCycle(t *testing.T) {
 // converted to an error and re-raised, and — critically — that e.done is still
 // closed so concurrent waiters on the same key unblock instead of hanging forever.
 func TestCrossDispatchPanicUnblocksWaiters(t *testing.T) {
-	cd := NewCrossDispatch()
+	cd := NewCrossDispatch(cache.NewTargetRuns())
 	var started sync.WaitGroup
 	started.Add(1)
 	release := make(chan struct{})
@@ -72,19 +73,19 @@ func TestCrossDispatchPanicUnblocksWaiters(t *testing.T) {
 		defer func() {
 			assert.NotNil(t, recover(), "panic should propagate to the running caller")
 		}()
-		_ = cd.Dispatch(context.Background(), "/ws/a", "build")
+		_ = cd.Dispatch(context.Background(), fakeProject("a"), "build")
 	}()
 
 	// Second caller parks on e.done; it must unblock with the converted error
 	// rather than hang.
 	started.Wait()
 	done := make(chan error, 1)
-	go func() { done <- cd.Dispatch(context.Background(), "/ws/a", "build") }()
+	go func() { done <- cd.Dispatch(context.Background(), fakeProject("a"), "build") }()
 	close(release)
 
 	select {
 	case err := <-done:
-		assert.ErrorContains(t, err, "cross-dispatch panic")
+		assert.ErrorContains(t, err, "a:build panicked")
 	case <-time.After(2 * time.Second):
 		t.Fatal("waiter hung after runner panicked (e.done was not closed)")
 	}
@@ -112,7 +113,7 @@ func TestCrossDispatchResetsBuzzAncestors(t *testing.T) {
 		return &buzz.WorkerSession{Session: buzz.NewSession(ctx), Targets: targets}, nil
 	})
 
-	cd := NewCrossDispatch()
+	cd := NewCrossDispatch(cache.NewTargetRuns())
 	cd.run = func(ctx context.Context, _, _ string) error {
 		// Stands in for the sub-project's own ctx.needs(lint): the same read of the
 		// inherited stack that bindings.buzzDispatchViaPool performs.
@@ -122,19 +123,19 @@ func TestCrossDispatchResetsBuzzAncestors(t *testing.T) {
 	// The caller is mid-run inside the parent project, whose "lint" target is what
 	// reached across the boundary.
 	ctx := buzz.WithAncestors(context.Background(), []string{"lint"})
-	require.NoError(t, cd.Dispatch(ctx, "/ws/sub", "build"),
+	require.NoError(t, cd.Dispatch(ctx, fakeProject("sub"), "build"),
 		"a sub-project target sharing a name with a caller's ancestor is not a cycle")
 	assert.True(t, ran.Load(), "the sub-project's target never ran")
 }
 
 // TestCrossDispatchDistinct verifies different (dir, target) keys each run.
 func TestCrossDispatchDistinct(t *testing.T) {
-	cd := NewCrossDispatch()
+	cd := NewCrossDispatch(cache.NewTargetRuns())
 	var runs atomic.Int32
 	cd.run = func(_ context.Context, _, _ string) error { runs.Add(1); return nil }
-	_ = cd.Dispatch(context.Background(), "/ws/a", "build")
-	_ = cd.Dispatch(context.Background(), "/ws/b", "build")
-	_ = cd.Dispatch(context.Background(), "/ws/a", "test")
+	_ = cd.Dispatch(context.Background(), fakeProject("a"), "build")
+	_ = cd.Dispatch(context.Background(), fakeProject("b"), "build")
+	_ = cd.Dispatch(context.Background(), fakeProject("a"), "test")
 	assert.Equal(t, int32(3), runs.Load(), "distinct keys should each run")
 }
 
@@ -149,7 +150,7 @@ func TestCrossDispatchDistinct(t *testing.T) {
 func TestCrossDispatchResetsTargetInterceptor(t *testing.T) {
 	var sawInterceptor atomic.Bool
 
-	cd := NewCrossDispatch()
+	cd := NewCrossDispatch(cache.NewTargetRuns())
 	cd.run = func(ctx context.Context, _, _ string) error {
 		// The same question bindings.buzzDispatchViaPool asks before deciding whether a
 		// needs is intercepted or run inline.
@@ -158,11 +159,14 @@ func TestCrossDispatchResetsTargetInterceptor(t *testing.T) {
 	}
 
 	ctx := buzz.WithTargetInterceptor(context.Background(), stubInterceptor{})
-	require.NoError(t, cd.Dispatch(ctx, "/ws/sub", "build"))
+	require.NoError(t, cd.Dispatch(ctx, fakeProject("sub"), "build"))
 
 	assert.False(t, sawInterceptor.Load(),
 		"the caller's interceptor crossed the project boundary, so the remote project's needs mint steps against the caller")
 }
+
+// fakeProject is a workspace project at path, rooted under /ws.
+func fakeProject(path string) *types.Project { return &types.Project{Path: path, Dir: "/ws/" + path} }
 
 // stubInterceptor stands in for the caller's project-bound interceptor. Its body is never
 // meant to run: the point is whether it CROSSES.

@@ -1,6 +1,7 @@
 package dry
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,15 +13,20 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
 // installHost wires a session for magusfile evaluation, layering host surfaces
 // from least to most permissive: the Buzz std library (print captured into
 // tr.out), then the pure-compute WASM-compatible host modules (`strings`, `json`,
-// ...), then the tracing `magus` and `magus/spell/*` modules backed by tr.
-// Every host effect is traced, not performed.
+// ...), then inert IO modules, then the tracing `magus` and `magus/spell/*` modules
+// backed by tr. Every module carries the declarations the engine gives it, so the
+// check here refuses what the engine refuses. Every host effect is traced, not
+// performed.
 //
 // spells is the set of spells to register as tracing `magus/spell/<name>` modules,
 // keyed by import name with its op names. Callers pass the built-in registry (the
@@ -28,6 +34,21 @@ import (
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
+	// An IO module gets the engine's declarations over a value that performs nothing (os
+	// keeps the stdlib's), so a call checks against its real signature and a probed body
+	// stops at it. proc is the exception: its exec traces, so doctor can see what a
+	// target runs. A wasm registry lists no IO module, so there these imports reach the
+	// resolver below.
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(ffi.WASM) {
+			continue
+		}
+		mod := vm.NewMap()
+		if name == "proc" {
+			mod = buildProc(tr)
+		}
+		installHostModule(sess, name, reg, mod)
+	}
 
 	// A native module, not a global: the playground must make you write
 	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
@@ -41,42 +62,19 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// snippet could read a field no return carries and the dry run would say nothing,
 	// which is the opposite of what a dry run is for. The stubs above are shaped to
 	// match, and TestMagusSurfaceMatchesBindings holds the member set in sync.
-	if src, ok := spell.ModuleDecls("magus"); ok {
-		sess.SetModuleDecls("magus", src)
-	}
+	spell.DeclareMagusTypes(sess, nil)
 	for name, ops := range spells {
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the canonical value-type module as embedded declarations so a
-	// SPELL buffer's or magusfile's `import "magus/spell"` resolves the
-	// Target/Command/Service object types instead of failing with `undefined type
-	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
-	// host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
-	// vcs, ...), but this sandbox never registers os/fs/http/vcs as real importable
-	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
-	// there is no owning-module import for a probed buffer to reach those types
-	// through. Bundling them here, under the one import path this sandbox does
-	// wire, is this dry-only host's deliberate simplification; it keeps every
-	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
-	// resolvable without also having to fake functional os/fs/http/vcs bindings.
-	// The session's import lookup order (native, then declarations, then resolver)
-	// means this is never shadowed by the catch-all resolver below.
-	sess.SetModuleDecls(spell.SpellModulePath, strings.Join([]string{
-		spell.TargetModuleSource,
-		spell.PatchOpSource,
-		spell.CharmTypeSource,
-		spell.CommandSource,
-		spell.ServiceSource,
-		spell.ExecResultSource,
-		spell.CommitAuthorSource,
-		spell.CommitSource,
-		spell.FileInfoSource,
-		spell.HTTPResponseSource,
-		spell.SemverVersionSource,
-		spell.URLSource,
-	}, "\n"))
+	// The source modules the engine registers beside the host ones. A host-returned
+	// type (ExecResult, Commit, ...) is reached through its owning module, as there.
+	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
+	for _, sm := range std.AllSource() {
+		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
+	}
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation
@@ -511,6 +509,40 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		"definition": vm.StrValue(""), "node_count": vm.IntValue(0), "edge_count": vm.IntValue(0),
 		"gods": empty, "orphans": empty, "coverage": empty,
 	}))
+	// indexed stays false: the dry run read no index, and a drift check has to refuse on that.
+	m.MapSet("importGraph", shaped("magus.importGraph", map[string]vm.Value{
+		"indexed": vm.BoolValue(false), "packages": vm.NewMap(),
+	}))
+	// indexed stays false for the reason importGraph's does.
+	m.MapSet("symbolIndexDigest", shaped("magus.symbolIndexDigest", map[string]vm.Value{
+		"digest": vm.StrValue(""), "indexed": vm.BoolValue(false), "projects": empty, "gaps": empty,
+	}))
+	// The typed records come from the generated encoders, so a dry run exposes exactly the
+	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
+	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.
+	firstStr := func(args []vm.Value) string {
+		if len(args) > 0 && args[0].IsStr() {
+			return args[0].AsString()
+		}
+		return ""
+	}
+	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		p := firstStr(args)
+		return bindinggen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
+	}))
+	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
+	}))
+	m.MapSet("neighborhood", fn("magus.neighborhood", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
+			Definition: types.KnowledgeNeighborhoodDefinition,
+			Focus:      firstStr(args),
+			Answer:     types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown},
+		}), nil
+	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
 		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StrValue(""),
@@ -736,6 +768,23 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 		if v, ok := opts.MapGet("sources"); ok {
 			p.Sources = valToStrings(v)
 		}
+		// Shape only: the preview has no tree to hold a directory's existence against.
+		if v, ok := opts.MapGet("layers"); ok {
+			if !v.IsMap() || len(v.MapKeys()) == 0 {
+				return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+					`magus.project: "layers" takes a map of workspace-relative directory or glob to layer name, e.g. {"internal/handler/**": "handler"}`)
+			}
+			for _, dir := range v.MapKeys() {
+				nv, _ := v.MapGet(dir)
+				if !nv.IsStr() {
+					return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+						`magus.project: "layers"[%q]: the layer name must be a string, got a %s`, dir, nv.Kind())
+				}
+				if err := types.CheckLayer(dir, nv.AsString()); err != nil {
+					return err
+				}
+			}
+		}
 		if v, ok := opts.MapGet("spells"); ok && v.IsList() {
 			for _, item := range v.ListItems() {
 				if item.IsMap() {
@@ -831,6 +880,28 @@ func buildSpell(name string, ops []string, tr *Tracer) vm.Value {
 		return strsToList(opsCopy), nil
 	}))
 	return h
+}
+
+// buildProc stubs the proc module: exec traces its argv and reports an empty
+// success, so a probed body runs past it; shell returns the {bin, args} the real one
+// would, with /bin/sh as the default shell on every platform.
+func buildProc(tr *Tracer) vm.Value {
+	m := vm.NewMap()
+	m.MapSet("exec", fn("proc.exec", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if bin := strArg(args, 0); bin != "" {
+			var rest []string
+			if len(args) > 1 {
+				rest = valToStrings(args[1])
+			}
+			tr.addExec(append([]string{bin}, rest...))
+		}
+		return bindinggen.ObjectExecResult(types.ExecResult{OK: true}), nil
+	}))
+	m.MapSet("shell", fn("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		shell := cmp.Or(strArg(args, 1), "/bin/sh")
+		return bindinggen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
+	}))
+	return m
 }
 
 func strsToList(ss []string) vm.Value {

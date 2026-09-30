@@ -468,3 +468,57 @@ func dirstateCheckoutID(dot string) (string, bool) {
 	}
 	return hex.EncodeToString(p1) + hex.EncodeToString(p2), true
 }
+
+// hgOperationStates are the files Mercurial and Sapling keep in the checkout's dot-dir
+// while an operation is stopped. A histedit rewrites history as a rebase does.
+var hgOperationStates = []struct{ name, op string }{
+	{"rebasestate", types.OperationRebase},
+	{"histedit-state", types.OperationRebase},
+	{"graftstate", types.OperationCherryPick},
+}
+
+// hgOperationInProgress reads the operation from the dot-dir of the checkout holding root,
+// starting no process: a rebase, histedit or graft by its state file, then a merge by its
+// merge state or by the dirstate's second parent, which Sapling sets even when it records
+// no merge state. merging answers only where the files cannot.
+func hgOperationInProgress(root, dot string, merging func() (bool, error)) (string, error) {
+	meta, found := hgDotDir(root, dot)
+	if found {
+		for _, s := range hgOperationStates {
+			if _, err := os.Lstat(filepath.Join(meta, s.name)); err == nil {
+				return s.op, nil
+			}
+		}
+		for _, name := range []string{"state", "state2"} {
+			if _, err := os.Lstat(filepath.Join(meta, "merge", name)); err == nil {
+				return types.OperationMerge, nil
+			}
+		}
+		if parents, ok := dirstateCheckoutID(meta); ok {
+			if strings.Trim(parents[len(parents)/2:], "0") != "" {
+				return types.OperationMerge, nil
+			}
+			return "", nil
+		}
+	}
+	underway, err := merging()
+	if err != nil || !underway {
+		return "", err
+	}
+	return types.OperationMerge, nil
+}
+
+// hgDotDir finds dot in root or the nearest ancestor holding one.
+func hgDotDir(root, dot string) (string, bool) {
+	for dir := filepath.Clean(root); ; {
+		meta := filepath.Join(dir, dot)
+		if info, err := os.Stat(meta); err == nil && info.IsDir() {
+			return meta, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}

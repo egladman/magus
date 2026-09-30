@@ -3,7 +3,7 @@
 # bundles the source directly.
 node_modules/
 
-# Bundled test output: `pnpm run test` esbuild-bundles src/*.test.ts here and runs it
+# Bundled test output: `magus run test libs/textsearch` esbuild-bundles src/*.test.ts here and runs it
 # under node --test (which skips node_modules, so the bundle can't live there). A build
 # artifact, not committed.
 .testcache/

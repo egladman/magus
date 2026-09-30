@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -240,7 +241,17 @@ func gateRepeatBrief(runs int, spent time.Duration) string {
 		types.TargetCI, runs, spent.Round(time.Second), gateCadence)
 }
 
-// denyLeaseScopedGate refuses the gate to a lease that was handed a narrower check, and
+// denyLeaseScopedGate is what a bound lease's magus runs meet: the gate refusal first, then
+// worker-check-only for every other target. One entry because roleScopedCommandRules lists
+// the rules it stands down by name.
+func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
+	if reason := denyLeaseGate(ctx, deps, actingLease, command); reason != "" {
+		return reason
+	}
+	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
+}
+
+// denyLeaseGate refuses the gate to a lease that was handed a narrower check, and
 // returns "" for everybody else.
 //
 // The gate runs ONCE per branch, in the orchestrator's tree, after every unit lands. A
@@ -258,7 +269,7 @@ func gateRepeatBrief(runs int, spent time.Duration) string {
 // an empty field is an undeclared boundary, but a bound worker is a worker either way and
 // the gate is still the orchestrator's; the empty field says nobody wrote down what this
 // unit should run, which is a reason to ask rather than a licence to run everything.
-func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
+func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" || !commandRunsGate(command) {
 		return ""
 	}
@@ -276,6 +287,253 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 		"magus workspace: run `%s` instead, which is the check lease %s was assigned. The orchestrator gates once, in its own tree, after every unit lands.\n"+
 			"`%s` runs the `%s` gate, and the validation field on lease %s's ledger row reads %q, which does not name it. "+leaseActorClause("widen that field"),
 		me.Validation, me.ID, command, types.TargetCI, me.ID, me.Validation)
+}
+
+// denyRuleWorkerCheckOnly names the refusal of any target but a bound row's own check.
+const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
+
+// denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
+// row's check and the targets declaring an output in its write paths, or returns "". Two
+// worktrees share no cache key, so a second run of the same target only doubles the load.
+//
+// Silent where there is nothing to hold the run to: no lease, no live row, a row that owns
+// the gate (the orchestrator's), or a row declaring no check at all, which denyLeaseGate
+// already answers for the gate. Every other verb, and a run that only reports (--plan,
+// --dry-run, --graph, --help), passes.
+func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) string {
+	if actingLease == "" {
+		return ""
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return ""
+	}
+	var runs []targetRun
+	for _, c := range cmds {
+		if r, ok := parseTargetRun(c); ok {
+			runs = append(runs, r)
+		}
+	}
+	if len(runs) == 0 {
+		return ""
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || LeaseOwnsGate(me) {
+		return ""
+	}
+	checks := rowChecks(me)
+	if len(checks) == 0 {
+		return ""
+	}
+	at := hookLocation(ctx, deps)
+	produces := sync.OnceValue(func() func(target, project string) bool {
+		return leaseProducers(ctx, deps, at.workspace, me.WritePaths)
+	})
+	for _, r := range runs {
+		if r.allowed(checks, at.workspace != "" && ownSourceRoot(at.workspace), produces) {
+			continue
+		}
+		lines := make([]string, len(checks))
+		next := make([]hint.Next, len(checks))
+		for i, c := range checks {
+			lines[i] = "`" + c.String() + "`"
+			next[i] = hint.Next{ID: "deny-" + string(denyRuleWorkerCheckOnly), Run: checkCommand(c)}
+		}
+		return fmt.Sprintf(
+			"magus workspace: run %s instead, the one check lease %s was assigned. The orchestrator runs every other target serially, in its own tree, after it integrates the units.\n"+
+				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
+			strings.Join(lines, " or "), me.ID, elideCommand(command), r.target, me.ID) +
+			hint.Render(next, func(hint.Next) string { return "" }) +
+			"see: " + ruleDocsBase + string(denyRuleWorkerCheckOnly) + "/"
+	}
+	return ""
+}
+
+// targetRun is one `magus run` or `magus affected` a command line makes, read far enough to
+// hold it to a row's check.
+type targetRun struct {
+	verb     string
+	target   string
+	projects []string
+}
+
+// runReportFlags turn a run into a report about one: nothing executes, so nothing contends.
+var runReportFlags = []string{"plan", "impact", "explain", "dry-run", "graph", "help", "h"}
+
+// parseTargetRun reads a magus invocation as a target run, reporting false for any other
+// verb, for a run that only reports, and for one whose target the line does not name.
+//
+// A flag's arity comes from the verb's own registry entry before the global set, so the
+// value of `--timeout 5m` or `--skip docs` is never read as a project.
+func parseTargetRun(c hint.Invocation) (targetRun, bool) {
+	if path.Base(c.Name) != "magus" {
+		return targetRun{}, false
+	}
+	var r targetRun
+	skip := false
+	for _, a := range c.Args {
+		switch {
+		case skip:
+			skip = false
+		case a == "--":
+			return r, r.target != ""
+		case len(a) > 1 && a[0] == '-':
+			name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+			if slices.Contains(runReportFlags, name) {
+				return targetRun{}, false
+			}
+			skip = !joined && verbFlagTakesValue(r.verb, name)
+		case r.verb == "":
+			if a != "run" && a != "affected" {
+				return targetRun{}, false
+			}
+			r.verb = a
+		case r.target == "":
+			r.target = a
+		default:
+			r.projects = append(r.projects, a)
+		}
+	}
+	return r, r.target != ""
+}
+
+// verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
+// in the registry the CLI parses with before magus's global set.
+func verbFlagTakesValue(verb, name string) bool {
+	for _, cmd := range cli.All {
+		if cmd.Name != verb {
+			continue
+		}
+		if i := slices.IndexFunc(cmd.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
+			return cmd.Flags[i].Kind != cli.FlagBool
+		}
+	}
+	takes, _ := MagusFlagTakesValue(name)
+	return takes
+}
+
+// allowed reports whether a bound worker may make this run: its row's check, a target
+// declaring an output in its write paths, or the rebuild of magus's own binary that every
+// bootstrap verdict in this repository names.
+//
+// `affected` is never a check: it picks its projects from the diff, and a check names one.
+func (r targetRun) allowed(checks []types.LeaseCheck, ownSource bool, produces func() func(target, project string) bool) bool {
+	projects := r.projects
+	if len(projects) == 0 {
+		projects = []string{"."}
+	}
+	if r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
+		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
+	}) {
+		return true
+	}
+	if r.verb != "run" {
+		return false
+	}
+	if ownSource && targetName(r.target) == "go-build" && len(projects) == 1 && path.Clean(projects[0]) == "." {
+		return true
+	}
+	writes := produces()
+	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })
+}
+
+// rowChecks are the runs a row names as its checks: the check record and every check goal.
+func rowChecks(row types.Job) []types.LeaseCheck {
+	var out []types.LeaseCheck
+	for _, g := range row.EffectiveGoals() {
+		if g.Kind == types.GateKindCheck && g.Check.Target != "" {
+			out = append(out, g.Check)
+		}
+	}
+	if len(out) > 0 || row.Validation == "" {
+		return out
+	}
+	// compat: see types.ParseLeaseRunLine
+	if c, err := types.ParseLeaseRunLine(row.Validation); err == nil {
+		out = append(out, c)
+	}
+	return out
+}
+
+// sameTarget reports whether a run names a check's target. The charm is ignored, since
+// `lint:rw` is the same work written back; a spell filter is compared only when both name
+// one, as internal/job.bindsTo does.
+func sameTarget(check, ran string) bool {
+	cs, ct := splitSpell(check)
+	rs, rt := splitSpell(ran)
+	return targetName(ct) == targetName(rt) && (cs == "" || rs == "" || cs == rs)
+}
+
+func splitSpell(s string) (spell, target string) {
+	spell, target, ok := strings.Cut(s, "::")
+	if !ok {
+		return "", s
+	}
+	return spell, target
+}
+
+// targetName is a target's normalized name, charm and spell filter dropped.
+func targetName(s string) string {
+	_, t := splitSpell(s)
+	name, _, _ := strings.Cut(t, ":")
+	return types.Normalize(name)
+}
+
+// leaseProducers reports which targets declare an output among writePaths, answered from
+// the workspace's own declarations.
+//
+// A workspace that cannot be read falls back to this repository's producer spelling, a
+// `-generate` name or a charm such as `:rw`: a rule the guard cannot evaluate must not
+// block a tool call.
+func leaseProducers(ctx context.Context, deps Dependencies, workspace string, writePaths []string) func(target, project string) bool {
+	looksGenerating := func(target, _ string) bool {
+		name := targetName(target)
+		_, t := splitSpell(target)
+		return name == "generate" || strings.HasSuffix(name, "-generate") || strings.Contains(t, ":")
+	}
+	ws, err := deps.inspect(ctx, workspace)
+	if err != nil || ws == nil {
+		return looksGenerating
+	}
+	paths := make([]string, 0, len(writePaths))
+	for _, p := range writePaths {
+		file, _ := types.SplitClaim(p)
+		paths = append(paths, file)
+	}
+	files, err := ws.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return looksGenerating
+	}
+	declared := map[[2]string]bool{}
+	for _, f := range files {
+		for _, c := range f.Claims {
+			if c.Role == "output" && c.Target != "" {
+				declared[[2]string{targetName(c.Target), path.Clean(cmp.Or(c.Project, "."))}] = true
+			}
+		}
+	}
+	return func(target, project string) bool {
+		return declared[[2]string{targetName(target), path.Clean(project)}]
+	}
+}
+
+// checkCommand renders a check as the command that runs it, quoted for a shell. A check
+// naming no charm is the charmless run, which --no-default-charms spells.
+func checkCommand(c types.LeaseCheck) string {
+	args := []string{c.Target, cmp.Or(c.Project, ".")}
+	if !c.NamesCharm() {
+		args = append(args, "--no-default-charms")
+	}
+	if len(c.Args) > 0 {
+		args = append(args, "--")
+		for _, a := range c.Args {
+			if q, err := syntax.Quote(a, syntax.LangBash); err == nil {
+				a = q
+			}
+			args = append(args, a)
+		}
+	}
+	return hint.Run.With(args...)
 }
 
 // actingLiveLease reads the acting lease's own live row, reporting none whenever the
@@ -303,6 +561,10 @@ type leaseStanding struct {
 	row      types.Job
 	// rows is the whole store, for a rule that reads the job tree around row.
 	rows []types.Job
+	// endedBinding is the job the caller was bound to when its own record is a tombstone:
+	// the job store ended the binding when that job's checkout was removed (see
+	// job.Binding). "" for any other record.
+	endedBinding string
 }
 
 // terminal reports a row that is declared and has stopped running, so its rules are inert.
@@ -360,12 +622,21 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // the line it prints locked a checkout out of its own repair: the plan moved house once and
 // the bound worker could not read the plan, print a schema, or bind again, because each of
 // those is a command and every command was refused.
+//
+// A tombstoned binding is refused the same way, whatever the ledger holds: its job's
+// checkout is gone, and reading the caller as unbound would grade it as the orchestrator.
 func denyUndeclaredLease(standing leaseStanding, actingLease, command string) string {
-	if !standing.readable || standing.declared {
+	if standing.endedBinding == "" && (!standing.readable || standing.declared) {
 		return ""
 	}
 	if command != "" && undeclaredLeaseRepairs(command) {
 		return ""
+	}
+	if standing.endedBinding != "" {
+		return fmt.Sprintf("magus workspace: your binding to job %s ended when its checkout was removed; run `%s` from a checkout that exists to bind again.\n"+
+			"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
+			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.",
+			standing.endedBinding, hint.JobExec.With("<job>"))
 	}
 	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
 		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+

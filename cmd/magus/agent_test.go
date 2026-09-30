@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	require.Len(t, defs, 14)
+	require.Len(t, defs, 15)
 	for _, def := range defs {
 		skill, err := agentSkills.Render(def, agent.VariantFull)
 		require.NoError(t, err)
@@ -111,6 +112,76 @@ func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
 	assert.Contains(t, err.Error(), "outside the working tree")
 }
 
+// plantSkillDirs stages the three things a skills directory holds beside a shipped
+// install: a skill a past magus stamped and this one dropped, a hand-authored skill,
+// and an empty directory.
+func plantSkillDirs(t *testing.T, dir, dest string) (retired, handAuthored, empty string) {
+	t.Helper()
+	retired = filepath.Join(dir, dest, "magus-retired")
+	require.NoError(t, os.MkdirAll(retired, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(retired, "SKILL.md"),
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+
+	handAuthored = filepath.Join(dir, dest, "magus-local-development")
+	require.NoError(t, os.MkdirAll(handAuthored, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(handAuthored, "SKILL.md"), []byte("---\nname: magus-local-development\n---\n\nmine\n"), 0o644))
+
+	empty = filepath.Join(dir, dest, "magus-empty")
+	require.NoError(t, os.MkdirAll(empty, 0o755))
+	return retired, handAuthored, empty
+}
+
+func TestInstallSkillTreePrunesOnlyWhatMagusStamped(t *testing.T) {
+	dir := t.TempDir()
+	const dest = ".claude/skills"
+	retired, handAuthored, empty := plantSkillDirs(t, dir, dest)
+
+	written, changed, removed, err := installSkillTree(dir, dest, true, false, agent.FormFull)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
+	assert.NotEmpty(t, written)
+	assert.Equal(t, written, changed, "a fresh tree is all changes")
+	assert.NoDirExists(t, retired)
+	assert.DirExists(t, handAuthored, "a skill without the stamp is not magus's to delete")
+	assert.DirExists(t, empty, "an empty directory proves nothing about who wrote it")
+	assert.FileExists(t, filepath.Join(dir, dest, "magus-query", "SKILL.md"))
+}
+
+func TestInstallSkillTreeDryRunRemovesNothing(t *testing.T) {
+	dir := t.TempDir()
+	const dest = ".claude/skills"
+	retired, _, _ := plantSkillDirs(t, dir, dest)
+
+	written, changed, removed, err := installSkillTree(dir, dest, true, true, agent.FormFull)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
+	assert.NotEmpty(t, written)
+	assert.Empty(t, changed)
+	assert.DirExists(t, retired)
+	assert.NoDirExists(t, filepath.Join(dir, dest, "magus-query"), "a dry run writes nothing")
+}
+
+// TestAgentInstallReportsEachRemovalOnStdout: install prunes without a flag, so the
+// report is all that stands between a person and a skill that left unannounced.
+func TestAgentInstallReportsEachRemovalOnStdout(t *testing.T) {
+	// Hints dedupe process-wide, so an emit here would silence them for every later test.
+	interactive.SetHintsEnabled(false)
+	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
+	dir := t.TempDir()
+	const dest = ".claude/skills"
+	retired, handAuthored, _ := plantSkillDirs(t, dir, dest)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, agentInstallCmd(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
+	})
+
+	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
+	assert.NoDirExists(t, retired)
+	assert.DirExists(t, handAuthored)
+}
+
 func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
 	dir := t.TempDir()
 	body, err := agentSkills.SkillTar(".claude/skills", agent.FormFull)
@@ -150,7 +221,7 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
 		written := []string{".claude/skills/magus-query/SKILL.md"}
-		printAgentInstallNextSteps(dir, written, written, nil, agent.FormFull, false)
+		printAgentInstallNextSteps(dir, written, written, agent.FormFull, false)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")

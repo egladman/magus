@@ -59,6 +59,14 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	if tgt.Bin == "" {
 		return run.ExecResult{}, nil
 	}
+	// Checked against the caller's args alone: Args and DefaultArgs are the op's own,
+	// and an explicit empty list is no more an answer than none.
+	if tgt.NeedsArgs != "" && len(opts.args) == 0 {
+		if opts.op != "" {
+			return run.ExecResult{}, fmt.Errorf("%s: %s", opts.op, tgt.NeedsArgs)
+		}
+		return run.ExecResult{}, errors.New(tgt.NeedsArgs)
+	}
 	dir := opts.cwd
 	if dir == "" {
 		dir = "."

@@ -53,6 +53,8 @@ var pinnedNeeds = map[string]types.Need{
 	"/api/v1/events":        read,
 	"/api/v1/insight":       read,
 	"/api/v1/graph":         read,
+	"/api/v1/diagrams":      read,
+	"/api/v1/diagrams/":     read,
 	"/api/v1/diff":          write,
 	"/api/v1/diff/patch":    write,
 	"/api/v1/diff/context":  write,
@@ -96,6 +98,10 @@ var pinnedNeeds = map[string]types.Need{
 	"/magus.viewer.v1alpha1.ViewerService/GetJournal":              read,
 	"/magus.viewer.v1alpha1.ViewerService/GetSessionActivity":      read,
 }
+
+// servedUnder pins routes a prefix mount answers without a mount of their own, each to the
+// mount whose Need guards it, so the matrix probes them too.
+var servedUnder = map[string]string{}
 
 // mountedOnlyWhen names the pinned paths a loaded server mounts conditionally.
 var mountedOnlyWhen = map[string]string{
@@ -391,7 +397,10 @@ func walkMatrix(t *testing.T, base string, paths []string, bearers map[string]be
 	client := &http.Client{Timeout: 10 * time.Second}
 	cells := 0
 	for _, p := range paths {
-		need := pinnedNeeds[p]
+		need, ok := pinnedNeeds[p]
+		if !ok {
+			need = pinnedNeeds[servedUnder[p]]
+		}
 		for name, b := range bearers {
 			status, reason := probe(t, client, base, p, b.token)
 			cells++
@@ -417,6 +426,10 @@ func walkMatrix(t *testing.T, base string, paths []string, bearers map[string]be
 func TestGrantMatrix(t *testing.T) {
 	base, patterns, needs, _, _ := bootConsoleServer(t)
 	paths := checkNeeds(t, patterns, needs, mountedOnlyWhen)
+	for route, mount := range servedUnder {
+		require.Equal(t, read, pinnedNeeds[mount], "%s is a read route", route)
+		paths = append(paths, route)
+	}
 	walkMatrix(t, base, paths, matrixBearers(t))
 }
 

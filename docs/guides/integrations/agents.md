@@ -279,8 +279,8 @@ Three rules cover the whole surface:
   entirely, `--root <path>` measures them from the workspace it names - so a
   command written once keeps working when it is run from somewhere else.
 - **Never rewrite a path magus printed.** Every surface prints the bare
-  workspace-relative form - `-o name`, `-o json`, logs, error messages, Mermaid
-  node labels - so it is already in the form the next command wants. Commands
+  workspace-relative form - `-o name`, `-o json`, logs, error messages - so it
+  is already in the form the next command wants. Commands
   that take fuzzy search tokens rather than paths, such as `magus where`, take
   the same bare text.
 - **Quoting a project back to a user**: prefer whatever magus printed. The

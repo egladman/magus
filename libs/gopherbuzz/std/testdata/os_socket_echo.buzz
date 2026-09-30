@@ -1,5 +1,8 @@
 // @expect: closed
 import "os";
-final server = os\TcpServer.init(0, os\SocketProtocol.tcp);
-server.close();
-final __r = "closed";
+fun listenAndClose() > str !> any {
+    final server = os\TcpServer.init(0, kind: os\SocketProtocol.tcp);
+    server.close();
+    return "closed";
+}
+final __r = listenAndClose() catch "raised";

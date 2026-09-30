@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -123,7 +124,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	graph, err := h.src.TargetGraph(r.Context())
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			handler.Refuse(w, r, rpcerr.WorkspaceNotWired())
 			return
 		}
 		h.Fail(w, r, "plan", err)
@@ -136,13 +137,13 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 
 	target, anchor, ok := h.resolveAnchor(r.URL.Query().Get("target"), index, report, descs)
 	if !ok {
-		http.Error(w, fmt.Sprintf("unknown target %q; run `magus describe targets` to list them", target), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid(fmt.Sprintf("unknown target %q; run `magus describe targets` to list them", target)))
 		return
 	}
 
 	nodes, edges := planClosure(index, graph.Projects, target)
 	overlayPlanState(nodes, report, descs, h.root)
-	handler.WriteJSON(w, planResponse{Target: target, Anchor: anchor, Nodes: nodes, Edges: edges})
+	handler.WriteJSON(w, r, planResponse{Target: target, Anchor: anchor, Nodes: nodes, Edges: edges})
 }
 
 // resolveAnchor picks the target this plan is about and says how it was picked. An explicit

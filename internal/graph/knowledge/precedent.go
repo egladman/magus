@@ -70,9 +70,9 @@ type precedentPackages struct {
 	ns map[string]string
 }
 
-// packages takes each package's layer from the first segment of its directory, and "." for
-// the workspace root. The path alone decides it: a top-level directory holding only nested
-// projects may have no node of its own. No directory name is special.
+// packages takes each package's layer from its dir node's declared AttrLayer, else the
+// first segment of its directory ("." for the root). The fallback reads the path alone:
+// a top-level directory holding only nested projects may have no node.
 func (m precedentMiner) packages() precedentPackages {
 	pk := precedentPackages{
 		deps: m.g.packageDepsExcept(m.x.generated), dir: map[string]string{}, layer: map[string]string{},
@@ -93,6 +93,10 @@ func (m precedentMiner) packages() precedentPackages {
 	for ns, dir := range pk.dir {
 		if cur, ok := pk.ns[dir]; !ok || ns < cur {
 			pk.ns[dir] = ns
+		}
+		if declared := m.g.nodes[dirID(dir)].Attrs[types.AttrLayer]; declared != "" {
+			pk.layer[ns] = declared
+			continue
 		}
 		pk.layer[ns], _, _ = strings.Cut(dir, "/")
 	}

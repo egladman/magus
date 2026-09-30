@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -651,7 +652,25 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 // sources, an artifact that moved turns the parent's hit into a miss, so the parent
 // re-runs against what the gate below actually produced instead of replaying an
 // entry recorded against different bytes.
+//
+// A target that declares its inputs with ctx.readsFiles keys only on the artifacts those
+// declarations can read, so an artifact it composes but never opens does not move its key.
 func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []Glob {
+	out := chainSkipCacheArtifacts(p, target, lookup)
+	inputs := p.TargetInputs[target]
+	if len(inputs) == 0 {
+		return out
+	}
+	return slices.DeleteFunc(out, func(g Glob) bool {
+		return !slices.ContainsFunc(inputs, func(in InputRef) bool {
+			return GlobsOverlap(g.Pattern, in.Rooted(p.Path).Pattern)
+		})
+	})
+}
+
+// chainSkipCacheArtifacts is ChainSkipCacheOutputs before the composer's footprint
+// narrows it.
+func chainSkipCacheArtifacts(p *Project, target string, lookup func(path string) *Project) []Glob {
 	var out []Glob
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
@@ -700,34 +719,54 @@ func chainReaches(p *Project, name string, lookup func(path string) *Project) ma
 
 func chainKey(projectPath, target string) string { return projectPath + "\x00" + target }
 
-// ChainSkipCacheSteps is the skip_cache targets a target composes with ctx.needs
-// that a caller must run itself before replaying it, in invocation order, each
-// carrying its owning project path.
+// ChainSkipCacheSteps is the skip_cache members of target's chain that a caller must run
+// before taking target's key, in invocation order, each carrying its owning project path.
 //
-// skip_cache says a target always runs. ctx.needs runs a composed target inside the
-// parent's body, which a cache hit never executes, so the policy stopped holding the
-// moment the target was reached through a chain rather than named on the command
-// line. A caller replaying the parent runs these to make it hold again.
+// ctx.needs runs a member inside its composer's body, which a cache hit never executes,
+// so skip_cache holds only if the caller runs these first. A member left for the body
+// would also rewrite an artifact the key already read.
 //
-// The set is narrower than "every composed skip_cache target", and
-// ChainSkipCacheOutputs is what narrows it: a target qualifies only when it maintains
-// an artifact that is already in the parent's key. That is what the parent needs
-// before it can trust a replay, and it leaves out the skip_cache targets that opted
-// out for a reason a replay cannot invalidate. `image-build` pushes a signed digest
-// per invocation, so it composes into `ci` and belongs nowhere near a hit path; eight
-// minutes of docker build measured the difference.
+// A member qualifies only when it maintains an artifact in the composer's key
+// (ChainSkipCacheOutputs). That leaves out members that skip the cache for a reason a
+// replay cannot invalidate, such as `image-build`, which pushes a signed digest per run.
 //
-// Running a gate runs everything it composes, so a gate the caller can reach from
-// another gate is already covered and is left out. One rule covers both shapes that
-// produces: `generate` composing `index-generate` directly, and root `ci` reaching
-// `generate` through `lint` and again through `security`.
+// Running one of these runs everything it composes, so a member reachable from another
+// is left out: `generate` composing `index-generate`, or root `ci` reaching `generate`
+// through both `lint` and `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+	return chainSkipCacheSteps(p, target, lookup)
+}
+
+// BeforeKey is ChainSkipCacheSteps as the target refs a caller runs, in order.
+func BeforeKey(p *Project, target string, lookup func(path string) *Project) []TargetRef {
+	steps := chainSkipCacheSteps(p, target, lookup)
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]TargetRef, len(steps))
+	for i, s := range steps {
+		out[i] = TargetRef{Project: s.Project, Target: s.Target}
+	}
+	return out
+}
+
+func chainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+	keyed := ChainSkipCacheOutputs(p, target, lookup)
+	inKey := func(artifacts []Glob) bool {
+		return slices.ContainsFunc(artifacts, func(a Glob) bool {
+			return slices.ContainsFunc(keyed, func(k Glob) bool { return GlobsOverlap(a.Pattern, k.Pattern) })
+		})
+	}
 	var out []ChainStep
 	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
 			return nil
 		}
-		if len(v.Project.TargetOutputs[v.Target]) == 0 && len(ChainSkipCacheOutputs(v.Project, v.Target, lookup)) == 0 {
+		own := make([]Glob, 0, len(v.Project.TargetOutputs[v.Target]))
+		for _, ref := range v.Project.TargetOutputs[v.Target] {
+			own = append(own, ref.Rooted(v.Project.Path))
+		}
+		if !inKey(own) && !inKey(chainSkipCacheArtifacts(v.Project, v.Target, lookup)) {
 			return nil
 		}
 		out = append(out, ChainStep{Project: v.Project.Path, Target: v.Target})

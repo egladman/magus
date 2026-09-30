@@ -1,101 +1,44 @@
 import "magus";
 import "proc";
-// The shared advisory gate. See hack/advisories.buzz for why an exit code is the wrong
-// question and what this asks instead.
 import "../hack/advisories" as advisories;
 import "../hack/toolchain-policy" as policy;
 import "../hack/index" as index;
-// Modules the targets use: fs (lcov reads), os (pnpm/esbuild), vcs (the gen/ drift gate).
 import "fs";
 import "os";
 import "proc";
 import "std";
-import "vcs";
-// The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
-// Reference drawer imports from source. Affected tracking is glob-based (not
-// import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
-// lib edit then marks the console affected and re-checks it through the target graph.
 import "project/../libs/textsearch";
+import "project/../docs";
 import "project/.." as root;
 
-// lcov merges the per-process reports into the one figure the floor gates on.
 import "lcov";
 
-// magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
-// TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
-// for the knowledge graph. ts is opaque (pnpm owns the dependency graph; informational) and does not
-// run in ci, which uses the custom targets below; it just makes the TypeScript browsable as symbols.
 import "magus/spell/typescript";
 
-// The console is the standalone native PWA (dashboard, logs, graph, activity as tabs + tiling). It owns
-// its whole stack - a hand-authored index.html/manifest/sw, its own esbuild build (via pnpm scripts),
-// and vendored copies of the shared lib/ui/proto/styles - with NO dependency on the docs site. This
-// magusfile registers it as a first-class magus project so `magus affected ci` covers it.
 magus\project({
-    // Adopts the shared node window by explicit import, not by position in the tree.
-    // Just node: this project drives no Go, and declaring a window for a toolchain it
-    // does not use would fail it on a version nobody here runs.
     "tools": {"node": policy\node},
     "spells": [typescript],
-    // ../proto because proto's buf-generate writes src/gen/ (see proto/buf.gen.yaml and the
-    // outputs note below). Without the edge the two are unordered and, worse, a .proto change
-    // does not mark the console affected - so its committed client can sit stale against the
-    // schema while every gate stays green. That is not hypothetical: it happened once against
-    // a viewer.proto field rename, which buf.gen.yaml records, and again here against the
-    // JobService collapse, where the docs copy regenerated and this one did not.
-    //
-    // docs already declares the same edge for the descriptor it reads. This is the write half
-    // of the same relationship, and it was the missing one.
+    // proto writes src/gen/; without this edge a .proto change leaves the console unaffected.
     "depends_on": ["../proto"],
-    // Affected/drift tracks this sources glob, not the import graph, so every input must be named to be
-    // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the
-    // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the
-    // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
-    // pnpm is the package manager - NOT npm; pnpm-workspace.yaml's minimumReleaseAge gate is the reason.
+    // Affected tracks this glob, not the import graph, so it names every input.
     "sources": ["*.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs", "stylelint-label-token.mjs",
-                // The icons and favicons build assembles into the bundle. src/**/*.ts
-                // above stops at the code; these are the rest of what it ships.
                 "src/assets/**",
-                // The authored changeset diffdemo-generate compiles into the committed
-                // src/console/diff/gen/demo.ts. Undeclared, editing the patch left the
-                // key where it was, so the generator replayed and the committed TS kept
-                // the old changeset.
-                "src/console/diff/demo.patch"],
-    // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
-    // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
-    // project. Claiming it here as well is MGS4002 - two projects declaring one path cannot be
-    // ordered against each other, and each would record the other's bytes as its own output.
-    // The producer's declaration is what makes clean, drift and the merge driver see the tree;
-    // src/**/*.ts above keeps it a cache input, which is the only relationship this project has
-    // to it.
+                "src/apps/diff/demo.patch"],
+    // Not src/gen/**: proto declares it, and a second claim is MGS4002.
     "outputs": ["gen/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
-        // build rebuilds the committed gen/ and gates on drift, so it must run every time.
-        // Its own vcs\isDirty check is inert (see build below); skip_cache is what keeps
-        // the rebuild honest.
-        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the check"},
-        // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
-        // The advisory database is the input that matters here and it lives on the
-        // registry, not in this tree. A hit would replay a clean bill of health from
-        // before the advisory that now applies to a lockfile nobody touched.
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
-        // Same shape as the root ci: pure composition, keyed on this project's whole
-        // baseline, so an edit anywhere in it moves the key and no run can replay.
-        // 11 runs, 0 cached (MGS1009). The members are where a hit belongs.
         "ci": {"skip_cache": "composes the gates and reads nothing itself; its key is the whole project, so it can never replay"},
     },
 });
 
-// install installs node_modules through the typescript spell's pnpm-install op. That
-// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
-// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+// install installs node_modules through the typescript spell's pnpm-install op.
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
@@ -103,8 +46,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(index_generate);
 }
 
-// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in hack/index.buzz.
+// Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
@@ -112,124 +54,153 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("console");
 }
 
-// test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
-// and holds the merged line coverage above a floor.
-//
-// The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs
-// localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying
-// the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and
-// reverted.
-//
-// Which is why the figure needs lcov.mergePercent rather than lcov.percent: three processes means
-// three reports, and each one lists the whole line table of every shared module it imported. Summing
-// their LF/LH would count those files once per process and report a number that is not about
-// anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
-//
-// Two flags in the test script exist ONLY to make the figure deterministic: a figure that wobbles by
-// a line between runs of an unchanged tree says nothing about the tree, and an unchanged tree once
-// reported 49.1% and 49.2%.
-//
-//   --splitting (esbuild): without it every test bundle inlines its own copy of each shared module,
-//   and merging those copies back through their sourcemaps is order-sensitive - tabs.ts and
-//   commands.ts moved by a line or two per run. Splitting emits each shared module into ONE chunk.
-//
-//   --experimental-test-isolation=none (node): runs a launch's test FILES in one process instead of
-//   one process each, so there is no cross-process coverage merge to lose a record in. With
-//   isolation on, card.ts alternated between 110 and 115 covered lines. --test-concurrency=1 does
-//   NOT fix that - it serializes the processes without removing the merge.
-//
-// This does not unify the three launches described above; each still runs separately, for the
-// localStorage reason. It only stops each launch from forking per file.
-//
-// Both --sourcemap (esbuild, in the test script) and --enable-source-maps (node) are required. With
-// only the first, Node reads the sourcemap for stack traces alone and every record stays
-// SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.
+// test runs the node:test suite and holds the merged TypeScript line coverage above a floor.
+// Node runs three times (happy-dom's getter-only localStorage breaks the tests that stub
+// it), so the reports merge by DA: record; summing LF/LH double-counts. esbuild's
+// --splitting and --experimental-test-isolation=none keep the figure deterministic.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install, textsearch\test);
-    // coverage.txt is the merged figure, declared so a cache hit restores it for the
-    // root's coverage-render, which publishes it and cannot import this project.
+    // Declared so a cache hit restores coverage.txt for the root's coverage-render.
     ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
-    proc\exec("pnpm", ["run", "test"], ".", {});
+    fs\removeAll(".testcache");
+    fs\remove("coverage.plain.lcov");
+    fs\remove("coverage.dom.lcov");
 
-    // One figure per LANGUAGE, not per project: it spans every TypeScript project with a
-    // suite, which today is this one and libs/textsearch. The console measures it because
-    // it sits at the top of the TypeScript dependency graph, so its test is where every
-    // report has already been produced. The textsearch report's paths are prefixed before
-    // the merge: both projects name their files src/..., and the merge unions DA: records
-    // by path, so unprefixed they would read as one file.
+    final bundle = mut [<str>];
+    foreach (t in fs\glob("src/**/*.test.ts")) { bundle.append(t.value); }
+    foreach (flag in ["--bundle", "--splitting", "--platform=node", "--format=esm",
+                      "--sourcemap", "--outdir=.testcache"]) {
+        bundle.append(flag);
+    }
+    typescript["esbuild"](ctx, {"args": bundle});
+
+    final plain = mut ["--test-reporter-destination=coverage.plain.lcov", "--experimental-test-isolation=none"];
+    final dom = mut ["--test-reporter-destination=coverage.dom.lcov", "--experimental-test-isolation=none",
+                     "--import", "./test-setup.mjs"];
+    foreach (b in fs\glob(".testcache/**/*.test.js")) {
+        if (b.value.endsWith("-dom.test.js")) {
+            dom.append(b.value);
+        } else {
+            plain.append(b.value);
+        }
+    }
+    typescript["node-test"](ctx, {"args": plain});
+    typescript["node-test"](ctx, {"args": dom});
+
+    final scripts = mut ["--test"];
+    foreach (s in fs\glob("scripts/*.test.mjs")) { scripts.append(s.value); }
+    proc\exec("node", scripts, ".", {});
+
+    // Both projects name their files src/..., so textsearch's paths get a prefix before the merge.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
         .replace("SF:src/", "SF:libs/textsearch/src/");
     final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
     fs\writeFile("coverage.txt", content: pct + "\n");
-    // The floor sits two points under the 69.1% measured when it was set, because the
-    // figure moves by a fraction of a point with the Node patch version.
+    // Two points of headroom: the figure moves a little with the Node patch version.
     final floor = 67;
     if (std\parseInt(pct.split(".")[0])! < floor) {
         throw "test: typescript coverage " + pct + "% is below the {floor}% floor; investigate the regression or lower the floor deliberately";
     }
 }
 
-// build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static
-// assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
-// dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
-// instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
-// Regenerates the Diff showcase's changeset from its .patch fixture.
-//
-// The showcase renders with NO server, so it cannot ask one to parse its patch - and this
-// surface no longer parses patches itself, because carrying a second reader is what let the
-// browser and the server drift. Rendering the fixture with the same Go reader keeps one
-// parser without making the showcase the single consumer allowed to disagree with the product.
-//
-// It lives here rather than in the root project, which is where it was first written: the root
-// is this project's ANCESTOR, and a parent writing into a descendant is MGS3001. proto can
-// write into src/gen because it is a sibling; the root cannot.
-//
-// The authored artifact stays the .patch file. A patch you can read is one you can check
-// against the tool that would have produced it; a hand-maintained tree of rows is not.
+// Renders the Diff showcase's changeset from its .patch with the Go reader; the showcase
+// has no server to parse it. It lives here because the root writing into a descendant is MGS3001.
 export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("src/console/diff/gen/*.ts");
+    ctx.writesFiles("src/apps/diff/gen/*.ts");
     proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
-                     "-patch", "src/console/diff/demo.patch",
-                     "-out", "src/console/diff/gen/demo.ts"], ".", {});
+                     "-patch", "src/apps/diff/demo.patch",
+                     "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
+// The shared stylesheets, each bundled with what it @imports (console.css takes table.css).
+final SHELL_CSS = ["tokens.css", "overrides.css", "console.css"];
+
+// appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
+// gen/<id>/<id>.js, the path the shell loads it from. An app whose manifest (app.ts) says
+// kind: "shell" ships inside console.js, so it gets none. apps.test.ts pins the pairing.
+fun appBundles() > [[str]] !> any {
+    final bundles = mut [<[str]>];
+    foreach (entry in fs\glob("src/apps/*/main.ts")) {
+        final dir = fs\dirname(entry.value);
+        if (fs\readFile(fs\join(dir, "app.ts")).indexOf("kind: \"shell\"") != null) { continue; }
+        final id = fs\basename(dir);
+        bundles.append([entry.value, "gen/" + id + "/" + id + ".js"]);
+    }
+    return bundles;
+}
+
+fun copyInto(files: [str], dir: str) > void !> any {
+    fs\mkdirAll(dir);
+    foreach (f in files) {
+        fs\copyFile(f, fs\join(dir, fs\basename(f)));
+    }
+}
+
+// build bundles the app into gen/ with esbuild, copies the static shell beside it, and
+// stamps the service worker.
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
-    // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
-    // against and hashing fires on every rebuild. vcs\isDirty reports an ignored path as
-    // clean, which is why this gate has never fired. It is inert, and the comment above
-    // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
-    final clean_before = vcs\isDirty(["gen"]) == false;
-    // The explorer's data is graph_generate's declared output, needed above. Copied
-    // here rather than by package.json so the dependency lives where magus sees it,
-    // and before the build because stamp-build.mjs hashes every precached file.
-    fs\mkdirAll(fs\join("gen", "graph"));
-    foreach (name in ["knowledge-graph.json", "target-graph.json"]) {
-        fs\copyFile(fs\join("..", "gen", name), fs\join("gen", "graph", name));
+    // The Graph's Figures runtime control loads gen/wasm/.
+    ctx.needs(docs\build_playground);
+    ctx.writesFiles(
+        "gen/console.js", "gen/theme.js",
+        "gen/patternfly.css", "gen/tokens.css", "gen/overrides.css", "gen/console.css",
+        "gen/*/*.js", "gen/*/*.css", "gen/*/scaffold.html",
+        "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
+        "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",
+        "gen/wasm/buzz.wasm", "gen/wasm/wasm_exec.js",
+        "gen/*/index.html");
+    // Copied before the bundles: stamp-build.mjs hashes every precached file.
+    copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
+             dir: fs\join("gen", "graph"));
+
+    foreach (b in [["src/desktop/main.ts", "gen/console.js"]] + appBundles()) {
+        typescript["esbuild"](ctx, {"args": [b[0], "--bundle", "--minify", "--format=esm", "--outfile=" + b[1]]});
     }
-    proc\exec("pnpm", ["run", "build"], ".", {});
-    if (ctx.hasCharm("rw")) {
-        return;
+    typescript["esbuild"](ctx, {"args": ["src/theme.ts", "--minify", "--outfile=gen/theme.js"]});
+    typescript["esbuild"](ctx, {"args": [
+        "src/styles/patternfly.css", "--bundle", "--minify",
+        "--external:*.woff2", "--external:*.woff", "--external:*.ttf", "--external:*.svg",
+        "--external:*.png", "--external:*.jpg", "--external:*.gif",
+        "--outfile=gen/patternfly.css"]});
+    foreach (c in SHELL_CSS) {
+        typescript["esbuild"](ctx, {"args": [fs\join("src", "styles", c), "--bundle", "--minify", "--outfile=" + fs\join("gen", c)]});
     }
-    if (clean_before and vcs\isDirty(["gen"])) {
-        throw "build: gen/ drifted; re-run `magus run build:rw console` and commit";
+    // An app's own sheets sit at the top of its directory; a view's sheet below it is @imported by
+    // one of those, so every app sheet bundles.
+    foreach (c in fs\glob("src/apps/*/*.css")) {
+        final outfile = fs\join("gen", fs\basename(fs\dirname(c.value)), fs\basename(c.value));
+        typescript["esbuild"](ctx, {"args": [c.value, "--bundle", "--minify", "--outfile=" + outfile]});
     }
+
+    copyInto(["index.html", "manifest.webmanifest", "sw.js"], dir: "gen");
+    final assets = mut [<str>];
+    foreach (a in fs\glob("src/assets/*")) { assets.append(a.value); }
+    copyInto(assets, dir: fs\join("gen", "assets"));
+    foreach (scaffold in fs\glob("src/apps/*/scaffold.html")) {
+        copyInto([scaffold.value], dir: fs\join("gen", fs\basename(fs\dirname(scaffold.value))));
+    }
+    copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
+              fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
+             dir: fs\join("gen", "wasm"));
+
+    proc\exec("node", ["scripts/surface-stubs.mjs"], ".", {});
+    // Last: it hashes every file above into sw.js's precache stamp.
+    proc\exec("node", ["scripts/stamp-build.mjs"], ".", {});
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // The Reference drawer imports the search grammar from the shared libs/textsearch
-    // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
-    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
-    proc\exec("pnpm", ["run", "stylelint"], ".", {});
-    // A swallowed catch is how a failure becomes an empty page; see scripts/lint-catch.mjs.
+    proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".", {});
     proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
 }
 
@@ -245,27 +216,13 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // security audits the dependency tree against the npm advisory database.
-//
-// --prod, not the whole tree, and that is the whole design. An unscoped audit reports the
-// dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never
-// reaches a browser and cannot be fixed from here. A gate that fails on something you
-// cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds
-// happened. This fails only on what actually ships.
-//
-// It is NOT folded into lint: lint is cached on the tree, and this answer changes when the
-// advisory database does. Its own target keeps that honest (see skip_cache above).
-//
-// The cooling period in pnpm-workspace.yaml is the other half and the stronger one: this catches a
-// KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
-// days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     advisories\audit(inheritedFatal: advisories\inheritedFatal(args));
 }
 
-// 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the
-// build-plus-drift-gate, and the advisory audit, all first-class ci steps. ctx.needs hands a
-// dependency no args, so `--inherited=fatal` calls security in the body.
+// The anchor `magus affected ci` keys off. ctx.needs passes no args, so
+// `--inherited=fatal` calls security directly.
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     if (!advisories\inheritedFatal(args)) {

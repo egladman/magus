@@ -7,6 +7,9 @@
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
    page loads; console.css holds only what is unique to the app surfaces. */
 
+/* The shared sortable table (ui/table.ts). Bundled at build time, so it is inlined here. */
+@import "./table.css";
+
 :root {
   --console-gap: 0.6rem;
   --console-pad: clamp(0.6rem, 1.6vw, 1rem);
@@ -2158,27 +2161,27 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   box-shadow: 0 1px 0 var(--pf-t--global--border--color--default);
 }
 
-/* Actions surface (actions.ts, data-surface="actions"): a first-class tab listing EVERY registered
+/* Shortcuts app (apps/shortcuts/main.ts, data-surface="shortcuts"): a first-class tab listing EVERY registered
    command, grouped by area - the token, the prose label, and the chord when one is bound. Reuses the
    keyboard cheat sheet's group/kbd chrome (it is the same row shape, just in a tab instead of a
    modal); only the three-column row grid and the page frame are authored here. Frames the surface as
    a single scrolling column, same idiom as the Settings page: the pane host already supplies height
    and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
-#console-outlet [data-surface="actions"] {
+#console-outlet [data-surface="shortcuts"] {
   height: 100%; overflow-y: auto; display: flex; flex-direction: column;
   gap: 1.25rem; padding-block: 1.5rem 2.5rem; padding-inline: var(--console-pad);
 }
 /* The banner: a bordered callout leading the surface, replacing the old read-only lede now that a row
    both runs and (for a rebindable command) edits. The Edit-keybindings button sits at the trailing edge
    so the callout reads as "here's what this page does, and here's the one related control". */
-.console-actions__banner {
+.console-shortcuts__banner {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem;
   max-width: 54rem; padding: 0.65rem 0.9rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-actions__banner p { margin: 0; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
+.console-shortcuts__banner p { margin: 0; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
 .console-commands-group__list {
   display: grid; grid-template-columns: max-content 1fr max-content;
   gap: 0; margin: 0;

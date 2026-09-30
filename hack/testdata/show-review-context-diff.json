@@ -1,0 +1,91 @@
+{
+  "base": "main",
+  "files": [
+    {
+      "path": "internal/widget/widget.go",
+      "project": ".",
+      "role": "source",
+      "hint": "declared source: edits invalidate the owning project's cache keys and pull it into the affected set",
+      "symbols": [
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/",
+          "label": "widget",
+          "ref_count": 40,
+          "file_count": 12,
+          "public_file_count": 0,
+          "change": "body"
+        },
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/Widget#Render().",
+          "label": "Render",
+          "ref_count": 12,
+          "file_count": 5,
+          "public_to": ["docs"],
+          "public_file_count": 2,
+          "change": "body",
+          "qualified": "Widget.Render",
+          "signature": "func (w *Widget) Render() string",
+          "public_through": [
+            {
+              "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/Open().",
+              "qualified": "Open",
+              "via": ["load"],
+              "boundary": "package"
+            }
+          ]
+        },
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/Widget#size.",
+          "label": "size",
+          "ref_count": 3,
+          "file_count": 1,
+          "public_file_count": 0
+        },
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/NewWidget().",
+          "label": "NewWidget",
+          "ref_count": 0,
+          "file_count": 0,
+          "public_file_count": 0,
+          "public_beyond_workspace": true,
+          "change": "added",
+          "qualified": "NewWidget",
+          "signature": "func NewWidget(ctx context.Context) (*Widget, error) // MGS1022 outside a workspace"
+        },
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget`/parse_widget_name().",
+          "label": "parse_widget_name",
+          "ref_count": 3,
+          "file_count": 1,
+          "public_file_count": 0,
+          "change": "signature",
+          "qualified": "parse_widget_name",
+          "signature": "func parse_widget_name(s string, strict bool) string"
+        }
+      ],
+      "surface": "public",
+      "reach": 5
+    },
+    {
+      "path": "internal/widget/gen/widget.pb.go",
+      "project": ".",
+      "role": "output",
+      "symbols": [
+        {
+          "id": "symbol:gomod example.com/m `example.com/m/internal/widget/gen`/WidgetProto#",
+          "label": "WidgetProto",
+          "ref_count": 2,
+          "file_count": 1,
+          "public_file_count": 0,
+          "change": "added"
+        }
+      ],
+      "surface": "internal",
+      "reach": 1
+    }
+  ],
+  "seed_projects": ["."],
+  "notes": [
+    "no coverage data on changed files (run `magus run coverage` to populate it)"
+  ]
+}

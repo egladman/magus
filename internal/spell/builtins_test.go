@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -298,9 +299,7 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		defer s.Close()
 		// charm.buzz imports magus/spell for the Charm/PatchOp object types; register
 		// the same bundle the runtime does so the import resolves in this bare session.
-		s.SetModuleDecls(SpellModulePath, strings.Join([]string{
-			TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource,
-		}, "\n"))
+		s.SetModuleDecls(SpellModulePath, SpellModuleSource)
 		require.NoError(t, s.Exec(ctx, CharmModuleSource), "load charm.buzz")
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
 		return ffi.ValueToAny(s.GetGlobal("__r"))
@@ -529,4 +528,39 @@ func TestGoFuzzMatchesGoTestPolicy(t *testing.T) {
 	assert.Equal(t, test.EnvKeys, fuzz.EnvKeys, "the same platform env keys the cache key already carries")
 	assert.Equal(t, test.Hints, fuzz.Hints)
 	assert.Equal(t, test.Bin, fuzz.Bin)
+}
+
+// The records run on their own; a failure here means the generated declarations name a
+// type they do not declare, or are stale.
+func TestMagusDeclarationsRun(t *testing.T) {
+	records, err := magusRecords()
+	require.NoError(t, err, "regenerate with `magus run spells-generate`")
+	var names []string
+	for _, r := range records {
+		names = append(names, r.name)
+	}
+	assert.Subset(t, names, []string{"DirsOptions", "NeighborhoodOptions", "PathOptions", "CheckStatus", "TargetRun", "Run"})
+	assert.NotContains(t, names, "Context", "the target context is the host's to build")
+}
+
+// Every magus declaration names only types the declarations define, the hand-written
+// Context and Exec included, which run nowhere and so reach no other check.
+func TestMagusDeclSourceNamesDeclaredTypes(t *testing.T) {
+	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetNativeModule("magus", vm.NewMap())
+	DeclareMagusTypes(sess, nil)
+	require.NoError(t, sess.Exec(t.Context(), `import "magus";
+fun f(ctx: magus\Context, run: magus\Run) > magus\Exec { return ctx.withEnv({"k": run.trigger}); }`))
+}
+
+func TestDeclareMagusTypesDropsUnimplementedExterns(t *testing.T) {
+	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetNativeModule("magus", vm.NewMap())
+	DeclareMagusTypes(sess, func(member string) bool { return member != "affected" })
+	require.NoError(t, sess.Exec(t.Context(), `import "magus";
+fun kept(opts: magus\DirsOptions) > str { return opts.language; }`))
+	err := sess.Exec(t.Context(), `fun dropped() > any { return magus\affected(); }`)
+	assert.ErrorContains(t, err, `module magus has no member "affected"`)
 }

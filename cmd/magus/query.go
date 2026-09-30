@@ -829,6 +829,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{out.Node.ID})
 	}
 
+	fmt.Print(resolutionNote(pos[0], out))
 	fmt.Print(render.ExplainText(out))
 	printSessionContact(os.Stdout, root, out.Node)
 

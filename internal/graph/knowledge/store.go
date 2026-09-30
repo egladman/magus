@@ -307,6 +307,43 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	return nil
 }
 
+// SymbolIndexDigest identifies the @symbols shards MergeSymbolShards loads: a hex SHA-256
+// over each project's shard fingerprint in project path order, so it moves exactly when a
+// symbol-reading answer can. No store, or no symbol shard, is Indexed false with no error.
+// The caller reports gaps, since it knows the declarations.
+func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
+	out := types.SymbolIndexDigest{Projects: []string{}}
+	man := s.readManifestOrNil()
+	if man == nil {
+		return out, nil
+	}
+	fps := map[string]string{}
+	for name, meta := range man.Shards {
+		if !isSymbolsShard(name) {
+			continue
+		}
+		// A blank fingerprint would hash as a constant and pin the digest while the
+		// shard's content moved under it.
+		if meta.Fingerprint == "" {
+			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint; rebuild with `magus graph build`", name)
+		}
+		project := strings.TrimSuffix(name, symbolsShardSuffix)
+		out.Projects = append(out.Projects, project)
+		fps[project] = meta.Fingerprint
+	}
+	if len(out.Projects) == 0 {
+		return out, nil
+	}
+	slices.Sort(out.Projects)
+	h := sha256.New()
+	for _, p := range out.Projects {
+		fmt.Fprintf(h, "%s\x00%s\n", p, fps[p])
+	}
+	out.Digest = hex.EncodeToString(h.Sum(nil))
+	out.Indexed = true
+	return out, nil
+}
+
 // isLazyShard reports whether a shard is persisted but held out of the default graph,
 // loaded only when a query reaches for it. One predicate rather than a disjunction at
 // each site, for the reason isMachineLocalShard gives: the exclusion must be added in one place

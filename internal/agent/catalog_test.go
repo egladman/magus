@@ -786,6 +786,59 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 	assert.Contains(t, got.Detail, "cannot read it")
 }
 
+// TestGradeDestNamesALeftoverDirectoryAndItsFix: an unshipped directory with no
+// readable stamp is one install cannot prune, and the reinstall the other reasons
+// name would leave it there. It used to read "cannot read it ... re-run", a fix that
+// never cleared the finding. Now Detail carries the command that does.
+func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	dest := ".claude/skills"
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	require.NoError(t, err)
+
+	empty := filepath.Join(dir, dest, "magus-empty")
+	require.NoError(t, os.MkdirAll(empty, 0o755))
+	locked := filepath.Join(dir, dest, "magus-locked")
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	lockedSkill := filepath.Join(locked, "SKILL.md")
+	require.NoError(t, os.WriteFile(lockedSkill, []byte("mine\n"), 0o644))
+	require.NoError(t, os.Chmod(lockedSkill, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(lockedSkill, 0o644) })
+	_, readErr := os.ReadFile(lockedSkill)
+	require.Error(t, readErr)
+
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
+
+	assert.Equal(t, Status{
+		Location:  dest,
+		Installed: true,
+		Stale:     true,
+		Detail: "magus-empty: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir " + filepath.Join(dest, "magus-empty") +
+			"; magus-locked: cannot read its SKILL.md (" + readErr.Error() + "), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r " + filepath.Join(dest, "magus-locked"),
+		Leftovers:     []string{filepath.Join(dest, "magus-empty"), filepath.Join(dest, "magus-locked")},
+		OnlyLeftovers: true,
+	}, got)
+}
+
+// TestGradeDestLeftoverBesideARealFindingKeepsTheReinstall: a location that also has a
+// stale shipped skill is still fixed by a reinstall, so OnlyLeftovers stays false.
+func TestGradeDestLeftoverBesideARealFindingKeepsTheReinstall(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	dest := ".claude/skills"
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, dest, "magus-empty"), 0o755))
+	require.NoError(t, os.Remove(filepath.Join(dir, dest, "magus-run", "SKILL.md")))
+
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
+
+	assert.True(t, got.Stale)
+	assert.False(t, got.OnlyLeftovers)
+	assert.Equal(t, []string{filepath.Join(dest, "magus-empty")}, got.Leftovers)
+}
+
 // TestGradeDestReportsEveryReasonNotJustTheFirst pins the fix for gradeDest
 // returning on the first offender. An orphaned directory that sorts before
 // magus-query alphabetically used to short-circuit the loop and hide the

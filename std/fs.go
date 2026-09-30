@@ -210,7 +210,7 @@ var Fs = Module{
 			Doc:  "Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.",
 			Args: []Arg{
 				{Name: "paths", Type: TypeStringSlice},
-				{Name: "callback", Type: TypeFunc},
+				{Name: "callback", Type: TypeFunc, Func: "fun (paths: [str]) > bool !> any"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -221,7 +221,7 @@ var Fs = Module{
 			Doc:  "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.",
 			Args: []Arg{
 				{Name: "root", Type: TypeString},
-				{Name: "callback", Type: TypeFunc},
+				{Name: "callback", Type: TypeFunc, Func: "fun (path: str, isDir: bool) > bool !> any"},
 			},
 			Returns: nil,
 			Raises:  true,

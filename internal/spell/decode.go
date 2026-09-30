@@ -50,6 +50,19 @@ type obj interface {
 	CallStrs(key string, args ...string) ([]string, error)
 }
 
+// decodeScriptRunners reads mgs_listScriptRunners: argv prefixes, never run.
+func decodeScriptRunners(src obj) ([]spells.Command, error) {
+	var out []spells.Command
+	for i, o := range src.Objs("script_runners") {
+		cmd, err := decodeCommand("", "", o)
+		if err != nil {
+			return nil, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
+		}
+		out = append(out, cmd)
+	}
+	return out, spells.ValidateScriptRunners(out)
+}
+
 // decodeManifests reads the manifests field, which is a list of records rather than
 // the list of strings every other path-bearing field decodes to (see
 // contractEntry.Shape). Each record is a Manifest: the file dependencies are declared
@@ -223,6 +236,10 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
+	runners, err := decodeScriptRunners(src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	indexer, err := decodeSymbolIndexer(name, src)
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
@@ -235,6 +252,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 		Name:               name,
 		IgnoreDirs:         ignoreDirs,
 		Manifests:          manifests,
+		ScriptRunners:      runners,
 		Tools:              tools,
 		Language:           language,
 		LanguageExtensions: langExts,
@@ -420,6 +438,9 @@ func Decode(src obj) (spells.Descriptor, error) {
 			m.DocOps = docOps
 		}
 	}
+	if err := decodeModeArgs(&m, src); err != nil {
+		return spells.Descriptor{}, err
+	}
 	// An AUTHORED op under the reserved name is refused, whether or not the spell also
 	// declares an indexer. magus owns the name (it registers the declared indexer under
 	// it), so the op would collide; and before mgs_getSymbolIndexer existed, declaring
@@ -450,6 +471,38 @@ func Decode(src obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, err
 	}
 	return m, nil
+}
+
+// decodeModeArgs reads mgs_getModeArgs onto the ops it names. Each arg must be in the op's
+// own argv: the raw-tool guard denies only invocations carrying all of them, and one magus
+// never renders would leave the op's own spelling allowed.
+func decodeModeArgs(m *spells.Descriptor, src obj) error {
+	modes, ok := src.Obj("mode_args")
+	if !ok {
+		return nil
+	}
+	for _, key := range modes.Keys() {
+		args, err := modes.Strs(key)
+		if err != nil {
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %w", m.Name, key, err)
+		}
+		name := types.Normalize(key)
+		op, ok := m.Ops[name]
+		if !ok {
+			return fmt.Errorf("spell %q mgs_getModeArgs names op %q, which the spell does not declare", m.Name, key)
+		}
+		if len(args) == 0 {
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args; drop the entry", m.Name, key)
+		}
+		for _, a := range args {
+			if !slices.Contains(op.Args, a) {
+				return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %q is not in the op's args %q", m.Name, key, a, op.Args)
+			}
+		}
+		op.ModeArgs = args
+		m.Ops[name] = op
+	}
+	return nil
 }
 
 // validEnvName reports whether s is usable as an environment variable name:
@@ -511,6 +564,9 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
+	}
+	if msg, ok := o.Str("needsArgs"); ok {
+		c.NeedsArgs = msg
 	}
 	if e, ok := o.Str("external"); ok {
 		c.External = spells.External(e)

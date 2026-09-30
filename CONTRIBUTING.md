@@ -65,7 +65,7 @@ is the promise itself; this is how to work inside it.
 
 ### MCP is an adapter, not another Magus API
 
-The [MCP tool inventory and boundary](docs/guides/integrations/mcp.md#the-boundary-and-the-fallback)
+The [MCP tool inventory and boundary](https://github.com/egladman/magus/blob/main/docs/guides/integrations/mcp.md#the-boundary-and-the-fallback)
 lists the currently exposed tools and their CLI fallbacks. Before adding one,
 identify the existing domain operation it adapts and explain why an agent cannot
 use an existing MCP tool for the same job. Put the declaration on `std.Magus`;

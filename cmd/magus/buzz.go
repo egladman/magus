@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -445,13 +446,66 @@ func addProfileObserver(ctx context.Context, sess *buzz.Session) {
 	}
 }
 
-// buzzEntryImportsMagus reports whether code's own import statements name the
-// magus namespace, a magus/* module, or a spell. A comment that mentions the
-// same text takes the slow path.
-func buzzEntryImportsMagus(code string) bool {
-	return strings.Contains(code, `import "magus"`) ||
-		strings.Contains(code, `import "magus/`) ||
-		strings.Contains(code, `import "spells/`)
+var buzzImportPattern = regexp.MustCompile(`\bimport\s+(?:[\w\s,]+?\s+from\s+)?"([^"]+)"`)
+
+// buzzReachesMagus reports whether code, or any file or source module it imports
+// transitively, imports the magus namespace, a magus/* module or a spell. An import
+// found nowhere counts as not reaching magus. An import named in a comment also
+// matches, which only costs the eager load.
+func buzzReachesMagus(sess *buzz.Session, code string) bool {
+	sources := map[string]string{}
+	for _, m := range std.AllSource() {
+		sources[m.ImportPath()] = m.Source
+	}
+	seen := map[string]bool{}
+	var reaches func(code, dir string) bool
+	reaches = func(code, dir string) bool {
+		for _, m := range buzzImportPattern.FindAllStringSubmatch(code, -1) {
+			p := strings.TrimPrefix(m[1], "buzz:")
+			if p == "magus" || strings.HasPrefix(p, "magus/") || strings.HasPrefix(p, "spells/") {
+				return true
+			}
+			if _, native := sess.NativeModule(p); native {
+				continue
+			}
+			if src, ok := sources[p]; ok {
+				if !seen["source:"+p] {
+					seen["source:"+p] = true
+					if reaches(src, "") {
+						return true
+					}
+				}
+				continue
+			}
+			path := buzzFindImport(p, dir, sess.IncludeDirs())
+			if path == "" || seen[path] {
+				continue
+			}
+			seen[path] = true
+			data, err := os.ReadFile(path)
+			if err == nil && reaches(string(data), filepath.Dir(path)) {
+				return true
+			}
+		}
+		return false
+	}
+	return reaches(code, "")
+}
+
+// buzzFindImport resolves p the way the session does for a file import: beside the
+// importing file first, then each include dir.
+func buzzFindImport(p, dir string, includeDirs []string) string {
+	dirs := includeDirs
+	if dir != "" {
+		dirs = append([]string{dir}, includeDirs...)
+	}
+	for _, d := range dirs {
+		candidate := filepath.Join(d, p+".buzz")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // installBuzzHost registers the module surface a script can import.
@@ -464,10 +518,9 @@ func buzzEntryImportsMagus(code string) bool {
 // workspace open these hooks already skip is the ~700ms figure; this is the
 // part that was still on the tool-call path for nothing.
 //
-// A nested import of magus from a file the entry did not name still resolves.
-// The mirrors are parsed at that import, which is the order DeclareMagusTypes
-// exists to avoid when the entry itself imports magus: an entry that does is
-// parsed up front, so a later file's type of the same name still wins.
+// A script whose import closure reaches magus gets the mirrors up front, so a later
+// file's type of the same name still wins and an aliased import sees them. The
+// resolver below covers an import the closure scan could not follow.
 func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
 	stop := tr.phase("buzz.register_surface")
 	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))
@@ -475,10 +528,10 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 	stop = tr.phase("buzz.register_decls")
 	bindings.RegisterSpellDecls(sess)
 	stop()
-	if buzzEntryImportsMagus(code) {
+	if buzzReachesMagus(sess, code) {
 		stop = tr.phase("buzz.register_namespace")
-		bindings.DeclareMagusTypes(sess)
 		bindings.RegisterMagusNamespace(ctx, sess)
+		bindings.DeclareMagusTypes(sess)
 		stop()
 		return
 	}
@@ -490,8 +543,8 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 		}
 		once.Do(func() {
 			stop := tr.phase("buzz.register_namespace")
-			bindings.DeclareMagusTypes(sess)
 			bindings.RegisterMagusNamespace(ctx, sess)
+			bindings.DeclareMagusTypes(sess)
 			stop()
 		})
 		v, ok := sess.NativeModule("magus")

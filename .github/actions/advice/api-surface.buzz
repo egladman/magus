@@ -150,10 +150,10 @@ fun main() > void !> any {
         var across = mut [];
         var changes = mut [];
         foreach (sym in f.symbols) {
-            if (sym.moduleAPI) { exports.append(sym.label); }
-            foreach (p in sym.externalProjects) { across.append(p); }
+            if (sym.publicBeyondWorkspace) { exports.append(sym.label); }
+            foreach (p in sym.publicTo) { across.append(p); }
             if (sym.change != "" and sym.change != "body") {
-                if (!sym.moduleAPI and sym.externalProjects.len() == 0) { continue; }
+                if (!sym.publicBeyondWorkspace and sym.publicTo.len() == 0) { continue; }
                 changes.append(sym.change + " `" + sym.qualified + "`");
             }
         }

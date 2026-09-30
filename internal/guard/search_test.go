@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -20,8 +23,8 @@ import (
 // 0 times.
 func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true, "Judge": true, "Verdict": true}
-	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }}
-	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph}
 
 	for _, tt := range []struct {
 		command string
@@ -294,4 +297,119 @@ func TestSymbolSearchStaysSilentOutsideTheWorkspace(t *testing.T) {
 	v := Evaluate(deps, "grep -rn HandleRequest ~/.claude/projects")
 	assert.Empty(t, v.Deny)
 	assert.Empty(t, v.Context, "nor is it advised")
+}
+
+// staleGraphTree is a workspace whose index vouches for HandleRequest, for the rules that
+// deny in favor of a graph answer: a tree search, a diagnostic code, a declaration read
+// through a context flag, and a translated heading search.
+func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
+	t.Helper()
+	root = writeTree(t, map[string]string{
+		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n",
+		"docs/guide.md":           "# Guide\n\n## Setup\n",
+		"notes.txt":               "one\n",
+	})
+	return root, Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return name == "HandleRequest", true },
+		GraphIDs: graphOf(map[string][]string{
+			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
+			types.KindDiagnostic: {"diagnostic:MGS2011"},
+		}),
+		scope:   workspaceScope{root: root},
+		callDir: root,
+	}
+}
+
+var staleGraphCommands = []struct {
+	command string
+	rule    denyRuleName
+}{
+	{`grep -rn HandleRequest internal`, denyRuleSymbolSearch},
+	{`grep -rn MGS2011 .`, denyRuleSymbolSearch},
+	{`grep -n 'func HandleRequest' -A20 internal/api/handler.go`, denyRuleGrepReader},
+	{`grep -n '^#' docs/guide.md`, denyRuleSearchTranslation},
+}
+
+// A graph-backed deny with the tree mid-rebase would send the reader from a grep over the
+// real tree to an index describing another one, so each advises that the graph is stale
+// and names the rebuild for after the rebase instead.
+func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
+	root, deps := staleGraphTree(t)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_EDITOR=true")
+		out, err := cmd.CombinedOutput()
+		if args[0] != "rebase" {
+			require.NoError(t, err, "git %v: %s", args, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	for _, side := range []string{"topic", "main"} {
+		if side == "topic" {
+			git("checkout", "-q", "-b", "topic")
+		} else {
+			git("checkout", "-q", "main")
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(root, "notes.txt"), []byte(side+"\n"), 0o644))
+		git("commit", "-q", "-am", side)
+	}
+	git("checkout", "-q", "topic")
+	git("rebase", "main")
+
+	for _, tt := range staleGraphCommands {
+		v := Evaluate(deps, tt.command)
+		assert.Empty(t, v.Deny, tt.command)
+		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
+		assert.Contains(t, v.Brief, "the graph is stale, a rebase is in progress.", tt.command)
+		assert.Contains(t, v.Brief, "graph build` refreshes it once that is finished", tt.command)
+	}
+}
+
+// An index built at another revision than HEAD advises in place of every graph-backed
+// deny; one built at HEAD, named by its full id or an abbreviation, still denies.
+func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
+	root, deps := staleGraphTree(t)
+	cacheDir := t.TempDir()
+	const built = "0123456789abcdef0123"
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Revision: built}))
+	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
+
+	for _, head := range []string{built, "0123456"} {
+		deps.Revision = func(context.Context, string, string) string { return head }
+		for _, tt := range staleGraphCommands {
+			assert.Equal(t, tt.rule, Evaluate(deps, tt.command).Rule.Name, "%s at %s", tt.command, head)
+		}
+	}
+
+	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
+	for _, tt := range staleGraphCommands {
+		v := Evaluate(deps, tt.command)
+		assert.Empty(t, v.Deny, tt.command)
+		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
+		assert.Contains(t, v.Brief, "the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9.", tt.command)
+		assert.NotContains(t, v.Brief, "once that is finished", tt.command)
+	}
+}
+
+// A code search is denied for the codes the graph holds, not the ones this binary
+// registers: mid-rebase the index may describe a tree without the code, or one the binary
+// has never heard of.
+func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
+	const registered = "grep -rn MGS2011 docs/"
+	withCode := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS2011", "diagnostic:MGS9901"}})
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}, Evaluate(Dependencies{GraphIDs: withCode}, registered).Rule)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS9901"}, Evaluate(Dependencies{GraphIDs: withCode}, "grep -rn MGS9901 docs/").Rule)
+
+	doubted := func(ctx context.Context, kind string) ([]string, bool) {
+		ids, _ := withCode(ctx, kind)
+		return ids, false
+	}
+	without := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901"}})
+	for name, deps := range map[string]Dependencies{"no graph": {}, "a graph it doubts": {GraphIDs: doubted}, "another tree's": {GraphIDs: without}} {
+		assert.Empty(t, Evaluate(deps, registered).Deny, name)
+	}
 }

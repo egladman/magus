@@ -54,6 +54,7 @@ type Spell struct {
 	declarationFiles    []string
 	declarationDirGlobs []string
 	manifests           []Manifest
+	scriptRunners       []Command
 
 	invoke      func(ctx context.Context, req InvokeRequest) (any, error)
 	renderCmd   func(target string, charms []string) (cmd string, args []string, ok bool, err error)
@@ -210,6 +211,11 @@ func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
 // VersionProbe is the TOOLCHAIN's version (`go version`), which feeds cache keys,
 // not the project's own version.
 func (s *Spell) Manifests() []Manifest { return s.manifests }
+
+// ScriptRunners returns the argv prefixes that run a script this spell's manifests
+// define, as declared by mgs_listScriptRunners; nil when the spell declares none.
+// Match an argv against them with MatchScriptRunner.
+func (s *Spell) ScriptRunners() []Command { return s.scriptRunners }
 
 // TargetDoc returns the documentation comment of the named target's handler, or
 // "" when undocumented or unknown.
@@ -442,6 +448,12 @@ func WithDeclarationDirGlobs(globs ...string) Option {
 // WithSources, WithDeclarationFiles, and WithVersionProbe.
 func WithManifests(manifests ...Manifest) Option {
 	return func(s *Spell) { s.manifests = append(s.manifests, manifests...) }
+}
+
+// WithScriptRunners sets the argv prefixes that run a manifest-defined script. See
+// Spell.ScriptRunners.
+func WithScriptRunners(runners ...Command) Option {
+	return func(s *Spell) { s.scriptRunners = append(s.scriptRunners, runners...) }
 }
 
 // WithTargetSources attaches workspace-root globs for the cache key per target.

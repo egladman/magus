@@ -2,9 +2,17 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
@@ -219,6 +227,13 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			globs = append(globs, strings.TrimSpace(item.AsString()))
 		}
 		opts = append(opts, workspace.WithMergeLowRisk(globs...))
+	}
+	if lv, ok := v.MapGet("layers"); ok {
+		layers, err := parseLayers(lv)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, withLayers(layers))
 	}
 	// Only false declares anything: true is the default, and accepting it keeps a
 	// workspace that spells the default out from failing to load.
@@ -535,4 +550,88 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 	}
 	return opts, nil
+}
+
+// parseLayers decodes magus.project's "layers" map, directory or glob to layer name,
+// checking each entry's shape. An empty map is refused: it declares nothing while
+// reading as a layering.
+func parseLayers(v vm.Value) (map[string]string, error) {
+	if !v.IsMap() || len(v.MapKeys()) == 0 {
+		return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+			`magus.project: "layers" takes a map of workspace-relative directory or glob to layer name, e.g. {"internal/handler/**": "handler"}`)
+	}
+	keys := slices.Sorted(slices.Values(v.MapKeys()))
+	layers := make(map[string]string, len(keys))
+	for _, dir := range keys {
+		nv, _ := v.MapGet(dir)
+		if !nv.IsStr() {
+			return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+				`magus.project: "layers"[%q]: the layer name must be a string, got a %s`, dir, nv.Kind())
+		}
+		if err := types.CheckLayer(dir, nv.AsString()); err != nil {
+			return nil, err
+		}
+		layers[dir] = nv.AsString()
+	}
+	return layers, nil
+}
+
+// withLayers records layers on the project once each entry is known to name a directory
+// in the tree. It runs at apply time because only then does the project know where the
+// workspace root is.
+func withLayers(layers map[string]string) workspace.ProjectOption {
+	return func(p *types.Project) error {
+		root := p.Dir
+		if p.Path != "." {
+			for range strings.Split(p.Path, "/") {
+				root = filepath.Dir(root)
+			}
+		}
+		for _, dir := range slices.Sorted(maps.Keys(layers)) {
+			ok, err := layerCoversADir(root, dir)
+			if err != nil {
+				return types.WrapDiagnostic(types.LayerDeclarationInvalid, err,
+					`magus.project: "layers"[%q]: %v`, dir, err)
+			}
+			if !ok {
+				return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+					`magus.project: "layers"[%q]: no directory under the workspace root matches it; paths are workspace-relative, not project-relative`, dir)
+			}
+			if prev, dup := p.Layers[dir]; dup && prev != layers[dir] {
+				return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+					`magus.project: "layers"[%q]: declared as both %q and %q`, dir, prev, layers[dir])
+			}
+		}
+		if p.Layers == nil {
+			p.Layers = make(map[string]string, len(layers))
+		}
+		maps.Copy(p.Layers, layers)
+		return nil
+	}
+}
+
+var errLayerDirFound = errors.New("layer directory found")
+
+// layerCoversADir reports whether pattern names at least one directory under root.
+func layerCoversADir(root, pattern string) (bool, error) {
+	if types.IsLiteralGlob(pattern) {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(pattern)))
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return info.IsDir(), nil
+	}
+	err := doublestar.GlobWalk(os.DirFS(root), pattern, func(_ string, d fs.DirEntry) error {
+		if d.IsDir() {
+			return errLayerDirFound
+		}
+		return nil
+	})
+	if errors.Is(err, errLayerDirFound) {
+		return true, nil
+	}
+	return false, err
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // TestDispatchRejectsCycleWithMemo is the regression for the cyclic-magusfile
-// deadlock: with a TargetMemo active (as on every `magus run`), a target that
+// deadlock: with a TargetRuns active (as on every `magus run`), a target that
 // dispatches one of its own ancestors must error promptly rather than subscribe
 // to the ancestor's in-flight result and deadlock. The factory must never run —
 // the cycle is caught before any session is checked out.
@@ -26,7 +26,7 @@ func TestDispatchRejectsCycleWithMemo(t *testing.T) {
 	}, nil, 1)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 
 	done := make(chan error, 1)
 	go func() {
@@ -95,7 +95,7 @@ func TestDispatchKeepsSiblingAncestorsPrivate(t *testing.T) {
 
 	ancestors := make([]string, 3, 4)
 	copy(ancestors, []string{"ci", "lint", "vet"})
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 
 	done := make(chan error, 1)
 	go func() { done <- p.Dispatch(ctx, names, ancestors) }()
@@ -138,7 +138,7 @@ func TestMemoSubscribersShareOneRun(t *testing.T) {
 	}, nil, callers)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 	var start, finished sync.WaitGroup
 	start.Add(1)
 	errs := make([]error, callers)
@@ -190,7 +190,7 @@ func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
 	}, nil, 2)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 	err := p.Dispatch(ctx, []string{"boom", "peer"}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, wantErr)
@@ -207,13 +207,13 @@ func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
 	}
 }
 
-// TestTargetMemoWaiterUnblocksOnCtxCancel is the regression for waitFn having no
+// TestTargetRunsWaiterUnblocksOnCtxCancel is the regression for waitFn having no
 // ctx escape: before, it was a bare `<-e.done`, so cancelling a run could never
 // unblock a caller subscribed to a target that will now never complete (e.g. its
 // runner crashed or was itself cancelled without reaching Complete). waitFn must
 // return promptly on ctx cancellation instead of blocking forever.
-func TestTargetMemoWaiterUnblocksOnCtxCancel(t *testing.T) {
-	m := NewTargetMemo()
+func TestTargetRunsWaiterUnblocksOnCtxCancel(t *testing.T) {
+	m := NewTargetRuns()
 	isNew, _ := m.TryRun("", "slow")
 	require.True(t, isNew, "first TryRun for a name must be new")
 	// Deliberately never call m.Complete("slow", ...): the entry stays in-flight
@@ -241,7 +241,7 @@ func TestTargetMemoWaiterUnblocksOnCtxCancel(t *testing.T) {
 // static ancestor check cannot see: two in-flight SIBLINGS that depend on each
 // other. A dispatches [b, c]; b then needs c (ancestors [a, b], c not among
 // them — the ancestor check passes) and c needs b (ancestors [a, c], symmetric).
-// Before TargetMemo tracked the dynamic wait-for graph, both TryRun calls
+// Before TargetRuns tracked the dynamic wait-for graph, both TryRun calls
 // returned a waitFn subscribing to the other's still-running memoEntry, and
 // neither entry could ever complete — a permanent hang. Both dispatches must
 // now report a cycle within the bound instead.
@@ -267,7 +267,7 @@ func TestDispatchDetectsSiblingWaitCycle(t *testing.T) {
 	}, nil, 2)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 	done := make(chan error, 1)
 	go func() { done <- p.Dispatch(ctx, []string{"b", "c"}, []string{"a"}) }()
 
@@ -290,7 +290,7 @@ func TestDispatchCancelledContextRunsNothing(t *testing.T) {
 	}, nil, 2)
 	defer func() { _ = p.Close() }()
 
-	ctx, cancel := context.WithCancel(WithTargetMemo(context.Background(), NewTargetMemo()))
+	ctx, cancel := context.WithCancel(WithTargetRuns(context.Background(), NewTargetRuns()))
 	cancel()
 	err := p.Dispatch(ctx, []string{"a", "b"}, nil)
 	require.Error(t, err)
@@ -358,7 +358,7 @@ func TestDispatchNestedYieldsSlotAtCapacityOne(t *testing.T) {
 	}, func(context.Context) Semaphore { return sem }, 2)
 	defer func() { _ = p.Close() }()
 
-	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	ctx := WithTargetRuns(context.Background(), NewTargetRuns())
 	done := make(chan error, 1)
 	go func() { done <- p.Dispatch(ctx, []string{"parent"}, nil) }()
 	select {
@@ -397,9 +397,27 @@ func TestTargetBodyRunsUnderTheContextAcquireReturned(t *testing.T) {
 	}, func(context.Context) Semaphore { return sem }, 1)
 	defer func() { _ = p.Close() }()
 
-	ctx, cancel := context.WithTimeout(WithTargetMemo(t.Context(), NewTargetMemo()), 5*time.Second)
+	ctx, cancel := context.WithTimeout(WithTargetRuns(t.Context(), NewTargetRuns()), 5*time.Second)
 	defer cancel()
 	require.NoError(t, p.Dispatch(ctx, []string{"install"}, nil))
 	assert.Equal(t, int32(1), sem.yields.Load(), "the body yielded the slot the pool took for it")
 	assert.Empty(t, sem.slots, "every acquired slot was released")
+}
+
+// A name recorded as done, at construction or later, is not run again, and MarkDone never
+// overrides a run already under way.
+func TestTargetRunsMarkDoneSkipsANameAndKeepsARunningOne(t *testing.T) {
+	runs := NewTargetRuns("lint")
+	isNew, wait := runs.TryRun("", "lint")
+	assert.False(t, isNew)
+	require.NoError(t, wait(t.Context()))
+
+	isNew, _ = runs.TryRun("", "build")
+	require.True(t, isNew)
+	runs.MarkDone("build", "format")
+	runs.Complete("build", errors.New("failed"))
+	_, wait = runs.TryRun("", "build")
+	assert.Error(t, wait(t.Context()), "MarkDone left the running build its own outcome")
+	isNew, _ = runs.TryRun("", "format")
+	assert.False(t, isNew)
 }

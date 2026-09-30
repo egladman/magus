@@ -125,6 +125,10 @@ type Arg struct {
 	// closed-set parameter reads as `str`, and naming an algorithm magus does not
 	// implement is a runtime throw rather than something the checker catches.
 	Enum string
+	// Func is the Buzz function type a TypeFunc argument must match, such as
+	// `fun (path: str, isDir: bool) > bool !> any`. Empty declares `any`, which lets
+	// a callback of the wrong shape through the checker to fail at the call.
+	Func string
 }
 
 // Ret is one return value of a Method.

@@ -407,16 +407,8 @@ func revisionForGuard(ctx context.Context, dir, rev string) string {
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	if rev == "" {
-		// Metadata rather than FindCommit: it is the cheap call the brief already uses for
-		// exactly this field, and it answers the abbreviation the run log's version string
-		// carries.
-		meta, err := res.VCS.Metadata(ctx, root)
-		if err != nil {
-			return ""
-		}
-		return meta.Short
-	}
+	// Not Metadata: it runs a status among several processes and overruns the hook
+	// budget on Mercurial and Sapling.
 	c, err := res.VCS.FindCommit(ctx, root, rev)
 	if err != nil {
 		return ""

@@ -85,6 +85,39 @@ func TestAssembleOwnersEdgesAndNodes(t *testing.T) {
 	assert.Contains(t, e.Provenance, "CODEOWNERS:")
 }
 
+// A package directory takes its owner from the last rule matching its own path, so a
+// figure can zone a box by owner.
+func TestAssembleOwnersReachesPackageDirs(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "CODEOWNERS", "* @root\n/internal/handler/ @web\n/internal/handler/mcp/ \n")
+
+	projects := []types.TargetGraphProject{{Path: "."}}
+	dirs := packageDirs([]string{"magus.go", "internal/handler/h.go", "internal/handler/mcp/m.go", "internal/cache/c.go"}, projects, nil)
+	g := mergeAll([]Shard{dirs, assembleOwners(root, ownedDirs(dirs.Nodes))})
+	g.AddNode(types.KnowledgeNode{ID: "project:.", Kind: types.KindProject, Label: ".", Source: "."})
+
+	var owns []string
+	for _, e := range g.Edges() {
+		if e.Relation == types.RelationOwns {
+			owns = append(owns, e.Source+" -> "+e.Target)
+		}
+	}
+	assert.Equal(t, []string{
+		"owner:@root -> dir:.",
+		"owner:@root -> dir:internal",
+		"owner:@root -> dir:internal/cache",
+		"owner:@web -> dir:internal/handler",
+	}, owns, "an owner-less rule unsets ownership for mcp")
+	assert.Empty(t, g.UndeclaredEdges())
+}
+
+func TestOwnedDirsKeepsOnlyDirs(t *testing.T) {
+	assert.Equal(t, []ownedNode{{ID: "dir:a", Path: "a"}}, ownedDirs([]types.KnowledgeNode{
+		{ID: "dir:a", Kind: types.KindDir, Source: "a"},
+		{ID: "file:a/b.go", Kind: types.KindFile, Source: "a/b.go"},
+	}))
+}
+
 func TestAssembleOwnersNoFile(t *testing.T) {
 	root := t.TempDir()
 	s := assembleOwners(root, []ownedNode{{ID: "project:pkg/a", Path: "pkg/a"}})

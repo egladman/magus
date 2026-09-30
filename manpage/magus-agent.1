@@ -54,9 +54,6 @@ Overwrite existing installed skill files (agent install)
 \fB\-\-global\fR
 Allow absolute destination paths in write mode (agent install)
 .TP
-\fB\-\-prune\fR
-Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)
-.TP
 \fB\-\-skill\-form\fR \fIstring\fR (default: both)
 Skill form to install: both (default), short, or full (agent install)
 .TP
@@ -109,16 +106,10 @@ magus agent install .agents/skills
 magus agent install .agents/skills --force
 .EE
 .PP
-\fIRefresh, and drop skills this version no longer ships\fR
+\fISee what an install would write and remove first\fR
 .PP
 .EX
-magus agent install .agents/skills --force --prune
-.EE
-.PP
-\fISee what a prune would remove first\fR
-.PP
-.EX
-magus agent install .agents/skills --prune --dry-run
+magus agent install .agents/skills --force --dry-run
 .EE
 .PP
 \fIInstall anywhere via tar\fR

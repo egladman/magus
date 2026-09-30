@@ -369,7 +369,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
-	if env, isEnvelope := decodeHookEnvelope(input); isEnvelope {
+	env, isEnvelope := decodeHookEnvelope(input)
+	if isEnvelope {
 		// Attribution is resolved BEFORE the nothing-to-judge arm below returns: a skill
 		// load is a nothing-to-judge envelope that still has to be recorded against the
 		// session that made it, and a session read after the return is read too late.
@@ -444,13 +445,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	}
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
-	bound := boundJob(who, location)
-	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
+	binding := boundJob(who, location)
+	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
+	// A subagent's first call registers its checkout. A command line runs where the call
+	// does; a host's hook may run from the session's checkout, so an envelope counts only
+	// the call's reported directory, and without one `magus job exec` registers it.
+	hostPlaced := location.workspace != "" && (!isEnvelope || callDir != "" && within(callDir, location.workspace))
 	switch {
-	case bound == "" || actingLease != bound:
+	case binding.Job == "" || binding.Gone || actingLease != binding.Job || !hostPlaced:
 	case req.DryRun:
-		ctx = withRegisteredBase(ctx, deps, location, bound)
-	case registerAgentBase(ctx, deps, location, bound):
+		ctx = withRegisteredBase(ctx, deps, location, binding.Job)
+	case registerAgentBase(ctx, deps, location, binding.Job):
 		ctx = withJobStoreRows(ctx, location)
 	}
 	tool := hookToolCommand
@@ -464,7 +469,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
-	// nobody while looking exactly like a guarded one.
+	// nobody while looking exactly like a guarded one. A caller whose binding the job store
+	// tombstoned is refused too: read as unbound, it would be graded as the orchestrator.
 	//
 	// Applied INSIDE each arm rather than returned from here, so the documented order
 	// holds: the cache-dir rule and the workspace-wide denies are true whoever runs the
@@ -473,6 +479,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
 	standing := actingLeaseStanding(ctx, deps, actingLease)
+	if binding.Gone {
+		standing.endedBinding = binding.Job
+	}
 	denyUndeclared := func(command string) {
 		if req.Observe || verdict.Decision == "deny" {
 			return

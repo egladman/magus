@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -67,7 +68,7 @@ func (r ProjectRef) WorkspaceURI() string {
 
 // Display renders the project for human consumption: the bare path for
 // nested projects, the dir basename for the root (so a bare "." never
-// appears in logs or Mermaid labels), and "(workspace root)" as the final
+// appears in logs or graph labels), and "(workspace root)" as the final
 // fallback. This is the canonical rendering: the bare workspace-relative path
 // is also what every project arg takes, so what magus prints pastes back in.
 func (r ProjectRef) Display() string {
@@ -239,6 +240,10 @@ type Project struct {
 	// (generated, prose, comment-only); this is the opt-in for code. Empty, the
 	// default, opts nothing in.
 	MergeLowRisk []string
+	// Layers maps a WORKSPACE-relative directory or glob to the layer name declared for
+	// it, from magus.project's "layers" key. Every entry names at least one existing
+	// directory; the load refuses one that does not (LayerDeclarationInvalid).
+	Layers map[string]string
 	// GateInheritOff is magus.project's "gate_inherit" key declared false: this
 	// workspace's CI plan never inherits a green run's verdict, however the
 	// delta classifies. One declaration turns it off workspace-wide (the same
@@ -414,6 +419,55 @@ func (g Glob) Match(path string) bool {
 // Excludes reports whether an entry of Except claims path, whether or not Pattern does.
 func (g Glob) Excludes(path string) bool {
 	return slices.ContainsFunc(g.Except, func(e string) bool { return claims(e, path) })
+}
+
+// GlobsOverlap conservatively reports whether two doublestar patterns can match a common
+// path. False only when provable: a literal path one side rejects, diverging literal
+// prefixes, or incompatible literal filename suffixes. Everything else answers true, so a
+// caller ordering on it or keying on it errs toward more, never less.
+func GlobsOverlap(a, b string) bool {
+	aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b)
+	switch {
+	case !aMeta && !bMeta:
+		return a == b
+	case !aMeta:
+		ok, err := doublestar.Match(b, a)
+		return ok || err != nil
+	case !bMeta:
+		ok, err := doublestar.Match(a, b)
+		return ok || err != nil
+	}
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if IsGlobMeta(as[i]) || IsGlobMeta(bs[i]) {
+			break
+		}
+		if as[i] != bs[i] {
+			return false
+		}
+		// Both consumed a literal segment. The shorter side, exhausted, may name a
+		// directory the longer one descends into, which this cannot rule out.
+		if i == len(as)-1 || i == len(bs)-1 {
+			return true
+		}
+	}
+	if as[len(as)-1] == "**" || bs[len(bs)-1] == "**" {
+		return true
+	}
+	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
+	return strings.HasSuffix(sa, sb) || strings.HasSuffix(sb, sa)
+}
+
+// IsGlobMeta reports whether s holds a doublestar metacharacter.
+func IsGlobMeta(s string) bool { return strings.ContainsAny(s, "*?[{") }
+
+// literalSuffix returns the literal tail of one glob segment: everything after the last
+// metacharacter ("" when the segment ends in one).
+func literalSuffix(seg string) string {
+	if i := strings.LastIndexAny(seg, "*?[]{}"); i >= 0 {
+		return seg[i+1:]
+	}
+	return seg
 }
 
 // Root roots g, declared against projectPath, at the workspace (see [RootGlob]).
@@ -630,4 +684,67 @@ func (p *Project) AttachSpell(spell *spells.Spell) {
 		p.Sources = append(p.Sources, sources...)
 		p.Outputs = append(p.Outputs, outputs...)
 	}
+}
+
+// layerNameRe is the layer-name grammar: a lowercase slug, so `layer=<name>` in a query
+// and a Buzz string compare it without quoting or case folding.
+var layerNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// CheckLayer validates the shape of one magus.project "layers" entry: dir is a clean
+// workspace-relative directory or glob inside the workspace, and name matches the layer
+// grammar. It does not check that dir exists, so it needs no filesystem. Errors carry
+// LayerDeclarationInvalid.
+func CheckLayer(dir, name string) error {
+	fail := func(format string, args ...any) error {
+		return DiagnosticErrorf(LayerDeclarationInvalid, `magus.project: "layers"[%q]: `+format, append([]any{dir}, args...)...)
+	}
+	switch {
+	case strings.TrimSpace(dir) == "":
+		return DiagnosticErrorf(LayerDeclarationInvalid, `magus.project: "layers" has a blank directory; name one relative to the workspace root, e.g. "internal/handler"`)
+	case path.IsAbs(dir) || filepath.IsAbs(dir):
+		return fail("is absolute; name the directory relative to the workspace root")
+	case dir == ".." || strings.HasPrefix(dir, "../"):
+		return fail("escapes the workspace root")
+	case path.Clean(dir) != dir:
+		return fail("is not in clean form; write %q", path.Clean(dir))
+	case !doublestar.ValidatePattern(dir):
+		return fail("is not a valid glob")
+	case !layerNameRe.MatchString(name):
+		return fail("layer name %q must be a lowercase slug matching %s, e.g. \"handler\"", name, layerNameRe)
+	}
+	return nil
+}
+
+// LayerFor reports the layer layers declares for the workspace-relative directory dir.
+// An exact path names that one directory; a glob names every directory it matches
+// ("internal/handler/**" includes internal/handler itself). Where several entries match,
+// an exact path wins, then the longest pattern, then the lexically first, so every
+// reader of one declaration agrees.
+func LayerFor(layers map[string]string, dir string) (string, bool) {
+	best, found := "", false
+	for pattern := range layers {
+		exact := pattern == dir
+		if !exact {
+			if IsLiteralGlob(pattern) {
+				continue
+			}
+			if ok, _ := doublestar.Match(pattern, dir); !ok {
+				continue
+			}
+		}
+		if !found || layerPatternBeats(pattern, best, dir) {
+			best, found = pattern, true
+		}
+	}
+	return layers[best], found
+}
+
+func layerPatternBeats(a, b, dir string) bool {
+	if (a == dir) != (b == dir) {
+		return a == dir
+	}
+	if len(a) != len(b) {
+		return len(a) > len(b)
+	}
+	return a < b
 }

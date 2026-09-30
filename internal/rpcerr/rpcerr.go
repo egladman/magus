@@ -81,6 +81,13 @@ var titles = map[types.DiagnosticCode]string{
 	types.ShareRequestMalformed:     "malformed share request",
 	types.TokenRequestInvalid:       "invalid token request",
 	types.SocketPeerNotOwner:        "socket peer is not the server's user",
+	types.RequestInvalid:            "invalid request",
+	types.ResourceNotFound:          "resource not found",
+	types.StateConflict:             "request conflicts with current state",
+	types.WorkspaceNotWired:         "server has no workspace",
+	types.InternalFailure:           "internal failure",
+	types.StreamingUnsupported:      "streaming unsupported",
+	types.ReviewHostFailed:          "review host failed",
 }
 
 // Titles returns a copy of the Help link description for each reason that has one.
@@ -172,9 +179,6 @@ const (
 // such as the share endpoint answer an error before or instead of running a request, so the
 // no-store/no-sniff headers below apply to all of them rather than at each call site.
 // A 401 always carries the RFC 6750 challenge, which MCP clients key their auth flow on.
-//
-// TODO: route handlers under /api/ still answer their own validation and internal errors
-// with plain-text http.Error; each needs a reason code before it can come through here.
 func (f Format) Write(w http.ResponseWriter, r *http.Request, e Error) {
 	h := w.Header()
 	if e.Code == connect.CodeUnauthenticated {
@@ -351,6 +355,59 @@ func WorkspaceLoading(root string) Error {
 			&errdetails.RetryInfo{RetryDelay: durationpb.New(loadingRetry)},
 			&errdetails.ResourceInfo{ResourceType: workspaceResource, ResourceName: root, Description: "loading"},
 		},
+	}
+}
+
+// Invalid is a request a route cannot act on (RequestInvalid, 400). message reaches the
+// caller, so it names what to change and carries none of the server's paths.
+func Invalid(message string) Error {
+	return Error{Code: connect.CodeInvalidArgument, Reason: types.RequestInvalid, Message: message}
+}
+
+// NotFound is a request naming a thing the server holds no record of (ResourceNotFound, 404).
+func NotFound(message string) Error {
+	return Error{Code: connect.CodeNotFound, Reason: types.ResourceNotFound, Message: message}
+}
+
+// Conflict is a request that contradicts the state it addresses (StateConflict, 409). ABORTED
+// is the google.rpc code HTTP transcoding pairs with 409.
+func Conflict(message string) Error {
+	return Error{Code: connect.CodeAborted, Reason: types.StateConflict, Message: message}
+}
+
+// WorkspaceNotWired is what a route needing a workspace answers when the server was started
+// without one. UNAVAILABLE keeps the 503 clients already treat as "render an empty state".
+func WorkspaceNotWired() Error {
+	return Error{
+		Code:    connect.CodeUnavailable,
+		Reason:  types.WorkspaceNotWired,
+		Message: "this server was started without a workspace",
+	}
+}
+
+// Internal is the server failing on its own account (InternalFailure, 500). what names the
+// step that failed and never the cause, which can carry absolute paths.
+func Internal(what string) Error {
+	return Error{Code: connect.CodeInternal, Reason: types.InternalFailure, Message: what + " failed"}
+}
+
+// StreamingUnsupported is an event stream asked of a writer that cannot flush.
+func StreamingUnsupported() Error {
+	return Error{
+		Code:    connect.CodeInternal,
+		Reason:  types.StreamingUnsupported,
+		Message: "the response writer cannot stream; a proxy or middleware is buffering it",
+	}
+}
+
+// ReviewHostFailed is a publish or reply the review host did not take, answered 502 because
+// the fault is upstream of this server.
+func ReviewHostFailed(message string) Error {
+	return Error{
+		Code:       connect.CodeUnavailable,
+		Reason:     types.ReviewHostFailed,
+		Message:    message,
+		HTTPStatus: http.StatusBadGateway,
 	}
 }
 

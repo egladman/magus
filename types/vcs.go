@@ -155,6 +155,7 @@ type VCSDriver interface {
 	RemoteConfigReporter
 	DefaultRefReporter
 	CheckoutStateReporter
+	OperationReporter
 	PushStatusReporter
 	RevTimeReporter
 	TrackedFileReporter
@@ -410,6 +411,7 @@ const (
 	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
 	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
 	CapCheckoutStateReporter VCSCapability = "CheckoutStateReporter"
+	CapOperationReporter     VCSCapability = "OperationReporter"
 	CapPushStatusReporter    VCSCapability = "PushStatusReporter"
 	CapRevTimeReporter       VCSCapability = "RevTimeReporter"
 	CapTrackedFileReporter   VCSCapability = "TrackedFileReporter"
@@ -628,6 +630,25 @@ type CheckoutState struct {
 type CheckoutStateReporter interface {
 	// CheckoutState returns the state of the checkout containing dir.
 	CheckoutState(ctx context.Context, dir string) (CheckoutState, error)
+}
+
+// The history rewrites an OperationReporter names.
+const (
+	OperationRebase     = "rebase"
+	OperationMerge      = "merge"
+	OperationCherryPick = "cherry-pick"
+	OperationRevert     = "revert"
+)
+
+// OperationReporter is the capability to name the history rewrite a checkout is stopped
+// in, whether or not it stopped on a conflict. Anything derived from the tree then
+// describes a state the operation is about to move.
+type OperationReporter interface {
+	// OperationInProgress returns OperationRebase, OperationMerge, OperationCherryPick
+	// or OperationRevert for the checkout containing root, "" when none is underway.
+	// A backend whose operations are atomic answers "". It reads the checkout's own
+	// files wherever the backend allows, so a caller on a hook's budget may ask.
+	OperationInProgress(ctx context.Context, root string) (string, error)
 }
 
 // PushStatusReporter is the capability to report whether a commit has already left the

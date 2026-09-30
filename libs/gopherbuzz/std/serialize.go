@@ -3,12 +3,16 @@ package std
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 
 	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
+
+//go:embed serialize.buzz
+var serializeSource string
 
 // errCircularReference is returned by serializeSerialize, encodeJSON, and
 // buzzToGo when they revisit a list or map already on their current recursion

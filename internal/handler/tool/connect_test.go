@@ -77,6 +77,49 @@ func TestListToolsCarriesBothDeclarationsAndTheIntersection(t *testing.T) {
 	assert.Equal(t, toolv1.Verdict_VERDICT_TOO_NEW, row.Verdict)
 	assert.Equal(t, "MGS3006", row.DiagnosticCode)
 	assert.NotNil(t, row.ProbeTime, "a reading that happened carries its age")
+	assert.True(t, row.Violation)
+	assert.Equal(t, ">= 18", row.SpellWindow)
+	assert.Equal(t, ">= 22, < 25", row.WorkspaceWindow)
+	assert.Equal(t, ">= 22, < 25", row.EffectiveWindow)
+}
+
+// Below is the first version REJECTED, so it can never print as a maximum: "< 25" accepts
+// 24.19.0 and rejects 25.0.0.
+func TestVersionBoundsWindowNeverPrintsBelowAsAMaximum(t *testing.T) {
+	assert.Equal(t, ">= 22, < 25", spells.VersionBounds{Min: "22", Below: "25"}.Window())
+	assert.Equal(t, ">= 1.26", spells.VersionBounds{Min: "1.26"}.Window())
+	assert.Equal(t, "< 25", spells.VersionBounds{Below: "25"}.Window())
+	assert.Empty(t, spells.VersionBounds{}.Window())
+}
+
+// The server owns what counts as a violation and how a window reads, so the console shows
+// both as given. Only a verdict that raises a diagnostic is a violation; an unconstrained
+// window is empty, not a placeholder.
+func TestListToolsFlagsViolationsAndRendersWindows(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		supported spells.VersionBounds
+		ws        spells.VersionBounds
+		out       func() (string, error)
+		violation bool
+		effective string
+	}{
+		{"too old", spells.VersionBounds{Min: "22"}, spells.VersionBounds{}, func() (string, error) { return "v20.1.0", nil }, true, ">= 22"},
+		{"too new", spells.VersionBounds{}, spells.VersionBounds{Below: "25"}, func() (string, error) { return "v25.0.0", nil }, true, "< 25"},
+		{"inside", spells.VersionBounds{Min: "18"}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, false, ">= 18"},
+		{"unconstrained", spells.VersionBounds{}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, false, ""},
+		{"absent", spells.VersionBounds{Min: "22"}, spells.VersionBounds{}, func() (string, error) { return "", errors.New("exec: node: not found") }, false, ">= 22"},
+		{"unreadable bound", spells.VersionBounds{Min: "latest"}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, false, ">= latest"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			p := probedProject("console", "typescript", "node", tc.supported, tc.ws, tc.out, &calls)
+			row := list(t, NewService(fakeWS{projects: []*types.Project{p}}), "").Projects[0].Tools[0]
+			assert.Equal(t, tc.violation, row.Violation)
+			assert.Equal(t, tc.violation, row.DiagnosticCode != "", "the flag and the diagnostic code are one rule")
+			assert.Equal(t, tc.effective, row.EffectiveWindow)
+		})
+	}
 }
 
 // A second request inside the TTL must not fork again. This is the only reason the

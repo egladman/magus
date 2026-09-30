@@ -5,10 +5,10 @@
 // somewhere you did not ask to go. It also links back to the documentation site. Mirrors the settings
 // gear's popover wiring (open/close, aria-expanded, click-outside, Escape, focus return) so the two
 // title-bar popovers behave identically. No-ops without the markup.
-import { dispatchCommand } from "../console/commands";
+import { dispatchCommand } from "../desktop/commands";
 
 export interface AppMenuItem {
-  pageId: string;
+  id: string;
   label: string;
 }
 
@@ -27,7 +27,7 @@ export function initAppMenu(items: readonly AppMenuItem[]): void {
       open.className = "pf-v6-c-menu__item";
       open.type = "button";
       open.setAttribute("role", "menuitem");
-      open.dataset.appOpen = item.pageId;
+      open.dataset.appOpen = item.id;
       const main = document.createElement("span");
       main.className = "pf-v6-c-menu__item-main";
       const text = document.createElement("span");

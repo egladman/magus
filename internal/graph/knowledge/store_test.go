@@ -3,6 +3,8 @@ package knowledge
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -509,6 +511,66 @@ func TestProjectPaths(t *testing.T) {
 			assert.Equal(t, tc.want, ProjectPaths(cacheDir))
 		})
 	}
+}
+
+func TestStoreSymbolIndexDigest(t *testing.T) {
+	digest := func(t *testing.T, cacheDir string) types.SymbolIndexDigest {
+		t.Helper()
+		d, err := NewStore(cacheDir, false, 0, nil, nil).SymbolIndexDigest()
+		require.NoError(t, err)
+		return d
+	}
+	symbol := func(label string) []types.KnowledgeSymbol {
+		return []types.KnowledgeSymbol{{Key: "example.com/a Foo#", Label: label, Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"}}}
+	}
+
+	t.Run("no store is not indexed", func(t *testing.T) {
+		assert.Equal(t, types.SymbolIndexDigest{Projects: []string{}}, digest(t, filepath.Join(t.TempDir(), "absent")))
+	})
+
+	t.Run("a store without symbol shards is not indexed", func(t *testing.T) {
+		cacheDir, in := buildFixture(t)
+		build(t, cacheDir, BuildOptions{}, in)
+		assert.Equal(t, types.SymbolIndexDigest{Projects: []string{}}, digest(t, cacheDir))
+	})
+
+	t.Run("hashes each symbol shard's fingerprint in project order", func(t *testing.T) {
+		cacheDir, in := buildFixture(t)
+		in.Symbols = map[string][]types.KnowledgeSymbol{"pkg/b": symbol("Bar"), "pkg/a": symbol("Foo")}
+		build(t, cacheDir, BuildOptions{}, in)
+		man := readManifest(t, cacheDir)
+		h := sha256.New()
+		fmt.Fprintf(h, "pkg/a\x00%s\npkg/b\x00%s\n", man.Shards["pkg/a@symbols"].Fingerprint, man.Shards["pkg/b@symbols"].Fingerprint)
+		assert.Equal(t, types.SymbolIndexDigest{
+			Digest:   hex.EncodeToString(h.Sum(nil)),
+			Indexed:  true,
+			Projects: []string{"pkg/a", "pkg/b"},
+		}, digest(t, cacheDir))
+	})
+
+	t.Run("moves with symbol content and only with it", func(t *testing.T) {
+		cacheDir, in := buildFixture(t)
+		in.Symbols = map[string][]types.KnowledgeSymbol{"pkg/a": symbol("Foo")}
+		build(t, cacheDir, BuildOptions{}, in)
+		first := digest(t, cacheDir)
+		require.True(t, first.Indexed)
+
+		in.Graph.Projects[0].Nodes = append(in.Graph.Projects[0].Nodes, types.TargetGraphNode{Name: "lint"})
+		build(t, cacheDir, BuildOptions{}, in)
+		assert.Equal(t, first, digest(t, cacheDir), "a domain shard change leaves the digest alone")
+
+		in.Symbols["pkg/a"] = symbol("Renamed")
+		build(t, cacheDir, BuildOptions{}, in)
+		assert.NotEqual(t, first.Digest, digest(t, cacheDir).Digest, "a symbol shard change moves the digest")
+	})
+
+	t.Run("a blank fingerprint refuses", func(t *testing.T) {
+		cacheDir := writeManifestBytes(t, marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+			"pkg/a@symbols": {},
+		}}))
+		_, err := NewStore(cacheDir, false, 0, nil, nil).SymbolIndexDigest()
+		require.ErrorContains(t, err, `symbol shard "pkg/a@symbols" has no fingerprint`)
+	})
 }
 
 // BenchmarkStoreSync measures the write side: fingerprint, compare, and persist the

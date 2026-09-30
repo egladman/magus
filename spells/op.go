@@ -74,8 +74,14 @@ type Command struct {
 	// so the trailing package pattern can only be safe on the no-args invocation.
 	// DefaultArgs cannot express this (it always applies over forwarding), and a
 	// fixed Args entry cannot either (forwarded args land after Args too).
-	TrailingArgs []string         `json:"trailing_args,omitempty"`
-	Charms       map[string]Charm `json:"charms,omitempty"`
+	TrailingArgs []string `json:"trailing_args,omitempty"`
+	// NeedsArgs, when non-empty, marks a command that is meaningless without caller
+	// args and holds the error naming the fix. The runner refuses to run it, before
+	// anything spawns, when the invocation passes none: absent, an empty list, and
+	// an empty `magus run <t> -- <extra>` all count as none. Args and DefaultArgs do
+	// not satisfy it, since the point is the operand only the caller knows.
+	NeedsArgs string           `json:"needs_args,omitempty"`
+	Charms    map[string]Charm `json:"charms,omitempty"`
 	// Sources, when non-empty, are doublestar globs (relative to the project
 	// directory this command runs in) that the RUNNER expands into a file list
 	// at EXECUTION time, via the same walk that builds the cache key
@@ -301,6 +307,10 @@ type Op struct {
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.
 	Install *InstallSpec `json:"install,omitempty"`
+	// ModeArgs are the args, from the spell's mgs_getModeArgs, that tell this op apart
+	// from the other uses of a program with no subcommand: node runs scripts and evals
+	// too, and only --test is node-test. Nil means every use of the program is this op.
+	ModeArgs []string `json:"mode_args,omitempty"`
 	// Doc is the handler function's documentation comment (see buzz Chunk.Doc),
 	// surfaced by `magus describe` and enforced by `magus doctor` for local Buzz
 	// spells. Empty for command built-ins (their Doc is not serialized in bytecode).

@@ -112,32 +112,35 @@ func TestRuleLookupIsExact(t *testing.T) {
 	}
 }
 
-// denyRuleNamesFromSource reads the denyRuleName constant values out of shell.go.
+// denyRuleNamesFromSource reads the denyRuleName constant values out of shell.go and
+// lease.go, where the lease-scoped rules declare theirs. advisory.go is left out: its
+// denyRuleName values are advisories, which advisoryNames covers.
 func denyRuleNamesFromSource(t *testing.T) []string {
 	t.Helper()
-	f, err := parser.ParseFile(token.NewFileSet(), "shell.go", nil, 0)
-	require.NoError(t, err, "parse shell.go")
-
 	var names []string
-	ast.Inspect(f, func(n ast.Node) bool {
-		spec, ok := n.(*ast.ValueSpec)
-		if !ok {
-			return true
-		}
-		ident, ok := spec.Type.(*ast.Ident)
-		if !ok || ident.Name != "denyRuleName" {
-			return true
-		}
-		for _, v := range spec.Values {
-			lit, ok := v.(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				continue
+	for _, src := range []string{"shell.go", "lease.go"} {
+		f, err := parser.ParseFile(token.NewFileSet(), src, nil, 0)
+		require.NoError(t, err, "parse %s", src)
+		ast.Inspect(f, func(n ast.Node) bool {
+			spec, ok := n.(*ast.ValueSpec)
+			if !ok {
+				return true
 			}
-			value, err := strconv.Unquote(lit.Value)
-			require.NoError(t, err)
-			names = append(names, value)
-		}
-		return true
-	})
+			ident, ok := spec.Type.(*ast.Ident)
+			if !ok || ident.Name != "denyRuleName" {
+				return true
+			}
+			for _, v := range spec.Values {
+				lit, ok := v.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				value, err := strconv.Unquote(lit.Value)
+				require.NoError(t, err)
+				names = append(names, value)
+			}
+			return true
+		})
+	}
 	return names
 }

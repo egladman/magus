@@ -386,6 +386,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkCacheableExternalOps,
 	},
 	{
+		Name:           "manifest-scripts",
+		Doc:            "a target running a script a manifest defines, whose steps, inputs and outputs the cache key cannot see",
+		Code:           types.ManifestScriptDelegation,
+		Evidence:       types.EvidenceInferred,
+		NeedsWorkspace: true,
+		run:            (*runner).checkManifestScripts,
+	},
+	{
 		Name:           "observation-keyed-as-version",
 		Doc:            "a tool whose observation probe is also its version probe, so the feed keys every target",
 		Code:           types.ObservationKeyedAsVersion,

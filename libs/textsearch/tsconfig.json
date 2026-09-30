@@ -1,5 +1,5 @@
 {
-  "//": "Type-check gate for the shared browser client library (src/**/*.ts). Same shape as the console/docs TS gates: esbuild does the actual compilation in each consumer, this only drives `pnpm run typecheck` (tsc --noEmit). Tests are excluded so the gate needs no @types/node (the *.test.ts imports node:test, exercised by `pnpm run test`).",
+  "//": "Type-check gate for the shared browser client library (src/**/*.ts). Same shape as the console/docs TS gates: esbuild does the actual compilation in each consumer, this only drives the tsc run in `magus run lint libs/textsearch`. Tests are excluded so the gate needs no @types/node (the *.test.ts imports node:test, exercised by `magus run test libs/textsearch`).",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

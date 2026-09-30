@@ -1,54 +1,41 @@
-// site/diagrams/ci-providers.buzz - how magus annotates a CI log without knowing which CI it is
+// site/diagrams/ci-providers.buzz: how magus annotates a CI log without knowing which CI it is
 // running under. The two zones carry the whole argument: everything vendor-specific lives
 // in a Buzz spell, and the binary side names no CI system anywhere.
+//
+// The provider ops and the prefixes they declare are Buzz, so they are actors; neither Go
+// box imports the other, and the run reaches the contract through a spell call.
 namespace ciProviders;
 
-import "../libs/diagram/diagram" as _;
+import "magus";
+import "magus/figure";
 
-export fun ciProvidersDiagram() > Diagram {
-    return Diagram{
-        id = "ci-providers",
-        eyebrow = "ci providers",
-        title = "Vendor syntax lives in the spell, never in the binary",
-        desc = "A failing project reaches the annotator contract, which speaks generic "
-            + "verbs to a provider spell; the spell translates them into the CI system's "
-            + "own syntax. Quote prefixes are declared once and applied per line in Go.",
-        width = 960,
-        height = 520,
-        zones = [
-            Zone{ label = "magus binary, names no ci system", x = 32, y = 88, w = 280, h = 320 },
-            Zone{ label = "provider spell, in buzz", x = 376, y = 88, w = 280, h = 320 },
-        ],
-        nodes = [
-            Node{ id = "run", label = "run and cache", sub = "a project failed",
-                  x = 56, y = 128, w = 232, h = 64 },
-            Node{ id = "contract", anchor = "internal/ci", label = "Annotator contract", sub = "internal/ci/annotate",
-                  x = 56, y = 224, w = 232, h = 64 },
-            Node{ id = "quote", anchor = "internal/ci", label = "QuoteWith", sub = "per line, in Go",
-                  x = 56, y = 320, w = 232, h = 64 },
-
-            Node{ id = "ops", label = "Provider ops", sub = "group start, end, annotate",
-                  x = 400, y = 128, w = 232, h = 64 },
-            Node{ id = "prefixes", label = "quote_prefixes", sub = "declared once",
-                  x = 400, y = 320, w = 232, h = 64 },
-
-            Node{ id = "vendor", label = "CI system", sub = "job log, pull request",
-                  role = "external", x = 720, y = 224, w = 200, h = 64 },
-        ],
-        // The replayed-output run leaves from the bottom and travels under both zones. Sent
-        // straight across it would pass behind the spell zone's nodes, which the design
-        // system only permits when rerouting is geometrically impossible.
-        edges = [
-            Edge{ src = "run", dst = "contract" },
-            Edge{ src = "contract", dst = "ops", label = "generic verbs", bend = 344 },
-            Edge{ src = "ops", dst = "vendor", label = "vendor syntax", bend = 676 },
-            Edge{ src = "prefixes", dst = "quote", label = "read once", dashed = true,
-                  dstSlot = 1, dstSlots = 2 },
-            Edge{ src = "quote", dst = "vendor", label = "de-fanged",
-                  srcSide = "bottom", dstSide = "bottom", bend = 440 },
-        ],
-        legend = [
-            LegendItem{ role = "external", label = "outside magus" },
-        ],
-    };
+export fun ciProvidersFigure() > figure\Figure !> any {
+    final contract = magus\dir("internal/ci/annotate");
+    final quote = magus\dir("internal/ci");
+    final run = figure\external("run and cache", sub: "a project failed", look: figure\Look.plain);
+    final ops = figure\external("Provider ops", sub: "group start, end, annotate", look: figure\Look.plain);
+    final prefixes = figure\external("quote_prefixes", sub: "declared once", look: figure\Look.plain);
+    final vendor = figure\external("CI system", sub: "job log, pull request");
+    return figure\of("ci-providers",
+            title: "Vendor syntax lives in the spell, never in the binary",
+            eyebrow: "ci providers",
+            desc: "A failing project reaches the annotator contract, which speaks generic "
+                + "verbs to a provider spell; the spell translates them into the CI system's "
+                + "own syntax. Quote prefixes are declared once and applied per line in Go.")
+        .actor(run)
+        .box(contract, label: "Annotator contract", sub: "internal/ci/annotate")
+        .box(quote, label: "QuoteWith", sub: "per line, in Go")
+        .actor(ops)
+        .actor(prefixes)
+        .actor(vendor)
+        .edgesFromGraph()
+        .flowIn(run, dst: contract)
+        .flowOut(contract, dst: ops, label: "generic verbs")
+        .flowAcross(ops, dst: vendor, label: "vendor syntax")
+        .flowIn(prefixes, dst: quote, label: "read once", stroke: figure\Stroke.optional)
+        .flowOut(quote, dst: vendor, label: "de-fanged")
+        .zone("magus binary, names no ci system", dirs: figure\setOf([contract, quote]), actors: [run])
+        .zone("provider spell, in buzz", actors: [ops, prefixes])
+        .legend(figure\Look.external, label: "outside magus")
+        .scope(figure\setOf([contract, quote]));
 }

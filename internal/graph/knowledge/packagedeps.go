@@ -24,6 +24,39 @@ type packageGraph map[string]map[string]bool
 // can move.
 func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
 
+// ImportGraph maps each workspace package directory ("." for the root) to the package
+// directories it imports, sorted. Languages comes from each dir node, falling back to its
+// import edges. With no SCIP index ingested, Packages is empty (never nil) and Indexed false.
+func (g *Graph) ImportGraph() types.ImportGraph {
+	out := types.ImportGraph{Indexed: g.HasSymbols(), Packages: map[string][]string{}, Languages: map[string]string{}}
+	fallback := map[string]string{}
+	for _, e := range g.edges {
+		from, okFrom := strings.CutPrefix(e.Source, types.KindDir+":")
+		to, okTo := strings.CutPrefix(e.Target, types.KindDir+":")
+		if e.Relation != types.RelationImports || !okFrom || !okTo {
+			continue
+		}
+		out.Packages[from] = append(out.Packages[from], to)
+		if l := e.Attrs[types.AttrLanguage]; l != "" && (fallback[from] == "" || l < fallback[from]) {
+			fallback[from] = l
+		}
+		for _, d := range []string{from, to} {
+			if l := g.nodes[dirID(d)].Attrs[types.AttrLanguage]; l != "" {
+				out.Languages[d] = l
+			}
+		}
+	}
+	for d, l := range fallback {
+		if _, ok := out.Languages[d]; !ok {
+			out.Languages[d] = l
+		}
+	}
+	for _, tos := range out.Packages {
+		slices.Sort(tos)
+	}
+	return out
+}
+
 // packageDepsExcept is packageDeps without the imports and calls made from the files skip
 // reports, given a workspace-relative path. A nil skip leaves none out.
 func (g *Graph) packageDepsExcept(skip func(file string) bool) packageGraph {

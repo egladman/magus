@@ -23,13 +23,16 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	attentionhandler "github.com/egladman/magus/internal/handler/attention"
+	diagramhandler "github.com/egladman/magus/internal/handler/diagram"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
@@ -346,6 +349,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			// and /api/v1/attention disposes a block a person owns, so neither is shared either.
 			f.api("/api/v1/events", eventsH)
 			f.api("/api/v1/graph", graphhandler.NewGraphHandler(svc, log))
+			diagramsH := diagramhandler.NewHandler(diagramWorkspace{opts.Magus}, log)
+			f.api(diagramhandler.Path, diagramsH)
+			f.api(diagramhandler.Path+"/", diagramsH)
 			f.api("/api/v1/insight", insightH)
 			f.api("/api/v1/diff/patch", patchH)
 			f.api("/api/v1/diff/context", contextH)
@@ -831,4 +837,24 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	log.WarnContext(ctx, "[BRIDGE] workspace not loaded; serving status and the console only",
 		slog.String("root", u.Root), slog.String("error", u.Err().Message))
 	return s.run(ctx, log, f)
+}
+
+// diagramWorkspace is the workspace plus the import graph the diagrams read.
+type diagramWorkspace struct{ *magus.Magus }
+
+// SymbolIndex reads the manifest's shard fingerprints instead of merging the shards into a
+// graph. The graph is built first so the manifest on disk is current.
+func (w diagramWorkspace) SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error) {
+	if _, err := w.KnowledgeGraph(ctx, false); err != nil {
+		return types.SymbolIndexDigest{}, err
+	}
+	return knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
+}
+
+func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, error) {
+	kg, err := w.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.ImportGraph{}, err
+	}
+	return kg.ImportGraph(), nil
 }

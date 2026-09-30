@@ -30,6 +30,8 @@ type Inputs struct {
 	Spells      []types.Spell           // ListSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
 	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
+	// Layers is every project's magus.project "layers", joined by unionLayers; Build fills it.
+	Layers map[string]string
 	// Root is the absolute workspace root, used by the docs and buzz-source
 	// extractors to scan the filesystem. Empty disables those extractors (the
 	// store tests build from synthetic Inputs with no tree to scan).
@@ -113,6 +115,10 @@ type Shard struct {
 	// content: fingerprintShardContent never reads it, so it cannot make an unchanged
 	// shard look dirty. Sync logs it; only @session sets it today.
 	Dropped int
+
+	// Err is a declaration the assembler refuses to index, such as an unknown marker
+	// family. Build fails on it; like Dropped it is never fingerprinted.
+	Err error
 }
 
 // AssembleShards builds every shard from the gathered inputs: the registry shard
@@ -185,6 +191,21 @@ func AssembleShards(in Inputs) []Shard {
 		if l := assembleLinks(in.Root, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
 			shards = append(shards, l)
 		}
+		// Markers resolve a figure id against the doc shard's pages and sections, so they
+		// run once those are known.
+		var docPages []string
+		for _, n := range docNodes {
+			if n.Kind == types.KindDoc {
+				docPages = append(docPages, n.Source)
+			}
+		}
+		if m := assembleMarkers(in.Root, in.Graph.Projects, docPages, newDocIndex(docNodes)); len(m.Nodes) > 0 || m.Err != nil {
+			shards = append(shards, m)
+		}
+		if pd := assemblePackageDirs(in.Root, in.Graph.Projects, in.Layers); len(pd.Nodes) > 0 {
+			owned = append(owned, ownedDirs(pd.Nodes)...)
+			shards = append(shards, pd)
+		}
 		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
 			shards = append(shards, o)
 		}
@@ -220,16 +241,14 @@ func AssembleShards(in Inputs) []Shard {
 	}
 	// One @symbols shard per project that declared an index, in sorted project order
 	// so the shard slice is deterministic despite the map input.
-	for _, project := range slices.Sorted(maps.Keys(in.Symbols)) {
-		if s := assembleSymbols(project, in.Symbols[project], in.Graph.Projects); len(s.Nodes) > 0 {
-			for _, n := range s.Nodes {
-				if n.Kind == types.KindFile {
-					pathToNode[n.Source] = n.ID
-					symbolPaths[n.Source] = true
-				}
+	for _, s := range assembleSymbolShards(in.Symbols, in.Graph.Projects) {
+		for _, n := range s.Nodes {
+			if n.Kind == types.KindFile {
+				pathToNode[n.Source] = n.ID
+				symbolPaths[n.Source] = true
 			}
-			shards = append(shards, s)
 		}
+		shards = append(shards, s)
 	}
 	// The build I/O layer: produces/consumes edges from each target's declared outputs and
 	// inputs to the file and doc nodes they match. Runs after the path-bearing shards so

@@ -14,8 +14,10 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/std"
 )
 
@@ -61,8 +64,12 @@ func runModuleDecls(args []string) error {
 		// how KnowledgeGodNode shipped an unparsable `in:` field: nothing parsed it.
 		// Codegen is the right place to fail, for the same reason checkObjectDecls fails
 		// here rather than at load.
-		if _, err := buzz.Parse(b.String()); err != nil {
+		prog, err := buzz.Parse(b.String())
+		if err != nil {
 			return fmt.Errorf("generated declarations for %s do not parse: %w", mod.Name, err)
+		}
+		if missing := undeclaredTypeNames(prog); len(missing) > 0 {
+			return fmt.Errorf("generated declarations for %s name undeclared types: %s", mod.Name, strings.Join(missing, ", "))
 		}
 		if err := emit.File(filepath.Join(*outDir, mod.Name+".buzz"), b.Bytes()); err != nil {
 			return fmt.Errorf("write %s: %w", mod.Name, err)
@@ -75,32 +82,12 @@ func runModuleDecls(args []string) error {
 // returns reference (leaf-first, since a field referencing an object needs that
 // object declared already), then an extern per method.
 func renderModuleDecls(mod std.Module) (string, error) {
+	records, err := renderRecordDecls(mod)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
-	// Enums first: an object mirror may use one as a field type, and Buzz needs the
-	// declaration before the use.
-	enums, err := collectEnums(mod)
-	if err != nil {
-		return "", err
-	}
-	for _, e := range enums {
-		b.Write(renderBuzzEnumDecl(e))
-		b.WriteByte('\n')
-	}
-
-	mirrors, err := collectMirrors(mod)
-	if err != nil {
-		return "", err
-	}
-	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
-		out, err := renderBuzzMirrorDecl(name, entry.Type)
-		if err != nil {
-			return "", err
-		}
-		b.Write(out)
-		b.WriteByte('\n')
-	}
-
+	b.WriteString(records)
 	for _, m := range sortedMethods(mod) {
 		decl, err := externDecl(m)
 		if err != nil {
@@ -134,6 +121,36 @@ func renderModuleDecls(mod std.Module) (string, error) {
 			}
 		}
 		b.WriteString("}\n\n")
+	}
+	return b.String(), nil
+}
+
+// renderRecordDecls renders the enums and object mirrors of one module's declarations,
+// the part a session executes so a script can construct them.
+func renderRecordDecls(mod std.Module) (string, error) {
+	var b strings.Builder
+	mirrors, err := collectMirrors(mod)
+	if err != nil {
+		return "", err
+	}
+	// Enums first: an object mirror may use one as a field type, and Buzz needs the
+	// declaration before the use.
+	enums, err := collectEnums(mod, mirrors)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range enums {
+		b.Write(renderBuzzEnumDecl(e))
+		b.WriteByte('\n')
+	}
+	for _, name := range mirrors {
+		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
+		out, err := renderBuzzMirrorDecl(name, entry.Type)
+		if err != nil {
+			return "", err
+		}
+		b.Write(out)
+		b.WriteByte('\n')
 	}
 	return b.String(), nil
 }
@@ -185,6 +202,12 @@ func externDecl(m std.Method) (string, error) {
 		// enforce, and `str` enforces nothing.
 		if a.Enum != "" {
 			typ = a.Enum
+		}
+		if a.Func != "" {
+			if a.Type != std.TypeFunc {
+				return "", fmt.Errorf("arg %s: Func is set on a %v argument; it types only a TypeFunc", a.Name, a.Type)
+			}
+			typ = a.Func
 		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
@@ -247,7 +270,9 @@ func buzzArgType(t std.TypeTag) (string, error) {
 	case std.TypeAnyMap:
 		return "{str: any}", nil
 	case std.TypeFunc:
-		return "Function", nil
+		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
+		// Arg carries neither; the host checks the callable when it is called.
+		return "any", nil
 	case std.TypeAny:
 		return "any", nil
 	default:
@@ -316,11 +341,8 @@ func buzzDefault(a std.Arg) (string, error) {
 
 // buzzZero is the default for an optional parameter that declares none.
 //
-// An unmapped tag is an error rather than a fallback. The fallback was `null`, which is
-// not the zero of any tag and is not even assignable to the annotations the unmapped
-// tags produce: an optional TypeFunc arg would emit `fn: Function = null` against a
-// non-nullable Function. Nothing declares one today, so this only ever fires the moment
-// someone adds the first, which is exactly when a silent `null` would be worst.
+// An unmapped tag is an error rather than a fallback: `null` is not the zero of any
+// tag, and an optional callback has no default a caller could mean.
 func buzzZero(t std.TypeTag) (string, error) {
 	switch t {
 	case std.TypeString:
@@ -347,8 +369,7 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: any>}", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
-		// annotates cleanly. That is not true of the tags still falling through: a
-		// TypeFunc arg would emit `fn: Function = null` against a non-nullable Function.
+		// annotates cleanly.
 		return "null", nil
 	default:
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)
@@ -468,19 +489,13 @@ func collectMirrors(mod std.Module) ([]string, error) {
 	return order, nil
 }
 
-// collectEnums returns the enum declarations a module's signatures name, in first-use
-// order.
+// collectEnums returns the enum declarations a module's signatures and its mirrors'
+// fields name, in first-use order.
 //
-// Derived from the signatures rather than hand-listed, for the same reason
-// collectMirrors is: an Arg.Enum naming a type whose declaration does not travel with it
-// produces a module whose extern references an undefined name. That parses (buzz.Parse
-// is syntax-only) and is then rejected at CHECK time, which drops the module's whole
-// declaration set with no codegen error saying why.
-//
-// This is why an enum reachable only from a signature needs collecting at all: the
-// types generator emits an enum into the mirror of the OBJECT whose field uses it, so
-// an enum no object references had nowhere to be declared.
-func collectEnums(mod std.Module) ([]boundaryEnum, error) {
+// Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
+// not travel with its use leaves the bundle naming an undefined type, and running the
+// bundle to make its records constructible stops at the first such name.
+func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	seen := map[string]bool{}
 	var order []boundaryEnum
 	add := func(name, where string) error {
@@ -507,6 +522,14 @@ func collectEnums(mod std.Module) ([]boundaryEnum, error) {
 			}
 		}
 	}
+	for _, name := range mirrors {
+		entry, _ := boundaryTypeNamed(name)
+		for _, e := range enumsUsedBy(entry.Type) {
+			if err := add(e.Name, name); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return order, nil
 }
 
@@ -521,6 +544,58 @@ func renderBuzzEnumDecl(e boundaryEnum) []byte {
 	}
 	fmt.Fprintln(&b, "}")
 	return b.Bytes()
+}
+
+// buzzBuiltinTypes are the type names the Buzz type parser knows without a declaration.
+var buzzBuiltinTypes = map[string]bool{
+	"int": true, "double": true, "str": true, "bool": true, "null": true, "void": true,
+	"any": true, "ud": true, "pat": true, "fib": true, "rg": true, "type": true,
+	"fun": true, "mut": true, "obj": true,
+}
+
+var (
+	buzzTypeIdent = regexp.MustCompile(`[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*`)
+	// A function type's `name:` parameter label, which is not a type.
+	buzzParamLabel = regexp.MustCompile(`([(,]\s*)\w+\s*:`)
+)
+
+// undeclaredTypeNames lists, sorted, every type name prog's annotations use that prog
+// itself does not declare. A bundle is executed on its own to make its records
+// constructible, so a name another bundle declares still breaks it.
+func undeclaredTypeNames(prog *ast.Program) []string {
+	declared := map[string]bool{}
+	var annots []string
+	fun := func(f *ast.FunDecl) {
+		annots = append(annots, f.ParamAnnots...)
+		annots = append(annots, f.RetAnnot, f.YieldAnnot)
+	}
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			declared[d.Name] = true
+			for _, f := range slices.Concat(d.Fields, d.StaticFields) {
+				annots = append(annots, f.TypeAnnot)
+			}
+			for _, m := range d.Methods {
+				fun(m)
+			}
+		case *ast.EnumDecl:
+			declared[d.Name] = true
+		case *ast.FunDecl:
+			fun(d)
+		case *ast.DeclStmt:
+			annots = append(annots, d.TypeAnnot)
+		}
+	}
+	missing := map[string]bool{}
+	for _, a := range annots {
+		for _, name := range buzzTypeIdent.FindAllString(buzzParamLabel.ReplaceAllString(a, "$1"), -1) {
+			if !buzzBuiltinTypes[name] && !declared[name] {
+				missing[name] = true
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(missing))
 }
 
 // sortedMethods orders a module's methods by name. Both the mirror walk and the extern

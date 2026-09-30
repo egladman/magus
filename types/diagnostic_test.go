@@ -37,3 +37,7 @@ func TestAllDiagnosticCodesEnumerated(t *testing.T) {
 	}
 	assert.Len(t, AllDiagnosticCodes(), len(declared), "allDiagnosticCodes has entries not in the const block")
 }
+
+func TestManifestScriptDelegationRoutesToMagusfileDocs(t *testing.T) {
+	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1049/", CodeURL(ManifestScriptDelegation))
+}

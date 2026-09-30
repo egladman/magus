@@ -115,3 +115,47 @@ func TestHgMergeToolRoutesOnlyWhatOutputsClaim(t *testing.T) {
 
 	assert.Equal(t, "a.txt = :merge\ngen/runtime.go = :merge\ngen/x.go = magus\n", string(out))
 }
+
+// The dot-dir's files answer without starting hg or sl, from the checkout root or under
+// it; only a checkout with no readable dirstate asks the tool.
+func TestHgOperationInProgressReadsTheDotDir(t *testing.T) {
+	asked := func() (bool, error) {
+		t.Error("the tool was asked")
+		return false, nil
+	}
+	parents := func(p2 byte) []byte {
+		b := make([]byte, 40)
+		b[0] = 1
+		b[39] = p2
+		return b
+	}
+	for _, tt := range []struct {
+		name  string
+		files map[string][]byte
+		want  string
+	}{
+		{"clean", map[string][]byte{"dirstate": parents(0)}, ""},
+		{"histedit", map[string][]byte{"dirstate": parents(0), "histedit-state": nil}, types.OperationRebase},
+		{"rebase over a merge state", map[string][]byte{"dirstate": parents(0), "rebasestate": nil, "merge/state2": nil}, types.OperationRebase},
+		{"graft", map[string][]byte{"dirstate": parents(0), "graftstate": nil}, types.OperationCherryPick},
+		{"conflicted update", map[string][]byte{"dirstate": parents(0), "merge/state": nil}, types.OperationMerge},
+		{"merge that merged no file", map[string][]byte{"dirstate": parents(1)}, types.OperationMerge},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			for name, body := range tt.files {
+				writeRepoFile(t, root, ".sl/"+name, string(body))
+			}
+			require.NoError(t, os.Mkdir(filepath.Join(root, "sub"), 0o755))
+			for _, at := range []string{root, filepath.Join(root, "sub")} {
+				op, err := hgOperationInProgress(at, ".sl", asked)
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, op, at)
+			}
+		})
+	}
+
+	op, err := hgOperationInProgress(t.TempDir(), ".hg", func() (bool, error) { return true, nil })
+	require.NoError(t, err)
+	assert.Equal(t, types.OperationMerge, op, "no dot-dir leaves the answer to the tool")
+}

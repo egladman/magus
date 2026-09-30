@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -81,206 +80,49 @@ func TestWriteGraphDOT_Empty(t *testing.T) {
 	assert.NotContains(t, got, "->", "unexpected edge in empty graph")
 }
 
-func TestWriteGraphMermaid_Linear(t *testing.T) {
-	t.Parallel()
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, linearOutput()))
-	got := b.String()
-	assert.Contains(t, got, "---\ntitle:", "missing frontmatter")
-	assert.Contains(t, got, "graph TD", "missing 'graph TD' header")
-	assert.Contains(t, got, "subgraph spell_", "missing subgraph")
-	for _, label := range []string{`"api"`, `"internal/db"`, `"internal/util"`} {
-		assert.Contains(t, got, label, "missing label %s", label)
-	}
-	assert.Contains(t, got, "-->", "missing edges")
-}
 
-func TestWriteGraphMermaid_PathEscaping(t *testing.T) {
+func TestWriteGraphDOT_GroupsNodesBySpellThenPath(t *testing.T) {
 	t.Parallel()
 	out := types.GraphOutput{
 		Direction: "downstream",
 		Nodes: []types.Node{
-			{Path: "foo/bar", Children: []string{"baz-qux"}},
-			{Path: "baz-qux", Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	assert.NotContains(t, got, "foo/bar[", "unsafe characters in Mermaid IDs")
-	assert.NotContains(t, got, "baz-qux[", "unsafe characters in Mermaid IDs")
-	assert.Contains(t, got, `"foo/bar"`, "label should preserve original path")
-}
-
-func TestWriteGraphMermaid_IDCollision(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "foo/bar", Children: []string{}},
-			{Path: "foo_bar", Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	// Both nodes should appear with distinct IDs (one will be foo_bar, the other foo_bar_1).
-	assert.Contains(t, got, `"foo/bar"`, "expected both node labels")
-	assert.Contains(t, got, `"foo_bar"`, "expected both node labels")
-}
-
-func TestMermaidIDs_ThreeWayCollision(t *testing.T) {
-	t.Parallel()
-	// "foo-bar", "foo/bar", and "foo_bar" all sanitize to the same base id
-	// "foo_bar". Sorted order is "foo-bar" < "foo/bar" < "foo_bar" (by byte
-	// value), so the base keeps its bare id and the other two must each get a
-	// distinct numeric suffix, not the two colliding on "foo_bar_1".
-	ids := mermaidIDs([]string{"foo/bar", "foo_bar", "foo-bar"})
-	assert.Len(t, ids, 3, "one id per input path")
-	seen := make(map[string]string, 3)
-	for path, id := range ids {
-		if other, ok := seen[id]; ok {
-			t.Fatalf("paths %q and %q both got mermaid id %q", other, path, id)
-		}
-		seen[id] = path
-	}
-}
-
-func TestWriteGraphMermaid_Subgraphs(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", Children: []string{"engine"}},
-			{Path: "engine", SpellName: "rust", Children: []string{}},
 			{Path: "web", SpellName: "typescript", Children: []string{}},
+			{Path: "b", SpellName: "go", Children: []string{}},
+			{Path: "a", SpellName: "go", Children: []string{}},
+			{Path: "docs", Children: []string{}},
 		},
 	}
 	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
+	require.NoError(t, WriteGraphDOT(&b, out))
 	got := b.String()
-	for _, sg := range []string{"subgraph spell_go", "subgraph spell_rust", "subgraph spell_typescript"} {
-		assert.Contains(t, got, sg)
-	}
+	want := `  "a";` + "\n" + `  "b";` + "\n" + `  "web";` + "\n" + `  "docs";` + "\n"
+	assert.Contains(t, got, want, "go, then typescript, then unspelled; each by path")
 }
 
-func TestWriteGraphMermaid_CrossSpellEdgeLabel(t *testing.T) {
+func TestWriteGraphDOT_DropsDanglingAndSelfEdges(t *testing.T) {
 	t.Parallel()
 	out := types.GraphOutput{
 		Direction: "downstream",
 		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", Children: []string{"engine", "util"}},
-			{Path: "engine", SpellName: "rust", Children: []string{}},
-			{Path: "util", SpellName: "go", Children: []string{}},
+			{Path: "api", SpellName: "go", Children: []string{"api", "gone", "db"}},
+			{Path: "db", SpellName: "go", Children: []string{}},
 		},
 	}
 	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
+	require.NoError(t, WriteGraphDOT(&b, out))
 	got := b.String()
-	assert.Contains(t, got, `|"rust"|`, `expected cross-spell edge label |"rust"|`)
-	// Same-spell edge (api→util) must be a plain -->, not labeled.
-	assert.GreaterOrEqual(t, strings.Count(got, " --> "), 1, "expected at least one unlabeled edge")
+	assert.Contains(t, got, `"api" -> "db";`)
+	assert.Equal(t, 1, strings.Count(got, "->"), "only the edge between two declared, distinct nodes")
 }
 
-func TestWriteGraphMermaid_RootHighlight(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Roots:     []string{"api"},
-		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", Children: []string{"util"}},
-			{Path: "util", SpellName: "go", Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	assert.Contains(t, got, "classDef root", "expected 'classDef root'")
-	assert.Contains(t, got, "root", "expected root class assignment for api")
-	assert.Contains(t, got, "api", "expected root class assignment for api")
-}
-
-func TestWriteGraphMermaid_ClickHandler(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", Dir: "/abs/path/api", Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	assert.Contains(t, got, "click ", "expected click handler")
-	assert.Contains(t, got, `"file:///abs/path/api"`, "expected file:// URL")
-}
-
-func TestWriteGraphMermaid_BlastRadius(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", BlastRadius: 12, Children: []string{"util"}},
-			{Path: "util", SpellName: "go", BlastRadius: 0, Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	assert.Contains(t, got, "BR=12", "expected BR=12 in label")
-	assert.NotContains(t, got, "BR=0", "unexpected BR=0 label")
-}
-
-func TestWriteGraphMermaid_Duration(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "fast", SpellName: "go", DurationMs: 450, Children: []string{}},
-			{Path: "mid", SpellName: "go", DurationMs: 2300, Children: []string{}},
-			{Path: "slow", SpellName: "go", DurationMs: 80000, Children: []string{}},
-			{Path: "none", SpellName: "go", DurationMs: 0, Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	for _, want := range []string{"~450ms", "~2.3s", "~1m20s"} {
-		assert.Contains(t, got, want)
-	}
-	// The "none" node must not get any duration label.
-	assert.NotContains(t, got, `"none<br/>`, "unexpected duration label for DurationMs=0")
-}
-
-func TestFormatDuration(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "0ms", FormatDuration(0))
-	assert.Equal(t, "450ms", FormatDuration(450*time.Millisecond))
-	assert.Equal(t, "999ms", FormatDuration(999*time.Millisecond))
-	assert.Equal(t, "1s", FormatDuration(1000*time.Millisecond))
-	assert.Equal(t, "2.3s", FormatDuration(2300*time.Millisecond))
-	assert.Equal(t, "60s", FormatDuration(59999*time.Millisecond))
-	assert.Equal(t, "1m", FormatDuration(60000*time.Millisecond))
-	assert.Equal(t, "1m20s", FormatDuration(80000*time.Millisecond))
-}
-
-func TestWriteGraphMermaid_Empty(t *testing.T) {
-	t.Parallel()
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, emptyOutput()))
-	got := b.String()
-	assert.Contains(t, got, "graph TD", "expected 'graph TD' even for empty graph")
-}
-
-func TestWriteGraphMermaid_Determinism(t *testing.T) {
+func TestWriteGraphDOT_Determinism(t *testing.T) {
 	t.Parallel()
 	out := diamondOutput()
 	var b1, b2 strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b1, out))
-	require.NoError(t, WriteGraphMermaid(&b2, out))
-	assert.Equal(t, b1.String(), b2.String(), "WriteGraphMermaid is not deterministic")
+	require.NoError(t, WriteGraphDOT(&b1, out))
+	require.NoError(t, WriteGraphDOT(&b2, out))
+	assert.Equal(t, b1.String(), b2.String(), "WriteGraphDOT is not deterministic")
 }
-
 // fakeRepo is a minimal in-memory DepGraphRepository. WriteTree only reaches for
 // Successors/Predecessors/Nodes (plus Graph.Project, which comes from the project
 // map handed to NewGraph), so the remaining interface methods are stubs that a
@@ -529,18 +371,4 @@ func TestHasSpellName(t *testing.T) {
 	multi := &types.Project{Spell: "go", Spells: []string{"go", "docker"}}
 	assert.True(t, hasSpellName(multi, "docker"), "should match a secondary spell")
 	assert.False(t, hasSpellName(multi, "bash"))
-}
-
-func TestSpellColor_UnknownFallsBackToUnspelled(t *testing.T) {
-	t.Parallel()
-	// A named spell returns its palette entry; anything unmapped falls back to the
-	// "unspelled" gray so the switch/default branch in spellColor is exercised.
-	fill, text := spellColor("go")
-	assert.Equal(t, "#00ADD8", fill)
-	assert.Equal(t, "#fff", text)
-
-	unfill, untext := spellColor("cobol")
-	wantFill, wantText := spellColor("unspelled")
-	assert.Equal(t, wantFill, unfill, "unknown spell should reuse the unspelled fill")
-	assert.Equal(t, wantText, untext, "unknown spell should reuse the unspelled text")
 }

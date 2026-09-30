@@ -1,12 +1,14 @@
-// site/diagrams/all.buzz - the registry every consumer reads. Two of them exist: the magusfile
-// target that writes the committed light/dark pair for GitHub, and the site render that
-// inlines the CSS-variable copy into a docs page. Both go through this list so a new
-// diagram is added in exactly one place.
+// The registry every consumer reads. diagrams-generate lays each figure out from the knowledge
+// graph and writes the committed files; the site render inlines the committed page copy, so
+// rendering a page never needs the symbol index.
 namespace diagrams;
 
 import "assert";
+import "crypto";
 import "fs";
-import "../libs/diagram/diagram" as _;
+import "encoding/json";
+import "magus";
+import "magus/figure";
 import "site/diagrams/server-http" as _;
 import "site/diagrams/server-socket" as _;
 import "site/diagrams/server-jobs" as _;
@@ -20,162 +22,332 @@ import "site/diagrams/volatility" as _;
 import "site/diagrams/commit-generated" as _;
 import "site/diagrams/lease-loop" as _;
 import "site/diagrams/cache-trust" as _;
+import "site/diagrams/diagram-pipeline" as _;
+import "site/diagrams/knowledge-graph" as _;
+import "site/diagrams/guard-path" as _;
+import "site/diagrams/agent-surface" as _;
+import "site/diagrams/buzz-engine" as _;
+import "site/diagrams/merge-queue-risk" as _;
+import "site/diagrams/workspace-load" as _;
+import "site/diagrams/inputs-outputs" as _;
+import "site/diagrams/bootstrap" as _;
+import "site/diagrams/target-order" as _;
 
-export fun allDiagrams() > [Diagram] {
+// The committed files, relative to the docs project.
+final PAIR_DIR = "assets/gen";
+
+// allFigures builds every registered figure. A typo in a directory or layer name raises
+// here, naming it.
+export fun allFigures() > [figure\Figure] !> any {
     return [
-        serverHttpDiagram(),
-        serverSocketDiagram(),
-        serverJobsDiagram(),
-        serverShareDiagram(),
-        ciPipelineDiagram(),
-        ciProvidersDiagram(),
-        imageBuildDiagram(),
-        dogfoodDiagram(),
-        projectReferenceDiagram(),
-        volatilityDiagram(),
-        commitGeneratedDiagram(),
-        leaseLoopDiagram(),
-        cacheTrustDiagram(),
+        serverHttpFigure(),
+        serverSocketFigure(),
+        serverJobsFigure(),
+        serverShareFigure(),
+        ciPipelineFigure(),
+        ciProvidersFigure(),
+        imageBuildFigure(),
+        dogfoodFigure(),
+        projectReferenceFigure(),
+        volatilityFigure(),
+        commitGeneratedFigure(),
+        leaseLoopFigure(),
+        cacheTrustFigure(),
+        diagramPipelineFigure(),
+        knowledgeGraphFigure(),
+        guardPathFigure(),
+        agentSurfaceFigure(),
+        buzzEngineFigure(),
+        mergeQueueRiskFigure(),
+        workspaceLoadFigure(),
+        inputsOutputsFigure(),
+        bootstrapFigure(),
+        targetOrderFigure(),
     ];
 }
 
-// rendered caches the one result renderAll can ever produce. Not a speed tweak: on the
-// nanbox build every string a render creates is pinned in the global object heap for the
-// life of the process, so each repeat call permanently retained about a megabyte.
-// See plans/reclaim-the-buzz-heap.md.
+// FigureRun is one figure's outcome: its paints, or the findings that stopped it.
+object FigureRun {
+    id: str,
+    stamp: str = "",
+    imports: int = 0,
+    calls: int = 0,
+    flow: int = 0,
+    findings: [str] = [<str>],
+    dark: str = "",
+    light: str = "",
+    page: str = "",
+}
+
+// runFigure lays f out once and paints it three ways. A finding is returned, never raised,
+// so its receipt can record it.
+fun runFigure(f: figure\Figure) > FigureRun {
+    try {
+        final d = f.diagram();
+        final lines: mut [str] = mut ["figure {d.id}", "title {d.title}", "unscoped {d.unscoped}"];
+        var imports = 0;
+        var calls = 0;
+        var flow = 0;
+        foreach (n in d.nodes) { lines.append("node {n.id} {n.role} {n.anchor}:{n.line} {n.label} / {n.sub}"); }
+        foreach (e in d.edges) {
+            lines.append("edge {e.src} {e.dst} {e.claim} {e.kind} {e.label}");
+            if (e.claim == "imports") { imports = imports + 1; }
+            if (e.claim == "calls") { calls = calls + 1; }
+            if (e.claim == "flow") { flow = flow + 1; }
+        }
+        foreach (s in d.scope) { lines.append("scope {s} {d.omits[s] ?? ""}"); }
+        final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
+        return FigureRun{
+            id = f.id, stamp = stamp, imports = imports, calls = calls, flow = flow,
+            dark = stamped(figure\draw(f, theme: figure\Theme.dark), id: f.id, stamp: stamp),
+            light = stamped(figure\draw(f, theme: figure\Theme.light), id: f.id, stamp: stamp),
+            page = stamped(figure\draw(f, theme: figure\Theme.page), id: f.id, stamp: stamp),
+        };
+    } catch (msg: str) {
+        return FigureRun{ id = f.id, findings = msg.split("\n") };
+    }
+    return FigureRun{ id = f.id };
+}
+
+// stamped puts the stamp in the SVG's metadata, so a reader of the file and a later run
+// compare the same fact.
+fun stamped(svg: str, id: str, stamp: str) > str {
+    final open = svg.indexOf(">");
+    if (open == null) { return svg; }
+    final meta = "<metadata>\{\"figure\":\"{id}\",\"stamp\":\"{stamp}\"}</metadata>";
+    return svg.sub(0, len: open! + 1) + meta + svg.sub(open! + 1);
+}
+
+test "the stamp lands inside the svg element" {
+    assert\equal(stamped("<svg a=\"1\"><g/></svg>", id: "x", stamp: "sha256:0"),
+        want: "<svg a=\"1\"><metadata>\{\"figure\":\"x\",\"stamp\":\"sha256:0\"}</metadata><g/></svg>",
+        message: "first child of the svg");
+}
+
+// receipt is the JSON beside a figure's SVGs. Keys stringify sorted, so symbolIndex is last.
+fun receipt(run: FigureRun, symbolIndex: str) > str !> any {
+    final record: {str: any} = {
+        "figure": run.id,
+        "stamp": run.stamp,
+        "claims": {"imports": run.imports, "calls": run.calls, "flow": run.flow},
+        "findings": run.findings,
+        "symbolIndex": symbolIndex,
+    };
+    return json\stringify(record, indent: "  ") + "\n";
+}
+
+// sameReceipt compares two receipts up to their symbolIndex line. The digest moves on every
+// indexed edit anywhere, so a figure whose picture held still keeps the digest it was drawn at.
+fun sameReceipt(a: str, b: str) > bool {
+    final key = "\"symbolIndex\"";
+    final ia = a.indexOf(key);
+    final ib = b.indexOf(key);
+    if (ia == null or ib == null) { return false; }
+    return a.sub(0, len: ia!) == b.sub(0, len: ib!);
+}
+
+test "a receipt that moved only its index digest is the same receipt" {
+    final run = FigureRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 };
+    final a = receipt(run, symbolIndex: "aaa") catch "";
+    final b = receipt(run, symbolIndex: "bbb") catch "";
+    assert\isTrue(a.indexOf("\"imports\": 2") != null, message: "claims counted: {a}");
+    assert\isTrue(sameReceipt(a, b: b), message: "digest alone");
+    final c = receipt(FigureRun{ id = "x", findings = ["figure \"x\": gone"] }, symbolIndex: "aaa") catch "";
+    assert\isFalse(sameReceipt(a, b: c), message: "a finding is a change");
+}
+
+// writeFigures writes, for every registered figure, the dark and light pair GitHub loads
+// through <img>, the page copy the site inlines, and the receipt, into dir. Returns every
+// finding: the figures' own and each magus:diagram marker naming no figure. A file is
+// rewritten only when its bytes move.
+//
+// Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
+// carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
+export fun writeFigures(dir: str) > [str] !> any {
+    final index: magus\SymbolIndexDigest = magus\symbolIndexDigest();
+    if (index.indexed == false) {
+        throw "diagrams-generate needs the symbol index, and magus\\symbolIndexDigest() answered indexed=false; build it with `magus graph build`, then rerun";
+    }
+    fs\mkdirAll(dir);
+    final expected: mut {str: bool} = mut {<str: bool>};
+    final findings: mut [str] = mut [<str>];
+    final figures = allFigures();
+    foreach (f in figures) {
+        final run = runFigure(f);
+        foreach (msg in run.findings) { findings.append(msg); }
+        final base = dir + "/diagram-" + f.id;
+        if (run.findings.len() == 0) {
+            writeIfMoved(base + ".svg", content: run.dark);
+            writeIfMoved(base + "-light.svg", content: run.light);
+            writeIfMoved(base + "-page.svg", content: run.page);
+        }
+        final body = receipt(run, symbolIndex: index.digest);
+        final path = base + ".json";
+        if (fs\exists(path) == false or sameReceipt(fs\readFile(path), b: body) == false) {
+            fs\writeFile(path, content: body);
+        }
+        foreach (suffix in [".svg", "-light.svg", "-page.svg", ".json"]) { expected["diagram-" + f.id + suffix] = true; }
+    }
+    prune(dir, expected: expected);
+    foreach (msg in unknownMarkers(figures)) { findings.append(msg); }
+    return findings;
+}
+
+fun writeIfMoved(path: str, content: str) > void !> any {
+    if (fs\exists(path) and fs\readFile(path) == content) { return; }
+    fs\writeFile(path, content: content);
+}
+
+// prune removes every diagram-* file in dir no registered figure wrote: an obsolete id, or
+// a filesystem-de-collided copy, which the cache would otherwise replay into other checkouts.
+fun prune(dir: str, expected: {str: bool}) > void !> any {
+    foreach (glob in ["/diagram-*.svg", "/diagram-*.json"]) {
+        foreach (candidate in fs\glob(dir + glob)) {
+            if (expected[fs\basename(candidate.value)] == null) { fs\remove(candidate.value); }
+        }
+    }
+}
+
+test "prune removes an obsolete owned file and leaves the rest" {
+    final dir = fs\tempDir("magus-diagrams-");
+    fs\writeFile(dir + "/diagram-ci-pipeline.svg", content: "current");
+    fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", content: "stale copy");
+    fs\writeFile(dir + "/diagram-gone.json", content: "stale receipt");
+    fs\writeFile(dir + "/not-a-diagram.svg", content: "authored");
+    prune(dir, expected: {"diagram-ci-pipeline.svg": true});
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), want: true, message: "current diagram remains");
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), want: false, message: "stale copy removed");
+    assert\equal(fs\exists(dir + "/diagram-gone.json"), want: false, message: "stale receipt removed");
+    assert\equal(fs\exists(dir + "/not-a-diagram.svg"), want: true, message: "outside the owned prefix remains");
+    fs\removeAll(dir);
+}
+
+// rendered caches pageSvgs' one possible result. Not for speed: on the nanbox build every
+// string a render creates stays pinned for the process's life. See plans/reclaim-the-buzz-heap.md.
 var rendered: {str: str}? = null;
 
-// renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready
-// for inlineDiagrams. Throws on the first diagram that fails validation, which is what
-// makes a crooked figure fail the docs build rather than ship.
-//
-// The result is memoized and shared by every caller, so treat it as read-only.
-export fun renderAll() > {str: str} !> any {
+// pageSvgs is the committed page copy of each figure, keyed by id. diagrams-generate wrote
+// them; a page render reads them rather than laying anything out.
+fun pageSvgs() > {str: str} !> any {
     if (rendered != null) { return rendered!; }
     final byId: mut {str: str} = mut {<str: str>};
-    foreach (d in allDiagrams()) {
-        byId[d.id] = renderSvg(d, cssVarPalette());
+    foreach (file in fs\glob(PAIR_DIR + "/diagram-*-page.svg")) {
+        final name = fs\basename(file.value);
+        final id = name.sub("diagram-".len(), len: name.len() - "diagram-".len() - "-page.svg".len());
+        byId[id] = fs\readFile(file.value);
     }
     rendered = byId;
     return byId;
 }
 
-// writeStandalonePair writes the committed light/dark SVG files for every diagram into
-// dir. These exist for GitHub: a README image is loaded through <img>, which makes it a
-// separate document with no access to the page's CSS variables, so the palette has to be
-// baked in and a second file is the only way to offer a dark one.
-//
-// Naming follows the terminal recordings already in assets/gen: the unsuffixed file is
-// dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
-export fun writeStandalonePair(dir: str) > void !> any {
-    fs\mkdirAll(dir);
-    final expected: mut [str] = mut [<str>];
-    foreach (d in allDiagrams()) {
-        final dark = dir + "/diagram-" + d.id + ".svg";
-        final light = dir + "/diagram-" + d.id + "-light.svg";
-        expected.append(dark);
-        expected.append(light);
-        fs\writeFile(dark, renderSvg(d, darkPalette()));
-        fs\writeFile(light, renderSvg(d, lightPalette()));
-    }
-    // This target owns every diagram-*.svg in its output directory. Prune an
-    // obsolete id or a filesystem-de-collided copy before the output glob is
-    // snapshotted, or the cache will replay that extra file into other checkouts.
-    foreach (candidate in fs\glob(dir + "/diagram-*.svg")) {
-        var current = false;
-        foreach (path in expected) {
-            if (fs\basename(path) == fs\basename(candidate.value)) { current = true; }
-        }
-        if (current == false) { fs\remove(candidate.value); }
-    }
-}
-
-test "writeStandalonePair prunes an obsolete owned diagram" {
-    final dir = fs\tempDir("magus-diagrams-");
-    fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", "stale copy");
-    fs\writeFile(dir + "/not-a-diagram.svg", "authored");
-
-    writeStandalonePair(dir);
-
-    assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), true, "current diagram remains");
-    assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), false, "stale diagram copy removed");
-    assert\equal(fs\exists(dir + "/not-a-diagram.svg"), true, "outside the owned prefix remains");
-    fs\removeAll(dir);
-}
-
 // inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on
-// the page mentioning one first: renderAll walks every figure in the registry, and a docs
-// build renders hundreds of pages that reference none.
+// the page mentioning one first: a docs build renders hundreds of pages that reference none.
 export fun inlinePageDiagrams(html: str) > str !> any {
     if (html.indexOf("<!--diagram:") == null and html.indexOf("diagram-") == null) {
         return html;
     }
-    return inlineDiagrams(html, renderAll());
+    return inlineDiagrams(html, svgById: pageSvgs());
 }
 
-// BackrefMarker is the token a source file uses to point back at a diagram, as in
+// inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
+// id. Inlining is what makes a figure follow the site's theme toggle: an <img>-loaded SVG
+// is a separate document and only ever sees prefers-color-scheme.
 //
-//     // magus:diagram server-http - this is the box the figure calls "Guard".
-//
-// Deliberately NOT parsed as a comment. The marker is unique enough to find with a plain
-// substring scan, so this works identically in Go, Buzz, TypeScript, YAML or anything
-// else without declaring a comment syntax per language: whatever precedes the token is
-// the host language's comment opener, and nothing here needs to know what it is.
-final BackrefMarker = "magus:diagram ";
-
-// verifyAnchors checks both directions of the diagram-to-code link and returns one message
-// per break, empty when they agree.
-//
-// Forward: every anchor a diagram declares must still resolve to a path in the tree. This
-// is the half that catches the common rot - a package renamed or deleted while the figure
-// keeps naming it.
-//
-// Reverse: every magus:diagram marker in the sources must name a diagram that exists. This
-// is the half that catches a diagram being renamed or dropped while call sites still point
-// at it. Neither half asserts the figure's SHAPE is right; that stays a human judgment.
-export fun verifyAnchors(root: str, sourceGlobs: [str]) > [str] !> any {
-    final findings: mut [str] = mut [<str>];
-
-    foreach (d in allDiagrams()) {
-        foreach (n in d.nodes) {
-            if (n.anchor != "" and fs\exists(root + "/" + n.anchor) == false) {
-                findings.append("diagram \"{d.id}\": node \"{n.id}\" anchors {n.anchor}, which no longer exists");
-            }
-        }
+// A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark
+// passes through. The README carries a real <picture> so GitHub shows the committed pair,
+// and the docs home page, which is the README, still gets the inline copy.
+fun inlineDiagrams(html: str, svgById: {str: str}) > str {
+    var page = html;
+    foreach (id in svgById.keys()) {
+        final svg = svgById[id] ?? "";
+        final fig = "<figure class=\"magus-diagram-figure\">" + svg + "</figure>";
+        page = page.split("<!--diagram:" + id + "-->").join(fig);
+        page = replacePicture(page, needle: "diagram-" + id + ".svg", replacement: fig);
     }
-
-    final known: mut [str] = mut [<str>];
-    foreach (d in allDiagrams()) { known.append(d.id); }
-
-    foreach (pattern in sourceGlobs) {
-        foreach (path in fs\glob(root + "/" + pattern)) {
-            final body = fs\readFile(path.value);
-            if (body.indexOf(BackrefMarker) == null) { continue; }
-            foreach (id in markedIds(body)) {
-                var found = false;
-                foreach (k in known) {
-                    if (k == id) { found = true; }
-                }
-                if (found == false) {
-                    findings.append("{path.value}: marks diagram \"{id}\", which no diagram declares");
-                }
-            }
-        }
-    }
-    return findings;
+    return page;
 }
 
-// markedIds pulls each id following a marker. The id runs to the first space or end of
-// line, so a marker may carry a trailing note explaining what the box is called.
-fun markedIds(body: str) > [str] {
-    final ids: mut [str] = mut [<str>];
-    foreach (line in body.split("\n")) {
-        final at = line.indexOf(BackrefMarker);
-        if (at == null) { continue; }
-        var rest = line.sub(at! + BackrefMarker.len()).trim();
-        final space = rest.indexOf(" ");
-        if (space != null) { rest = rest.sub(0, len: space!); }
-        if (rest != "") { ids.append(rest); }
+// replacePicture rewrites each <picture> element whose markup mentions needle. The srcset
+// and img inside carry attributes in no fixed order, and a <picture> that does not mention
+// the needle survives untouched.
+fun replacePicture(html: str, needle: str, replacement: str) > str {
+    final done = mut [<str>];
+    var page = html;
+    var guard = 0;
+    while (guard < 64) {
+        final start = page.indexOf("<picture");
+        if (start == null) { break; }
+        final rest = page.sub(start!);
+        final close = rest.indexOf("</picture>");
+        if (close == null) { break; }
+        final element = rest.sub(0, len: close! + 10);
+        if (element.indexOf(needle) != null) {
+            done.append(page.sub(0, len: start!));
+            done.append(replacement);
+            page = rest.sub(close! + 10);
+            break;
+        }
+        // Carry this one through and keep scanning: the README opens with an unrelated
+        // <picture>, the hero terminal recording.
+        done.append(page.sub(0, len: start!));
+        done.append(element);
+        page = rest.sub(close! + 10);
+        guard = guard + 1;
     }
-    return ids;
+    done.append(page);
+    return done.join("");
+}
+
+test "a comment marker and a picture are replaced, an unrelated picture is not" {
+    final page = inlineDiagrams("<p>a</p>\n<!--diagram:x-->\n<p>b</p>", svgById: {"x": "<svg/>"});
+    assert\isTrue(page.indexOf("<svg/>") != null and page.indexOf("<!--diagram:x-->") == null, message: "marker");
+    final markup = "<picture><img src=\"assets/gen/core-loop.svg\"></picture><picture><source srcset=\"assets/gen/diagram-x-light.svg\">"
+        + "<img src=\"assets/gen/diagram-x.svg\" alt=\"x\"></picture><p>b</p>";
+    final swapped = inlineDiagrams(markup, svgById: {"x": "<svg/>"});
+    assert\equal(swapped, want: "<picture><img src=\"assets/gen/core-loop.svg\"></picture><figure class=\"magus-diagram-figure\"><svg/></figure><p>b</p>",
+        message: "the figure's picture goes whole, the recording stays");
+}
+
+// unknownMarkers is the reverse check: a magus:diagram marker naming no figure means a
+// figure was renamed or dropped while the code still points at it.
+fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
+    final known: mut {str: bool} = mut {<str: bool>};
+    foreach (f in figures) { known[f.id] = true; }
+    final result: QueryResult = magus\query("kind=marker family=diagram", opts: {"limit": 10000});
+    final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
+    foreach (n in result.nodes) {
+        marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });
+    }
+    return unknownMarkerFindings(known, marked: marked);
+}
+
+// DiagramMarker is the part of a graph marker node the reverse check reads: source is
+// "<file>:<line>" and args starts with the figure id.
+object DiagramMarker {
+    source: str,
+    args: str,
+}
+
+fun unknownMarkerFindings(known: {str: bool}, marked: [DiagramMarker]) > [str] {
+    final found: mut [str] = mut [<str>];
+    foreach (m in marked) {
+        final args = m.args.trim();
+        final space = args.indexOf(" ");
+        final id = if (space != null) args.sub(0, len: space!) else args;
+        if (id != "" and known[id] == null) {
+            found.append("{m.source}: marks diagram \"{id}\", which no figure declares");
+        }
+    }
+    return found;
+}
+
+test "a diagram marker naming no figure is a finding" {
+    final known: {str: bool} = {"server-http": true};
+    final marked = [
+        DiagramMarker{ source = "a.go:3", args = "server-http the guard" },
+        DiagramMarker{ source = "b.go:9", args = "gone" },
+    ];
+    assert\equal(unknownMarkerFindings(known, marked: marked),
+        want: ["b.go:9: marks diagram \"gone\", which no figure declares"],
+        message: "only the marker naming a missing figure is reported");
 }

@@ -23,6 +23,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -79,13 +80,13 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	if len(paths) == 0 {
 		// No paths is a caller BUG, not an empty review: annotating nothing would render as
 		// "this change touches nothing", which is the most misleading answer available.
-		http.Error(w, "review requires at least one path parameter", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("review requires at least one path parameter"))
 		return
 	}
 	out, err := h.src.Diff(r.Context(), paths)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			handler.Refuse(w, r, rpcerr.WorkspaceNotWired())
 			return
 		}
 		h.Fail(w, r, "review", err)
@@ -111,10 +112,10 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 				return review.DigestFile(filepath.Join(h.root, filepath.FromSlash(p)))
 			})
 		}
-		handler.WriteJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
+		handler.WriteJSON(w, r, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return
 	}
-	handler.WriteJSON(w, types.DiffReview{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
+	handler.WriteJSON(w, r, types.DiffReview{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
 }
 
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
@@ -162,13 +163,13 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	if path == "" || filepath.IsAbs(path) || path != filepath.Clean(path) || path == "." || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
-		http.Error(w, "context requires a workspace-relative path", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("context requires a workspace-relative path"))
 		return
 	}
 	start, _ := strconv.Atoi(r.URL.Query().Get("start"))
 	end, _ := strconv.Atoi(r.URL.Query().Get("end"))
 	if start < 1 || end < start {
-		http.Error(w, "context requires a valid line range", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("context requires a valid line range"))
 		return
 	}
 	radius, _ := strconv.Atoi(r.URL.Query().Get("radius"))
@@ -180,20 +181,20 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	asOf := strings.TrimSpace(r.URL.Query().Get("as_of"))
 	if asOf == "" {
-		http.Error(w, "context requires the review snapshot identity", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("context requires the review snapshot identity"))
 		return
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), nil)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			handler.Refuse(w, r, rpcerr.WorkspaceNotWired())
 			return
 		}
 		h.Fail(w, r, "context snapshot", err)
 		return
 	}
 	if changeset.PatchDigest(patch) != asOf {
-		http.Error(w, "review snapshot is stale; refresh the diff", http.StatusConflict)
+		handler.Refuse(w, r, rpcerr.Conflict("review snapshot is stale; refresh the diff"))
 		return
 	}
 	changed := false
@@ -204,18 +205,21 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !changed {
-		http.Error(w, "context path is not in the reviewed patch", http.StatusNotFound)
+		handler.Refuse(w, r, rpcerr.NotFound("context path is not in the reviewed patch"))
 		return
 	}
 	root, err := filepath.EvalSymlinks(h.root)
 	if err != nil {
-		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		// err names the root's path, so it stays out of the body.
+		gone := rpcerr.WorkspaceNotWired()
+		gone.Message = "the workspace root no longer resolves"
+		handler.Refuse(w, r, gone)
 		return
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(root, path))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
+			handler.Refuse(w, r, rpcerr.NotFound("file is not present in the working tree"))
 			return
 		}
 		h.Fail(w, r, "context", err)
@@ -223,7 +227,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	rel, err := filepath.Rel(root, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		http.Error(w, "context path escapes workspace", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("context path escapes workspace"))
 		return
 	}
 	info, err := os.Stat(target)
@@ -232,17 +236,19 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !info.Mode().IsRegular() {
-		http.Error(w, "context requires a regular file", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("context requires a regular file"))
 		return
 	}
 	if info.Size() > maxContextFileBytes {
-		http.Error(w, "context is unavailable for files larger than 1 MiB", http.StatusRequestEntityTooLarge)
+		tooLarge := rpcerr.Invalid("context is unavailable for files larger than 1 MiB")
+		tooLarge.HTTPStatus = http.StatusRequestEntityTooLarge
+		handler.Refuse(w, r, tooLarge)
 		return
 	}
 	body, err := os.ReadFile(target)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
+			handler.Refuse(w, r, rpcerr.NotFound("file is not present in the working tree"))
 			return
 		}
 		h.Fail(w, r, "context", err)
@@ -252,10 +258,10 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	from := max(1, start-radius)
 	to := min(len(lines), end+radius)
 	if from > len(lines) {
-		handler.WriteJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: []string{}})
+		handler.WriteJSON(w, r, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: []string{}})
 		return
 	}
-	handler.WriteJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: lines[from-1 : to]})
+	handler.WriteJSON(w, r, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: lines[from-1 : to]})
 }
 
 // NewPatchHandler returns the GET /api/v1/diff/patch handler reading from src.
@@ -289,13 +295,13 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 	patch, err := h.src.WorkingDiff(r.Context(), scopePaths(r))
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			handler.Refuse(w, r, rpcerr.WorkspaceNotWired())
 			return
 		}
 		h.Fail(w, r, "diff", err)
 		return
 	}
-	handler.WriteJSON(w, diffResponse{
+	handler.WriteJSON(w, r, diffResponse{
 		Files:  changeset.Parse(patch),
 		Patch:  patch,
 		Digest: changeset.PatchDigest(patch),
@@ -517,10 +523,10 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		sess := h.Sessions.Get(h.Root)
 		if sess == nil {
-			http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
+			handler.Refuse(w, r, rpcerr.Conflict(noSessionAttached))
 			return
 		}
-		handler.WriteJSON(w, sess)
+		handler.WriteJSON(w, r, sess)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -530,7 +536,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	handler.LimitRequestBody(w, r)
 	var req reviewSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("the request body is not the JSON a review op takes: "+err.Error()))
 		return
 	}
 
@@ -575,21 +581,21 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		var err error
 		sess, err = h.publish(r.Context(), req)
 		if err != nil {
-			http.Error(w, "publish: "+err.Error(), http.StatusBadGateway)
+			handler.Refuse(w, r, rpcerr.ReviewHostFailed("publish: "+err.Error()))
 			return
 		}
 	case "reply":
 		// 400 rather than 502: an incomplete request is the caller's mistake, and reporting it
 		// as a bad gateway sends them to look at their network.
 		if req.ID == "" || strings.TrimSpace(req.Body) == "" {
-			http.Error(w, "reply needs a thread and something to say", http.StatusBadRequest)
+			handler.Refuse(w, r, rpcerr.Invalid("reply needs a thread and something to say"))
 			return
 		}
 		// ID is a HOST thread id here, not a local comment id.
 		var err error
 		sess, err = h.reply(r.Context(), req)
 		if err != nil {
-			http.Error(w, "reply: "+err.Error(), http.StatusBadGateway)
+			handler.Refuse(w, r, rpcerr.ReviewHostFailed("reply: "+err.Error()))
 			return
 		}
 	case "discard":
@@ -602,17 +608,19 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "answer":
 		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, req.On)
 	default:
-		http.Error(w, "unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, publish, reply, discard, resolve, answer)", http.StatusBadRequest)
+		handler.Refuse(w, r, rpcerr.Invalid("unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, publish, reply, discard, resolve, answer)"))
 		return
 	}
 	if sess == nil {
-		// No session attached yet. 409 rather than 404: the ROUTE exists and the workspace is
-		// fine, the client just has not read a review yet, and the fix is to fetch one.
-		http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
+		// 409 rather than 404: the ROUTE exists and the workspace is fine, the client just
+		// has not read a review yet, and the fix is to fetch one.
+		handler.Refuse(w, r, rpcerr.Conflict(noSessionAttached))
 		return
 	}
-	handler.WriteJSON(w, sess)
+	handler.WriteJSON(w, r, sess)
 }
+
+const noSessionAttached = "no review session attached; GET /api/v1/diff first"
 
 // mintReceipt records that a person read path, at the content it holds right now.
 //
@@ -760,7 +768,7 @@ func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 			out.Reason = err.Error()
 		}
 	}
-	handler.WriteJSON(w, out)
+	handler.WriteJSON(w, r, out)
 }
 
 // markNew flags the threads the reader has not had on screen before. It READS the watermark and
@@ -868,5 +876,5 @@ func (h *BranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
 			out.Branches = append(out.Branches, got...)
 		}
 	}
-	handler.WriteJSON(w, out)
+	handler.WriteJSON(w, r, out)
 }

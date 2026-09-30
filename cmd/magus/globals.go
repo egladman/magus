@@ -21,7 +21,6 @@ const (
 	outputName     = FormatName
 	outputTemplate = FormatTemplate
 	outputDot      = FormatDot
-	outputMermaid  = FormatMermaid
 	outputTree     = FormatTree
 	outputMarkdown = FormatMarkdown
 	outputGraphML  = FormatGraphML

@@ -212,3 +212,62 @@ func GraphObserverFromContext(ctx context.Context) Observer {
 	o, _ := ctx.Value(graphObserverKey{}).(Observer)
 	return o
 }
+
+// EvalMemo holds what one evaluation (a target body, or one script) computes once. Every
+// read inside it sees the same snapshot, so a body that writes files and reads the
+// knowledge graph again sees the graph as the body began. A failed computation is not
+// kept, so a canceled context never sticks.
+type EvalMemo struct {
+	mu    sync.Mutex
+	cells map[string]*evalMemoCell
+}
+
+type evalMemoCell struct {
+	mu   sync.Mutex
+	done bool
+	v    any
+}
+
+// Do returns the value computed for key in this evaluation, computing it on the first
+// call. Concurrent callers of one key wait for the one computation. A nil memo computes
+// every time.
+func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
+	if m == nil {
+		return compute()
+	}
+	m.mu.Lock()
+	if m.cells == nil {
+		m.cells = map[string]*evalMemoCell{}
+	}
+	c := m.cells[key]
+	if c == nil {
+		c = &evalMemoCell{}
+		m.cells[key] = c
+	}
+	m.mu.Unlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done {
+		return c.v, nil
+	}
+	v, err := compute()
+	if err != nil {
+		return nil, err
+	}
+	c.v, c.done = v, true
+	return v, nil
+}
+
+type evalMemoKey struct{}
+
+// WithEvalMemo returns ctx carrying a fresh, empty EvalMemo that replaces any outer one.
+func WithEvalMemo(ctx context.Context) context.Context {
+	return context.WithValue(ctx, evalMemoKey{}, &EvalMemo{})
+}
+
+// EvalMemoFromContext returns the evaluation's memo, or nil when none was installed.
+func EvalMemoFromContext(ctx context.Context) *EvalMemo {
+	m, _ := ctx.Value(evalMemoKey{}).(*EvalMemo)
+	return m
+}

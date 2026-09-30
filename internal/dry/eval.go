@@ -2,11 +2,16 @@ package dry
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
+	"slices"
 	"strconv"
 
+	"github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -14,7 +19,9 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/std"
 )
 
 // SpellCatalog yields the built-in spell op surface (import name -> op names) the
@@ -67,8 +74,31 @@ func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session
 // registerWASMCompatibleMagusModules installs every module in WASMCompatibleMagusModules
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
 func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
-	for name, register := range WASMCompatibleMagusModules {
-		sess.SetNativeModule(name, register(ctx, sess))
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(ffi.WASM) {
+			installHostModule(sess, name, reg, reg.Register(ctx, sess))
+		}
+	}
+}
+
+// installHostModule binds one registry module as the engine's hostModuleBinds does:
+// the generated declarations appended under its import path, and mod merged onto a
+// stdlib module at that path or installed fresh. Without the declarations every call
+// through the module is untyped here, so a body the engine refuses would pass.
+func installHostModule(sess *buzz.Session, name string, reg ffi.Registration, mod vm.Value) {
+	importPath := cmp.Or(reg.Path, name)
+	if src, ok := spell.ModuleDecls(name); ok {
+		sess.SetModuleDecls(importPath, src)
+	}
+	base, ok := sess.NativeModule(importPath)
+	if !ok {
+		sess.SetNativeModule(importPath, mod)
+		return
+	}
+	for _, k := range mod.MapKeys() {
+		if v, ok := mod.MapGet(k); ok {
+			base.MapSet(k, v)
+		}
 	}
 }
 
@@ -76,9 +106,9 @@ func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session)
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
 // installHost registers as a native module like the rest, so the playground is a
 // blank slate and every surface it offers is reached by an explicit import, the same
-// import a magusfile writes. It is the single truth for what runs in the playground (kept next to the
-// wiring so the two can't drift), and the langservice manifest diffs against it to
-// decide which modules are reference-only there. Because magus is listed here (it is
+// import a magusfile writes. With PlaygroundSourceModules it is the single truth for what
+// runs in the playground, and the langservice manifest diffs against both to decide which
+// modules are reference-only there. Because magus is listed here (it is
 // genuinely wired), it is never reported as excluded: no special-casing downstream.
 func PlaygroundHostModules() []string {
 	out := make([]string, 0, len(WASMCompatibleMagusModules)+1)
@@ -205,22 +235,82 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 
 	// Plain mode: evaluate the Buzz snippet once and return its trailing value + output.
 	var out bytes.Buffer
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	sess := plainSession(ctx, &out)
 	defer sess.Close()
-	buzzstd.RegisterWithOutput(sess, &out)
-	registerWASMCompatibleMagusModules(ctx, sess)
-	// The pure-compute half of the magus surface, registered as a MODULE so plain
-	// mode resolves `import "magus"` the way a magusfile does. It was previously a
-	// global, which made the import optional here and only here: a snippet that ran
-	// under the Run button then failed when pasted into a magusfile, so the page
-	// taught a form the language rejects.
-	sess.SetNativeModule("magus", pureMagus())
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {
 		return EvalResult{Output: out.String(), Diag: toDiag(err)}
 	}
 	return EvalResult{OK: true, Result: v.String(), Output: testBlockNote(src) + out.String()}
+}
+
+// plainSession is the language playground's session: Buzz stdlib, the WASM-compatible host
+// modules, the pure magus surface and the vetted Buzz-implemented modules. The caller closes it.
+func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	buzzstd.RegisterWithOutput(sess, out)
+	registerWASMCompatibleMagusModules(ctx, sess)
+	// The pure-compute half of the magus surface, registered as a MODULE so plain
+	// mode resolves `import "magus"` the way a magusfile does. It was previously a
+	// global, which made the import optional here and only here: a snippet that ran
+	// under the Run button then failed when pasted into a magusfile, so the page
+	// taught a form the language rejects.
+	magus := pureMagus()
+	sess.SetNativeModule("magus", magus)
+	// Only the externs pureMagus implements: any other would type-check a call that
+	// then fails at run time.
+	spell.DeclareMagusTypes(sess, func(member string) bool {
+		_, ok := magus.MapGet(member)
+		return ok
+	})
+	for _, name := range playgroundSourceModules {
+		sm, ok := std.GetSource(name)
+		if !ok {
+			panic("dry: the playground lists source module " + name + ", which std does not register")
+		}
+		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
+	}
+	return sess
+}
+
+// playgroundSourceModules are the Buzz-implemented std modules the playground resolves,
+// each vetted by hand: figure imports only Buzz's std and assert and calls no host module.
+var playgroundSourceModules = []string{"figure"}
+
+// PlaygroundSourceModules names the Buzz-implemented modules the playground resolves, beside
+// the host modules PlaygroundHostModules names.
+func PlaygroundSourceModules() []string { return slices.Clone(playgroundSourceModules) }
+
+// DrawResult is one figure the playground drew: SVG when OK, else the Findings
+// magus/figure raised, or a Diag when the record or the runtime failed.
+type DrawResult struct {
+	OK       bool   `json:"ok"`
+	SVG      string `json:"svg"`
+	Findings string `json:"findings"`
+	Diag     *Diag  `json:"diag"`
+}
+
+// DrawFigure draws figJSON, a figure\Figure record as JSON, with figure\draw in a plain
+// session. A member the record does not declare is refused, so a caller's record cannot
+// drift from the module's unnoticed.
+func DrawFigure(ctx context.Context, figJSON, anchorHref string) DrawResult {
+	var fig figure.Figure
+	if err := json.UnmarshalStrict([]byte(figJSON), &fig); err != nil {
+		return DrawResult{Diag: &Diag{Msg: "figure record: " + err.Error()}}
+	}
+	var out bytes.Buffer
+	sess := plainSession(ctx, &out)
+	defer sess.Close()
+	svg, err := figure.Draw(ctx, sess, fig, anchorHref)
+	var refused *figure.Findings
+	switch {
+	case errors.As(err, &refused):
+		return DrawResult{Findings: refused.Text}
+	case err != nil:
+		return DrawResult{Diag: toDiag(err)}
+	}
+	return DrawResult{OK: true, SVG: svg}
 }
 
 // EvalInContext evaluates expr in a session that has first executed magusfileSrc,

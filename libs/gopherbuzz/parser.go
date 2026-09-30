@@ -965,6 +965,22 @@ func (p *parser) skipTypeParams() (bool, error) {
 	return true, nil
 }
 
+// typeParamList consumes a DECLARATION's `::<T, U>` clause and returns its names.
+// A use site (`f::<int>()`) goes through skipTypeParams.
+func (p *parser) typeParamList() ([]string, error) {
+	from := p.pos
+	if ok, err := p.skipTypeParams(); !ok || err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, t := range p.tokens[from+3 : p.pos-1] {
+		if t.Kind == token.Ident {
+			names = append(names, t.Val)
+		}
+	}
+	return names, nil
+}
+
 // skipBalancedBraces consumes a { ... } group, nesting included.
 func (p *parser) skipBalancedBraces() error {
 	if _, err := p.eat(token.LBrace); err != nil {
@@ -1564,14 +1580,15 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.skipTypeParams(); err != nil {
+	tps, err := p.typeParamList()
+	if err != nil {
 		return nil, err
 	}
 	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, TypeParams: tps, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
 }
 
 // parseExternFunDecl parses `extern fun name(params) > T;`, the signature of a
@@ -1589,14 +1606,15 @@ func (p *parser) parseExternFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.skipTypeParams(); err != nil {
+	tps, err := p.typeParamList()
+	if err != nil {
 		return nil, err
 	}
 	fr, err := p.parseFunRest(true)
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, TypeParams: tps, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -1713,7 +1731,8 @@ func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.skipTypeParams(); err != nil {
+		tps, err := p.typeParamList()
+		if err != nil {
 			return nil, err
 		}
 		// parseFunRest(true) is the signature-only form `extern fun` uses: params and
@@ -1723,7 +1742,7 @@ func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
 			return nil, err
 		}
 		decl.Methods = append(decl.Methods, &ast.FunDecl{
-			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val,
+			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val, TypeParams: tps,
 			Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults,
 			RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot,
 		})
@@ -1764,16 +1783,16 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 		return nil, err
 	}
 	// `object Payload::<K, V>` declares type parameters. They are erased like a
-	// generic function's, so the object's identity stays its bare name and the
-	// parameters only have to parse: a field typed `K` resolves to Unknown,
-	// which is compatible with whatever the instance actually holds.
-	if _, err := p.skipTypeParams(); err != nil {
+	// generic function's, so the object's identity stays its bare name. The names
+	// are kept only so the checker does not report a field typed `K` as undefined.
+	tps, err := p.typeParamList()
+	if err != nil {
 		return nil, err
 	}
 	if _, err := p.eat(token.LBrace); err != nil {
 		return nil, err
 	}
-	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Conforms: conforms}
+	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Conforms: conforms, TypeParams: tps}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		// `static` marks a member that lives on the type rather than an instance:
 		// `static fun` is a method called as Foo.make() with no receiver, and a
@@ -2749,14 +2768,15 @@ func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
 func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	t, _ := p.eat(token.Fun)
 	// A lambda can declare type parameters too: `fun::<E, F>() > int => 12`.
-	if _, err := p.skipTypeParams(); err != nil {
+	tps, err := p.typeParamList()
+	if err != nil {
 		return nil, err
 	}
 	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
+	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, TypeParams: tps, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
 }
 
 // funRest is the shared tail of a function: (params) rettype *> yieldtype { body }.

@@ -2,7 +2,12 @@ package spells
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
+	"unicode"
 )
 
 // PatchOpKind is one JSON Patch (RFC 6902) operation name. A charm is an ordered
@@ -345,6 +350,51 @@ type Descriptor struct {
 	// child may touch, never what a build produces, and keying on it would invalidate
 	// every cached entry each time a spell's grants were corrected.
 	Sandbox *Sandbox `json:"-"`
+	// ScriptRunners are the argv prefixes that hand control to a script a manifest
+	// defines, from mgs_listScriptRunners. Not serialized: doctor reads them, no build
+	// does, so correcting one must not invalidate the cache.
+	ScriptRunners []Command `json:"-"`
+}
+
+// ValidateScriptRunners rejects a runner that is not a plain argv prefix: a bin is
+// required, no arg may be blank, and only Bin and Args may be set, since a runner
+// is matched against a traced argv and never run.
+func ValidateScriptRunners(runners []Command) error {
+	for i, r := range runners {
+		if r.Bin == "" || strings.ContainsFunc(r.Bin, unicode.IsSpace) {
+			return fmt.Errorf("mgs_listScriptRunners[%d]: bin %q must name one executable", i, r.Bin)
+		}
+		if slices.Contains(r.Args, "") {
+			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): args %q holds a blank token", i, r.Bin, r.Args)
+		}
+		if len(r.DefaultArgs)+len(r.TrailingArgs)+len(r.Charms)+len(r.Sources)+len(r.Secrets)+len(r.EnvKeys)+len(r.Hints) > 0 || r.NeedsArgs != "" ||
+			r.External != ExternalNone || r.SourcesEach || r.Capture {
+			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): a runner is an argv prefix; set only bin and args", i, r.Bin)
+		}
+	}
+	return nil
+}
+
+// MatchScriptRunner reports the first runner argv starts with, and the script it
+// names: the first token after the prefix that is not a flag, "" when there is none.
+// argv[0] matches a runner's Bin by base name, so "/usr/bin/npm" is npm.
+func MatchScriptRunner(runners []Command, argv []string) (runner Command, script string, ok bool) {
+	if len(argv) == 0 {
+		return Command{}, "", false
+	}
+	bin := path.Base(filepath.ToSlash(argv[0]))
+	for _, r := range runners {
+		if r.Bin != bin || len(argv)-1 < len(r.Args) || !slices.Equal(argv[1:1+len(r.Args)], r.Args) {
+			continue
+		}
+		for _, tok := range argv[1+len(r.Args):] {
+			if !strings.HasPrefix(tok, "-") {
+				return r, tok, true
+			}
+		}
+		return r, "", true
+	}
+	return Command{}, "", false
 }
 
 // OpNames returns the spell's op names in sorted order.

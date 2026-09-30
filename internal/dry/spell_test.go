@@ -166,6 +166,26 @@ func TestLoadSpell_customCharms(t *testing.T) {
 	}
 }
 
+// TestRunSpell_needsArgsRefused pins parity with runCommand: the dry run has no
+// call-site args, so an op declaring needsArgs is refused with its message.
+func TestRunSpell_needsArgsRefused(t *testing.T) {
+	src := `import "magus/spell";
+export fun mgs_getName() > str { return "serving"; }
+fun serve(t: Target) > Service {
+    return Service{ command = Command{ bin = "pnpm", args = ["exec"], needsArgs = "name the server command" }};
+}
+fun lint(t: Target) > Command { return Command{ bin = "x", args = ["run"] }; }
+export fun mgs_listTargets() > any { return {"serve": serve, "lint": lint}; }
+`
+	res := Run(context.Background(), src, "serve", nil)
+	assert.False(t, res.OK)
+	require.NotNil(t, res.Diag)
+	assert.Equal(t, "serve: name the server command", res.Diag.Msg)
+
+	other := Run(context.Background(), src, "lint", nil)
+	assert.True(t, other.OK, "an op without needsArgs still plans: %+v", other.Diag)
+}
+
 // TestRunSpell_badCharmPatchSurfaces locks in that a charm patch which passes the
 // structural decode check but fails to apply (an out-of-range JSON pointer) surfaces
 // as a diagnostic, not swallowed. The engine returns that error and refuses the run;

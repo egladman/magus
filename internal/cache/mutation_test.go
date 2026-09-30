@@ -217,3 +217,18 @@ func TestKeyStillDescribesInputsSeesAClaimedOutputMove(t *testing.T) {
 	assert.False(t, fresh, "a hashed input moved and the key was still called fresh")
 	assert.Equal(t, []string{"pkg/enum.go"}, moved)
 }
+
+// A moved input some target generates is the step's own run rewriting its key, which is
+// MGS4010; one nothing declares moved under it from outside and stays a plain notice.
+func TestMovedInputsNoticeCodesOnlyAGeneratedInput(t *testing.T) {
+	s := Step{ProjectPath: ".", Target: "test", OwnedOutputs: types.MustParseGlobs("gen/*.json")}
+
+	got := movedInputsNotice(s, "0123456789abcdef", []string{"gen/graph.json", "README.md"})
+	assert.Contains(t, got, string(types.SelfInvalidatingKey))
+	assert.Contains(t, got, "gen/graph.json")
+	assert.NotContains(t, got, "README.md", "only the generated inputs are the target's own doing")
+
+	got = movedInputsNotice(s, "0123456789abcdef", []string{"README.md"})
+	assert.NotContains(t, got, string(types.SelfInvalidatingKey))
+	assert.Contains(t, got, "README.md")
+}

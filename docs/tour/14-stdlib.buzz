@@ -16,7 +16,7 @@ import "strings";
 // A target assembling build config from the stdlib the way a real one would:
 // derive an artifact slug and compare two versions, then print them. `run stamp`
 // computes each value for real.
-export fun stamp(ctx: magus\Context, args: [str]) > void {
+export fun stamp(ctx: magus\Context, args: [str]) > void !> any {
     final slug = strings\kebabCase("Build The App");
     // satisfies() tests a relation or a range; compare() orders two versions
     // and returns -1, 0, or 1, the way every other semver library spells it.

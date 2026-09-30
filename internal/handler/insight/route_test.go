@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
@@ -62,8 +63,12 @@ func TestInsightHandler_ErrorReturns500(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
 	}
-	if body := w.Body.String(); body != "insight failed\n" {
-		t.Errorf("want only what failed, got %q", body)
+	body := w.Body.String()
+	if !strings.Contains(body, `"reason":"MGS9027"`) || !strings.Contains(body, "insight failed") {
+		t.Errorf("want the internal-failure reason naming what failed, got %q", body)
+	}
+	if strings.Contains(body, "/Users/dev") {
+		t.Errorf("the body names the server's path: %q", body)
 	}
 }
 
@@ -73,6 +78,9 @@ func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("want 503, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9026"`) {
+		t.Errorf("want the workspace-not-wired reason, got %q", w.Body.String())
 	}
 }
 

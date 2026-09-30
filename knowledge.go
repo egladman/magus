@@ -1348,6 +1348,7 @@ func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph
 // knowledge.WriteGuardIndex), from a cache-first graph with symbols merged. Called where
 // indexes are rebuilt: `magus graph build` and the server's auto-indexer.
 func (m *Magus) WriteGuardIndex(ctx context.Context) error {
+	at := knowledge.ReadGuardCheckout(ctx, m.Root())
 	g, err := m.KnowledgeGraphWithSymbols(ctx)
 	if err != nil {
 		return err
@@ -1355,7 +1356,7 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 	fresh := !slices.ContainsFunc(m.SymbolIndexStatus(ctx), func(s types.SymbolIndexStatus) bool {
 		return s.Freshness == types.SymbolIndexStale
 	})
-	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh)
+	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh, at)
 }
 
 // KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus\refs: it

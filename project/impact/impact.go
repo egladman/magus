@@ -15,6 +15,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -161,6 +162,133 @@ func Enrich(res *types.ImpactResult, store SymbolStore) {
 		res.Notes = append(res.Notes,
 			"no coverage data on changed files (run `magus run coverage` to populate it)")
 	}
+}
+
+// ChangedLines maps each file a unified patch touches to the new-side lines it changed. A
+// removed run counts as the new-side line right after it, so a deletion inside a definition
+// lands in that definition.
+func ChangedLines(patch string) map[string][]int {
+	out := map[string][]int{}
+	for _, f := range changeset.Parse(patch) {
+		for _, h := range f.Hunks {
+			next := h.NewStart
+			for _, r := range h.Rows {
+				switch {
+				case r.NewLine != nil:
+					next = *r.NewLine + 1
+					if r.Kind == changeset.KindAdd {
+						out[f.Path] = append(out[f.Path], *r.NewLine)
+					}
+				case r.Kind == changeset.KindDel:
+					out[f.Path] = append(out[f.Path], next)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// Span is the lines one symbol's definition occupies in a file. End is 0 where the indexer
+// recorded no enclosing range.
+type Span struct {
+	ID         string
+	Start, End int
+}
+
+// Touched returns the IDs of the spans a changed line falls in. A span with an End contains
+// the lines from Start to End, and one without always owns its Start line. A line no ranged
+// span contains also belongs to the nearest definition above it when that one has no End,
+// the rule [knowledge.Graph.SymbolAt] uses, so an indexer that records no ranges still places
+// each change in a declaration. Inside a ranged span that rule would hand a new field's lines
+// to the field declared above it, so a definition a closed range encloses is never nearest.
+func Touched(spans []Span, lines []int) map[string]bool {
+	// enclosedTo is the last line of the ranges enclosing each span's start, itself aside.
+	enclosedTo := make([]int, len(spans))
+	for i, s := range spans {
+		for j, r := range spans {
+			if i != j && r.End > 0 && r.Start <= s.Start && s.Start <= r.End {
+				enclosedTo[i] = max(enclosedTo[i], r.End)
+			}
+		}
+	}
+	out := map[string]bool{}
+	for _, l := range lines {
+		contained, nearest := false, 0
+		for i, s := range spans {
+			switch {
+			case s.End > 0 && s.Start <= l && l <= s.End:
+				out[s.ID] = true
+				contained = true
+			case s.End == 0 && s.Start == l:
+				out[s.ID] = true
+			}
+			if s.Start <= l && (enclosedTo[i] == 0 || enclosedTo[i] >= l) {
+				nearest = max(nearest, s.Start)
+			}
+		}
+		if contained {
+			continue
+		}
+		for _, s := range spans {
+			if s.End == 0 && s.Start > 0 && s.Start == nearest {
+				out[s.ID] = true
+			}
+		}
+	}
+	return out
+}
+
+// CallGraph is what PublicThrough walks.
+type CallGraph interface {
+	// Callers are the symbols with a calls edge into id, in a stable order.
+	Callers(id string) []string
+	// Boundary is the DiffBoundary constant naming what a file referencing id sits outside
+	// of, or empty when every referencing file shares id's package and project.
+	Boundary(id string) string
+	// Qualified is id's name through its enclosing declarations.
+	Qualified(id string) string
+}
+
+// The bounds on one PublicThrough walk. A widely called helper fans out fast, and past a few
+// hops the chain says more about the call graph than about the change.
+const (
+	reachDepth = 4
+	reachLimit = 10
+	reachVisit = 500
+)
+
+// PublicThrough walks id's callers breadth first and returns each one that crosses a package or
+// project boundary, with the callers between. A path stops at its first such caller, because
+// that is where the change becomes visible to other code.
+func PublicThrough(g CallGraph, id string) []types.DiffPublicPath {
+	type hop struct {
+		id  string
+		via []string
+	}
+	seen := map[string]bool{id: true}
+	frontier := []hop{{id: id}}
+	var out []types.DiffPublicPath
+	for depth := 0; depth < reachDepth && len(frontier) > 0 && len(seen) < reachVisit; depth++ {
+		var next []hop
+		for _, h := range frontier {
+			for _, c := range g.Callers(h.id) {
+				if seen[c] {
+					continue
+				}
+				seen[c] = true
+				if b := g.Boundary(c); b != "" {
+					out = append(out, types.DiffPublicPath{ID: c, Qualified: g.Qualified(c), Via: h.via, Boundary: b})
+					if len(out) == reachLimit {
+						return out
+					}
+					continue
+				}
+				next = append(next, hop{id: c, via: append(slices.Clone(h.via), g.Qualified(c))})
+			}
+		}
+		frontier = next
+	}
+	return out
 }
 
 // toCoverage narrows the knowledge-graph coverage facts to the report's own

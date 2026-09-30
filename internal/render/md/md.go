@@ -243,7 +243,7 @@ func (b *Builder) AlignedCodeBlock(lang string, lines []CodeLine) {
 // CodeLine is one line of an AlignedCodeBlock: the code and its comment.
 type CodeLine struct{ Code, Note string }
 
-// Fenced writes a fenced block whose body comes from emit (e.g. a Mermaid
+// Fenced writes a fenced block whose body comes from emit (e.g. a DOT
 // emitter that takes an io.Writer). The fence is closed even when emit fails,
 // but the error is returned as-is.
 func (b *Builder) Fenced(lang string, emit func(io.Writer) error) error {

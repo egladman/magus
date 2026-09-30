@@ -169,6 +169,8 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //                    subagent's command is graded under the job it was spawned for
 //                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_CWD_PATH    dot-path to the directory the call runs in, whose checkout's own
+//                    ./magus judges it (default cwd)
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
 //   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
@@ -642,7 +644,7 @@ fun main(args: [str]) > void {
         rewrites = updatedInput != "";
     }
 
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(session, family: "unavailable-{toolName}", file: "magus-command.buzz")) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
@@ -772,8 +774,8 @@ wasteful, not destructive.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
-//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_AGENT_PATH, HOST_TRANSCRIPT_PATH
-//                    dot-paths into the event; the tool name is what decides whether the
+//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_AGENT_PATH, HOST_TRANSCRIPT_PATH,
+//   HOST_CWD_PATH    dot-paths into the event; the tool name is what decides whether the
 //                    whole envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
@@ -887,12 +889,12 @@ fun main(args: [str]) > void {
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
 
-    // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
-    // That file's notices are held to one firing per session and the session id keys them,
-    // so it has to read the event to stay quiet; this surface prints nothing by default and
-    // needs no key. The cost is that a host writing to a stdin nobody reads can see a broken
-    // pipe, which is why the two orders are stated rather than assumed to match.
-    final bin = hook\resolveBin();
+    // The event is read first, as magus-command.buzz reads it: the binary is the one in the
+    // checkout the event's cwd names.
+    final raw = io\stdin.readAll() catch null;
+    final event = json\parse(raw ?? "") catch null;
+
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (bin == "" or !hook\isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
         // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
@@ -900,9 +902,6 @@ fun main(args: [str]) > void {
         if (unavailable != "") { io\stdout.write(unavailable) catch void; }
         return;
     }
-
-    final raw = io\stdin.readAll() catch null;
-    final event = json\parse(raw ?? "") catch null;
 
     // A payload that opens like an envelope but does not parse is a TRUNCATED one, not a
     // path. Judged as text it matches no rule and passes; see magus-command.buzz.

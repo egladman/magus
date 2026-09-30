@@ -91,11 +91,12 @@ alias is telling you when it appears anywhere other than the two spellings above
 
 ## Layering
 
-    transport    internal/httpx           (one loopback Server + middleware)
-    handler      internal/handler/*       (this package - request -> domain -> wire)
-    service      internal/service/*       (pure application logic - no http/proto)
-    repository   internal/cache, knowledge  (data access)
-    composition  internal/server          (assembles the server server)
+The layers are declared in the root `magusfile.buzz`, under `"layers"` in its
+`magus\project` call: transport (`internal/httpx`, one loopback server and its middleware),
+handler (this package: request to domain to wire), service (pure application logic, no
+http or proto), repository (data access) and composition (`internal/server`, which
+assembles the server). `magus\layer("handler")` answers what each one covers, and the
+docs figures group by them.
 
-Keep the arrows pointing down: a handler imports its service, httpx (to mount routes),
-and the repositories; nothing in a repository or in httpx imports a handler.
+Keep the arrows pointing down that list: a handler imports its service, httpx (to mount
+routes), and the repositories; nothing in a repository or in httpx imports a handler.

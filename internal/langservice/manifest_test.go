@@ -17,20 +17,23 @@ func names(mods []Module) []string {
 
 func TestExcludedModules(t *testing.T) {
 	// The playground registers the pure-compute modules plus magus (wired as a
-	// global). Everything else in the manifest is reference-only there.
+	// global), and the Buzz-implemented modules dry vets. Everything else in the
+	// manifest is reference-only there.
 	//
 	// This list mirrors the WASM-capable entries of
-	// internal/interp/bindings/gen/modules_wasm.go, which is what the playground
-	// actually installs. Keep the two together when a module is added: the list
-	// went stale once already, when the stdlib expansion added thirteen modules
-	// and nothing here noticed, so every one of them read as "excluded", which
-	// would have told a playground user that base64 and math were unavailable.
+	// internal/interp/bindings/gen/modules_wasm.go plus dry.PlaygroundSourceModules,
+	// which is what the playground actually installs. Keep them together when a module
+	// is added: the list went stale once already, when the stdlib expansion added
+	// thirteen modules and nothing here noticed, so every one of them read as
+	// "excluded", which would have told a playground user that base64 and math were
+	// unavailable.
 	available := []string{
 		"platform", "crypto", "env", "json", "time", "fmt", "markdown", "charm",
 		"path", "strings", "semver", "yaml", "template", "toml", "uuid", "xml",
 		"base64", "csv", "diff", "hex", "ini", "log", "math", "merge", "sort", "url",
 		"flags",
 		"magus",
+		"figure", // pure Buzz: it takes magus\ records as values and calls no host module
 	}
 	got := names(ExcludedModules(available))
 	assert.ElementsMatch(t, []string{

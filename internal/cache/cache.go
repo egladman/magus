@@ -121,6 +121,9 @@ type Stats struct {
 type Step struct {
 	ProjectPath string       // repo-relative project directory
 	Sources     []types.Glob // for the cache key
+	// BeforeKey are the skip_cache targets whose artifacts Sources reads. RunAll runs them
+	// through WithTargetRunner after the upstreams finish and before hashing the key.
+	BeforeKey []types.TargetRef
 	// IgnoreDirs are the non-source dir names this project's resolved spells generate
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
 	// The field itself is not written into the key; only the resulting file set is, so
@@ -176,11 +179,11 @@ type Step struct {
 
 	Deps      []string // upstream project hashes folded into the key
 	DependsOn []string // upstream project paths for scheduling (not hashed)
-	// RunAfter holds node keys (DepKey) of batch steps this one must wait for,
-	// derived from declared writer-before-reader footprints (DeriveTargetOrder).
-	// Unlike DependsOn it crosses target names and is exact. Scheduling only:
-	// never hashed, never folded into Deps, never part of the affected set.
-	RunAfter      []string
+	// RunAfter is the batch steps this one must wait for, derived from declared
+	// writer-before-reader footprints (DeriveTargetOrder). Unlike DependsOn it crosses
+	// target names and is exact. Scheduling only: never hashed, never folded into Deps,
+	// never part of the affected set.
+	RunAfter      []types.TargetRef
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
@@ -284,6 +287,8 @@ type runCtx struct {
 	// Zero is unlimited: every step that can run, runs, and the batch reports all of
 	// them. See RunAll for why that is the default.
 	maxFailures int
+	// runTarget runs a step's BeforeKey targets; see WithTargetRunner.
+	runTarget func(context.Context, types.TargetRef) error
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -857,9 +862,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	if storable {
 		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
 			storable = false
-			c.log.WarnContext(ctx, fmt.Sprintf(
-				"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
-				s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+			c.log.WarnContext(ctx, movedInputsNotice(*rc.step, hash, moved))
 		}
 	}
 
@@ -1213,7 +1216,7 @@ func WithSharedStepBase(ctx context.Context) context.Context {
 // instead of the caller's: the context a step that several parents reach has to run on.
 //
 // A composed target is dispatched once and awaited by everyone who needs it (the Buzz
-// pool's TargetMemo), so whichever parent asks first supplies the context the work runs
+// pool's TargetRuns), so whichever parent asks first supplies the context the work runs
 // under. When that parent declares a timeout, its ceiling silently becomes the ceiling of
 // a step its siblings also depend on: on 2026-09-10 `security` (15m) reached `generate`
 // first, and when it expired the whole codegen chain died with "context deadline exceeded"
@@ -1255,7 +1258,7 @@ func (c sharedStepContext) Value(key any) any           { return c.values.Value(
 // lock: exactly how a settle pass wedged a gate for over an hour on 2026-09-04 with
 // `magus status` reporting 0 slots in use and nothing running.
 //
-// Concurrency is the caller's to arrange; unlike RunAll there is no dependency barrier.
+// Concurrency is the caller's to arrange; unlike RunAll it waits on no upstreams.
 // The step still joins the invocation's isolation scope, so an exclusive off-batch step
 // cannot overlap a batch step or another dynamic child.
 func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
@@ -1311,11 +1314,11 @@ func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Con
 }
 
 // RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
-// Step.DependsOn (same-target) and Step.RunAfter (exact node keys) impose
+// Step.DependsOn (same-target) and Step.RunAfter (exact target refs) impose
 // scheduling order for in-scope steps only; out-of-scope deps are ignored. A
 // cyclic graph over either edge kind is rejected before any goroutine
 // launches. Upstream cache keys fold into dependent Step.Deps transitively
-// (happens-before: markDone writes the key before waitForDeps returns in
+// (happens-before: complete writes the key before waitForUpstreams returns in
 // dependents). Every goroutine launches immediately and blocks on deps without
 // holding a slot, so the pool never deadlocks and g.Wait() always drains cleanly.
 func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Context, Step) error, opts ...RunOption) ([]Result, error) {
@@ -1333,10 +1336,10 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 		return nil, err
 	}
 
-	barrier := newDepBarrier(steps)
+	upstreams := newUpstreamRuns(steps)
 
 	var keysMu sync.Mutex
-	resolvedKeys := make(map[string]string, len(steps))
+	resolvedKeys := make(map[types.TargetRef]string, len(steps))
 
 	// optimization: coalesce the mtime-store flush to once per batch instead of once
 	// per step. A per-step flush rewrites every shard a completing step shares with
@@ -1366,7 +1369,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// batch, so one project's failure killed every INDEPENDENT project mid-flight, and
 	// a run reported one failure per invocation no matter how many were really there.
 	// Dependents are a different matter and are already handled without any of this:
-	// waitForDeps reads the upstream's recorded error from the barrier, so the things
+	// waitForUpstreams reads the upstream's recorded error, so the things
 	// that genuinely could not proceed still stop.
 	//
 	// So step errors are collected here instead of returned to the group, and only a
@@ -1388,11 +1391,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range steps {
 		g.Go(func() error {
-			// stepErr is this step's REAL verdict and markDone always gets it, even when
+			// stepErr is this step's REAL verdict and complete always gets it, even when
 			// nil is returned to the group. The two must not be the same value: the group
-			// learns of a failure only to cancel, while a dependent asks the barrier
-			// whether its upstream succeeded. Collapsing them (the named-return form this
-			// replaced) would tell every dependent its upstream passed.
+			// learns of a failure only to cancel, while a dependent asks its upstream's
+			// run whether it succeeded. Collapsing them into a named return would tell
+			// every dependent its upstream passed.
 			var stepErr error
 			// ran distinguishes a step that reached fn from one that never started: a
 			// dependency failed, or the batch was already cancelled. Only the first kind
@@ -1400,16 +1403,16 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// appears in the joined error; the rest are consequences already explained by
 			// the failure that caused them.
 			ran := false
-			// markDone on every exit so a failing upstream cascades to its dependents,
+			// complete on every exit so a failing upstream cascades to its dependents,
 			// carrying this step's own result so a dependent's wait can tell success
-			// from failure rather than just "done" (see waitForDeps).
-			defer func() { barrier.markDone(stepKey(s), stepErr) }()
-			// fail routes a step's outcome: the barrier always hears it, the group only
+			// from failure rather than just "done" (see waitForUpstreams).
+			defer func() { upstreams.complete(stepRef(s), stepErr) }()
+			// fail routes a step's outcome: its run always records it, the group only
 			// when the budget is spent (returning non-nil is what cancels the batch).
 			fail := func(e error) error {
 				stepErr = e
 				if e == nil || !ran || gctx.Err() != nil {
-					return nil //nolint:nilerr // swallowing here is the point: the barrier has the real error (stepErr), and returning it would cancel every peer
+					return nil //nolint:nilerr // swallowing here is the point: the step's run has the real error (stepErr), and returning it would cancel every peer
 				}
 				if recordFailure(i, e) {
 					return e
@@ -1427,7 +1430,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			}
 			// Wait for upstreams before acquiring a slot: holding a slot while
 			// blocked on a dep would deadlock a saturated limiter.
-			if err := barrier.waitForDeps(gctx, s); err != nil {
+			if err := upstreams.waitForUpstreams(gctx, s); err != nil {
 				return fail(err)
 			}
 			// Fold upstream keys into Deps for transitive cache-key propagation. Before
@@ -1436,13 +1439,21 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				keysMu.Lock()
 				depKeys := make([]string, 0, len(s.DependsOn))
 				for _, dep := range s.DependsOn {
-					if k, ok := resolvedKeys[DepKey(dep, s.Target)]; ok {
+					if k, ok := resolvedKeys[types.TargetRef{Project: dep, Target: s.Target}]; ok {
 						depKeys = append(depKeys, k)
 					}
 				}
 				keysMu.Unlock()
 				if len(depKeys) > 0 {
 					s.Deps = slices.Concat(s.Deps, depKeys)
+				}
+			}
+			if rc.runTarget != nil && !s.NoCache {
+				for _, ref := range s.BeforeKey {
+					if err := rc.runTarget(gctx, ref); err != nil {
+						ran = gctx.Err() == nil
+						return fail(err)
+					}
 				}
 			}
 
@@ -1516,11 +1527,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				}
 				r, err = admitAndRun(machineCtx, opts)
 			}
-			// Write key before markDone; the markDone→waitForDeps happens-before edge
+			// Write key before complete; the complete→waitForUpstreams happens-before edge
 			// ensures dependents see the key when they unblock.
 			if r.Hash != "" {
 				keysMu.Lock()
-				resolvedKeys[stepKey(s)] = r.Hash
+				resolvedKeys[stepRef(s)] = r.Hash
 				keysMu.Unlock()
 			}
 			results[i] = r

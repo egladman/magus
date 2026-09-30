@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1379,15 +1380,41 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			out.Files[i].Reach = &zero
 		}
 	}
+	// Read once here rather than in conformance: which symbols count as changed depends on it.
+	patch, patchErr := cfg.patch, error(nil)
+	if !cfg.patchGiven {
+		patch, patchErr = m.WorkingDiff(ctx, paths)
+	}
+	var changed map[string]touchedSymbol
+	switch {
+	case patchErr != nil:
+		out.Notes = append(out.Notes,
+			"the patch could not be read, so each changed file lists every symbol it defines rather than the ones the change touched: "+patchErr.Error())
+	case graph != nil:
+		changed = touchedSymbols(graph, patch, byPath)
+	}
 	for _, s := range res.ChangedSymbols {
 		f, ok := byPath[s.File]
 		if !ok {
 			continue
 		}
+		// The index covered this file whether or not the patch touched a symbol in it.
+		if f.Surface == types.DiffSurfaceUnknown {
+			f.Surface = types.DiffSurfaceInternal
+		}
+		// A package symbol is defined by every file of its package and referenced by every
+		// importer, so it would set every file's reach and changes nothing a caller sees.
+		t, hit := changed[s.Symbol]
+		if namespaceSymbol(s.Symbol, "") || (changed != nil && !hit) {
+			continue
+		}
 		sym := types.DiffSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
-		sym.ModuleAPI = exportedFromModule(s.File, s.Label, s.Symbol)
+		if t.change != "" {
+			sym.Change, sym.Qualified, sym.Signature = t.change, qualifiedName(s.Symbol, s.Label), t.signature
+		}
+		sym.PublicBeyondWorkspace = exportedFromModule(s.File, s.Label, s.Symbol)
 		if graph != nil {
-			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
+			sym.PublicTo, sym.PublicFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
 		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
 		// parameters and temporaries (`signal0`, `headers1`, `body0`), and on a real file they
@@ -1399,12 +1426,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// The exports are kept even at zero references, and that is the whole reason this is a
 		// conjunction rather than `RefCount == 0`: a NEWLY ADDED public function has no
 		// referents yet and is precisely the thing a reviewer must see.
-		//
-		// Only the APPEND is skipped. The reach and surface updates below still run for a
-		// local, because a file whose changed symbols are all locals was still COVERED by the
-		// index, and reporting its surface as unknown would say nobody looked when somebody
-		// did.
-		if sym.RefCount > 0 || sym.FileCount > 0 || sym.ModuleAPI || len(sym.ExternalProjects) > 0 {
+		if sym.RefCount > 0 || sym.FileCount > 0 || sym.PublicBeyondWorkspace || len(sym.PublicTo) > 0 {
 			f.Symbols = append(f.Symbols, sym)
 		}
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
@@ -1417,11 +1439,8 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// One symbol crossing a project boundary makes the whole file public surface: a
 		// reviewer needs to know the file contains something a consumer can see, and burying
 		// that because its neighbors are internal is how the signal gets missed.
-		switch {
-		case len(sym.ExternalProjects) > 0 || sym.ModuleAPI:
+		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
 			f.Surface = types.DiffSurfacePublic
-		case f.Surface == types.DiffSurfaceUnknown:
-			f.Surface = types.DiffSurfaceInternal
 		}
 	}
 	for _, c := range res.ChangedFileCoverage {
@@ -1430,7 +1449,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
-	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: cfg.patch}
+	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: patch}
 	if cfg.baseline != nil {
 		if indexed {
 			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
@@ -1448,17 +1467,157 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			strings.Join(m.symbolCapableIn(touched), ", ")))
 		out.ConformanceError = &d
 	case indexed:
-		m.conformance(ctx, &out, byPath, graph, paths, cfg, in)
+		m.conformance(ctx, &out, byPath, graph, cfg, in, patchErr)
+	}
+	if indexed {
+		attachPublicThrough(out.Files, newCallGraph(graph, m.projectOwner()))
 	}
 
 	out.SortForReading()
 	return out, nil
 }
 
+// touchedSymbol is what a patch says about one symbol whose lines it changed.
+type touchedSymbol struct {
+	change    string
+	signature string
+}
+
+// touchedSymbols reads which symbols the reviewed files define on lines the patch changed, and
+// what it did to each, from the head graph's definition ranges. Package and namespace symbols
+// are never touched.
+func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*types.DiffFile) map[string]touchedSymbol {
+	lines := impact.ChangedLines(patch)
+	pf := readPatchFacts(patch)
+	defs := definedSymbols(head.Nodes())
+	spans := map[string][]impact.Span{}
+	for id, def := range defs {
+		if _, ok := byPath[def.path]; !ok || namespaceSymbol(id, def.node.Attrs[attrSymbolKind]) {
+			continue
+		}
+		end, _ := strconv.Atoi(def.node.Attrs[attrDefEndLine])
+		spans[def.path] = append(spans[def.path], impact.Span{ID: id, Start: sourceLine(def.node.Source), End: end})
+	}
+	out := map[string]touchedSymbol{}
+	for path, ss := range spans {
+		// File-local, so a short name one other file also removed does not read as re-signed.
+		removed := strings.Join(pf.removed[path], "\n")
+		for id := range impact.Touched(ss, lines[path]) {
+			def := defs[id]
+			change := types.DiffChangeBody
+			if _, added := pf.added[path][sourceLine(def.node.Source)]; added {
+				change = types.DiffChangeAdded
+				if knowledge.IndexIdentifier(removed, def.node.Label) >= 0 {
+					change = types.DiffChangeSignature
+				}
+			}
+			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature]}
+		}
+	}
+	return out
+}
+
+// The symbol attrs the knowledge graph writes and keeps unexported.
+const (
+	attrDefEndLine = "def_end_line"
+	attrSymbolKind = "symbol_kind"
+	attrNamespace  = "namespace"
+)
+
+// namespaceSymbol reports whether a symbol is a package or namespace: its SCIP kind says so, or
+// its ID ends in a namespace descriptor, which SCIP spells with a trailing slash in every
+// language.
+func namespaceSymbol(id, kind string) bool {
+	return kind == "Package" || kind == "Namespace" || strings.HasSuffix(id, "/")
+}
+
+// attachPublicThrough sets PublicThrough on every listed symbol.
+func attachPublicThrough(files []types.DiffFile, g impact.CallGraph) {
+	for i := range files {
+		for j := range files[i].Symbols {
+			files[i].Symbols[j].PublicThrough = impact.PublicThrough(g, files[i].Symbols[j].ID)
+		}
+	}
+}
+
+// callGraph is [impact.CallGraph] over a knowledge graph's SCIP calls, defines and references
+// edges.
+type callGraph struct {
+	g       *knowledge.Graph
+	owner   func(path string) string
+	symbols map[string]types.KnowledgeNode
+	callers map[string][]string
+	// namespaces are the namespaces each file defines a symbol in.
+	namespaces map[string][]string
+}
+
+func newCallGraph(g *knowledge.Graph, owner func(string) string) callGraph {
+	cg := callGraph{
+		g: g, owner: owner, symbols: map[string]types.KnowledgeNode{},
+		callers: map[string][]string{}, namespaces: map[string][]string{},
+	}
+	for _, n := range g.Nodes() {
+		if n.Kind == types.KindSymbol {
+			cg.symbols[n.ID] = n
+		}
+	}
+	for _, e := range g.Edges() {
+		switch e.Relation {
+		case types.RelationCalls:
+			if _, ok := cg.symbols[e.Source]; ok {
+				cg.callers[e.Target] = append(cg.callers[e.Target], e.Source)
+			}
+		case types.RelationDefines:
+			ns := cg.symbols[e.Target].Attrs[attrNamespace]
+			file := strings.TrimPrefix(e.Source, types.KindFile+":")
+			if ns != "" && !slices.Contains(cg.namespaces[file], ns) {
+				cg.namespaces[file] = append(cg.namespaces[file], ns)
+			}
+		}
+	}
+	for _, c := range cg.callers {
+		slices.Sort(c)
+	}
+	return cg
+}
+
+func (c callGraph) Callers(id string) []string { return c.callers[id] }
+
+func (c callGraph) Qualified(id string) string { return qualifiedName(id, c.symbols[id].Label) }
+
+// Boundary reports a file of another project before a file of another namespace, because the
+// project is the wider of the two. A referencing file that defines no symbol says nothing
+// about its namespace and is not counted.
+func (c callGraph) Boundary(id string) string {
+	n, ok := c.symbols[id]
+	if !ok {
+		return ""
+	}
+	refs, ok := c.g.Refs(id)
+	if !ok {
+		return ""
+	}
+	path := n.Source
+	if i := strings.LastIndexByte(path, ':'); i >= 0 {
+		path = path[:i]
+	}
+	owner, ns := c.owner(path), n.Attrs[attrNamespace]
+	out := ""
+	for _, site := range refs.Refs {
+		if p := c.owner(site.File); p != "" && p != owner {
+			return types.DiffBoundaryProject
+		}
+		if theirs := c.namespaces[site.File]; ns != "" && len(theirs) > 0 && !slices.Contains(theirs, ns) {
+			out = types.DiffBoundaryPackage
+		}
+	}
+	return out
+}
+
 // conformance runs the conformance checks for diff. Whatever keeps them from running is set as
 // out.ConformanceError, in place of findings; a weaker input they fall back to is a Note.
 func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
-	graph *knowledge.Graph, paths []string, cfg diffConfig, in conformanceInput,
+	graph *knowledge.Graph, cfg diffConfig, in conformanceInput, patchErr error,
 ) {
 	fail := func(msg string, err error) {
 		d := types.Diagnostic{Message: "the conformance checks could not run: " + msg + ": " + err.Error()}
@@ -1468,13 +1627,9 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		if cfg.baseline != nil {
 			out.Notes = append(out.Notes, "conformance: the baseline could not be compared, so what the change adds was read from its patch, which cannot tell a re-signed symbol from an unchanged one")
 		}
-		if !cfg.patchGiven {
-			patch, err := m.WorkingDiff(ctx, paths)
-			if err != nil {
-				fail("the working tree's patch could not be read", err)
-				return
-			}
-			in.patch = patch
+		if patchErr != nil {
+			fail("the working tree's patch could not be read", patchErr)
+			return
 		}
 	}
 	generated, err := m.generatedFiles(ctx, graph)
@@ -1527,7 +1682,7 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 // here because Go states export in the language itself (an initial capital) and states
 // unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
 // is a fact rather than a heuristic. Every other language returns false, which reads as "not
-// known to be module API" and never as "internal": the caller keeps ExternalProjects, which
+// known to be module API" and never as "internal": the caller keeps PublicTo, which
 // is language-neutral, and the surface stays honest about what was not checked.
 //
 // Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a
@@ -1576,24 +1731,7 @@ func (m *Magus) externalReferents(g *knowledge.Graph, symbolID, owner string) ([
 	if !ok {
 		return nil, 0
 	}
-	owners := slices.Clone(m.ws.All())
-	slices.SortFunc(owners, func(a, b *types.Project) int {
-		if c := cmp.Compare(len(b.Path), len(a.Path)); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.Path, b.Path)
-	})
-	projectOf := func(path string) string {
-		for _, p := range owners {
-			if p.Path == "." || strings.HasPrefix(path, p.Path+"/") {
-				if p.Path != "." {
-					return p.Path
-				}
-				return "."
-			}
-		}
-		return ""
-	}
+	projectOf := m.projectOwner()
 
 	seen := map[string]bool{}
 	external := 0
@@ -1611,6 +1749,26 @@ func (m *Magus) externalReferents(g *knowledge.Graph, symbolID, owner string) ([
 	}
 	slices.Sort(projects)
 	return projects, external
+}
+
+// projectOwner returns a lookup from a workspace-relative path to the project owning it, by
+// directory containment with the longest project path first, or "" when none does.
+func (m *Magus) projectOwner() func(path string) string {
+	owners := slices.Clone(m.ws.All())
+	slices.SortFunc(owners, func(a, b *types.Project) int {
+		if c := cmp.Compare(len(b.Path), len(a.Path)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Path, b.Path)
+	})
+	return func(path string) string {
+		for _, p := range owners {
+			if p.Path == "." || strings.HasPrefix(path, p.Path+"/") {
+				return p.Path
+			}
+		}
+		return ""
+	}
 }
 
 // Telemetry returns this workspace's observability provider (nil on an Inspect workspace,

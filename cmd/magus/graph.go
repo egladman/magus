@@ -88,8 +88,8 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "  build    rebuild the knowledge graph now, reindexing code symbols (runs each project's scip op)")
 	fmt.Fprintln(os.Stderr, "  push     publish the graph to a container registry as an OCI artifact")
 	fmt.Fprintln(os.Stderr, "  pull     fetch a published graph; a public one needs no credentials")
-	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
-	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
+	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|tree)")
+	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
 	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export or --rev; PR blast-radius")
 	fmt.Fprintln(os.Stderr, "")
@@ -262,8 +262,8 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
-			fmt.Fprintln(os.Stderr, "the engine behind `"+hint.Query.String()+"`. -o dot and -o mermaid render only with")
-			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for those layouts to be legible.")
+			fmt.Fprintln(os.Stderr, "the engine behind `"+hint.Query.String()+"`. -o dot renders only with")
+			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -288,13 +288,13 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}, pos)
 	}
 
-	opts, err := ResolveOutput(global.output, outputGraphML, outputDot, outputMermaid)
+	opts, err := ResolveOutput(global.output, outputGraphML, outputDot)
 	if err != nil {
 		return err
 	}
-	// dot/mermaid are graph-layout formats; on the whole graph (1000s of nodes)
-	// they are unreadable, so they require a --select neighborhood to scope down.
-	if (opts.Format == outputDot || opts.Format == outputMermaid) && ef.Select == "" {
+	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
+	// unreadable, so it requires a --select neighborhood to scope down.
+	if opts.Format == outputDot && ef.Select == "" {
 		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
@@ -339,8 +339,6 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return render.WriteKnowledgeGraphML(os.Stdout, out)
 	case outputDot:
 		return render.WriteKnowledgeDOT(os.Stdout, out)
-	case outputMermaid:
-		return render.WriteKnowledgeMermaid(os.Stdout, out)
 	case outputName:
 		names := make([]string, 0, len(out.Nodes))
 		for _, n := range out.Nodes {
@@ -583,9 +581,9 @@ type graphRenderOptions struct {
 	Target string
 }
 
-// renderWorkspaceGraph emits the project dependency graph; respects -o (text|json|yaml|dot|mermaid|tree).
+// renderWorkspaceGraph emits the project dependency graph; respects -o (text|json|yaml|dot|tree).
 func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opts graphRenderOptions) error {
-	outOpts, err := ResolveOutput(global.output, outputDot, outputMermaid, outputTree)
+	outOpts, err := ResolveOutput(global.output, outputDot, outputTree)
 	if err != nil {
 		return err
 	}
@@ -630,8 +628,6 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		return emitNames(names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
-	case outputMermaid:
-		return render.WriteGraphMermaid(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
 	}
 
 	// text and tree formats both render the ASCII dependency tree.

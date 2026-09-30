@@ -326,6 +326,9 @@ func TestPlanHandler_UnknownExplicitTargetIs400(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("target %q: want 400, got %d", target, w.Code)
 		}
+		if !strings.Contains(w.Body.String(), `"reason":"MGS9023"`) {
+			t.Errorf("target %q: want the invalid-request reason, got %q", target, w.Body.String())
+		}
 		if !strings.Contains(w.Body.String(), "magus describe targets") {
 			t.Errorf("target %q: the error must name how to list targets, got %q", target, w.Body.String())
 		}
@@ -356,8 +359,12 @@ func TestPlanHandler_ErrorReturns500(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
 	}
-	if body := w.Body.String(); body != "plan failed\n" {
-		t.Errorf("want only what failed, got %q", body)
+	body := w.Body.String()
+	if !strings.Contains(body, `"reason":"MGS9027"`) || !strings.Contains(body, "plan failed") {
+		t.Errorf("want the internal-failure reason naming what failed, got %q", body)
+	}
+	if strings.Contains(body, "/Users/dev") {
+		t.Errorf("the body names the server's path: %q", body)
 	}
 }
 
@@ -367,6 +374,9 @@ func TestPlanHandler_NoWorkspaceReturns503(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("want 503, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"reason":"MGS9026"`) {
+		t.Errorf("want the workspace-not-wired reason, got %q", w.Body.String())
 	}
 }
 
