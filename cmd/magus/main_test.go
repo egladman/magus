@@ -438,8 +438,6 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 		"install flags: " +
 		"--dir <path> repo directory to install into (default .) " +
 		"--force overwrite existing installed skill files " +
-		"--prune also remove installed skills this binary no longer ships; without it they are reported and " +
-		"left in place. Only skills magus wrote are candidates - a hand-authored one beside them is never touched " +
 		"--tar stream a tar archive to stdout instead of writing files " +
 		"--global allow absolute destination paths in write mode " +
 		"--skill-form skill form: both (default), short, or full; choose explicitly when one body per skill is wanted"

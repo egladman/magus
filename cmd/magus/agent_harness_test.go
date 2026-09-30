@@ -41,19 +41,21 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
 
 	log.Reset()
-	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, false))
+	out := captureStdout(t, func() {
+		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, false))
+	})
 	assert.NoDirExists(t, orphan)
-	assert.Contains(t, log.String(), "agent harness install: removed skill this binary no longer ships")
-	assert.Contains(t, log.String(), filepath.Join(dest, "magus-retired"))
+	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
 
 	// A dry run names the same deletion and performs none of it.
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
 		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
-	log.Reset()
-	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
+	out = captureStdout(t, func() {
+		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
+	})
 	assert.DirExists(t, orphan)
-	assert.Contains(t, log.String(), "agent harness install: would remove skill this binary no longer ships")
+	assert.Contains(t, out, "would remove skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n")
 }
 
 // TestHarnessInstallRefusesABoundJobFromEitherSource pins that a harness skill install is

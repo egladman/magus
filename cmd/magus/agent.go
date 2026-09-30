@@ -87,9 +87,6 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "install flags:")
 	tty.ProseItem(w, tty.SystemProbe, "  --dir <path>   ", "repo directory to install into (default .)")
 	tty.ProseItem(w, tty.SystemProbe, "  --force        ", "overwrite existing installed skill files")
-	tty.ProseItem(w, tty.SystemProbe, "  --prune        ",
-		"also remove installed skills this binary no longer ships; without it they are reported and left in place.",
-		"Only skills magus wrote are candidates - a hand-authored one beside them is never touched")
 	tty.ProseItem(w, tty.SystemProbe, "  --tar          ", "stream a tar archive to stdout instead of writing files")
 	tty.ProseItem(w, tty.SystemProbe, "  --global       ", "allow absolute destination paths in write mode")
 	tty.ProseItem(w, tty.SystemProbe, "  --skill-form   ", "skill form: both (default), short, or full; choose explicitly when one body per skill is wanted")
@@ -173,17 +170,22 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
-	// On stdout, so a removal shows at the default log level. A silent delete is how
-	// a person loses a skill they thought they had.
-	for _, p := range removed {
-		if af.DryRun {
-			fmt.Fprintln(os.Stdout, "would remove skill this binary no longer ships: "+p)
-			continue
-		}
-		fmt.Fprintln(os.Stdout, "removed skill this binary no longer ships: "+p)
-	}
+	reportRemovedSkills(os.Stdout, removed, af.DryRun)
 	printAgentInstallNextSteps(af.Dir, written, changed, form, af.DryRun)
 	return nil
+}
+
+// reportRemovedSkills prints one line per removal on stdout, so a delete shows at the
+// default log level. A silent delete is how a person loses a skill they thought they
+// had. Both installers share it so the wording stays one.
+func reportRemovedSkills(w io.Writer, removed []string, dryRun bool) {
+	verb := "removed"
+	if dryRun {
+		verb = "would remove"
+	}
+	for _, p := range removed {
+		fmt.Fprintf(w, "%s skill this binary no longer ships: %s\n", verb, p)
+	}
 }
 
 // installSkillTree writes one skill tree, then removes the skill directories this

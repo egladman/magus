@@ -75,8 +75,6 @@ const (
 	FlagAgentForce = "force"
 	// agent: --global
 	FlagAgentGlobal = "global"
-	// agent: --prune
-	FlagAgentPrune = "prune"
 	// agent: --skill-form
 	FlagAgentSkillForm = "skill-form"
 	// agent: --tar
@@ -2027,7 +2025,6 @@ func BindSpellLock(fs *flag.FlagSet) *SpellLockFlags {
 type AgentFlags struct {
 	Dir       string // --dir
 	Force     bool   // --force
-	Prune     bool   // --prune
 	DryRun    bool   // --dry-run
 	Tar       bool   // --tar
 	Global    bool   // --global
@@ -2039,7 +2036,6 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	var f AgentFlags
 	fs.StringVar(&f.Dir, FlagAgentDir, ".", "Repo directory to install into (agent install)")
 	fs.BoolVar(&f.Force, FlagAgentForce, false, "Overwrite existing installed skill files (agent install)")
-	fs.BoolVar(&f.Prune, FlagAgentPrune, false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")

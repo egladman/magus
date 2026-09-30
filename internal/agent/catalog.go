@@ -93,8 +93,8 @@ import (
 // 52: that skill is magus-memory again, and the agent-industry name it carried is
 // gone from every surface a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
-// always been called. Pre-1.0, so the old directory is not carried: `--prune`
-// removes it, which is what the stale report already names it for.
+// always been called. Pre-1.0, so the old directory is not carried: install
+// removes it.
 // 53: the SHORT/FULL axis answers to one word per end everywhere: the constants,
 // the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
 // installed file's stamp changes from `simple` to `short`, so every tree grades

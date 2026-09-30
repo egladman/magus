@@ -42,28 +42,32 @@ stderr 'already exists'
 exec magus agent install .claude/skills --force
 exists .claude/skills/magus-query/SKILL.md
 
-# a skill this binary no longer ships is REPORTED, not removed: pruning is opt-in,
-# because install writes files it can name and a prune deletes ones the caller has
-# not seen. Both copies below are stamped, so both are magus's to delete - only the
-# flag decides whether it does.
+# a skill this binary no longer ships is removed, and each removal is printed on
+# stdout. The copy below carries the stamp, so it is magus's to delete; --dry-run
+# names the removal first and touches nothing.
 mkdir .claude/skills/magus-retired
 cp .claude/skills/magus-query/SKILL.md .claude/skills/magus-retired/SKILL.md
-env MAGUS_HINTS_ENABLED=true
-exec magus agent install .claude/skills --force
-stderr 'still in place.*Remove them with --prune'
+exec magus agent install .claude/skills --force --dry-run
+stdout 'would remove skill this binary no longer ships: \.claude/skills/magus-retired'
 exists .claude/skills/magus-retired/SKILL.md
 
-# a hand-authored skill carries no stamp, so it is never a candidate either way
+# a hand-authored skill carries no stamp, and an empty directory proves nothing
+# about who made it, so neither is ever removed
 mkdir .claude/skills/magus-local-development
 cp mine.md .claude/skills/magus-local-development/SKILL.md
-exec magus agent install .claude/skills --force --prune -v
-stderr 'removed skill this binary no longer ships'
-# nothing stale after a prune, so the hint stays silent - it is not a banner
-! stderr 'Remove them with --prune'
-env MAGUS_HINTS_ENABLED=false
+mkdir .claude/skills/magus-empty
+exec magus agent install .claude/skills --force
+stdout 'removed skill this binary no longer ships: \.claude/skills/magus-retired'
+! stdout 'magus-local-development'
+! stdout 'magus-empty'
 ! exists .claude/skills/magus-retired/SKILL.md
 exists .claude/skills/magus-local-development/SKILL.md
 cmp .claude/skills/magus-local-development/SKILL.md mine.md
+exists .claude/skills/magus-empty
+
+# a second install has nothing left to remove, so it prints no removal
+exec magus agent install .claude/skills --force
+! stdout 'no longer ships'
 
 # absolute destinations are refused unless --global is set; --tar is the supported
 # way to install skills outside the working tree

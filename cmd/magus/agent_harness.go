@@ -96,9 +96,7 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 		if err != nil {
 			return err
 		}
-		for _, dir := range stale {
-			slog.InfoContext(ctx, "agent harness install: would remove skill this binary no longer ships", slog.String("path", dir))
-		}
+		reportRemovedSkills(os.Stdout, stale, true)
 		return nil
 	}
 	written, changed, err := agentSkills.WriteSkillTree(root, path, true, form)
@@ -123,11 +121,7 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	if err != nil {
 		return err
 	}
-	// Reported at the same level as a write. A silent delete is how a person loses
-	// a skill they thought they had.
-	for _, file := range removed {
-		slog.InfoContext(ctx, "agent harness install: removed skill this binary no longer ships", slog.String("path", file))
-	}
+	reportRemovedSkills(os.Stdout, removed, false)
 	return nil
 }
 

@@ -64,9 +64,6 @@ a pattern no graph verb fits.
 **--global**
 : Allow absolute destination paths in write mode (agent install)
 
-**--prune**
-: Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)
-
 **--skill-form** *string* (default: both)
 : Skill form to install: both (default), short, or full (agent install)
 
@@ -116,16 +113,10 @@ magus agent install .agents/skills
 magus agent install .agents/skills --force
 ```
 
-*Refresh, and drop skills this version no longer ships*
+*See what an install would write and remove first*
 
 ```sh
-magus agent install .agents/skills --force --prune
-```
-
-*See what a prune would remove first*
-
-```sh
-magus agent install .agents/skills --prune --dry-run
+magus agent install .agents/skills --force --dry-run
 ```
 
 *Install anywhere via tar*
