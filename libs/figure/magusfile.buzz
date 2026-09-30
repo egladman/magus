@@ -1,28 +1,19 @@
-// magusfile.buzz for libs/figure, the Buzz module magus embeds as `import "magus/figure"`.
-// Its own project so `magus affected ci` runs the module's suite when figure.buzz changes,
-// not only when a figure that imports it is rebuilt.
-//
-//   magus run lint libs/figure   strict type check, warnings fail
-//   magus run test libs/figure   run the in-file test blocks
-//   magus run ci libs/figure     lint, then test
-//
-// There is no build target: std/lib.go embeds figure.buzz into the magus binary.
+// No build target: std/lib.go embeds figure.buzz into the binary.
 import "magus";
 
 magus\project({
-    // No spell claims .buzz, so this is what makes figure.buzz a declared source.
+    // No spell claims .buzz, so this line declares figure.buzz a source.
     "sources": ["*.buzz"],
 });
 
-// test runs the in-file test blocks upstream-strict, as a figure author's `magus buzz` runs
-// the module.
+// test runs the in-file test blocks upstream-strict.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("figure.buzz");
     magus\cmd("buzz", args: ["-t", "figure.buzz"]);
 }
 
-// lint type-checks the module upstream-strict and fails on any BZZ diagnostic. --check
-// exits 0 on a warning, so the captured output is graded here.
+// lint type-checks the module upstream-strict and fails on any BZZ diagnostic.
+// --check exits 0 on a warning, so lint grades the output itself.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("figure.buzz");
     final res = magus\cmd("buzz", args: ["--check", "figure.buzz"], opts: {"quiet": true});
@@ -40,7 +31,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// ci runs lint before test, so a type error fails in seconds rather than after the suite.
+// ci runs lint, then test.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint);
     ctx.needs(test);

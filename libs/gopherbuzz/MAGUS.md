@@ -6,15 +6,15 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/gopherbuzz`
 
-| Target           | What it does                                                                                                                                                                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                                                                                                                                                                                                       |
-| `format`         |                                                                                                                                                                                                                                                                             |
-| `lint`           |                                                                                                                                                                                                                                                                             |
-| `build`          |                                                                                                                                                                                                                                                                             |
-| `test`           | README.md's "Contributing gotchas" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe. |
-| `fuzz`           | Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it.                                                                                                                                                                                   |
-| `buzz-build`     | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.                                                                                                                                                       |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
-| `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                                                                                                                            |
+| Target           | What it does                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `generate`       | Regenerates MAGUS.md.                                                                     |
+| `format`         |                                                                                           |
+| `lint`           |                                                                                           |
+| `build`          |                                                                                           |
+| `test`           | Runs the suite under the default tags, then again under buzz_safe.                        |
+| `fuzz`           | Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it. |
+| `buzz-build`     | Compiles the standalone buzz CLI, stamped with this module's version, not magus's.        |
+| `ci`             | The anchor `magus affected ci` keys off.                                                  |
+| `conformance`    | Runs the upstream buzz suite at the pinned commit against the allowlist.                  |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                          |

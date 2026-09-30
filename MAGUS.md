@@ -59,7 +59,7 @@ magus graph export -o json  # the whole graph
 | file       |     300+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
 | function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
-| rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
+| rationale  |      10+ | `magus query kind=rationale`  | `FIXME`, `TODO`, `TODO`                                                                                          |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
 | marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
@@ -141,8 +141,8 @@ magus graph export -o json  # the whole graph
 
 ## Project: libs/figure
 
-| Target | What it does                                                                                          |
-| ------ | ----------------------------------------------------------------------------------------------------- |
-| `ci`   | ci runs lint before test, so a type error fails in seconds rather than after the suite.               |
-| `test` | test runs the in-file test blocks upstream-strict, as a figure author's `magus buzz` runs the module. |
-| `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic.                          |
+| Target | What it does                                                                 |
+| ------ | ---------------------------------------------------------------------------- |
+| `ci`   | ci runs lint, then test.                                                     |
+| `test` | test runs the in-file test blocks upstream-strict.                           |
+| `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic. |

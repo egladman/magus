@@ -6,11 +6,11 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/textsearch`
 
-| Target           | What it does                                                                                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                               |
-| `lint`           | lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.                                                                                    |
-| `ci`             | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.                                                                                     |
-| `install`        | install installs node_modules through the typescript spell's pnpm-install op.                                                                                          |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                                       |
+| Target           | What it does                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `generate`       | Regenerates MAGUS.md and fails on drift.                                            |
+| `lint`           | lint runs the TypeScript type-check and Biome.                                      |
+| `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report. |
+| `ci`             | The anchor `magus affected ci` keys off.                                            |
+| `install`        | install installs node_modules through the typescript spell's pnpm-install op.       |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                    |

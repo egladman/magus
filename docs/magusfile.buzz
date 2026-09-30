@@ -1,196 +1,85 @@
 import "magus";
 import "../hack/toolchain-policy" as policy;
-// The shared advisory gate; see hack/advisories.buzz for why an exit code is the wrong question.
 import "../hack/advisories" as advisories;
 import "../hack/drift" as drift;
 import "../hack/index" as index;
 import "../hack/changelog" as changelog;
-// Modules the targets use: fs (writes MAGUS.md), os (esbuild,
-// npm), vcs (drift gate), http (serve). render.buzz
-// owns the rendering machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
 import "proc";
 import "vcs";
 import "http";
-// build-playground compiles the gopherbuzz Buzz VM to wasm with the stock Go
-// toolchain, so it depends on
-// gopherbuzz's build. The path import binds its targets as cross-project handles
-// (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../libs/gopherbuzz";
-// The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
-// site bundle imports from source. Affected tracking is glob-based (not import-graph),
-// so this handle lets lint pull in textsearch.lint (type-check + biome) - a lib edit then
-// marks docs affected and re-checks it through the target graph.
 import "project/../libs/textsearch";
-// workspace exposes cross-project files in exact target footprints. The publication
-// stages below deliberately name only what they read so a page or bundle change does
-// not invalidate every docs target.
 import "project/.." as workspace;
-// The agent-hook templates are a nested project under this one (guides/integrations/agents).
-// This page EMBEDS their contents verbatim, and `conventions` fails when a template and its
-// code block drift apart, so a template edit has to re-run this project's gates. Affected
-// tracking is glob-based, not import-graph-based, so the edge is declared, never inferred.
+// The guide embeds these templates verbatim, so a template edit must rerun this project's gates.
 import "project/guides/integrations/agents";
-// The static site generator, a sibling module. Aliased so it does not collide with the
-// `render` target below: a same-name target shadows the import and nulls its members.
+// Aliased: the same-name `render` target would shadow the import and null its members.
 import "render" as renderer;
 
-// magusfile binds this file's own exported targets (generate, render, ci, ...); ts adds
-// the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
-// op indexes them (via tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns
-// the dependency graph; informational) and does not run in this project's ci, which uses
-// the custom targets below; it just makes the project's TypeScript browsable as symbols.
 import "magus/spell/typescript";
-// go is imported for its go-run op only (content-generate drives repo-root Go tools
-// through it), NOT added to the project spells list below: docs is
-// not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
+// Imported for go-run only. Listing it in spells would claim **/*.go for docs.
 import "magus/spell/go";
-// Imported for its typos op only, NOT added to the project spells list below: binding
-// markdown here would also claim this tree's **/*.md for markdownlint, which the root
-// project already lints. The prose check is the part docs was missing.
+// Imported for typos only. Listing it in spells would claim **/*.md, which the root lints.
 import "magus/spell/markdown";
 
 magus\project({
-    // The shared node window, by explicit import (hack/toolchain-policy.buzz).
-    // This project drives node; it declares no go window because it drives no Go.
     "tools": {"node": policy\node},
     "spells": [typescript],
-    // ../proto because content-generate reads proto/gen/descriptor.binpb, which the proto
-    // project writes. Without the edge the two generate targets are unordered, so a schema
-    // change could regenerate the API reference from the PREVIOUS descriptor - and reading
-    // another project's declared output with no dependency on it is what MGS4004 flags.
-    // ../libs/figure for the same reason: the render and diagrams-generate read its module,
-    // and reading another project's file with no edge is unordered (MGS4004).
+    // content-generate reads proto's descriptor and the render reads libs/figure;
+    // without these edges the reads are unordered (MGS4004).
     "depends_on": ["..", "../proto", "../libs/figure"],
-    // Affected/drift tracks this sources glob, not the import graph, so render.buzz
-    // (and every other input) must be named to be watched. The SSG now lives IN docs/,
-    // co-located with the markdown it renders, so the content and the generator share one
-    // tree. **/*.md is the local docs tree this render reads; source expansion prunes any
-    // dir named gen/ or node_modules/ (and the declared outputs) by name, so the generated
-    // index.md files under gen/ and package READMEs under node_modules/ never leak in as
-    // watched content. Both src/**/*.js AND src/**/*.ts are named: the client bundles are
-    // increasingly TypeScript (esbuild strips the types), and a .ts edit must mark this
-    // project affected just like a .js one. package.json + pnpm-lock.yaml are named so a
-    // bundled-dep version bump (hljs, d3, codemirror) invalidates the cacheable
-    // build-* targets and marks this project affected - the esbuild inputs live in those
-    // manifests, not in the src/ entries. tsconfig.json (the ts build) is a render/build
-    // input too. (pnpm is the package manager - NOT npm; there is no package-lock.json.)
+    // Affected tracks this glob, not the import graph, so it names every input,
+    // including the Go trees content-generate renders pages from.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
-                // render.buzz imports magus/figure, which the binary embeds from this file,
-                // so buzz-test and every other target keyed on these sources moves with it.
+                // The binary embeds magus/figure from this file.
                 "../libs/figure/figure.buzz",
-                // retired.urls.lock is hand-authored: a human lists URLs intentionally
-                // removed from the site, exempting them from abandonedLinkCheck (gates.buzz).
-                // Nothing generates it, so it belongs here as a source, not in "outputs" -
-                // editing it must invalidate the cache key that gates the render.
+                // Hand-authored exemptions for abandonedLinkCheck, so a source, not an output.
                 "retired.urls.lock",
-                // NOT the .proto sources. The JS client is generated by the proto project
-                // (proto/buf.gen.yaml) straight into src/gen/, and src/**/*.ts below already
-                // covers the generated files - so a schema change still marks this project
-                // affected, without a Markdown edit re-running a network-bound codegen step.
+                // Not the .proto files: src/**/*.ts already covers the client proto generates.
                 "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
-                // content-generate derives committed Markdown from the Go source tree (the
-                // Buzz module reference, the built-in spell docs, and the Markdown manpages),
-                // so name those generators' inputs here: a change to a host-module binding, a
-                // built-in spell or its example, or the CLI/manpage registry must mark this
-                // project affected so content-generate re-runs and the drift gate catches an
-                // unregenerated page. Data sources are ../std + ../host (module ref), ../spells
-                // + ../internal/spell (spell docs), and ../internal/cli + ../internal/config
-                // (manpages); the tools themselves live under ../cmd/magus-{docs,spelldocs,manpage}.
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spell/**/*.go",
                 "../internal/cli/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/graph/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
-                // The skill reference is generated from the embedded bodies and the
-                // elision that splits them, so both are inputs: edit a SKILL.md and
-                // its page must regenerate, or the site documents a version nobody
-                // installs - the exact drift this generator exists to prevent.
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
-                // Same argument for the rule reference: the pages are the guard's own
-                // catalog rendered, so a rule added or reworded there must regenerate
-                // them, or the site documents a rule under a name nothing fires.
                 "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go"],
-    // The committed Markdown that content-generate derives from the Go tree
-    // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
-    // magus.outputs, not here, so that generator's cache entry snapshots exactly its
-    // pages and no other target's hit can restore them stale.
-    // Outputs are owned by the stage that writes them. A project-wide output would make
-    // every target snapshot the entire site tree, defeating the cache boundary below.
+    // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
-        // ci and test COMPOSE other targets and write nothing of their own. With outputs owned
-        // per-stage (see above), the wrapper has no glob of its own to snapshot, and the cache
-        // treats an empty match as a broken entry rather than an empty one:
-        // `snapshot "docs": no files matched declared outputs`. It stayed hidden while these
-        // wrappers replayed from cache and only surfaced once a change actually made docs
-        // re-run. Same shape, same fix, and the same reason as @magus/agents.
         "ci": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         "test": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
-        // generate is the cheap orchestration and drift gate. Its actual work lives in
-        // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
-        // render is the FAST re-render path (site_render and the changelog page, no MAGUS.md/
-        // JS-bundle rebuild, no drift gate) the workspace-root `serve` dev loop calls on
-        // a docs change. skip_cache so every invocation actually re-renders gen/.
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
-		// site-generate incorporates VCS tags and history. Those are deliberately
-		// outside file hashing, so replay is unsafe until the cache has a VCS input
-		// primitive. It still has a narrow target footprint and no output snapshot.
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
-        // build-hljs / build-playground-editor bundle a
-        // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
-        // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
-        // stay cacheable (no skip_cache): a cache hit replays identical bytes, and a
-        // version bump invalidates it via package.json/pnpm-lock.yaml in sources.
-        // generate runs them, so a version bump reaches the published site on its own.
+        // The build-* targets stay cached: esbuild and the npm deps are pinned.
     },
 });
 
-// Paths this project reads from and writes to, owned here and passed into
-// render.site_render so the generator stays config-agnostic.
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
 final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-// install installs node_modules through the typescript spell's pnpm-install op. That
-// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
-// stamp, so an unchanged tree forks nothing and a canceled install, which leaves a
-// node_modules that EXISTS but is incomplete, reinstalls. Reached once per invocation
-// through install, so the fan-out of build-* targets below does not race several
-// installs in the same directory.
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+// install installs node_modules through the typescript spell's pnpm-install op.
+// The build-* targets reach it through install, so they do not race parallel installs.
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
-// index-generate refreshes MAGUS.md (this project's target catalog) from this
-// magusfile, so it stays in lockstep with the targets. generate calls it; run
-// standalone after editing targets: `magus run index-generate docs`.
+// index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
-    // Reasons for these inputs are in hack/index.buzz.
     ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
                    "../internal/render/md/md.go", "../internal/hint/cli_command.go");
     index\render("docs");
 }
 
-// content-generate regenerates the committed docs Markdown derived from the Go source
-// tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry),
-// the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the
-// Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked
-// examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The
-// generator tools live at the repo root, so they run from here (the docs cwd) through
-// the go spell's go-run op (`go run ../cmd/...`) writing into this project's own tree,
-// version-pinned and sandbox-aware rather than a raw proc.exec. This owns only the Markdown
-// manpages (docs-site content, docs/manpage/*.md); the roff manpages are a distribution
-// artifact owned by the root magusfile (man-generate). generate depends on this and
-// drift-gates the result.
+// content-generate regenerates the committed docs Markdown derived from the Go source tree.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
         workspace\file("spells/**/*.buzz"), workspace\file("internal/spell/**/*.go"),
@@ -201,38 +90,15 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
         workspace\file("cmd/magus-ruledocs/**/*.go"), workspace\file("internal/guard/**/*.go"),
-        // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
-        // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
-        // directly would drag a network-bound buf step into this project's cache boundary,
-        // which is the exact coupling buf.gen.yaml was restructured to remove.
-        // The .proto sources ALONGSIDE the descriptor, not instead of it. Both now reach
-        // the cache key, so this is redundancy rather than the load-bearing declaration it
-        // was for one afternoon: the descriptor lives under gen/, which the expansion walk
-        // prunes by name, and an exact path inside a pruned tree used to be dropped
-        // silently (`describe target` listed it under sources while the key omitted it).
-        // internal/cache now resolves a wildcard-free declaration by stat, and MGS1029
-        // reports the pattern case that still cannot work.
-        //
-        // Kept anyway, because keying on the schema is the more honest statement of what
-        // this target reads: the descriptor is downstream of these files, and a reader
-        // asking why the API reference regenerated is better served by "the .proto
-        // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
-        // is hashed, not executed, so no buf step enters this project's boundary.
+        // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
         workspace\file("proto/gen/descriptor.binpb"),
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
-    // entry here that needs a recursive glob; every other generator here writes flat.
     ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
-    // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
-    // carrying a small generated region between HTML markers, which magus-spelldocs and
-    // magus-examples replace in place and hard-error on if the markers are missing.
-    // Declared as outputs they were deletable, and excluded from the source hash.
+    // Hand-written pages with a generated region between markers; as outputs, clean would delete them.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
         "concepts/review.md",
-        // pruneContentPageCopies removes only byte-identical numeric collisions
-        // next to pages it just regenerated. Those copies are still source files
-        // until removed, so name that narrow mutation boundary explicitly.
+        // The byte-identical copies pruneContentPageCopies removes.
         "reference/config *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
@@ -243,14 +109,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-ruledocs", "-out", "./reference/rules"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
-    // Benchmark results as docs pages, the same way and for the same reason: a result
-    // that lives only in the repository is one a reader never meets. Each committed
-    // report under benchmarks/agent/reports (written by `agent-bench-report --publish`)
-    // and the build-tool comparison at benchmarks/BENCHMARKS.md become a page under
-    // benchmarks/, linked from the hand-written benchmarks.md index.
     fs\mkdirAll("benchmarks");
-    // A report sits at reports/<date>/<provider>/<model>.md and keeps that path on
-    // the site, so a URL names the run the way the tree does.
     final contentPages: mut [str] = mut ["reference/config.md", "benchmarks/build-tools.md"];
     foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
         final rel = report.value.split("../benchmarks/agent/reports/").join("");
@@ -278,10 +137,8 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     pruneGeneratedPageCopies("reference/rules/*.md");
 }
 
-// pruneContentPageCopies removes only a byte-identical numeric copy beside a page
-// content_generate just wrote. That narrow proof preserves authored pages and stale
-// pages whose provenance needs review, while preventing macOS-style "name 3.md"
-// collisions from being captured by this target's broad output glob and replayed.
+// Removes macOS-style "name 3.md" copies, and only byte-identical ones: these pages mix
+// authored and generated text, so a differing copy may be someone's work.
 fun pruneContentPageCopies(canonicals: [str]) > void !> any {
     foreach (canonical in canonicals) {
         if (fs\exists(canonical) == false) { continue; }
@@ -296,11 +153,7 @@ fun pruneContentPageCopies(canonicals: [str]) > void !> any {
     }
 }
 
-// pruneGeneratedPageCopies cleans whole-page generated directories. Unlike the
-// mixed-content pages above, these directories are entirely target-owned outputs:
-// if a numeric sibling has a canonical page, it cannot be an authored document.
-// Comparing only names makes a stale previous generation disappear even when the
-// current skills changed its bytes.
+// Matches copies by name alone: every page in these directories is generated.
 fun pruneGeneratedPageCopies(pattern: str) > void !> any {
     final pages = fs\glob(pattern);
     foreach (canonical in pages) {
@@ -326,22 +179,14 @@ fun isDecimalCopySuffix(suffix: str) > bool {
     return true;
 }
 
-// changelog-page renders the changelog, the one place it is assembled: every release from
-// releases/*.yaml, and under [Unreleased] the fragments in changes/unreleased/, through
-// templates/changelog.mustache. It is build output and never committed (.gitignore),
-// because a committed page would move with every fragment and put a shared file back into
-// every pull request the fragments keep apart.
-//
-// Links in the entries are written for GitHub, resolving from the repo ROOT
-// ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix comes off or
-// every one of them 404s, which the asset-integrity gate catches. CONTRIBUTING.md is
-// not a docs page at all: site/development.buzz synthesizes it under development/, so
-// that link becomes the URL. Trailing slash and no anchor, so a "#naming" suffix survives.
+// changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.
+// Uncommitted: a committed page would conflict in every pull request.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("templates/changelog.mustache", workspace\file("releases/*.yaml"),
         workspace\file("changes/unreleased/*.md"), workspace\file("hack/changelog.buzz"),
         workspace\file("hack/commits.buzz"));
     ctx.writesFiles("changelog.md");
+    // Entry links resolve from the repo root for GitHub; this page sits inside docs/.
     final page = changelog\render(fs\readFile("templates/changelog.mustache"),
         fragments: changelog\read("../" + changelog\FRAGMENT_DIR),
         shipped: changelog\releases("../releases"));
@@ -350,23 +195,13 @@ export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
         .split("](CONTRIBUTING.md").join("](development/contributing/"));
 }
 
-// site-generate owns publication. It cannot replay while it reads VCS state; the
-// public generate target still lets the independent content stages fan out first.
-//
-// The bundles are needed HERE, not merely ordered by whoever calls this. They used to be
-// ordered only in `generate`, which made this target correct as a stage and broken on its
-// own: `magus run site-generate docs` - and `magus vcs resolve`, which invokes the target
-// that owns a conflicted output directly - failed on `playground/index.html references
-// missing playground/wasm_exec.js`. A caller cannot be the thing that makes a target
-// correct. The ordering requirement is unchanged and now stated where it holds: the render
-// hashes gen/ into the service-worker precache and the site manifest, so a bundle written
-// after it would ship with a manifest that does not describe it.
+// site-generate renders and publishes the site into gen/.
 export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // The render hashes gen/ into the precache manifest, so the bundles must exist first.
     ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
-        // The page copy of each figure, which diagrams-generate committed and the render inlines.
         "assets/gen/diagram-*-page.svg", workspace\file("libs/figure/figure.buzz"),
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
         workspace\file("assets/**"), workspace\file("releases/*.yaml"));
@@ -376,59 +211,28 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         ctx.hasCharm("rw"));
 }
 
-// generate owns the COMMITTED derived files, and nothing else. That is the line between
-// generate and build here: generate's output is in the repository, so CI can re-run it and
-// fail when the bytes move, and the drift gate below is that check. build's output is not
-// committed, so no comparison can gate it - it is verified by rendering without error.
-//
-// The site render, the esbuild bundles, and the WebAssembly playground all write the ignored
-// gen/ tree, so they live in build. They used to run here, which cost every `affected ci` a
-// full 536-page render to gate bytes that are not tracked.
+// generate regenerates the committed derived files and fails on drift. The ignored gen/
+// tree belongs to build.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
     ctx.needs(install);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
         "reference/rules", "reference/api"];
-    // The three pages content-generate INJECTS into rather than writes whole. It declares them
-    // itself, but the write is attributed to this composed target as well, so the declaration has
-    // to exist in both places or a run that actually changes one trips MGS4007.
-    //
-    // This was latent until an example was added to review.md: knowledge.md and spells.md rarely
-    // change in the same run that regenerates them, so the composed target almost never wrote one
-    // and the missing declaration never fired.
+    // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "reference/config *.md");
-    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md and the derived
-    // Markdown in CONTENT. gen/ is absent because it is ignored, and an ignored path is never
-    // dirty, so listing it would assert a check that silently passes. src/gen is absent
-    // because proto:generate declares and gates it - nothing in THIS chain regenerates it, so
-    // the hash either side would always match. assets/gen is absent because diagrams-generate
-    // gates its own files: it needs the symbol index, which the shards running this never build.
+    // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
+    // diagrams-generate, which needs a symbol index these shards never build.
     final GENERATED = ["MAGUS.md"] + CONTENT;
-    // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
-    // of these was already dirty, which is the state you are in while editing a generator.
-    // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
-    // these paths at all - it used to be inert there and fire only in CI.
+    // Hashed before and after: a dirty tree or a git worktree must not disarm the gate.
     final before = drift\hashes(GENERATED);
-    // These producers own disjoint outputs and can fan out. site-generate then reads
-    // their completed artifacts, so it intentionally runs in the following stage.
     ctx.needs(content_generate, index_generate);
     if (ctx.hasCharm("rw")) { return; }
-    // Name the files, not the set. "MAGUS.md or generated docs Markdown drifted" tells a
-    // reader only that one of nine things moved, and this gate fires
-    // where the tree is not in front of them. changedSince expands the directories in
-    // GENERATED, so what comes back is the actual files.
     final moved = drift\changedSince(before, GENERATED);
     if (moved.len() > 0) {
-        // Print the diff, not just the names: a name alone still leaves the reader
-        // guessing WHY a file they regenerated locally came out different on a runner,
-        // and CI is where this mostly fires. magus\info, NOT the command's own streamed
-        // output: a tool's stdout goes to the run log and the console shows only "likely
-        // diagnostics", which dropped this diff entirely on the first attempt.
+        // magus\log.info, not stdout: the console drops a tool's stdout from its diagnostics.
         var body = vcs\dirtyDiff(moved);
-        // A generated JSON file is one enormous line; bound it so the useful
-        // case (a small markdown drift) is not buried by the useless one.
         if (body.len() > 4000) {
             body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
         }
@@ -440,19 +244,12 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Scope dprint by ARGV, not by its config, for the same reason the root project does:
-// dprint DISCOVERS a nested dprint.json and formats that subtree under its own config,
-// and neither this project's `includes` nor an exclude prunes it. Since the guard-hook
-// templates' project under guides/integrations/agents grew Markdown pages of its own,
-// a bare run here reached them - the parent target writing into a descendant project,
-// which magus rejects as MGS3001. That project formats its own pages.
-//
-// Keep this list in step with dprint.json's `includes` (minus that one directory); the
-// excludes there still apply, so the generated trees stay out.
+// format runs dprint over the authored pages.
+// The paths go in argv because dprint would otherwise descend into the agents project's
+// own dprint.json (MGS3001). Keep them in step with dprint.json `includes`.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    // Keep in step with the dprint args below. Not writesFiles: dprint amends authored
-    // pages, so `magus clean` must never claim them. Undeclared, this is MGS4007.
+    // Keep in step with the dprint args below.
     ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "guides/*.md",
         "guides/integrations/*.md", "migrating/**/*.md", "reference/**/*.md",
         "setup/**/*.md");
@@ -461,20 +258,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
         "./setup/**/*.md"]});
 }
 
-// conventions holds every doc page to the conventions page it publishes: no shell prompt
-// in a command block, no pinned version standing in for example output, no backticked path
-// that has since moved. See docs/conventions.md for what each rule means.
-//
-// It also holds pages to what they document (lib/crosscheck.buzz): no live bearer token, no
-// example that sniffs where it runs, the agent guide against the hook templates it embeds
-// and the coverage they declare, and the verify guide against the release keyring. Those
-// were Go tests once, which put every page in the whole Go suite's cache key.
-//
-// Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose
-// nit should name the thing that is wrong; folding it into lint would report a stale path in
-// the README as "docs lint failed", and a target that fails for reasons unrelated to its
-// name is a target people learn to ignore. It also means `magus run conventions docs` is a
-// two-second check you can run on its own while editing a page.
+// conventions holds every doc page to docs/conventions.md and to what it documents.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/crosscheck.buzz", "engine/gates.buzz",
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
@@ -484,53 +268,26 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
         agents\file("opencode-plugin.ts"));
     renderer\site_conventions(ROOT, DOCS);
 }
-// lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
-// banned patterns (no `any`, no non-null assertions - see biome.json). Both need
-// node_modules, which it reaches through format -> generate -> install; proc.exec raises
-// on a non-zero exit, so either gate fails lint.
-//
-// Markdown formatting is dprint, run once from the root project (its scope is
-// dprint.json at the workspace root), so `format` here is a dependency edge and nothing
-// else. This project only lints prose; see docs/concepts/generated-files.md.
+// lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    // A stage of its own, ahead of conventions: format reaches content-generate, and a page
-    // generated for the first time is absent from disk while the two fan out together, so
-    // every link to it reads as missing-link on that one run.
+    // Before conventions: a page content-generate creates is missing until format finishes.
     ctx.needs(format);
     ctx.needs(conventions);
-    // The site bundle imports the search grammar from the shared libs/textsearch source,
-    // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
     ctx.needs(textsearch\lint);
-    // Same reasoning, one directory down: the guide embeds these templates, so their
-    // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
-    // The figure modules' strict type check is a root lint-files rule. Needing it, rather
-    // than running --check here too, keeps it to one node when `magus affected ci` reaches
-    // both projects.
     ctx.needs(workspace\lint_files);
-    // The docs pages are the largest prose surface in the workspace and had no spell
-    // check at all - the op was defined and never invoked from any target.
     markdown.typos(ctx);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
-// build renders the site: the tree cd.yaml publishes and deploy-generate assembles. None of
-// it is committed, so unlike generate it is gated by producing without error rather than by
-// a byte comparison - see generate's comment for the split.
-//
-// generate first, because site-generate reads the Markdown and catalog it derives. The
-// esbuild bundles are NOT listed here: site-generate declares them itself, which is what
-// makes it correct when something other than this target invokes it. Repeating them would
-// state the ordering in two places, and the copy that is not load-bearing is the one that
-// goes stale.
+// build renders the site cd.yaml publishes. It is uncommitted, so no drift gate applies.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
     ctx.needs(site_generate);
 }
 
-// buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
-// --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
-// on a non-zero exit, so a failing assertion fails this target.
+// buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.
+// --embedded so render's markdown and encoding imports resolve.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
 }
@@ -539,49 +296,27 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format, buzz_test);
 }
 
-// security audits what actually ships against the npm advisory database. See
-// console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
-// pnpm-workspace.yaml cooling period is the stronger half of this.
+// security audits what actually ships against the npm advisory database.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     advisories\audit(inheritedFatal: advisories\inheritedFatal(args));
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    // build renders every page format rewrites in place, so the render waits for the
-    // format under lint rather than racing it (MGS4008). Two calls, not an edge on
-    // build: a site built alone from unformatted markdown is a fine site.
+    // Two stages so build waits for lint's format instead of racing it (MGS4008).
     ctx.needs(generate, lint, test);
     ctx.needs(build);
 }
 
-// build-playground rebuilds the WebAssembly interpreter the playground loads: the
-// stock Go toolchain compiles ../cmd/buzz-playground straight into
-// gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The
-// glue must come from the SAME Go that built the wasm - it is a matched pair.
-//
-// gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so
-// it could not reproduce them and they had to be inputs rather than output. CI has
-// Go. So this is ordinary render output now, rebuilt at will, and a ~21MB binary
-// stops entering git history on every interpreter change.
-//
-// Stock Go over TinyGo, which built this until now, is a deliberate trade. It costs
-// size: 3.4MB brotli against TinyGo's 0.9MB, and no flag closes that gap - `-s -w`
-// saves 0.07MB and wasm-opt -Oz shrinks the RAW file while making the compressed one
-// slightly larger, because its transforms compress worse than what they replace. It
-// buys three things back: the build is byte-reproducible (verified by building twice
-// and comparing sha256, which is why this target no longer needs skip_cache, where
-// TinyGo's non-determinism forced it), the toolchain is one already pinned rather
-// than a second one, and full reflection means std/validate_wasm.go's no-op stub -
-// there because TinyGo's wasm reflect omits NumIn/NumOut - can go.
+// build-playground compiles the playground's WebAssembly interpreter with stock Go and
+// copies that Go's wasm_exec.js beside it; the two must come from the same toolchain.
+// Stock Go over TinyGo: about 4x larger, but reproducible, so the target stays cached.
 export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(gopherbuzz\build);
     ctx.writesFiles("gen/playground/buzz.wasm", "gen/playground/wasm_exec.js");
     fs\mkdirAll("gen/playground");
-    // Run from the module root (..) so go resolves its go.mod. -trimpath keeps the
-    // output independent of the checkout path, which is half of what makes it
-    // reproducible; -s -w drops the symbol table and DWARF.
+    // From the module root so go finds go.mod; -trimpath keeps the output reproducible.
     os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
         proc\exec("go",
             ["build", "-trimpath", "-ldflags=-s -w",
@@ -592,27 +327,14 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
-// diagrams-generate lays every figure out from the knowledge graph and writes, per figure,
-// the dark and light pair the README loads as images, the page copy the site inlines,
-// and a receipt: the stamp, the claim counts, the findings and the symbol index it was
-// drawn at. The site render reads only the page copies, so it never needs the index.
-//
-// The files land under this project rather than beside the terminal recordings in the
-// workspace's assets/gen: docs already depends on the root project, so writing there is
-// MGS1012, a target reading from and writing into the same project. The README reaches
-// them by relative path, which is all GitHub needs.
-//
-// Not one of generate's stages: generate runs where no index is built. It is its own gate
-// instead, failing when the committed files move; :rw rewrites them.
-//
-// The index lives in the cache, outside file hashing, so the key reads the root's digest
-// of it: symbol-digest-generate is skip_cache and runs before any replay of this one, and
-// an index that moved turns the replay into a run. The root magusfile declares the layers
-// a figure groups by.
+// diagrams-generate lays every figure out from the knowledge graph and fails when the
+// committed files move. It is not a generate stage: generate runs where no symbol index
+// exists. The files stay in docs because writing the root's assets/gen is MGS1012.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
     }
+    // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate);
     ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/figure/figure.buzz"),
         workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"));
@@ -632,26 +354,20 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
-// into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting
-// works offline without any CDN. Bump the version in package.json and the next generate picks
-// it up; gen/ is not committed, so generate runs this as one of its stages.
+// build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
+    // Declares the real artifact rather than inheriting the spell's `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     proc\exec("pnpm", ["run", "build-hljs"], ".", {});
     magus\log.info("rebuilt gen/assets/hljs.js");
 }
 
 // build-playground-editor bundles the CodeMirror editor the playground loads into
-// gen/playground/editor.js. It existed only as a pnpm script before, because the artifact
-// was committed and a human ran it after a version bump. gen/ is no longer committed, so
-// every published byte needs a target CI can run - a script nothing invokes would have
-// shipped a playground with no editor.
+// gen/playground/editor.js.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
+    // Declares the real artifact rather than inheriting the spell's `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
     proc\exec("pnpm", ["run", "build-editor"], ".", {});
 }
@@ -659,7 +375,7 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> an
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
 export fun render(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
-    // The one page no checkout carries, so a fresh tree would render without it.
+    // Uncommitted, so a fresh checkout lacks it.
     ctx.needs(changelog_page);
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph());

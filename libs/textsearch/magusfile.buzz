@@ -1,80 +1,39 @@
-// magusfile.buzz for @magus/textsearch, the shared DOM-free browser client library at
-// libs/textsearch. It holds code that would otherwise be duplicated across the two
-// independent front-end esbuild projects (docs/ and console/) - currently the
-// Datadog-style documentation search grammar (src/textsearch.ts). Registered as its own
-// first-class magus project so `magus affected ci` type-checks and tests it. Mirrors
-// libs/gopherbuzz's magusfile structure, TS-flavored.
-//
-//   magus run lint libs/textsearch   type-check (tsc) + biome
-//   magus run test libs/textsearch   run the node:test suite
-//   magus run ci libs/textsearch     lint + test
-//   magus run generate libs/textsearch  refresh MAGUS.md (target catalog)
-//
-// There is deliberately NO build target: this library is shared SOURCE, not a build
-// artifact. It ships no bundle of its own; each consumer's esbuild follows the relative
-// import into src/ and bundles it inline (the library has zero npm deps, so that
-// resolves cleanly across project dirs). Its lint target is wired into each consumer's
-// lint via ctx.needs(textsearch.lint), so a lib edit pulls the consumer checks through
-// the target graph - affected tracking is glob-based (sources), not import-graph-based.
+// No build target: each consumer's esbuild bundles src/ inline.
 
 import "magus";
 import "../../hack/drift" as drift;
 import "../../hack/index" as index;
-// fs globs the test sources; os shells out to pnpm (typecheck/biome/test);
-// hack/drift.buzz gates the generated MAGUS.md on drift.
 import "fs";
 import "os";
 
 import "proc";
-// magusfile binds this file's exported targets (generate, lint, test, ci); ts adds the
-// TypeScript spell so the shared src/ is symbol-capable - its `scip` op indexes it (via
-// tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns the dependency graph;
-// informational) and does not run in ci, which uses the custom targets below.
 import "magus/spell/typescript";
 
 import "../../hack/toolchain-policy" as policy;
 
 magus\project({
-    // The shared node window, by explicit import (hack/toolchain-policy.buzz).
-    // This project drives node; it declares no go window because it drives no Go.
     "tools": {"node": policy\node},
     "spells": [typescript],
-    // Affected/drift tracks this sources glob, not the import graph, so every input must
-    // be named to be watched: the shared TypeScript, the build manifests (package.json +
-    // pnpm-lock.yaml, where the dev-gate deps are pinned), and the tsconfig/biome configs
-    // that drive the gates. pnpm is the package manager - NOT npm;
-    // pnpm-workspace.yaml's minimumReleaseAge gate is the reason.
+    // Affected tracks this glob, not the import graph, so it names every input.
     "sources": ["src/**/*.ts", "package.json", "pnpm-lock.yaml",
                 "tsconfig.json", "biome.json"],
-    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
-    // It used to be declared project-wide so the cacheable lint/test targets had a real
-    // output to snapshot - the ts spell contributes a dist/** provided-glob a source-only
-    // lib never fills, and an empty snapshot was an error. It no longer is for a glob the
-    // target did not name itself; see cache.Step.OutputsDeclared.
+    // MAGUS.md is declared on index_generate, not here.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
-        // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
     },
 });
 
-// install installs node_modules through the typescript spell's pnpm-install op. That
-// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
-// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+// install installs node_modules through the typescript spell's pnpm-install op.
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
-// measured by hashing MAGUS.md before and after (hack/drift.buzz), not by asking whether
-// it was clean, so the gate still fires when you already have it uncommitted. A
-// locally-regenerated MAGUS.md passes either way: its bytes do not move.
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(index_generate);
 }
 
-// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in hack/index.buzz.
+// Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
@@ -82,9 +41,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("libs/textsearch");
 }
 
-// lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
-// plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
-// proc.exec raises on a non-zero exit, so either gate fails lint.
+// lint runs the TypeScript type-check and Biome.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
@@ -92,18 +49,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.
-//
-// The bundle is deliberate, not a workaround: this project is authored
-// bundler-first (tsconfig moduleResolution: "bundler", extensionless relative
-// imports, consumed as SOURCE through a paths alias rather than as a package), so
-// esbuild is the compiler and tsc is only the type gate. Coverage therefore has to
-// travel back through a sourcemap - hence --sourcemap here - or every record would
-// name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    // The TypeScript coverage figure is one across every TypeScript project, merged by
-    // the console (the top of the TypeScript dependency graph) from this report and its
-    // own. Declaring it keeps a cache hit restoring the report the console reads.
+    // Declared so a cache hit restores the report the console merges.
     ctx.writesFiles("coverage.lcov");
 
     final tests = fs\glob("src/**/*.test.ts");
@@ -114,9 +62,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     bundle.append("--outdir=.testcache");
     proc\exec("pnpm", bundle, ".", {});
 
-    // --enable-source-maps is what makes the coverage report name src/*.ts. Without
-    // it Node reads the sourcemap for stack traces only, and every lcov record
-    // stays SF:.testcache/<bundle>.js - a coverage figure about the bundle.
+    // Without --sourcemap above and --enable-source-maps here, lcov names the
+    // .testcache bundle instead of src/*.ts.
     var run = mut ["--enable-source-maps", "--experimental-test-coverage",
         "--test-reporter=spec", "--test-reporter-destination=stdout",
         "--test-reporter=lcov", "--test-reporter-destination=coverage.lcov",
@@ -125,7 +72,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("node", run, ".", {});
 }
 
-// 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.
+// The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, test);
 }

@@ -6,12 +6,12 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/diagnostics`
 
-| Target           | What it does                                                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                                                                                      |
-| `format`         |                                                                                                                                                            |
-| `lint`           |                                                                                                                                                            |
-| `build`          |                                                                                                                                                            |
-| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                                                           |
+| Target           | What it does                                                          |
+| ---------------- | --------------------------------------------------------------------- |
+| `generate`       | Regenerates MAGUS.md.                                                 |
+| `format`         |                                                                       |
+| `lint`           |                                                                       |
+| `build`          |                                                                       |
+| `test`           | Runs the suite; the root merges coverage.out into its coverage badge. |
+| `ci`             | The anchor `magus affected ci` keys off.                              |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                      |

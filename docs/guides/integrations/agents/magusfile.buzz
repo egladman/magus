@@ -1,55 +1,21 @@
-// magusfile.buzz for @magus/agents, the guard-hook templates at
-// docs/guides/integrations/agents. They live beside the guide that documents them
-// (../agents.md) rather than in a separate tree, so the page, the files it embeds, and the
-// config that invokes them are one directory instead of three places to keep in sync.
-//
-//   magus run lint docs/guides/integrations/agents   type-check (tsc) + biome
-//   magus run ci docs/guides/integrations/agents     format + lint + transport tests
-//
-// Registered as its own project for one reason: the OpenCode plugin is real TypeScript that
-// ships to users, so it must be held to the same gates as the rest of the workspace instead
-// of being prose in a markdown file nobody type-checks. The Buzz templates are exercised by
-// the Go tests at the repo root (cmd/magus/testdata/script/guard_templates.txtar runs them
-// against recorded host events). That the guide embeds them verbatim is the docs project's
-// conventions target (docs/lib/crosscheck.buzz).
-//
-// There is deliberately NO build target: nothing here is compiled. The Buzz templates are
-// named by a host's hook config and run by `magus buzz`, and the plugin is loaded FROM SOURCE
-// by OpenCode's own Bun runtime. devDependencies are the two gates only.
-//
-// The docs SSG renders only *.md, so these templates never become pages and this magusfile is
-// invisible to it. The per-host guide pages beside them (claude-code.md, codex.md, ...) DO
-// render: they belong to the docs project's **/*.md set, not to this project's sources.
+// No build target: hosts run the Buzz templates through `magus buzz`, and OpenCode's Bun
+// loads the plugin from source. cmd/magus/testdata/script/guard_templates.txtar runs the templates.
 
 import "magus";
-// The page renderer, kept out of this file because it wants tests of its own.
 import "./lib/embed" as embed;
-// The workspace's shared drift helper, so this project's generated files are gated the
-// same way the root's are rather than by a second implementation of the same idea.
 import "../../../../hack/drift" as drift;
 import "../../../../hack/index" as index;
-// os shells out to pnpm for the install and the two gates.
 import "os";
 
 import "proc";
-// fs enumerates the Buzz templates for the type-check, so adding one does not mean
-// remembering to add it to a list.
 import "fs";
-// magusfile binds this file's exported targets; ts adds the TypeScript spell so the plugin is
-// symbol-capable (its `scip` op indexes it for the knowledge graph). ts is opaque - pnpm owns
-// the dependency graph - and does not run in ci, which uses the custom targets below.
 import "magus/spell/typescript";
-// Imported for its dprint op only, NOT added to the project spells list below: binding
-// markdown here would also claim this directory's *.md for markdownlint, which the root
-// project already lints. Formatting is the part this project has to own itself.
+// Imported for dprint only. Listing it in spells would claim *.md, which the root lints.
 import "magus/spell/markdown";
 
 magus\project({
     "spells": [typescript],
-    // Affected tracking is glob-based, not import-graph-based, so every input must be named to
-    // be watched: the templates themselves, and the config files that drive the gates.
-    // *.buzz covers the Buzz templates, and lib/*.buzz the modules they import and the
-    // renderer behind guard-templates.md. Both are type-checked by lint.
+    // Affected tracks this glob, not the import graph, so it names every input.
     "sources": ["*.ts", "*.buzz", "lib/*.buzz", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
                 "host-e2e/*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
@@ -59,45 +25,21 @@ magus\project({
     },
 });
 
-// install installs node_modules through the typescript spell's pnpm-install op. That
-// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
-// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+// install installs node_modules through the typescript spell's pnpm-install op.
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
-// Everything generate writes, project-relative because that is where this target runs.
-// The schema DIRECTORY rather than its files: drift\expand walks it, so a schema the SDK
-// starts emitting is covered without this list being edited to notice.
+// The schema directory, not its files: drift\expand walks it, so new schemas are covered.
 fun generatedOutputs() > [str] {
     return ["guard-templates.md", "../../../../testdata/hosts/cursor/gen"];
 }
 
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
 // replaced by the file it names.
-//
-// The page is a verbatim copy of the templates a reader downloads, and kept by hand it went
-// stale where no gate could see. conventions_test.go compared the EXECUTABLE lines, so a
-// comment rewritten in a template and not in the page passed every check and shipped the old
-// text; three of ten had drifted that way at once. Generated, the page cannot: the drift
-// gate regenerates it and compares byte for byte, which is the same argument
-// cursor_schemas_generate above makes about hand transcription.
-//
-// Reading the templates is declared, because affected tracking is glob-based here: without
-// it, editing a template would not rebuild the page that quotes it.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Hashed BEFORE the generators run, so an already-dirty tree does not disarm the
-    // check: what matters is whether these bytes moved during this run, not whether the
-    // tree was clean when it started.
-    //
-    // The OUTPUTS by name, where the root's copy of this hashes whatever vcs reports
-    // dirty. The root can do that because it runs there; here vcs\status names paths from
-    // the repository root while this target resolves them from its own directory, so every
-    // one of them missed and the check passed on a tree it had never looked at.
+    // Hashed by name before the generators run, so a dirty tree does not disarm the check.
+    // vcs\status names paths from the repository root, which this directory cannot match.
     final before = drift\hashes(generatedOutputs());
 
-    // The other generated thing this project owns. Its own comment claimed the drift gate
-    // compared its output byte for byte, and nothing ran it: measured by planting a probe
-    // in a committed schema and watching a full green gate keep it.
     ctx.needs(cursor_schemas_generate, index_generate);
     ctx.readsFiles("guard-templates.md.tmpl", "*.buzz", "lib/*.buzz");
     ctx.writesFiles("guard-templates.md");
@@ -108,17 +50,12 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
     final rendered = embed\render(tmpl, files: files);
 
-    // Under `rw` this target is the thing that WRITES the page. The gate strips that charm,
-    // and the rest of this function is the half that answers instead.
     if (ctx.hasCharm("rw")) {
         fs\writeFile("guard-templates.md", content: rendered);
         return;
     }
 
-    // COMPARED, never written. Writing here would edit the tree this run was asked to judge
-    // and then report its own edit (MGS1035): the page would be correct by the time anything
-    // looked, so the check could only ever pass. Named separately from the hash comparison
-    // below because that one cannot see this file at all for the same reason.
+    // Compared, never written: writing here would edit the tree under judgment (MGS1035).
     if ((fs\readFile("guard-templates.md") catch "") != rendered) {
         throw "[MGS4006] generate: guard-templates.md does not match its template; re-run "
             + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
@@ -131,8 +68,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Renders MAGUS.md, this project's target catalog. The declarations stay here; the
-// body and the reasons for them are in hack/index.buzz.
+// Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     ctx.readsFiles("magusfile.buzz", "../../../../magus.yaml", "../../../../internal/render/target_graph.go",
@@ -141,15 +77,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.
-//
-// A GENERATOR where every other Cursor schema in that tree is a hand transcription, which
-// is the point: a transcription is partial by construction and goes stale in silence, and
-// this one cannot, because its source is a pinned package and the drift gate compares the
-// output byte for byte.
-//
-// The output lands in the ROOT project's testdata, because that is where the host schemas
-// live and where internal/agent's tests read them. Declared with writesFiles so the snapshot
-// covers it and a cross-project write is not a surprise.
+// It writes into the root project's testdata, where internal/agent's tests read them.
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
@@ -157,10 +85,7 @@ export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> an
 }
 
 
-// lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus
-// Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors
-// libs/textsearch's rules so the whole workspace writes TypeScript the same way).
-// proc.exec raises on a non-zero exit, so either gate fails lint.
+// lint runs the TypeScript type-check, Biome, and a Buzz type-check of the templates.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
@@ -168,27 +93,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     checkBuzz();
 }
 
-// checkBuzz type-checks this directory's Buzz without running it.
-//
-// Running is what stood in for this before, and it is not the same question: these
-// templates read an event on stdin and shell out, so executing one exercises the path
-// its fixture happens to take and says nothing about the rest of the file. A check reads
-// all of it.
-//
-// TWO invocations because the two sets parse under different rules, and the split is not
-// cosmetic: the templates are upstream-strict, which is what lets a reader run one with a
-// stock Buzz toolchain, while lib/ is written for the magusfile engine. Checking either
-// under the other's mode reports rules it never targeted.
-//
-// GLOBBED, not enumerated: a hand-written list of shell templates once named six of nine,
-// and the three that ran on every Read, every compaction and every Stop were the unchecked
-// ones. A list that must be edited when a file is added is a list that stops matching the
-// directory.
-//
-// NOT quiet, unlike every other magus\cmd in this workspace. A passing check prints
-// nothing, so quiet buys no silence on the common path and costs the whole answer on the
-// failing one: it captures the diagnostics, leaving a reader "exited with code 1" and a
-// command to re-run by hand to find out which file and which line.
+// The templates are upstream-strict and lib/ is engine Buzz, so each set gets its own
+// check. Not quiet: quiet would swallow the diagnostics on failure.
 fun checkBuzz() > void !> any {
     var strict = mut ["--check", "cursor-hook.buzz"];
     foreach (script in fs\glob("magus-*.buzz")) {
@@ -203,35 +109,19 @@ fun checkBuzz() > void !> any {
     magus\cmd("buzz", args: embedded);
 }
 
-// test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level
-// `hook` subcommand, the input on stdin) and handle each decision the way it declares.
-//
-// It runs under node, not bun, even though the plugin's runtime is bun. The test supplies
-// Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified,
-// which is a better trade than putting a second JS runtime in every contributor's toolchain for
-// one file. The residual gap is bun-versus-node spawn semantics, and it is small.
-//
-// The Buzz templates are covered elsewhere, by cmd/magus/testdata/script/guard_templates.txtar
-// and session_load_adapters.txtar: testscript already gives them a real magus on PATH, which
-// is exactly what a Buzz template needs and what this project cannot offer.
+// test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     proc\exec("pnpm", ["run", "test"], ".", {});
 }
 
-// host-integration is deliberately NOT a dependency of ci. It starts real, locally installed
-// agent hosts, so it can consume the caller's authentication and quota. A person
-// opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness
-// descriptors explicitly:
+// host_integration drives real local agent hosts, spending the caller's auth and quota,
+// so it stays out of ci. Opt in with MAGUS_HOST_E2E=1 and pass descriptors:
 //
 //   MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
 //     host-e2e/example.json
 //
-// The runner creates a disposable workspace and applies each descriptor's config. A
-// missing local host is a structured skip; a present host that fails to dispatch
-// its hook is a failure, not a skip. An all-skip run is inconclusive and exits
-// nonzero. Successful workspaces are deleted unless MAGUS_HOST_E2E_KEEP=1; a
-// failure keeps its trace, config, and capped host logs for inspection.
+// An all-skip run exits nonzero. MAGUS_HOST_E2E_KEEP=1 keeps passing workspaces.
 export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     var command = mut ["run", "e2e", "--"];
@@ -239,39 +129,19 @@ export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", args: command, dir: ".", opts: {});
 }
 
-// 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is
-// lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked
-// elsewhere: conventions_test.go verifies that this repository's own hook config invokes them;
-// internal/agent/guard_test.go that each declares a stance for every decision and surface in the guard contract (the
-// magus-guard-coverage lines); the docs conventions target verifies that the guide embeds them
-// verbatim and that its parity tables match those lines.
-//
-// This comment used to claim the templates' behavior was asserted from the repo root when
-// nothing executed them at all, which is why the gap went unnoticed for so long. It is closed
-// now, and the honest remaining limit is narrow: the event SHAPES in the fixtures are recorded
-// from each host's documentation, so a host silently renaming a field is still invisible here.
+// The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     ctx.needs(lint);
     ctx.needs(test);
 }
 
-// format owns the Markdown in this directory - the per-host guide pages beside the
-// templates. The docs project cannot do it: dprint discovers this project's dprint.json
-// and would format the subtree under it, which is a parent target writing into a
-// descendant project (MGS3001). So the pages are formatted by the project that owns them,
-// which is the same rule every other project with Markdown follows.
+// format owns this directory's Markdown; the docs project formatting it would be MGS3001.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(install);
-    // Before dprint, so the page it formats is the one the template just produced. This is
-    // also what puts the render inside `ci`, and so under the drift gate.
+    // Before dprint, so it formats the freshly rendered page.
     ctx.needs(generate);
-    // dprint amends the AUTHORED guide pages in place. They are inputs, not generated
-    // outputs: declaring them as outputs would make magus clean delete a reader's
-    // documentation. guard-templates.md is the one exception and is declared an output by
-    // generate above, because it is rendered rather than written, so clean deleting it
-    // costs a regeneration instead of prose nobody can get back. dprint leaves the
-    // rendered page byte-identical, which is what keeps the drift gate quiet.
+    // Inputs, not outputs: an output declaration would let magus clean delete the guide pages.
     ctx.modifiesExistingFiles("*.md", "*.ts");
     markdown["dprint"](ctx);
     typescript["biome-format"](ctx);
