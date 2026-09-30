@@ -5,17 +5,49 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
+
+// TestDescribeTargets_SpellsSorted pins that the spells a target lists come out in name
+// order however the registry was filled: they used to follow the built-ins' map order, so
+// `describe targets -o json` flipped between runs.
+func TestDescribeTargets_SpellsSorted(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+import "magus/spell/typescript";
+import "magus/spell/go";
+import "magus/spell/bash";
+import "magus/spell/markdown";
+
+magus.project({"spells": [typescript, go, markdown, bash]})
+`), 0o644))
+	m, err := magus.Open(t.Context(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	targets, err := m.ListTargets(t.Context())
+	require.NoError(t, err)
+	shared := 0
+	for _, e := range targets {
+		assert.Truef(t, slices.IsSorted(e.Spells), "target %q lists its spells out of order: %v", e.Name, e.Spells)
+		if len(e.Spells) > 1 {
+			shared++
+		}
+	}
+	assert.NotZero(t, shared, "the fixture must bind spells that share a target, or the check proves nothing")
+}
 
 // TestDescribeWorkspacesOutput_MultiDeclared verifies that `describe workspaces`
 // enumerates every declared server workspace, not just the active one.
