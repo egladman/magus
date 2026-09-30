@@ -1,10 +1,6 @@
-// The figure a pull-request comment or issue body carries: an image of the graph, and a link
-// to the hosted console, which draws it client-side with magus/figure.
-//
-// The image is drawn here with the same module and uploaded as a GitHub comment attachment.
-// The link stays beside it, and alone when the upload fails. The graph rides in the link's
-// URL fragment and a fragment never reaches a server, so the link sends project names
-// nowhere; the image puts them on GitHub, beside the table that already names them.
+// The figure a pull-request comment or issue body carries: a link to the hosted console,
+// which draws the graph client-side with magus/figure. The graph rides in the link's URL
+// fragment and a fragment never reaches a server, so the link sends project names nowhere.
 //
 //	<consoleBase>graph/#figure=<base64url(utf-8 JSON)>
 //	{"v":1,"kind":"deps","title":"...","nodes":[{"id":"...","label":"...","seed":true}],
@@ -15,9 +11,7 @@
 //
 // Shared by the advisors here and by hack/ci/pull-requests.buzz, which imports it by path:
 // this directory ships with the action and is the one place both can reach.
-import "http";
 import "serialize";
-import "magus/figure";
 // Used by the test blocks.
 import "assert";
 
@@ -68,171 +62,11 @@ export fun decodeFigureLink(link: str) > serialize\Boxed !> any {
     return serialize\jsonDecode(payload.decodeBase64());
 }
 
-// FigureGraph is one figure's content, which figureLink encodes and figureSvg draws.
+// FigureGraph is one figure's content, the arguments figureLink takes.
 export object FigureGraph {
     title: str,
     nodes: [FigureNode],
     edges: [[str]],
-}
-
-// figureSvg draws g as an SVG: each node a box, a seed accented, an arrow from dependency to
-// dependent. Throws the module's findings, or on an edge naming a node g does not hold.
-export fun figureSvg(g: FigureGraph) > str !> str {
-    final f = figure\of("deps", title: g.title, direction: figure\Direction.down, generated: true);
-    final actors = mut {<str: figure\Actor>};
-    foreach (n in g.nodes) {
-        var look = figure\Look.plain;
-        if (n.seed) { look = figure\Look.focal; }
-        final a = figure\external(n.label, look: look);
-        actors[n.id] = a;
-        f.actor(a);
-    }
-    foreach (e in g.edges) {
-        final src = actors[e[0]];
-        final dst = actors[e[1]];
-        if (src == null or dst == null) { throw "edge {e[0]} -> {e[1]} names a node the graph does not hold"; }
-        f.flowAcross(src!, dst: dst!);
-    }
-    // Light, with its colours baked in: GitHub serves the file to an <img>, which no page
-    // stylesheet reaches.
-    return figure\draw(f, theme: figure\Theme.light);
-}
-
-// Request and Reply are one HTTP exchange, so the upload runs over any transport: httpSend
-// in the action, a fake in the tests.
-export object Request {
-    method: str,
-    url: str,
-    body: str = "",
-    headers: {str: str} = {<str: str>},
-}
-
-export object Reply {
-    status: int = 0,
-    body: str = "",
-}
-
-// httpSend sends req once, with a 30 second timeout. Throws when no response arrives; any
-// status is a Reply.
-export fun httpSend(req: Request) > Reply !> str {
-    try {
-        final res = http\request(req.method, url: req.url, body: req.body, headers: req.headers, opts: {"timeout": 30});
-        return Reply{ status = res.status, body = res.body };
-    } catch (e: str) {
-        throw "{req.method} {req.url} got no response: {e}";
-    } catch (e) {
-        throw "{req.method} {req.url} got no response: {e}";
-    }
-    return Reply{};
-}
-
-final apiBase = "https://api.github.com";
-
-// GitHub documents no API for attachments. This is the endpoint its web editor uploads to,
-// and the one `gh --attach` (v2.99.0 on) calls; it can change without notice.
-final attachmentsURL = "https://uploads.github.com/user-attachments/assets";
-
-// repositoryRequest reads repo (owner/name), whose numeric id the upload names.
-export fun repositoryRequest(repo: str, token: str) > Request {
-    return Request{ method = "GET", url = "{apiBase}/repos/{repo}", headers = {
-        "Authorization": "Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    } };
-}
-
-// uploadRequest posts svg as an attachment of the repository with the given id. name is sent
-// unescaped, so it must be a plain file name.
-export fun uploadRequest(repositoryId: int, name: str, svg: str, token: str) > Request {
-    return Request{
-        method = "POST",
-        url = "{attachmentsURL}?name={name}&content_type=image%2Fsvg%2Bxml&repository_id={repositoryId}",
-        body = svg,
-        headers = {"Authorization": "Bearer {token}", "Accept": "application/json", "Content-Type": "image/svg+xml"},
-    };
-}
-
-// uploadFigure uploads svg as a comment attachment of repo (owner/name), authenticated by
-// token, and returns the URL GitHub serves it at. Throws why it could not.
-export fun uploadFigure(send: fun(Request) > Reply !> any, repo: str, token: str, name: str, svg: str) > str !> any {
-    if (token == "") { throw "no GitHub token to upload with"; }
-    final got = send(repositoryRequest(repo, token: token));
-    if (got.status != 200) { throw "GET /repos/{repo} answered HTTP {got.status}: {got.body}"; }
-    final id = serialize\jsonDecode(got.body).q("id").integer();
-    if (id == null) { throw "GET /repos/{repo} carried no repository id"; }
-    final up = send(uploadRequest(id!, name: name, svg: svg, token: token));
-    if (up.status != 200 and up.status != 201) { throw "the attachment upload answered HTTP {up.status}: {up.body}"; }
-    final url = serialize\jsonDecode(up.body).q("url").string() ?? "";
-    if (url == "") { throw "the attachment upload answered with no url: {up.body}"; }
-    return url;
-}
-
-// Attachment is how attaching a figure went: the image's url, or the failure that stopped
-// it. Both empty means nothing was attempted.
-export object Attachment {
-    url: str = "",
-    failure: str = "",
-}
-
-// attachFigure draws g and uploads it under name. It never throws: a failure comes back as
-// one printable line for the comment to carry.
-export fun attachFigure(send: fun(Request) > Reply !> any, repo: str, token: str, name: str, g: FigureGraph) > Attachment {
-    try {
-        return Attachment{ url = uploadFigure(send, repo: repo, token: token, name: name, svg: figureSvg(g)) };
-    } catch (e: str) {
-        return Attachment{ failure = oneLine(e) };
-    } catch (e) {
-        return Attachment{ failure = oneLine("{e}") };
-    }
-    return Attachment{};
-}
-
-// imageMarkdown is the line a comment carries above the figure's link: the image, why it
-// could not be attached, or "" when nothing was attempted.
-export fun imageMarkdown(a: Attachment, alt: str) > str {
-    if (a.url != "") { return "![{alt}]({a.url})"; }
-    if (a.failure != "") { return "The figure could not be attached as an image: `{a.failure}`"; }
-    return "";
-}
-
-// oneLine fits a failure into a code span on one line: printable ASCII, no backticks, at
-// most 200 bytes.
-fun oneLine(s: str) > str {
-    final acc = mut [<str>];
-    var i = 0;
-    while (i < s.len()) {
-        final b = s.byte(i);
-        if (b == 96 or b < 32 or b == 127) {
-            acc.append(" ");
-        } else if (b < 128) {
-            acc.append(s.sub(i, len: 1));
-        } else if (b >= 192) {
-            acc.append("?");
-        }
-        i = i + 1;
-    }
-    final words = mut [<str>];
-    foreach (w in acc.join("").split(" ")) {
-        if (w != "") { words.append(w); }
-    }
-    var line = words.join(" ");
-    if (line.len() > 200) { line = line.sub(0, len: 197) + "..."; }
-    return line;
-}
-
-// fakeSend answers from replies, one per request in order, and records each request.
-fun fakeSend(replies: [Reply], sent: mut [Request]) > fun(Request) > Reply !> any {
-    return fun (req: Request) > Reply !> any {
-        sent.append(req);
-        if (sent.len() > replies.len()) { throw "unexpected request {req.method} {req.url}"; }
-        return replies[sent.len() - 1];
-    };
-}
-
-fun sample() > FigureGraph {
-    return FigureGraph{ title = "How far this change reaches",
-        nodes = [FigureNode{ id = "libs/a", label = "libs/a", seed = true }, FigureNode{ id = "cmd/b", label = "cmd/b" }],
-        edges = [["libs/a", "cmd/b"]] };
 }
 
 test "a link decodes to the graph it was built from" {
@@ -291,79 +125,4 @@ test "a link without a fragment is refused" {
         refused = true;
     }
     assert\equal(refused, want: true, message: "no fragment");
-}
-
-test "figureSvg draws every node as a light-theme svg" {
-    final svg = figureSvg(sample());
-    assert\equal(svg.startsWith("<svg"), want: true, message: svg);
-    assert\equal(svg.indexOf("libs/a") != null and svg.indexOf("cmd/b") != null, want: true, message: "both labels");
-    assert\equal(svg.indexOf("var(--magus-diagram-") == null, want: true, message: "colours baked in for an <img>");
-}
-
-test "figureSvg refuses an edge to a node it does not hold" {
-    final g = FigureGraph{ title = "t", nodes = [FigureNode{ id = "a", label = "a" }], edges = [["a", "gone"]] };
-    assert\equal(figureSvg(g) catch "refused", want: "refused", message: "dangling edge");
-}
-
-test "the upload reads the repository id, then posts the svg under it" {
-    final sent = mut [<Request>];
-    final send = fakeSend([
-        Reply{ status = 200, body = "\{\"id\": 42, \"name\": \"r\"\}" },
-        Reply{ status = 201, body = "\{\"url\": \"https://github.com/user-attachments/assets/abc\"\}" },
-    ], sent: sent);
-    final a = attachFigure(send, repo: "o/r", token: "tok", name: "blast-radius.svg", g: sample());
-    assert\equal([a.url, a.failure], want: ["https://github.com/user-attachments/assets/abc", ""], message: "attached");
-    assert\equal(sent.len(), want: 2, message: "two requests");
-    assert\equal([sent[0].method, sent[0].url, sent[0].headers["Authorization"] ?? ""],
-        want: ["GET", "https://api.github.com/repos/o/r", "Bearer tok"], message: "the repository read");
-    assert\equal([sent[1].method, sent[1].url],
-        want: ["POST", "https://uploads.github.com/user-attachments/assets?name=blast-radius.svg&content_type=image%2Fsvg%2Bxml&repository_id=42"],
-        message: "the upload");
-    assert\equal([sent[1].headers["Authorization"] ?? "", sent[1].headers["Content-Type"] ?? ""],
-        want: ["Bearer tok", "image/svg+xml"], message: "the upload's headers");
-    assert\equal(sent[1].body, want: figureSvg(sample()), message: "the body is the drawn figure");
-}
-
-test "a refused upload comes back as its reason on one line" {
-    final sent = mut [<Request>];
-    final send = fakeSend([
-        Reply{ status = 200, body = "\{\"id\": 42\}" },
-        Reply{ status = 404, body = "\{\"message\":\"Not Found\"\}\n" },
-    ], sent: sent);
-    final a = attachFigure(send, repo: "o/r", token: "tok", name: "x.svg", g: sample());
-    assert\equal([a.url, a.failure], want: ["", "the attachment upload answered HTTP 404: \{\"message\":\"Not Found\"\}"], message: "the reason");
-}
-
-test "a failed repository read stops before the upload" {
-    final sent = mut [<Request>];
-    final a = attachFigure(fakeSend([Reply{ status = 403, body = "forbidden" }], sent: sent),
-        repo: "o/r", token: "tok", name: "x.svg", g: sample());
-    assert\equal([a.failure, "{sent.len()}"], want: ["GET /repos/o/r answered HTTP 403: forbidden", "1"], message: "one request");
-}
-
-test "no token attempts nothing" {
-    final sent = mut [<Request>];
-    final a = attachFigure(fakeSend([<Reply>], sent: sent), repo: "o/r", token: "", name: "x.svg", g: sample());
-    assert\equal([a.failure, "{sent.len()}"], want: ["no GitHub token to upload with", "0"], message: "no request");
-}
-
-test "a transport that gets no response is a failure, never a throw" {
-    final a = attachFigure(fun (req: Request) > Reply !> any { throw "dial tcp: refused"; },
-        repo: "o/r", token: "tok", name: "x.svg", g: sample());
-    assert\equal(a.failure, want: "dial tcp: refused", message: "the reason");
-}
-
-test "imageMarkdown carries the image, the failure, or nothing" {
-    assert\equal(imageMarkdown(Attachment{ url = "https://github.com/user-attachments/assets/abc" }, alt: "The reach"),
-        want: "![The reach](https://github.com/user-attachments/assets/abc)", message: "the image");
-    assert\equal(imageMarkdown(Attachment{ failure = "HTTP 404" }, alt: "The reach"),
-        want: "The figure could not be attached as an image: `HTTP 404`", message: "the failure");
-    assert\equal(imageMarkdown(Attachment{}, alt: "The reach"), want: "", message: "nothing attempted");
-}
-
-test "oneLine keeps a reason printable, unbroken and short" {
-    assert\equal(oneLine("a\n  b`c`\tcaf\195\169"), want: "a b c caf?", message: "flattened");
-    final long = mut [<str>];
-    for (var i = 0; i < 300; i = i + 1) { long.append("x"); }
-    assert\equal(oneLine(long.join("")).len(), want: 200, message: "clipped");
 }
