@@ -284,8 +284,8 @@ type runCtx struct {
 	// Zero is unlimited: every step that can run, runs, and the batch reports all of
 	// them. See RunAll for why that is the default.
 	maxFailures int
-	// prelude runs ahead of each RunAll step's key; see WithPrelude.
-	prelude func(context.Context, Step) error
+	// beforeKey runs for each RunAll step before its key is hashed; see WithBeforeKey.
+	beforeKey func(context.Context, Step) error
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -1213,7 +1213,7 @@ func WithSharedStepBase(ctx context.Context) context.Context {
 // instead of the caller's: the context a step that several parents reach has to run on.
 //
 // A composed target is dispatched once and awaited by everyone who needs it (the Buzz
-// pool's TargetMemo), so whichever parent asks first supplies the context the work runs
+// pool's TargetRuns), so whichever parent asks first supplies the context the work runs
 // under. When that parent declares a timeout, its ceiling silently becomes the ceiling of
 // a step its siblings also depend on: on 2026-09-10 `security` (15m) reached `generate`
 // first, and when it expired the whole codegen chain died with "context deadline exceeded"
@@ -1445,11 +1445,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					s.Deps = slices.Concat(s.Deps, depKeys)
 				}
 			}
-			if rc.prelude != nil {
-				if err := gctx.Err(); err != nil {
-					return fail(err)
-				}
-				if err := rc.prelude(gctx, s); err != nil {
+			if rc.beforeKey != nil {
+				if err := rc.beforeKey(gctx, s); err != nil {
 					ran = gctx.Err() == nil
 					return fail(err)
 				}

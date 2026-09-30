@@ -1308,18 +1308,18 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 	}
 }
 
-// A prelude runs after a step's upstreams and before its body, and a prelude that fails
+// A before-key hook runs after a step's upstreams and before its key, and one that fails
 // fails that step alone: its body never runs, its dependents are held back, and a peer
 // with nothing to do with it still runs.
-func TestRunAllPreludeRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
+func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	root, c := openCache(t)
 	up := depStep(root, "up")
-	gated := depStep(root, "gated")
-	gated.DependsOn = []string{"up"}
+	failing := depStep(root, "failing")
+	failing.DependsOn = []string{"up"}
 	after := depStep(root, "after")
-	after.DependsOn = []string{"gated"}
+	after.DependsOn = []string{"failing"}
 	peer := depStep(root, "peer")
-	steps := []Step{up, gated, after, peer}
+	steps := []Step{up, failing, after, peer}
 	for i := range steps {
 		steps[i].NoCache = true
 	}
@@ -1327,21 +1327,21 @@ func TestRunAllPreludeRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	note := func(s string) { mu.Lock(); order = append(order, s); mu.Unlock() }
-	prelude := func(_ context.Context, s Step) error {
-		note("prelude:" + s.ProjectPath)
-		if s.ProjectPath == "gated" {
-			return errors.New("gate failed")
+	beforeKey := func(_ context.Context, s Step) error {
+		note("before-key:" + s.ProjectPath)
+		if s.ProjectPath == "failing" {
+			return errors.New("skip_cache member failed")
 		}
 		return nil
 	}
 	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
 		note("run:" + s.ProjectPath)
 		return nil
-	}, WithPrelude(prelude))
+	}, WithBeforeKey(beforeKey))
 
-	require.ErrorContains(t, err, "gate failed")
-	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "prelude:gated"), "the prelude waits for its step's upstreams")
-	assert.NotContains(t, order, "run:gated", "a failed prelude fails its step")
-	assert.NotContains(t, order, "prelude:after", "and holds back its dependents")
+	require.ErrorContains(t, err, "skip_cache member failed")
+	assert.Less(t, slices.Index(order, "run:up"), slices.Index(order, "before-key:failing"), "the hook waits for its step's upstreams")
+	assert.NotContains(t, order, "run:failing", "a failed hook fails its step")
+	assert.NotContains(t, order, "before-key:after", "and holds back its dependents")
 	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }

@@ -236,7 +236,7 @@ func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key
 // wrote to its own inputs. Construct one per sweep with NewSourceMemo, thread it
 // explicitly, and let it fall out of scope.
 //
-// Threaded as an explicit parameter rather than through ctx like gopherbuzz's TargetMemo,
+// Threaded as an explicit parameter rather than through ctx like gopherbuzz's TargetRuns,
 // deliberately: an explicit parameter is what makes "prediction only" provable by grep.
 type SourceMemo struct {
 	mu      sync.Mutex

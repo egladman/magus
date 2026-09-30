@@ -969,7 +969,7 @@ export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 }
 
 // runPooledTargetIn runs target over the magusfile in dir through the VM pool, with
-// the pool registry and per-invocation TargetMemo a real `magus run` step installs
+// the pool registry and per-invocation TargetRuns a real `magus run` step installs
 // (run.go). runTargetIn deliberately has neither, so it takes dispatchBuzzDeps'
 // inline sequential branch — the branch where a dependency cycle recurses instead of
 // being memo-deduped. Anything about cycle detection or concurrent dispatch has to
@@ -979,7 +979,7 @@ func runPooledTargetIn(t *testing.T, dir, target string) error {
 	reg := buzz.NewPoolRegistry(nil, 4)
 	t.Cleanup(func() { _ = reg.Close() })
 	ctx := buzz.WithPoolRegistry(context.Background(), reg)
-	ctx = buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
+	ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns())
 	_, err := interp.RunDir(ctx, dir, target, nil)
 	return err
 }

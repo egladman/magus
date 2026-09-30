@@ -606,7 +606,7 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 	require.NoError(t, m.Run(ctx, targets), "first run")
 	assert.Equal(t, int32(1), composer.Load(), "first run: the composer executes")
 	assert.Equal(t, int32(1), gate.Load(),
-		"a miss runs the gate before the key is taken, and the body's memo skips it")
+		"a miss runs the skip_cache member before the key, and the body's TargetRuns skips it")
 
 	require.NoError(t, m.Run(ctx, targets), "second run")
 	assert.Equal(t, int32(1), composer.Load(), "second run: the composer replays")
@@ -615,13 +615,13 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "third run (--no-cache)")
 	assert.Equal(t, int32(2), composer.Load(), "--no-cache re-executes the composer")
 	assert.Equal(t, int32(3), gate.Load(),
-		"--no-cache still stores the entry, so the gate still runs ahead of its key")
+		"--no-cache still stores the entry, so the skip_cache member still runs before its key")
 }
 
-// The first run after a change must be stored. The composer's key holds its gate's
-// artifact, so a gate left for the body to run rewrote a key input mid-run and the run
-// was refused a cache entry; every change then cost two full executions.
-func TestRun_FirstRunAfterAChangeIsStoredWhenAGateRewritesItsArtifact(t *testing.T) {
+// The first run after a change must be stored. The composer's key holds its skip_cache
+// member's artifact, so a member left for the body to run rewrote a key input mid-run and
+// the run was refused a cache entry; every change then cost two full executions.
+func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact(t *testing.T) {
 	const spellName = "zzz-gate-first-run-spell"
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))

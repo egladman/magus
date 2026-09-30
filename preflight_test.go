@@ -157,7 +157,7 @@ func TestPreflightCountsAsTheComposedGateRun(t *testing.T) {
 
 	require.NoError(t, f.m.Run(ctx, targets))
 	require.Equal(t, 1, f.count("a:composer"))
-	require.Equal(t, 1, f.count("a:gate"), "a miss runs the gate ahead of the key")
+	require.Equal(t, 1, f.count("a:gate"), "a miss runs the skip_cache member before the key")
 	key, _, err := f.m.ComputeTargetKey(ctx, "a", "composer", nil)
 	require.NoError(t, err)
 

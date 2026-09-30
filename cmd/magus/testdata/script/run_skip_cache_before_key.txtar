@@ -1,11 +1,12 @@
-# A composer's skip_cache gate runs ahead of the composer's key, once per invocation, and a
-# body that reaches it through ctx.needs does not run it again. So the first run after a
-# change is cached although the gate rewrites a file in the key, a gate two members of an
-# uncached ci share runs once, and a gate another project owns runs once too.
+# A skip_cache member whose artifact a composer's key reads runs before that key, once per
+# run, and a body that reaches it through ctx.needs does not run it again. So the first run
+# after a change is cached although the member rewrites a file in the key, a member two
+# members of an uncached ci share runs once, one an uncached composer also needs directly
+# runs once, and one another project owns runs once too.
 
 cd ws
 
-# The gate rewrites gen.txt, which test's key holds; the first run is stored all the same.
+# generate rewrites gen.txt, which test's key holds; the first run is stored all the same.
 exec magus run test .
 grep -count=1 '^gen$' $WORK/log
 grep -count=1 '^test$' $WORK/log
@@ -23,6 +24,12 @@ grep -count=1 '^gen$' $WORK/log
 grep -count=1 '^lint$' $WORK/log
 grep -count=1 '^test$' $WORK/log
 
+# release needs generate directly and through test: one run.
+cp IN.again IN.txt
+rm $WORK/log
+exec magus run release .
+grep -count=1 '^gen$' $WORK/log
+
 # site in docs needs the root's generate across projects: one run.
 cp IN.last IN.txt
 rm $WORK/log
@@ -32,6 +39,8 @@ grep -count=1 '^site$' $WORK/log
 
 -- ws/IN.txt --
 one
+-- ws/IN.again --
+again
 -- ws/IN.next --
 two
 -- ws/IN.last --
@@ -48,7 +57,8 @@ import "magus";
 import "spells/acme";
 magus\project({"name": "root", "spells": [acme], "targets": {
     "generate": {"skip_cache": "stands in for a generator"},
-    "ci": {"skip_cache": "the gate"},
+    "ci": {"skip_cache": "runs its members every time"},
+    "release": {"skip_cache": "runs its members every time"},
 }});
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
@@ -69,6 +79,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(lint, test);
+}
+
+export fun release(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate, test);
 }
 -- ws/docs/magusfile.buzz --
 import "magus";

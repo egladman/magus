@@ -2,11 +2,10 @@ package interp
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"slices"
-	"sync"
 
+	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -14,30 +13,20 @@ import (
 type crossDispatchCtxKey struct{}
 type crossAncestorCtxKey struct{}
 
-// CrossDispatch runs cross-project target dependencies (declared via a project
-// import, then referenced as <alias>.<target>) at most once per run and detects
-// cross-project cycles.
-// One instance is installed in the run context and shared across every target, so
-// two targets that both need the same remote target run it once; Dispatch is safe
-// for concurrent use.
+// CrossDispatch runs cross-project target dependencies (declared via a project import,
+// then referenced as <alias>.<target>) and detects cross-project cycles. Which of them
+// already ran is the run's TargetRuns, so a remote target runs at most once whether a
+// body, a preflight pass or a composer's key reached it first. Dispatch is safe for
+// concurrent use.
 type CrossDispatch struct {
-	mu  sync.Mutex
-	m   map[string]*crossEntry
-	run func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
-	// passed maps a project dir to the targets MarkDone recorded in it, which a remote
-	// run into that dir must not repeat.
-	passed map[string][]string
+	runs *cache.TargetRuns
+	run  func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
 }
 
-type crossEntry struct {
-	done chan struct{}
-	err  error
-}
-
-// NewCrossDispatch returns an empty coordinator for one run.
-func NewCrossDispatch() *CrossDispatch {
+// NewCrossDispatch returns a coordinator that records its runs in runs.
+func NewCrossDispatch(runs *cache.TargetRuns) *CrossDispatch {
 	return &CrossDispatch{
-		m: make(map[string]*crossEntry),
+		runs: runs,
 		// A cross-project dependency is run for its EFFECT (its outputs feed the
 		// dependent), so its return value has no consumer here and is dropped.
 		run: func(ctx context.Context, dir, target string) error {
@@ -59,37 +48,6 @@ func CrossDispatchFromContext(ctx context.Context) *CrossDispatch {
 	return c
 }
 
-// MarkDone records that target already passed in the project at dir earlier in this
-// run: a later Dispatch of it returns nil without running, and a remote run into dir
-// treats it as done where that body needs it. Safe for concurrent use.
-func (c *CrossDispatch) MarkDone(dir, target string) {
-	e := &crossEntry{done: make(chan struct{})}
-	close(e.done)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.m[dir+"\x00"+target]; !ok {
-		c.m[dir+"\x00"+target] = e
-	}
-	if c.passed == nil {
-		c.passed = map[string][]string{}
-	}
-	if !slices.Contains(c.passed[dir], target) {
-		c.passed[dir] = append(c.passed[dir], target)
-	}
-}
-
-// NewTargetMemoDone returns a TargetMemo on which every name has already completed
-// without error, so a ctx.needs of one of them returns at once instead of running it.
-func NewTargetMemoDone(names ...string) *buzz.TargetMemo {
-	memo := buzz.NewTargetMemo()
-	for _, name := range names {
-		if isNew, _ := memo.TryRun("", name); isNew {
-			memo.Complete(name, nil)
-		}
-	}
-	return memo
-}
-
 func withCrossAncestor(ctx context.Context, key string) context.Context {
 	prev, _ := ctx.Value(crossAncestorCtxKey{}).([]string)
 	next := append(append([]string(nil), prev...), key)
@@ -101,45 +59,32 @@ func crossAncestors(ctx context.Context) []string {
 	return a
 }
 
-// Dispatch runs target in the project rooted at dir, at most once per run. A second
-// caller for the same (dir, target) blocks on and shares the first run's result. A
-// (dir, target) already on the current call stack is a cross-project cycle and
-// errors instead of deadlocking.
+// Dispatch runs target in project dep, at most once per invocation. A second caller for
+// the same target shares the first run's outcome; one already on the current call stack is
+// a cross-project cycle and errors instead of deadlocking.
 //
 // The caller is responsible for yielding any concurrency slot it holds before
 // calling Dispatch (the remote run needs slots of its own); see the binding's use
 // of proc.RunChildSync.
-func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error {
-	key := dir + "\x00" + target
-	if slices.Contains(crossAncestors(ctx), key) {
-		return types.DiagnosticErrorf(types.TargetDependencyCycle, "cross-project cycle: %s target %q", dir, target)
+func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target string) error {
+	ref := types.TargetRef{Project: dep.Path, Target: target}
+	if slices.Contains(crossAncestors(ctx), ref.Ref()) {
+		return types.DiagnosticErrorf(types.TargetDependencyCycle, "cross-project cycle: %s", ref.Ref())
 	}
+	return c.runs.Once(ctx, ref, func() error { return c.runRemote(ctx, dep, ref) })
+}
 
-	c.mu.Lock()
-	if e, ok := c.m[key]; ok {
-		c.mu.Unlock()
-		slog.DebugContext(ctx, "interp: cross-project dispatch (awaiting in-flight run)", "dir", dir, "target", target)
-		// Share the in-flight result, but don't pin a cancelled waiter on a slow run.
-		select {
-		case <-e.done:
-			return e.err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	slog.DebugContext(ctx, "interp: cross-project dispatch", "dir", dir, "target", target)
+// runRemote runs ref's target in dep for the one caller that reached it first.
+func (c *CrossDispatch) runRemote(ctx context.Context, dep *types.Project, ref types.TargetRef) error {
+	slog.DebugContext(ctx, "interp: cross-project dispatch", "target", ref.Ref())
 	// Mark before running: the parent's audit diffs after its body returns, and by then
 	// this child has already written its own outputs.
-	types.ActiveDispatchFromContext(ctx).Mark(dir)
-	e := &crossEntry{done: make(chan struct{})}
-	c.m[key] = e
-	passed := slices.Clone(c.passed[dir])
-	c.mu.Unlock()
+	types.ActiveDispatchFromContext(ctx).Mark(dep.Dir)
 
-	// A fresh memo so the remote project's internal depends_on dedups within its own
-	// run without colliding with the caller's (target names are per-project). The
-	// ancestor key guards a cycle back through this same remote target.
-	rctx := buzz.WithTargetMemo(ctx, NewTargetMemoDone(passed...))
+	// A fresh body record so the remote project's own ctx.needs runs each target once
+	// without colliding with the caller's (target names are per-project), seeded with what
+	// this run already ran there.
+	rctx := buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(c.runs.Passed(dep.Path)...))
 	// Same reason the memo is fresh, applied to the dispatch ancestor stack: its
 	// entries are bare target names, and a name only means something within one
 	// project. Carried across, a sub-project target that merely SHARES a name with
@@ -156,22 +101,6 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	// Stripped rather than rebuilt for the remote project: without one, that target's own
 	// needs run inline and uncached, which is what run.go does for a cacheable member too.
 	rctx = buzz.WithoutTargetInterceptor(rctx)
-	rctx = withCrossAncestor(rctx, key)
-	// e.done is the publication point: e.err is written before close, and a waiter
-	// only reads it after <-e.done, so the write is visible without a data race.
-	// close is deferred and panic-recovering: c.run does work outside the buzz VM's
-	// own recover (file I/O, chdir, child-process plumbing), and a panic that left
-	// e.done unclosed would hang every waiter on this key — and, transitively, the
-	// run's errgroup.Wait — forever. Convert the panic to an error and re-raise so
-	// the caller's goroutine still unwinds.
-	defer func() {
-		if r := recover(); r != nil {
-			e.err = fmt.Errorf("cross-dispatch panic: %s target %q: %v", dir, target, r)
-			close(e.done)
-			panic(r)
-		}
-	}()
-	e.err = c.run(rctx, dir, target)
-	close(e.done)
-	return e.err
+	rctx = withCrossAncestor(rctx, ref.Ref())
+	return c.run(rctx, dep.Dir, ref.Target)
 }

@@ -162,12 +162,13 @@ func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }
 }
 
-// WithPrelude runs fn for each RunAll step once its upstreams have finished and before
-// its key is hashed, holding no slot, so work fn does lands in the key and a step fn
+// WithBeforeKey runs fn for each RunAll step once its upstreams have finished and before
+// its key is hashed, holding no slot, so work fn does lands in the key and a target fn
 // waits on can take the slots it needs. An error fails the step as its own failure,
-// spending the failure budget like any other.
-func WithPrelude(fn func(context.Context, Step) error) RunOption {
-	return func(rc *runCtx) { rc.prelude = fn }
+// spending the failure budget like any other. RunAside does not honor it: a caller of
+// RunAside runs the same work itself first.
+func WithBeforeKey(fn func(context.Context, Step) error) RunOption {
+	return func(rc *runCtx) { rc.beforeKey = fn }
 }
 
 // WithLimiter shares an external Limiter with RunAll instead of creating a private one,

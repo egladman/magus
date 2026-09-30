@@ -303,6 +303,19 @@ type TargetGraphNode struct {
 	FootprintErr error `json:"-" yaml:"-" buzz:"-"`
 }
 
+// TargetRef names one target in the workspace: its project's workspace-relative path,
+// never empty, and its name. It is comparable, so it keys what an invocation records about
+// the targets it ran.
+type TargetRef struct {
+	Project string `json:"project" yaml:"project"`
+	Target  string `json:"target"  yaml:"target"`
+}
+
+// Ref spells the reference the way the CLI takes a target ref, "project:target".
+func (r TargetRef) Ref() string {
+	return r.Project + ":" + r.Target
+}
+
 // CrossTargetRef names one target in another project: a target-level cross-project
 // dependency. Project is workspace-relative (resolved from the dot-/repo-relative
 // path written in the magusfile); Target is the kebab-normalized target name.

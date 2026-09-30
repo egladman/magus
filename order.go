@@ -275,7 +275,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		// result event with its captured log. Dispatched bare it was invisible to all
 		// four, and a stalled settle read as a finished run that forgot to exit.
 		if _, err := m.cache.RunAside(ctx, newStep(p, node.Target), func(ctx context.Context) error {
-			_, err := interp.RunDir(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), p.Dir, node.Target, nil)
+			_, err := interp.RunDir(buzz.WithTargetRuns(ctx, buzz.NewTargetRuns()), p.Dir, node.Target, nil)
 			return err
 		}, opts...); err != nil {
 			return fmt.Errorf("magus: derived ordering: settle %s:%s: %w", node.Project, node.Target, err)
