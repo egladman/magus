@@ -425,10 +425,7 @@ var raiseSiteSkipDirs = map[string]bool{
 
 // mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
 // today, listed rather than tolerated so the gate is green and the debt is named.
-var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{
-	types.DirNotInGraph:       "magus\\dir raises it; lands with the dir client members",
-	types.LayerNotDeclared:    "magus\\layer raises it; lands with the dir client members",
-}
+var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{}
 
 // TestEveryDiagnosticCodeHasARaiseSite pins the property the code registry silently lost:
 // a code magus can never emit.

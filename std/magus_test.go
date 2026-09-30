@@ -576,7 +576,10 @@ type fakeGraphWorkspace struct {
 	types.WorkspaceRepository
 	g        *knowledge.Graph
 	cacheDir string
+	projects []*types.Project
 }
+
+func (f *fakeGraphWorkspace) All() []*types.Project { return f.projects }
 
 func (f *fakeGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
 	return f.g, nil
@@ -628,11 +631,11 @@ func TestGraphMembersAreServedInProcess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "target:pkg/a:build", x.Node.ID)
 
-	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test")
+	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test", nil)
 	require.NoError(t, err)
 	assert.True(t, p.Found)
 
-	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b")
+	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b", nil)
 	require.NoError(t, err, "a resolved pair with no connection is an answer")
 	assert.False(t, unlinked.Found)
 
@@ -647,7 +650,7 @@ func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
 
 	_, err := MagusExplain(ctx, "target:pkg/z:nope")
 	require.Error(t, err)
-	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope")
+	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", nil)
 	require.Error(t, err)
 	_, err = MagusQuery(ctx, " ", nil)
 	require.Error(t, err)
@@ -672,25 +675,27 @@ func TestImportGraphHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
 
 	noPackages, err := MagusImportGraph(graphContext(t))
 	require.NoError(t, err)
-	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}}, noPackages,
-		"graphContext holds a symbol but no file defines a namespace")
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}, Languages: map[string]string{}}, noPackages,
+		"graphContext holds a symbol but no dir imports another")
 
 	g := knowledge.NewGraph()
 	ctx := types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
 	empty, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}}, empty)
+	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}, Languages: map[string]string{}}, empty)
 
-	a, b := "symbol:gomod example.com/m `example.com/m/pkg/a`/", "symbol:gomod example.com/m `example.com/m/pkg/b`/"
-	for dir, ns := range map[string]string{"pkg/a": a, "pkg/b": b} {
-		g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: dir, Attrs: map[string]string{"namespace": ns}})
-		g.AddNode(types.KnowledgeNode{ID: "file:" + dir + "/f.go", Kind: types.KindFile, Label: dir + "/f.go", Source: dir + "/f.go"})
-		g.AddEdge(types.KnowledgeEdge{Source: "file:" + dir + "/f.go", Target: ns, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+	g.AddNode(types.KnowledgeNode{ID: "symbol:x", Kind: types.KindSymbol, Label: "x"})
+	for _, dir := range []string{"pkg/a", "pkg/b"} {
+		g.AddNode(types.KnowledgeNode{ID: "dir:" + dir, Kind: types.KindDir, Label: dir, Source: dir, Attrs: map[string]string{types.AttrLanguage: "go"}})
 	}
-	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/a/f.go", Target: b, Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1})
+	g.AddEdge(types.KnowledgeEdge{Source: "dir:pkg/a", Target: "dir:pkg/b", Relation: types.RelationImports, Confidence: types.ConfidenceExtracted, Score: 1})
 	got, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{"pkg/a": {"pkg/b"}}}, got)
+	assert.Equal(t, types.ImportGraph{
+		Indexed:   true,
+		Packages:  map[string][]string{"pkg/a": {"pkg/b"}},
+		Languages: map[string]string{"pkg/a": "go", "pkg/b": "go"},
+	}, got)
 }
 
 // A mistyped option would otherwise answer a different question than the one asked.
@@ -713,10 +718,14 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 	calls := map[string]func() error{
 		"query":          func() error { _, err := MagusQuery(ctx, "x", nil); return err },
 		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
-		"path":           func() error { _, err := MagusPath(ctx, "x", "y"); return err },
+		"path":           func() error { _, err := MagusPath(ctx, "x", "y", nil); return err },
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
 		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
+		"dir":            func() error { _, err := MagusDir(ctx, "x"); return err },
+		"dirs":           func() error { _, err := MagusDirs(ctx, "**", nil); return err },
+		"layer":          func() error { _, err := MagusLayer(ctx, "x"); return err },
+		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", nil); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
 		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
 	}

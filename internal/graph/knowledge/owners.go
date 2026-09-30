@@ -18,7 +18,7 @@ import (
 // the shard is remote-shareable like the other extracted shards (unlike @runtime).
 
 // ownersShardName is the singleton shard holding CODEOWNERS owner nodes and the
-// owns edges to the projects and files they cover.
+// owns edges to the projects, directories and files they cover.
 const ownersShardName = "@owners"
 
 // codeownersPaths are the locations GitHub recognizes for a CODEOWNERS file, in
@@ -27,10 +27,24 @@ const ownersShardName = "@owners"
 var codeownersPaths = []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"}
 
 // ownedNode is one path-bearing node CODEOWNERS patterns are matched against: a
-// project or a buzz file. Its ID gets the owns edge; its Path drives the match.
+// project, a package directory or a buzz file. Its ID gets the owns edge; its Path drives
+// the match.
 type ownedNode struct {
 	ID   string
 	Path string
+}
+
+// ownedDirs lists every dir node in nodes as an ownedNode, so a package directory takes
+// the owner the last matching CODEOWNERS rule names for its path and a figure can zone a
+// box by owner without walking its files.
+func ownedDirs(nodes []types.KnowledgeNode) []ownedNode {
+	var out []ownedNode
+	for _, n := range nodes {
+		if n.Kind == types.KindDir {
+			out = append(out, ownedNode{ID: n.ID, Path: n.Source})
+		}
+	}
+	return out
 }
 
 // codeownersRule is one CODEOWNERS line: the path pattern, its owners, and the
@@ -44,7 +58,7 @@ type codeownersRule struct {
 }
 
 // assembleOwners reads the workspace CODEOWNERS (if any) and emits an owner node
-// per distinct owner plus an owns edge to each project/file the owner covers under
+// per distinct owner plus an owns edge to each project, dir or file the owner covers under
 // last-match-wins. An absent or empty CODEOWNERS yields an empty shard (dropped by
 // the caller). Owners are matched only against nodes that already exist, so a rule
 // covering paths outside the graph adds no dangling edge.

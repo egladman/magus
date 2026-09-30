@@ -182,16 +182,6 @@ export fun inlinePageDiagrams(html: str) > str !> any {
     return inlineDiagrams(html, svgById: renderAll());
 }
 
-// BackrefMarker is the token a source file uses to point back at a diagram, as in
-//
-//     // magus:diagram server-http - this is the box the figure calls "Guard".
-//
-// Deliberately NOT parsed as a comment. The marker is unique enough to find with a plain
-// substring scan, so this works identically in Go, Buzz, TypeScript, YAML or anything
-// else without declaring a comment syntax per language: whatever precedes the token is
-// the host language's comment opener, and nothing here needs to know what it is.
-final BackrefMarker = "magus:diagram ";
-
 // DriftOptions carries the drift step's switches. Import verification is off unless the step
 // was invoked with --verify-imports, because it needs a symbol index a plain checkout lacks.
 export object DriftOptions {
@@ -218,7 +208,7 @@ export object DriftReport {
 // Per figure, in order: anchors that no longer resolve; Go packages under the figure's scope
 // that no node anchors and no omit names; omits naming a path that is gone; edges whose
 // claim is unknown or cannot be checked; and, with opts.verifyImports, imports claims the
-// import graph does not bear out. Then every magus:diagram marker in sourceGlobs that names
+// import graph does not bear out. Then every magus:diagram marker the graph holds that names
 // no figure. None of it asserts the figure's SHAPE is right; that stays a human judgment.
 //
 // Raises when opts.verifyImports is set and the workspace has no symbol index: an empty
@@ -229,7 +219,12 @@ export fun verifyFigures(root: str, sourceGlobs: [str], opts: DriftOptions) > Dr
         final observed: ImportGraph = magus\importGraph();
         imports = ObservedImports{ indexed = observed.indexed, packages = observed.packages };
     }
-    return checkFigures(allDiagrams(), root: root, sourceGlobs: sourceGlobs, imports: imports);
+    final figures = allDiagrams();
+    final report = checkFigures(figures, root: root, sourceGlobs: sourceGlobs, imports: imports);
+    final findings: mut [str] = mut [<str>];
+    foreach (msg in report.findings) { findings.append(msg); }
+    foreach (msg in unknownMarkers(figures)) { findings.append(msg); }
+    return DriftReport{ findings = findings, summaries = report.summaries };
 }
 
 // checkFigures is verifyFigures over any figure list; imports is null when not verifying.
@@ -250,7 +245,6 @@ fun checkFigures(figures: [Diagram], root: str, sourceGlobs: [str], imports: Obs
         }
         summaries.append(summaryLine(d, verified: imports != null));
     }
-    foreach (msg in unknownMarkers(figures, root: root, sourceGlobs: sourceGlobs)) { findings.append(msg); }
     return DriftReport{ findings = findings, summaries = summaries };
 }
 
@@ -528,38 +522,49 @@ export fun writeObservedFigures(dir: str, imports: ObservedImports) > [str] !> a
 }
 
 // unknownMarkers is the reverse half: a magus:diagram marker naming no figure means a figure
-// was renamed or dropped while the code still points at it.
-fun unknownMarkers(figures: [Diagram], root: str, sourceGlobs: [str]) > [str] !> any {
-    final found: mut [str] = mut [<str>];
+// was renamed or dropped while the code still points at it. The markers are the graph's,
+// so a marker is exactly what the markers adapter declares one to be.
+fun unknownMarkers(figures: [Diagram]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (d in figures) { known[d.id] = true; }
-    foreach (pattern in sourceGlobs) {
-        foreach (file in fs\glob(root + "/" + pattern)) {
-            final body = fs\readFile(file.value);
-            if (body.indexOf(BackrefMarker) == null) { continue; }
-            foreach (id in markedIds(body)) {
-                if (known[id] == null) {
-                    found.append("{file.value}: marks diagram \"{id}\", which no diagram declares");
-                }
-            }
+    final result: QueryResult = magus\query("kind=marker family=diagram", opts: {"limit": 10000});
+    final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
+    foreach (n in result.nodes) {
+        marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });
+    }
+    return unknownMarkerFindings(known, marked: marked);
+}
+
+// DiagramMarker is the part of a graph marker node the reverse check reads: source is
+// "<file>:<line>" and args starts with the figure id.
+object DiagramMarker {
+    source: str,
+    args: str,
+}
+
+// unknownMarkerFindings names each marker whose first argument is no known figure id.
+fun unknownMarkerFindings(known: {str: bool}, marked: [DiagramMarker]) > [str] {
+    final found: mut [str] = mut [<str>];
+    foreach (m in marked) {
+        final args = m.args.trim();
+        final space = args.indexOf(" ");
+        final id = if (space != null) args.sub(0, len: space!) else args;
+        if (id != "" and known[id] == null) {
+            found.append("{m.source}: marks diagram \"{id}\", which no diagram declares");
         }
     }
     return found;
 }
 
-// markedIds pulls each id following a marker. The id runs to the first space or end of
-// line, so a marker may carry a trailing note explaining what the box is called.
-fun markedIds(body: str) > [str] {
-    final ids: mut [str] = mut [<str>];
-    foreach (line in body.split("\n")) {
-        final at = line.indexOf(BackrefMarker);
-        if (at == null) { continue; }
-        var rest = line.sub(at! + BackrefMarker.len()).trim();
-        final space = rest.indexOf(" ");
-        if (space != null) { rest = rest.sub(0, len: space!); }
-        if (rest != "") { ids.append(rest); }
-    }
-    return ids;
+test "a diagram marker naming no figure is a finding" {
+    final known: {str: bool} = {"server-http": true};
+    final marked = [
+        DiagramMarker{ source = "a.go:3", args = "server-http the guard" },
+        DiagramMarker{ source = "b.go:9", args = "gone" },
+    ];
+    assert\equal(unknownMarkerFindings(known, marked: marked),
+        want: ["b.go:9: marks diagram \"gone\", which no diagram declares"],
+        message: "only the marker naming a missing figure is reported");
 }
 
 // driftTree lays out a throwaway workspace: two packages, and a directory holding only a
@@ -785,6 +790,6 @@ test "server-http composed over its observation lays out clean" {
     }
     assert\equal(refusal, want: "", message: "composed");
     // 13 omits: internal/handler/diagram joined the scope after the observed set was written.
-    assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 13], message: "nodes, edges, omits");
+    assert\equal([d.nodes.len(), d.edges.len(), d.omits.size()], want: [9, 7, 12], message: "nodes, edges, omits");
     assert\equal(d.stamp, want: serverHttpGen\serverHttpObserved().stamp, message: "stamped by its observation");
 }

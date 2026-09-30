@@ -560,8 +560,7 @@ func parseLayers(v vm.Value) (map[string]string, error) {
 		return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
 			`magus.project: "layers" takes a map of workspace-relative directory or glob to layer name, e.g. {"internal/handler/**": "handler"}`)
 	}
-	keys := v.MapKeys()
-	slices.Sort(keys)
+	keys := slices.Sorted(slices.Values(v.MapKeys()))
 	layers := make(map[string]string, len(keys))
 	for _, dir := range keys {
 		nv, _ := v.MapGet(dir)

@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"maps"
-	"path"
 	"slices"
 	"strings"
 
@@ -26,43 +25,38 @@ type packageGraph map[string]map[string]bool
 func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
 
 // ImportGraph maps each workspace package directory ("." for the root) to the package
-// directories it imports, sorted. Test files, packages outside the workspace, and a
-// package importing itself are left out. Packages is empty, never nil, when no SCIP index
-// was ingested, and Indexed is false then.
+// directories it imports, sorted, read off the dir -imports-> dir edges foldImports stored
+// at ingest. Languages takes each directory's language from its dir node, falling back to
+// the edges it imports along. Packages is empty, never nil, when no SCIP index was
+// ingested, and Indexed is false then.
 func (g *Graph) ImportGraph() types.ImportGraph {
-	// A namespace's directory is the lowest one holding a non-test file that defines it,
-	// the same placement Precedents reads, so both name a package by one directory.
-	dir := map[string]string{}
-	for id, nss := range g.fileNamespaces() {
-		n := g.nodes[id]
-		if n.Kind != types.KindFile || isTestSource(n.Source) {
+	out := types.ImportGraph{Indexed: g.HasSymbols(), Packages: map[string][]string{}, Languages: map[string]string{}}
+	fallback := map[string]string{}
+	for _, e := range g.edges {
+		from, okFrom := strings.CutPrefix(e.Source, types.KindDir+":")
+		to, okTo := strings.CutPrefix(e.Target, types.KindDir+":")
+		if e.Relation != types.RelationImports || !okFrom || !okTo {
 			continue
 		}
-		d := path.Dir(n.Source)
-		for _, ns := range nss {
-			if cur, ok := dir[ns]; !ok || d < cur {
-				dir[ns] = d
+		out.Packages[from] = append(out.Packages[from], to)
+		if l := e.Attrs[types.AttrLanguage]; l != "" && (fallback[from] == "" || l < fallback[from]) {
+			fallback[from] = l
+		}
+		for _, d := range []string{from, to} {
+			if l := g.nodes[dirID(d)].Attrs[types.AttrLanguage]; l != "" {
+				out.Languages[d] = l
 			}
 		}
 	}
-	out := map[string][]string{}
-	for from, tos := range g.packageDeps() {
-		fd, ok := dir[from]
-		if !ok {
-			continue
-		}
-		for to := range tos {
-			// Two namespaces in one directory, one per language, are one package here.
-			if td, ok := dir[to]; ok && td != fd {
-				out[fd] = append(out[fd], td)
-			}
+	for d, l := range fallback {
+		if _, ok := out.Languages[d]; !ok {
+			out.Languages[d] = l
 		}
 	}
-	for d, tos := range out {
+	for _, tos := range out.Packages {
 		slices.Sort(tos)
-		out[d] = slices.Compact(tos)
 	}
-	return types.ImportGraph{Indexed: g.HasSymbols(), Packages: out}
+	return out
 }
 
 // packageDepsExcept is packageDeps without the imports and calls made from the files skip

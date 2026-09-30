@@ -2,12 +2,18 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
+	"maps"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/internal/deps"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
@@ -46,9 +52,16 @@ func SeedsLazyLayer(input string) bool {
 	if strings.HasPrefix(input, types.KindFile+":") || strings.HasPrefix(input, types.KindDir+":") {
 		return true
 	}
-	q := parseQuery(input)
-	if len(q.fields["language"]) > 0 || len(q.reFields["language"]) > 0 {
+	// A path resolves to a dir or file node first, and a Go package's dir exists only in
+	// the lazy shards; so does every dir a layer can be stamped on.
+	if pathShaped(input) {
 		return true
+	}
+	q := parseQuery(input)
+	for _, f := range []string{"language", "layer"} {
+		if len(q.fields[f]) > 0 || len(q.reFields[f]) > 0 {
+			return true
+		}
 	}
 	for _, k := range q.fields["kind"] {
 		if slices.Contains(lazyLayerKinds, k) {
@@ -125,9 +138,12 @@ const DefaultBudget = 50
 // kindRank and ID order break ties among wildcard matches.
 const wildcardTermScore = 1
 
-// knownFields are the recognized field:value prefixes. kind/project/id/language
-// constrain which nodes match; relation constrains which edges a neighborhood traverses.
-var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true}
+// knownFields are the recognized field:value prefixes. relation constrains which edges a
+// neighborhood traverses; every other field constrains which nodes match.
+var knownFields = map[string]bool{
+	"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true,
+	"layer": true, "family": true, "stamp": true,
+}
 
 type parsedQuery struct {
 	terms     []string                    // positive free-text tokens (AND)
@@ -318,6 +334,22 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		return 0, false
 	}
 	if res := q.reFields["role"]; len(res) > 0 && !matchesAnyRe(n.Attrs[attrRole], res) {
+		return 0, false
+	}
+	// layer and family compare one attr exactly, as role does: both are closed
+	// vocabularies, not text to search.
+	for field, attr := range map[string]string{"layer": types.AttrLayer, "family": types.AttrMarkerFamily} {
+		if vals, ok := q.fields[field]; ok && !slices.Contains(vals, n.Attrs[attr]) {
+			return 0, false
+		}
+		if vals := q.negFields[field]; slices.Contains(vals, n.Attrs[attr]) {
+			return 0, false
+		}
+		if res := q.reFields[field]; len(res) > 0 && !matchesAnyRe(n.Attrs[attr], res) {
+			return 0, false
+		}
+	}
+	if !matchesStamp(n, q) {
 		return 0, false
 	}
 
@@ -555,10 +587,11 @@ func (g *Graph) Select(input string, budget int) types.KnowledgeGraphOutput {
 }
 
 // Explain resolves ref to a node and returns its context card, or ok=false when
-// nothing resolves. A package node that is not replaced carries the documentation URL
-// of the version its version attr names.
+// nothing resolves. Resolution says whether ref was the node's ID, its exact path, or a
+// ranked guess. A package node that is not replaced carries the documentation URL of the
+// version its version attr names.
 func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
-	id, ok := g.resolveOne(ref)
+	id, how, ok := g.resolve(ref)
 	if !ok {
 		return types.KnowledgeExplainOutput{}, false
 	}
@@ -569,6 +602,7 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Node:          n,
 		BlastRadius:   g.blastRadius(id),
+		Resolution:    how,
 	}
 	if n.Kind == types.KindPackage && n.Attrs[attrPackageReplaced] == "" {
 		out.DocsURL, _ = deps.DocsURL(n.Attrs[attrPackageManager], n.Label, n.Attrs[AttrPackageVersion])
@@ -586,6 +620,12 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 // bidirectional). ok=false only when an endpoint fails to resolve; a resolved
 // pair with no connection returns Found=false.
 func (g *Graph) Path(a, b string) (types.KnowledgePathOutput, bool) {
+	return g.PathWith(a, b, types.KnowledgePathOptions{})
+}
+
+// PathWith is Path walking only opts.Relations, every relation when empty. Found=false
+// under a filter means no path of those relations, not no path at all.
+func (g *Graph) PathWith(a, b string, opts types.KnowledgePathOptions) (types.KnowledgePathOutput, bool) {
 	from, ok := g.resolveOne(a)
 	if !ok {
 		return types.KnowledgePathOutput{}, false
@@ -600,7 +640,7 @@ func (g *Graph) Path(a, b string) (types.KnowledgePathOutput, bool) {
 		From:          from,
 		To:            to,
 	}
-	steps, found := g.shortestPath(from, to)
+	steps, found := g.shortestPath(from, to, relationSet(opts.Relations))
 	out.Found = found
 	out.Steps = steps
 	return out, true
@@ -704,17 +744,473 @@ func splitPathLine(s string) (path string, line int, ok bool) {
 
 // --- resolution & traversal helpers ---
 
-// resolveOne maps a ref to a single node ID: an exact ID hit wins; otherwise the
-// top-ranked match for the ref as a query (nil-safe, deterministic).
+// resolveOne is resolve without the resolution.
 func (g *Graph) resolveOne(ref string) (string, bool) {
+	id, _, ok := g.resolve(ref)
+	return id, ok
+}
+
+// resolve maps a ref to a single node ID: an exact ID first, then the dir or file node
+// at exactly that path when ref is path-shaped, and only then the top-ranked match for
+// ref as a query. Ranking alone once resolved internal/handler/mcp to a target named
+// mcp-tools-generate, so a path never reaches the ranking while its node exists.
+func (g *Graph) resolve(ref string) (string, types.KnowledgeResolution, bool) {
 	if _, ok := g.node(ref); ok {
-		return ref, true
+		return ref, types.ResolvedID, true
+	}
+	if id, ok := g.pathNode(ref); ok {
+		return id, types.ResolvedPath, true
 	}
 	matches := g.Resolve(ref, 1)
 	if len(matches) == 0 {
+		return "", "", false
+	}
+	return matches[0].ID, types.ResolvedFuzzy, true
+}
+
+// pathNode returns the dir or file node at exactly the workspace path ref names.
+func (g *Graph) pathNode(ref string) (string, bool) {
+	if !pathShaped(ref) {
 		return "", false
 	}
-	return matches[0].ID, true
+	p, ok := file.NormalizeWorkspacePath(strings.TrimSpace(ref), g.root)
+	if !ok {
+		return "", false
+	}
+	for _, id := range []string{dirID(p), fileID(p)} {
+		if _, ok := g.node(id); ok {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// pathShaped reports whether input is one workspace-path token: it holds a separator and
+// no whitespace, wildcard, field matcher or kind prefix. A bare word is not a path, so
+// `explain build` keeps resolving the target rather than a build/ directory.
+func pathShaped(input string) bool {
+	s := strings.TrimSpace(input)
+	if s == "" || strings.ContainsAny(s, " \t*") || strings.Contains(s, "://") || !strings.ContainsAny(s, `/\`) {
+		return false
+	}
+	// Any colon but a drive letter's is a node ID or a field matcher.
+	if i := strings.IndexByte(s, ':'); i >= 0 && i != 1 {
+		return false
+	}
+	_, _, _, matcher := parseMatcher(s)
+	return !matcher
+}
+
+// reservedMarkerAttrs are the attrs every marker carries; the rest are its stamp pairs.
+var reservedMarkerAttrs = []string{
+	types.AttrMarkerFamily, types.AttrMarkerVerb, types.AttrMarkerArgs, types.AttrLine, types.AttrEndLine,
+}
+
+// matchesStamp applies the stamp field. A value "k=v" asks that stamp pair k equal v; a
+// bare value asks that some pair's value equal it; a regex runs against each "k=v". Only
+// a marker carries stamp pairs, so any other node fails a positive stamp constraint.
+func matchesStamp(n types.KnowledgeNode, q parsedQuery) bool {
+	pos, neg, res := q.fields["stamp"], q.negFields["stamp"], q.reFields["stamp"]
+	if len(pos) == 0 && len(neg) == 0 && len(res) == 0 {
+		return true
+	}
+	var pairs []string
+	if n.Kind == types.KindMarker {
+		for _, k := range slices.Sorted(maps.Keys(n.Attrs)) {
+			if !slices.Contains(reservedMarkerAttrs, k) {
+				pairs = append(pairs, k+"="+n.Attrs[k])
+			}
+		}
+	}
+	hit := func(want string) bool {
+		if _, _, keyed := strings.Cut(want, "="); keyed {
+			return slices.Contains(pairs, want)
+		}
+		return slices.ContainsFunc(pairs, func(p string) bool { return strings.SplitN(p, "=", 2)[1] == want })
+	}
+	for _, v := range pos {
+		if !hit(v) {
+			return false
+		}
+	}
+	if slices.ContainsFunc(neg, hit) {
+		return false
+	}
+	return len(res) == 0 || slices.ContainsFunc(pairs, func(p string) bool { return matchesAnyRe(p, res) })
+}
+
+// relationSet is the set of relations a walk may follow, nil for every relation.
+func relationSet(rels []types.RelationID) map[types.RelationID]bool {
+	if len(rels) == 0 {
+		return nil
+	}
+	set := make(map[types.RelationID]bool, len(rels))
+	for _, r := range rels {
+		set[r] = true
+	}
+	return set
+}
+
+// NeighborhoodOf walks outward from focus up to opts.Depth hops (0 means 1) along
+// opts.Relations only and in opts.Direction only, then folds every source-level node
+// under an opts.Collapse prefix into that prefix's dir node. ok is false when focus
+// resolves to nothing. Answer is left for the caller, which knows what it loaded.
+func (g *Graph) NeighborhoodOf(focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, bool) {
+	id, how, ok := g.resolve(focus)
+	if !ok {
+		return types.KnowledgeNeighborhoodOutput{}, false
+	}
+	g.ensureAdj()
+	opts.Depth = max(opts.Depth, 1)
+	rels := relationSet(opts.Relations)
+	hops := map[string]int{id: 0}
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if hops[cur] == opts.Depth {
+			continue
+		}
+		step := func(e types.KnowledgeEdge, next string) {
+			if rels != nil && !rels[e.Relation] {
+				return
+			}
+			if _, seen := hops[next]; !seen {
+				hops[next] = hops[cur] + 1
+				queue = append(queue, next)
+			}
+		}
+		if opts.Direction != types.EdgeIn {
+			for _, e := range g.out[cur] {
+				step(e, e.Target)
+			}
+		}
+		if opts.Direction != types.EdgeOut {
+			for _, e := range g.in[cur] {
+				step(e, e.Source)
+			}
+		}
+	}
+
+	prefixes := make([]string, 0, len(opts.Collapse))
+	for _, p := range opts.Collapse {
+		prefixes = append(prefixes, path.Clean(strings.TrimPrefix(p, types.KindDir+":")))
+	}
+	rep := make(map[string]string, len(hops))
+	folded := map[string]int{}
+	sub := NewGraph()
+	for nid := range hops {
+		n, _ := g.node(nid)
+		rep[nid] = nid
+		prefix, under := longestPrefix(foldPath(nid, n), prefixes)
+		if !under {
+			sub.AddNode(n)
+			continue
+		}
+		rep[nid] = dirID(prefix)
+		if nid != rep[nid] {
+			folded[prefix]++
+		}
+		stand, ok := g.node(rep[nid])
+		if !ok {
+			stand = types.KnowledgeNode{ID: rep[nid], Kind: types.KindDir, Label: prefix, Source: prefix}
+		}
+		sub.AddNode(stand)
+	}
+	for nid := range hops {
+		for _, e := range g.out[nid] {
+			if _, in := hops[e.Target]; !in || (rels != nil && !rels[e.Relation]) {
+				continue
+			}
+			e.Source, e.Target = rep[e.Source], rep[e.Target]
+			if e.Source != e.Target {
+				sub.AddEdge(e)
+			}
+		}
+	}
+
+	graph := sub.Output()
+	out := types.KnowledgeNeighborhoodOutput{
+		Definition:    types.KnowledgeNeighborhoodDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Focus:         id,
+		Resolution:    how,
+		Options:       opts,
+		Nodes:         graph.Nodes,
+		Links:         graph.Links,
+	}
+	for _, p := range slices.Sorted(maps.Keys(folded)) {
+		out.Folds = append(out.Folds, types.KnowledgeFold{Prefix: p, Node: dirID(p), Folded: folded[p]})
+	}
+	return out, true
+}
+
+// foldableKinds are the kinds a collapse prefix absorbs: the ones a workspace path
+// locates. A target or spell under the prefix is a declaration about the tree, not part
+// of it, and keeps its own node.
+var foldableKinds = []string{
+	types.KindDir, types.KindFile, types.KindDoc, types.KindDocSection, types.KindFunction,
+	types.KindSymbol, types.KindRationale, types.KindMarker,
+}
+
+// foldPath is the workspace path a collapse prefix is held against, "" for a node that
+// has none.
+func foldPath(id string, n types.KnowledgeNode) string {
+	if !slices.Contains(foldableKinds, n.Kind) {
+		return ""
+	}
+	switch n.Kind {
+	case types.KindDir, types.KindFile, types.KindDoc:
+		return trimKind(id)
+	}
+	src, _, _ := strings.Cut(n.Source, ":")
+	return src
+}
+
+// longestPrefix returns the longest of prefixes that p equals or lies under.
+func longestPrefix(p string, prefixes []string) (string, bool) {
+	best, found := "", false
+	if p == "" {
+		return best, found
+	}
+	for _, pre := range prefixes {
+		if (p == pre || strings.HasPrefix(p, pre+"/")) && (!found || len(pre) > len(best)) {
+			best, found = pre, true
+		}
+	}
+	return best, found
+}
+
+// Dir returns the record for the workspace directory p ("internal/httpx", "dir:" prefix
+// optional). Layer falls back to layers when no shard stamped the node; layers is the
+// workspace's magus.project "layers" declarations and may be nil. A path with no dir node
+// fails with DirNotInGraph, naming the nearest dir when one is a typo away.
+func (g *Graph) Dir(p string, layers map[string]string) (types.Dir, error) {
+	p = g.cleanDirPath(p)
+	n, ok := g.node(dirID(p))
+	if !ok || n.Kind != types.KindDir {
+		if near := g.nearest(p, func(kind string) bool { return kind == types.KindDir }); near != "" {
+			return types.Dir{}, types.DiagnosticErrorf(types.DirNotInGraph, "no dir node for %q; did you mean %q?", p, trimKind(near))
+		}
+		return types.Dir{}, types.DiagnosticErrorf(types.DirNotInGraph,
+			"no dir node for %q: it is outside every project, or no graph build has reached it", p)
+	}
+	g.ensureAdj()
+	return g.dirRecord(n, g.dirTree(), layers), nil
+}
+
+// Dirs returns the record of every dir node whose path matches glob, sorted by path.
+// opts.Depth bounds how many segments a match sits below glob's literal prefix. A layer
+// filter naming a layer layers does not declare fails with LayerNotDeclared rather than
+// matching nothing.
+func (g *Graph) Dirs(glob string, opts types.DirsOptions, layers map[string]string) ([]types.Dir, error) {
+	if !doublestar.ValidatePattern(glob) {
+		return nil, fmt.Errorf("%q is not a valid glob", glob)
+	}
+	if opts.Layer != "" && len(declaredFor(opts.Layer, layers)) == 0 {
+		return nil, errLayerNotDeclared(opts.Layer, layers)
+	}
+	g.ensureAdj()
+	tree := g.dirTree()
+	base := globBase(glob)
+	out := []types.Dir{}
+	for id, n := range g.nodes {
+		if n.Kind != types.KindDir {
+			continue
+		}
+		p := trimKind(id)
+		if ok, _ := doublestar.Match(glob, p); !ok {
+			continue
+		}
+		if opts.Depth > 0 && segmentsBelow(base, p) > opts.Depth {
+			continue
+		}
+		d := g.dirRecord(n, tree, layers)
+		if (opts.Layer != "" && d.Layer != opts.Layer) || (opts.Language != "" && d.Language != opts.Language) {
+			continue
+		}
+		out = append(out, d)
+	}
+	slices.SortFunc(out, func(a, b types.Dir) int { return cmp.Compare(a.Path, b.Path) })
+	return out, nil
+}
+
+// Layer returns the layer name declares and every dir it covers. A name no entry of
+// layers declares fails with LayerNotDeclared.
+func (g *Graph) Layer(name string, layers map[string]string) (types.Layer, error) {
+	declared := declaredFor(name, layers)
+	if len(declared) == 0 {
+		return types.Layer{}, errLayerNotDeclared(name, layers)
+	}
+	dirs, err := g.Dirs("**", types.DirsOptions{Layer: name}, layers)
+	if err != nil {
+		return types.Layer{}, err
+	}
+	return types.Layer{Name: name, Declared: declared, Dirs: dirs}, nil
+}
+
+// declaredFor returns the sorted directories and globs layers maps to name.
+func declaredFor(name string, layers map[string]string) []string {
+	var out []string
+	for dir, layer := range layers {
+		if layer == name {
+			out = append(out, dir)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+func errLayerNotDeclared(name string, layers map[string]string) error {
+	names := slices.Compact(slices.Sorted(maps.Values(layers)))
+	if len(names) == 0 {
+		return types.DiagnosticErrorf(types.LayerNotDeclared,
+			"layer %q is not declared: no magus.project declares \"layers\"", name)
+	}
+	return types.DiagnosticErrorf(types.LayerNotDeclared,
+		"layer %q is not declared; declared layers: %s", name, strings.Join(names, ", "))
+}
+
+// cleanDirPath reduces a dir argument to the workspace-relative form dir IDs carry.
+func (g *Graph) cleanDirPath(p string) string {
+	p = strings.TrimPrefix(strings.TrimSpace(p), types.KindDir+":")
+	if out, ok := file.NormalizeWorkspacePath(p, g.root); ok {
+		return out
+	}
+	return path.Clean(p)
+}
+
+// dirTree indexes each dir's immediate child dirs and direct file count, so a batch of
+// Dir records costs one node scan rather than one per record.
+type dirTree struct {
+	children map[string][]string
+	files    map[string]int
+}
+
+func (g *Graph) dirTree() dirTree {
+	t := dirTree{children: map[string][]string{}, files: map[string]int{}}
+	for id, n := range g.nodes {
+		switch n.Kind {
+		case types.KindDir:
+			if p := trimKind(id); p != "." {
+				t.children[path.Dir(p)] = append(t.children[path.Dir(p)], p)
+			}
+		case types.KindFile:
+			t.files[path.Dir(trimKind(id))]++
+		}
+	}
+	for _, c := range t.children {
+		slices.Sort(c)
+	}
+	return t
+}
+
+// dirRecord builds n's Dir. Callers hold ensureAdj.
+func (g *Graph) dirRecord(n types.KnowledgeNode, tree dirTree, layers map[string]string) types.Dir {
+	p := trimKind(n.ID)
+	d := types.Dir{
+		Path:       p,
+		ID:         n.ID,
+		Layer:      n.Attrs[types.AttrLayer],
+		Language:   n.Attrs[types.AttrLanguage],
+		Imports:    []string{},
+		ImportedBy: []string{},
+		Calls:      []types.DirCall{},
+		CalledBy:   []types.DirCall{},
+		Children:   append([]string{}, tree.children[p]...),
+		Files:      tree.files[p],
+	}
+	if d.Layer == "" {
+		d.Layer, _ = types.LayerFor(layers, p)
+	}
+	// The language attr is folded from the same indexed package the imports are, so a
+	// dir without one was never read for imports.
+	d.ImportsIndexed = d.Language != ""
+	for _, e := range g.out[n.ID] {
+		if other, ok := strings.CutPrefix(e.Target, types.KindDir+":"); ok {
+			switch e.Relation {
+			case types.RelationImports:
+				d.Imports = append(d.Imports, other)
+			case types.RelationCalls:
+				d.Calls = append(d.Calls, g.declaredCalls(e, other)...)
+			}
+		}
+	}
+	for _, e := range g.in[n.ID] {
+		if other, ok := strings.CutPrefix(e.Source, types.KindDir+":"); ok {
+			switch e.Relation {
+			case types.RelationImports:
+				d.ImportedBy = append(d.ImportedBy, other)
+			case types.RelationCalls:
+				d.CalledBy = append(d.CalledBy, g.declaredCalls(e, other)...)
+			}
+		}
+	}
+	slices.Sort(d.Imports)
+	slices.Sort(d.ImportedBy)
+	byDirThenSource := func(a, b types.DirCall) int {
+		return cmp.Or(cmp.Compare(a.Dir, b.Dir), cmp.Compare(a.Source, b.Source))
+	}
+	slices.SortFunc(d.Calls, byDirThenSource)
+	slices.SortFunc(d.CalledBy, byDirThenSource)
+	return d
+}
+
+// declaredCalls expands one dir -calls-> dir edge into a DirCall per `magus:calls` marker
+// declaring it: a marker in a file directly under the caller that references the callee.
+// Parallel edges collapse in the graph, so the markers are the only record of how many
+// declarations there are. An edge no marker explains still yields one DirCall.
+func (g *Graph) declaredCalls(e types.KnowledgeEdge, other string) []types.DirCall {
+	caller := trimKind(e.Source)
+	var out []types.DirCall
+	for _, r := range g.in[e.Target] {
+		if r.Relation != types.RelationReferences {
+			continue
+		}
+		m, ok := g.node(r.Source)
+		if !ok || m.Kind != types.KindMarker || m.Attrs[types.AttrMarkerFamily] != string(types.MarkerCalls) {
+			continue
+		}
+		site := strings.TrimPrefix(r.Source, types.KindMarker+":")
+		i := strings.LastIndexByte(site, ':')
+		if i < 0 || path.Dir(site[:i]) != caller {
+			continue
+		}
+		transport := e.Attrs[types.AttrTransport]
+		if args := strings.Fields(m.Attrs[types.AttrMarkerArgs]); len(args) > 1 {
+			transport = args[1]
+		}
+		out = append(out, types.DirCall{Dir: other, Transport: transport, Marker: r.Source, Source: site})
+	}
+	if len(out) == 0 {
+		out = append(out, types.DirCall{Dir: other, Transport: e.Attrs[types.AttrTransport]})
+	}
+	return out
+}
+
+// globBase is the literal directory prefix of glob, "" when its first segment is a
+// pattern. A glob with no metacharacter is its own base.
+func globBase(glob string) string {
+	i := strings.IndexAny(glob, "*?[{")
+	if i < 0 {
+		return glob
+	}
+	if j := strings.LastIndexByte(glob[:i], '/'); j >= 0 {
+		return glob[:j]
+	}
+	return ""
+}
+
+// segmentsBelow counts the path segments p sits below base.
+func segmentsBelow(base, p string) int {
+	rel := p
+	if base != "" {
+		rel = strings.TrimPrefix(strings.TrimPrefix(p, base), "/")
+	}
+	if rel == "" {
+		return 0
+	}
+	return strings.Count(rel, "/") + 1
 }
 
 // HasSymbols reports whether the graph holds any ingested code symbol node. refs
@@ -807,8 +1303,9 @@ func (g *Graph) blastRadius(id string) int {
 }
 
 // shortestPath runs a BFS treating edges as undirected, reconstructing the hop
-// list oriented as walked. Returns (nil, false) when unconnected.
-func (g *Graph) shortestPath(from, to string) ([]types.KnowledgePathStep, bool) {
+// list oriented as walked. rels, when non-nil, is the only relations a hop may use.
+// Returns (nil, false) when unconnected.
+func (g *Graph) shortestPath(from, to string, rels map[types.RelationID]bool) ([]types.KnowledgePathStep, bool) {
 	g.ensureAdj()
 	if from == to {
 		return nil, true
@@ -828,12 +1325,18 @@ func (g *Graph) shortestPath(from, to string) ([]types.KnowledgePathStep, bool) 
 		}
 		// Deterministic neighbor order: outgoing (already sorted) then incoming.
 		for _, e := range g.out[cur] {
+			if rels != nil && !rels[e.Relation] {
+				continue
+			}
 			if _, seen := back[e.Target]; !seen {
 				back[e.Target] = crumb{prev: cur, edge: e, fwd: true}
 				queue = append(queue, e.Target)
 			}
 		}
 		for _, e := range g.in[cur] {
+			if rels != nil && !rels[e.Relation] {
+				continue
+			}
 			if _, seen := back[e.Source]; !seen {
 				back[e.Source] = crumb{prev: cur, edge: e, fwd: false}
 				queue = append(queue, e.Source)
@@ -862,6 +1365,7 @@ func (g *Graph) edgeRef(e types.KnowledgeEdge, dir types.EdgeDirection, other st
 		OtherKind:  n.Kind,
 		OtherLabel: n.Label,
 		Provenance: e.Provenance,
+		Attrs:      e.Attrs,
 	}
 }
 

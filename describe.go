@@ -755,7 +755,7 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 			continue // best-effort introspection: a project we can't read just omits its graph
 		}
 		for _, src := range srcs {
-			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectDisplayName(p.Path, p.Name, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn}
+			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectDisplayName(p.Path, p.Name, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn, Layers: p.Layers}
 			if repoRoot != "" {
 				if rel, err := filepath.Rel(repoRoot, p.Dir); err == nil {
 					entry.RelPath = filepath.ToSlash(rel)

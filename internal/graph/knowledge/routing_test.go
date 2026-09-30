@@ -126,6 +126,20 @@ func TestRoutingWithholdsAnchorsForMethodKind(t *testing.T) {
 	assert.Equal(t, 4, rowAfter.Count)
 }
 
+func TestRoutingIncludesMarkerKind(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "marker:a/a.go:3", Kind: types.KindMarker, Label: "magus:calls"})
+	g.AddNode(types.KnowledgeNode{ID: "file:a/a.go", Kind: types.KindFile, Label: "a/a.go"})
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "file:a/a.go", Target: "marker:a/a.go:3",
+		Relation: types.RelationContains, Confidence: types.ConfidenceDeclared, Score: 1,
+	})
+
+	row, ok := routingKind(g.Routing(), types.KindMarker)
+	require.True(t, ok, "marker kind row present in Routing")
+	assert.Equal(t, 1, row.Count)
+}
+
 // TestRoutingIncludesOwnerKind pins that owner nodes, merged into the default graph by
 // store.go (it excludes only symbol/coverage shards), actually surface in the routing
 // table, not just get loaded and then dropped by an incomplete kind allowlist.

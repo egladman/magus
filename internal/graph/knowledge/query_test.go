@@ -1,6 +1,8 @@
 package knowledge
 
 import (
+	"maps"
+	"path"
 	"slices"
 	"testing"
 
@@ -498,4 +500,307 @@ func TestDependentsTerminatesOnACycle(t *testing.T) {
 	})
 	assert.ElementsMatch(t, []string{"target:.:test", "target:.:ci"},
 		g.Dependents("target:.:build"))
+}
+
+// dirFixture is the shape the dirs, symbols and markers shards emit for three Go packages:
+// mcp imports httpx, and httpx declares two calls into mcp from two files, which the graph
+// holds as one dir -calls-> dir edge. A target whose name fuzzy-matches the mcp path sits
+// beside them.
+func dirFixture() *Graph {
+	g := NewGraph()
+	goDir := func(p string, attrs map[string]string) {
+		all := map[string]string{types.AttrLanguage: "go"}
+		maps.Copy(all, attrs)
+		g.AddNode(types.KnowledgeNode{ID: "dir:" + p, Kind: types.KindDir, Label: p, Source: p, Attrs: all})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "dir:internal", Kind: types.KindDir, Label: "internal", Source: "internal"})
+	goDir("internal/httpx", map[string]string{types.AttrLayer: "transport"})
+	goDir("internal/handler", nil)
+	goDir("internal/handler/mcp", nil)
+	g.AddNode(types.KnowledgeNode{ID: "target:.:mcp-tools-generate", Kind: types.KindTarget, Label: "mcp-tools-generate"})
+	edge := func(s, t string, rel types.RelationID, attrs map[string]string) {
+		g.AddEdge(types.KnowledgeEdge{Source: s, Target: t, Relation: rel, Confidence: types.ConfidenceExtracted, Score: 1, Attrs: attrs})
+	}
+	for _, f := range []string{"internal/httpx/a.go", "internal/httpx/b.go", "internal/handler/mcp/t.go"} {
+		g.AddNode(types.KnowledgeNode{ID: "file:" + f, Kind: types.KindFile, Label: f, Source: f})
+		edge("dir:"+path.Dir(f), "file:"+f, types.RelationContains, nil)
+	}
+	edge("dir:internal", "dir:internal/httpx", types.RelationContains, nil)
+	edge("dir:internal", "dir:internal/handler", types.RelationContains, nil)
+	edge("dir:internal/handler", "dir:internal/handler/mcp", types.RelationContains, nil)
+	edge("dir:internal/handler/mcp", "dir:internal/httpx", types.RelationImports, map[string]string{types.AttrLanguage: "go"})
+	edge("dir:internal/httpx", "dir:internal/handler/mcp", types.RelationCalls, map[string]string{types.AttrTransport: "http"})
+	for _, site := range []struct{ file, line, args string }{
+		{"internal/httpx/a.go", "12", "internal/handler/mcp http"},
+		{"internal/httpx/b.go", "40", "internal/handler/mcp grpc"},
+	} {
+		id := "marker:" + site.file + ":" + site.line
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindMarker, Label: "magus:calls", Source: site.file + ":" + site.line, Attrs: map[string]string{
+			types.AttrMarkerFamily: string(types.MarkerCalls), types.AttrMarkerVerb: string(types.MarkerPoint),
+			types.AttrMarkerArgs: site.args, types.AttrLine: site.line,
+		}})
+		edge("file:"+site.file, id, types.RelationContains, nil)
+		edge(id, "dir:internal/handler/mcp", types.RelationReferences, nil)
+	}
+	return g
+}
+
+var fixtureLayers = map[string]string{"internal/httpx": "transport", "internal/handler/**": "handler"}
+
+func TestResolveTriesThePathBeforeRanking(t *testing.T) {
+	g := dirFixture()
+	for ref, want := range map[string]struct {
+		id  string
+		how types.KnowledgeResolution
+	}{
+		"dir:internal/handler/mcp":    {"dir:internal/handler/mcp", types.ResolvedID},
+		"internal/handler/mcp":        {"dir:internal/handler/mcp", types.ResolvedPath},
+		"./internal/handler/mcp":      {"dir:internal/handler/mcp", types.ResolvedPath},
+		"internal/httpx/a.go":         {"file:internal/httpx/a.go", types.ResolvedPath},
+		"mcp-tools-generate":          {"target:.:mcp-tools-generate", types.ResolvedFuzzy},
+		"target:.:mcp-tools-generate": {"target:.:mcp-tools-generate", types.ResolvedID},
+	} {
+		out, ok := g.Explain(ref)
+		require.True(t, ok, ref)
+		assert.Equal(t, want.id, out.Node.ID, ref)
+		assert.Equal(t, want.how, out.Resolution, ref)
+	}
+}
+
+// A path with no node falls to ranking, and says so.
+func TestResolveLabelsAFuzzyAnswerForAPath(t *testing.T) {
+	out, ok := dirFixture().Explain("internal/handler/mc")
+	require.True(t, ok)
+	assert.Equal(t, types.ResolvedFuzzy, out.Resolution)
+}
+
+func TestPathShaped(t *testing.T) {
+	for _, in := range []string{"internal/httpx", "./a/b", "a\\b", "/abs/p", "C:\\x\\y"} {
+		assert.Truef(t, pathShaped(in), "%q", in)
+	}
+	for _, in := range []string{"build", "kind=dir a/b", "project=pkg/a", "target:pkg/a:build", "a/*", "https://x.y/z", ""} {
+		assert.Falsef(t, pathShaped(in), "%q", in)
+	}
+}
+
+func TestSeedsLazyLayerOnPathsAndLayers(t *testing.T) {
+	for _, in := range []string{"internal/httpx", "layer=handler", "layer=~hand"} {
+		assert.Truef(t, SeedsLazyLayer(in), "%q", in)
+	}
+	for _, in := range []string{"family=calls", "kind=marker stamp=schema=16"} {
+		assert.Falsef(t, SeedsLazyLayer(in), "%q", in)
+	}
+}
+
+func TestExplainCarriesEdgeAttrs(t *testing.T) {
+	out, ok := dirFixture().Explain("internal/httpx")
+	require.True(t, ok)
+	var calls []types.KnowledgeEdgeRef
+	for _, e := range out.Out {
+		if e.Relation == types.RelationCalls {
+			calls = append(calls, e)
+		}
+	}
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]string{types.AttrTransport: "http"}, calls[0].Attrs)
+}
+
+func TestDirRecord(t *testing.T) {
+	g := dirFixture()
+	d, err := g.Dir("internal/httpx", fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, types.Dir{
+		Path: "internal/httpx", ID: "dir:internal/httpx", Layer: "transport", Language: "go",
+		Imports: []string{}, ImportedBy: []string{"internal/handler/mcp"}, ImportsIndexed: true,
+		Calls: []types.DirCall{
+			{Dir: "internal/handler/mcp", Transport: "http", Marker: "marker:internal/httpx/a.go:12", Source: "internal/httpx/a.go:12"},
+			{Dir: "internal/handler/mcp", Transport: "grpc", Marker: "marker:internal/httpx/b.go:40", Source: "internal/httpx/b.go:40"},
+		},
+		CalledBy: []types.DirCall{}, Children: []string{}, Files: 2,
+	}, d)
+
+	mcp, err := g.Dir("dir:internal/handler/mcp", fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, "handler", mcp.Layer, "an unstamped dir takes the declared layer")
+	assert.Equal(t, []string{"internal/httpx"}, mcp.Imports)
+	assert.Len(t, mcp.CalledBy, 2, "one DirCall per declaring marker")
+
+	root, err := g.Dir("internal", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/handler", "internal/httpx"}, root.Children)
+	assert.False(t, root.ImportsIndexed, "no package was indexed here")
+}
+
+func TestDirRaisesOnATypo(t *testing.T) {
+	_, err := dirFixture().Dir("internal/htpx", nil)
+	require.ErrorIs(t, err, types.DirNotInGraph)
+	assert.ErrorContains(t, err, `did you mean "internal/httpx"`)
+}
+
+// An edge no marker explains still reads back as one call, from the edge alone.
+func TestDirCallWithoutAMarker(t *testing.T) {
+	g := dirFixture()
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "dir:internal/handler", Target: "dir:internal/httpx", Relation: types.RelationCalls,
+		Confidence: types.ConfidenceDeclared, Score: 1, Attrs: map[string]string{types.AttrTransport: "exec"},
+	})
+	d, err := g.Dir("internal/handler", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []types.DirCall{{Dir: "internal/httpx", Transport: "exec"}}, d.Calls)
+}
+
+func TestDirsFilters(t *testing.T) {
+	g := dirFixture()
+	paths := func(ds []types.Dir) []string {
+		out := make([]string, len(ds))
+		for i, d := range ds {
+			out[i] = d.Path
+		}
+		return out
+	}
+	all, err := g.Dirs("internal/*", types.DirsOptions{}, fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/handler", "internal/httpx"}, paths(all))
+
+	shallow, err := g.Dirs("internal/**", types.DirsOptions{Depth: 1}, fixtureLayers)
+	require.NoError(t, err)
+	assert.NotContains(t, paths(shallow), "internal/handler/mcp")
+	assert.Contains(t, paths(shallow), "internal/httpx")
+
+	handler, err := g.Dirs("**", types.DirsOptions{Layer: "handler"}, fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/handler", "internal/handler/mcp"}, paths(handler))
+
+	golang, err := g.Dirs("**", types.DirsOptions{Language: "go"}, fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/handler", "internal/handler/mcp", "internal/httpx"}, paths(golang))
+
+	_, err = g.Dirs("**", types.DirsOptions{Layer: "service"}, fixtureLayers)
+	require.ErrorIs(t, err, types.LayerNotDeclared)
+	_, err = g.Dirs("[", types.DirsOptions{}, nil)
+	require.Error(t, err)
+}
+
+func TestLayer(t *testing.T) {
+	g := dirFixture()
+	l, err := g.Layer("handler", fixtureLayers)
+	require.NoError(t, err)
+	assert.Equal(t, "handler", l.Name)
+	assert.Equal(t, []string{"internal/handler/**"}, l.Declared)
+	require.Len(t, l.Dirs, 2)
+	assert.Equal(t, "internal/handler/mcp", l.Dirs[1].Path)
+
+	_, err = g.Layer("service", fixtureLayers)
+	require.ErrorIs(t, err, types.LayerNotDeclared)
+	assert.ErrorContains(t, err, "declared layers: handler, transport")
+	_, err = g.Layer("service", nil)
+	require.ErrorIs(t, err, types.LayerNotDeclared)
+}
+
+func TestQueryFiltersOnLayerFamilyAndStamp(t *testing.T) {
+	g := dirFixture()
+	for _, stamp := range []string{"16", "15"} {
+		id := "marker:AGENTS.md:" + stamp
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindMarker, Label: "magus:skills", Attrs: map[string]string{
+			types.AttrMarkerFamily: string(types.MarkerSkills), types.AttrMarkerVerb: string(types.MarkerBlock),
+			types.AttrLine: stamp, "schema": stamp,
+		}})
+	}
+	for q, want := range map[string][]string{
+		"layer=transport":                       {"dir:internal/httpx"},
+		"kind=dir layer!=transport language=go": {"dir:internal/handler", "dir:internal/handler/mcp"},
+		"family=skills":                         {"marker:AGENTS.md:15", "marker:AGENTS.md:16"},
+		"family=skills stamp!=schema=16":        {"marker:AGENTS.md:15"},
+		"family=skills stamp=schema=16":         {"marker:AGENTS.md:16"},
+		"stamp=15":                              {"marker:AGENTS.md:15"},
+		"stamp=~^schema=1[56]$":                 {"marker:AGENTS.md:15", "marker:AGENTS.md:16"},
+		"family=~^cal":                          {"marker:internal/httpx/a.go:12", "marker:internal/httpx/b.go:40"},
+		"stamp=line=12":                         {}, // line is the marker's own attr, not a stamp pair
+	} {
+		got := matchIDs(g.Resolve(q, 0))
+		slices.Sort(got)
+		assert.Equal(t, want, got, q)
+	}
+}
+
+func TestPathWithRelations(t *testing.T) {
+	g := dirFixture()
+	out, ok := g.PathWith("internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationImports}})
+	require.True(t, ok)
+	assert.True(t, out.Found)
+	assert.Equal(t, []types.KnowledgePathStep{{From: "dir:internal/handler/mcp", To: "dir:internal/httpx", Relation: types.RelationImports, Forward: true}}, out.Steps)
+
+	none, ok := g.PathWith("internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationDependsOn}})
+	require.True(t, ok)
+	assert.False(t, none.Found)
+}
+
+func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
+	g := dirFixture()
+	nodeIDs := func(out types.KnowledgeNeighborhoodOutput) []string {
+		ids := make([]string, len(out.Nodes))
+		for i, n := range out.Nodes {
+			ids[i] = n.ID
+		}
+		return ids
+	}
+	imports := []types.RelationID{types.RelationImports}
+
+	out, ok := g.NeighborhoodOf("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports})
+	require.True(t, ok)
+	assert.Equal(t, "dir:internal/handler/mcp", out.Focus)
+	assert.Equal(t, types.ResolvedPath, out.Resolution)
+	assert.Equal(t, 1, out.Options.Depth, "0 means 1")
+	assert.Equal(t, []string{"dir:internal/handler/mcp", "dir:internal/httpx"}, nodeIDs(out))
+	require.Len(t, out.Links, 1)
+	assert.Equal(t, types.RelationImports, out.Links[0].Relation)
+
+	in, ok := g.NeighborhoodOf("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports, Direction: types.EdgeIn})
+	require.True(t, ok)
+	assert.Equal(t, []string{"dir:internal/handler/mcp"}, nodeIDs(in), "nothing imports mcp")
+
+	deep, ok := g.NeighborhoodOf("dir:internal", types.KnowledgeNeighborhoodOptions{Depth: 2, Relations: []types.RelationID{types.RelationContains}, Direction: types.EdgeOut})
+	require.True(t, ok)
+	assert.Contains(t, nodeIDs(deep), "dir:internal/handler/mcp")
+	assert.NotContains(t, nodeIDs(deep), "file:internal/handler/mcp/t.go", "three hops out")
+
+	_, ok = g.NeighborhoodOf("nonesuch-xyz", types.KnowledgeNeighborhoodOptions{})
+	assert.False(t, ok)
+}
+
+func TestNeighborhoodOfCollapsesByPrefix(t *testing.T) {
+	g := dirFixture()
+	out, ok := g.NeighborhoodOf("internal/httpx", types.KnowledgeNeighborhoodOptions{
+		Depth: 2, Collapse: []string{"internal/handler", "internal/httpx/"},
+	})
+	require.True(t, ok)
+	for _, n := range out.Nodes {
+		assert.NotContains(t, []string{"dir:internal/handler/mcp", "file:internal/httpx/a.go", "marker:internal/httpx/a.go:12"}, n.ID, "folded away")
+	}
+	assert.Equal(t, []types.KnowledgeFold{
+		{Prefix: "internal/handler", Node: "dir:internal/handler", Folded: 2},
+		{Prefix: "internal/httpx", Node: "dir:internal/httpx", Folded: 4},
+	}, out.Folds)
+	var calls, self int
+	for _, e := range out.Links {
+		if e.Source == e.Target {
+			self++
+		}
+		if e.Relation == types.RelationCalls {
+			calls++
+			assert.Equal(t, "dir:internal/httpx", e.Source)
+			assert.Equal(t, "dir:internal/handler", e.Target)
+		}
+	}
+	assert.Zero(t, self, "an edge folded onto itself is dropped")
+	assert.Equal(t, 1, calls, "re-pointed duplicates merge")
+}
+
+func TestDirsGlobBaseAndSegments(t *testing.T) {
+	assert.Equal(t, "internal", globBase("internal/**"))
+	assert.Equal(t, "", globBase("**/gen"))
+	assert.Equal(t, "a/b", globBase("a/b"))
+	assert.Equal(t, 2, segmentsBelow("internal", "internal/a/b"))
+	assert.Equal(t, 0, segmentsBelow("internal", "internal"))
+	assert.Equal(t, 1, segmentsBelow("", "a"))
 }

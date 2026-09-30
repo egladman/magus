@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/hint"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
 )
@@ -514,6 +515,36 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// indexed stays false: the dry run read no index, and a drift check has to refuse on that.
 	m.MapSet("importGraph", shaped("magus.importGraph", map[string]vm.Value{
 		"indexed": vm.BoolValue(false), "packages": vm.NewMap(),
+	}))
+	// indexed stays false for the reason importGraph's does.
+	m.MapSet("symbolIndexDigest", shaped("magus.symbolIndexDigest", map[string]vm.Value{
+		"digest": vm.StrValue(""), "indexed": vm.BoolValue(false), "projects": empty, "gaps": empty,
+	}))
+	// The typed records come from the generated encoders, so a dry run exposes exactly the
+	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
+	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.
+	firstStr := func(args []vm.Value) string {
+		if len(args) > 0 && args[0].IsStr() {
+			return args[0].AsString()
+		}
+		return ""
+	}
+	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		p := firstStr(args)
+		return bindinggen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
+	}))
+	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
+	}))
+	m.MapSet("neighborhood", fn("magus.neighborhood", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
+			Definition: types.KnowledgeNeighborhoodDefinition,
+			Focus:      firstStr(args),
+			Answer:     types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown},
+		}), nil
 	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),

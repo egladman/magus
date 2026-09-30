@@ -290,3 +290,112 @@ func TestSymbolsDoNotChangeTheDefaultGraph(t *testing.T) {
 		require.Truef(t, ids[e.Target], "edge %s -%s-> %s targets a node the default graph does not hold", e.Source, e.Relation, e.Target)
 	}
 }
+
+// foldFixture is three indexes the way scip-go and scip-typescript write them: a Go
+// package is one namespace every file defines, a TypeScript module is one namespace per
+// file, and an import is a reference to the imported namespace.
+func foldFixture() map[string][]types.KnowledgeSymbol {
+	const (
+		nsA   = "gomod m `m/internal/a`/"
+		nsB   = "gomod m `m/internal/b`/"
+		nsC   = "gomod m `m/internal/c`/"
+		nsApp = "gomod m `m/cmd/app`/"
+		nsX   = "gomod m/libs/x `m/libs/x`/"
+		nsExt = "gomod golang.org/x/sync `golang.org/x/sync/errgroup`/"
+		nsTa  = "npm console src/`a.ts`/"
+		nsTb  = "npm console src/lib/`b.ts`/"
+		nsTc  = "npm console src/`c.ts`/"
+		doX   = nsX + "Do()."
+	)
+	ref := func(p string) types.KnowledgeSymbolRef { return types.KnowledgeSymbolRef{Path: p, Count: 1} }
+	ns := func(key, lang string, defs []string, refs ...types.KnowledgeSymbolRef) types.KnowledgeSymbol {
+		return types.KnowledgeSymbol{Key: key, Namespace: key, Language: lang, Defs: defs, Refs: refs}
+	}
+	return map[string][]types.KnowledgeSymbol{
+		".": {
+			ns(nsA, "go", []string{"internal/a/a.go", "internal/a/a_test.go"}),
+			// a_test.go importing b and c says nothing about the package; b2.go is b itself.
+			ns(nsB, "go", []string{"internal/b/b.go", "internal/b/b2.go"},
+				ref("internal/a/a.go"), ref("internal/a/a_test.go"), ref("internal/b/b2.go")),
+			ns(nsC, "go", []string{"internal/c/c.go"}, ref("internal/a/a_test.go")),
+			ns(nsApp, "go", []string{"cmd/app/main.go"}),
+			// Defined in another project's index, and by no file at all.
+			ns(nsX, "go", nil, ref("cmd/app/main.go")),
+			ns(nsExt, "go", nil, ref("internal/a/a.go")),
+			{Key: nsC + "Run().", Namespace: nsC, Language: "go", Source: "internal/c/c.go:3",
+				Calls: []types.KnowledgeSymbolCall{{Key: doX, Count: 1}}},
+			{Key: doX, Namespace: nsX, Language: "go"},
+		},
+		"libs/x": {
+			ns(nsX, "go", []string{"libs/x/x.go"}),
+			{Key: doX, Namespace: nsX, Language: "go", Source: "libs/x/x.go:5", Defs: []string{"libs/x/x.go"}},
+		},
+		"console": {
+			ns(nsTa, "typescript", []string{"console/src/a.ts"}),
+			ns(nsTb, "typescript", []string{"console/src/lib/b.ts"}, ref("console/src/a.ts")),
+			ns(nsTc, "typescript", []string{"console/src/c.ts"}, ref("console/src/a.ts")),
+		},
+	}
+}
+
+func TestFoldImportsFoldsEveryLanguageByDirectory(t *testing.T) {
+	t.Parallel()
+
+	imports := func(from, to, lang, evidence string) types.KnowledgeEdge {
+		e := extractedEdge("dir:"+from, "dir:"+to, types.RelationImports, evidence)
+		e.Attrs = map[string]string{types.AttrLanguage: lang}
+		return e
+	}
+	dir := func(d, lang string) types.KnowledgeNode {
+		return types.KnowledgeNode{ID: "dir:" + d, Kind: types.KindDir, Label: d, Source: d,
+			Attrs: map[string]string{types.AttrLanguage: lang}}
+	}
+	assert.Equal(t, map[string]foldedImports{
+		".": {
+			nodes: []types.KnowledgeNode{dir("cmd/app", "go"), dir("internal/a", "go"), dir("internal/b", "go"), dir("internal/c", "go"), dir("libs/x", "go")},
+			edges: []types.KnowledgeEdge{
+				imports("cmd/app", "libs/x", "go", "cmd/app/main.go"),
+				imports("internal/a", "internal/b", "go", "internal/a/a.go"),
+				imports("internal/c", "libs/x", "go", "internal/c/c.go:3"),
+			},
+		},
+		"console": {
+			nodes: []types.KnowledgeNode{dir("console/src", "typescript"), dir("console/src/lib", "typescript")},
+			edges: []types.KnowledgeEdge{imports("console/src", "console/src/lib", "typescript", "console/src/a.ts")},
+		},
+	}, foldImports(foldFixture()))
+}
+
+// The fold is stored in the shard of the index that read each import, so a symbol load
+// carries its own edges and no reader refolds.
+func TestAssembleSymbolShardsStoresTheFold(t *testing.T) {
+	t.Parallel()
+
+	projects := []types.TargetGraphProject{{Path: "."}, {Path: "libs/x"}, {Path: "console"}}
+	shards := assembleSymbolShards(foldFixture(), projects)
+
+	var names []string
+	for _, sh := range shards {
+		names = append(names, sh.Name)
+	}
+	assert.Equal(t, []string{"." + symbolsShardSuffix, "console" + symbolsShardSuffix, "libs/x" + symbolsShardSuffix}, names)
+
+	importsIn := func(sh Shard) []string {
+		var out []string
+		for _, e := range sh.Edges {
+			if e.Relation == types.RelationImports {
+				out = append(out, e.Source+" -> "+e.Target)
+			}
+		}
+		return out
+	}
+	assert.Equal(t, []string{"dir:cmd/app -> dir:libs/x", "dir:internal/a -> dir:internal/b", "dir:internal/c -> dir:libs/x"}, importsIn(shards[0]))
+	assert.Equal(t, []string{"dir:console/src -> dir:console/src/lib"}, importsIn(shards[1]))
+	assert.Empty(t, importsIn(shards[2]))
+
+	g := mergeAll(shards)
+	for _, p := range projects {
+		g.AddNode(types.KnowledgeNode{ID: projectID(p.Path), Kind: types.KindProject, Label: p.Path, Source: p.Path})
+	}
+	assert.Empty(t, g.UndeclaredEdges())
+}

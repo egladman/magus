@@ -234,6 +234,34 @@ func TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects(t *testing
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepDirection, layers))
 }
 
+// A layer magus.project declares on a dir node wins over the first path segment, and a
+// package no declaration covers keeps the segment.
+func TestPrecedentsTakeTheDeclaredLayer(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	for _, dir := range []string{"cmd/app", "internal/handler/a", "internal/handler/b", "internal/store"} {
+		f.pkg(dir, 1)
+	}
+	for _, dir := range []string{"internal/handler/a", "internal/handler/b"} {
+		f.g.AddNode(types.KnowledgeNode{ID: "dir:" + dir, Kind: types.KindDir, Label: dir, Source: dir,
+			Attrs: map[string]string{types.AttrLayer: "handler"}})
+		f.imports("cmd/app", dir)
+		f.imports(dir, "internal/store")
+	}
+	rows := f.g.Precedents(PrecedentOptions{})
+
+	toHandler := types.PrecedentScope{Layers: []string{"cmd", "handler"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepDirection, Scope: toHandler, Key: types.PrecedentKey{From: "cmd", To: "handler"},
+		Follow: 2, Cohort: 2, Share: 1,
+		Cited: []types.Case{depCase("cmd/app", "internal/handler/a"), depCase("cmd/app", "internal/handler/b")},
+	}, precedentRow(t, rows, types.PrecedentDepDirection, toHandler))
+	fromHandler := types.PrecedentScope{Layers: []string{"handler", "internal"}}
+	assert.Equal(t, types.PrecedentKey{From: "handler", To: "internal"},
+		precedentRow(t, rows, types.PrecedentDepDirection, fromHandler).Key)
+}
+
 func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
 	t.Parallel()
 

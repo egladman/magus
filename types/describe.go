@@ -495,6 +495,8 @@ type TargetGraphProject struct {
 	Engine string            `json:"engine,omitempty" yaml:"engine,omitempty"`
 	Nodes  []TargetGraphNode `json:"nodes,omitempty"  yaml:"nodes,omitempty"`
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
+	// Layers is magus.project's "layers" key (Project.Layers), stamped onto dir nodes.
+	Layers map[string]string `json:"layers,omitempty" yaml:"layers,omitempty" buzz:"-"`
 	// DependsOn are the workspace-relative paths of the projects this project
 	// depends on (its project-level deps, declared in magus.project).
 	// They draw the project -> project arrows in the combined workspace graph;

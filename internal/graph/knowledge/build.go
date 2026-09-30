@@ -22,6 +22,17 @@ type BuildOptions struct {
 // persisted store, and returns the merged in-memory graph. First run pays a full
 // build; steady state writes only the shards whose content changed.
 func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, log *slog.Logger) (*Graph, error) {
+	byProject := map[string]map[string]string{}
+	for _, p := range in.Graph.Projects {
+		if len(p.Layers) > 0 {
+			byProject[p.Path] = p.Layers
+		}
+	}
+	layers, err := unionLayers(byProject)
+	if err != nil {
+		return nil, err
+	}
+	in.Layers = layers
 	shards := AssembleShards(in)
 	for _, sh := range shards {
 		if sh.Err != nil {

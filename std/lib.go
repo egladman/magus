@@ -1,6 +1,10 @@
 package std
 
-import _ "embed"
+import (
+	_ "embed"
+
+	figuresrc "github.com/egladman/magus/libs/figure"
+)
 
 // The Buzz-implemented half of the standard library. Each source is embedded and
 // registered exactly like a Go module; see source_module.go for why a stdlib
@@ -15,5 +19,11 @@ func init() {
 		Name:   "lcov",
 		Doc:    "LCOV coverage reports: the percentage a badge or a floor gate shows, and the line-level merge that keeps it true across multiple test processes.",
 		Source: lcovSource,
+	})
+	RegisterSource(SourceModule{
+		Name:   "figure",
+		Path:   "magus/figure",
+		Doc:    "Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls.",
+		Source: figuresrc.Source,
 	})
 }

@@ -48,34 +48,41 @@ func TestPackageDepsFileNamespacesAreSorted(t *testing.T) {
 	}
 }
 
-func TestImportGraphKeysByDirectoryAndSorts(t *testing.T) {
+// ImportGraph reads the stored fold: every language's packages keyed by directory, each
+// named with its language, the default graph's dir node winning over the edge's.
+func TestImportGraphReadsTheFoldedEdges(t *testing.T) {
+	t.Parallel()
+
+	projects := []types.TargetGraphProject{{Path: "."}, {Path: "libs/x"}, {Path: "console"}}
+	g := mergeAll(append([]Shard{packageDirs([]string{"libs/x/x.go", "libs/x/y.py", "libs/x/z.py"}, projects, nil)},
+		assembleSymbolShards(foldFixture(), projects)...))
+
+	assert.Equal(t, types.ImportGraph{
+		Indexed: true,
+		Packages: map[string][]string{
+			"cmd/app":     {"libs/x"},
+			"console/src": {"console/src/lib"},
+			"internal/a":  {"internal/b"},
+			"internal/c":  {"libs/x"},
+		},
+		Languages: map[string]string{
+			"cmd/app": "go", "console/src": "typescript", "console/src/lib": "typescript",
+			"internal/a": "go", "internal/b": "go", "internal/c": "go", "libs/x": "python",
+		},
+	}, g.ImportGraph())
+}
+
+// A refold would find the file -references-> namespace edges; the stored fold is the only
+// thing ImportGraph reads.
+func TestImportGraphDoesNotRefold(t *testing.T) {
 	t.Parallel()
 
 	f := newPrecedentFixture()
-	for _, dir := range []string{"internal/server", "internal/httpx", "internal/handler/mcp", "cmd/app", "."} {
-		f.pkg(dir, 2)
-	}
-	f.imports("internal/server", "internal/httpx")
-	f.imports("internal/server", "internal/handler/mcp")
-	f.imports("cmd/app", "internal/server")
-	f.imports("cmd/app", ".")
-	// A second language's namespace in the same directory is the same package, so its
-	// import of httpx folds into the Go one rather than listing httpx twice.
-	ts := precedentNamespace("internal/server", "typescript")
-	f.file("internal/server/client.ts", ts, "server", "typescript")
-	f.edge("file:internal/server/client.ts", precedentNamespace("internal/httpx", "go"), types.RelationReferences)
-	// Defined by no workspace file: a module dependency, not a workspace package.
-	ext := "symbol:gomod golang.org/x/sync `golang.org/x/sync/errgroup`/"
-	f.g.AddNode(types.KnowledgeNode{ID: ext, Kind: types.KindSymbol, Label: "errgroup", Attrs: map[string]string{attrNamespace: ext}})
-	f.edge("file:internal/server/f0.go", ext, types.RelationReferences)
-	// Only a test imports this, and a test's imports do not constrain the package.
-	f.file("internal/httpx/httpx_test.go", precedentNamespace("internal/httpx", "go"), "httpx", "go")
-	f.edge("file:internal/httpx/httpx_test.go", precedentNamespace("cmd/app", "go"), types.RelationReferences)
+	f.pkg("internal/a", 1)
+	f.pkg("internal/b", 1)
+	f.imports("internal/a", "internal/b")
 
-	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{
-		"cmd/app":         {".", "internal/server"},
-		"internal/server": {"internal/handler/mcp", "internal/httpx"},
-	}}, f.g.ImportGraph())
+	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}, Languages: map[string]string{}}, f.g.ImportGraph())
 }
 
 func TestImportGraphUnindexedIsEmptyNotNil(t *testing.T) {
@@ -84,18 +91,5 @@ func TestImportGraphUnindexedIsEmptyNotNil(t *testing.T) {
 	g := NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "file:internal/a/a.go", Kind: types.KindFile, Label: "internal/a/a.go", Source: "internal/a/a.go"})
 
-	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}}, g.ImportGraph())
-}
-
-func TestImportGraphDropsSelfImports(t *testing.T) {
-	t.Parallel()
-
-	f := newPrecedentFixture()
-	f.pkg("internal/a", 2)
-	f.imports("internal/a", "internal/a")
-	ts := precedentNamespace("internal/a", "typescript")
-	f.file("internal/a/a.ts", ts, "a", "typescript")
-	f.edge("file:internal/a/a.ts", precedentNamespace("internal/a", "go"), types.RelationReferences)
-
-	assert.Equal(t, types.ImportGraph{Indexed: true, Packages: map[string][]string{}}, f.g.ImportGraph())
+	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}, Languages: map[string]string{}}, g.ImportGraph())
 }

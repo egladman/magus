@@ -80,6 +80,9 @@ magus\project({
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
+                // render.buzz imports flow and diagram from libs/diagram, so buzz-test and
+                // every other target keyed on these sources has to move when they do.
+                "../libs/diagram/*.buzz",
                 // retired.urls.lock is hand-authored: a human lists URLs intentionally
                 // removed from the site, exempting them from abandonedLinkCheck (gates.buzz).
                 // Nothing generates it, so it belongs here as a source, not in "outputs" -
@@ -142,7 +145,6 @@ magus\project({
 		// outside file hashing, so replay is unsafe until the cache has a VCS input
 		// primitive. It still has a narrow target footprint and no output snapshot.
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
-        "diagrams-observe": {"skip_cache": "reads the symbol index `magus graph build` writes, which is outside file hashing, so a replay could restore an older observation"},
         // build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
@@ -654,12 +656,17 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
 // between them, stamped so --verify-imports can tell a figure composed from a stale one.
 // Run by hand after `magus graph build`, and not one of generate's stages: generate runs
 // where no index is built, and this refuses rather than write an empty observation.
+//
+// The index lives in the cache, outside file hashing, so the key reads the root's digest
+// of it instead: symbol-digest-generate is skip_cache and runs before any replay of this
+// one, and an index that moved turns the replay into a run.
 export fun diagrams_observe(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         throw "diagrams-observe: unexpected arguments {args.join(" ")}; it takes none";
     }
-    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/flow.buzz"),
-        workspace\file("internal/**/*.go"), workspace\file("cmd/**/*.go"), workspace\file("broker/**/*.go"));
+    ctx.needs(workspace\symbol_digest_generate);
+    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/*.buzz"),
+        workspace\file("gen/symbol-index.json"));
     ctx.writesFiles("site/diagrams/gen/*.buzz");
     final written = renderer\site_diagrams_observe("site/diagrams/gen", graph: magus\importGraph());
     magus\log.info("observed {written.len()} figure(s) into docs/site/diagrams/gen");

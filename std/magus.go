@@ -64,7 +64,8 @@ var Magus = Module{
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
-		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`) " +
+		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, " +
+		"`dir`, `dirs`, `layer`, `neighborhood`) " +
 		"and `output` all answer in-process, and so does `magus\\job` (list, put, " +
 		"register, exit, wait, clear): the job store an orchestrating agent declares about work it handed " +
 		"out (see types.Job). The `magus job` CLI subcommand is a third write door onto " +
@@ -205,7 +206,7 @@ var Magus = Module{
 		},
 		{
 			Name: "explain",
-			Doc:  "One knowledge-graph node's context card: {definition, schemaVersion, node, blastRadius, out, in, docsURL}. Annotate the result `> ExplainResult`. node is a node ID (target:pkg/foo:build) or a name that resolves to one. A path between two nodes is magus\\path. Raises when node resolves to nothing, naming magus\\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One knowledge-graph node's context card: {definition, schemaVersion, node, blastRadius, out, in, docsURL, resolution}. Annotate the result `> ExplainResult`. node is a node ID (target:pkg/foo:build), a workspace path (internal/httpx), or a name that resolves to one. A path resolves to its dir or file node exactly before any ranked match; resolution says which happened (id, path or fuzzy), and a caller anchoring by path refuses fuzzy. A path between two nodes is magus\\path. Raises when node resolves to nothing, naming magus\\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "node", Type: TypeString},
 			},
@@ -215,10 +216,11 @@ var Magus = Module{
 		},
 		{
 			Name: "path",
-			Doc:  "The shortest chain of edges between two knowledge-graph nodes: {definition, schemaVersion, from, to, found, steps}. Annotate the result `> PathResult`. Edges are walked in both directions. A resolved pair with no connection returns found false; only an endpoint that resolves to nothing raises. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "The shortest chain of edges between two knowledge-graph nodes: {definition, schemaVersion, from, to, found, steps}. Annotate the result `> PathResult`. Edges are walked in both directions. opts.relations limits the hops to those relations, so found false under it means no path of those relations. A resolved pair with no connection returns found false; an endpoint that resolves to nothing, an unknown option, and an unknown relation raise. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "node", Type: TypeString},
 				{Name: "to", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "PathOptions"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "PathResult"}},
 			Raises:  true,
@@ -252,6 +254,56 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ImportGraph"}},
 			Raises:  true,
 			Impl:    MagusImportGraph,
+		},
+		{
+			Name:    "symbol_index_digest",
+			Doc:     "A digest of the symbol index the graph members load: {digest, indexed, projects, gaps}. Annotate the result `> SymbolIndexDigest`. digest is a hex SHA-256 over each loaded project's symbol shard fingerprint in project path order, so it moves exactly when magus\\importGraph could answer differently; a target writes it as a declared output that a reader of the index keys its cache on, instead of skip_cache. The knowledge graph is built first, so the digest names the index files on disk now. indexed is false and digest empty when no index was ingested. gaps are the projects declaring an index magus could not read: a digest with gaps is stable but partial. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises when the gap probe cannot run.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "SymbolIndexDigest"}},
+			Raises:  true,
+			Impl:    MagusSymbolIndexDigest,
+		},
+		{
+			Name: "dir",
+			Doc:  "One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus.project's \"layers\" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "path", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Dir"}},
+			Raises:  true,
+			Impl:    MagusDir,
+		},
+		{
+			Name: "dirs",
+			Doc:  "Every directory whose workspace path matches glob, as Dir records sorted by path. Annotate the result `> [Dir]`. glob is a doublestar pattern (internal/**). opts is a DirsOptions: layer keeps one declared layer, and a layer nothing declares raises MGS7006 rather than matching nothing; language keeps one package language; depth bounds how many segments below the glob's literal prefix a match may sit (0 is unbounded). An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "glob", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "DirsOptions"},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "[Dir]"}},
+			Raises:  true,
+			Impl:    MagusDirs,
+		},
+		{
+			Name: "layer",
+			Doc:  "One layer magus.project's \"layers\" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "name", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Layer"}},
+			Raises:  true,
+			Impl:    MagusLayer,
+		},
+		{
+			Name: "neighborhood",
+			Doc:  "The knowledge subgraph around one focus node: {definition, schemaVersion, focus, resolution, options, nodes, links, folds, answer}. Annotate the result `> NeighborhoodResult`. focus is a node ID, a workspace path, or a name; resolution says how it was reached. opts is a NeighborhoodOptions: depth is the most hops (0 means 1); relations are the only relations walked; direction is out, in, or empty for both; collapse folds every source node under each workspace path prefix into that prefix's dir node, longest prefix winning, and folds lists what each absorbed. Read answer.verdict before trusting a thin result: an imports walk with no symbol index is unknown, not absent. An unknown option, relation or direction raises, as does a focus that resolves to nothing. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "focus", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "NeighborhoodOptions"},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "NeighborhoodResult"}},
+			Raises:  true,
+			Impl:    MagusNeighborhood,
 		},
 		{
 			Name: "output",
@@ -887,6 +939,7 @@ var magusMCPTools = []MCPTool{
 			"`import \"magus\"` is required to call the workspace. Also importable: std, math, crypto, serialize, buffer, and the pure host modules (those marked WASM) except env. " +
 			"File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. " +
 			"Call `magus\\describeModule(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. " +
+			"For a subsystem, `magus\\dir(path)`, `magus\\dirs(glob)`, `magus\\layer(name)` and `magus\\neighborhood(focus)` return typed records (Dir, [Dir], Layer, NeighborhoodResult) with imports, declared calls and layers; a directory the graph lacks raises MGS7005 and an undeclared layer MGS7006. " +
 			"Variables do not persist between calls; filter a large result in the script before returning it. " +
 			"Each call runs in a separate process. Bounded at 10 minutes when called directly; a host that supports MCP tasks can run it as a task without that bound. " +
 			"Example: `import \"magus\"; fun main(args: [str]) > any !> str { return magus\\query(\"kind=spell\"); }`",

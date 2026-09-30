@@ -144,7 +144,8 @@ magus\project({
     // The handlers import proto/gen/go. **/*.go keys on the stubs' bytes, but only this
     // edge puts a .proto edit in this project's affected set, orders proto's generate
     // first, and keeps proto inside a lease focused here.
-    "depends_on": ["proto"],
+    // libs/figure: the go-build embeds figure.buzz as the magus/figure module.
+    "depends_on": ["proto", "libs/figure"],
     "spells": [go, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no
@@ -252,6 +253,7 @@ magus\project({
         // other change leaves the key unmoved and a hit reverts the committed file.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+        "symbol-digest-generate": {"skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
@@ -1473,6 +1475,24 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // generating target at all, which made it stale by construction with nothing to say so.
 // Whole-workspace scope is why this lives at the root rather than in docs/, whose index
 // is scoped to docs alone.
+//
+// symbol-digest-generate writes gen/symbol-index.json, the digest of the symbol index the
+// graph members load. A target whose answer reads the index needs this one and reads the
+// file: being skip_cache, it runs before any replay of that reader, so an index that moved
+// turns the replay into a run. Rewritten only when the bytes move.
+export fun symbol_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen/symbol-index.json");
+    final d = magus\symbolIndexDigest();
+    final gaps: mut [str] = mut [<str>];
+    foreach (g in d.gaps) { gaps.append(g.project.path); }
+    final record: {str: any} = {"digest": d.digest, "indexed": d.indexed, "projects": d.projects, "gaps": gaps};
+    final body = json\stringify(record, "  ") + "\n";
+    final path = fs\join("gen", "symbol-index.json");
+    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    fs\mkdirAll("gen");
+    fs\writeFile(path, body);
+}
+
 export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared although gitignored: console's build needs this target and copies the
     // pair, so the files are an output it consumes, not residue it happens to find.
@@ -3260,7 +3280,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/guides/integrations/agents/magusfile.buzz",
                    "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
                    "libs/diagnostics/magusfile.buzz", "libs/diagram/magusfile.buzz",
-                   "libs/gopherbuzz/magusfile.buzz",
+                   "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
@@ -3281,7 +3301,7 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.md", "console/**/*.md", "docs/**/*.md",
                    "docs/guides/integrations/agents/**/*.md",
                    "libs/coldread/**/*.md", "libs/conventions/**/*.md",
-                   "libs/diagnostics/**/*.md", "libs/diagram/**/*.md",
+                   "libs/diagnostics/**/*.md", "libs/diagram/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
                    "libs/textsearch/**/*.md", "proto/**/*.md");
     magus\cmd("buzz", args: ["hack/lint.buzz"]);

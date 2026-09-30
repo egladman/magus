@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"slices"
 	"strings"
 
@@ -90,15 +91,16 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 	if err != nil {
 		return types.KnowledgeExplainOutput{}, err
 	}
-	kg, err := g.KnowledgeGraph(ctx, false)
+	seeded := knowledge.SeedsLazyLayer(node)
+	kg, err := loadGraph(ctx, g, seeded)
 	if err != nil {
 		return types.KnowledgeExplainOutput{}, err
 	}
 	out, ok := kg.Explain(node)
 	if !ok {
-		// explain reads the symbol-free graph, so a miss on a name that could be a code
-		// symbol is a blind spot, not an absence.
-		if knowledge.Answer(node, false, graphCoverage(ctx, g, node, false)).Verdict == types.VerdictUnknown {
+		// A bare name reads the symbol-free graph, so a miss on a name that could be a
+		// code symbol is a blind spot, not an absence.
+		if knowledge.Answer(node, false, graphCoverage(ctx, g, node, seeded)).Verdict == types.VerdictUnknown {
 			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q in the domain graph; code symbols are not loaded here, so ask magus\\refs", node)
 		}
 		return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q", node)
@@ -106,22 +108,39 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 	return out, nil
 }
 
+// loadGraph reads the domain graph, with the symbol shards merged when seeded.
+func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.Graph, error) {
+	if seeded {
+		return g.KnowledgeGraphWithSymbols(ctx)
+	}
+	return g.KnowledgeGraph(ctx, false)
+}
+
 // MagusPath backs magus\path: the shortest chain of edges between node and to, the
-// record `magus path -o json` prints. A resolved pair with no connection is an answer
-// (found is false); only an endpoint that resolves to nothing raises.
-func MagusPath(ctx context.Context, node, to string) (types.KnowledgePathOutput, error) {
+// record `magus path -o json` prints. opts is a PathOptions; relations narrows the hops.
+// A resolved pair with no connection is an answer (found is false); only an endpoint
+// that resolves to nothing, or an option that names nothing, raises.
+func MagusPath(ctx context.Context, node, to string, opts map[string]any) (types.KnowledgePathOutput, error) {
 	if node == "" || to == "" {
 		return types.KnowledgePathOutput{}, errors.New("magus\\path: needs both endpoints")
+	}
+	o := optionReader{member: "path", opts: opts}
+	if err := o.only("relations"); err != nil {
+		return types.KnowledgePathOutput{}, err
+	}
+	rels, err := o.relations()
+	if err != nil {
+		return types.KnowledgePathOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "path")
 	if err != nil {
 		return types.KnowledgePathOutput{}, err
 	}
-	kg, err := g.KnowledgeGraph(ctx, false)
+	kg, err := loadGraph(ctx, g, knowledge.SeedsLazyLayer(node) || knowledge.SeedsLazyLayer(to))
 	if err != nil {
 		return types.KnowledgePathOutput{}, err
 	}
-	out, ok := kg.Path(node, to)
+	out, ok := kg.PathWith(node, to, types.KnowledgePathOptions{Relations: rels})
 	if !ok {
 		return types.KnowledgePathOutput{}, fmt.Errorf("magus\\path: could not resolve %q or %q to a node", node, to)
 	}
@@ -196,6 +215,249 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
+}
+
+// MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages
+// live in the symbol shards, so this reads the graph with them merged. A path with no dir
+// node raises DirNotInGraph: a typo must not come back as an empty Dir.
+func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
+	if strings.TrimSpace(dir) == "" {
+		return types.Dir{}, errors.New("magus\\dir: needs a workspace-relative directory, e.g. \"internal/httpx\"")
+	}
+	g, err := graphsFromContext(ctx, "dir")
+	if err != nil {
+		return types.Dir{}, err
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.Dir{}, err
+	}
+	d, err := kg.Dir(dir, workspaceLayers(ctx))
+	if err != nil {
+		return types.Dir{}, fmt.Errorf("magus\\dir: %w", err)
+	}
+	return d, nil
+}
+
+// MagusDirs backs magus\dirs: every dir whose workspace path matches glob, sorted by
+// path. opts is a DirsOptions; a layer it names that nothing declares raises
+// LayerNotDeclared.
+func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.Dir, error) {
+	if strings.TrimSpace(glob) == "" {
+		return nil, errors.New("magus\\dirs: needs a glob over workspace paths, e.g. \"internal/**\"")
+	}
+	o := optionReader{member: "dirs", opts: opts}
+	if err := o.only("layer", "language", "depth"); err != nil {
+		return nil, err
+	}
+	var do types.DirsOptions
+	var err error
+	if do.Layer, err = o.str("layer"); err != nil {
+		return nil, err
+	}
+	if do.Language, err = o.str("language"); err != nil {
+		return nil, err
+	}
+	if do.Depth, err = o.count("depth"); err != nil {
+		return nil, err
+	}
+	g, err := graphsFromContext(ctx, "dirs")
+	if err != nil {
+		return nil, err
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := kg.Dirs(glob, do, workspaceLayers(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("magus\\dirs: %w", err)
+	}
+	return dirs, nil
+}
+
+// MagusLayer backs magus\layer: a declared layer and every dir it covers. A name no
+// magus.project "layers" entry declares raises LayerNotDeclared.
+func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
+	if strings.TrimSpace(name) == "" {
+		return types.Layer{}, errors.New("magus\\layer: needs a layer name, e.g. \"handler\"")
+	}
+	g, err := graphsFromContext(ctx, "layer")
+	if err != nil {
+		return types.Layer{}, err
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.Layer{}, err
+	}
+	l, err := kg.Layer(name, workspaceLayers(ctx))
+	if err != nil {
+		return types.Layer{}, fmt.Errorf("magus\\layer: %w", err)
+	}
+	return l, nil
+}
+
+// MagusNeighborhood backs magus\neighborhood: the subgraph within opts.depth hops of
+// focus, along opts.relations in opts.direction, folded by opts.collapse. opts is a
+// NeighborhoodOptions.
+func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (types.KnowledgeNeighborhoodOutput, error) {
+	if strings.TrimSpace(focus) == "" {
+		return types.KnowledgeNeighborhoodOutput{}, errors.New("magus\\neighborhood: needs a focus node ID, path or name")
+	}
+	o := optionReader{member: "neighborhood", opts: opts}
+	if err := o.only("depth", "relations", "direction", "collapse"); err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	var no types.KnowledgeNeighborhoodOptions
+	var err error
+	if no.Depth, err = o.count("depth"); err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	if no.Relations, err = o.relations(); err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	dir, err := o.str("direction")
+	if err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	switch no.Direction = types.EdgeDirection(dir); no.Direction {
+	case "", types.EdgeIn, types.EdgeOut:
+	default:
+		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: direction must be %q, %q or empty for both, got %q", types.EdgeOut, types.EdgeIn, dir)
+	}
+	if no.Collapse, err = o.strs("collapse"); err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	g, err := graphsFromContext(ctx, "neighborhood")
+	if err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.KnowledgeNeighborhoodOutput{}, err
+	}
+	out, ok := kg.NeighborhoodOf(focus, no)
+	if !ok {
+		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: no node matches %q", focus)
+	}
+	matched := len(out.Nodes) > 1
+	if !walksSymbolLayer(no.Relations) {
+		out.Answer = types.ClassifyAnswer(matched, "", nil)
+		return out, nil
+	}
+	// The shards were merged, but a graph holding no symbol read no index at all, and a
+	// thin imports walk over it is unknown rather than absent.
+	cov := knowledge.Coverage{Seeded: kg.HasSymbols()}
+	cov.Gaps, cov.Probed = g.SymbolGaps(ctx)
+	// The walk, not a query string, decides relevance; "" leaves the layer in scope.
+	out.Answer = knowledge.Answer("", matched, cov)
+	return out, nil
+}
+
+// symbolLayerRelations are the relations whose edges the symbol shards hold.
+var symbolLayerRelations = []types.RelationID{
+	types.RelationImports, types.RelationDefines, types.RelationReferences, types.RelationCalls, types.RelationContains,
+}
+
+func walksSymbolLayer(rels []types.RelationID) bool {
+	return len(rels) == 0 || slices.ContainsFunc(rels, func(r types.RelationID) bool {
+		return slices.Contains(symbolLayerRelations, r)
+	})
+}
+
+// workspaceLayers merges every project's magus.project "layers" declarations. Their keys
+// are workspace-relative, so one map holds them all.
+func workspaceLayers(ctx context.Context) map[string]string {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil
+	}
+	layers := map[string]string{}
+	for _, p := range ws.All() {
+		maps.Copy(layers, p.Layers)
+	}
+	return layers
+}
+
+// optionReader decodes one member's options object. An unknown key or a value of the
+// wrong shape raises: dropping `{dpeth = 2}` would answer a different question with
+// nothing to say the typo did not take.
+type optionReader struct {
+	member string
+	opts   map[string]any
+}
+
+func (o optionReader) only(keys ...string) error {
+	for _, k := range slices.Sorted(maps.Keys(o.opts)) {
+		if !slices.Contains(keys, k) {
+			return fmt.Errorf("magus\\%s: unknown option %q (want %s)", o.member, k, strings.Join(keys, ", "))
+		}
+	}
+	return nil
+}
+
+func (o optionReader) str(key string) (string, error) {
+	v, ok := o.opts[key]
+	if !ok || v == nil {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("magus\\%s: %s must be a string, got %T", o.member, key, v)
+	}
+	return s, nil
+}
+
+func (o optionReader) strs(key string) ([]string, error) {
+	switch v := o.opts[key].(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return v, nil
+	case []any:
+		out := make([]string, len(v))
+		for i, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("magus\\%s: %s[%d] must be a string, got %T", o.member, key, i, item)
+			}
+			out[i] = s
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("magus\\%s: %s must be a list of strings, got %T", o.member, key, v)
+	}
+}
+
+// count reads a non-negative integer option; absent is 0.
+func (o optionReader) count(key string) (int, error) {
+	v, ok := o.opts[key]
+	if !ok {
+		return 0, nil
+	}
+	n, err := intOptions(o.member, map[string]any{key: v}, key)
+	return n[key], err
+}
+
+// relations reads the relations option, refusing a name the graph does not define: a
+// misspelt relation filters every edge out and reads as an empty neighborhood.
+func (o optionReader) relations() ([]types.RelationID, error) {
+	names, err := o.strs("relations")
+	if err != nil {
+		return nil, err
+	}
+	rels := make([]types.RelationID, 0, len(names))
+	for _, name := range names {
+		if _, ok := types.KnowledgeRelation(types.RelationID(name)); !ok {
+			var known []string
+			for _, d := range types.KnowledgeRelationDefinitions() {
+				known = append(known, string(d.ID))
+			}
+			return nil, fmt.Errorf("magus\\%s: unknown relation %q (want one of %s)", o.member, name, strings.Join(known, ", "))
+		}
+		rels = append(rels, types.RelationID(name))
+	}
+	return rels, nil
 }
 
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
