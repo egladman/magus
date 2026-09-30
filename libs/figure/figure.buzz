@@ -116,19 +116,24 @@ fun cssVarPalette() > Palette {
 // GitHub loads. They deliberately do not mirror the site: an inlined figure blends into the
 // page through the CSS vars, while a standalone file is a document of its own and paints the
 // skill's paper. surface is the skill's backend fill (light) and paper-2 (dark).
+//
+// Every colour is an opaque hex. SVG paint takes no rgba(), and a rasterizer that follows
+// the spec (Inkscape, librsvg) paints one black, so rule and accentTint are the tints
+// pre-blended over the surface and paper they sit on. soft is the smallest text in the
+// figure, so it holds 4.5:1 against both paper and surface.
 fun lightPalette() > Palette {
     return Palette{
         paper = "#f5f5f5", surface = "#ffffff", ink = "#2d3142", muted = "#4f5d75",
-        soft = "#7a8399", rule = "rgba(45,49,66,0.12)", accent = "#eb6c36",
-        accentTint = "rgba(235,108,54,0.08)", link = "#2e5aa8",
+        soft = "#5f6780", rule = "#e6e6e8", accent = "#eb6c36",
+        accentTint = "#f4eae6", link = "#2e5aa8",
     };
 }
 
 fun darkPalette() > Palette {
     return Palette{
         paper = "#2d3142", surface = "#393e53", ink = "#f5f5f5", muted = "#bfc0c0",
-        soft = "#8e98ac", rule = "rgba(245,245,245,0.12)", accent = "#f08a59",
-        accentTint = "rgba(240,138,89,0.10)", link = "#6a95d8",
+        soft = "#a9b1c2", rule = "#505466", accent = "#f08a59",
+        accentTint = "#403a44", link = "#6a95d8",
     };
 }
 
@@ -1158,7 +1163,7 @@ fun renderZone(z: Zone, p: Palette, s: Style) > str {
     final cx = z.x + z.w / 2;
     final w = snap(z.label.len() * 6 + 12);
     return rect + "<rect x=\"{cx - w / 2}\" y=\"{z.y + 4}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-        + "<text x=\"{cx}\" y=\"{z.y + 13}\" fill=\"{p.ink}\" fill-opacity=\"0.4\" font-size=\"{s.zoneLabelSize}\""
+        + "<text x=\"{cx}\" y=\"{z.y + 13}\" fill=\"{p.soft}\" font-size=\"{s.zoneLabelSize}\""
         + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
         + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(z.label.upper()) + "</text>";
 }
@@ -1646,10 +1651,10 @@ test "the default Style renders the pre-Style bytes" {
         + `<g transform="translate(0,40)">`
         + `<path data-edge="a->b" id="t-edge-a-b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#t-arrow-default)"/>`
         + `<g data-node="a"><rect x="32" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
-        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
+        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="#e6e6e8" stroke-width="1.2"/>`
         + `<text x="112" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text></g>`
         + `<g data-node="b"><rect x="288" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
-        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.12)" stroke-width="1.2"/>`
+        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="#e6e6e8" stroke-width="1.2"/>`
         + `<text x="368" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text></g>`
         + `</g></svg>`;
     assert\equal(renderSvg(twoBox(), p: lightPalette()) catch "threw", want, message: "twoBox at the shipped defaults");
@@ -1750,7 +1755,7 @@ test "input and security paint the skill's treatments" {
     };
     assert\equal(validate(d).len(), want: 0, message: "a node wholly inside a boundary is not an overlap");
     final svg = renderSvg(d, p: lightPalette()) catch "threw";
-    std\assert(svg.indexOf("fill=\"#4f5d75\" fill-opacity=\"0.1\" stroke=\"#7a8399\"") != null, message: "input is muted at 10%");
+    std\assert(svg.indexOf("fill=\"#4f5d75\" fill-opacity=\"0.1\" stroke=\"#5f6780\"") != null, message: "input is muted at 10%");
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
     std\assert((svg.indexOf("data-node=\"trust\"") ?? 0) < (svg.indexOf("data-edge=") ?? 0), message: "the boundary paints under the connector");
@@ -1828,7 +1833,7 @@ test "zones paint a solid hairline wash and stop at three" {
     final svg = renderSvg(d, p: lightPalette()) catch "threw";
     std\assert(svg.indexOf("fill=\"#2d3142\" fill-opacity=\"0.02\" stroke=\"#2d3142\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
         message: "ink wash, ink hairline, no dash");
-    std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#2d3142\" fill-opacity=\"0.4\" font-size=\"7\"") != null, message: "label centred, 7px");
+    std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#5f6780\" font-size=\"7\"") != null, message: "label centred, 7px, soft");
     final four = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
     assert\equal(validate(four).len(), want: 1, message: "a fourth zone is a finding");
 }
