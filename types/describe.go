@@ -1,6 +1,7 @@
 package types
 
 import (
+	"cmp"
 	"path"
 	"slices"
 	"strings"
@@ -314,6 +315,12 @@ type TargetRef struct {
 // Ref spells the reference the way the CLI takes a target ref, "project:target".
 func (r TargetRef) Ref() string {
 	return r.Project + ":" + r.Target
+}
+
+// Compare orders refs by project, then target, the order every deterministic walk over
+// them uses.
+func (r TargetRef) Compare(o TargetRef) int {
+	return cmp.Or(strings.Compare(r.Project, o.Project), strings.Compare(r.Target, o.Target))
 }
 
 // CrossTargetRef names one target in another project: a target-level cross-project

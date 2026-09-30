@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -22,8 +21,8 @@ func orderSteps() []Step {
 	}
 }
 
-func stepKeys(steps []Step) (root, docs string) {
-	return stepKey(steps[0]), stepKey(steps[1])
+func stepKeys(steps []Step) (root, docs types.TargetRef) {
+	return stepRef(steps[0]), stepRef(steps[1])
 }
 
 func TestDeriveTargetOrderWriterBeforeReader(t *testing.T) {
@@ -32,15 +31,15 @@ func TestDeriveTargetOrderWriterBeforeReader(t *testing.T) {
 		{ProjectPath: "b", Target: "check"},
 	}
 	nodes := []TargetNode{
-		{Project: "a", Target: "gen", Steps: []string{stepKey(steps[0])},
+		{Project: "a", Target: "gen", Steps: []types.TargetRef{stepRef(steps[0])},
 			Writes: types.MustParseGlobs("a/out/report.md"), DeclaredWrites: true,
 			Reads: types.MustParseGlobs("a/src/**"), DeclaredReads: true},
-		{Project: "b", Target: "check", Steps: []string{stepKey(steps[1])},
+		{Project: "b", Target: "check", Steps: []types.TargetRef{stepRef(steps[1])},
 			Reads: types.MustParseGlobs("a/out/*.md"), DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
-	assert.Equal(t, map[string][]string{stepKey(steps[1]): {stepKey(steps[0])}}, d.RunAfter)
+	assert.Equal(t, map[types.TargetRef][]types.TargetRef{stepRef(steps[1]): {stepRef(steps[0])}}, d.RunAfter)
 }
 
 func TestDeriveTargetOrderNoSelfEdge(t *testing.T) {
@@ -49,15 +48,15 @@ func TestDeriveTargetOrderNoSelfEdge(t *testing.T) {
 	nodes := []TargetNode{
 		// Reads what it writes: not an edge, or every regenerator would cycle on
 		// itself.
-		{Project: ".", Target: "index", Steps: []string{root},
+		{Project: ".", Target: "index", Steps: []types.TargetRef{root},
 			Reads: types.MustParseGlobs("MAGUS.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("MAGUS.md"), DeclaredWrites: true},
 		// Same-step overlap is the body's own ctx.needs ordering, not derivation's.
-		{Project: ".", Target: "sibling", Steps: []string{root},
+		{Project: ".", Target: "sibling", Steps: []types.TargetRef{root},
 			Reads: types.MustParseGlobs("MAGUS.md"), DeclaredReads: true},
 		// A cross-step reader still derives, proving the guards above are the only
 		// thing suppressing the first two pairs.
-		{Project: "docs", Target: "reader", Steps: []string{docs},
+		{Project: "docs", Target: "reader", Steps: []types.TargetRef{docs},
 			Reads: types.MustParseGlobs("MAGUS.md"), DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
@@ -73,10 +72,10 @@ func TestDeriveTargetOrderMutualDeclarationsSettle(t *testing.T) {
 	steps := orderSteps()
 	root, docs := stepKeys(steps)
 	nodes := []TargetNode{
-		{Project: ".", Target: "changelog", Steps: []string{root},
+		{Project: ".", Target: "changelog", Steps: []types.TargetRef{root},
 			Reads: types.MustParseGlobs("docs/changelog.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("CHANGELOG.md"), DeclaredWrites: true},
-		{Project: "docs", Target: "content", Steps: []string{docs},
+		{Project: "docs", Target: "content", Steps: []types.TargetRef{docs},
 			Reads: types.MustParseGlobs("CHANGELOG.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("docs/changelog.md"), DeclaredWrites: true},
 	}
@@ -85,7 +84,7 @@ func TestDeriveTargetOrderMutualDeclarationsSettle(t *testing.T) {
 	// direction is the one that yields.
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
 	require.Equal(t, []DroppedEdge{{DerivedEdge: DerivedEdge{Writer: 1, Reader: 0}, Reason: "cycle"}}, d.Dropped)
-	assert.Equal(t, map[string][]string{docs: {root}}, d.RunAfter)
+	assert.Equal(t, map[types.TargetRef][]types.TargetRef{docs: {root}}, d.RunAfter)
 }
 
 // TestDeriveTargetOrderMutualTrioTieBreak is the workspace's own sibling-index
@@ -100,7 +99,7 @@ func TestDeriveTargetOrderMutualTrioTieBreak(t *testing.T) {
 	}
 	node := func(i int) TargetNode {
 		p := steps[i].ProjectPath
-		return TargetNode{Project: p, Target: "index-generate", Steps: []string{stepKey(steps[i])},
+		return TargetNode{Project: p, Target: "index-generate", Steps: []types.TargetRef{stepRef(steps[i])},
 			Reads: types.MustParseGlobs("libs/**/MAGUS.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs(p + "/MAGUS.md"), DeclaredWrites: true}
 	}
@@ -129,10 +128,10 @@ func TestDeriveTargetOrderWeakCycleDropped(t *testing.T) {
 		// Declares no reads, so its whole-tree fallback overlaps everything: the
 		// resulting cycle is an artifact of the over-approximation, so the weak edge
 		// is the one that yields.
-		{Project: ".", Target: "index", Steps: []string{root},
+		{Project: ".", Target: "index", Steps: []types.TargetRef{root},
 			Reads:  types.MustParseGlobs("**/*.md"),
 			Writes: types.MustParseGlobs("MAGUS.md"), DeclaredWrites: true},
-		{Project: "docs", Target: "index", Steps: []string{docs},
+		{Project: "docs", Target: "index", Steps: []types.TargetRef{docs},
 			Reads: types.MustParseGlobs("**/MAGUS.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("docs/MAGUS.md"), DeclaredWrites: true},
 	}
@@ -150,13 +149,13 @@ func TestDeriveTargetOrderEntangledUnordered(t *testing.T) {
 	steps := orderSteps()
 	root, docs := stepKeys(steps)
 	nodes := []TargetNode{
-		{Project: ".", Target: "changelog", Steps: []string{root},
+		{Project: ".", Target: "changelog", Steps: []types.TargetRef{root},
 			Reads: types.MustParseGlobs("releases/*.yaml"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("CHANGELOG.md"), DeclaredWrites: true},
-		{Project: "docs", Target: "content", Steps: []string{docs},
+		{Project: "docs", Target: "content", Steps: []types.TargetRef{docs},
 			Reads: types.MustParseGlobs("CHANGELOG.md"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("docs/changelog.md"), DeclaredWrites: true},
-		{Project: ".", Target: "graph", Steps: []string{root},
+		{Project: ".", Target: "graph", Steps: []types.TargetRef{root},
 			Reads:  types.MustParseGlobs("**/*.md"),
 			Writes: types.MustParseGlobs("gen/*.json"), DeclaredWrites: true},
 	}
@@ -167,7 +166,7 @@ func TestDeriveTargetOrderEntangledUnordered(t *testing.T) {
 		// The reader's step ran first and nothing can reorder it: settle after.
 		{Writer: 1, Reader: 2, weak: true, Ordered: false},
 	}, d.Edges)
-	assert.Equal(t, map[string][]string{docs: {root}}, d.RunAfter,
+	assert.Equal(t, map[types.TargetRef][]types.TargetRef{docs: {root}}, d.RunAfter,
 		"only the with-the-grain direction is admitted; the against-the-grain edge induces nothing")
 }
 
@@ -175,9 +174,9 @@ func TestDeriveTargetOrderIgnoredDirInvisibleToFallbackReader(t *testing.T) {
 	steps := orderSteps()
 	root, docs := stepKeys(steps)
 	nodes := []TargetNode{
-		{Project: "docs", Target: "site", Steps: []string{docs},
+		{Project: "docs", Target: "site", Steps: []types.TargetRef{docs},
 			Writes: types.MustParseGlobs("docs/gen/**"), DeclaredWrites: true},
-		{Project: ".", Target: "graph", Steps: []string{root},
+		{Project: ".", Target: "graph", Steps: []types.TargetRef{root},
 			Reads:      types.MustParseGlobs("**/*.md"),
 			IgnoreDirs: []string{"gen"}},
 	}
@@ -189,8 +188,8 @@ func TestTopoNodesWritersFirst(t *testing.T) {
 	steps := orderSteps()
 	root, docs := stepKeys(steps)
 	nodes := []TargetNode{
-		{Project: ".", Target: "graph", Steps: []string{root}, Reads: types.MustParseGlobs("**/*.md")},
-		{Project: "docs", Target: "content", Steps: []string{docs},
+		{Project: ".", Target: "graph", Steps: []types.TargetRef{root}, Reads: types.MustParseGlobs("**/*.md")},
+		{Project: "docs", Target: "content", Steps: []types.TargetRef{docs},
 			Reads: types.MustParseGlobs("src/*.txt"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("docs/changelog.md"), DeclaredWrites: true},
 	}
@@ -203,21 +202,21 @@ func TestTopoNodesWritersFirst(t *testing.T) {
 // generator writing Go files and a badge reading every Go file, with nothing between them.
 // order says whether the badge declares the ctx.needs edge that was the fix.
 func badgeFixture(ordered bool) []TargetNode {
-	step := DepKey(".", "ci")
+	step := ref(".", "ci")
 	badge := TargetNode{
-		Project: ".", Target: "coverage-badge", Steps: []string{step},
+		Project: ".", Target: "coverage-badge", Steps: []types.TargetRef{step},
 		Reads: types.MustParseGlobs("**/*.go"), DeclaredReads: true,
 		Writes: types.MustParseGlobs("assets/coverage.svg"), DeclaredWrites: true,
 	}
 	if ordered {
-		badge.Needs = Needs(DepKey(".", "generate"))
+		badge.Needs = Needs(ref(".", "generate"))
 	}
 	return []TargetNode{
-		{Project: ".", Target: "ci", Steps: []string{step},
-			Needs: Needs(DepKey(".", "generate"), DepKey(".", "coverage-badge"))},
-		{Project: ".", Target: "generate", Steps: []string{step},
-			Needs: Needs(DepKey(".", "mocks-generate"))},
-		{Project: ".", Target: "mocks-generate", Steps: []string{step},
+		{Project: ".", Target: "ci", Steps: []types.TargetRef{step},
+			Needs: Needs(ref(".", "generate"), ref(".", "coverage-badge"))},
+		{Project: ".", Target: "generate", Steps: []types.TargetRef{step},
+			Needs: Needs(ref(".", "mocks-generate"))},
+		{Project: ".", Target: "mocks-generate", Steps: []types.TargetRef{step},
 			Writes: types.MustParseGlobs("**/gen/mocks/*.go"), DeclaredWrites: true},
 		badge,
 	}
@@ -228,9 +227,9 @@ func TestFindSameStepConflictsRefusesTheUnorderedReader(t *testing.T) {
 	got := FindSameStepConflicts(badgeFixture(false), nil)
 	require.Len(t, got, 1)
 	assert.Equal(t, SameStepConflict{
-		Step:      DepKey(".", "ci"),
-		Writer:    DepKey(".", "mocks-generate"),
-		Reader:    DepKey(".", "coverage-badge"),
+		Step:      ref(".", "ci"),
+		Writer:    ref(".", "mocks-generate"),
+		Reader:    ref(".", "coverage-badge"),
 		WriteGlob: "**/gen/mocks/*.go",
 		ReadGlob:  "**/*.go",
 	}, got[0])
@@ -268,13 +267,13 @@ func TestFindSameStepConflictsIgnoresBaselineFallbacks(t *testing.T) {
 
 func TestFindSameStepConflictsIgnoresCrossStepAndWriterFirst(t *testing.T) {
 	t.Parallel()
-	ci, gate := DepKey(".", "ci"), DepKey(".", "gate")
+	ci, gate := ref(".", "ci"), ref(".", "gate")
 	// Same overlap, different steps: that is an edge DeriveTargetOrder derives, not a
 	// plan to refuse.
 	cross := []TargetNode{
-		{Project: ".", Target: "gen", Steps: []string{ci},
+		{Project: ".", Target: "gen", Steps: []types.TargetRef{ci},
 			Writes: types.MustParseGlobs("gen/**/*.go"), DeclaredWrites: true},
-		{Project: ".", Target: "read", Steps: []string{gate},
+		{Project: ".", Target: "read", Steps: []types.TargetRef{gate},
 			Reads: types.MustParseGlobs("**/*.go"), DeclaredReads: true},
 	}
 	assert.Empty(t, FindSameStepConflicts(cross, nil))
@@ -283,10 +282,10 @@ func TestFindSameStepConflictsIgnoresCrossStepAndWriterFirst(t *testing.T) {
 	// Reading what was there beforehand is a staleness question, not an unschedulable
 	// plan.
 	writerFirst := []TargetNode{
-		{Project: ".", Target: "gen", Steps: []string{ci},
+		{Project: ".", Target: "gen", Steps: []types.TargetRef{ci},
 			Writes: types.MustParseGlobs("gen/**/*.go"), DeclaredWrites: true,
-			Needs: Needs(DepKey(".", "read"))},
-		{Project: ".", Target: "read", Steps: []string{ci},
+			Needs: Needs(ref(".", "read"))},
+		{Project: ".", Target: "read", Steps: []types.TargetRef{ci},
 			Reads: types.MustParseGlobs("**/*.go"), DeclaredReads: true},
 	}
 	assert.Empty(t, FindSameStepConflicts(writerFirst, nil))
@@ -332,18 +331,18 @@ func TestFindSameStepConflictsSeesAReadOfAGeneratedTree(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(f), 0o755))
 	require.NoError(t, os.WriteFile(f, []byte("x\n"), 0o644))
 
-	gen := DepKey(".", "generate")
+	gen := ref(".", "generate")
 	nodes := func(ordered bool) []TargetNode {
-		reader := TargetNode{Project: ".", Target: "mcp-tools-generate", Steps: []string{gen},
+		reader := TargetNode{Project: ".", Target: "mcp-tools-generate", Steps: []types.TargetRef{gen},
 			Reads: types.MustParseGlobs("**/*.go", "internal/spell/gen/types/*.buzz"), DeclaredReads: true,
 			Writes: types.MustParseGlobs("internal/handler/mcp/gen/registry.go"), DeclaredWrites: true}
 		if ordered {
-			reader.Needs = Needs(DepKey(".", "spells-generate"))
+			reader.Needs = Needs(ref(".", "spells-generate"))
 		}
 		return []TargetNode{
-			{Project: ".", Target: "generate", Steps: []string{gen},
-				Needs: Needs(DepKey(".", "spells-generate"), DepKey(".", "mcp-tools-generate"))},
-			{Project: ".", Target: "spells-generate", Steps: []string{gen},
+			{Project: ".", Target: "generate", Steps: []types.TargetRef{gen},
+				Needs: Needs(ref(".", "spells-generate"), ref(".", "mcp-tools-generate"))},
+			{Project: ".", Target: "spells-generate", Steps: []types.TargetRef{gen},
 				Writes: types.MustParseGlobs("internal/spell/gen/types/*.buzz"), DeclaredWrites: true},
 			reader,
 		}
@@ -352,7 +351,7 @@ func TestFindSameStepConflictsSeesAReadOfAGeneratedTree(t *testing.T) {
 	witness := WorkspaceOverlapWitness(root)
 	got := FindSameStepConflicts(nodes(false), witness)
 	assert.Equal(t, SameStepConflicts{{
-		Step: gen, Writer: DepKey(".", "spells-generate"), Reader: DepKey(".", "mcp-tools-generate"),
+		Step: gen, Writer: ref(".", "spells-generate"), Reader: ref(".", "mcp-tools-generate"),
 		WriteGlob: "internal/spell/gen/types/*.buzz", ReadGlob: "internal/spell/gen/types/*.buzz",
 	}}, got)
 	require.Error(t, got.Refusal())
@@ -405,15 +404,15 @@ func TestChainCallsGroupByCall(t *testing.T) {
 	none := func(string) *types.Project { return nil }
 	calls := ChainCalls(p, "lint", none)
 	assert.Equal(t,
-		Needs(DepKey("docs", "format")).Needs(DepKey("docs", "conventions"), DepKey("docs", "spelling")).Needs(DepKey("docs", "links")),
+		Needs(ref("docs", "format")).Needs(ref("docs", "conventions"), ref("docs", "spelling")).Needs(ref("docs", "links")),
 		calls, "a step that resolves to nothing neither orders nor is ordered")
 
-	assert.Equal(t, []string{DepKey("docs", "format"), DepKey("docs", "conventions"), DepKey("docs", "spelling")},
-		calls.before(DepKey("docs", "links")))
-	assert.Equal(t, []string{DepKey("docs", "format")}, calls.before(DepKey("docs", "spelling")),
+	assert.Equal(t, []types.TargetRef{ref("docs", "format"), ref("docs", "conventions"), ref("docs", "spelling")},
+		calls.before(ref("docs", "links")))
+	assert.Equal(t, []types.TargetRef{ref("docs", "format")}, calls.before(ref("docs", "spelling")),
 		"a sibling in the same call is not before")
-	assert.Nil(t, calls.before(DepKey("docs", "format")), "nothing precedes the first call")
-	assert.Nil(t, calls.before(DepKey("docs", "nobody")), "not a member")
+	assert.Nil(t, calls.before(ref("docs", "format")), "nothing precedes the first call")
+	assert.Nil(t, calls.before(ref("docs", "nobody")), "not a member")
 	assert.Empty(t, ChainCalls(p, "orphan", none), "no empty call is kept")
 }
 
@@ -449,8 +448,8 @@ func TestCallOrderReachesUnderTheLaterComposer(t *testing.T) {
 	p.TargetChains["ci"] = types.Needs("generate", "lint", "build")
 	got := FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil)
 	require.Len(t, got, 1)
-	assert.Equal(t, DepKey("docs", "site-generate"), got[0].Reader)
-	assert.Equal(t, DepKey("docs", "format"), got[0].Writer)
+	assert.Equal(t, ref("docs", "site-generate"), got[0].Reader)
+	assert.Equal(t, ref("docs", "format"), got[0].Writer)
 }
 
 // TestAComposersOwnNeedsDoNotOrderItsMembers pins the hop the upward walk must not
@@ -482,7 +481,6 @@ func TestSameStepRefusalNamesBothFixes(t *testing.T) {
 	} {
 		assert.Contains(t, msg, want)
 	}
-	assert.NotContains(t, msg, nodeKeySep, "a node key's separator is a control byte; never printed raw")
 
 	assert.NoError(t, SameStepConflicts(nil).Refusal(), "no conflicts is not an error")
 }
@@ -505,7 +503,7 @@ func TestOrderingIsNotInheritedAcrossComposers(t *testing.T) {
 	}
 	got := FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil)
 	require.Len(t, got, 1)
-	assert.Equal(t, DepKey(".", "coverage-badge"), got[0].Reader)
+	assert.Equal(t, ref(".", "coverage-badge"), got[0].Reader)
 
 	// With A staged the same way, every composer agrees and the pair is ordered.
 	p.TargetChains["a"] = types.Needs("mocks-generate").Needs("coverage-badge")
@@ -519,21 +517,21 @@ func TestOrderingIsNotInheritedAcrossComposers(t *testing.T) {
 func TestDeriveTargetOrderPartlySharedStepsStillDerive(t *testing.T) {
 	t.Parallel()
 	steps := []Step{{ProjectPath: "a", Target: "gen"}, {ProjectPath: "b", Target: "check"}, {ProjectPath: "c", Target: "check"}}
-	s1, s2, s3 := stepKey(steps[0]), stepKey(steps[1]), stepKey(steps[2])
+	s1, s2, s3 := stepRef(steps[0]), stepRef(steps[1]), stepRef(steps[2])
 	nodes := []TargetNode{
-		{Project: "a", Target: "gen", Steps: []string{s1, s2},
+		{Project: "a", Target: "gen", Steps: []types.TargetRef{s1, s2},
 			Writes: types.MustParseGlobs("a/out/*.md"), DeclaredWrites: true},
-		{Project: "b", Target: "check", Steps: []string{s2, s3},
+		{Project: "b", Target: "check", Steps: []types.TargetRef{s2, s3},
 			Reads: types.MustParseGlobs("a/out/**"), DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Len(t, d.Edges, 1, "the pair is not confined to one step, so it is an edge")
 	assert.True(t, d.Edges[0].Ordered)
-	assert.ElementsMatch(t, []string{s1, s2}, d.RunAfter[s3])
+	assert.ElementsMatch(t, []types.TargetRef{s1, s2}, d.RunAfter[s3])
 	require.Len(t, d.SameStep, 1, "and the S2 race is still reported")
 	assert.Equal(t, s2, d.SameStep[0].Step)
 
-	nodes[1].Steps = []string{s1, s2}
+	nodes[1].Steps = []types.TargetRef{s1, s2}
 	assert.Empty(t, DeriveTargetOrder(steps, nodes, nil).Edges, "identical step sets are the body's own sequencing")
 }
 
@@ -562,15 +560,9 @@ func TestOrderingDoesNotDependOnWhichPairAsksFirst(t *testing.T) {
 		rotated := append(slices.Clone(nodes[shift:]), nodes[:shift]...)
 		assert.Empty(t, FindSameStepConflicts(rotated, nil), "rotation %d", shift)
 		o := newNodeOrder(rotated)
-		assert.True(t, o.runsAfter(DepKey("docs", "site-generate"), DepKey("docs", "content-generate")), "rotation %d", shift)
-		assert.Empty(t, o.preceded[DepKey("docs", "preflight")], "nothing precedes preflight, whichever composer reaches it first")
+		assert.True(t, o.runsAfter(ref("docs", "site-generate"), ref("docs", "content-generate")), "rotation %d", shift)
+		assert.Empty(t, o.preceded[ref("docs", "preflight")], "nothing precedes preflight, whichever composer reaches it first")
 	}
-}
-
-func TestProjectOfANodeKey(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "docs", projectOf(DepKey("docs", "generate")))
-	assert.Equal(t, ".", projectOf(DepKey(".", "ci")))
 }
 
 // BenchmarkFindSameStepConflicts is the doctor's shape at workspace scale: one composer
@@ -607,7 +599,7 @@ func TestDeriveTargetOrderCarriesSameStepConflicts(t *testing.T) {
 	d := DeriveTargetOrder(steps, badgeFixture(false), nil)
 	assert.Empty(t, d.Edges, "a same-step pair is never an edge; no schedule can express it")
 	require.Len(t, d.SameStep, 1)
-	assert.Equal(t, DepKey(".", "coverage-badge"), d.SameStep[0].Reader)
+	assert.Equal(t, ref(".", "coverage-badge"), d.SameStep[0].Reader)
 }
 
 // ciFixtureProject is the same shape as a workspace declares it, for the collection that
@@ -638,8 +630,8 @@ func TestDeclaredNodesFeedsTheSamePredicate(t *testing.T) {
 	t.Parallel()
 	unordered := FindSameStepConflicts(DeclaredNodes(ciFixtureProject(false), "ci", nil), nil)
 	require.Len(t, unordered, 1)
-	assert.Equal(t, DepKey(".", "coverage-badge"), unordered[0].Reader)
-	assert.Equal(t, DepKey(".", "mocks-generate"), unordered[0].Writer)
+	assert.Equal(t, ref(".", "coverage-badge"), unordered[0].Reader)
+	assert.Equal(t, ref(".", "mocks-generate"), unordered[0].Writer)
 
 	assert.Empty(t, FindSameStepConflicts(DeclaredNodes(ciFixtureProject(true), "ci", nil), nil),
 		"the ctx.needs edge that fixed the workspace has to silence this too")
@@ -675,11 +667,4 @@ func TestDeclaredNodesSkipsAnUnresolvableCrossProjectStep(t *testing.T) {
 	nodes := DeclaredNodes(p, "ci", func(string) *types.Project { return nil })
 	require.Len(t, nodes, 1)
 	assert.Empty(t, nodes[0].Needs, "a step magus cannot resolve contributes nothing rather than a guess")
-}
-
-func TestTargetTailOfANodeKey(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "generate", targetOf(DepKey("docs", "generate")))
-	assert.Equal(t, "docs", targetOf("docs"), "a bare project key has no target half")
-	assert.False(t, strings.Contains(targetOf(DepKey(".", "ci")), nodeKeySep))
 }

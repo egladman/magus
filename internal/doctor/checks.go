@@ -1175,7 +1175,7 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.Check {
 				details = append(details, fmt.Sprintf(
 					"%s: %s runs %s, which reads %q, alongside %s, which writes %q, and needs neither from the other (%s)",
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), target,
-					cache.DisplayNodeKey(c.Reader), c.ReadGlob, cache.DisplayNodeKey(c.Writer), c.WriteGlob, verdict))
+					cache.DisplayRef(c.Reader), c.ReadGlob, cache.DisplayRef(c.Writer), c.WriteGlob, verdict))
 			}
 		}
 	}

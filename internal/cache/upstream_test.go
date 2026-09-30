@@ -17,6 +17,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// ref is the target ref of project's target.
+func ref(project, target string) types.TargetRef {
+	return types.TargetRef{Project: project, Target: target}
+}
+
 // depStep builds a minimal step for project path p depending on deps. Sources
 // is left empty (no files), so the step always misses and runs fn.
 func depStep(root, p string, deps ...string) Step {
@@ -175,7 +180,7 @@ func TestRunAllRunAfterOrdersAcrossTargets(t *testing.T) {
 	rec := newOrderRecorder()
 
 	steps := []Step{
-		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey(".", "gen")}},
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []types.TargetRef{ref(".", "gen")}},
 		{ProjectPath: ".", Target: "gen", WorkspaceRoot: root},
 	}
 
@@ -192,12 +197,12 @@ func TestRunAllRunAfterOrdersAcrossTargets(t *testing.T) {
 }
 
 // TestRunAllRunAfterUpstreamFailureReleasesWaiter verifies a RunAfter waiter is
-// released (and failed) when its writer step fails, not left blocked: markDone
+// released (and failed) when its writer step fails, not left blocked: complete
 // runs on every exit path, and the waiter reads the writer's real verdict.
 func TestRunAllRunAfterUpstreamFailureReleasesWaiter(t *testing.T) {
 	root, c := openCache(t)
 	steps := []Step{
-		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey(".", "gen")}},
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []types.TargetRef{ref(".", "gen")}},
 		{ProjectPath: ".", Target: "gen", WorkspaceRoot: root},
 	}
 	ran := make(map[string]bool)
@@ -232,7 +237,7 @@ func TestRunAllRunAfterUpstreamFailureReleasesWaiter(t *testing.T) {
 func TestRunAllRunAfterOutOfScope(t *testing.T) {
 	root, c := openCache(t)
 	steps := []Step{
-		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey("elsewhere", "gen")}},
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []types.TargetRef{ref("elsewhere", "gen")}},
 	}
 	done := make(chan struct{})
 	go func() {
@@ -252,8 +257,8 @@ func TestRunAllRunAfterOutOfScope(t *testing.T) {
 func TestRunAllRunAfterCycleRejected(t *testing.T) {
 	root, c := openCache(t)
 	steps := []Step{
-		{ProjectPath: "a", Target: "gen", WorkspaceRoot: root, RunAfter: []string{DepKey("b", "check")}},
-		{ProjectPath: "b", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey("a", "gen")}},
+		{ProjectPath: "a", Target: "gen", WorkspaceRoot: root, RunAfter: []types.TargetRef{ref("b", "check")}},
+		{ProjectPath: "b", Target: "check", WorkspaceRoot: root, RunAfter: []types.TargetRef{ref("a", "gen")}},
 	}
 	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error { return nil })
 	require.ErrorContains(t, err, "dependency cycle")
@@ -386,67 +391,67 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	assert.False(t, bRan, "B's fn ran even though its dependency A failed")
 }
 
-// TestDepBarrierWaitForDepsFailsOnFailedUpstream drives depBarrier directly (no
-// goroutines, no errgroup), so it pins the defect rather than racing for it: markDone
+// TestUpstreamRunsWaitFailsOnFailedUpstream drives upstreamRuns directly (no
+// goroutines, no errgroup), so it pins the defect rather than racing for it: complete
 // signalling only "done" and not "succeeded" let a dependent proceed on a failed
-// upstream, because markDone fires as a defer inside the upstream's own goroutine,
+// upstream, because complete fires as a defer inside the upstream's own goroutine,
 // strictly before errgroup cancels the shared ctx. Marking done-with-error and then
 // waiting, both on this goroutine, reproduces that ordering on every run.
-func TestDepBarrierWaitForDepsFailsOnFailedUpstream(t *testing.T) {
+func TestUpstreamRunsWaitFailsOnFailedUpstream(t *testing.T) {
 	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
-	b := newDepBarrier(steps)
+	b := newUpstreamRuns(steps)
 	wantErr := errors.New("A boom")
 
-	b.markDone(stepKey(steps[1]), wantErr)
+	b.complete(stepRef(steps[1]), wantErr)
 
-	err := b.waitForDeps(context.Background(), steps[0])
+	err := b.waitForUpstreams(context.Background(), steps[0])
 	require.Error(t, err, "B must not treat a failed A as satisfied")
 	assert.ErrorIs(t, err, wantErr, "the dependent's error names the actual upstream failure")
 }
 
-// TestDepBarrierWaitForDepsSucceedsOnPassedUpstream is the control for the test
-// above: markDone(nil) must still unblock a dependent cleanly, so the fix above
-// (checking e.err) does not turn every dependency into a false failure.
-func TestDepBarrierWaitForDepsSucceedsOnPassedUpstream(t *testing.T) {
+// TestUpstreamRunsWaitSucceedsOnPassedUpstream is the control for the test
+// above: complete(nil) must still unblock a dependent cleanly, so the fix above
+// (checking the upstream's error) does not turn every dependency into a false failure.
+func TestUpstreamRunsWaitSucceedsOnPassedUpstream(t *testing.T) {
 	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
-	b := newDepBarrier(steps)
+	b := newUpstreamRuns(steps)
 
-	b.markDone(stepKey(steps[1]), nil)
+	b.complete(stepRef(steps[1]), nil)
 
-	err := b.waitForDeps(context.Background(), steps[0])
+	err := b.waitForUpstreams(context.Background(), steps[0])
 	assert.NoError(t, err, "a successful upstream must still unblock its dependent")
 }
 
-// TestDepBarrierReleasesADependentWhoseOwnDeadlineExpired pins the invariant the
+// TestUpstreamRunsReleasesADependentWhoseOwnDeadlineExpired pins the invariant the
 // 2026-09-10 stall investigation went looking for: a step that has SETTLED can never be
 // waited on. Whichever parent gets there second may already be past its own ceiling, and
 // the answer it needs is on record, so the settled state has to outrank its expiry. The
 // sibling case (a settled FAILURE outranking a cancelled ctx) is pinned below; this is
 // the success half, which had no test.
-func TestDepBarrierReleasesADependentWhoseOwnDeadlineExpired(t *testing.T) {
+func TestUpstreamRunsReleasesADependentWhoseOwnDeadlineExpired(t *testing.T) {
 	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
 
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
 	defer cancel()
 
 	for range 100 {
-		b := newDepBarrier(steps)
-		b.markDone(stepKey(steps[1]), nil)
+		b := newUpstreamRuns(steps)
+		b.complete(stepRef(steps[1]), nil)
 
-		err := b.waitForDeps(ctx, steps[0])
+		err := b.waitForUpstreams(ctx, steps[0])
 
 		assert.NoError(t, err, "a settled upstream must release a dependent whose ceiling already fired")
 	}
 }
 
-// TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled pins the tie-break. When
-// an upstream fails AND a sibling has already cancelled the group, both the barrier
-// channel and ctx.Done() are ready, and a bare select over the two picks uniformly at
+// TestUpstreamRunsNamesTheFailedUpstreamEvenWhenCtxIsCancelled pins the tie-break. When
+// an upstream fails AND a sibling has already cancelled the group, both the upstream's
+// run and ctx.Done() are ready, and a bare select over the two picks uniformly at
 // random, so the error naming the actual dependency would appear only about half the
 // time and the same failure would report differently run to run. Both are ready on
 // every iteration here, so a regression to the random form fails this quickly rather
 // than flaking in CI.
-func TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled(t *testing.T) {
+func TestUpstreamRunsNamesTheFailedUpstreamEvenWhenCtxIsCancelled(t *testing.T) {
 	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
 	wantErr := errors.New("A boom")
 
@@ -454,10 +459,10 @@ func TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled(t *testing.T) {
 	cancel()
 
 	for range 100 {
-		b := newDepBarrier(steps)
-		b.markDone(stepKey(steps[1]), wantErr)
+		b := newUpstreamRuns(steps)
+		b.complete(stepRef(steps[1]), wantErr)
 
-		err := b.waitForDeps(ctx, steps[0])
+		err := b.waitForUpstreams(ctx, steps[0])
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, wantErr, "a settled upstream must outrank a cancelled ctx")
@@ -499,23 +504,19 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 		return nil
 	}, WithLimiter(NewLimiter(4)))
 	assert.Error(t, err, "expected RunAll to reject the 3-node cycle")
-	assert.NotContains(t, err.Error(), nodeKeySep,
-		"the cycle report must not leak the raw node-key separator into a user-facing error")
 }
 
-// TestFormatCycle pins the rendering of a node-key cycle. The keys join project and
-// target with a control byte, so the naive %v puts an unprintable character in front of
-// the user, and this is the error they see when a build order cannot be satisfied, which
-// is exactly when the text has to be readable.
+// TestFormatCycle pins the rendering of a cycle of steps: this is the error a reader sees
+// when a build order cannot be satisfied, which is exactly when the text has to be
+// readable.
 func TestFormatCycle(t *testing.T) {
-	cycle := []string{DepKey("site", "build"), DepKey("producer", "build"), DepKey("site", "build")}
+	cycle := []types.TargetRef{ref("site", "build"), ref("producer", "build"), ref("site", "build")}
 
 	assert.Equal(t, "site build -> producer build -> site build", formatCycle(cycle))
 }
 
 // TestRunAllNoDependencies is a regression guard: steps with no DependsOn run
-// concurrently and every result slot is populated, matching pre-barrier
-// behaviour.
+// concurrently and every result slot is populated.
 func TestRunAllNoDependencies(t *testing.T) {
 	root, c := openCache(t)
 
@@ -673,7 +674,7 @@ func TestWaitForUpstreamNamesTheWriterWithoutVouchingForIt(t *testing.T) {
 	upstream := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- waitForUpstream(ctx, upstream, DepKey(".", "coverage-badge"), DepKey(".", "generate"))
+		done <- waitForUpstream(ctx, upstream, ref(".", "coverage-badge"), ref(".", "generate"))
 	}()
 	time.Sleep(200 * time.Millisecond)
 	assert.Greater(t, prog.Idle(), time.Hour, "waiting on this run's own step counted as the run making progress")
@@ -698,5 +699,5 @@ func TestWaitForUpstreamEndsOnCancel(t *testing.T) {
 	withShortHeartbeat(t, time.Hour)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	assert.ErrorIs(t, waitForUpstream(ctx, make(chan struct{}), "a", "b"), context.Canceled)
+	assert.ErrorIs(t, waitForUpstream(ctx, make(chan struct{}), ref("a", ""), ref("b", "")), context.Canceled)
 }

@@ -369,7 +369,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
-	if env, isEnvelope := decodeHookEnvelope(input); isEnvelope {
+	env, isEnvelope := decodeHookEnvelope(input)
+	if isEnvelope {
 		// Attribution is resolved BEFORE the nothing-to-judge arm below returns: a skill
 		// load is a nothing-to-judge envelope that still has to be recorded against the
 		// session that made it, and a session read after the return is read too late.
@@ -446,11 +447,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	bound := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
-	// A subagent's first call registers the checkout it runs in, and only the host's report
-	// of the call's directory names that: a location magus fell back to is the hook process's
-	// own, the session's checkout for a worker isolated in a worktree. Without the report the
-	// worker's own `magus job exec` registers it.
-	hostPlaced := callDir != "" && location.workspace != "" && within(callDir, location.workspace)
+	// A subagent's first call registers the checkout it runs in. A command line runs where
+	// the call does, so its own location names that. A host's hook may run from the
+	// session's checkout instead, so for an envelope only the call's reported directory
+	// names it; without one the worker's own `magus job exec` registers it.
+	hostPlaced := location.workspace != "" && (!isEnvelope || callDir != "" && within(callDir, location.workspace))
 	switch {
 	case bound == "" || actingLease != bound || !hostPlaced:
 	case req.DryRun:
