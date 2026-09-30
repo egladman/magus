@@ -50,6 +50,19 @@ type obj interface {
 	CallStrs(key string, args ...string) ([]string, error)
 }
 
+// decodeScriptRunners reads mgs_listScriptRunners: argv prefixes, never run.
+func decodeScriptRunners(src obj) ([]spells.Command, error) {
+	var out []spells.Command
+	for i, o := range src.Objs("script_runners") {
+		cmd, err := decodeCommand("", "", o)
+		if err != nil {
+			return nil, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
+		}
+		out = append(out, cmd)
+	}
+	return out, spells.ValidateScriptRunners(out)
+}
+
 // decodeManifests reads the manifests field, which is a list of records rather than
 // the list of strings every other path-bearing field decodes to (see
 // contractEntry.Shape). Each record is a Manifest: the file dependencies are declared
@@ -223,6 +236,10 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
+	runners, err := decodeScriptRunners(src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	indexer, err := decodeSymbolIndexer(name, src)
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
@@ -235,6 +252,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 		Name:               name,
 		IgnoreDirs:         ignoreDirs,
 		Manifests:          manifests,
+		ScriptRunners:      runners,
 		Tools:              tools,
 		Language:           language,
 		LanguageExtensions: langExts,

@@ -241,6 +241,20 @@ export fun mgs_listManifests() > [Manifest] {
                      }}];
 }
 
+// test and start are the package managers' shorthands for scripts.test and scripts.start.
+// The bare `pnpm <script>` and `yarn <script>` forms go undetected: a bin-only prefix
+// would also match `pnpm install` and `pnpm exec`.
+export fun mgs_listScriptRunners() > [Command] {
+    return [Command{bin = "npm", args = ["run"]}, Command{bin = "npm", args = ["run-script"]},
+            Command{bin = "npm", args = ["test"]}, Command{bin = "npm", args = ["t"]},
+            Command{bin = "npm", args = ["start"]},
+            Command{bin = "pnpm", args = ["run"]}, Command{bin = "pnpm", args = ["test"]},
+            Command{bin = "pnpm", args = ["start"]},
+            Command{bin = "yarn", args = ["run"]}, Command{bin = "yarn", args = ["test"]},
+            Command{bin = "yarn", args = ["start"]},
+            Command{bin = "bun", args = ["run"]}];
+}
+
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes
 // into lint, not this spell). --write and --reporter=github verified against

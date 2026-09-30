@@ -94,6 +94,7 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 		spells.WithSources(spec.Needs...),
 		spells.WithIgnoreDirs(spec.IgnoreDirs...),
 		spells.WithManifests(spec.Manifests...),
+		spells.WithScriptRunners(spec.ScriptRunners...),
 		spells.WithOutputs(spec.Provides...),
 		spells.WithTargets(spec.OpNames()...),
 		spells.WithServiceTargets(spec.ServiceOpNames()...),
