@@ -21,6 +21,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/gcpolicy"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -677,35 +678,64 @@ func TestRelaxGCConcurrentCallersShareOneRestore(t *testing.T) {
 	assert.Equal(t, before, got, "GOGC must be restored to its pre-relax value once every holder released")
 }
 
+var gcPercentAtInit = func() int {
+	percent := debug.SetGCPercent(100)
+	debug.SetGCPercent(percent)
+	return percent
+}()
+
+func TestGCPolicyInitRanBeforeMain(t *testing.T) {
+	if _, raised := gcpolicy.Prior(); !raised {
+		t.Skip("an explicit GOGC kept gcpolicy's init from raising it")
+	}
+	assert.Equal(t, gcpolicy.Percent, gcPercentAtInit)
+}
+
 func TestRelaxStartupGCRestoresAfterTheWindow(t *testing.T) {
 	if orig, ok := os.LookupEnv("GOGC"); ok {
 		require.NoError(t, os.Unsetenv("GOGC"))
 		t.Cleanup(func() { _ = os.Setenv("GOGC", orig) })
 	}
-	const before = 111
-	debug.SetGCPercent(before)
-	t.Cleanup(func() { debug.SetGCPercent(before) })
-
-	// Held under gcRelaxMu so the timer's restore cannot land between the two calls.
-	peek := func() (percent, holders int) {
-		gcRelaxMu.Lock()
-		defer gcRelaxMu.Unlock()
-		percent = debug.SetGCPercent(before)
-		debug.SetGCPercent(percent)
-		return percent, gcRelaxCount
+	initPrior, raised := gcpolicy.Prior()
+	afterInit := gcpolicy.Percent
+	if raised {
+		afterInit = initPrior
 	}
+	cases := []struct {
+		name        string
+		before      int
+		wantRestore int
+	}{
+		{name: "caller set GOGC", before: 111, wantRestore: 111},
+		{name: "gcpolicy init raised GOGC", before: gcpolicy.Percent, wantRestore: afterInit},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			debug.SetGCPercent(tc.before)
+			t.Cleanup(func() { debug.SetGCPercent(tc.before) })
 
-	relaxStartupGC(50 * time.Millisecond)
-	percent, holders := peek()
-	assert.Equal(t, loadGCPercent, percent)
-	assert.Equal(t, 1, holders)
+			// Held under gcRelaxMu so the timer's restore cannot land between the two calls.
+			peek := func() (percent, holders int) {
+				gcRelaxMu.Lock()
+				defer gcRelaxMu.Unlock()
+				percent = debug.SetGCPercent(tc.before)
+				debug.SetGCPercent(percent)
+				return percent, gcRelaxCount
+			}
 
-	require.Eventually(t, func() bool {
-		_, holders := peek()
-		return holders == 0
-	}, 5*time.Second, 5*time.Millisecond)
-	percent, _ = peek()
-	assert.Equal(t, before, percent)
+			relaxStartupGC(50 * time.Millisecond)
+			percent, holders := peek()
+			assert.Equal(t, loadGCPercent, percent)
+			assert.Equal(t, 1, holders)
+
+			require.Eventually(t, func() bool {
+				_, holders := peek()
+				return holders == 0
+			}, 5*time.Second, 5*time.Millisecond)
+			percent, _ = peek()
+			assert.Equal(t, tc.wantRestore, percent)
+		})
+	}
 	assert.Equal(t, time.Second, startupGCWindow)
 }
 

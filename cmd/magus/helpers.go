@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/workspace"
@@ -200,8 +201,17 @@ const loadGCPercent = 400
 const startupGCWindow = time.Second
 
 // relaxStartupGC holds relaxGC for window, so a command that exits sooner never restores it.
+// It takes over gcpolicy's init raise, restoring the GOGC that raise replaced.
 func relaxStartupGC(window time.Duration) {
-	time.AfterFunc(window, relaxGC())
+	restore := relaxGC()
+	if prior, ok := gcpolicy.Prior(); ok {
+		gcRelaxMu.Lock()
+		if gcRelaxCount == 1 && gcRelaxPrev == gcpolicy.Percent {
+			gcRelaxPrev = prior
+		}
+		gcRelaxMu.Unlock()
+	}
+	time.AfterFunc(window, restore)
 }
 
 var (
