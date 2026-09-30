@@ -593,7 +593,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // diagrams-generate lays every figure out from the knowledge graph and writes, per figure,
-// the dark and light pair the README loads through <img>, the page copy the site inlines,
+// the dark and light pair the README loads as images, the page copy the site inlines,
 // and a receipt: the stamp, the claim counts, the findings and the symbol index it was
 // drawn at. The site render reads only the page copies, so it never needs the index.
 //
