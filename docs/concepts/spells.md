@@ -75,6 +75,20 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
 
+## Manifests and magusfiles
+
+A manifest (`go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`) declares what a package **is**: its name, its dependencies, its entry points, and the config its tools read. `[project.scripts]` and `bin` stay there, because they name executables the package installs.
+
+The magusfile declares how the workspace **builds, tests, and lints** it. A target that runs a script the manifest defines (`pnpm run build`, `npm test`, `poe lint`) hands those steps back to the manifest, where magus cannot see them: the commands, the files they read, and the files they write are all missing from the cache key and the affected set. `magus doctor` reports each such call as an error, [MGS1049](../reference/codes/magusfile/MGS1049.md). Move the script's steps into the target body, as spell ops or `proc\exec` calls.
+
+Which argv shapes run a manifest script is language knowledge, so each spell declares it with `mgs_listScriptRunners`, a list of `Command` argv prefixes. The `python` spell declares `poe`, `hatch run`, `pdm run`, and `pipenv run`; a spell that declares none contributes none. Doctor finds the calls by tracing each target body's `proc\exec` under the dry-run host, so a call made through a helper function is found and a branch the trace does not take is not.
+
+```buzz
+export fun mgs_listScriptRunners() > [Command] {
+    return [Command{bin = "poe"}, Command{bin = "pdm", args = ["run"]}];
+}
+```
+
 ## What a spell provides
 
 A bound spell contributes three things to its project. Only operations are "runnable"; the other two are metadata that make caching correct.
@@ -107,7 +121,7 @@ fun goFmt(target: Target) > Command {
 // service op: a long-running dev server `magus run` blocks on
 // (command is required; readiness and stop are optional)
 fun nodeServe(target: Target) > Service {
-    return Service{ command   = Command{bin = "npm", args = ["run", "dev"]},
+    return Service{ command   = Command{bin = "pnpm", args = ["exec", "vite"]},
                    readiness = Command{bin = "curl", args = ["-sf", "http://localhost:5173"]} };
 }
 // a map that mixes op kinds is typed `any` (its values have different function types)

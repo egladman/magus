@@ -28,6 +28,7 @@ package dry
 import (
 	"bytes"
 	"slices"
+	"strings"
 )
 
 // Project is one magus.project(...) call, flattened to the fields the
@@ -61,6 +62,9 @@ type Op struct {
 	Kind   string `json:"kind"`   // "spell" | "exec" | "log" | "run" | "service" | "command" | "ward"
 	Name   string `json:"name"`   // op name ("go-build"), argv[0], log level, or MGS code (ward)
 	Detail string `json:"detail"` // argv / message / diagnostic / extra context
+	// Argv is an exec op's argv as passed, unjoined, so a caller can match tokens
+	// that hold spaces.
+	Argv []string `json:"argv,omitempty"`
 }
 
 // Tracer accumulates the side effects of evaluating a magusfile under the
@@ -96,6 +100,15 @@ func (r *Tracer) addOp(kind, name, detail string) {
 	}
 	r.opsByTarget[r.cur] = append(r.opsByTarget[r.cur], Op{
 		Target: r.cur, Kind: kind, Name: name, Detail: detail,
+	})
+}
+
+func (r *Tracer) addExec(argv []string) {
+	if r.cur == "" {
+		return
+	}
+	r.opsByTarget[r.cur] = append(r.opsByTarget[r.cur], Op{
+		Target: r.cur, Kind: "exec", Name: argv[0], Detail: strings.Join(argv[1:], " "), Argv: argv,
 	})
 }
 

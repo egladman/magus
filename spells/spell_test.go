@@ -123,6 +123,13 @@ func TestSpellManifests(t *testing.T) {
 	}, s.Manifests())
 }
 
+func TestSpellScriptRunners(t *testing.T) {
+	assert.Nil(t, NewSpell("golang").ScriptRunners(), "a spell that declares no runner contributes none")
+
+	s := NewSpell("python", WithScriptRunners(Command{Bin: "poe"}), WithScriptRunners(Command{Bin: "pdm", Args: []string{"run"}}))
+	assert.Equal(t, []Command{{Bin: "poe"}, {Bin: "pdm", Args: []string{"run"}}}, s.ScriptRunners())
+}
+
 // TestSpellDependsOn covers the in-workspace dependency probe: nil probe returns
 // nil, a set probe is called with the project dir and its result surfaced.
 func TestSpellDependsOn(t *testing.T) {

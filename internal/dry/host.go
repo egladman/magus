@@ -1,6 +1,7 @@
 package dry
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -35,12 +36,18 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	registerWASMCompatibleMagusModules(ctx, sess)
 	// An IO module gets the engine's declarations over a value that performs nothing (os
 	// keeps the stdlib's), so a call checks against its real signature and a probed body
-	// stops at it. A wasm registry lists no IO module, so there these imports reach the
+	// stops at it. proc is the exception: its exec traces, so doctor can see what a
+	// target runs. A wasm registry lists no IO module, so there these imports reach the
 	// resolver below.
 	for name, reg := range bindinggen.Modules {
-		if !reg.Capabilities.Has(ffi.WASM) {
-			installHostModule(sess, name, reg, vm.NewMap())
+		if reg.Capabilities.Has(ffi.WASM) {
+			continue
 		}
+		mod := vm.NewMap()
+		if name == "proc" {
+			mod = buildProc(tr)
+		}
+		installHostModule(sess, name, reg, mod)
 	}
 
 	// A native module, not a global: the playground must make you write
@@ -873,6 +880,28 @@ func buildSpell(name string, ops []string, tr *Tracer) vm.Value {
 		return strsToList(opsCopy), nil
 	}))
 	return h
+}
+
+// buildProc stubs the proc module: exec traces its argv and reports an empty
+// success, so a probed body runs past it; shell returns the {bin, args} the real one
+// would, with /bin/sh as the default shell on every platform.
+func buildProc(tr *Tracer) vm.Value {
+	m := vm.NewMap()
+	m.MapSet("exec", fn("proc.exec", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if bin := strArg(args, 0); bin != "" {
+			var rest []string
+			if len(args) > 1 {
+				rest = valToStrings(args[1])
+			}
+			tr.addExec(append([]string{bin}, rest...))
+		}
+		return bindinggen.ObjectExecResult(types.ExecResult{OK: true}), nil
+	}))
+	m.MapSet("shell", fn("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		shell := cmp.Or(strArg(args, 1), "/bin/sh")
+		return bindinggen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
+	}))
+	return m
 }
 
 func strsToList(ss []string) vm.Value {

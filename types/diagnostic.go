@@ -277,6 +277,11 @@ const (
 	// workspace, or a blank or malformed layer name. The load stops rather than let a
 	// layer silently cover nothing.
 	LayerDeclarationInvalid DiagnosticCode = "MGS1048"
+	// ManifestScriptDelegation is a target whose body runs a script a manifest defines
+	// (`pnpm run build`, `poe lint`). The script's steps, inputs and outputs live in the
+	// manifest, where the cache key and the affected set cannot see them. Which argv
+	// shapes delegate is declared by each spell's mgs_listScriptRunners.
+	ManifestScriptDelegation DiagnosticCode = "MGS1049"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -675,7 +680,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
-	LayerDeclarationInvalid,
+	LayerDeclarationInvalid, ManifestScriptDelegation,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,

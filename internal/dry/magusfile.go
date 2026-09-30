@@ -142,6 +142,25 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 	}
 }
 
+// Execs evaluates src as a magusfile and returns the proc\exec calls each target body
+// makes when probed once, grouped by target in name order. Only the branches the
+// probe takes are seen. A spell buffer yields none; diag is non-nil when src fails
+// to evaluate.
+func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
+	tr, targets, _, _, diag := evalAndProbe(ctx, src, nil, builtinCatalog{}.BuiltinOps())
+	if diag != nil {
+		return nil, diag
+	}
+	for _, t := range targets {
+		for _, op := range tr.opsByTarget[t.key] {
+			if op.Kind == "exec" {
+				execs = append(execs, op)
+			}
+		}
+	}
+	return execs, nil
+}
+
 // Diagnostics type-checks src as a magusfile and returns every diagnostic to
 // surface in the editor: a single parse error, or otherwise every type error the
 // checker found, sorted by position. It reuses LoadMagusfile's browser-safe host
