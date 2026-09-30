@@ -177,7 +177,7 @@ func TestRenderCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	_, err = c.get(t.Context(), "new", compute)
 	require.NoError(t, err)
 
-	assert.Equal(t, renderCacheEntries, c.order.Len())
+	assert.Len(t, c.entries, renderCacheEntries)
 	assert.Contains(t, c.entries, "0", "a recent hit outlives older entries")
 	assert.NotContains(t, c.entries, "1", "the oldest entry made room")
 	assert.Equal(t, renderCacheEntries, c.bytes)
