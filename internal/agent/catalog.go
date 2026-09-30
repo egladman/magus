@@ -254,7 +254,9 @@ import (
 // 100: magus-multi-agent teaches `magus job edit` for widening or revoking a job's write
 // paths; magus-vcs-hygiene says vcs\ref() is null when no name points at the revision;
 // magus-workspace-rules forks a harness spell with `magus spell pull`.
-const SkillVersion = 100
+// 101: magus-architecture-review's insight fence is followed by a blank line, which
+// markdownlint requires.
+const SkillVersion = 101
 
 const skillLicense = "GPL-3.0-or-later"
 

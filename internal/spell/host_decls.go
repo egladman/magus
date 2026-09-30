@@ -36,8 +36,11 @@ var hostDeclsFS embed.FS
 //	  139 KiB and 148 allocs/op to 0 (benchstat -col /memo, n=10).
 //	trade-off: the declarations stay resident once read, under 180 KiB in all.
 func ModuleDecls(module string) (string, bool) {
-	if d, ok := moduleDecls.Load(module); ok {
-		d := d.(moduleDecl)
+	if v, ok := moduleDecls.Load(module); ok {
+		d, isDecl := v.(moduleDecl)
+		if !isDecl {
+			panic("spell: module declaration cache holds a value that is not a moduleDecl")
+		}
 		return d.src, d.ok
 	}
 	var d moduleDecl

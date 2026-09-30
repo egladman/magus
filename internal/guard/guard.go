@@ -1412,14 +1412,12 @@ func listJobRows(store *job.Store) ([]types.Job, error) {
 	if err != nil {
 		return rows, err
 	}
-	after, err := os.Stat(path)
-	if err != nil || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) ||
-		now.Sub(before.ModTime()) < jobRowsRacy {
-		return rows, nil
-	}
-	memo := jobRowsMemo{Schema: types.JobSchemaVersion, Size: before.Size(), ModNS: before.ModTime().UnixNano(), AtNS: now.UnixNano(), Rows: rows}
-	if raw, err := json.Marshal(memo); err == nil {
-		_ = file.WriteFileAtomic(memoPath, raw, 0o644)
+	if after, err := os.Stat(path); err == nil && after.Size() == before.Size() && after.ModTime().Equal(before.ModTime()) &&
+		now.Sub(before.ModTime()) >= jobRowsRacy {
+		memo := jobRowsMemo{Schema: types.JobSchemaVersion, Size: before.Size(), ModNS: before.ModTime().UnixNano(), AtNS: now.UnixNano(), Rows: rows}
+		if raw, err := json.Marshal(memo); err == nil {
+			_ = file.WriteFileAtomic(memoPath, raw, 0o644)
+		}
 	}
 	return rows, nil
 }
