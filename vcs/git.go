@@ -632,6 +632,137 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 	}, nil
 }
 
+// Ref implements types.VCSDriver from HEAD and the ref store's files, starting no git in
+// an ordinary checkout: the commit-msg hook asks for the branch on every commit, and
+// Metadata's status walk was most of its wall time.
+//
+// Whatever the files cannot settle alone asks git with Metadata's own query, so the
+// answer and the error stay Metadata's: an unborn branch (git's error is the one the
+// commit-msg hook catches), a reftable store, a branch name another ref shadows, which
+// --abbrev-ref would qualify, and a checkout CreateCheckout made, whose git runs pinned.
+func (v gitVCS) Ref(ctx context.Context, dir string) (string, error) {
+	if _, made := madeCheckout(dir); !made {
+		if branch, ok := headBranch(dir); ok {
+			return branch, nil
+		}
+	}
+	branch, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	if branch == "HEAD" {
+		branch = ""
+	}
+	return branch, nil
+}
+
+// headBranch answers Ref from the files git itself would read. ok is false whenever the
+// files leave any doubt, and the caller then asks git.
+func headBranch(dir string) (string, bool) {
+	root, ok := gitDiscover(dir)
+	if !ok {
+		return "", false
+	}
+	gitdir := filepath.Join(root, ".git")
+	if linked, ok := gitLinkedDir(root); ok {
+		gitdir = linked
+	}
+	// A symlinked HEAD is git's oldest format, and reading through it would take the
+	// branch's commit for a detached HEAD.
+	if fi, err := os.Lstat(filepath.Join(gitdir, "HEAD")); err != nil || !fi.Mode().IsRegular() {
+		return "", false
+	}
+	head, err := os.ReadFile(filepath.Join(gitdir, "HEAD"))
+	if err != nil {
+		return "", false
+	}
+	line := strings.TrimSpace(string(head))
+	target, symbolic := strings.CutPrefix(line, "ref:")
+	if !symbolic {
+		return "", isObjectID(line)
+	}
+	name, ok := strings.CutPrefix(strings.TrimSpace(target), "refs/heads/")
+	if !ok || name == "" || !filepath.IsLocal(filepath.FromSlash(name)) {
+		return "", false
+	}
+	common := gitCommonDir(root)
+	if _, err := os.Stat(filepath.Join(common, "reftable")); err == nil {
+		return "", false
+	}
+	packed := gitPackedRefs(common)
+	if !gitRefExists(common, packed, "refs/heads/"+name) {
+		return "", false
+	}
+	// The names git's ref rules would try besides refs/heads/<name>. Any of them
+	// existing makes --abbrev-ref qualify the name, which only git spells exactly.
+	for _, other := range []string{name, "refs/" + name, "refs/tags/" + name, "refs/remotes/" + name, "refs/remotes/" + name + "/HEAD"} {
+		if gitRefExists(gitdir, nil, other) || gitRefExists(common, packed, other) {
+			return "", false
+		}
+	}
+	return name, true
+}
+
+// gitDiscover finds the top of the checkout containing dir the way git's discovery does,
+// by walking up to the first .git. ok is false where dir sits inside a bare repository,
+// which git would find first.
+func gitDiscover(dir string) (string, bool) {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return "", false
+	}
+	for {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			return d, true
+		}
+		if _, err := os.Stat(filepath.Join(d, "objects")); err == nil {
+			if _, err := os.Stat(filepath.Join(d, "HEAD")); err == nil {
+				return "", false
+			}
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return "", false
+		}
+		d = parent
+	}
+}
+
+// gitRefExists reports whether ref is a loose ref file under dir or a line of packed.
+func gitRefExists(dir string, packed map[string]bool, ref string) bool {
+	if fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(ref))); err == nil && fi.Mode().IsRegular() {
+		return true
+	}
+	return packed[ref]
+}
+
+// gitPackedRefs returns the ref names in common's packed-refs, nil when it has none.
+func gitPackedRefs(common string) map[string]bool {
+	b, err := os.ReadFile(filepath.Join(common, "packed-refs"))
+	if err != nil {
+		return nil
+	}
+	refs := map[string]bool{}
+	for line := range strings.Lines(string(b)) {
+		if line == "" || line[0] == '#' || line[0] == '^' {
+			continue
+		}
+		if _, ref, ok := strings.Cut(strings.TrimSpace(line), " "); ok {
+			refs[ref] = true
+		}
+	}
+	return refs
+}
+
+// isObjectID reports whether s is a full SHA-1 or SHA-256 object name.
+func isObjectID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
 // RevTime reads rev's commit date with `git log -1 --format=%ct`, which prints a Unix
 // timestamp and so needs no layout guess the way Metadata's %ci would.
 //

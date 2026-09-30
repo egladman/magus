@@ -178,6 +178,11 @@ func (v saplingVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, er
 	}, nil
 }
 
+// Ref implements types.VCSDriver with Metadata's bookmark query alone.
+func (v saplingVCS) Ref(ctx context.Context, dir string) (string, error) {
+	return vcsOutput(ctx, dir, "sl", "log", "-r", ".", "--template", saplingRefTemplate)
+}
+
 // Dirty reports whether the working copy (optionally scoped to paths) has changes, via
 // `sl status`. Non-empty output = dirty.
 func (v saplingVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {

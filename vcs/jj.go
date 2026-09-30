@@ -228,6 +228,12 @@ func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 	}, nil
 }
 
+// Ref implements types.VCSDriver with Metadata's bookmark query alone. Like every jj
+// command it snapshots the working copy first, as Metadata's queries do.
+func (v jjVCS) Ref(ctx context.Context, dir string) (string, error) {
+	return vcsOutput(ctx, dir, "jj", "log", "-r", "@", "--no-graph", "-T", `if(bookmarks, bookmarks, "")`)
+}
+
 // Dirty reports whether the working copy (optionally scoped to paths) has
 // changes, via `jj diff --name-only`. Non-empty output = dirty.
 func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {

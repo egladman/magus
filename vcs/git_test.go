@@ -2517,6 +2517,65 @@ func TestGitMetadataRefIsEmptyOnADetachedHead(t *testing.T) {
 	assert.NotEmpty(t, meta.ID)
 }
 
+// Ref reads a checkout's HEAD and ref files and starts no git, which is the commit-msg
+// hook's whole cost. PATH is emptied, so any git it started would fail the call.
+func TestGitRefStartsNoGit(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "feat/work")
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
+	packed := t.TempDir()
+	gitInitRepo(t, packed, map[string]string{"a.txt": "one\n"})
+	gitRun(t, packed, "switch", "-q", "-c", "packed")
+	gitRun(t, packed, "pack-refs", "--all")
+	require.NoFileExists(t, filepath.Join(packed, ".git", "refs", "heads", "packed"))
+	detached := t.TempDir()
+	gitInitRepo(t, detached, map[string]string{"a.txt": "one\n"})
+	gitRun(t, detached, "switch", "-q", "--detach")
+
+	t.Setenv("PATH", t.TempDir())
+	for _, tc := range []struct{ name, dir, want string }{
+		{"branch", dir, "feat/work"},
+		{"subdirectory", filepath.Join(dir, "sub"), "feat/work"},
+		{"linked worktree", linked, "side"},
+		{"packed ref", packed, "packed"},
+		{"detached", detached, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := gitVCS{}.Ref(t.Context(), tc.dir)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// What the files cannot settle goes to git, so Ref answers exactly as Metadata does: an
+// error on an unborn branch, and the qualified name --abbrev-ref gives a branch a tag
+// shadows.
+func TestGitRefAsksGitWhenTheFilesCannotSettleIt(t *testing.T) {
+	unborn := t.TempDir()
+	gitInitRepo(t, unborn, map[string]string{"a.txt": "one\n"})
+	gitRun(t, unborn, "switch", "-q", "--orphan", "fresh")
+	shadowed := t.TempDir()
+	gitInitRepo(t, shadowed, map[string]string{"a.txt": "one\n"})
+	gitRun(t, shadowed, "switch", "-q", "-c", "work")
+	gitRun(t, shadowed, "tag", "work")
+
+	g := gitVCS{}
+	_, err := g.Ref(t.Context(), unborn)
+	require.Error(t, err, "an unborn branch must raise, as Metadata does")
+	_, err = g.Metadata(t.Context(), unborn)
+	require.Error(t, err)
+
+	got, err := g.Ref(t.Context(), shadowed)
+	require.NoError(t, err)
+	meta, err := g.Metadata(t.Context(), shadowed)
+	require.NoError(t, err)
+	assert.Equal(t, meta.Ref, got)
+	assert.Equal(t, "heads/work", got)
+}
+
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
 	probe := &ensureRecorder{VCSDriver: gitVCS{}}

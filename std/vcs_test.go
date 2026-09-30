@@ -157,6 +157,23 @@ func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
 	assert.Nil(t, ref)
 }
 
+// A repository's first commit is made on an unborn branch, and hack/git-hooks/commit-msg.buzz
+// falls back to symbolic-ref only because vcs\ref raises there.
+func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	out, err := exec.Command("git", "-C", dir, "init", "-q", "-b", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	ref, err := VcsRef(WithCwd(context.Background(), dir))
+	require.Error(t, err)
+	assert.Nil(t, ref)
+}
+
 // TestVcsIsDirtyRaisesWhenTheProbeFails is the most important one here. is_dirty is the
 // drift-gate primitive (a generate target asks it "did my output change?"), and it used to
 // answer false when the git status probe FAILED. That is a gate reporting clean after a

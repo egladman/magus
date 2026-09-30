@@ -286,11 +286,18 @@ func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 // branch, a jj bookmark), or nil when none names it; raises when no VCS or metadata is
 // available.
 func VcsRef(ctx context.Context) (*string, error) {
-	meta, err := vcsMetadata(ctx)
-	if err != nil || meta.Ref == "" {
-		return nil, err
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return nil, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
 	}
-	return &meta.Ref, nil
+	ref, err := v.Ref(ctx, vcsDir(ctx))
+	if err != nil {
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
+	}
+	if ref == "" {
+		return nil, nil
+	}
+	return &ref, nil
 }
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.

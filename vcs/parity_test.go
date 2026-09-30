@@ -252,6 +252,88 @@ func TestParityMetadataReportsRevisionAndDirt(t *testing.T) {
 	})
 }
 
+// Ref is Metadata's Ref without the rest, so it must agree with Metadata on the value AND
+// on failing: hack/git-hooks/commit-msg.buzz catches vcs\ref raising on git's unborn
+// branch, and a Ref that answered there would skip that fallback.
+func TestParityRefAgreesWithMetadata(t *testing.T) {
+	agree := func(t *testing.T, b parityBackend, dir, state string) string {
+		t.Helper()
+		meta, metaErr := b.drv.Metadata(t.Context(), dir)
+		ref, refErr := b.drv.Ref(t.Context(), dir)
+		require.Equalf(t, metaErr != nil, refErr != nil,
+			"%s %s: Metadata error %v, Ref error %v", b.name, state, metaErr, refErr)
+		assert.Equalf(t, meta.Ref, ref, "%s %s", b.name, state)
+		return ref
+	}
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+		nameRef(t, b, dir, "work")
+		assert.Equal(t, "work", agree(t, b, dir, "on a named ref"))
+
+		leaveRef(t, b, dir)
+		ref := agree(t, b, dir, "off the named ref")
+		if b.name != "hg" {
+			assert.Emptyf(t, ref, "%s names a ref the revision no longer carries", b.name)
+		}
+
+		// A subdirectory resolves the same repository.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+		agree(t, b, filepath.Join(dir, "sub"), "from a subdirectory")
+
+		empty := t.TempDir()
+		initEmpty(t, b, empty)
+		agree(t, b, empty, "in a repository with no commits")
+	})
+}
+
+// nameRef points the backend's movable name at the working revision: a git branch, an hg
+// named branch, a Sapling or jj bookmark.
+func nameRef(t *testing.T, b parityBackend, dir, name string) {
+	t.Helper()
+	switch b.name {
+	case "git":
+		vcsTestRun(t, dir, "git", "switch", "-q", "-c", name)
+	case "hg":
+		vcsTestRun(t, dir, "hg", "branch", "-q", name)
+	case "sl":
+		vcsTestRun(t, dir, "sl", "bookmark", name)
+	case "jj":
+		vcsTestRun(t, dir, "jj", "bookmark", "create", name, "-r", "@")
+	}
+}
+
+// leaveRef moves the working revision off the name nameRef made. hg has no anonymous
+// working state: its working directory always carries a named branch.
+func leaveRef(t *testing.T, b parityBackend, dir string) {
+	t.Helper()
+	switch b.name {
+	case "git":
+		vcsTestRun(t, dir, "git", "switch", "-q", "--detach")
+	case "hg":
+		vcsTestRun(t, dir, "hg", "update", "-q", "null")
+	case "sl":
+		vcsTestRun(t, dir, "sl", "bookmark", "-d", "work")
+	case "jj":
+		vcsTestRun(t, dir, "jj", "new")
+	}
+}
+
+// initEmpty makes a repository with nothing committed.
+func initEmpty(t *testing.T, b parityBackend, dir string) {
+	t.Helper()
+	switch b.name {
+	case "git":
+		vcsTestRun(t, dir, "git", "init", "-q")
+	case "hg":
+		vcsTestRun(t, dir, "hg", "init")
+	case "sl":
+		vcsTestRun(t, dir, "sl", "init", ".")
+	case "jj":
+		vcsTestRun(t, dir, "jj", "git", "init")
+	}
+}
+
 // A path outside ASCII survives the round trip. git renders one C-quoted
 // ("uni/caf\303\251.md") unless core.quotePath is off, and a quoted name matches no
 // project glob, so the project owning that file is never rebuilt, with no diagnostic.
