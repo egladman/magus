@@ -1,8 +1,15 @@
 package token
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"unsafe"
 
@@ -173,6 +180,298 @@ func TestLexer_DocComments(t *testing.T) {
 	t.Run("a block comment joins the line comments above it", func(t *testing.T) {
 		assert.Equal(t, "lead\ntail", tokenizedDoc(t, "// lead\n/* tail */\nbuild", "build"))
 	})
+
+	cases := []struct {
+		name, src, ident, want string
+	}{
+		{"line comments join the block comment above them", "/* head */\n// tail\nbuild", "build", "head\ntail"},
+		{"a multi-line block comment attaches from its closing line", "/* a\n   b */\nbuild", "build", "a\n   b"},
+		{"a blank line after a block comment starts a fresh block", "/* a */\n\n// b\nbuild", "build", "b"},
+		{"a blank line between blocks and token attaches neither", "// a\n\n// b\n\nbuild", "build", ""},
+		{"indented comments attach", "    // a\n    // b\n    build", "build", "a\nb"},
+		{"CRLF line comments attach without the carriage return", "// one\r\n// two\r\nbuild", "build", "one\ntwo"},
+		{"a trailing block comment does not attach", "x /* t */\nbuild", "build", ""},
+		{"only the first token below the block takes it", "// a\nx build", "build", ""},
+		{"a block consumed across a gap does not reach a later token", "// a\n\nx\nbuild", "build", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, tokenizedDoc(t, c.src, c.ident))
+		})
+	}
+
+	t.Run("a block above the end of input attaches to nothing", func(t *testing.T) {
+		toks, err := Tokenize("x\n// dangling\n/* and this */")
+		require.NoError(t, err)
+		require.Len(t, toks, 2)
+		assert.Equal(t, "", toks[0].Doc)
+		assert.Equal(t, Token{Kind: EOF, Line: 3, Col: toks[1].Col}, toks[1])
+	})
+}
+
+// TestTokenize_Positions pins exact tokens for the edge shapes of a source:
+// nothing at all, a single token, CRLF line ends, and identifiers outside ASCII,
+// whose Col counts bytes.
+func TestTokenize_Positions(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []Token
+	}{
+		{"empty source", "", []Token{{Kind: EOF, Line: 1, Col: 1}}},
+		{"whitespace only", "  \n \t", []Token{{Kind: EOF, Line: 2, Col: 3}}},
+		{"one identifier", "x", []Token{{Kind: Ident, Val: "x", Line: 1, Col: 1}, {Kind: EOF, Line: 1, Col: 2}}},
+		{"one keyword", "fun", []Token{{Kind: Fun, Val: "fun", Line: 1, Col: 1}, {Kind: EOF, Line: 1, Col: 4}}},
+		{"one number", "42", []Token{{Kind: Int, Val: "42", Line: 1, Col: 1}, {Kind: EOF, Line: 1, Col: 3}}},
+		{"one string", `"s"`, []Token{{Kind: String, Val: "s", Line: 1, Col: 1}, {Kind: EOF, Line: 1, Col: 4}}},
+		{"CRLF line ends", "a\r\nb\r\n", []Token{
+			{Kind: Ident, Val: "a", Line: 1, Col: 1},
+			{Kind: Ident, Val: "b", Line: 2, Col: 1},
+			{Kind: EOF, Line: 3, Col: 1},
+		}},
+		{"CRLF inside a string is kept", "\"a\r\nb\" c", []Token{
+			{Kind: String, Val: "a\r\nb", Line: 1, Col: 1},
+			{Kind: Ident, Val: "c", Line: 2, Col: 4},
+			{Kind: EOF, Line: 2, Col: 5},
+		}},
+		{"accented identifier", "héllo x", []Token{
+			{Kind: Ident, Val: "héllo", Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 1, Col: 8},
+			{Kind: EOF, Line: 1, Col: 9},
+		}},
+		{"CJK identifier", "日本 = 1", []Token{
+			{Kind: Ident, Val: "日本", Line: 1, Col: 1},
+			{Kind: Assign, Line: 1, Col: 8},
+			{Kind: Int, Val: "1", Line: 1, Col: 10},
+			{Kind: EOF, Line: 1, Col: 11},
+		}},
+		{"non-ASCII digit continues an identifier", "x٣", []Token{
+			{Kind: Ident, Val: "x٣", Line: 1, Col: 1},
+			{Kind: EOF, Line: 1, Col: 4},
+		}},
+		{"free identifier keeps its spelling", `@"fun name"`, []Token{
+			{Kind: Ident, Val: "fun name", Raw: true, Line: 1, Col: 1},
+			{Kind: EOF, Line: 1, Col: 12},
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			toks, err := Tokenize(c.src)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, toks)
+			assert.Equal(t, len(toks), cap(toks))
+		})
+	}
+}
+
+// pooledScratch lexes src and takes a buffer back out of the pool. sync.Pool may
+// drop a Put, and does at random under -race, so it retries until one comes back.
+func pooledScratch(t *testing.T, src string) []Token {
+	t.Helper()
+	for range 100 {
+		_, _ = Tokenize(src)
+		buf := scratch.Get().(*[]Token)
+		got := slices.Clone((*buf)[:cap(*buf)])
+		scratch.Put(buf)
+		if len(got) > 0 {
+			return got
+		}
+	}
+	t.Fatal("the pool never returned a used buffer")
+	return nil
+}
+
+// TestTokenize_PooledBufferIsCleared pins that a buffer waiting in the pool holds
+// no token, so it pins no source text or doc string, whether the lex it served
+// succeeded or failed.
+func TestTokenize_PooledBufferIsCleared(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"after a successful lex", "// doc\nfun a() > void { \"text {x}\"; }\n"},
+		{"after a failed lex", "// doc\nfun a() > void { \"unterminated"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for i, tok := range pooledScratch(t, c.src) {
+				require.Equalf(t, Token{}, tok, "pooled buffer slot %d", i)
+			}
+		})
+	}
+}
+
+// TestTokenize_PoolCapFallback lexes modules past maxScratch tokens: the result is
+// complete and exact, and the oversized buffer never enters the pool.
+func TestTokenize_PoolCapFallback(t *testing.T) {
+	cases := []struct {
+		name  string
+		line  string
+		lines int
+	}{
+		{"presized past the cap", "abcdefgh\n", maxScratch + 4000},
+		{"grown past the cap mid-lex", "a\n", maxScratch + 4000},
+		{"grown under the cap", "a\n", maxScratch / 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			toks, err := Tokenize(strings.Repeat(c.line, c.lines))
+			require.NoError(t, err)
+			require.Len(t, toks, c.lines+1)
+			assert.Equal(t, len(toks), cap(toks))
+			word := strings.TrimSuffix(c.line, "\n")
+			assert.Equal(t, Token{Kind: Ident, Val: word, Line: c.lines, Col: 1}, toks[c.lines-1])
+			assert.Equal(t, Token{Kind: EOF, Line: c.lines + 1, Col: 1}, toks[c.lines])
+
+			var held []*[]Token
+			for range 8 {
+				buf := scratch.Get().(*[]Token)
+				assert.LessOrEqual(t, cap(*buf), maxScratch)
+				held = append(held, buf)
+			}
+			for _, buf := range held {
+				scratch.Put(buf)
+			}
+		})
+	}
+}
+
+// TestTokenize_ConcurrentCallersSharePool is meant for -race: callers lexing
+// different sources at once through one pool each get exactly their own tokens.
+func TestTokenize_ConcurrentCallersSharePool(t *testing.T) {
+	srcs := []string{
+		"// doc\nfun a() > void { return \"a {b} \\t c\"; }\n",
+		"x",
+		strings.Repeat("a\n", maxScratch+10),
+		"`raw {q}` // trailing\n",
+		"\"unterminated",
+	}
+	want := make([][]Token, len(srcs))
+	wantErr := make([]error, len(srcs))
+	for i, src := range srcs {
+		want[i], wantErr[i] = Tokenize(src)
+	}
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			for i := range 40 {
+				k := (g + i) % len(srcs)
+				got, err := Tokenize(srcs[k])
+				assert.Equal(t, wantErr[k], err)
+				assert.Equal(t, want[k], got)
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// TestValidRunes pins that valid text comes back uncopied and each invalid byte
+// becomes U+FFFD, as ranging over the string decodes it.
+func TestValidRunes(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"empty", "", ""},
+		{"ascii", "abc", "abc"},
+		{"multibyte", "héllo 日本", "héllo 日本"},
+		{"lone invalid byte", "\xff", "�"},
+		{"invalid between valid", "a\xffb\xfec", "a�b�c"},
+		{"truncated sequence", "a\xe2\x82", "a��"},
+		{"surrogate half", "\xed\xa0\x80", "���"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := validRunes(c.in)
+			assert.Equal(t, c.want, got)
+			if c.in == c.want && c.in != "" {
+				assert.Same(t, unsafe.StringData(c.in), unsafe.StringData(got), "valid text must not be copied")
+			}
+		})
+	}
+}
+
+// FuzzTokenize lexes every Buzz program under the package's testdata and examples,
+// plus hostile shapes. A success ends in EOF, keeps positions in source order and
+// inside the source, and matches a second lex exactly, which a leak through the
+// pooled buffer would break. A failure is the lexer's own error, never a panic.
+func FuzzTokenize(f *testing.F) {
+	for _, root := range []string{"../testdata", "../examples"} {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || filepath.Ext(path) != ".buzz" {
+				return err
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			f.Add(string(src))
+			return nil
+		})
+		require.NoError(f, err)
+	}
+	for _, src := range []string{
+		"",
+		"\"unterminated",
+		"`unterminated",
+		"\"{unterminated",
+		"\"{\"nested",
+		"/* unterminated",
+		"\"a {\"b {c}\"} d\"",
+		"\"{ {\"{`}`}\"} }\"",
+		"`{`{`{x}`}`}`",
+		"\"\xff\"",
+		"`\xff{x}`",
+		"\"\\\xff\"",
+		"\"{\xff}\"",
+		"// \xff\nx",
+		"\xff",
+		"a\r\nb",
+		"// doc\r\n// more\r\nfun a() > void {}\r\n",
+		"\"a\r\nb {x} \\t\"\r\ny",
+		"/* \xff */\r\nx",
+		"\"\\256\"",
+		"\"\\0ab\\999\"",
+		"\"{a}{b}{\"{c}\"}\"",
+		"\"{\"{\"{`{x}`}\"}\"}\"",
+		"@\"\xff\"",
+		"@\"{x}\"",
+		"h\xffllo",
+		"\xef\xbb\xbfx",
+		"$\"\\d+\\\"\"",
+		"'\\n' 'a' '\\q'",
+		"\"", "`", "{", "}", "@", "$",
+		strings.Repeat("a ", maxScratch+4000),
+		strings.Repeat("// doc\nx\n", maxScratch),
+		strings.Repeat("\"a {b} c\\t\"\n", maxScratch/2),
+	} {
+		f.Add(src)
+	}
+	errType := reflect.TypeOf(errors.New(""))
+
+	f.Fuzz(func(t *testing.T, src string) {
+		toks, err := Tokenize(src)
+		if err != nil {
+			require.Nil(t, toks)
+			require.Equal(t, errType, reflect.TypeOf(err))
+			require.True(t, strings.HasPrefix(err.Error(), "buzz: "), err.Error())
+			return
+		}
+		require.NotEmpty(t, toks)
+		require.Equal(t, EOF, toks[len(toks)-1].Kind)
+		lines := strings.Split(src, "\n")
+		prev := Token{Line: 1, Col: 1}
+		for i, tok := range toks {
+			require.Truef(t, tok.Line > prev.Line || tok.Line == prev.Line && tok.Col >= prev.Col,
+				"token %d at %d:%d precedes %d:%d", i, tok.Line, tok.Col, prev.Line, prev.Col)
+			require.LessOrEqualf(t, tok.Line, len(lines), "token %d line", i)
+			require.GreaterOrEqualf(t, tok.Col, 1, "token %d col", i)
+			require.LessOrEqualf(t, tok.Col, len(lines[tok.Line-1])+1, "token %d at %d:%d is past its line", i, tok.Line, tok.Col)
+			prev = tok
+		}
+		again, err := Tokenize(src)
+		require.NoError(t, err)
+		require.Equal(t, toks, again)
+	})
 }
 
 // TestTokenSize pins Kind packed beside Raw: every cached module holds one Token
@@ -297,6 +596,24 @@ func TestTokenizeStringEscapes(t *testing.T) {
 		{"raw", "`a\\nb`", `a\nb`},
 		{"raw escaped brace", "`a\\{b\\}`", "a{b}"},
 		{"raw keeps invalid utf-8", "`a\xffb`", "a\xffb"},
+		{"escaped open brace", `"a\{b"`, "a{b"},
+		{"escaped close brace", `"a\}b"`, "a}b"},
+		{"decimal byte escape zero", `"\000"`, "\x00"},
+		{"decimal byte escape max", `"\255"`, "\xff"},
+		{"digit escape without three digits kept", `"\0ab"`, `\0ab`},
+		{"digit escape at the end kept", `"\12"`, `\12`},
+		{"unknown multibyte escape kept", `"\é"`, `\é`},
+		{"escaped invalid byte", "\"\\\xff\"", "\\\uFFFD"},
+		{"invalid utf-8 before an escape", "\"\xff\\t\"", "\uFFFD\t"},
+		{"newline after an escape", "\"\\t\nb\"", "\t\nb"},
+		{"CRLF", "\"a\r\nb\"", "a\r\nb"},
+		{"non-ASCII text", `"héllo 日本"`, "héllo 日本"},
+		{"raw multiline", "`a\nb`", "a\nb"},
+		{"raw CRLF", "`a\r\nb`", "a\r\nb"},
+		{"raw trailing backslash", "`a\\`", `a\`},
+		{"raw backslash before other text kept", "`a\\db`", `a\db`},
+		{"raw newline after an escaped brace", "`\\{\nz`", "{\nz"},
+		{"raw invalid utf-8 after an escaped brace", "`\\}\xff`", "}\xff"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -324,6 +641,19 @@ func TestTokenizeInterpolationParts(t *testing.T) {
 		{"escaped quote in nested string", `"{g("a\"}")}"`, []StringPart{{IsExpr: true, Text: `g("a\"}")`}}},
 		{"invalid utf-8 in an expression", "\"{h(\"\xff\")}\"", []StringPart{{IsExpr: true, Text: "h(\"\uFFFD\")"}}},
 		{"raw", "`p {q} r`", []StringPart{{Text: "p "}, {IsExpr: true, Text: "q"}, {Text: " r"}}},
+		{"empty expression", `"{}"`, []StringPart{{IsExpr: true, Text: ""}}},
+		{"nested braces", `"{ {a} }"`, []StringPart{{IsExpr: true, Text: " {a} "}}},
+		{"nested interpolation stays in the expression", `"{"in {x}"} out"`, []StringPart{{IsExpr: true, Text: `"in {x}"`}, {Text: " out"}}},
+		{"raw string inside an expression", "\"{`}`}\"", []StringPart{{IsExpr: true, Text: "`}`"}}},
+		{"escaped backslash ends a nested string", `"{f("a\\")}"`, []StringPart{{IsExpr: true, Text: `f("a\\")`}}},
+		{"newline inside an expression", "\"{a +\nb}\"", []StringPart{{IsExpr: true, Text: "a +\nb"}}},
+		{"newline inside a nested string", "\"{f(\"a\nb\")}\"", []StringPart{{IsExpr: true, Text: "f(\"a\nb\")"}}},
+		{"run after an escape and an expression", `"\t{x}y"`, []StringPart{{Text: "\t"}, {IsExpr: true, Text: "x"}, {Text: "y"}}},
+		{"invalid utf-8 in a run", "\"\xff{x}\xfe\"", []StringPart{{Text: "�"}, {IsExpr: true, Text: "x"}, {Text: "�"}}},
+		{"non-ASCII runs", `"é{x}日"`, []StringPart{{Text: "é"}, {IsExpr: true, Text: "x"}, {Text: "日"}}},
+		{"raw keeps invalid utf-8 in a run", "`\xff{x}`", []StringPart{{Text: "\xff"}, {IsExpr: true, Text: "x"}}},
+		{"raw escaped brace then an expression", "`\\{a{x}b`", []StringPart{{Text: "{a"}, {IsExpr: true, Text: "x"}, {Text: "b"}}},
+		{"raw multiline run", "`a\n{x}`", []StringPart{{Text: "a\n"}, {IsExpr: true, Text: "x"}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -346,6 +676,15 @@ func TestTokenizeErrors(t *testing.T) {
 		{"unterminated string", `"abc`},
 		{"unterminated pattern", `$"abc`},
 		{"lone dollar", `$x`},
+		{"dangling escape", `"a\`},
+		{"decimal byte escape past 255", `"\256"`},
+		{"unterminated raw string", "`abc"},
+		{"unterminated interpolation", `"a {b`},
+		{"unterminated string inside an interpolation", `"{"abc`},
+		{"unterminated raw interpolation", "`{b"},
+		{"free identifier that interpolates", `@"{x}"`},
+		{"unterminated free identifier", `@"x`},
+		{"unexpected character", "#"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

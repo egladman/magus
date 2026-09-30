@@ -600,6 +600,17 @@ under `buzz_safe`.
   not per-Chunk (chunks are shared; verified `-race`).
 - **NaN-box + handle table**: zero write barriers on push/pop; the table pins
   objects for the VM's life (fine for short per-target sessions).
+- **Pooled lexer buffer**: `Tokenize` lexes into a `sync.Pool` scratch buffer
+  and returns an exact-length copy. The pool keeps buffers up to 16K tokens,
+  about 64 KB of source; a larger module lexes into a fresh buffer the pool
+  drops. Each buffer goes back cleared, so it pins no source text.
+- **Source slices, not copies**: string and interpolation text slice the source
+  until an escape rewrites a run, and a doc comment block joins once, only when
+  it lands on a token. A surviving literal pins its source string, as
+  identifiers do.
+- **80-byte `Token`** on 64-bit: `token.Kind` is a byte beside `Raw`, sharing
+  one padded word. The parse cache holds one `Token` per lexeme of every module
+  it keeps; `TestTokenSize` pins the layout.
 
 ## Bytecode version
 
