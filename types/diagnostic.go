@@ -268,6 +268,10 @@ const (
 	// work and `magus shell` denies, because a value exported for magus and silently not
 	// honored is a configuration that looks applied and is not.
 	MisconfiguredEnvVar DiagnosticCode = "MGS1046"
+	// SpellImportEscapesWorkspace is a relative import every candidate of which resolves
+	// outside the workspace root. A load that followed it would read another checkout's
+	// files, so the same magusfile would load differently in a worktree than in main.
+	SpellImportEscapesWorkspace DiagnosticCode = "MGS1047"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -652,7 +656,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
-	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar,
+	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,

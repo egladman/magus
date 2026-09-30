@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,4 +66,31 @@ func TestImportProbesNotSpellIsPerLoad(t *testing.T) {
 	probes.MarkNotSpell("/x.buzz")
 	assert.True(t, probes.NotSpell("/x.buzz"))
 	assert.False(t, probes.NotSpell("/y.buzz"))
+}
+
+func TestImportProbesSpellAtIsPerLoadAndAbsolute(t *testing.T) {
+	var none *ImportProbes
+	none.RecordSpellAt("/s/spell.buzz", &spells.Descriptor{Name: "s"})
+	_, known := none.SpellAt("/s/spell.buzz")
+	assert.False(t, known)
+
+	ctx, seal := WithImportProbes(t.Context())
+	probes := ImportProbesFromContext(ctx)
+	spec := &spells.Descriptor{Name: "s"}
+	probes.RecordSpellAt("/s/spell.buzz", spec)
+	probes.RecordSpellAt("/none.buzz", nil)
+	probes.RecordSpellAt(filepath.Join("rel", "spell.buzz"), spec)
+
+	got, known := probes.SpellAt("/s/spell.buzz")
+	assert.True(t, known)
+	assert.Same(t, spec, got)
+	got, known = probes.SpellAt("/none.buzz")
+	assert.True(t, known)
+	assert.Nil(t, got)
+	_, known = probes.SpellAt(filepath.Join("rel", "spell.buzz"))
+	assert.False(t, known, "a relative candidate names a different file per project")
+
+	seal()
+	_, known = probes.SpellAt("/s/spell.buzz")
+	assert.False(t, known)
 }

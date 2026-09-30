@@ -55,6 +55,7 @@ type ImportProbes struct {
 	sealed   bool
 	dirs     map[string]*probeDir
 	notSpell map[string]struct{}
+	spellAt  map[string]*spells.Descriptor
 }
 
 type importProbesKey struct{}
@@ -63,11 +64,15 @@ type importProbesKey struct{}
 // returned seal ends it: every later probe stats the filesystem again, so no answer
 // outlives the load, including in a long-lived server.
 func WithImportProbes(ctx context.Context) (context.Context, func()) {
-	p := &ImportProbes{dirs: make(map[string]*probeDir), notSpell: make(map[string]struct{})}
+	p := &ImportProbes{
+		dirs:     make(map[string]*probeDir),
+		notSpell: make(map[string]struct{}),
+		spellAt:  make(map[string]*spells.Descriptor),
+	}
 	seal := func() {
 		p.mu.Lock()
 		p.sealed = true
-		p.dirs, p.notSpell = nil, nil
+		p.dirs, p.notSpell, p.spellAt = nil, nil, nil
 		p.mu.Unlock()
 	}
 	return context.WithValue(ctx, importProbesKey{}, p), seal
@@ -128,6 +133,43 @@ func (p *ImportProbes) MarkNotSpell(path string) {
 	defer p.mu.Unlock()
 	if !p.sealed {
 		p.notSpell[path] = struct{}{}
+	}
+}
+
+// SpellAt reports what RecordSpellAt recorded this load for the absolute candidate
+// path. known is false when nothing was; a nil spec with known true means no spell
+// loads from path. The spec is shared, so callers must not modify it.
+//
+// optimization: memoize each spell import candidate by its absolute path.
+//
+//	measured: describe targets on this repo answers 70 of 328 candidates from the
+//	  memo; BenchmarkResolveLocalSpellImport in bindings -5% allocs/op, sec/op
+//	  within noise (benchstat, n=10).
+//	trade-off: a spell file edited during the load keeps its first descriptor
+//	  until the next load.
+//	assumes: the key is absolute; a relative import string such as
+//	  ../../hack/index names a different file from each project.
+func (p *ImportProbes) SpellAt(path string) (spec *spells.Descriptor, known bool) {
+	if p == nil {
+		return nil, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	spec, known = p.spellAt[path]
+	return spec, known
+}
+
+// RecordSpellAt records the outcome of resolving the absolute candidate path, nil
+// when no spell loads from it. A relative path, or a load that has ended, records
+// nothing.
+func (p *ImportProbes) RecordSpellAt(path string, spec *spells.Descriptor) {
+	if p == nil || !filepath.IsAbs(path) {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.sealed {
+		p.spellAt[path] = spec
 	}
 }
 

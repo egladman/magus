@@ -117,8 +117,8 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 // resolveLocalSpellImport resolves a path-style import (e.g. "spells/hello") to a
 // workspace-local spell, returning the spell handle and ok=true when a file exists
 // and parses as a spell; otherwise ok=false, leaving the import to the normal file
-// search. It never takes a "./"-relative path: a bare `import "spells/hello"` stays
-// faithful to upstream Buzz's plain-import form.
+// search. "./spells/hello" resolves as "spells/hello" does; upstream Buzz's search
+// treats the two alike.
 //
 // Resolution walks a spells dir at every level from the workspace root down to the
 // importing file's directory, root-first (see spellSearchLevels). This accrues
@@ -127,11 +127,17 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 // to a project's magusfile is private to it. Precedence is ROOT-WINS: the first
 // (root-most) match is canonical, so a shared name means one spell workspace-wide.
 // A deeper level defining a name an ancestor already owns is a shadow footgun,
-// guarded separately by the shadow ward at preload; this resolver just picks the
-// canonical one deterministically and never errors.
+// guarded separately by the shadow ward at preload.
+//
+// The walk is hermetic: a "../" import joined onto a shallow level can land above
+// the workspace root, and that candidate is skipped without being probed. An import
+// whose every candidate lands outside the root is refused with MGS1047.
 func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, importPath string) (vm.Value, bool) {
 	probes := interp.ImportProbesFromContext(ctx)
-	for _, dir := range spellSearchLevels(ctx) {
+	levels, root := spellSearchLevels(ctx)
+	escapedFrom, probed := "", false
+	for _, dir := range levels {
+		bounded := root != "" && within(root, dir)
 		// Two layouts are accepted: a flat spells/<name>.buzz, and the directory
 		// convention spells/<name>/spell.buzz (preferred — keeps a spell's source
 		// and any future companion files together, easy to discover).
@@ -140,22 +146,47 @@ func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, impor
 			if dir != "" {
 				path = filepath.Join(dir, rel)
 			}
-			if !probes.IsFile(path) {
+			if bounded && !within(root, path) {
+				escapedFrom = dir
 				continue
 			}
-			// loadLocalSpell absolutizes a relative path and registers the Buzz spell
-			// with handler op support, so the returned handle's name resolves to a
-			// handler op-capable spell whether it is bound to a project or wired as
-			// the remote cache backend.
-			if m, ok := loadLocalSpell(ctx, path); ok {
-				if err := embeddedShadow(im, m.Name, filepath.Dir(path)); err != nil {
-					return importFailed(ctx, err)
-				}
-				return spellHandleFromMeta(m), true
+			probed = true
+			m, ok := resolveSpellCandidate(ctx, probes, path)
+			if !ok {
+				continue
 			}
+			if err := embeddedShadow(im, m.Name, filepath.Dir(path)); err != nil {
+				return importFailed(ctx, err)
+			}
+			return spellHandleFromMeta(*m), true
 		}
 	}
+	if !probed && escapedFrom != "" {
+		return importFailed(ctx, types.DiagnosticErrorf(types.SpellImportEscapesWorkspace,
+			"import %q resolves outside the workspace: from %s it reaches above the workspace root %s, and an import never loads a file outside the root; import a path inside the workspace",
+			importPath, escapedFrom, root))
+	}
 	return vm.Null, false
+}
+
+// resolveSpellCandidate loads the spell at path, answering a candidate this load
+// already resolved from the probes' memo.
+func resolveSpellCandidate(ctx context.Context, probes *interp.ImportProbes, path string) (*spells.Descriptor, bool) {
+	if m, known := probes.SpellAt(path); known {
+		return m, m != nil
+	}
+	var spec *spells.Descriptor
+	if probes.IsFile(path) {
+		// loadLocalSpell absolutizes a relative path and registers the Buzz spell
+		// with handler op support, so the returned handle's name resolves to a
+		// handler op-capable spell whether it is bound to a project or wired as
+		// the remote cache backend.
+		if m, ok := loadLocalSpell(ctx, path); ok {
+			spec = &m
+		}
+	}
+	probes.RecordSpellAt(path, spec)
+	return spec, spec != nil
 }
 
 // resolveRemoteSpellImport binds a spell imported by registry path from its verified
@@ -233,21 +264,27 @@ func importFailed(ctx context.Context, err error) (vm.Value, bool) {
 // against, in resolution order: the workspace root first, then each nested level
 // down to the importing file's own directory (root-wins), then "" (the process
 // cwd) as an out-of-workspace fallback for a `magus buzz` script with no workspace.
-// The walk is bounded at the workspace root so resolution stays hermetic and never
-// reaches for spells outside the workspace.
-func spellSearchLevels(ctx context.Context) []string {
-	var start, root string
+// It also returns the absolute workspace root that bounds the walk, "" without a
+// workspace.
+func spellSearchLevels(ctx context.Context) (levels []string, root string) {
+	var start string
 	if src := interp.SourceFromContext(ctx); src != nil {
 		start = src.Dir
 	}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
-		root = ws.Root()
+		root = absOrEmpty(ws.Root())
 	}
-	levels := rootFirstLevels(root, start)
+	levels = rootFirstLevels(root, start)
 	if root == "" {
 		levels = append(levels, "")
 	}
-	return levels
+	return levels, root
+}
+
+// within reports whether the clean absolute path p is root or lies under it.
+func within(root, p string) bool {
+	rest, ok := strings.CutPrefix(p, root)
+	return ok && (rest == "" || rest[0] == filepath.Separator || strings.HasSuffix(root, string(filepath.Separator)))
 }
 
 // rootFirstLevels returns the directory chain from root down to start inclusive,
@@ -264,8 +301,7 @@ func rootFirstLevels(root, start string) []string {
 		}
 		return nil
 	}
-	within := absRoot != "" && (absStart == absRoot || strings.HasPrefix(absStart, absRoot+string(filepath.Separator)))
-	if !within {
+	if absRoot == "" || !within(absRoot, absStart) {
 		return []string{absStart} // importing file is outside the workspace root
 	}
 	var up []string
