@@ -1,7 +1,6 @@
 package dry
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -16,14 +15,17 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
 // installHost wires a session for magusfile evaluation, layering host surfaces
 // from least to most permissive: the Buzz std library (print captured into
 // tr.out), then the pure-compute WASM-compatible host modules (`strings`, `json`,
-// ...), then the tracing `magus` and `magus/spell/*` modules backed by tr.
-// Every host effect is traced, not performed.
+// ...), then inert IO modules, then the tracing `magus` and `magus/spell/*` modules
+// backed by tr. Every module carries the declarations the engine gives it, so the
+// check here refuses what the engine refuses. Every host effect is traced, not
+// performed.
 //
 // spells is the set of spells to register as tracing `magus/spell/<name>` modules,
 // keyed by import name with its op names. Callers pass the built-in registry (the
@@ -31,17 +33,14 @@ import (
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
-	// An IO module Buzz's stdlib also binds (os) is typed by the stdlib's declarations
-	// alone, which lack the host's members, so `os\withEnv` in a target body would fail
-	// the check here and pass in the engine. Append the host's declarations, as the
-	// engine does; a target body is checked here, never run.
+	// An IO module gets the engine's declarations over a value that performs nothing:
+	// os keeps the value Buzz's stdlib binds, and proc, http, vcs and the rest an empty
+	// module, so a call checks against its real signature and a probed body stops at it
+	// instead of running it. A wasm registry lists no IO module, so there these imports
+	// still reach the resolver below.
 	for name, reg := range bindinggen.Modules {
-		importPath := cmp.Or(reg.Path, name)
-		if _, bound := sess.NativeModule(importPath); !bound || reg.Capabilities.Has(ffi.WASM) {
-			continue
-		}
-		if src, ok := spell.ModuleDecls(name); ok {
-			sess.SetModuleDecls(importPath, src)
+		if !reg.Capabilities.Has(ffi.WASM) {
+			installHostModule(sess, name, reg, vm.NewMap())
 		}
 	}
 
@@ -62,30 +61,14 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the magus/spell bundle the real runtime registers, so a SPELL buffer's
-	// or magusfile's `import "magus/spell"` resolves the same Target/Command/Service
-	// object types, followed by the host-returned types. The real runtime
-	// (internal/interp/bindings) instead ships each host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
-	// vcs, ...), but this sandbox never registers os/fs/http/vcs as real importable
-	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
-	// there is no owning-module import for a probed buffer to reach those types
-	// through. Bundling them here, under the one import path this sandbox does
-	// wire, is this dry-only host's deliberate simplification; it keeps every
-	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
-	// resolvable without also having to fake functional os/fs/http/vcs bindings.
-	// The session's import lookup order (native, then declarations, then resolver)
-	// means this is never shadowed by the catch-all resolver below.
-	sess.SetModuleDecls(spell.SpellModulePath, strings.Join([]string{
-		spell.SpellModuleSource,
-		spell.ExecResultSource,
-		spell.CommitAuthorSource,
-		spell.CommitSource,
-		spell.FileInfoSource,
-		spell.HTTPResponseSource,
-		spell.SemverVersionSource,
-		spell.URLSource,
-	}, "\n"))
+	// The source modules the engine registers beside the host ones. A host-returned
+	// type (ExecResult, Commit, ...) is reached through its owning module, as there.
+	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
+	for _, sm := range std.AllSource() {
+		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
+	}
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation

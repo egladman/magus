@@ -2,6 +2,7 @@ package dry
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -73,8 +74,31 @@ func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session
 // registerWASMCompatibleMagusModules installs every module in WASMCompatibleMagusModules
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
 func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
-	for name, register := range WASMCompatibleMagusModules {
-		sess.SetNativeModule(name, register(ctx, sess))
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(ffi.WASM) {
+			installHostModule(sess, name, reg, reg.Register(ctx, sess))
+		}
+	}
+}
+
+// installHostModule binds one registry module as the engine's hostModuleBinds does:
+// the generated declarations appended under its import path, and mod merged onto a
+// stdlib module at that path or installed fresh. Without the declarations every call
+// through the module is untyped here, so a body the engine refuses would pass.
+func installHostModule(sess *buzz.Session, name string, reg ffi.Registration, mod vm.Value) {
+	importPath := cmp.Or(reg.Path, name)
+	if src, ok := spell.ModuleDecls(name); ok {
+		sess.SetModuleDecls(importPath, src)
+	}
+	base, ok := sess.NativeModule(importPath)
+	if !ok {
+		sess.SetNativeModule(importPath, mod)
+		return
+	}
+	for _, k := range mod.MapKeys() {
+		if v, ok := mod.MapGet(k); ok {
+			base.MapSet(k, v)
+		}
 	}
 }
 
