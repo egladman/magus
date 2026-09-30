@@ -107,6 +107,24 @@ func (v PrecedentFamily) Values() []string { return precedentFamilies.Strings() 
 func (v PrecedentFamily) Valid() bool      { return precedentFamilies.Valid(v) }
 func (v PrecedentFamily) String() string   { return enum.String(v) }
 
+var markerFamilies = enum.Set[MarkerFamily]{MarkerDiagram, MarkerCalls, MarkerSkills, MarkerObserved}
+
+func (v MarkerFamily) Values() []string { return markerFamilies.Strings() }
+func (v MarkerFamily) Valid() bool      { return markerFamilies.Valid(v) }
+func (v MarkerFamily) String() string   { return enum.String(v) }
+
+var markerVerbs = enum.Set[MarkerVerb]{MarkerPoint, MarkerBlock}
+
+func (v MarkerVerb) Values() []string { return markerVerbs.Strings() }
+func (v MarkerVerb) Valid() bool      { return markerVerbs.Valid(v) }
+func (v MarkerVerb) String() string   { return enum.String(v) }
+
+var knowledgeResolutions = enum.Set[KnowledgeResolution]{ResolvedID, ResolvedPath, ResolvedFuzzy}
+
+func (v KnowledgeResolution) Values() []string { return knowledgeResolutions.Strings() }
+func (v KnowledgeResolution) Valid() bool      { return knowledgeResolutions.Valid(v) }
+func (v KnowledgeResolution) String() string   { return enum.String(v) }
+
 // SandboxMode's String names the zero value as off rather than unset (see sandbox.go).
 var sandboxModes = enum.Set[SandboxMode]{SandboxModeOff, SandboxModeBestEffort, SandboxModeRequired}
 

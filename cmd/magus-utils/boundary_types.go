@@ -164,6 +164,16 @@ var boundaryTypes = []boundaryType{
 	{Name: "OutputRecord", Type: reflect.TypeFor[types.OutputRecord](), RuntimeObject: true},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
+	{Name: "SymbolIndexDigest", Type: reflect.TypeFor[types.SymbolIndexDigest](), RuntimeObject: true},
+	{Name: "DirCall", Type: reflect.TypeFor[types.DirCall](), RuntimeObject: true},
+	{Name: "Dir", Type: reflect.TypeFor[types.Dir](), RuntimeObject: true},
+	{Name: "Layer", Type: reflect.TypeFor[types.Layer](), RuntimeObject: true},
+	{Name: "KnowledgeFold", Type: reflect.TypeFor[types.KnowledgeFold](), RuntimeObject: true},
+	{Name: "NeighborhoodResult", Type: reflect.TypeFor[types.KnowledgeNeighborhoodOutput](), RuntimeObject: true},
+	// Inbound only, like HttpRetry: a script hands these to magus and never reads one back.
+	{Name: "DirsOptions", Type: reflect.TypeFor[types.DirsOptions]()},
+	{Name: "NeighborhoodOptions", Type: reflect.TypeFor[types.KnowledgeNeighborhoodOptions]()},
+	{Name: "PathOptions", Type: reflect.TypeFor[types.KnowledgePathOptions]()},
 	// Registered because KnowledgeAnswer carries it: a struct field on a registered Buzz
 	// object must itself be registered, or the generated encoder calls one the field's
 	// type does not have.
@@ -250,6 +260,11 @@ var boundaryTypes = []boundaryType{
 // A case must be a legal Buzz identifier, and the first entry is the field's default,
 // so a zero-valued case belongs first.
 var boundaryEnums = []boundaryEnum{
+	{
+		Name:  "KnowledgeResolution",
+		Type:  reflect.TypeFor[types.KnowledgeResolution](),
+		Cases: []enumCase{{"none", ""}, {"id", "id"}, {"path", "path"}, {"fuzzy", "fuzzy"}},
+	},
 	{
 		Name:  "SignAlgorithm",
 		Type:  reflect.TypeFor[types.SignAlgorithm](),

@@ -2,13 +2,16 @@ package bindings
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 // applyOpts runs the parsed project options against a fresh root project so tests can
@@ -710,5 +713,84 @@ func TestParseBuzzProjectOpts_GateInherit(t *testing.T) {
 		opts.MapSet("gate_inherit", vm.StrValue("false"))
 		_, err := parseBuzzProjectOpts(context.Background(), opts)
 		assert.ErrorContains(t, err, `"gate_inherit" takes a bool`)
+	})
+}
+
+func layersOpts(kv map[string]vm.Value) vm.Value {
+	layers := vm.NewMap()
+	for k, v := range kv {
+		layers.MapSet(k, v)
+	}
+	opts := vm.NewMap()
+	opts.MapSet("layers", layers)
+	return opts
+}
+
+// A layer is a declared fact a check will hold code to, so one naming no directory in
+// the tree is a load error, never a layer that silently covers nothing.
+func TestParseBuzzProjectOpts_Layers(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"internal/handler/mcp", "cmd/magus", "docs"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, d), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "file.go"), nil, 0o644))
+
+	apply := func(projectPath string, opts vm.Value) (*types.Project, error) {
+		got, err := parseBuzzProjectOpts(context.Background(), opts)
+		if err != nil {
+			return nil, err
+		}
+		p := &types.Project{Path: projectPath, Dir: filepath.Join(root, filepath.FromSlash(projectPath))}
+		for _, o := range got {
+			if err := o(p); err != nil {
+				return p, err
+			}
+		}
+		return p, nil
+	}
+
+	t.Run("existing directories and globs are recorded", func(t *testing.T) {
+		p, err := apply(".", layersOpts(map[string]vm.Value{
+			"internal/handler": vm.StrValue("transport"),
+			"cmd/*":            vm.StrValue("cli"),
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"internal/handler": "transport", "cmd/*": "cli"}, p.Layers)
+	})
+
+	t.Run("paths are workspace-relative from a nested project", func(t *testing.T) {
+		p, err := apply("docs", layersOpts(map[string]vm.Value{"internal/handler/**": vm.StrValue("handler")}))
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"internal/handler/**": "handler"}, p.Layers)
+	})
+
+	for _, tc := range []struct {
+		name string
+		opts vm.Value
+		want string
+	}{
+		{"a missing directory", layersOpts(map[string]vm.Value{"internal/nope": vm.StrValue("x")}), "no directory under the workspace root matches it"},
+		{"a file, not a directory", layersOpts(map[string]vm.Value{"internal/file.go": vm.StrValue("x")}), "no directory under the workspace root matches it"},
+		{"a glob matching no directory", layersOpts(map[string]vm.Value{"cmd/*/deep": vm.StrValue("x")}), "no directory under the workspace root matches it"},
+		{"a non-string name", layersOpts(map[string]vm.Value{"cmd": vm.IntValue(1)}), "must be a string"},
+		{"an empty map", layersOpts(nil), `"layers" takes a map`},
+		{"a malformed name", layersOpts(map[string]vm.Value{"cmd": vm.StrValue("CLI")}), "lowercase slug"},
+	} {
+		t.Run(tc.name+" is refused", func(t *testing.T) {
+			_, err := apply(".", tc.opts)
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tc.want)
+			assert.ErrorIs(t, err, types.LayerDeclarationInvalid)
+		})
+	}
+
+	t.Run("one directory declared under two names is refused", func(t *testing.T) {
+		got, err := parseBuzzProjectOpts(context.Background(), layersOpts(map[string]vm.Value{"cmd": vm.StrValue("cli")}))
+		require.NoError(t, err)
+		again, err := parseBuzzProjectOpts(context.Background(), layersOpts(map[string]vm.Value{"cmd": vm.StrValue("tool")}))
+		require.NoError(t, err)
+		p := &types.Project{Path: ".", Dir: root}
+		require.NoError(t, got[0](p))
+		assert.ErrorContains(t, again[0](p), `declared as both "cli" and "tool"`)
 	})
 }

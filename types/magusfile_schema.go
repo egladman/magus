@@ -39,6 +39,7 @@ var ProjectOptions = []ProjectOption{
 	{Key: "gate_low_risk", Since: "0.4.3"},
 	{Key: "gate_inherit", Since: "0.4.3"},
 	{Key: "merge_low_risk", Since: "0.5.0"},
+	{Key: "layers", Since: "0.5.0"},
 }
 
 // TargetPolicyOptions is the ONE list of recognized keys inside magus.project's

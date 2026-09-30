@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 )
@@ -97,6 +99,13 @@ func fingerprintShardContent(sh Shard) string {
 		buf = appendCount(buf, len(score))
 		buf = append(buf, score...)
 		buf = appendField(buf, e.Provenance)
+		// Attrs are not part of an edge's identity, but a declared call whose transport
+		// changed is a different fact, so its shard must not replay.
+		buf = appendCount(buf, len(e.Attrs))
+		for _, k := range slices.Sorted(maps.Keys(e.Attrs)) {
+			buf = appendField(buf, k)
+			buf = appendField(buf, e.Attrs[k])
+		}
 		_, _ = h.Write(buf) // hash.Hash never errors
 		buf = buf[:0]
 	}

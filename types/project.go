@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -239,6 +240,12 @@ type Project struct {
 	// (generated, prose, comment-only); this is the opt-in for code. Empty, the
 	// default, opts nothing in.
 	MergeLowRisk []string
+	// Layers maps a WORKSPACE-relative directory or glob to the layer name declared for
+	// it, from magus.project's "layers" key. Workspace-relative rather than project-relative
+	// because a layering table describes the tree, and the root magusfile usually holds it.
+	// Every entry names at least one existing directory; the load refuses one that does not
+	// (LayerDeclarationInvalid).
+	Layers map[string]string
 	// GateInheritOff is magus.project's "gate_inherit" key declared false: this
 	// workspace's CI plan never inherits a green run's verdict, however the
 	// delta classifies. One declaration turns it off workspace-wide (the same
@@ -630,4 +637,68 @@ func (p *Project) AttachSpell(spell *spells.Spell) {
 		p.Sources = append(p.Sources, sources...)
 		p.Outputs = append(p.Outputs, outputs...)
 	}
+}
+
+// layerNameRe is the layer-name grammar: a lowercase slug, so `layer=<name>` in a query
+// and a Buzz string compare it without quoting or case folding.
+var layerNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// CheckLayer validates the shape of one magus.project "layers" entry: dir is a clean
+// workspace-relative directory or glob inside the workspace, and name matches the layer
+// grammar. Whether dir names an existing directory is the loader's question; this one
+// needs no filesystem, so the dry-run host asks it too. Errors carry
+// LayerDeclarationInvalid.
+func CheckLayer(dir, name string) error {
+	fail := func(format string, args ...any) error {
+		return DiagnosticErrorf(LayerDeclarationInvalid, `magus.project: "layers"[%q]: `+format, append([]any{dir}, args...)...)
+	}
+	switch {
+	case strings.TrimSpace(dir) == "":
+		return DiagnosticErrorf(LayerDeclarationInvalid, `magus.project: "layers" has a blank directory; name one relative to the workspace root, e.g. "internal/handler"`)
+	case path.IsAbs(dir) || filepath.IsAbs(dir):
+		return fail("is absolute; name the directory relative to the workspace root")
+	case dir == ".." || strings.HasPrefix(dir, "../"):
+		return fail("escapes the workspace root")
+	case path.Clean(dir) != dir:
+		return fail("is not in clean form; write %q", path.Clean(dir))
+	case !doublestar.ValidatePattern(dir):
+		return fail("is not a valid glob")
+	case !layerNameRe.MatchString(name):
+		return fail("layer name %q must be a lowercase slug matching %s, e.g. \"handler\"", name, layerNameRe)
+	}
+	return nil
+}
+
+// LayerFor reports the layer layers declares for the workspace-relative directory dir.
+// An exact path names that one directory; a glob names every directory it matches
+// ("internal/handler/**" includes internal/handler itself). Where several entries match,
+// an exact path wins, then the longest pattern, then the lexically first, so every
+// reader of one declaration agrees.
+func LayerFor(layers map[string]string, dir string) (string, bool) {
+	best, found := "", false
+	for pattern := range layers {
+		exact := pattern == dir
+		if !exact {
+			if IsLiteralGlob(pattern) {
+				continue
+			}
+			if ok, _ := doublestar.Match(pattern, dir); !ok {
+				continue
+			}
+		}
+		if !found || layerPatternBeats(pattern, best, dir) {
+			best, found = pattern, true
+		}
+	}
+	return layers[best], found
+}
+
+func layerPatternBeats(a, b, dir string) bool {
+	if (a == dir) != (b == dir) {
+		return a == dir
+	}
+	if len(a) != len(b) {
+		return len(a) > len(b)
+	}
+	return a < b
 }

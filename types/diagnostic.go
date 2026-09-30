@@ -272,6 +272,11 @@ const (
 	// outside the workspace root. A load that followed it would read another checkout's
 	// files, so the same magusfile would load differently in a worktree than in main.
 	SpellImportEscapesWorkspace DiagnosticCode = "MGS1047"
+	// LayerDeclarationInvalid is a magus.project "layers" entry magus cannot honor: a
+	// directory that does not exist, a glob matching no directory, a path escaping the
+	// workspace, or a blank or malformed layer name. The load stops, because a layer that
+	// silently covers nothing is a check that looks enforced and is not.
+	LayerDeclarationInvalid DiagnosticCode = "MGS1048"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -552,7 +557,17 @@ const (
 	// SymbolIndexNotCurrent is a review whose symbol index could not be brought up to date
 	// for the projects the change touched, so the conformance checks did not run: the
 	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
-	SymbolIndexNotCurrent    DiagnosticCode = "MGS7003"
+	SymbolIndexNotCurrent DiagnosticCode = "MGS7003"
+	// UnknownMarkerFamily is a `magus:<family>` token whose family is not a MarkerFamily.
+	// The graph build fails naming the file, the line and the families it knows, because
+	// a skipped marker is a declaration nothing honors.
+	UnknownMarkerFamily DiagnosticCode = "MGS7004"
+	// DirNotInGraph is magus\dir asked for a path the graph holds no dir node for. A typo
+	// and a directory outside every project both land here; neither is an empty Dir.
+	DirNotInGraph DiagnosticCode = "MGS7005"
+	// LayerNotDeclared is a layer name no magus.project "layers" key declares, asked for
+	// through magus\layer or a DirsOptions filter.
+	LayerNotDeclared         DiagnosticCode = "MGS7006"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
 	OutputRefMalformed       DiagnosticCode = "MGS8003"
@@ -657,6 +672,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
+	LayerDeclarationInvalid,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
@@ -673,6 +689,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
+	UnknownMarkerFamily, DirNotInGraph, LayerNotDeclared,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, TokenStoreTooNew,
 	NoAuthToken, TokenNameExists, TokenNotFound,

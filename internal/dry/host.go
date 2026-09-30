@@ -740,6 +740,23 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 		if v, ok := opts.MapGet("sources"); ok {
 			p.Sources = valToStrings(v)
 		}
+		// Shape only: the preview has no tree to hold a directory's existence against.
+		if v, ok := opts.MapGet("layers"); ok {
+			if !v.IsMap() || len(v.MapKeys()) == 0 {
+				return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+					`magus.project: "layers" takes a map of workspace-relative directory or glob to layer name, e.g. {"internal/handler/**": "handler"}`)
+			}
+			for _, dir := range v.MapKeys() {
+				nv, _ := v.MapGet(dir)
+				if !nv.IsStr() {
+					return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
+						`magus.project: "layers"[%q]: the layer name must be a string, got a %s`, dir, nv.Kind())
+				}
+				if err := types.CheckLayer(dir, nv.AsString()); err != nil {
+					return err
+				}
+			}
+		}
 		if v, ok := opts.MapGet("spells"); ok && v.IsList() {
 			for _, item := range v.ListItems() {
 				if item.IsMap() {

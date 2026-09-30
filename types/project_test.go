@@ -314,3 +314,56 @@ func BenchmarkProjectAllOutputs(b *testing.B) {
 		})
 	}
 }
+
+func TestCheckLayer(t *testing.T) {
+	for _, ok := range [][2]string{
+		{"internal/handler", "handler"},
+		{"internal/handler/**", "handler"},
+		{".", "composition"},
+		{"cmd/*", "cli-2"},
+	} {
+		assert.NoErrorf(t, CheckLayer(ok[0], ok[1]), "%v", ok)
+	}
+	for _, tc := range []struct{ dir, name, want string }{
+		{"", "handler", "blank directory"},
+		{"/abs/path", "handler", "is absolute"},
+		{"../sibling", "handler", "escapes the workspace root"},
+		{"internal/./handler", "handler", `write "internal/handler"`},
+		{"internal/", "handler", `write "internal"`},
+		{"internal/[", "handler", "not a valid glob"},
+		{"internal", "", "lowercase slug"},
+		{"internal", "Handler", "lowercase slug"},
+		{"internal", "hand ler", "lowercase slug"},
+	} {
+		err := CheckLayer(tc.dir, tc.name)
+		require.Errorf(t, err, "%q -> %q", tc.dir, tc.name)
+		assert.ErrorContains(t, err, tc.want)
+		assert.ErrorIs(t, err, LayerDeclarationInvalid)
+	}
+}
+
+func TestLayerFor(t *testing.T) {
+	layers := map[string]string{
+		"internal/**":         "engine",
+		"internal/handler/**": "handler",
+		"internal/handler":    "transport",
+		"cmd/*":               "cli",
+	}
+	for dir, want := range map[string]string{
+		"internal/cache":       "engine",
+		"internal/handler/mcp": "handler",
+		"internal/handler":     "transport",
+		"cmd/magus":            "cli",
+		"internal":             "engine",
+	} {
+		got, ok := LayerFor(layers, dir)
+		assert.Truef(t, ok, dir)
+		assert.Equalf(t, want, got, dir)
+	}
+	for _, dir := range []string{"cmd", "cmd/magus/sub", "types", "."} {
+		_, ok := LayerFor(layers, dir)
+		assert.Falsef(t, ok, "%s is covered by no declaration", dir)
+	}
+	_, ok := LayerFor(map[string]string{"internal": "engine"}, "internal/cache")
+	assert.False(t, ok, "an exact path names one directory, not its subtree")
+}
