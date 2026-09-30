@@ -1,5 +1,5 @@
 // views.test.ts - the direction and relation rules behind the "most depended-on" and "what is
-// dead" questions. Run: `pnpm run test`.
+// dead" questions. Run: `magus run test console`.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

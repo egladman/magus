@@ -49,9 +49,9 @@ dry run: commands shown, not executed</span>
 <span class="term-ok">[dry]</span> apps/web
   magus run ci apps/web
   <span class="term-cmd">$ pnpm install --frozen-lockfile</span>
-  <span class="term-cmd">$ pnpm run typecheck</span>
+  <span class="term-cmd">$ pnpm exec tsc</span>
   <span class="term-cmd">$ pnpm exec biome check src</span>
-  <span class="term-cmd">$ pnpm run test</span>
+  <span class="term-cmd">$ pnpm exec vitest run</span>
 <span class="term-muted">summary: dry run, 1 target would run</span><span class="term-cursor" aria-hidden="true"></span>`;
 
 
@@ -140,7 +140,7 @@ export fun renderLanding(site: Site) > void !> any {
         <a class="landing-btn" href="tour/">Take the tour</a>
       </div>
     </div>
-    <div class="term" data-hero-terminal role="img" aria-label="A terminal session. magus affected ci --dry-run reports that one of five projects is affected, then lists the exact commands it would run in it: pnpm install, pnpm run typecheck, pnpm exec biome check, pnpm run test.">
+    <div class="term" data-hero-terminal role="img" aria-label="A terminal session. magus affected ci --dry-run reports that one of five projects is affected, then lists the exact commands it would run in it: pnpm install, pnpm exec tsc, pnpm exec biome check, pnpm exec vitest run.">
       <div class="term-bar">
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       </div>
@@ -363,8 +363,8 @@ lint</code></pre>
 <span class="term-muted">events: </span> 19
   <span class="term-muted">14:30:49  started</span>
   <span class="term-muted">14:30:51  exec    </span>  pnpm install --frozen-lockfile
-  <span class="term-muted">14:30:51  exec    </span>  pnpm run typecheck
-  <span class="term-muted">14:30:52  exec    </span>  pnpm run biome
+  <span class="term-muted">14:30:51  exec    </span>  pnpm exec tsc
+  <span class="term-muted">14:30:52  exec    </span>  pnpm exec biome check src
   <span class="term-muted">14:30:53  result  </span>  <span class="term-ok">pass</span></code></pre>
     </div>
     <p class="landing-humans-body">The second question is the one a cache normally cannot answer. A content-addressed cache decides by hashing its inputs, so "why did this run again" has an exact answer, and magus will show you the key broken into the parts that composed it. One digest differs from last time; that is the input that changed.</p>

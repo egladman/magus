@@ -7,7 +7,7 @@
 // the store on a ~1s tick, so every tile renders as if a busy server were attached.
 //
 // Because the tile <-> store boundary is pure view-model (no wire types below it),
-// the fixture here is a normal typed object: `pnpm run typecheck` verifies it against
+// the fixture here is a normal typed object: `magus run lint console` type-checks it against
 // the same interfaces the real mappers produce, so it can't silently drift when a
 // tile gains a field. Entered from main.ts on a `#demo` fragment or the empty-state
 // "See a demo" button.

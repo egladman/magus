@@ -1,5 +1,5 @@
 // duration.test.ts - nodeDurationMs's three-spelling reconciliation and
-// formatDuration's boundary/rounding rules. Run: `pnpm run test`.
+// formatDuration's boundary/rounding rules. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

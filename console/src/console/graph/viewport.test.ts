@@ -1,4 +1,4 @@
-// viewport.test.ts - the inset rule and the framing arithmetic behind Fit. Run: `pnpm run test`.
+// viewport.test.ts - the inset rule and the framing arithmetic behind Fit. Run: `magus run test console`.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

@@ -1,5 +1,5 @@
 // tabBar.test.ts - the pure Workspace->view mapping the tab bar renders from. The DOM wiring
-// needs a browser; tabViews is pure and runs under node. Run: `pnpm run test`.
+// needs a browser; tabViews is pure and runs under node. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

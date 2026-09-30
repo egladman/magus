@@ -3,7 +3,7 @@
 // directly under node. This pins the Datadog-style grammar (AND, -exclude, field:scope, quoted
 // phrase, wildcard, ranking), the injected-source factory, and the generic entry type against a
 // tiny in-memory index. describeQuery and buildSnippet are not exported (they are internal to
-// the lib), so they are exercised through the factory's methods. Run: `pnpm run test`.
+// the lib), so they are exercised through the factory's methods. Run: `magus run test libs/textsearch`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

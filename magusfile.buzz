@@ -1963,6 +1963,8 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
                    "hack/README.md",
                    ".github/**/*.buzz",
                    "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
+                   "**/package.json", "console/package.json", "docs/package.json",
+                   "docs/guides/integrations/agents/package.json", "libs/textsearch/package.json",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
                    "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
@@ -2228,12 +2230,6 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // Explicit args replace go-test's `./...`, so this compiles one package under cgo.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
-}
-
-// Always runs pnpm install: an interrupted install leaves an incomplete node_modules.
-fun rebuild_console() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
-    proc\exec("pnpm", ["run", "build"], "console", {});
 }
 
 // Shells out: docs/render.buzz resolves its flat imports with docs/ as the cwd.

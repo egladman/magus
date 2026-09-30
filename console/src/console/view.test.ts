@@ -1,5 +1,5 @@
 // view.test.ts - the reactive primitives. signal/bind/scope are pure (no DOM), so they run under
-// node; h() needs a document and is exercised in the browser. Run: `pnpm run test`.
+// node; h() needs a document and is exercised in the browser. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

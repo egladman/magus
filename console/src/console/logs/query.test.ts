@@ -1,6 +1,6 @@
 // query.test.ts - the #q= log query grammar. parseQuery is pure and DOM-free (query.ts),
 // so it runs directly under node. This grammar is what the future logs SearchProvider.parse()
-// reuses, so pinning it down here de-risks that wiring. Run: `pnpm run test`.
+// reuses, so pinning it down here de-risks that wiring. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

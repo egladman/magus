@@ -32,6 +32,7 @@ import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/package-install-targets-never-replay" as installs;
+import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
 import "hack/lint/provider-io-is-buzz" as providerio;
 import "hack/lint/prose-names-targets-that-exist" as prosetargets;
 import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
@@ -55,6 +56,7 @@ export fun rules() > [Rule] {
         Rule{ name = "setup-magus-mints-the-queue-app-token-only-as-an-output", reads = queuetoken\reads(), check = queuetoken\check },
         Rule{ name = "published-magus-is-built-first-and-verified-by-digest", reads = publishedmagus\reads(), check = publishedmagus\check },
         Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },
+        Rule{ name = "package-manifests-carry-no-scripts", reads = manifestscripts\reads(), check = manifestscripts\check },
         Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
         Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },

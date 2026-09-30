@@ -1,5 +1,5 @@
 // commands.test.ts - the command registry + keybinding engine. Everything but installKeybindings
-// (one DOM listener) is pure, so it runs directly under node. Run: `pnpm run test`.
+// (one DOM listener) is pure, so it runs directly under node. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

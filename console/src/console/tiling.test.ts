@@ -1,5 +1,5 @@
 // tiling.test.ts - the Pane tree ops are pure, so the layout algebra is tested here
-// without a DOM. Run: `pnpm run test`. Covers the tree surgery a tiling UI is easy to
+// without a DOM. Run: `magus run test console`. Covers the tree surgery a tiling UI is easy to
 // get wrong: which leaf gets replaced, sibling promotion on close, and ratio clamping.
 
 import { test } from "node:test";

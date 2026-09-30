@@ -1,5 +1,5 @@
 // lineage.test.ts - the session grouping and the spawn -> lease -> child join. lineage.ts is pure
-// and DOM-free, so it runs directly under node. Run: `pnpm run test`.
+// and DOM-free, so it runs directly under node. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

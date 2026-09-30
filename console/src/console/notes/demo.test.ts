@@ -1,5 +1,5 @@
 // demo.test.ts - the sample notes the Notes surface shows without a server. demoNotes is pure
-// and DOM-free, so it runs directly under node. Run: `pnpm run test`.
+// and DOM-free, so it runs directly under node. Run: `magus run test console`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
