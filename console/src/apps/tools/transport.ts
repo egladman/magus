@@ -1,9 +1,6 @@
-// transport.ts - the Tools app's read: one ListTools call mapped into the ToolsView the Dashboard's
-// Toolchain tile reads, by the same rules as dashboard/transport.ts. The server forks a version
-// probe per tool behind a TTL, so callers poll on getPollMs rather than faster.
-//
-// TODO: dashboard/transport.ts still carries its own copy of the label maps and the row mapping;
-// have it call mapTools.
+// transport.ts - the Tools app's read: one ListTools call mapped into the ToolsView that both this
+// app and the Dashboard's Toolchain tile read. The server forks a version probe per tool behind a
+// TTL, so callers poll on getPollMs rather than faster.
 
 import { createClient } from "@connectrpc/connect";
 import {
@@ -111,6 +108,7 @@ export async function fetchToolsView(
     const client = createClient(ToolService, createServerTransport(host, token));
     return mapTools(await client.listTools({}));
   } catch {
+    // reported: by the server transport.
     return null;
   }
 }

@@ -82,9 +82,9 @@ async function relay(): Promise<void> {
     assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
     const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
     assert.match(linkSvg, /data-edge="external:lib->external:app"/);
-    assert.match(linkSvg, /edited/);
+    assert.match(linkSvg, />EDITED</);
 
-    const importsMeta ={ id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
+    const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
     const imports = figureFor(
       {
         nodes: [

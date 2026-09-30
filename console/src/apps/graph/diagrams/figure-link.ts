@@ -51,6 +51,7 @@ export function decodeFigureLink(payload: string): FigureLinkRead {
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
+    // reported: the fail() result surfaces in the Figures view.
     return fail("the link is not UTF-8 text");
   }
   let doc: unknown;

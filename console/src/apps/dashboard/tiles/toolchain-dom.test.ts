@@ -87,10 +87,7 @@ test("a violation is counted and named in the note with the lifecycle note after
   const tile = toolchainTile();
   tile.update(
     stateWith(
-      [
-        row({ bin: "node", verdict: "too new", code: "MGS3006" }),
-        row({ support: "unknown" }),
-      ],
+      [row({ bin: "node", verdict: "too new", code: "MGS3006" }), row({ support: "unknown" })],
       { provider: "endoflife-date", state: "unreached", sources: [], detail: "no route to host" },
     ),
   );
