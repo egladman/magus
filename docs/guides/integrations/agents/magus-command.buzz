@@ -46,6 +46,8 @@
 //                    subagent's command is graded under the job it was spawned for
 //                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_CWD_PATH    dot-path to the directory the call runs in, whose checkout's own
+//                    ./magus judges it (default cwd)
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
 //   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
@@ -519,7 +521,7 @@ fun main(args: [str]) > void {
         rewrites = updatedInput != "";
     }
 
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(session, family: "unavailable-{toolName}", file: "magus-command.buzz")) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",

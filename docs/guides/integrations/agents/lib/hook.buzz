@@ -171,11 +171,17 @@ export fun parentDir(dir: str) > str {
 // never finds one. A hook's working directory is the host's session directory,
 // which is not always the workspace root.
 export fun workspaceRoot() > str {
-    var dir = path\abs(".") catch "";
-    while (dir != "") {
-        final found = fs\isFile("{dir}/magusfile.buzz") catch false;
-        if (found) { return dir; }
-        dir = parentDir(dir);
+    return workspaceRootAt(path\abs(".") catch "");
+}
+
+// workspaceRootAt is workspaceRoot walked up from dir instead of the hook's own
+// working directory.
+export fun workspaceRootAt(dir: str) > str {
+    var at = dir;
+    while (at != "") {
+        final found = fs\isFile("{at}/magusfile.buzz") catch false;
+        if (found) { return at; }
+        at = parentDir(at);
     }
     return "";
 }
@@ -191,10 +197,18 @@ export fun workspaceRoot() > str {
 // The walk is up to the magusfile, not a test of ./magus alone. Measured
 // 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
 // unjudged because the session directory was not the workspace root.
-export fun resolveBin() > str {
+//
+// cwd is the directory the host says the call runs in, walked first. A host runs a
+// subagent's hooks from the session's directory while the subagent works in its own
+// worktree, and the session's binary, or PATH's, is not the one that tree builds.
+// Measured 2026-09-30: every write two worktree workers made was graded by a PATH
+// magus older than the rules their tree carried.
+export fun resolveBin(cwd: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }
-    final root = workspaceRoot();
+    var root = "";
+    if (cwd != "") { root = workspaceRootAt(cwd); }
+    if (root == "") { root = workspaceRoot(); }
     if (root != "") {
         final candidate = "{root}/magus";
         if (isExecutable(candidate)) { return candidate; }
