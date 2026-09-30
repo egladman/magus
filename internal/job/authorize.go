@@ -231,7 +231,7 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 	switch {
 	case !subset(next.WritePaths, parent.WritePaths):
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
-	case !subset(readBoundary(next), readBoundary(parent)):
+	case !subset(ReadBoundary(next), ReadBoundary(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
 	case !subset(parent.DenyPaths, next.DenyPaths):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
@@ -287,10 +287,10 @@ func checkLine(row types.Job) string {
 	return strings.Join(lines, ", ")
 }
 
-// readBoundary is the declarations a row may READ: its read paths when it declares any, else
-// its own write paths, which is the fallback cmd/magus/guard_focus.go makes. A parent's
-// write paths ride along either way, since a child may already be handed them.
-func readBoundary(row types.Job) []string {
+// ReadBoundary is the declarations a row may READ: its write paths, widened by its read
+// paths. Read paths only ever add; the guard's focus-read deny and the store's subset check
+// both read this, so the two agree on what a lease may read.
+func ReadBoundary(row types.Job) []string {
 	if len(row.ReadPaths) == 0 {
 		return row.WritePaths
 	}
