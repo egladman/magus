@@ -74,15 +74,6 @@ func TestBuildToolRowSeparatesEveryProbeOutcome(t *testing.T) {
 	}
 }
 
-// below is the first version REJECTED, not the last accepted, so it can never render as a
-// maximum: "< 25" accepts 24.19.0 and rejects 25.0.0.
-func TestRenderWindowNeverPrintsBelowAsAMaximum(t *testing.T) {
-	assert.Equal(t, ">= 22, < 25", renderWindow(spells.VersionBounds{Min: "22", Below: "25"}))
-	assert.Equal(t, ">= 1.26", renderWindow(spells.VersionBounds{Min: "1.26"}))
-	assert.Equal(t, "< 25", renderWindow(spells.VersionBounds{Below: "25"}))
-	assert.Empty(t, renderWindow(spells.VersionBounds{}))
-}
-
 // Two spells in one project can declare the same bin. Without the spell as a third key
 // their order is whatever the sort happened to do, and a read-only command's JSON output
 // would differ between runs on identical input.

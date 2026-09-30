@@ -45,8 +45,8 @@ function tool(over: Record<string, unknown> = {}): Record<string, unknown> {
     bin: "go",
     spell: "go",
     installedVersion: "v1.26.5",
-    workspaceBounds: { min: "1.26" },
-    effective: { min: "1.26" },
+    workspaceWindow: ">= 1.26",
+    effectiveWindow: ">= 1.26",
     verdict: "VERDICT_INSIDE",
     cycle: "1.26",
     eol: "2027-02-11",
@@ -64,9 +64,10 @@ const PROJECTS = [
         bin: "node",
         spell: "typescript",
         installedVersion: "v26.5.0",
-        workspaceBounds: { min: "22", below: "25" },
-        effective: { min: "22", below: "25" },
+        workspaceWindow: ">= 22, < 25",
+        effectiveWindow: ">= 22, < 25",
         verdict: "VERDICT_TOO_NEW",
+        violation: true,
         diagnosticCode: "MGS3006",
         cycle: "26",
         eol: "",
@@ -79,7 +80,8 @@ const PROJECTS = [
     tools: [
       tool({
         installedVersion: "v1.25.3",
-        workspaceBounds: undefined,
+        workspaceWindow: undefined,
+        effectiveWindow: ">= 1.25",
         cycle: "1.25",
         eol: "2026-08-19",
         support: "SUPPORT_EOL",
@@ -167,6 +169,29 @@ test("every toolchain row is a table row, with the wire mapped into its cells", 
     "too new (MGS3006)",
   ]);
   assert.equal(count(), "3 tools, 1 outside window");
+});
+
+test("the table shows the server's window text and violation flag, not its own reading of them", async () => {
+  // The bounds are absent and the diagnostic code is blank, so a cell can only read as it does
+  // because the server rendered it, and the count can only include the row because the server
+  // flagged it.
+  serve([
+    {
+      path: ".",
+      tools: [
+        tool({
+          bin: "odd",
+          effectiveWindow: "whatever the server printed",
+          verdict: "VERDICT_TOO_OLD",
+          violation: true,
+        }),
+      ],
+    },
+  ]);
+  await mount();
+  assert.equal(table()[0][4], "whatever the server printed");
+  assert.equal(table()[0][6], "too old");
+  assert.equal(count(), "1 tool, 1 outside window");
 });
 
 test("a column header sorts the table and a second press reverses it", async () => {

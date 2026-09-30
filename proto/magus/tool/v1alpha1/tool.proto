@@ -118,6 +118,18 @@ message Tool {
   string cycle = 12;
   string eol = 13;
   Support support = 14;
+
+  // violation is true when the version sits outside its effective window (TOO_OLD or
+  // TOO_NEW), the rows the CLI raises MGS3005/MGS3006 for. UNKNOWN is never a violation.
+  // A client counts these rather than re-deriving the rule from verdict or diagnostic_code.
+  bool violation = 15;
+
+  // The three windows rendered the way `magus describe tools` prints them: ">= 22, < 25".
+  // Empty when that window constrains nothing. Clients show these as given; below is the
+  // first version rejected, so it renders as "< x", never as a max.
+  string spell_window = 16;
+  string workspace_window = 17;
+  string effective_window = 18;
 }
 
 // Project groups the tools one project drives, since a window is declared per project and

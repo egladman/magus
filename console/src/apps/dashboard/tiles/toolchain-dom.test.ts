@@ -21,6 +21,7 @@ function row(over: Partial<ToolRowView> = {}): ToolRowView {
     workspaceWindow: ">= 1.26",
     effectiveWindow: ">= 1.26",
     verdict: "inside",
+    violation: false,
     code: "",
     probedAtMs: 0,
     cycle: "",
@@ -35,7 +36,7 @@ const unwired: LifecycleView = { provider: "", state: "unwired", sources: [], de
 function stateWith(rows: ToolRowView[], lifecycle: LifecycleView = unwired): DashboardState {
   return {
     ...initialState(),
-    tools: { rows, violations: rows.filter((r) => r.code !== "").length, lifecycle },
+    tools: { rows, lifecycle },
   };
 }
 
@@ -82,12 +83,15 @@ test("the summary counts what needs acting on, and states the zeros", () => {
 });
 
 test("a violation is counted and named in the note with the lifecycle note after it", () => {
-  // The console and a terminal must not disagree about the same pair: the count is the rows that
-  // carry a diagnostic code, the same ones `magus run` would fail on.
+  // The console and a terminal must not disagree about the same pair: the count is the rows the
+  // server flags as violations, the same ones `magus run` would fail on.
   const tile = toolchainTile();
   tile.update(
     stateWith(
-      [row({ bin: "node", verdict: "too new", code: "MGS3006" }), row({ support: "unknown" })],
+      [
+        row({ bin: "node", verdict: "too new", violation: true, code: "MGS3006" }),
+        row({ support: "unknown" }),
+      ],
       { provider: "endoflife-date", state: "unreached", sources: [], detail: "no route to host" },
     ),
   );

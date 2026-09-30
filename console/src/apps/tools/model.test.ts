@@ -21,6 +21,7 @@ function row(over: Partial<ToolRowView> = {}): ToolRowView {
     workspaceWindow: ">= 1.26",
     effectiveWindow: ">= 1.26",
     verdict: "inside",
+    violation: false,
     code: "",
     probedAtMs: 0,
     cycle: "",
@@ -58,7 +59,7 @@ test("a tool with only its spell's window is unpinned", () => {
 });
 
 test("counts agree with the filters that produce them", () => {
-  const violating = row({ bin: "bad", code: "MGS3005", verdict: "too old" });
+  const violating = row({ bin: "bad", violation: true, code: "MGS3005", verdict: "too old" });
   assert.deepEqual(toolCounts([...rows, violating]), {
     total: 5,
     pastEol: 2,

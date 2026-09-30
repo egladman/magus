@@ -24,6 +24,13 @@ func TestDeclaredByNamesWhicheverSideSetTheWindow(t *testing.T) {
 	assert.Equal(t, "unconstrained", windowCell(types.ToolRow{}), "a blank cell would read as missing data")
 }
 
+// The table words a verdict the way the console does, while the JSON keeps too_old.
+func TestDescribeToolsVerdictCellSpacesTheVerdictAndNamesTheCode(t *testing.T) {
+	assert.Equal(t, "too old (MGS3005)", verdictCell(types.ToolRow{Verdict: types.ToolVerdictTooOld, DiagnosticCode: "MGS3005"}))
+	assert.Equal(t, "too new (MGS3006)", verdictCell(types.ToolRow{Verdict: types.ToolVerdictTooNew, DiagnosticCode: "MGS3006"}))
+	assert.Equal(t, "inside", verdictCell(types.ToolRow{Verdict: types.ToolVerdictInside}))
+}
+
 // The header is the network announcement: every state a report can be in names itself,
 // and a live one names what was read.
 func TestLifecycleHeaderNamesTheStateAndTheReads(t *testing.T) {

@@ -236,6 +236,9 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 				SpellBounds:      boundsToProto(t.Supported),
 				WorkspaceBounds:  boundsToProto(projBounds),
 				Effective:        boundsToProto(effective),
+				SpellWindow:      t.Supported.Window(),
+				WorkspaceWindow:  projBounds.Window(),
+				EffectiveWindow:  effective.Window(),
 			}
 			// Only for a reading that happened: a probe that never ran must not carry a
 			// timestamp saying it did.
@@ -244,6 +247,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 			}
 			row.Verdict = verdict(effective, pr.version)
 			row.DiagnosticCode = diagnosticCode(row.Verdict)
+			row.Violation = row.DiagnosticCode != ""
 			out = append(out, row)
 		}
 	}

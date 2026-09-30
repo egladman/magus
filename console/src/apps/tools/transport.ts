@@ -11,58 +11,13 @@ import {
   type ListToolsResponse,
 } from "@wire/tool/v1alpha1/tool_pb";
 import { createServerTransport } from "../../lib/server";
-import {
-  renderWindow,
-  type LifecycleView,
-  type ToolRowView,
-  type ToolsView,
-} from "../dashboard/state";
+import { enumWord } from "../../lib/enums";
+import type { ToolRowView, ToolsView } from "../dashboard/state";
 
-// UNKNOWN stays its own word: "we could not check" must not read as inside.
-const verdictLabel = (v: Verdict): ToolRowView["verdict"] => {
-  switch (v) {
-    case Verdict.TOO_OLD:
-      return "too old";
-    case Verdict.TOO_NEW:
-      return "too new";
-    case Verdict.INSIDE:
-      return "inside";
-    default:
-      return "unknown";
-  }
-};
-
-const supportLabel = (s: Support): ToolRowView["support"] => {
-  switch (s) {
-    case Support.SUPPORTED:
-      return "supported";
-    case Support.EOL:
-      return "eol";
-    case Support.UNANNOUNCED:
-      return "unannounced";
-    case Support.UNKNOWN:
-      return "unknown";
-    default:
-      return "";
-  }
-};
-
-// An unset state reads as unwired: nothing was asked.
-const lifecycleStateLabel = (s: LifecycleState): LifecycleView["state"] => {
-  switch (s) {
-    case LifecycleState.LIVE:
-      return "live";
-    case LifecycleState.CACHED:
-      return "cached";
-    case LifecycleState.OFFLINE:
-      return "offline";
-    case LifecycleState.UNREACHED:
-      return "unreached";
-    default:
-      return "unwired";
-  }
-};
-
+// The server decides what a violation is and renders the windows, so this maps them through. The
+// enums turn into words from their value names; the unspecified word is the honest reading of an
+// unset value: a verdict nobody set is unknown ("we could not check" must not read as inside), a
+// lifecycle state nobody set is unwired (nothing was asked), and no support is blank.
 export function mapTools(resp: ListToolsResponse): ToolsView {
   const rows: ToolRowView[] = [];
   for (const proj of resp.projects) {
@@ -72,26 +27,30 @@ export function mapTools(resp: ListToolsResponse): ToolsView {
         bin: tool.bin,
         spell: tool.spell,
         installed: tool.installedVersion,
-        spellWindow: renderWindow(tool.spellBounds),
-        workspaceWindow: renderWindow(tool.workspaceBounds),
-        effectiveWindow: renderWindow(tool.effective),
-        verdict: verdictLabel(tool.verdict),
+        spellWindow: tool.spellWindow,
+        workspaceWindow: tool.workspaceWindow,
+        effectiveWindow: tool.effectiveWindow,
+        verdict: enumWord(Verdict, tool.verdict, "unknown"),
+        violation: tool.violation,
         code: tool.diagnosticCode,
         probedAtMs: tool.probeTime
           ? Number(tool.probeTime.seconds) * 1000 + Math.floor(tool.probeTime.nanos / 1e6)
           : 0,
         cycle: tool.cycle,
         eol: tool.eol,
-        support: supportLabel(tool.support),
+        support: enumWord(Support, tool.support, ""),
       });
     }
   }
   return {
     rows,
-    violations: rows.filter((r) => r.code !== "").length,
     lifecycle: {
       provider: resp.lifecycle?.provider ?? "",
-      state: lifecycleStateLabel(resp.lifecycle?.state ?? LifecycleState.UNSPECIFIED),
+      state: enumWord(
+        LifecycleState,
+        resp.lifecycle?.state ?? LifecycleState.UNSPECIFIED,
+        "unwired",
+      ),
       sources: resp.lifecycle?.sources ?? [],
       detail: resp.lifecycle?.detail ?? "",
     },

@@ -384,12 +384,22 @@ type Tool struct {
 	// lifecycle is the product the spell names for this binary (spells.Tool.lifecycle),
 	// empty when it names none. cycle is the release line the installed version belongs
 	// to and eol that line's end date, both empty when nothing matched.
-	Lifecycle     string  `protobuf:"bytes,11,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
-	Cycle         string  `protobuf:"bytes,12,opt,name=cycle,proto3" json:"cycle,omitempty"`
-	Eol           string  `protobuf:"bytes,13,opt,name=eol,proto3" json:"eol,omitempty"`
-	Support       Support `protobuf:"varint,14,opt,name=support,proto3,enum=magus.tool.v1alpha1.Support" json:"support,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Lifecycle string  `protobuf:"bytes,11,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	Cycle     string  `protobuf:"bytes,12,opt,name=cycle,proto3" json:"cycle,omitempty"`
+	Eol       string  `protobuf:"bytes,13,opt,name=eol,proto3" json:"eol,omitempty"`
+	Support   Support `protobuf:"varint,14,opt,name=support,proto3,enum=magus.tool.v1alpha1.Support" json:"support,omitempty"`
+	// violation is true when the version sits outside its effective window (TOO_OLD or
+	// TOO_NEW), the rows the CLI raises MGS3005/MGS3006 for. UNKNOWN is never a violation.
+	// A client counts these rather than re-deriving the rule from verdict or diagnostic_code.
+	Violation bool `protobuf:"varint,15,opt,name=violation,proto3" json:"violation,omitempty"`
+	// The three windows rendered the way `magus describe tools` prints them: ">= 22, < 25".
+	// Empty when that window constrains nothing. Clients show these as given; below is the
+	// first version rejected, so it renders as "< x", never as a max.
+	SpellWindow     string `protobuf:"bytes,16,opt,name=spell_window,json=spellWindow,proto3" json:"spell_window,omitempty"`
+	WorkspaceWindow string `protobuf:"bytes,17,opt,name=workspace_window,json=workspaceWindow,proto3" json:"workspace_window,omitempty"`
+	EffectiveWindow string `protobuf:"bytes,18,opt,name=effective_window,json=effectiveWindow,proto3" json:"effective_window,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Tool) Reset() {
@@ -511,6 +521,34 @@ func (x *Tool) GetSupport() Support {
 		return x.Support
 	}
 	return Support_SUPPORT_UNSPECIFIED
+}
+
+func (x *Tool) GetViolation() bool {
+	if x != nil {
+		return x.Violation
+	}
+	return false
+}
+
+func (x *Tool) GetSpellWindow() string {
+	if x != nil {
+		return x.SpellWindow
+	}
+	return ""
+}
+
+func (x *Tool) GetWorkspaceWindow() string {
+	if x != nil {
+		return x.WorkspaceWindow
+	}
+	return ""
+}
+
+func (x *Tool) GetEffectiveWindow() string {
+	if x != nil {
+		return x.EffectiveWindow
+	}
+	return ""
 }
 
 // Project groups the tools one project drives, since a window is declared per project and
@@ -689,7 +727,7 @@ const file_magus_tool_v1alpha1_tool_proto_rawDesc = "" +
 	"\x06detail\x18\x06 \x01(\tR\x06detail\"7\n" +
 	"\rVersionBounds\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\tR\x03min\x12\x14\n" +
-	"\x05below\x18\x02 \x01(\tR\x05below\"\xdd\x04\n" +
+	"\x05below\x18\x02 \x01(\tR\x05below\"\xf4\x05\n" +
 	"\x04Tool\x12\x10\n" +
 	"\x03bin\x18\x01 \x01(\tR\x03bin\x12\x14\n" +
 	"\x05spell\x18\x02 \x01(\tR\x05spell\x12+\n" +
@@ -704,7 +742,11 @@ const file_magus_tool_v1alpha1_tool_proto_rawDesc = "" +
 	"\tlifecycle\x18\v \x01(\tR\tlifecycle\x12\x14\n" +
 	"\x05cycle\x18\f \x01(\tR\x05cycle\x12\x10\n" +
 	"\x03eol\x18\r \x01(\tR\x03eol\x126\n" +
-	"\asupport\x18\x0e \x01(\x0e2\x1c.magus.tool.v1alpha1.SupportR\asupportJ\x04\b\n" +
+	"\asupport\x18\x0e \x01(\x0e2\x1c.magus.tool.v1alpha1.SupportR\asupport\x12\x1c\n" +
+	"\tviolation\x18\x0f \x01(\bR\tviolation\x12!\n" +
+	"\fspell_window\x18\x10 \x01(\tR\vspellWindow\x12)\n" +
+	"\x10workspace_window\x18\x11 \x01(\tR\x0fworkspaceWindow\x12)\n" +
+	"\x10effective_window\x18\x12 \x01(\tR\x0feffectiveWindowJ\x04\b\n" +
 	"\x10\vR\benforced\"b\n" +
 	"\aProject\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +

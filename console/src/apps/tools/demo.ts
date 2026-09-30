@@ -12,6 +12,7 @@ const row = (over: Partial<ToolRowView>): ToolRowView => ({
   workspaceWindow: ">= 1.26",
   effectiveWindow: ">= 1.26",
   verdict: "inside",
+  violation: false,
   code: "",
   probedAtMs: 0,
   cycle: "1.26",
@@ -62,7 +63,6 @@ export function demoToolsView(now: number): ToolsView {
   ];
   return {
     rows,
-    violations: 0,
     lifecycle: { provider: "endoflife-date", state: "cached", sources: [], detail: "" },
   };
 }

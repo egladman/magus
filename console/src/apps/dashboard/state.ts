@@ -778,43 +778,36 @@ export interface ToolRowView {
   bin: string;
   spell: string;
   installed: string; // "" when the tool is absent or printed nothing version-shaped
-  spellWindow: string; // rendered window, "" when unconstrained
+  // The windows are rendered by the server, the way `magus describe tools` prints them; "" when
+  // unconstrained.
+  spellWindow: string;
   workspaceWindow: string;
   effectiveWindow: string;
-  verdict: "inside" | "too old" | "too new" | "unknown";
+  verdict: string; // the verdict enum's word: "inside", "too old", "too new" or "unknown"
+  violation: boolean; // the server's call: outside the effective window
   code: string; // MGS3005 / MGS3006, "" when satisfied
   probedAtMs: number; // 0 when never probed
   cycle: string; // the release line the installed version belongs to, "" when none matched
   eol: string; // that line's end-of-life date, "" when none is announced or known
-  // "" when the spell names no product or no provider is wired; "unknown" when the provider
-  // could not place the version, and ToolsView.lifecycle.state says why.
-  support: "" | "supported" | "eol" | "unannounced" | "unknown";
+  // The support enum's word: "" when the spell names no product or no provider is wired, else
+  // "supported", "eol", "unannounced" or "unknown" (the provider could not place the version, and
+  // ToolsView.lifecycle.state says why).
+  support: string;
 }
 
 // LifecycleView is where the rows' end-of-life columns came from. The provider reads over
 // the network, so the tile names its state rather than leaving a blank that reads as fine.
 export interface LifecycleView {
   provider: string;
-  state: "live" | "cached" | "offline" | "unreached" | "unwired";
+  state: string; // the lifecycle state enum's word: live, cached, offline, unreached or unwired
   sources: string[];
   detail: string; // why the provider was not asked or did not answer
 }
 
 export interface ToolsView {
   rows: ToolRowView[];
-  violations: number;
   lifecycle: LifecycleView;
 }
-
-// renderWindow turns a wire window into the notation the docs use. `below` is the first
-// version REJECTED, so it renders as "< x" and never as a max.
-export const renderWindow = (b: { min: string; below: string } | undefined): string => {
-  if (!b) return "";
-  const parts: string[] = [];
-  if (b.min) parts.push(">= " + b.min);
-  if (b.below) parts.push("< " + b.below);
-  return parts.join(", ");
-};
 
 export interface InsightView {
   commits: number; // the git-history window shared by the four VCS lenses

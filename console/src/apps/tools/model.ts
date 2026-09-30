@@ -46,7 +46,7 @@ export function toolCounts(rows: readonly ToolRowView[]): ToolCounts {
   return {
     total: rows.length,
     pastEol: n("eol"),
-    outsideWindow: rows.filter((r) => r.code !== "").length,
+    outsideWindow: rows.filter((r) => r.violation).length,
     unannounced: n("unannounced"),
     unpinned: n("unpinned"),
   };
