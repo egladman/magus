@@ -267,6 +267,26 @@ func TestTokenize_Positions(t *testing.T) {
 			{Kind: Ident, Val: "x", Line: 1, Col: 1},
 			{Kind: EOF, Line: 1, Col: 7},
 		}},
+		{"escaped newline in a string counts a line", "\"a\\\nb\" x", []Token{
+			{Kind: String, Val: "a\\\nb", Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 2, Col: 4},
+			{Kind: EOF, Line: 2, Col: 5},
+		}},
+		{"escaped newline in a pattern counts a line", "$\"a\\\nb\" x", []Token{
+			{Kind: Pat, Val: "a\\\nb", Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 2, Col: 4},
+			{Kind: EOF, Line: 2, Col: 5},
+		}},
+		{"raw newline in a char literal counts a line", "'\n' x", []Token{
+			{Kind: Int, Val: "10", Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 2, Col: 3},
+			{Kind: EOF, Line: 2, Col: 4},
+		}},
+		{"quote inside a nested string's interpolation", `"{"x{"}"}"}" y`, []Token{
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: `"x{"}"}"`}}, Line: 1, Col: 1},
+			{Kind: Ident, Val: "y", Line: 1, Col: 14},
+			{Kind: EOF, Line: 1, Col: 15},
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -456,6 +476,11 @@ func FuzzTokenize(f *testing.F) {
 		"\"{a\n}\" x",
 		"\"{\"a\\\nb\"}\"\nx",
 		"x // c",
+		"\"a\\\nb\" x",
+		"$\"a\\\nb\" x",
+		"'\n' x",
+		"\"{`a\\`}\" x",
+		"\"{\"x{\"}\"}\"}\" y",
 		"\"", "`", "{", "}", "@", "$",
 		strings.Repeat("a ", maxScratch+4000),
 		strings.Repeat("// doc\nx\n", maxScratch),
@@ -671,6 +696,7 @@ func TestTokenizeInterpolationParts(t *testing.T) {
 		{"raw keeps invalid utf-8 in a run", "`\xff{x}`", []StringPart{{Text: "\xff"}, {IsExpr: true, Text: "x"}}},
 		{"raw escaped brace then an expression", "`\\{a{x}b`", []StringPart{{Text: "{a"}, {IsExpr: true, Text: "x"}, {Text: "b"}}},
 		{"raw multiline run", "`a\n{x}`", []StringPart{{Text: "a\n"}, {IsExpr: true, Text: "x"}}},
+		{"raw leaves a brace in a nested string unmatched", "`{\"a {b\"}`", []StringPart{{IsExpr: true, Text: `"a {b"`}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -709,4 +735,12 @@ func TestTokenizeErrors(t *testing.T) {
 			require.Errorf(t, err, "Tokenize(%q) accepted malformed input", c.src)
 		})
 	}
+}
+
+// TestTokenize_NestedRawStringBackslashEscapesBacktick pins upstream's rule inside
+// an interpolation: \` does not close a nested raw string, so the outer brace is
+// never reached. Upstream reports the same input as an unterminated string.
+func TestTokenize_NestedRawStringBackslashEscapesBacktick(t *testing.T) {
+	_, err := Tokenize("\"{`a\\`}\" x")
+	require.EqualError(t, err, "buzz: unterminated interpolation at line 1:1")
 }

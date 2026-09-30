@@ -730,8 +730,13 @@ func (l *lexer) lexChar(line, col int) (Token, error) {
 		}
 		r = esc
 	}
+	if l.src[l.pos] == '\n' {
+		l.line++
+		l.col = 1
+	} else {
+		l.col++
+	}
 	l.pos++
-	l.col++
 
 	if l.pos >= len(l.src) || l.src[l.pos] != '\'' {
 		return Token{}, fmt.Errorf("buzz: unterminated character literal at line %d:%d", line, col)
@@ -840,7 +845,12 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 					lit.WriteRune(esc)
 				}
 				l.pos += esz
-				l.col += esz
+				if esc == '\n' {
+					l.line++
+					l.col = 1
+				} else {
+					l.col += esz
+				}
 				continue
 			}
 			return Token{}, fmt.Errorf("buzz: dangling escape in string at line %d:%d", line, col)
@@ -850,7 +860,7 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
-			expr, err := l.captureInterpExpr(line, col)
+			expr, err := l.captureInterpExpr(line, col, true)
 			if err != nil {
 				return Token{}, err
 			}
@@ -959,7 +969,7 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
-			expr, err := l.captureInterpExpr(line, col)
+			expr, err := l.captureInterpExpr(line, col, false)
 			if err != nil {
 				return Token{}, err
 			}
@@ -1012,7 +1022,12 @@ func (l *lexer) lexPattern(line, col int) (Token, error) {
 				}
 				sb.WriteRune(r2)
 				l.pos += s2
-				l.col += s2
+				if r2 == '\n' {
+					l.line++
+					l.col = 1
+				} else {
+					l.col += s2
+				}
 			} else {
 				sb.WriteRune(r)
 			}
@@ -1036,8 +1051,12 @@ func (l *lexer) lexPattern(line, col int) (Token, error) {
 
 // captureInterpExpr reads source up to the matching closing brace, honoring
 // nested braces and embedded strings. The opening brace is already consumed.
-// The expression is returned exactly as written.
-func (l *lexer) captureInterpExpr(line, col int) (string, error) {
+// The expression is returned exactly as written. With nest, an interpolation
+// inside an embedded string is captured too, as upstream's scanInterpolation
+// does, so a quote inside it cannot end that string. A raw string passes false:
+// its braces may hold JSON or a template rather than Buzz, and an unparsable
+// interpolation there stays literal text.
+func (l *lexer) captureInterpExpr(line, col int, nest bool) (string, error) {
 	depth := 1
 	start := l.pos
 	for l.pos < len(l.src) {
@@ -1057,7 +1076,10 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 			// Skip a nested string whole so its braces aren't miscounted. A BACKTICK
 			// string counts here too: an interpolation may hold a raw string, and its
 			// braces (or an unbalanced one in a zdef block) would otherwise close the
-			// interpolation early.
+			// interpolation early. A backslash skips the next rune in either kind:
+			// upstream's scanner lets \` escape a backtick, so "{`a\`}" is
+			// unterminated there as here, though lexRawString ends a top-level raw
+			// string at \`.
 			delim := r
 			l.pos += size
 			l.col += size
@@ -1078,6 +1100,12 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 						l.col = 1
 					} else {
 						l.col += s3
+					}
+					continue
+				}
+				if r2 == '{' && nest {
+					if _, err := l.captureInterpExpr(line, col, nest); err != nil {
+						return "", err
 					}
 					continue
 				}
