@@ -162,7 +162,7 @@ default_charms: [rw]
 *.ts diff=typescript
 *.tsx diff=typescript
 *.buzz diff=buzz
-OUT.txt merge=magus linguist-generated
+/OUT.txt merge=magus linguist-generated
 # END magus-generated
 -- magusfile.buzz --
 import "magus";

@@ -8,14 +8,15 @@
 # entirely.
 
 # -- a verb that renders nothing structured refuses -o (exit 2, usage class) -----------
-! exec magus clean -o json
-stderr 'magus clean: -o is not supported by this command'
+! exec magus graph build -o json
+stderr 'magus graph build: -o is not supported by this command'
 
 ! exec magus notes edit some-note -o json
 stderr 'magus notes edit: -o is not supported by this command'
 
-# Without -o the same verbs are untouched.
-exec magus clean --dry-run
+# A verb that renders a report takes -o.
+exec magus clean --dry-run -o json
+stdout '"dry_run": true'
 
 # -- events is a JSONL stream, so every other format is refused ------------------------
 ! exec magus events -o json --limit 0
