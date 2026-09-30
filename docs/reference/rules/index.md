@@ -60,6 +60,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [unknown-env](unknown-env.md)                     | a retired or misspelled MAGUS_* variable handed to a command                                      |
 | [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                  |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
+| [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths         |
 | [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                           |
 
 ## Explains

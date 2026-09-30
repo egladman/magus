@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v15). Query it instead of grepping:
+This workspace has a knowledge graph (schema v16). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `lint-files`                                                                |
+| target     |     100+ | `magus query kind=target`     | `lint-files`, `content-generate`, `site-generate`                                                                |
 | spell      | built in | `magus query kind=spell`      | `go`, `buzz`, `markdown`                                                                                         |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
@@ -55,24 +55,25 @@ magus graph export -o json  # the whole graph
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
 | doc        |     900+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
-| dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                   |
-| file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `hack/pull-requests.buzz`                               |
-| function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
-| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
+| dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                         |
+| file       |     300+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
+| function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
+| import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
 | rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
+| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      54 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
-| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `install`, `ci`, `build`                                 |
+| [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
+| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
 | [libs/coldread](libs/coldread/MAGUS.md)                                     |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
-| [libs/diagram](libs/diagram/MAGUS.md)                                       |       4 | `magus query project=libs/diagram`                    | `test`, `ci`, `generate`                                 |
+| libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                     |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
@@ -132,7 +133,16 @@ magus graph export -o json  # the whole graph
 | `types-generate`         | Regenerates everything derived from the boundary registry: the runtime boundary list and the Go-to-Buzz encoders.                                                                                                                                                                                                                                                                              |
 | `skills-generate`        | Reinstalls the agent skills from their embedded sources in internal/agent/skills.                                                                                                                                                                                                                                                                                                              |
 | `index-generate`         | Renders MAGUS.md via `magus describe graph`.                                                                                                                                                                                                                                                                                                                                                   |
-| `graph-generate`         | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.                                                                                                                                                                                                            |
+| `symbol-digest-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.                                                                                                                                                                                                            |
+| `graph-generate`         |                                                                                                                                                                                                                                                                                                                                                                                                |
 | `advice-test`            | Runs the PR advisors' `test "..." {}` blocks.                                                                                                                                                                                                                                                                                                                                                  |
 | `buzz-test`              | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine, and holds their merged line coverage above a floor.                                                                                                                                                                                                                             |
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                                                                                                                                                                                      |
+
+## Project: libs/figure
+
+| Target | What it does                                                                                          |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `ci`   | ci runs lint before test, so a type error fails in seconds rather than after the suite.               |
+| `test` | test runs the in-file test blocks upstream-strict, as a figure author's `magus buzz` runs the module. |
+| `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic.                          |

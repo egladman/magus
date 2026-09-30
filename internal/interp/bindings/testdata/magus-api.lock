@@ -13,6 +13,8 @@ describeFile
 describeModule
 diagnoseDrift
 diff
+dir
+dirs
 doctor
 explain
 fatal
@@ -31,6 +33,7 @@ harness
 harness.provider
 hasCharm
 impact
+importGraph
 insight
 job
 job.clear
@@ -39,6 +42,7 @@ job.list
 job.put
 job.register
 job.wait
+layer
 lifecycle
 lifecycle.provider
 log
@@ -47,6 +51,7 @@ log.error
 log.hint
 log.info
 log.warn
+neighborhood
 output
 path
 project
@@ -68,6 +73,7 @@ service.acquire
 service.release
 skills
 stats
+symbolIndexDigest
 targets
 tools
 vcs

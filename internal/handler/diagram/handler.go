@@ -145,7 +145,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fig, err := render(r.Context(), g, lens.describe())
+	sourceURL := h.sourceURL(r.Context())
+	fig, err := render(r.Context(), g, lens.describe(), anchorTemplate(sourceURL))
 	var findings *FindingsError
 	if errors.As(err, &findings) {
 		http.Error(w, findings.Findings, http.StatusUnprocessableEntity)
@@ -164,8 +165,14 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 		Title:     fig.Title,
 		SVG:       fig.SVG,
 		Nodes:     nodes,
-		SourceURL: h.sourceURL(r.Context()),
+		SourceURL: sourceURL,
 	})
+}
+
+// anchorTemplate is the source URL template without its line fragment: a node anchors a
+// directory or a file, never a line, so the link lands on the path itself.
+func anchorTemplate(sourceURL string) string {
+	return strings.TrimSuffix(sourceURL, "#L{line}")
 }
 
 var errUnknownFigure = errors.New("diagram: unknown figure")
