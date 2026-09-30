@@ -51,11 +51,11 @@ func benchRun(b *testing.B, chunk *vmpackage.Chunk, env *vmpackage.Env) {
 // arithmetic, and conditional branching.
 func BenchmarkFib(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`fun fib(n: int) > int {
+		`fun fibonacci(n: int) > int {
     if (n <= 1) { return n; }
-    return fib(n - 1) + fib(n - 2);
+    return fibonacci(n - 1) + fibonacci(n - 2);
 }`,
-		`final __r = fib(30);`,
+		`final __r = fibonacci(30);`,
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
