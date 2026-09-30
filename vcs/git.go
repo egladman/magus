@@ -667,6 +667,13 @@ func headBranch(dir string) (string, bool) {
 	if linked, ok := gitLinkedDir(root); ok {
 		gitdir = linked
 	}
+	// git refuses a repository another user owns unless safe.directory allows it, and
+	// only git reads that config, so a doubtful owner goes to git for its own error.
+	for _, p := range []string{filepath.Join(root, ".git"), gitdir, root} {
+		if !ownedByCurrentUser(p) {
+			return "", false
+		}
+	}
 	// A symlinked HEAD is git's oldest format, and reading through it would take the
 	// branch's commit for a detached HEAD.
 	if fi, err := os.Lstat(filepath.Join(gitdir, "HEAD")); err != nil || !fi.Mode().IsRegular() {
@@ -705,11 +712,17 @@ func headBranch(dir string) (string, bool) {
 
 // gitDiscover finds the top of the checkout containing dir the way git's discovery does,
 // by walking up to the first .git. ok is false where dir sits inside a bare repository,
-// which git would find first.
+// which git would find first, and where the walk would cross onto another device, which
+// git refuses unless GIT_DISCOVERY_ACROSS_FILESYSTEM is set.
 func gitDiscover(dir string) (string, bool) {
 	d, err := filepath.Abs(dir)
 	if err != nil {
 		return "", false
+	}
+	bounded := !envBool(os.Getenv("GIT_DISCOVERY_ACROSS_FILESYSTEM"))
+	var startDev uint64
+	if bounded {
+		startDev, bounded = deviceOf(d)
 	}
 	for {
 		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
@@ -724,8 +737,30 @@ func gitDiscover(dir string) (string, bool) {
 		if parent == d {
 			return "", false
 		}
+		if bounded {
+			if dev, ok := deviceOf(parent); !ok || dev != startDev {
+				return "", false
+			}
+		}
 		d = parent
 	}
+}
+
+// Seams for the ownership and device checks, which a test cannot stage with chown or a
+// second mount.
+var (
+	ownedByCurrentUser = pathOwnedByCurrentUser
+	deviceOf           = pathDevice
+)
+
+// envBool reads a boolean environment value the way git's git_env_bool does.
+func envBool(s string) bool {
+	switch strings.ToLower(s) {
+	case "true", "yes", "on":
+		return true
+	}
+	n, err := strconv.Atoi(s)
+	return err == nil && n != 0
 }
 
 // gitRefExists reports whether ref is a loose ref file under dir or a line of packed.
@@ -736,9 +771,40 @@ func gitRefExists(dir string, packed map[string]bool, ref string) bool {
 	return packed[ref]
 }
 
-// gitPackedRefs returns the ref names in common's packed-refs, nil when it has none.
+// packedRefsCache holds parsed packed-refs files, so a long-lived process asking for the
+// branch does not re-read a large file each time.
+var packedRefsCache struct {
+	sync.Mutex
+	files map[string]packedRefsEntry
+}
+
+// packedRefsEntry is a parsed packed-refs and the stat it was read under. The refs map is
+// shared between callers and never written after parsing.
+type packedRefsEntry struct {
+	mtime time.Time
+	size  int64
+	refs  map[string]bool
+}
+
+// maxPackedRefsCache bounds the cache; a process that sees more repositories than this
+// starts over.
+const maxPackedRefsCache = 64
+
+// gitPackedRefs returns the ref names in common's packed-refs, nil when it has none. The
+// parse is reused while the file's mtime and size are unchanged.
 func gitPackedRefs(common string) map[string]bool {
-	b, err := os.ReadFile(filepath.Join(common, "packed-refs"))
+	path := filepath.Join(common, "packed-refs")
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	packedRefsCache.Lock()
+	e, hit := packedRefsCache.files[path]
+	packedRefsCache.Unlock()
+	if hit && e.size == fi.Size() && e.mtime.Equal(fi.ModTime()) {
+		return e.refs
+	}
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
@@ -751,6 +817,15 @@ func gitPackedRefs(common string) map[string]bool {
 			refs[ref] = true
 		}
 	}
+	packedRefsCache.Lock()
+	if len(packedRefsCache.files) >= maxPackedRefsCache {
+		clear(packedRefsCache.files)
+	}
+	if packedRefsCache.files == nil {
+		packedRefsCache.files = map[string]packedRefsEntry{}
+	}
+	packedRefsCache.files[path] = packedRefsEntry{mtime: fi.ModTime(), size: fi.Size(), refs: refs}
+	packedRefsCache.Unlock()
 	return refs
 }
 

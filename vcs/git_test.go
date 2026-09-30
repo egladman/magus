@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2574,6 +2576,170 @@ func TestGitRefAsksGitWhenTheFilesCannotSettleIt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, meta.Ref, got)
 	assert.Equal(t, "heads/work", got)
+}
+
+// swapSeam sets *seam for the test and restores it after. The seams are package state, so
+// a test that swaps one must not run in parallel.
+func swapSeam[T any](t *testing.T, seam *T, to T) {
+	t.Helper()
+	old := *seam
+	*seam = to
+	t.Cleanup(func() { *seam = old })
+}
+
+// A repository directory git would call dubiously owned is not answered from its files:
+// Ref asks git, whose own verdict and error then stand. PATH is emptied, so reaching git
+// fails the call, which is how the test sees the fast path decline.
+func TestGitRefAsksGitWhenTheRepositoryIsNotOwned(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "work")
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
+	t.Setenv("PATH", t.TempDir())
+
+	var checked []string
+	swapSeam(t, &ownedByCurrentUser, func(path string) bool {
+		checked = append(checked, path)
+		return true
+	})
+	got, err := gitVCS{}.Ref(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "work", got)
+	assert.Equal(t, []string{filepath.Join(dir, ".git"), dir}, dedupe(checked),
+		"the .git entry and the worktree are the paths git's check reads")
+
+	linkedGitDir, ok := gitLinkedDir(linked)
+	require.True(t, ok)
+	for _, tc := range []struct{ name, dir, unowned string }{
+		{"git dir", dir, filepath.Join(dir, ".git")},
+		{"worktree", dir, dir},
+		{"linked git dir", linked, linkedGitDir},
+		{"linked gitfile", linked, filepath.Join(linked, ".git")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			swapSeam(t, &ownedByCurrentUser, func(path string) bool { return path != tc.unowned })
+			_, err := gitVCS{}.Ref(t.Context(), tc.dir)
+			require.Error(t, err, "an unowned %s must not be answered from files", tc.name)
+		})
+	}
+}
+
+func dedupe(s []string) []string {
+	var out []string
+	for _, v := range s {
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Discovery stops where git would: at a parent on another device than the start, unless
+// GIT_DISCOVERY_ACROSS_FILESYSTEM is set. The device seam puts the repository root on its
+// own device, as a mount at the checkout's top would.
+func TestGitRefStopsAtAFilesystemBoundary(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"sub/b.txt": "two\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "work")
+	sub := filepath.Join(dir, "sub")
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("GIT_DISCOVERY_ACROSS_FILESYSTEM", "")
+	swapSeam(t, &deviceOf, func(path string) (uint64, bool) {
+		if path == dir {
+			return 2, true
+		}
+		return 1, true
+	})
+
+	got, err := gitVCS{}.Ref(t.Context(), dir)
+	require.NoError(t, err, "the top of a mount is still found from inside it")
+	assert.Equal(t, "work", got)
+
+	_, err = gitVCS{}.Ref(t.Context(), sub)
+	require.Error(t, err, "a walk onto another device falls to git")
+
+	for _, v := range []string{"1", "true", "yes", "on"} {
+		t.Run("across "+v, func(t *testing.T) {
+			t.Setenv("GIT_DISCOVERY_ACROSS_FILESYSTEM", v)
+			got, err := gitVCS{}.Ref(t.Context(), sub)
+			require.NoError(t, err)
+			assert.Equal(t, "work", got)
+		})
+	}
+	t.Run("across 0", func(t *testing.T) {
+		t.Setenv("GIT_DISCOVERY_ACROSS_FILESYSTEM", "0")
+		_, err := gitVCS{}.Ref(t.Context(), sub)
+		require.Error(t, err)
+	})
+	t.Run("unreadable device", func(t *testing.T) {
+		swapSeam(t, &deviceOf, func(string) (uint64, bool) { return 0, false })
+		got, err := gitVCS{}.Ref(t.Context(), sub)
+		require.NoError(t, err, "no device to compare, so no boundary")
+		assert.Equal(t, "work", got)
+	})
+}
+
+// packed-refs is parsed once per mtime and size: an unchanged file returns the same parse,
+// and an edit, by size or by mtime alone, is read again.
+func TestGitPackedRefsCacheFollowsTheFile(t *testing.T) {
+	common := t.TempDir()
+	path := filepath.Join(common, "packed-refs")
+	write := func(body string, mtime time.Time) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		require.NoError(t, os.Chtimes(path, mtime, mtime))
+	}
+	const a = "1111111111111111111111111111111111111111 refs/heads/aaa\n"
+	const b = "1111111111111111111111111111111111111111 refs/heads/bbb\n"
+	t0 := time.Now().Add(-time.Hour).Truncate(time.Second)
+
+	write(a, t0)
+	first := gitPackedRefs(common)
+	assert.Equal(t, map[string]bool{"refs/heads/aaa": true}, first)
+	assert.Equal(t, reflect.ValueOf(first).Pointer(), reflect.ValueOf(gitPackedRefs(common)).Pointer(),
+		"an unchanged file is not parsed again")
+
+	write(a+b, t0)
+	assert.Equal(t, map[string]bool{"refs/heads/aaa": true, "refs/heads/bbb": true}, gitPackedRefs(common),
+		"a size change is read again")
+
+	write(b+"# pad\n", t0)
+	write(a+"# pad\n", t0.Add(time.Second))
+	assert.Equal(t, map[string]bool{"refs/heads/aaa": true}, gitPackedRefs(common),
+		"an mtime change at equal size is read again")
+
+	require.NoError(t, os.Remove(path))
+	assert.Nil(t, gitPackedRefs(common))
+}
+
+// An edited packed-refs changes Ref's answer: deleting the branch's line leaves a ref
+// files cannot vouch for, so Ref goes to git.
+func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	gitRun(t, dir, "switch", "-q", "-c", "packed")
+	gitRun(t, dir, "pack-refs", "--all")
+	path := filepath.Join(dir, ".git", "packed-refs")
+	require.NoFileExists(t, filepath.Join(dir, ".git", "refs", "heads", "packed"))
+	t.Setenv("PATH", t.TempDir())
+
+	got, err := gitVCS{}.Ref(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "packed", got)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var kept []string
+	for line := range strings.Lines(string(body)) {
+		if !strings.Contains(line, "refs/heads/packed") {
+			kept = append(kept, line)
+		}
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(kept, "")), 0o644))
+
+	_, err = gitVCS{}.Ref(t.Context(), dir)
+	require.Error(t, err, "the edited packed-refs no longer names the branch")
 }
 
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
