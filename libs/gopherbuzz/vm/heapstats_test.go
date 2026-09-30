@@ -84,6 +84,12 @@ func TestOwnerReleaseFreesAndReusesSlots(t *testing.T) {
 	if got := ReadHeapStats().Objects; got != before {
 		t.Fatalf("live count after release: %d, want %d", got, before)
 	}
+	if raceEnabled {
+		if again := gHeapAlloc(&listObj{}, nil); again == idx {
+			t.Fatalf("the race build recycled released slot %d; it must stay poisoned", idx)
+		}
+		return
+	}
 	if gHeapGet(idx) != nil {
 		t.Fatalf("slot %d still holds its object after release", idx)
 	}
@@ -100,7 +106,7 @@ func TestOwnerClaimStopsAtAnotherOwner(t *testing.T) {
 	outer := ListValue([]Value{inner})
 	adopter.Claim(outer)
 	adopter.Release()
-	if nanboxObj(outer) != nil {
+	if !freed(outer) {
 		t.Fatal("the adopted list survived its adopter's release")
 	}
 	if _, ok := nanboxObj(inner).(*listObj); !ok {
@@ -126,7 +132,34 @@ func TestOwnerTakesMembersAttachedAfterTheClaim(t *testing.T) {
 		t.Fatal("a value stored past the owner is owned before anything reached it")
 	}
 	a.Release(m)
-	if nanboxObj(viaSet) != nil || nanboxObj(viaWalk) != nil {
+	if !freed(viaSet) || !freed(viaWalk) {
 		t.Fatal("attached members survived the release")
 	}
+}
+
+// freed reports whether v's slot was released: emptied, or poisoned under -race.
+// It reads the table directly, since gHeapGet panics on a poisoned slot.
+func freed(v Value) bool {
+	switch (*gHeapPtr.Load())[uint64(v)&idxMaskHeap].(type) {
+	case nil, released:
+		return true
+	}
+	return false
+}
+
+// Under the race detector a released slot is never recycled, and reading a
+// Value into one panics by name instead of quietly reading a later object.
+func TestReleasedSlotReadPanicsUnderRace(t *testing.T) {
+	if !raceEnabled {
+		t.Skip("released slots are poisoned only under -race")
+	}
+	var a Owner
+	v := encodeHeap(tagList, gHeapAlloc(&listObj{}, &a))
+	a.Release()
+	defer func() {
+		if got := recover(); got != "buzz: value used after its session closed" {
+			t.Fatalf("read of a released slot: got %v, want the use-after-close panic", got)
+		}
+	}()
+	_ = v.asList()
 }

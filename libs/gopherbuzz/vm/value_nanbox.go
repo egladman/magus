@@ -245,11 +245,26 @@ func heapRelease(o *Owner, roots []Value) {
 		s[idx] = nil
 		gHeapOwner[idx] = nil
 	}
-	gHeapFree = append(gHeapFree, o.slots...)
+	// Under the race detector a released slot is poisoned instead of recycled,
+	// as sync.Pool drops instead of reusing there: a Value read after its
+	// session closed then panics in gHeapGet, where a recycled slot would have
+	// quietly read as some later object.
+	if raceEnabled {
+		for _, idx := range o.slots {
+			s[idx] = released{}
+		}
+	} else {
+		gHeapFree = append(gHeapFree, o.slots...)
+	}
 	gHeapLive.Add(-int64(len(o.slots)))
 	o.slots = nil
 	gHeapMu.Unlock()
 }
+
+// released marks a slot poisoned by heapRelease under the race detector.
+type released struct{}
+
+func (released) heapKind() valueTag { return tagNull }
 
 // walkLocked gives o every unowned slot reachable from root; a slot's owner
 // mark is also its visited mark, so a cycle terminates. With seen non-nil the
@@ -269,6 +284,11 @@ func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
 		case owner == nil:
 			if s[idx] == nil {
 				continue
+			}
+			if raceEnabled {
+				if _, gone := s[idx].(released); gone {
+					continue
+				}
 			}
 			gHeapOwner[idx] = o
 			o.slots = append(o.slots, idx)
@@ -327,7 +347,13 @@ func alloc[T heapVal](vm *VM, tag valueTag, ptr T) Value {
 // gHeapGet returns the heap object at idx. Lock-free: loads an atomic snapshot
 // of the slice header and indexes it directly.
 func gHeapGet(idx uint64) heapVal {
-	return (*gHeapPtr.Load())[idx]
+	o := (*gHeapPtr.Load())[idx]
+	if raceEnabled {
+		if _, ok := o.(released); ok {
+			panic("buzz: value used after its session closed")
+		}
+	}
+	return o
 }
 
 // heapFineFits fails to COMPILE if a new heap valueTag outgrows the fine field. The
