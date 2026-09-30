@@ -259,38 +259,23 @@ func vcsDir(ctx context.Context) string {
 	return dir
 }
 
-// vcsMetadata resolves the workspace VCS and reads its metadata, RAISING when either step
-// fails rather than reporting a zero value.
-//
-// Swallowing both failures and returning "" is not how a Buzz function reports a problem
-// (upstream declares the error in the signature and the caller writes try/catch), and ""
-// is a value a branch name could take. It also pushed the check onto every call site: a
-// magusfile that forgot `if (h == "")` interpolated an empty commit into a version string
-// or an image tag, surfacing only when someone read the artifact.
-//
-// magus.affected already made this call the other way: an empty answer and an unavailable
-// one mean opposite things to whoever is deciding what to build.
-func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return types.VCSMeta{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
-	}
-	meta, err := v.Metadata(ctx, vcsDir(ctx))
-	if err != nil {
-		return types.VCSMeta{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
-	}
-	return meta, nil
-}
-
 // VcsRef returns the movable name at the current revision (a git branch, an hg named
 // branch, a jj bookmark), or nil when none names it; raises when no VCS or metadata is
 // available.
 func VcsRef(ctx context.Context) (*string, error) {
-	meta, err := vcsMetadata(ctx)
-	if err != nil || meta.Ref == "" {
-		return nil, err
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return nil, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
 	}
-	return &meta.Ref, nil
+	ref, err := v.Ref(ctx, vcsDir(ctx))
+	if err != nil {
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
+	}
+	var name *string
+	if ref != "" {
+		name = &ref
+	}
+	return name, nil
 }
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.

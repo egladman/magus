@@ -146,7 +146,7 @@ Every VCS-history lens as one typed report: {hotspots, affinity, ownership, tren
 
 Search the knowledge graph: {definition, schemaVersion, query, budget, matchCount, offset, matches, nodes, links, answer}. Annotate the result `> QueryResult`. query is free text plus field matchers (kind=spell, project=pkg/foo, relation=uses, kind!=op, id=~build$). A query that seeds code symbols (kind=symbol) reads the symbol shards too; every other query reads the domain graph. opts.budget caps the neighborhood (default 50); opts.limit and opts.offset window the matches while matchCount stays the total. Read answer.verdict before trusting zero matches: `unknown` means part of the workspace had no symbol index. An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\query(query, [opts]) -> QueryResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L55)
+**Signature:** `magus\query(query, [opts]) -> QueryResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L54)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -159,7 +159,7 @@ Search the knowledge graph: {definition, schemaVersion, query, budget, matchCoun
 
 One knowledge-graph node's context card: {definition, schemaVersion, node, blastRadius, out, in, docsURL}. Annotate the result `> ExplainResult`. node is a node ID (target:pkg/foo:build) or a name that resolves to one. A path between two nodes is magus\path. Raises when node resolves to nothing, naming magus\refs when the name could be a code symbol this graph does not load. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\explain(node) -> ExplainResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L86)
+**Signature:** `magus\explain(node) -> ExplainResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L85)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -171,7 +171,7 @@ One knowledge-graph node's context card: {definition, schemaVersion, node, blast
 
 The shortest chain of edges between two knowledge-graph nodes: {definition, schemaVersion, from, to, found, steps}. Annotate the result `> PathResult`. Edges are walked in both directions. A resolved pair with no connection returns found false; only an endpoint that resolves to nothing raises. The endpoints are `node` and `to` rather than from and to because `from` is a reserved Buzz word. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\path(node, to) -> PathResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L113)
+**Signature:** `magus\path(node, to) -> PathResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L112)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -184,7 +184,7 @@ The shortest chain of edges between two knowledge-graph nodes: {definition, sche
 
 Where a code symbol is defined and every file that references it: {definition, schemaVersion, symbol, label, fileCount, refCount, defs, refs, answer}. Annotate the result `> RefsResult`. symbol is a symbol node ID or a name that resolves to one, drawn from the workspace's declared SCIP indexes. A symbol nothing defines is an answer, not a raise: answer.verdict says whether that is a verified absence or a blind spot. opts.limit and opts.offset window refs while fileCount and refCount stay the totals. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\refs(symbol, [opts]) -> RefsResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L136)
+**Signature:** `magus\refs(symbol, [opts]) -> RefsResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L135)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -197,7 +197,7 @@ Where a code symbol is defined and every file that references it: {definition, s
 
 The knowledge graph's shape: {definition, nodeCount, edgeCount, gods, orphans, coverage, isolatedCount, componentCount, largestComponentSize}. Annotate the result `> KnowledgeStats`. gods are the most connected nodes, where structural risk concentrates; orphans are docs that document nothing and spells no target uses. kind scopes every section to one node kind (spell, target, doc, ...); omit it for the whole graph. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\stats([kind]) -> KnowledgeStats` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L176)
+**Signature:** `magus\stats([kind]) -> KnowledgeStats` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L175)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -209,7 +209,7 @@ The knowledge graph's shape: {definition, nodeCount, edgeCount, gods, orphans, c
 
 One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L191)
+**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L190)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |

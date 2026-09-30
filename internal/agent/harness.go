@@ -449,7 +449,11 @@ func (p *HarnessPlan) addFile(path string, file HarnessFile) error {
 func mergeFragment(dst, src map[string]any) map[string]any {
 	// MergeDeep never fails, and two objects always merge into an object.
 	merged, _ := std.MergeDeep(context.Background(), dst, src)
-	return merged.(map[string]any)
+	m, ok := merged.(map[string]any)
+	if !ok {
+		panic(fmt.Sprintf("agent: merging two objects gave %T", merged))
+	}
+	return m
 }
 
 // harnessMergeScript reads a `describe harness -o json` plan on stdin and writes every

@@ -378,9 +378,10 @@ func callArguments(s string, open int) (string, bool) {
 		c := s[i]
 		switch {
 		case quote != 0:
-			if c == '\\' {
+			switch c {
+			case '\\':
 				i++
-			} else if c == quote {
+			case quote:
 				quote = 0
 			}
 		case c == '\'' || c == '"' || c == '`':
@@ -405,9 +406,10 @@ func splitArguments(args string) []string {
 		c := args[i]
 		switch {
 		case quote != 0:
-			if c == '\\' {
+			switch c {
+			case '\\':
 				i++
-			} else if c == quote {
+			case quote:
 				quote = 0
 			}
 		case c == '\'' || c == '"' || c == '`':

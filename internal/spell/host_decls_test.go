@@ -1,6 +1,7 @@
 package spell
 
 import (
+	"io/fs"
 	"testing"
 
 	"github.com/egladman/magus/internal/hostmodules"
@@ -26,6 +27,41 @@ func TestModuleDeclsParse(t *testing.T) {
 		_, err := buzz.Parse(src)
 		assert.NoErrorf(t, err, "the generated %s declarations must parse", mod.Name)
 	}
+}
+
+func TestModuleDeclsRepeatTheEmbeddedFile(t *testing.T) {
+	for _, name := range []string{"magus", "fs", "no-such-module"} {
+		b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+name+".buzz")
+		for range 2 {
+			src, ok := ModuleDecls(name)
+			assert.Equal(t, err == nil, ok, name)
+			assert.Equal(t, string(b), src, name)
+		}
+	}
+}
+
+// BenchmarkModuleDecls registers every host module's declarations, as each new Buzz
+// session does.
+func BenchmarkModuleDecls(b *testing.B) {
+	mods := hostmodules.All()
+	b.Run("memo=false", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			for _, mod := range mods {
+				if data, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+mod.Name+".buzz"); err == nil {
+					_ = string(data)
+				}
+			}
+		}
+	})
+	b.Run("memo=true", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			for _, mod := range mods {
+				_, _ = ModuleDecls(mod.Name)
+			}
+		}
+	})
 }
 
 // TestModuleDeclsDeclareEveryMethod pins the declarations to the module they describe:

@@ -25,6 +25,7 @@ import "../../spells/golang/gomod" as gomod;
 import "os";
 import "proc";
 import "fs";
+import "flags";
 import "vcs";
 import "env";
 
@@ -36,14 +37,15 @@ magus\project({
     // the suite has to re-check rather than replay. *.txt matches no go spell glob (it
     // takes *.go and *.txtar). Project-wide because test declares no ctx.readsFiles of
     // its own, so the baseline is what keys it; dprint.json is per-target instead, on
-    // the one target that reads it.
-    "sources": ["testdata/*.txt"],
+    // the one target that reads it. The .buzz programs are FuzzTokenize's seeds.
+    "sources": ["testdata/*.txt", "testdata/**/*.buzz", "examples/**/*.buzz"],
     // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
     "targets": {
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
         // Fetches over the network and re-checks upstream out every run.
         "conformance": {"skip_cache": "fetches over the network and re-checks upstream on every run"},
+        "fuzz": {"skip_cache": "the mutator is randomized, so an unchanged tree can crash on the next run"},
     },
 });
 
@@ -113,6 +115,18 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("coverage.out");
     go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
     proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
+}
+
+// Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it.
+// go refuses -fuzz across packages, which is why go-test's ./... cannot run this.
+export fun fuzz(ctx: magus\Context, args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: [<str>], valued: ["--fuzztime"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "fuzz: unexpected arguments {args.join(" ")}; the only flag is --fuzztime <duration>";
+    }
+    // A found crasher is a new file under the fuzzed package's testdata/fuzz.
+    ctx.writesFiles("token/testdata/fuzz/**");
+    go["go-fuzz"](ctx, {"args": ["-fuzz", "FuzzTokenize", "-fuzztime", parsed.values["--fuzztime"] ?? "30s", "./token"]});
 }
 
 // The CLI is independently versioned from the gopherbuzz module tag namespace.

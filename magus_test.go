@@ -26,7 +26,9 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -1565,4 +1567,65 @@ func TestTargetLabel(t *testing.T) {
 	assert.Equal(t, "api (affected)", TargetLabel(one, "affected"))
 	assert.Equal(t, "3 projects", TargetLabel(several, ""))
 	assert.Equal(t, "3 projects (stdin paths)", TargetLabel(several, "stdin paths"))
+}
+
+func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	d := mocks.NewMockVCSDriver(t)
+	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
+	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("https://example.com/o/r.git", nil).Once()
+	m := &Magus{ws: &types.Workspace{Root: root}}
+
+	got := m.reviewOriginOf(t.Context(), d)
+
+	assert.Equal(t, types.ReviewOrigin{Branch: "feat/x", Remote: "https://example.com/o/r.git"}, got)
+	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
+}
+
+func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	d := mocks.NewMockVCSDriver(t)
+	d.EXPECT().Ref(mock.Anything, root).Return("", errors.New("unborn branch")).Once()
+	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("", errors.New("no remote")).Once()
+	m := &Magus{ws: &types.Workspace{Root: root}}
+
+	assert.Equal(t, types.ReviewOrigin{}, m.reviewOriginOf(t.Context(), d))
+	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
+}
+
+func TestLastPassedBaseReadsRefWithoutMetadata(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	d := mocks.NewMockVCSDriver(t)
+	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
+	d.EXPECT().ParentRef().Return("HEAD~1").Once()
+	m := &Magus{ws: &types.Workspace{Root: root}}
+	m.cfg.CI.RecordRuns = true
+	m.cfg.HistoryPath = filepath.Join(t.TempDir(), "history.json")
+	res := types.VCSResolution{Name: "git", Source: types.VCSSourceAuto, Base: BaseLastPassed, VCS: d}
+
+	got, err := m.lastPassedBase(t.Context(), res)
+
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD~1", got)
+	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
+}
+
+func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	cause := errors.New("unborn branch")
+	d := mocks.NewMockVCSDriver(t)
+	d.EXPECT().Ref(mock.Anything, root).Return("", cause).Once()
+	m := &Magus{ws: &types.Workspace{Root: root}}
+	m.cfg.CI.RecordRuns = true
+	res := types.VCSResolution{Name: "git", Source: types.VCSSourceAuto, Base: BaseLastPassed, VCS: d}
+
+	_, err := m.lastPassedBase(t.Context(), res)
+
+	require.ErrorIs(t, err, cause)
+	assert.EqualError(t, err, `base "last-passed": read git metadata: unborn branch`)
+	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
 }

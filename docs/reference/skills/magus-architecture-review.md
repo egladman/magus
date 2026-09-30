@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6903
-skill_short_bytes: 5602
+skill_full_bytes: 6904
+skill_short_bytes: 5603
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `100` |
+| `agent-skill-version` | `101` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `299f056cb252` |
+| `skill-content` | `15da4217d5f6` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -77,6 +77,7 @@ Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
 ```sh
 magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
 ```
+
  Weight affinity most: changing
 together with no declared edge is back-door coupling.
 
@@ -213,6 +214,7 @@ Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
 ```sh
 magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
 ```
+
  Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.

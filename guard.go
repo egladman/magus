@@ -69,7 +69,6 @@ type headPolicy struct {
 type objectBatchState struct {
 	once  sync.Once
 	batch vcs.ObjectBatch
-	err   error
 }
 
 // loadShapingFiles are the files besides Buzz sources whose edit can change what a load
@@ -437,9 +436,9 @@ func (h headPolicy) readBatch(ctx context.Context, repoRoot, rel string) (string
 		return "", false, nil
 	}
 	h.batch.once.Do(func() {
-		h.batch.batch, h.batch.err = opener.OpenObjectBatch(ctx, repoRoot, "")
+		h.batch.batch, _ = opener.OpenObjectBatch(ctx, repoRoot, "")
 	})
-	if h.batch.err != nil || h.batch.batch == nil {
+	if h.batch.batch == nil {
 		return "", false, nil
 	}
 	content, err := h.batch.batch.Read(rel)

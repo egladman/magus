@@ -3,6 +3,7 @@ package project
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/spells"
@@ -51,7 +52,17 @@ func (r *SpellRegistry) RegisterSpell(s *spells.Spell) {
 			panic(fmt.Sprintf("magus/project: duplicate spell registration %q", s.Name()))
 		}
 	}
-	r.items = append(r.items, s)
+	r.insertLocked(s)
+}
+
+// insertLocked keeps items sorted by name. Registration order is not stable (the
+// built-in spells register from a map), so All sorts here rather than in every printer.
+// The caller holds mu and has checked s's name is absent.
+func (r *SpellRegistry) insertLocked(s *spells.Spell) {
+	i, _ := slices.BinarySearchFunc(r.items, s.Name(), func(e *spells.Spell, name string) int {
+		return strings.Compare(e.Name(), name)
+	})
+	r.items = slices.Insert(r.items, i, s)
 }
 
 // RegisterIfAbsent registers s and returns it, or — if a spell of the same name
@@ -72,12 +83,11 @@ func (r *SpellRegistry) RegisterIfAbsent(s *spells.Spell) *spells.Spell {
 			return existing
 		}
 	}
-	r.items = append(r.items, s)
+	r.insertLocked(s)
 	return s
 }
 
-// ReplaceSpell registers s in place of any spell of the same name, keeping its position
-// so All's order is stable, and reports whether one was replaced. It is how a declared
+// ReplaceSpell registers s in place of any spell of the same name, and reports whether one was replaced. It is how a declared
 // override takes an embedded spell's name: registration is by name, so the override
 // has to own the entry rather than sit beside it. The registry is per process, so the
 // replacement holds for every workspace that process loads.
@@ -94,7 +104,7 @@ func (r *SpellRegistry) ReplaceSpell(s *spells.Spell) bool {
 			return true
 		}
 	}
-	r.items = append(r.items, s)
+	r.insertLocked(s)
 	return false
 }
 
@@ -107,7 +117,7 @@ func (r *SpellRegistry) UnregisterSpell(name string) {
 	})
 }
 
-// All returns a snapshot of every registered spell.
+// All returns a snapshot of every registered spell, sorted by name.
 func (r *SpellRegistry) All() []*spells.Spell {
 	r.runEnsure()
 	r.mu.RLock()

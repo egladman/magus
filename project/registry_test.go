@@ -49,8 +49,26 @@ func TestSpellRegistry_ReplaceSpell(t *testing.T) {
 	assert.Equal(t, []string{"go", "rust"}, spellNames(r.All()), "the entry keeps its place")
 
 	assert.False(t, r.ReplaceSpell(spells.NewSpell("python")), "a name nothing holds is added")
-	assert.Equal(t, []string{"go", "rust", "python"}, spellNames(r.All()))
+	assert.Equal(t, []string{"go", "python", "rust"}, spellNames(r.All()))
 	assert.False(t, r.ReplaceSpell(nil))
+}
+
+func TestSpellRegistry_AllIsSortedByName(t *testing.T) {
+	names := []string{"typescript", "go", "rust", "buf", "markdown", "bash"}
+	want := []string{"bash", "buf", "go", "markdown", "rust", "typescript"}
+	for _, reg := range []func(*SpellRegistry, *spells.Spell){
+		(*SpellRegistry).RegisterSpell,
+		func(r *SpellRegistry, s *spells.Spell) { r.RegisterIfAbsent(s) },
+		func(r *SpellRegistry, s *spells.Spell) { r.ReplaceSpell(s) },
+	} {
+		r := NewSpellRegistry()
+		for _, n := range names {
+			reg(r, spells.NewSpell(n))
+		}
+		first := spellNames(r.All())
+		assert.Equal(t, want, first)
+		assert.Equal(t, first, spellNames(r.All()), "two calls agree")
+	}
 }
 
 func spellNames(all []*spells.Spell) []string {

@@ -362,6 +362,8 @@ func (m *Magus) load(ctx context.Context) error {
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
 	ctx = m.withRecordedOutput(ctx)
+	ctx, sealProbes := interp.WithImportProbes(ctx)
+	defer sealProbes()
 	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
 	// asks a registry what a tag means.
 	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{
@@ -1178,11 +1180,15 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 	if err != nil || res.VCS == nil {
 		return types.ReviewOrigin{}
 	}
+	return m.reviewOriginOf(ctx, res.VCS)
+}
+
+func (m *Magus) reviewOriginOf(ctx context.Context, driver types.VCSDriver) types.ReviewOrigin {
 	var out types.ReviewOrigin
-	if meta, err := res.VCS.Metadata(ctx, m.ws.Root); err == nil {
-		out.Branch = meta.Ref
+	if ref, err := driver.Ref(ctx, m.ws.Root); err == nil {
+		out.Branch = ref
 	}
-	if remote, err := res.VCS.RemoteURL(ctx, m.ws.Root, ""); err == nil {
+	if remote, err := driver.RemoteURL(ctx, m.ws.Root, ""); err == nil {
 		out.Remote = remote
 	}
 	return out
@@ -1665,6 +1671,10 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	if res.Base != BaseLastPassed {
 		return base, nil
 	}
+	return m.lastPassedBase(ctx, res)
+}
+
+func (m *Magus) lastPassedBase(ctx context.Context, res types.VCSResolution) (string, error) {
 	// Refused, not silently downgraded. With the run log off there is nothing to read,
 	// and every fallback available here is a base that gates less than the caller asked
 	// for, which is the failure this base ref exists to prevent. Naming the switch that
@@ -1675,7 +1685,7 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	if res.VCS == nil || res.Source == types.VCSSourceDisabled {
 		return "", fmt.Errorf("base %q needs a VCS to resolve against, and none is active", BaseLastPassed)
 	}
-	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
+	ref, err := res.VCS.Ref(ctx, m.ws.Root)
 	if err != nil {
 		return "", fmt.Errorf("base %q: read %s metadata: %w", BaseLastPassed, res.Name, err)
 	}
@@ -1684,15 +1694,15 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return "", fmt.Errorf("base %q: %w", BaseLastPassed, err)
 	}
-	if commit, ok := hist.PassedCommit(meta.Ref, ""); ok {
+	if commit, ok := hist.PassedCommit(ref, ""); ok {
 		slog.DebugContext(ctx, "affected: base resolved from run history",
-			slog.String("ref", meta.Ref), slog.String("commit", commit))
+			slog.String("ref", ref), slog.String("commit", commit))
 		return commit, nil
 	}
 
 	parent := res.VCS.ParentRef()
 	slog.WarnContext(ctx, "affected: no passing run recorded for this ref; diffing its parent commit instead",
-		slog.String("ref", meta.Ref),
+		slog.String("ref", ref),
 		slog.String("base", parent),
 		slog.String("history_path", m.cfg.HistoryPath),
 		slog.String("consequence", "anything merged by a run that did not pass is NOT in this diff"))

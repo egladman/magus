@@ -71,7 +71,7 @@ func (j *Journal) record(key string, stop spells.Command) {
 		err = file.WriteFileAtomic(j.path(key), data, 0o600)
 	}
 	if err != nil {
-		slog.Warn("magus: could not journal a hosted service; a broker crash would leave it running",
+		slog.WarnContext(context.Background(), "magus: could not journal a hosted service; a broker crash would leave it running",
 			slog.String("key", key), slog.String("err", err.Error()))
 	}
 }

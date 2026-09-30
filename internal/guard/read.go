@@ -520,7 +520,17 @@ func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 
 // wholeReadFiles are the files written to be read whole: an agent's instructions and a
 // skill, whose every section applies at once.
-var wholeReadFiles = map[string]bool{"SKILL.md": true, "AGENTS.md": true, "CLAUDE.md": true}
+var wholeReadFiles = baseNames("SKILL.md", "AGENTS.md", "./CLAUDE.md")
+
+// baseNames keys a set by each path's last element, so a host's file is written as the
+// path it is rather than as a bare host name.
+func baseNames(paths ...string) map[string]bool {
+	set := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		set[path.Base(p)] = true
+	}
+	return set
+}
 
 // mapFor maps rel by its kind, or reports false for a kind with no parser here. TypeScript
 // has none, so it stays silent.

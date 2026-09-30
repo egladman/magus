@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -157,6 +159,52 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 	}
 }
 
+// The search joins `../x` onto the root as root/../x.buzz, a file beside the workspace,
+// which from a worktree is a sibling checkout. It must be refused and never read.
+func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
+	outer := t.TempDir()
+	root := filepath.Join(outer, "ws")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	const module = "export fun touch() > void {}\n"
+	above := filepath.Join(outer, "x.buzz")
+	require.NoError(t, os.WriteFile(above, []byte(module), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inside.buzz"), []byte(module), 0o644))
+
+	ctx := types.WithWorkspace(t.Context(), rootWorkspace{root: root})
+	oldJoin := strings.ReplaceAll(magusSearchPaths(ctx, root)[0], "?", "../x")
+	require.Equal(t, root+string(filepath.Separator)+".."+string(filepath.Separator)+"x.buzz", oldJoin)
+	require.Equal(t, above, filepath.Clean(oldJoin), "the old search resolves the planted module")
+
+	load := func(t *testing.T, magusfile string) ([]string, error) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		var reads []string
+		ctx := WithSourceReader(ctx, func(path string) ([]byte, error) {
+			reads = append(reads, path)
+			return os.ReadFile(path)
+		})
+		src, err := Find(root)
+		require.NoError(t, err)
+		load, err := execBuzzSrc(ctx, src, true)
+		if err == nil {
+			t.Cleanup(func() { _ = load.Session.Close() })
+		}
+		return reads, err
+	}
+
+	t.Run("a module above the root is refused unread", func(t *testing.T) {
+		reads, err := load(t, "import \"../x\";\nx\\touch();\n")
+		require.ErrorIs(t, err, types.SpellImportEscapesWorkspace)
+		assert.NotContains(t, reads, above)
+		assert.NotContains(t, reads, oldJoin)
+	})
+	t.Run("a module inside the root loads", func(t *testing.T) {
+		reads, err := load(t, "import \"inside\";\ninside\\touch();\n")
+		require.NoError(t, err)
+		assert.Contains(t, reads, filepath.Join(root, "inside.buzz"))
+	})
+}
+
 // importsWorkspace is a workspace carrying resolved spell imports, the way Magus does.
 type importsWorkspace struct {
 	rootWorkspace
@@ -181,14 +229,17 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	require.NoError(t, err)
 	declared := types.WithWorkspace(t.Context(), importsWorkspace{rootWorkspace{root: root}, im})
 
-	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local";`))
-	assert.NoError(t, checkRemoteSpellImports(declared, `import "`+lint+`";`))
-	assert.NoError(t, checkRemoteSpellImports(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
+	check := func(ctx context.Context, src string) error {
+		return checkRemoteSpellImports(ctx, remoteImportPaths(src))
+	}
+	assert.NoError(t, check(t.Context(), `import "spells/local";`))
+	assert.NoError(t, check(declared, `import "`+lint+`";`))
+	assert.NoError(t, check(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
 
-	err = checkRemoteSpellImports(t.Context(), `import "`+lint+`";`)
+	err = check(t.Context(), `import "`+lint+`";`)
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared, "no workspace declares anything")
 
-	err = checkRemoteSpellImports(declared, "import \""+lint+"\";\nimport \"ghcr.io/team/spells/fmt\" as fmt;\n")
+	err = check(declared, "import \""+lint+"\";\nimport \"ghcr.io/team/spells/fmt\" as fmt;\n")
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared)
 	require.ErrorContains(t, err, `"ghcr.io/team/spells/fmt"`)
 }
@@ -273,12 +324,13 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
 }
 
-// storedChunks lists every file under dir, which holds nothing but the stores.
+// storedChunks lists every file under dir, which holds nothing but the stores, less
+// the magusfile facts kept beside the chunks.
 func storedChunks(t *testing.T, dir string) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
 	require.NoError(t, filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
+		if err == nil && d.Type().IsRegular() && !strings.HasPrefix(d.Name(), "facts-") {
 			out[path] = true
 		}
 		return err
@@ -316,6 +368,9 @@ func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
 		require.NoError(t, err)
 		sum := sha256.Sum256([]byte(root))
 		assert.Equal(t, []string{compilerStamp(), hex.EncodeToString(sum[:])}, strings.Split(filepath.Dir(rel), string(filepath.Separator)))
+		facts, err := filepath.Glob(filepath.Join(filepath.Dir(path), "facts-*"))
+		require.NoError(t, err)
+		assert.Len(t, facts, 1, "the magusfile's facts sit beside its chunk")
 	}
 }
 
@@ -433,4 +488,69 @@ func TestGuardLoadRefusesATamperedChunk(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, planted, recompiled, "the refused chunk is replaced by the compile")
 	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
+}
+
+// A guard hook reads a stored copy of what the checks before Exec learn from the
+// magusfile's syntax, and the copy says what a parse says.
+func TestRuntimeStoredMagusfileFactsMatchParsed(t *testing.T) {
+	t.Parallel()
+	const code = `import "magus/spell/go";
+import "lib/x" as helper;
+import "fs";
+import "ghcr.io/team/spells/lint" as lint;
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    magus.needs(build);
+}
+
+export fun plain(args: [str]) > void {}
+`
+	want := magusfileFacts{
+		Imports:       map[string]string{"go": "magus/spell/go", "helper": "lib/x", "fs": "fs", "lint": "ghcr.io/team/spells/lint"},
+		CtxForm:       []string{"build"},
+		SpellHandles:  []string{"go"},
+		RemoteImports: []string{"ghcr.io/team/spells/lint"},
+		RemovedCall:   "magus.needs",
+		Replacement:   "call ctx.needs(<target>)",
+	}
+	assert.Equal(t, want, magusfileFactsOf(nil, code))
+
+	store := buzz.NewDiskBytecodeStore(t.TempDir())
+	assert.Equal(t, want, magusfileFactsOf(store, code), "computed on a miss")
+	assert.Equal(t, want, magusfileFactsOf(store, code), "read back on a hit")
+}
+
+// A stored copy that does not decode is recomputed, never trusted as empty.
+func TestRuntimeMagusfileFactsIgnoreAnUnreadableCopy(t *testing.T) {
+	t.Parallel()
+	const code = `import "magus/spell/go";` + "\n"
+	store := buzz.NewDiskBytecodeStore(t.TempDir())
+	sum := sha256.Sum256([]byte(code))
+	require.NoError(t, store.Store("facts-"+hex.EncodeToString(sum[:]), []byte("{not json")))
+	assert.Equal(t, []string{"go"}, magusfileFactsOf(store, code).SpellHandles)
+}
+
+// BenchmarkMagusfileFacts is the guard hook's pre-Exec cost for this repo's root
+// magusfile. reparse varies the source per iteration, as a fresh hook process starts
+// with an empty parse cache.
+func BenchmarkMagusfileFacts(b *testing.B) {
+	data, err := os.ReadFile("../../magusfile.buzz")
+	require.NoError(b, err)
+	code := string(data)
+	b.Run("reparse", func(b *testing.B) {
+		b.ReportAllocs()
+		i := 0
+		for b.Loop() {
+			i++
+			magusfileFactsOf(nil, code+"\n// "+strconv.Itoa(i)+"\n")
+		}
+	})
+	b.Run("stored", func(b *testing.B) {
+		b.ReportAllocs()
+		store := buzz.NewDiskBytecodeStore(b.TempDir())
+		magusfileFactsOf(store, code)
+		for b.Loop() {
+			magusfileFactsOf(store, code)
+		}
+	})
 }

@@ -12,10 +12,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/workspace"
@@ -186,6 +188,31 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 // local spell allocates heavily and retains little: measured on this repository, 400
 // cut `magus ls` from 121ms to 110ms and its CPU by a quarter, for 37MB more peak RSS.
 const loadGCPercent = 400
+
+// optimization: run the first second of every process under loadGCPercent, not only the load.
+//
+//	measured: median wall, interleaved runs, n=60: commit-msg hook 74.1->61.6ms, tool-call hook
+//	          89.7->78.1ms, describe targets 240.8->233.9ms; one fewer GC each.
+//	trade-off: a long-lived process grows its heap 5x live for its first second.
+//	assumes:  darwin arm64, 10 P; the GCs a short process pays are the 4MB-minimum-heap ones.
+//
+// GC off under a 512MiB limit ran level with 400 and peaked 100MB higher on describe targets.
+// GOGC 50, 100 and 200, GOMAXPROCS 2 and 4, and a freed 64 to 256MB ballast all lost to 400.
+const startupGCWindow = time.Second
+
+// relaxStartupGC holds relaxGC for window, so a command that exits sooner never restores it.
+// It takes over gcpolicy's init raise, restoring the GOGC that raise replaced.
+func relaxStartupGC(window time.Duration) {
+	restore := relaxGC()
+	if prior, ok := gcpolicy.Prior(); ok {
+		gcRelaxMu.Lock()
+		if gcRelaxCount == 1 && gcRelaxPrev == gcpolicy.Percent {
+			gcRelaxPrev = prior
+		}
+		gcRelaxMu.Unlock()
+	}
+	time.AfterFunc(window, restore)
+}
 
 var (
 	gcRelaxMu    sync.Mutex

@@ -3,6 +3,7 @@ package spell
 import (
 	"embed"
 	"io/fs"
+	"sync"
 )
 
 // This file holds the generated Buzz DECLARATIONS of every host module: the object
@@ -28,10 +29,31 @@ var hostDeclsFS embed.FS
 // whether any exist. A module with no generated declarations is not an error: the
 // caller simply registers the native implementation without them, which is the
 // behavior every module had before these existed.
+//
+// optimization: memoize each module's source for the process.
+//
+//	measured: BenchmarkModuleDecls, one session's registrations, -97% sec/op,
+//	  139 KiB and 148 allocs/op to 0 (benchstat -col /memo, n=10).
+//	trade-off: the declarations stay resident once read, under 180 KiB in all.
 func ModuleDecls(module string) (string, bool) {
-	b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+module+".buzz")
-	if err != nil {
-		return "", false
+	if v, ok := moduleDecls.Load(module); ok {
+		d, isDecl := v.(moduleDecl)
+		if !isDecl {
+			panic("spell: module declaration cache holds a value that is not a moduleDecl")
+		}
+		return d.src, d.ok
 	}
-	return string(b), true
+	var d moduleDecl
+	if b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+module+".buzz"); err == nil {
+		d = moduleDecl{src: string(b), ok: true}
+	}
+	moduleDecls.Store(module, d)
+	return d.src, d.ok
 }
+
+type moduleDecl struct {
+	src string
+	ok  bool
+}
+
+var moduleDecls sync.Map

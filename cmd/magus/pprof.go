@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
+	"strconv"
 	"strings"
 )
 
@@ -31,9 +32,17 @@ import (
 // than by work. A `trace` is the execution trace, for wall time a CPU profile cannot
 // see: a goroutine waiting on a child process or a lock samples nothing.
 //
+// A magus this one starts inherits the variable: the guard hook's `magus buzz` forks
+// `magus shell` on every call. Two processes writing one path left neither profile
+// readable, so a descendant writes beside it, at <path>.<its pid>. A %p in a path is
+// the writing process's pid.
+//
 // Failures here are reported and then ignored: a mistyped profile spec must not fail
 // the build the developer was actually trying to measure.
 const pprofEnv = "MAGUS_PPROF"
+
+// pprofPid is the placeholder a profile path spells its writer's pid with.
+const pprofPid = "%p"
 
 // startProfiling honors MAGUS_PPROF and returns a stop function. The stop function is
 // always non-nil, so callers can defer it unconditionally.
@@ -42,6 +51,10 @@ func startProfiling() func() {
 	if spec == "" {
 		return func() {}
 	}
+	if err := os.Setenv(pprofEnv, pprofDescendantSpec(spec)); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %s: %v\n", pprofEnv, err)
+	}
+	spec = strings.ReplaceAll(spec, pprofPid, strconv.Itoa(os.Getpid()))
 	var stops []func()
 	for _, part := range strings.Split(spec, ",") {
 		part = strings.TrimSpace(part)
@@ -62,6 +75,21 @@ func startProfiling() func() {
 			stop()
 		}
 	}
+}
+
+// pprofDescendantSpec is the spec a child process inherits: each path that does not
+// already name its writer's pid gains a .%p suffix, so no two processes share a file.
+func pprofDescendantSpec(spec string) string {
+	parts := strings.Split(spec, ",")
+	for i, part := range parts {
+		kind, path, ok := strings.Cut(part, ":")
+		path = strings.TrimSpace(path)
+		if !ok || path == "" || strings.Contains(path, pprofPid) {
+			continue
+		}
+		parts[i] = kind + ":" + path + "." + pprofPid
+	}
+	return strings.Join(parts, ",")
 }
 
 // startOneProfile starts a single named profile, or reports why it could not and

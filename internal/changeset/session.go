@@ -614,7 +614,8 @@ func (s *Store) saveSeen(ids []string) {
 	if s.seenPath == "" {
 		return
 	}
-	err := file.Doc[[]string]{Path: s.seenPath}.Update(context.Background(), func(stored *[]string) error {
+	ctx := context.Background()
+	err := file.Doc[[]string]{Path: s.seenPath}.Update(ctx, func(stored *[]string) error {
 		n := len(*stored)
 		for _, id := range ids {
 			if !slices.Contains(*stored, id) {
@@ -622,11 +623,11 @@ func (s *Store) saveSeen(ids []string) {
 			}
 		}
 		if len(*stored) == n {
-			return file.SkipWrite
+			return file.ErrSkipWrite
 		}
 		return nil
 	})
 	if err != nil {
-		slog.Warn("magus: could not persist the review's seen threads", slog.String("err", err.Error()))
+		slog.WarnContext(ctx, "magus: could not persist the review's seen threads", slog.String("err", err.Error()))
 	}
 }

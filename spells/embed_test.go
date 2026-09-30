@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// go:embed takes the files on disk, less any whose name starts with . or _, while a
+// The embed takes the files on disk, less any whose name starts with . or _, while a
 // release packs the files git tracks. The two must be one set, or the digest a binary
 // computes for a shipped spell names an artifact no release published. Every
 // directory under spells/ holding a spell.buzz ships, experimental/ aside, so a new

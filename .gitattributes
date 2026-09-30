@@ -117,6 +117,7 @@ libs/diagnostics/coverage.out merge=magus linguist-generated
 libs/diagram/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
+libs/gopherbuzz/token/testdata/fuzz/** merge=magus linguist-generated
 libs/testlayout/MAGUS.md merge=magus linguist-generated
 libs/testlayout/coverage.out merge=magus linguist-generated
 libs/textsearch/MAGUS.md merge=magus linguist-generated

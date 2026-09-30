@@ -881,3 +881,32 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 		})
 	}
 }
+
+// The guard hook's `magus buzz` forks `magus shell`, which inherits MAGUS_PPROF. Each
+// process profiles to its own file, so neither overwrites the profile the other is
+// still writing.
+func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
+	for spec, want := range map[string]string{
+		"cpu:/tmp/c":               "cpu:/tmp/c.%p",
+		"cpu:/tmp/c,mem:/tmp/m":    "cpu:/tmp/c.%p,mem:/tmp/m.%p",
+		"cpu: /tmp/c ":             "cpu:/tmp/c.%p",
+		"trace:/tmp/t.%p":          "trace:/tmp/t.%p",
+		"cpu:/tmp/c.%p,mem:/tmp/m": "cpu:/tmp/c.%p,mem:/tmp/m.%p",
+		"cpu":                      "cpu",
+		"cpu:":                     "cpu:",
+	} {
+		assert.Equal(t, want, pprofDescendantSpec(spec), spec)
+	}
+
+	dir := t.TempDir()
+	t.Setenv(pprofEnv, "cpu:"+filepath.Join(dir, "top.pprof")+",mem:"+filepath.Join(dir, "own.%p"))
+	stop := startProfiling()
+	inherited := os.Getenv(pprofEnv)
+	stop()
+	assert.Equal(t, "cpu:"+filepath.Join(dir, "top.pprof.%p")+",mem:"+filepath.Join(dir, "own.%p"), inherited)
+	for _, name := range []string{"top.pprof", fmt.Sprintf("own.%d", os.Getpid())} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		assert.True(t, bytes.HasPrefix(data, []byte{0x1f, 0x8b}), "%s is a gzipped profile", name)
+	}
+}

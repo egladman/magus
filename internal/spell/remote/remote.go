@@ -621,7 +621,11 @@ func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
 		_, d, err := content.Manifest()
 		return shippedArtifact{content: content, manifest: d}, err
 	}))
-	a, err := f.(func() (shippedArtifact, error))()
+	load, ok := f.(func() (shippedArtifact, error))
+	if !ok {
+		panic(fmt.Sprintf("remote: shipped artifact cache holds a %T", f))
+	}
+	a, err := load()
 	if err != nil {
 		return oci.Reference{}, oci.Content{}, err
 	}

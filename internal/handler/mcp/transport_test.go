@@ -29,7 +29,7 @@ import (
 const wantServerInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\projects, magus\targets, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\describeFile, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\insight, magus\doctor, magus\memory, magus\job, magus\vcs). Call magus\describeModule("magus") for the signatures. The tools below are the operations that module does not cover.
+The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\projects, magus\targets, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\describeFile, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\insight, magus\doctor, magus\job, magus\vcs). Call magus\describeModule("magus") for the signatures. The tools below are the operations that module does not cover.
 
   client                  - run Buzz against the magus client and return its value
   buzz                    - transform JSON with Buzz; no workspace access

@@ -152,6 +152,13 @@ func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 	}, nil
 }
 
+// Ref implements types.VCSDriver with Metadata's `hg branch` alone. An empty repository
+// answers "default" here as Metadata does, since `hg log -r .` resolves to the null
+// revision rather than failing.
+func (v hgVCS) Ref(ctx context.Context, dir string) (string, error) {
+	return vcsOutput(ctx, dir, "hg", "branch")
+}
+
 // Dirty reports whether the working directory (optionally scoped to paths) has
 // changes, via `hg status`. Non-empty output = dirty.
 func (v hgVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {

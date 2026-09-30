@@ -944,7 +944,7 @@ func (s *Store) doc() file.Doc[jobsFile] {
 }
 
 // update runs fn over the ledger as it stands under the file lock and writes what fn
-// leaves. fn returning an error, file.SkipWrite included, writes nothing.
+// leaves. fn returning an error, file.ErrSkipWrite included, writes nothing.
 func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 	if s.err != nil {
 		return s.err

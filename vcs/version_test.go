@@ -93,8 +93,8 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 
 var installedVCSFloor = flag.Bool("installed-vcs-floor", false, "fail when an installed git, hg, sl or jj is older than its floor")
 
-// This checks the machine, not the code, so it runs only when asked:
-// go test ./vcs -run TestInstalledVCSMeetsItsFloor -installed-vcs-floor
+// This checks the machine, not the code, so it runs only when asked, by passing
+// -installed-vcs-floor with -run TestInstalledVCSMeetsItsFloor.
 func TestInstalledVCSMeetsItsFloor(t *testing.T) {
 	if !*installedVCSFloor {
 		t.Skip("pass -installed-vcs-floor to check the installed binaries")

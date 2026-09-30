@@ -114,7 +114,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {
 }
 
 // writeFile writes content under dir/rel, creating parent dirs.
-func writeFile(t *testing.T, dir, rel, content string) {
+func writeFile(t testing.TB, dir, rel, content string) {
 	t.Helper()
 	path := filepath.Join(dir, rel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))

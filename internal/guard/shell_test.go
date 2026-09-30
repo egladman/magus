@@ -367,7 +367,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// The wrapper peeling that judges `time go test` as `go test` would erase
 		// the token this rule reads, so it works off the raw line.
 		{command: "time go test ./...", rule: rawTool(`go test ./...`)},
-		// Bounding magus with the shell kills it from outside; magustimeout_test.go
+		// Bounding magus with the shell kills it from outside; magus_timeout_test.go
 		// covers each shape and the command it serves.
 		{command: "timeout 300 magus run ci .", rule: denyRule{Name: denyRuleMagusTimeout}},
 		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", rule: denyRule{Name: denyRuleMagusTimeout}},

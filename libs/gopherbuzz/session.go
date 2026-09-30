@@ -156,6 +156,9 @@ type Session struct {
 	// importedModuleVars maps the same bound name to the module's exported
 	// `final`/`var` declarations. See collectImportedModule.
 	importedModuleVars map[string][]*ast.DeclStmt
+	// checkPrelude is what the last check registered from the four fields above,
+	// extended by the next check rather than rebuilt. See checkPrelude.sync.
+	checkPrelude *checkPrelude
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
 	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -264,13 +267,13 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 // partway down a chain outranks types the chain already declared.
 func (s *Session) DeclareModuleTypes(boundName, src string) {
 	// A host's declaration source is static text a person wrote, so a parse error is a
-	// bug in the host and must not read as an empty declaration: collectImportedModule
-	// ignores parse errors because a real import is re-parsed by the Exec that follows,
-	// and nothing re-parses this.
-	if _, err := s.parse(src); err != nil {
+	// bug in the host and must not read as an empty declaration: an import's callers
+	// ignore the parse error because the Exec that follows re-parses the source, and
+	// nothing re-parses this.
+	if s.collectImportedModule(boundName, src) == nil {
+		_, err := s.parse(src)
 		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
 	}
-	s.collectImportedModule(boundName, src)
 }
 
 // SetModuleResolver installs fn as the on-demand resolver for path-style imports
@@ -1015,7 +1018,8 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs, checkWarnings := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
+	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
+	errs, checkWarnings := checkWithPrelude(prog, globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -1324,7 +1328,11 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			key := "decls:" + resolvePath
 			if !s.loadedPaths[key] {
 				s.loadedPaths[key] = true
-				s.collectImportedModule(boundName, src)
+				// A declaration source that does not parse declares nothing.
+				prog := s.collectImportedModule(boundName, src)
+				if prog == nil {
+					prog = &ast.Program{}
+				}
 				// An enum the declarations export needs a runtime VALUE on the module,
 				// not only a type for the checker. The compiler lowers an inferred case
 				// to `ns\Enum.case` (compiler.go, EnumCaseExpr), which is a real member
@@ -1332,7 +1340,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				// host receives an empty string. Set it on v: the namespace is not bound
 				// in env until after this point, which is why it has to be the module
 				// value in hand rather than a lookup by name.
-				s.declareEnumValues(v, src)
+				s.declareEnumValues(v, prog)
 				// An OBJECT the declarations export needs a runtime definition for the
 				// same reason an enum needs a runtime value: the checker knowing the
 				// type is not enough to CONSTRUCT one. Without this, `HttpRetry{...}`
@@ -1345,7 +1353,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				// defines its objects and enums and redefines none of the native
 				// methods. The module value in hand is untouched, verified by calling
 				// a native method after this runs.
-				s.declareObjectTypes(src)
+				s.declareObjectTypes(src, prog)
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -1538,10 +1546,14 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 // A cached chunk's replay collects too: nothing checks that chunk again, but a
 // later compile in this session binds the same import as ImportBound and has
 // only this collection to name the module's types from.
-func (s *Session) collectImportedModule(boundName, src string) {
+//
+// It returns the parsed program, whose declarations the session now holds, so a
+// caller reading them again does not parse src a second time; nil when src does
+// not parse.
+func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 	prog, err := s.parse(src)
 	if err != nil {
-		return
+		return nil
 	}
 	for _, stmt := range prog.Stmts {
 		switch d := stmt.(type) {
@@ -1575,6 +1587,7 @@ func (s *Session) collectImportedModule(boundName, src string) {
 			}
 		}
 	}
+	return prog
 }
 
 // declareEnumValues copies every exported enum in a module's declaration source onto
@@ -1590,13 +1603,9 @@ func (s *Session) collectImportedModule(boundName, src string) {
 // so its enums are ordinary values. This restores that behaviour for a host module
 // bound as a Go map.
 //
-// Cost is one parse of the declaration source that collectImportedModule has already
-// done, once per module per session, and a map insert per enum. Nothing runs per call.
-func (s *Session) declareEnumValues(mod vmpackage.Value, src string) {
-	prog, err := s.parse(src)
-	if err != nil {
-		return
-	}
+// prog is the declaration source as collectImportedModule parsed it. Cost is a map
+// insert per enum, once per module per session. Nothing runs per call.
+func (s *Session) declareEnumValues(mod vmpackage.Value, prog *ast.Program) {
 	for _, stmt := range prog.Stmts {
 		d, isEnum := stmt.(*ast.EnumDecl)
 		if !isEnum || !d.IsExported {
@@ -1623,15 +1632,9 @@ func (s *Session) declareEnumValues(mod vmpackage.Value, src string) {
 // of them able to build it: `magus/spell` spells write `Command{...}` freely,
 // while `http\HttpRetry{...}` threw.
 //
-// Nothing is emitted for a source with no exported object, which is most of them,
-// so the common import pays one parse and no execution.
-func (s *Session) declareObjectTypes(src string) {
-	prog, err := s.parse(src)
-	if err != nil {
-		// A malformed declaration source is already reported by the collect step;
-		// failing here too would surface the same typo twice.
-		return
-	}
+// prog is src as collectImportedModule parsed it. Nothing is emitted for a source
+// with no exported object, which is most of them, so the common import runs nothing.
+func (s *Session) declareObjectTypes(src string, prog *ast.Program) {
 	// Only a source that is PURELY declarations may run. An exported function with
 	// a body is real code, and executing it flat-merges the name into the importing
 	// scope, which for a magusfile means magus reads it as a TARGET. Buzz's own
@@ -1973,6 +1976,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.importedModuleFuncs = maps.Clone(s.importedModuleFuncs)
 	sub.importedModuleTypes = maps.Clone(s.importedModuleTypes)
 	sub.importedModuleVars = maps.Clone(s.importedModuleVars)
+	sub.checkPrelude = s.checkPrelude.clone()
 
 	// Copy parent's current globals into the sub-session so the imported file
 	// can reference host APIs (magus, print, etc.).

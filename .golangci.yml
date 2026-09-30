@@ -237,7 +237,7 @@ linters:
           files:
             - internal/guard/*.go
             - cmd/magus/shell*.go
-            - cmd/magus/guard_*.go
+            - guard.go
             - internal/agent/*.go
           # magus's own labels (hookToolCommand, hookToolWrite, hookToolRead in
           # internal/guard/guard.go) are deliberately none of these.
@@ -306,11 +306,12 @@ linters:
             # since the merge queue's packages moved from libs/mergequeue to
             # internal/queue, 68 since refs --rename imports internal/edit, 70
             # since the MCP workers re-exec into internal/interp/mcpclient and
-            # internal/interp/transform before the CLI starts. Raising it is a
-            # sentence in the commit message.
+            # internal/interp/transform before the CLI starts, 71 since
+            # internal/gcpolicy is a dependency-free leaf imported first so its
+            # init runs early. Raising it is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 70
+              max: 71
 
       stutter:
         type: module

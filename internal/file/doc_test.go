@@ -93,10 +93,10 @@ func TestDocUpdateWritesNothingOnSkipOrFailure(t *testing.T) {
 
 	require.NoError(t, d.Update(t.Context(), func(c *counter) error {
 		c.N = 1
-		return SkipWrite
+		return ErrSkipWrite
 	}))
 	_, err := os.Stat(path)
-	require.ErrorIs(t, err, os.ErrNotExist, "SkipWrite writes nothing")
+	require.ErrorIs(t, err, os.ErrNotExist, "ErrSkipWrite writes nothing")
 
 	boom := errors.New("boom")
 	require.ErrorIs(t, d.Update(t.Context(), func(c *counter) error {

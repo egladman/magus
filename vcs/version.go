@@ -89,7 +89,10 @@ func cachedToolVersion(ctx context.Context, bin string) error {
 		return nil
 	}
 	got, _ := toolProbes.LoadOrStore(bin, new(toolProbe))
-	p := got.(*toolProbe)
+	p, ok := got.(*toolProbe)
+	if !ok {
+		panic("vcs: tool probe cache holds a value that is not a *toolProbe")
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.done {

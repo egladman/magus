@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -406,10 +408,10 @@ func (s sealedBytecodeStore) Store(key string, blob []byte) error {
 func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
 	m := hmac.New(sha256.New, s.secret)
 	for _, part := range []string{s.scope, key} {
-		m.Write([]byte(part))
-		m.Write([]byte{0})
+		_, _ = m.Write([]byte(part))
+		_, _ = m.Write([]byte{0})
 	}
-	m.Write(blob)
+	_, _ = m.Write(blob)
 	return m.Sum(nil)
 }
 
@@ -666,28 +668,39 @@ func spellImportNames(src string) []string {
 // checkRemoteSpellImports refuses a registry-path import magus.yaml does not declare,
 // before Exec runs any top-level statement, so the load stops naming the entry to add
 // rather than at an unbound name. Declared spells were pulled and verified when the
-// workspace loaded, so this touches no network and no file. A parse error yields nil:
-// Exec re-parses and reports it with position.
-func checkRemoteSpellImports(ctx context.Context, src string) error {
+// workspace loaded, so this touches no network and no file. paths are the source's
+// registry-path imports, as remoteImportPaths reads them.
+func checkRemoteSpellImports(ctx context.Context, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	im := remotespell.ImportsFromContext(ctx)
+	var errs []error
+	for _, path := range paths {
+		if _, err := im.Dir(path); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// remoteImportPaths returns the registry-path imports src makes. A parse error yields
+// nil: Exec re-parses and reports it with position.
+func remoteImportPaths(src string) []string {
 	if !mentionsRemoteImport(src) {
 		return nil
 	}
 	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
-		return nil //nolint:nilerr // Exec reports the syntax error
+		return nil
 	}
-	im := remotespell.ImportsFromContext(ctx)
-	var errs []error
+	var paths []string
 	for _, stmt := range prog.Stmts {
-		imp, ok := stmt.(*ast.ImportStmt)
-		if !ok || !spells.IsRemoteImport(imp.Path) {
-			continue
-		}
-		if _, err := im.Dir(imp.Path); err != nil {
-			errs = append(errs, err)
+		if imp, ok := stmt.(*ast.ImportStmt); ok && spells.IsRemoteImport(imp.Path) {
+			paths = append(paths, imp.Path)
 		}
 	}
-	return errors.Join(errs...)
+	return paths
 }
 
 // mentionsRemoteImport is the cheap textual gate in front of the parse: whether any
@@ -763,6 +776,58 @@ func importBoundNames(src string) map[string]string {
 		names[bound] = imp.Path
 	}
 	return names
+}
+
+// magusfileFacts is what execBuzzSrc reads from a magusfile's syntax before running it.
+// Every field is a function of the source bytes and this build's parser alone.
+type magusfileFacts struct {
+	Imports       map[string]string `json:"imports,omitempty"`
+	CtxForm       []string          `json:"ctx_form,omitempty"`
+	SpellHandles  []string          `json:"spell_handles,omitempty"`
+	RemoteImports []string          `json:"remote_imports,omitempty"`
+	RemovedCall   string            `json:"removed_call,omitempty"`
+	Replacement   string            `json:"replacement,omitempty"`
+}
+
+func factsOf(code string) magusfileFacts {
+	f := magusfileFacts{
+		Imports:       importBoundNames(code),
+		SpellHandles:  spellImportNames(code),
+		RemoteImports: remoteImportPaths(code),
+	}
+	f.CtxForm = slices.Sorted(maps.Keys(CtxFormTargetKeys(code)))
+	f.RemovedCall, f.Replacement, _ = RemovedAPICall(code)
+	return f
+}
+
+// magusfileFactsOf returns code's facts, kept in store beside the compiled chunks when
+// there is one.
+//
+// optimization: a guard hook whose chunk is stored never parses the entry magusfile
+// except to answer these checks, so their answers are stored too.
+//
+//	measured: BenchmarkMagusfileFacts on this repo's root magusfile, reparse to stored
+//	  -95.7% sec/op (10.7ms to 0.47ms), -97.9% B/op (11.0 MB), -99.9% allocs/op
+//	  (benchstat, n=10).
+//	trade-off: one more file per magusfile version in the guard's chunk store.
+//	assumes:  store is scoped to one compiler build, as guardBytecodeStore's is.
+func magusfileFactsOf(store buzz.BytecodeStore, code string) magusfileFacts {
+	if store == nil {
+		return factsOf(code)
+	}
+	sum := sha256.Sum256([]byte(code))
+	key := "facts-" + hex.EncodeToString(sum[:])
+	if blob, err := store.Load(key); err == nil {
+		var f magusfileFacts
+		if json.Unmarshal(blob, &f) == nil {
+			return f
+		}
+	}
+	f := factsOf(code)
+	if blob, err := json.Marshal(f); err == nil {
+		_ = store.Store(key, blob)
+	}
+	return f
 }
 
 // importTargetCollisionErr reports a target whose name shadows a same-named import,
@@ -930,7 +995,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
-	if read := loadReader(ctx); read != nil {
+	if read := confineImportReads(ctx, src.Dir, loadReader(ctx)); read != nil {
 		buzzSess.SetSourceReader(read)
 	}
 	// Magusfiles run as whole files, not incrementally, so a non-exported,
@@ -944,6 +1009,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// A profile on ctx records the same events for a human reading a trace.
 	AttachSessionObservers(ctx, buzzSess, ModeMagusfile)
 	buzzSess.AddCompileObserver(buzz.ProfileFromContext(ctx))
+	var store buzz.BytecodeStore
 	if guardRules(ctx) {
 		buzzSess.SetEntryFilter(guardRulesFilterID, guardRulesFilter)
 		// A hook loads these rules in a fresh process, and compiling them is the
@@ -951,7 +1017,8 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		// magusfile loads are left alone, and so is a load of approved sources:
 		// it exists to trust nothing but the bytes its reader returns.
 		if sourceReaderFrom(ctx) == nil {
-			if store := guardBytecodeStore(src.Dir); store != nil {
+			store = guardBytecodeStore(src.Dir)
+			if store != nil {
 				buzzSess.SetBytecodeStore(store)
 			}
 		}
@@ -987,10 +1054,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			return nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
 		code := string(data)
-		for name, importPath := range importBoundNames(code) {
-			importNames[name] = importPath
-		}
-		for key := range CtxFormTargetKeys(code) {
+		facts := magusfileFactsOf(store, code)
+		maps.Copy(importNames, facts.Imports)
+		for _, key := range facts.CtxForm {
 			ctxForm[key] = true
 		}
 		// Validate spell handles before Exec: an unknown `magus/spell/<handle>`
@@ -998,14 +1064,14 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		// otherwise surface much later as a disconnected "undefined" error. Fail fast,
 		// naming the file, with a did-you-mean instead.
 		if buzzSpellImportCheckFn != nil {
-			if err := buzzSpellImportCheckFn(spellImportNames(code)); err != nil {
+			if err := buzzSpellImportCheckFn(facts.SpellHandles); err != nil {
 				_ = buzzSess.Close()
 				return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
 		}
 		// The module resolver has no error channel, so an undeclared remote spell import
 		// is refused here, where the load can stop naming the entry to add.
-		if err := checkRemoteSpellImports(ctx, code); err != nil {
+		if err := checkRemoteSpellImports(ctx, facts.RemoteImports); err != nil {
 			_ = buzzSess.Close()
 			return nil, &ImportError{Path: path, rel: rel, Err: err}
 		}
@@ -1013,9 +1079,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		// load naming the migration rather than at run time as "null is not callable"
 		// (or, for a shape that predates required parameter annotations, as a parser
 		// complaint about the callback's parameter).
-		if call, replacement, stale := RemovedAPICall(code); stale {
+		if facts.RemovedCall != "" {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIErr(call, replacement))
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIErr(facts.RemovedCall, facts.Replacement))
 		}
 		execErr := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) })
 		// An import that failed to bind is the cause of whatever Exec tripped on next,
@@ -1156,6 +1222,9 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	// line not typed yet.
 	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
 	buzzSess.SetIncludeDirs(nil)
+	if read := confineImportReads(ctx, dir, nil); read != nil {
+		buzzSess.SetSourceReader(read)
+	}
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs
@@ -1232,6 +1301,56 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		}
 	}
 	return paths
+}
+
+// confineImportReads wraps read, the session's import source reader (nil reads the
+// disk), so a file the module search resolved outside the workspace root is refused
+// with MGS1047 and never read. It answers where the search joins an import onto a
+// directory, the only point that sees the final path: gopherbuzz stats each candidate
+// before the reader runs, so an escaping candidate is stat'd but its bytes are never
+// opened. Allowed: the workspace root, the verified remote-spell view, and dir when
+// the importing file itself lives outside the root. With no workspace it returns read
+// unchanged.
+func confineImportReads(ctx context.Context, dir string, read func(path string) ([]byte, error)) func(path string) ([]byte, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil || ws.Root() == "" {
+		return read
+	}
+	root := absClean(ws.Root())
+	bounds := []string{root}
+	if view := remotespell.ImportsFromContext(ctx).View(); view != "" {
+		bounds = append(bounds, absClean(view))
+	}
+	if dir != "" && !within(root, absClean(dir)) {
+		bounds = append(bounds, absClean(dir))
+	}
+	return func(path string) ([]byte, error) {
+		abs := absClean(path)
+		if !slices.ContainsFunc(bounds, func(b string) bool { return within(b, abs) }) {
+			err := types.DiagnosticErrorf(types.SpellImportEscapesWorkspace,
+				"import resolves outside the workspace: %s is above the workspace root %s, and an import never loads a file outside the root; import a path inside the workspace",
+				abs, root)
+			ReportImportError(ctx, err)
+			return nil, err
+		}
+		if read == nil {
+			return os.ReadFile(path)
+		}
+		return read(path)
+	}
+}
+
+func absClean(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
+}
+
+// within reports whether the clean absolute path p is root or lies under it.
+func within(root, p string) bool {
+	rest, ok := strings.CutPrefix(p, root)
+	return ok && (rest == "" || rest[0] == filepath.Separator || strings.HasSuffix(root, string(filepath.Separator)))
 }
 
 // runTargetBody runs one target body, driving it as a fiber so a ctx.needs inside it

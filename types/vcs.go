@@ -69,6 +69,11 @@ type VCSDriver interface {
 	// its implementation says so where a reader will meet it.
 	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
+	// Ref is Metadata's Ref alone: the movable name at the current revision, "" when none
+	// names it, and an error where Metadata fails to find the revision, as on git's unborn
+	// branch. It starts at most one process, because a caller that needs only the name
+	// should not pay for Metadata's status walk.
+	Ref(ctx context.Context, dir string) (string, error)
 	// Dirty reports whether the working tree has uncommitted changes. When paths
 	// is non-empty the probe is scoped to those pathspecs (interpreted relative to
 	// dir, the same as the VCS's own CLI); empty checks the whole repository. It is

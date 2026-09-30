@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -308,7 +309,7 @@ type Verdict struct {
 // backgrounds it instead of killing it. A heredoc, a pipe or a `<` still feed their own
 // command, since each sets stdin for that command alone.
 //
-// A prefix rather than a `{ <line>\n} </dev/null` group. Claude Code's isolation check for
+// A prefix rather than a `{ <line>\n} </dev/null` group. One host's isolation check for
 // worktree agents judges the rewritten line; measured 2026-09-29, it refused the group as
 // too complex even around `stat` or `git status`, and refuses the prefix only on a line it
 // already found borderline (runtime-computed values beside a redirect).
@@ -1343,8 +1344,82 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
-	rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	rows, err := listJobRows(job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}))
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+}
+
+// jobRowsMemoTTL bounds how long a memoized sweep is trusted. The sweep also ends rows for
+// reasons no write to the store announces: a declared row aging past jobs.stale_after, a
+// checkout directory being removed.
+const jobRowsMemoTTL = 10 * time.Second
+
+// jobRowsRacy is how recently a store file may have changed and still not be memoized: a
+// second write inside one modification-time tick leaves the stamp the memo was keyed on.
+const jobRowsRacy = time.Second
+
+// jobRowsMemoFile sits beside jobs.json, so the memo follows the repository's store
+// rather than one checkout's cache.
+const jobRowsMemoFile = "guard-rows.json"
+
+// jobRowsMemo is the rows one List returned, stamped with the store file it read.
+type jobRowsMemo struct {
+	Schema int         `json:"schema"`
+	Size   int64       `json:"size"`
+	ModNS  int64       `json:"mod_ns"`
+	AtNS   int64       `json:"at_ns"`
+	Rows   []types.Job `json:"rows"`
+}
+
+// fresh reports whether m holds the rows of the store file info describes, as of now.
+func (m jobRowsMemo) fresh(info os.FileInfo, now time.Time) bool {
+	age := now.Sub(time.Unix(0, m.AtNS))
+	return m.Schema == types.JobSchemaVersion && m.Size == info.Size() && m.ModNS == info.ModTime().UnixNano() &&
+		age >= 0 && age < jobRowsMemoTTL
+}
+
+// listJobRows is store.List, except that a call whose store file is unchanged since a
+// sweep that ended nothing, within jobRowsMemoTTL, returns that sweep's rows.
+//
+// optimization: skip the sweep and its O(rows^2) ancestor walk when jobs.json is unchanged.
+//
+//	measured: BenchmarkWithJobStoreRows 300 rows -87% ns/op, -89% allocs/op (benchstat, n=10).
+//	trade-off: a row that becomes dead by the clock or by a removed checkout is ended up to
+//	jobRowsMemoTTL later than an unmemoized read would end it.
+//	assumes:  a store rewrite changes the file's size or modification time; racy stamps are
+//	never memoized.
+//
+// A memo is written only when the store file is the same before and after the List, which
+// is how it is known nothing was ended and no writer interleaved. Any memo problem falls
+// back to List: the memo can cost a read, never a verdict.
+func listJobRows(store *job.Store) ([]types.Job, error) {
+	path, err := store.Path()
+	if err != nil {
+		return store.List()
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		return store.List()
+	}
+	memoPath := filepath.Join(filepath.Dir(path), jobRowsMemoFile)
+	now := time.Now()
+	if raw, err := os.ReadFile(memoPath); err == nil {
+		var memo jobRowsMemo
+		if json.Unmarshal(raw, &memo) == nil && memo.fresh(before, now) {
+			return memo.Rows, nil
+		}
+	}
+	rows, err := store.List()
+	if err != nil {
+		return rows, err
+	}
+	if after, err := os.Stat(path); err == nil && after.Size() == before.Size() && after.ModTime().Equal(before.ModTime()) &&
+		now.Sub(before.ModTime()) >= jobRowsRacy {
+		memo := jobRowsMemo{Schema: types.JobSchemaVersion, Size: before.Size(), ModNS: before.ModTime().UnixNano(), AtNS: now.UnixNano(), Rows: rows}
+		if raw, err := json.Marshal(memo); err == nil {
+			_ = file.WriteFileAtomic(memoPath, raw, 0o644)
+		}
+	}
+	return rows, nil
 }
 
 // leaseRows reports the pinned job store, reading it when nothing pinned one. A test that
