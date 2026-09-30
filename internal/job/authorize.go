@@ -95,6 +95,9 @@ const (
 	// asExec is a worker reporting the base it landed on: graded, and the one
 	// write that sets the registration fields.
 	asExec
+	// asVerdict is `magus job wait` recording the pass it graded from the row's evidence:
+	// graded, and the one write through which a bound holder moves a row to pass.
+	asVerdict
 	// asObservation is the guard recording a write by somebody else: ungraded, since the
 	// row it lands on is by definition not the writer's, and the one write that sets
 	// Unattributed.
@@ -164,15 +167,19 @@ func refuse(actor Actor, id, rule string) error {
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
 // it landed on, SHRINK its write paths (which is how the skill has it release one), and
 // end itself in fail, no_return, or exited; on any other row it may only CREATE a child of itself
-// inside its own boundary. Widening a boundary, changing the plan's shape, and grading a row
-// are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
-// can widen its own row has no boundary at all.
-func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
+// inside its own boundary, or, as an [asVerdict] write, pass a row below it. Widening a
+// boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
+// is the asymmetry the whole rule exists for: a worker that can widen its own row has no
+// boundary at all.
+func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, exists bool, rows []types.Job) error {
 	if !actor.Bound() {
 		return nil
 	}
 	if actor.Unstamped {
 		return refuse(actor, id, "a caller magus cannot name may be any row's holder or none, so it writes no row")
+	}
+	if kind == asVerdict {
+		return authorizeVerdict(actor, id, prev, next, rows)
 	}
 	if id != actor.Lease {
 		return authorizeChild(actor, id, next, exists, rows)
@@ -198,6 +205,22 @@ func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, row
 			// The registration, which is what a worker is asked for.
 		default:
 			return refuse(actor, id, "a worker may not change "+field+" on its own row")
+		}
+	}
+	return nil
+}
+
+// authorizeVerdict grades a bound holder's verdict: on a row below its own lease (see
+// [Actor.Verifies]), the move to pass and no other change. Wait refuses the rest at its
+// door; this refusal is what holds for any other caller of the verdict write.
+func authorizeVerdict(actor Actor, id string, prev, next types.Job, rows []types.Job) error {
+	if !actor.Verifies(rows, id) {
+		return refuse(actor, id, "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's")
+	}
+	for _, field := range changedFields(prev, next) {
+		if field != "state" || next.State != types.StatePass {
+			return refuse(actor, id, fmt.Sprintf("a verdict moves a row to %s and changes nothing else, and this one changes %s",
+				types.StatePass, field))
 		}
 	}
 	return nil

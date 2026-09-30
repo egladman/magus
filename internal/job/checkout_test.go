@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
@@ -408,4 +409,61 @@ func TestARecordThatDoesNotReadIsNone(t *testing.T) {
 
 	require.NoError(t, s.Bind(Caller{}, "wave/worker"), "a binding replaces what did not read")
 	assert.Equal(t, "wave/worker", s.Bound(Caller{}))
+}
+
+// The read that ends a job whose checkout is gone also drops every caller record naming
+// such a job. A record naming a job still taken somewhere, one never taken, or no job at
+// all stays.
+func TestListDropsRecordsWhoseCheckoutIsGone(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	s, _ := sweepStore(t, 1_000, time.Hour)
+	gone, here := t.TempDir(), t.TempDir()
+	plant(t, s,
+		types.Job{ID: "w/gone", State: types.StateRunning, CheckoutRoot: gone, Registered: 900, Created: 900, Updated: 900},
+		types.Job{ID: "w/returned", State: types.StateExited, CheckoutRoot: gone, Registered: 900, Created: 900, Updated: 900},
+		types.Job{ID: "w/here", State: types.StateRunning, CheckoutRoot: here, Registered: 900, Created: 900, Updated: 900},
+		types.Job{ID: "w/untaken", State: types.StateDeclared, Created: 900, Updated: 900},
+	)
+	callers := map[string]Caller{
+		"w/gone":     {Host: "claude-code", Session: "s1", Agent: "a1"},
+		"w/returned": {Host: "claude-code", Session: "s1", Agent: "a2"},
+		"w/here":     {Host: "claude-code", Session: "s1", Agent: "a3"},
+		"w/untaken":  {Host: "claude-code", Session: "s1", Agent: "a4"},
+		"w/nobody":   {Host: "claude-code", Session: "s1", Agent: "a5"},
+	}
+	for id, c := range callers {
+		require.NoError(t, s.Bind(c, id))
+	}
+	require.NoError(t, os.RemoveAll(gone))
+
+	_, err := s.List()
+	require.NoError(t, err)
+
+	got := map[string]string{}
+	for id, c := range callers {
+		got[id] = s.Bound(c)
+	}
+	assert.Equal(t, map[string]string{
+		"w/gone":     "",
+		"w/returned": "",
+		"w/here":     "w/here",
+		"w/untaken":  "w/untaken",
+		"w/nobody":   "w/nobody",
+	}, got)
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(s.path), agentRecordDir))
+	require.NoError(t, err)
+	assert.Len(t, entries, 3, "the sweep leaves nothing behind but the records it kept")
+}
+
+// A caller rebound between the sweep's read and its removal keeps the new binding.
+func TestDropRecordKeepsANewBinding(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record")
+	require.NoError(t, os.WriteFile(path, []byte("w/new\n"), 0o600))
+
+	dropRecord(path, "w/old")
+
+	assert.Equal(t, "w/new", readRecord(path))
+	entries, err := os.ReadDir(filepath.Dir(path))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "the record moved aside is not left behind")
 }

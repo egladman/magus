@@ -2,6 +2,7 @@ package job
 
 import (
 	"cmp"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -187,10 +188,52 @@ func (s *Store) Bind(c Caller, id string) error {
 // Bound is the job c's own record names, "" when none does. Exact: a subagent never reads
 // its session's record, a session never reads a subagent's, and an identified caller never
 // reads the checkout's.
-//
-// TODO: records are never swept; one small file per binding.
 func (s *Store) Bound(c Caller) string {
 	return readRecord(s.record(c))
+}
+
+// dropRecords removes each identified caller's record whose job was taken in a checkout
+// w proves gone: nobody works that job again, and a record is otherwise never removed. A
+// record naming no row, or a row never taken, stays. Best effort: a read or removal that
+// fails leaves the record where it is.
+//
+// Checkout records are not swept: MarkerPath keys one on a hash of its cache dir, and
+// nothing maps the hash back to a checkout.
+func (s *Store) dropRecords(w *sweeper, rows []types.Job) {
+	if s.err != nil || s.path == "" {
+		return
+	}
+	dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		id := readRecord(path)
+		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+		if id == "" || i < 0 || !w.checkoutGone(rows[i].CheckoutRoot) {
+			continue
+		}
+		dropRecord(path, id)
+	}
+}
+
+// dropRecord removes the record at path if it still names id.
+//
+// Moved aside before it is read rather than re-read and removed: [Store.Bind] may rebind
+// the caller in between, and deleting that record would leave a bound worker unbound. A
+// record found to name another job is linked back, unless a newer bind already took its
+// place.
+func dropRecord(path, id string) {
+	aside := path + "." + rand.Text() + ".sweep"
+	if os.Rename(path, aside) != nil {
+		return
+	}
+	if readRecord(aside) != id {
+		_ = os.Link(aside, path)
+	}
+	_ = os.Remove(aside)
 }
 
 // ActingLease resolves the lease for a process that is not a hook, and so knows no session

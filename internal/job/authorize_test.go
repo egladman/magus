@@ -461,3 +461,65 @@ func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
 	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
 }
+
+// A verdict is graded by the store, not only by Wait's door: a holder passes a row below
+// its lease and nothing else, and a verdict carries no other change.
+func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	holder := Actor{Lease: "root/worker"}
+	outside := "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's"
+	for name, tc := range map[string]struct {
+		target string
+		apply  func(*types.Job)
+		want   error
+	}{
+		"a child passes": {
+			target: "root/worker/child",
+			apply:  func(row *types.Job) { row.State = types.StatePass },
+		},
+		"its own row":  {target: "root/worker", want: refuse(holder, "root/worker", outside)},
+		"a sibling":    {target: "root/sibling", want: refuse(holder, "root/sibling", outside)},
+		"an ancestor":  {target: "root", want: refuse(holder, "root", outside)},
+		"unrelated":    {target: "other", want: refuse(holder, "other", outside)},
+		"a child fails": {
+			target: "root/worker/child",
+			apply:  func(row *types.Job) { row.State = types.StateFail },
+			want:   refuse(holder, "root/worker/child", "a verdict moves a row to pass and changes nothing else, and this one changes state"),
+		},
+		"a pass that widens the child": {
+			target: "root/worker/child",
+			apply: func(row *types.Job) {
+				row.State = types.StatePass
+				row.WritePaths = append(row.WritePaths, "cmd/magus")
+			},
+			want: refuse(holder, "root/worker/child", "a verdict moves a row to pass and changes nothing else, and this one changes write_paths"),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rows := lineage(lineageRow("root/worker/child", "root/worker"))
+			loc := declared(t, rows...)
+			apply := tc.apply
+			if apply == nil {
+				apply = func(row *types.Job) { row.State = types.StatePass }
+			}
+
+			_, err := boundStore(loc, holder.Lease).mutate(t.Context(), tc.target, asVerdict, func(row *types.Job, _ bool, _ int64) error {
+				apply(row)
+				return nil
+			})
+
+			want := map[string]types.JobState{}
+			for _, row := range rows {
+				want[row.ID] = types.StateRunning
+			}
+			if tc.want == nil {
+				require.NoError(t, err)
+				want[tc.target] = types.StatePass
+			} else {
+				assert.Equal(t, tc.want, err)
+			}
+			assert.Equal(t, want, jobStates(t, loc))
+		})
+	}
+}

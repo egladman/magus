@@ -429,7 +429,7 @@ func (s *Store) Edit(ctx context.Context, id string, opts EditOptions) (types.Jo
 		return types.Job{}, err
 	}
 	actor := s.Actor()
-	if err := authorizeRow(actor, id, prev, next, true, rows); err != nil {
+	if err := authorizeRow(actor, id, asDeclaration, prev, next, true, rows); err != nil {
 		return types.Job{}, err
 	}
 	next.Releases = s.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != id)
@@ -593,12 +593,12 @@ func widensInPlace(prev, next types.Job) bool {
 	return moved
 }
 
-// mutate is the locked read-modify-write [Store.Update] and [Store.Exec] share, and
+// mutate is the locked read-modify-write [Store.Update], [Store.Exec] and [Wait] share, and
 // the only place jobs.json is rewritten row-wise. kind says what the write is; see
 // [grading].
 //
-// apply gets what only Exec needs: exists, because Update creates a row and Exec
-// refuses one nobody declared, and now, the one clock read the write is stamped from. It
+// apply gets what Update does not need: exists, because Update creates a row while Exec
+// and Wait refuse one nobody declared, and now, the one clock read the write is stamped from. It
 // may fail, which is what lets that refusal be decided under the lock; nothing is written
 // when it does.
 func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
@@ -644,7 +644,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			e := &row.Entries[len(row.Entries)-1]
 			e.By, e.At, e.Consumed = trail.StampOrigin(ctx, types.Origin{}), now, 0
 		case kind.graded():
-			if aerr := authorizeRow(actor, id, prev, row, i >= 0, f.Jobs); aerr != nil {
+			if aerr := authorizeRow(actor, id, kind, prev, row, i >= 0, f.Jobs); aerr != nil {
 				return aerr
 			}
 		}
