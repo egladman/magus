@@ -1018,6 +1018,11 @@ func (v hgVCS) mergeInProgress(ctx context.Context, root string) (bool, error) {
 	return !strings.Contains(out, "no merge state found"), nil
 }
 
+// OperationInProgress implements types.OperationReporter. See hgOperationInProgress.
+func (v hgVCS) OperationInProgress(ctx context.Context, root string) (string, error) {
+	return hgOperationInProgress(root, ".hg", func() (bool, error) { return v.mergeInProgress(ctx, root) })
+}
+
 // AbortMerge abandons the in-progress merge. See types.MergeStarter.
 //
 // `hg merge --abort` refuses on its own when nothing is underway, unlike Sapling's

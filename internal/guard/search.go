@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -63,16 +62,20 @@ func graphMoved(deps Dependencies) staleGraph {
 	if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
 		return staleGraph{reason: knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), underway: true}
 	}
-	rev := deps.revision(ctx, root, "")
-	if rev == "" {
-		return staleGraph{}
-	}
+	// The index header is a file read; the revision starts processes, so it waits on one.
 	cacheDir, err := deps.cacheDir(root)
 	if err != nil {
 		return staleGraph{}
 	}
 	built, err := knowledge.ReadGuardIndexCheckout(cacheDir, root)
 	if err != nil {
+		return staleGraph{}
+	}
+	if built.Operation != "" {
+		return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
+	}
+	rev := deps.revision(ctx, root, "")
+	if rev == "" {
 		return staleGraph{}
 	}
 	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{Revision: rev})}
@@ -730,18 +733,26 @@ var definitionLookupRe = regexp.MustCompile(`^(?:func|type) (?:\\?\([^()]*\\?\) 
 // mistaken for a symbol, and never provable: the graph carries no node for one.
 var diagnosticCodeRe = regexp.MustCompile(`^(?:MGS|BZZ)[0-9]{4}$`)
 
-// registeredDiagnostics are the codes the graph builds a diagnostic node for.
-var registeredDiagnostics = sync.OnceValue(func() map[string]bool {
-	out := map[string]bool{}
-	for _, code := range types.AllDiagnosticCodes() {
-		out[string(code)] = true
+// graphDiagnostics are the codes of the graph's diagnostic nodes, definitive on graphIDs'
+// terms. They come from the graph and not this binary's catalog: the two differ once the
+// checkout moves past the build the graph describes, as it does mid-rebase.
+func graphDiagnostics(deps Dependencies) ([]string, bool) {
+	ids, definitive := deps.graphIDs(context.Background(), types.KindDiagnostic)
+	if !definitive {
+		return nil, false
 	}
-	return out
-})
+	codes := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if code, ok := strings.CutPrefix(id, types.KindDiagnostic+":"); ok {
+			codes = append(codes, code)
+		}
+	}
+	return codes, true
+}
 
 func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 	if diagnosticCodeRe.MatchString(alt) {
-		if !registeredDiagnostics()[alt] {
+		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
 			return searchRoute{}, false
 		}
 		node := string(types.KindDiagnostic) + ":" + alt

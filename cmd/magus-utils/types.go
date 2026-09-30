@@ -116,13 +116,18 @@ func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
 	return buzzgen.ObjectDecl(name, rt, mirrorOptions())
 }
 
-// enumsUsedBy returns the enums rt's exported fields reference, in registry order and
-// deduplicated, so each is declared once ahead of the object that uses it.
+// enumsUsedBy returns the enums rt's exported fields reference, directly or as a list,
+// map or pointer element, in field order and deduplicated, so each is declared once
+// ahead of the object that uses it.
 func enumsUsedBy(rt reflect.Type) []boundaryEnum {
 	seen := map[string]bool{}
 	var out []boundaryEnum
 	for _, f := range boundaryFields(rt) {
-		e, ok := buzzEnum(f.Type)
+		t := f.Type
+		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		e, ok := buzzEnum(t)
 		if !ok || seen[e.Name] {
 			continue
 		}

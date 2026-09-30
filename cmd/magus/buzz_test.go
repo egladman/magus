@@ -15,6 +15,7 @@ import (
 	"text/template"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -473,6 +474,58 @@ func TestBuzzCmd_NestedMagusImportResolvesWithoutAnEntryImport(t *testing.T) {
 	stdout, trace := buzzTrace(t, []string{"-s", script})
 	assert.Contains(t, stdout, "http-server")
 	assert.Contains(t, trace, "buzz.register_namespace")
+}
+
+// An aliased import checks against the types declared when it starts, so a file that
+// reaches magus only through one needs the mirrors declared up front.
+func TestBuzzCmd_AliasedImportReachingMagusSeesTheMirrors(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`import "magus";
+export fun language() > str {
+    final opts: magus\DirsOptions = magus\DirsOptions{ language = "go" };
+    return opts.language;
+}
+`), 0o644))
+	script := filepath.Join(dir, "main.buzz")
+	require.NoError(t, os.WriteFile(script, []byte(
+		"import \"std\";\nimport \"lib\" as lib;\nfun main() > void { std\\print(lib\\language()); }\n"), 0o644))
+
+	stdout, trace := buzzTrace(t, []string{"-s", script})
+	assert.Contains(t, stdout, "go")
+	assert.Contains(t, trace, "buzz.register_namespace")
+}
+
+func TestBuzzReachesMagus(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, src string) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644))
+	}
+	write("plain.buzz", `import "std";`)
+	write("direct.buzz", `import "magus";`)
+	write("lib/deep.buzz", `import "magus/spell";`)
+	write("lib/mid.buzz", `import "deep" as deep;`)
+	write("cycle.buzz", `import "cycle";`)
+
+	sess := buzz.NewSession(t.Context())
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetIncludeDirs([]string{dir})
+	bindings.RegisterModuleSurface(t.Context(), sess)
+
+	for code, want := range map[string]bool{
+		`import "std"; import "fs";`:                  false,
+		`import "plain" as p;`:                        false,
+		`import "missing";`:                           false,
+		`import "cycle";`:                             false,
+		`import "magus" as m;`:                        true,
+		`import print from "buzz:magus";`:             true,
+		`import "std"; import "direct";`:              true,
+		`import "lib/mid" as mid;`:                    true,
+		`import "spells/hello";`:                      true,
+		"import \"std\";\nimport \"magus/figure\";\n": true,
+	} {
+		assert.Equal(t, want, buzzReachesMagus(sess, code), code)
+	}
 }
 
 // TestBuzzCmd_ScriptArgvReachesMain pins the three shapes a caller has for handing a

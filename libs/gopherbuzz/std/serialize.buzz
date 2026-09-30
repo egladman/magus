@@ -1,0 +1,52 @@
+namespace serialize;
+
+/// The `serialize` module's DECLARATIONS, after upstream Buzz's src/lib/serialize.buzz.
+///
+/// The implementations are native (std/serialize.go); this file exists so the
+/// CHECKER can resolve `serialize\Boxed` and type what the module returns. It states
+/// what this implementation provides, which differs from upstream in four places:
+///
+///   - Boxed has no `data` field: the wrapped value is not reachable by name.
+///   - `q` takes upstream's single list (`q(["a", 0])`) and also the older
+///     variadic form (`q("a", "b")`). Buzz cannot declare a variadic, so it is a
+///     field of type `any`, the spelling the generated declarations use for one.
+///   - `serialize` stands where upstream has `serializeValue`, and `floating` and
+///     `floatingValue` are spellings upstream does not have.
+///   - Nothing declares a raise; upstream raises CircularReference and
+///     NotSerializable from init and jsonEncode, and JsonParseError from jsonDecode.
+
+/// Wraps deserialized data, for example decoded JSON.
+export object Boxed {
+    /// Query the element at a path: `q(["a", 0])`, or `q("a", "b")`.
+    q: any = null,
+
+    /// Wraps serializable data.
+    static extern fun init(data: any) > Boxed;
+
+    extern fun string() > str?;
+    extern fun boolean() > bool?;
+    extern fun integer() > int?;
+    extern fun float() > double?;
+    extern fun floating() > double?;
+    /// Object property values are themselves wrapped in a `Boxed`.
+    extern fun map() > {str: Boxed}?;
+    /// List elements are themselves wrapped in a `Boxed`.
+    extern fun list() > [Boxed]?;
+
+    extern fun stringValue() > str;
+    extern fun booleanValue() > bool;
+    extern fun integerValue() > int;
+    extern fun floatValue() > double;
+    extern fun floatingValue() > double;
+    extern fun mapValue() > {str: Boxed};
+    extern fun listValue() > [Boxed];
+}
+
+/// Returns value unchanged once it is known to hold no reference cycle.
+export extern fun serialize(value: any) > any;
+
+/// Encodes data as a JSON string.
+export extern fun jsonEncode(data: any) > str;
+
+/// Decodes a JSON string into a `Boxed`.
+export extern fun jsonDecode(json: str) > Boxed;

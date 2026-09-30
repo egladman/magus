@@ -340,7 +340,7 @@ func translateSearch(deps Dependencies, dir string, c hint.Invocation) (translat
 	if !ok || sc.readsStdin() || allOutside(deps.scope, sc.paths) || searchesRevision(c, dir) {
 		return translation{}, false
 	}
-	tr, ok := translateDiagnostics(dir, sc)
+	tr, ok := translateDiagnostics(deps, dir, sc)
 	if !ok {
 		tr, ok = translateHeadings(deps, dir, sc)
 	}
@@ -436,9 +436,8 @@ func collapseDigitRuns(s string) string {
 }
 
 // translateDiagnostics answers a pattern that can only match diagnostic codes with the
-// query selecting the registered codes it matches. The registry is what the graph builds
-// its diagnostic nodes from, so it is the graph's id set without loading the graph.
-func translateDiagnostics(dir string, sc searchCall) (translation, bool) {
+// query selecting the graph's codes it matches.
+func translateDiagnostics(deps Dependencies, dir string, sc searchCall) (translation, bool) {
 	for _, p := range sc.paths {
 		if !codeBearingPath(dir, p) {
 			return translation{}, false
@@ -460,11 +459,14 @@ func translateDiagnostics(dir string, sc searchCall) (translation, bool) {
 	if !ok {
 		return translation{}, false
 	}
-	registered := types.AllDiagnosticCodes()
+	registered, ok := graphDiagnostics(deps)
+	if !ok {
+		return translation{}, false
+	}
 	var matched []string
 	for _, code := range registered {
-		if line.MatchString(string(code)) {
-			matched = append(matched, string(code))
+		if line.MatchString(code) {
+			matched = append(matched, code)
 		}
 	}
 	// Every alternative must name something the graph holds, or the search is also
@@ -491,8 +493,8 @@ func translateDiagnostics(dir string, sc searchCall) (translation, bool) {
 	answer := regexp.MustCompile(idRe)
 	var selected []string
 	for _, code := range registered {
-		if answer.MatchString(string(types.KindDiagnostic) + ":" + string(code)) {
-			selected = append(selected, string(code))
+		if answer.MatchString(types.KindDiagnostic + ":" + code) {
+			selected = append(selected, code)
 		}
 	}
 	if !slices.Equal(selected, matched) {

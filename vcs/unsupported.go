@@ -83,6 +83,10 @@ func (declines[N]) CheckoutState(context.Context, string) (types.CheckoutState, 
 	return types.CheckoutState{}, decline[N](types.CapCheckoutStateReporter)
 }
 
+func (declines[N]) OperationInProgress(context.Context, string) (string, error) {
+	return "", decline[N](types.CapOperationReporter)
+}
+
 func (declines[N]) CommitPushed(context.Context, string, string) (bool, bool, error) {
 	return false, false, decline[N](types.CapPushStatusReporter)
 }

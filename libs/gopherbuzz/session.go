@@ -159,6 +159,17 @@ type Session struct {
 	// checkPrelude is what the last check registered from the four fields above,
 	// extended by the next check rather than rebuilt. See checkPrelude.sync.
 	checkPrelude *checkPrelude
+	// hostTypes is every DeclareModuleTypes call made on this session or on any
+	// session made from it (NewChild, an aliased import), shared by all of them. A
+	// host declares into the session it holds, often lazily from its module
+	// resolver, so a sub-session that already copied the imported declarations
+	// would never see those types. hostTypesSeen counts the entries this session
+	// has collected.
+	hostTypes     *[]hostTypeDecl
+	hostTypesSeen int
+	// collectedDecls names the native modules whose declaration source this
+	// session has collected; see resolveImport.
+	collectedDecls map[string]bool
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
 	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -270,10 +281,55 @@ func (s *Session) DeclareModuleTypes(boundName, src string) {
 	// bug in the host and must not read as an empty declaration: an import's callers
 	// ignore the parse error because the Exec that follows re-parses the source, and
 	// nothing re-parses this.
-	if s.collectImportedModule(boundName, src) == nil {
+	s.syncHostTypes()
+	prog := s.collectImportedModule(boundName, src)
+	if prog == nil {
 		_, err := s.parse(src)
 		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
 	}
+	*s.hostTypes = append(*s.hostTypes, hostTypeDecl{boundName: boundName, prog: prog})
+	s.hostTypesSeen = len(*s.hostTypes)
+}
+
+// hostTypeDecl is one DeclareModuleTypes call, parsed once for every session
+// that shares it.
+type hostTypeDecl struct {
+	boundName string
+	prog      *ast.Program
+}
+
+// syncHostTypes collects the host declarations another session in this tree made
+// since this one last looked. They go BENEATH everything already collected: a
+// host declaration is the lowest precedence a type can have (see
+// DeclareModuleTypes), and a later one must not shadow a program's own type.
+func (s *Session) syncHostTypes() {
+	unseen := (*s.hostTypes)[s.hostTypesSeen:]
+	if len(unseen) == 0 {
+		return
+	}
+	s.hostTypesSeen = len(*s.hostTypes)
+	decls, funcs, mtypes, vars := s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars
+	s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars = nil, nil, nil, nil
+	for _, d := range unseen {
+		s.collectProgram(d.boundName, d.prog)
+	}
+	s.importedTypes = append(s.importedTypes, decls...)
+	s.importedModuleFuncs = prependEach(s.importedModuleFuncs, funcs)
+	s.importedModuleTypes = prependEach(s.importedModuleTypes, mtypes)
+	s.importedModuleVars = prependEach(s.importedModuleVars, vars)
+}
+
+// prependEach appends each of later's lists to first's list under the same key
+// and returns first. later's slices are only read: a sub-session's maps are
+// shallow clones whose lists the parent still holds.
+func prependEach[T any](first, later map[string][]T) map[string][]T {
+	if first == nil {
+		return later
+	}
+	for k, v := range later {
+		first[k] = append(first[k], v...)
+	}
+	return first
 }
 
 // SetModuleResolver installs fn as the on-demand resolver for path-style imports
@@ -321,6 +377,7 @@ func newSession(ctx context.Context) *Session {
 		loadedPaths:        make(map[string]bool),
 		importCache:        make(map[string]*cachedImport),
 		declaredNamespaces: make(map[string]string),
+		hostTypes:          new([]hostTypeDecl),
 	}
 	// resume/resolve are session-bound so they can swap curVM to the fiber's VM
 	// for the duration of Exec(), making Frames()/CallDepth()/step hooks reflect
@@ -582,6 +639,9 @@ func (s *Session) NewChild() *Session {
 	if c.ffiDisabled {
 		c.disableFFI()
 	}
+	// The host declarations travel with the module resolver: a child whose import
+	// the resolver answers has no other way to learn that module's types.
+	c.hostTypes = s.hostTypes
 	return c
 }
 
@@ -1018,6 +1078,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
+	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
 	errs, checkWarnings := checkWithPrelude(prog, globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
 	warnings = append(warnings, checkWarnings...)
@@ -1325,9 +1386,14 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		// do NOT execute it: executing would redefine at runtime what the native module
 		// already provides.
 		if src, hasDecls := s.moduleDecls[resolvePath]; hasDecls {
-			key := "decls:" + resolvePath
-			if !s.loadedPaths[key] {
-				s.loadedPaths[key] = true
+			// Per session, not in the shared loadedPaths: a sibling alias sub-session
+			// that collected first holds the types in its own fields, where this
+			// session's checker never looks.
+			if !s.collectedDecls[resolvePath] {
+				if s.collectedDecls == nil {
+					s.collectedDecls = map[string]bool{}
+				}
+				s.collectedDecls[resolvePath] = true
 				// A declaration source that does not parse declares nothing.
 				prog := s.collectImportedModule(boundName, src)
 				if prog == nil {
@@ -1555,6 +1621,13 @@ func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 	if err != nil {
 		return nil
 	}
+	s.collectProgram(boundName, prog)
+	return prog
+}
+
+// collectProgram records prog's exported declarations under boundName; see
+// collectImportedModule.
+func (s *Session) collectProgram(boundName string, prog *ast.Program) {
 	for _, stmt := range prog.Stmts {
 		switch d := stmt.(type) {
 		case *ast.ObjectDecl:
@@ -1587,7 +1660,6 @@ func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 			}
 		}
 	}
-	return prog
 }
 
 // declareEnumValues copies every exported enum in a module's declaration source onto
@@ -1977,6 +2049,8 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.importedModuleTypes = maps.Clone(s.importedModuleTypes)
 	sub.importedModuleVars = maps.Clone(s.importedModuleVars)
 	sub.checkPrelude = s.checkPrelude.clone()
+	sub.hostTypes, sub.hostTypesSeen = s.hostTypes, s.hostTypesSeen
+	sub.collectedDecls = maps.Clone(s.collectedDecls)
 
 	// Copy parent's current globals into the sub-session so the imported file
 	// can reference host APIs (magus, print, etc.).

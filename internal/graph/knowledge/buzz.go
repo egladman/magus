@@ -161,6 +161,10 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 // deduped, excluding self-recursion. Uses ast.Inspect for full AST coverage
 // so a call nested in an if-condition or loop body is not missed.
 func callEdges(rel string, d *ast.FunDecl, sameFile map[string]bool) []types.KnowledgeEdge {
+	// An extern fun has no body to call from.
+	if d.Body == nil {
+		return nil
+	}
 	fnID := functionID(rel, d.Name)
 	seen := map[string]bool{}
 	var out []types.KnowledgeEdge

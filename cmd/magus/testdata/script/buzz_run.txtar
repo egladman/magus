@@ -53,10 +53,9 @@ stdout 'http-server'
 stderr '\[MGS1022\] magus.project: only callable from a magusfile'
 stderr 'see: https://.*MGS1022'
 
-# magus\Context is the target-declaration TYPE, which only the magusfile engine
-# declares; the REPL (`magus buzz` with no arguments) is where it exists
+# magus\Context is the value a target receives: a script can name the type but not build one
 ! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
-stderr '\[BZZ1002\] buzz: line 1:40: undefined type "Context"'
+stderr 'unknown object type "Context"'
 
 -- hello.buzz --
 import "std";

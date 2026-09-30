@@ -39,7 +39,7 @@ fun changed(base: str, head: str) > [str] !> any {
 
 // trips reports whether `reached` of `total` projects is enough to be worth saying. Pure,
 // so the rule is testable and reviewable in one place.
-export fun trips(reached: int, total: int, share: float) > bool {
+export fun trips(reached: int, total: int, share: double) > bool {
     if (reached < 2) { return false; }
     if (total <= 0) { return false; }
     // Multiplied, not divided: reached / total is INTEGER division here, so 5 of 10

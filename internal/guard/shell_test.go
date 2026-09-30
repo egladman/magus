@@ -494,8 +494,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A line-bounded read already has a range; refs is not the next step.
 		{command: "sed -n '10,40p' cmd/magus/main.go"},
 	}
+	deps := testDependencies()
+	deps.GraphIDs = diagnosticGraph
 	for _, tt := range tests {
-		v := Evaluate(testDependencies(), tt.command)
+		v := Evaluate(deps, tt.command)
 		if (tt.rule != denyRule{}) {
 			// assert rather than require: a require here stops the loop at the first
 			// wrong row, and a rule change that moves seven of them should name all

@@ -140,8 +140,11 @@ type FunDecl struct {
 	// the signature is declared here, the implementation comes from the host. It
 	// is how upstream Buzz types its native stdlib (src/lib/*.buzz), and it emits
 	// no code: the name must already be bound at runtime. Body is nil.
-	IsExtern    bool
-	Name        string
+	IsExtern bool
+	Name     string
+	// TypeParams names the `::<T, U>` clause. Erased at run time; the checker
+	// needs them to tell a type parameter from a type nothing declares.
+	TypeParams  []string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
 	// ParamDefaults is parallel to Params, with a nil entry for a parameter that
@@ -195,6 +198,8 @@ type ObjectDecl struct {
 	// conformance to be DECLARED, not merely structural, so this is what makes an
 	// instance assignable to a protocol-typed target.
 	Conforms []string
+	// TypeParams names `object Name::<K, V>`; see FunDecl.TypeParams.
+	TypeParams []string
 }
 
 // ObjField is a single object field declaration with an optional default.
@@ -373,6 +378,7 @@ type PatLit struct {
 // FunExpr: fun(params) type { body }
 type FunExpr struct {
 	Pos
+	TypeParams  []string // see FunDecl.TypeParams
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
 	// ParamDefaults is parallel to Params, with a nil entry for a parameter that

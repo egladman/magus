@@ -23,8 +23,8 @@ import (
 // 0 times.
 func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true, "Judge": true, "Verdict": true}
-	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }}
-	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph}
 
 	for _, tt := range []struct {
 		command string
@@ -311,9 +311,12 @@ func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 	})
 	return root, Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return name == "HandleRequest", true },
-		GraphIDs:      graphOf(map[string][]string{types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"}}),
-		scope:         workspaceScope{root: root},
-		callDir:       root,
+		GraphIDs: graphOf(map[string][]string{
+			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
+			types.KindDiagnostic: {"diagnostic:MGS2011"},
+		}),
+		scope:   workspaceScope{root: root},
+		callDir: root,
 	}
 }
 
@@ -361,7 +364,7 @@ func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
 		v := Evaluate(deps, tt.command)
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
-		assert.Contains(t, v.Brief, "the graph is stale, a merge, rebase or cherry-pick is in progress.", tt.command)
+		assert.Contains(t, v.Brief, "the graph is stale, a rebase is in progress.", tt.command)
 		assert.Contains(t, v.Brief, "graph build` refreshes it once that is finished", tt.command)
 	}
 }
@@ -389,5 +392,24 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
 		assert.Contains(t, v.Brief, "the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9.", tt.command)
 		assert.NotContains(t, v.Brief, "once that is finished", tt.command)
+	}
+}
+
+// A code search is denied for the codes the graph holds, not the ones this binary
+// registers: mid-rebase the index may describe a tree without the code, or one the binary
+// has never heard of.
+func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
+	const registered = "grep -rn MGS2011 docs/"
+	withCode := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS2011", "diagnostic:MGS9901"}})
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}, Evaluate(Dependencies{GraphIDs: withCode}, registered).Rule)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS9901"}, Evaluate(Dependencies{GraphIDs: withCode}, "grep -rn MGS9901 docs/").Rule)
+
+	doubted := func(ctx context.Context, kind string) ([]string, bool) {
+		ids, _ := withCode(ctx, kind)
+		return ids, false
+	}
+	without := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901"}})
+	for name, deps := range map[string]Dependencies{"no graph": {}, "a graph it doubts": {GraphIDs: doubted}, "another tree's": {GraphIDs: without}} {
+		assert.Empty(t, Evaluate(deps, registered).Deny, name)
 	}
 }

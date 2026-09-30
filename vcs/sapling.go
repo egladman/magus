@@ -988,6 +988,11 @@ func (v saplingVCS) mergeInProgress(ctx context.Context, root string) (bool, err
 	return !strings.Contains(out, "no merge state found"), nil
 }
 
+// OperationInProgress implements types.OperationReporter. See hgOperationInProgress.
+func (v saplingVCS) OperationInProgress(ctx context.Context, root string) (string, error) {
+	return hgOperationInProgress(root, ".sl", func() (bool, error) { return v.mergeInProgress(ctx, root) })
+}
+
 // AbortMerge abandons the in-progress merge. See types.MergeStarter.
 //
 // The guard is not defensive tidiness, it is the whole method. `sl goto --clean .` is a

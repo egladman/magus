@@ -74,7 +74,11 @@ var Modules = []buzz.Module{
 		s.SetModuleDecls("os", osSource)
 		return nil
 	}},
-	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},
+	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetNativeModule("serialize", serializeModule())
+		s.SetModuleDecls("serialize", serializeSource)
+		return nil
+	}},
 	{Name: "buffer", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("buffer", bufferModule)},
 	{Name: "ffi", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("ffi", ffiModule)},
 	{Name: "assertcore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("assertcore", assertCoreModule)},

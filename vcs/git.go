@@ -1104,6 +1104,69 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
+// gitOperationStates are the files a stopped operation leaves in the checkout's own gitdir,
+// rebase first: a rebase stopped on a conflicted pick is the rebase, not the pick.
+// rebase-apply also holds a `git am` series.
+var gitOperationStates = []struct{ name, op string }{
+	{"rebase-merge", types.OperationRebase},
+	{"rebase-apply", types.OperationRebase},
+	{"MERGE_HEAD", types.OperationMerge},
+	{"CHERRY_PICK_HEAD", types.OperationCherryPick},
+	{"REVERT_HEAD", types.OperationRevert},
+}
+
+// OperationInProgress implements types.OperationReporter from the state files, which each
+// linked worktree keeps in its own gitdir. A root holding .git is read without starting
+// git; any other root asks `rev-parse --git-path` once.
+func (gitVCS) OperationInProgress(ctx context.Context, root string) (string, error) {
+	paths, err := gitOperationPaths(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	for i, s := range gitOperationStates {
+		if _, err := os.Lstat(paths[i]); err == nil {
+			return s.op, nil
+		}
+	}
+	return "", nil
+}
+
+func gitOperationPaths(ctx context.Context, root string) ([]string, error) {
+	paths := make([]string, len(gitOperationStates))
+	gitdir, ok := gitLinkedDir(root)
+	if !ok {
+		gitdir = filepath.Join(root, ".git")
+		info, err := os.Stat(gitdir)
+		ok = err == nil && info.IsDir()
+	}
+	if ok {
+		for i, s := range gitOperationStates {
+			paths[i] = filepath.Join(gitdir, s.name)
+		}
+		return paths, nil
+	}
+	args := []string{"rev-parse"}
+	for _, s := range gitOperationStates {
+		args = append(args, "--git-path", s.name)
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, args...)
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse --git-path: %w", err)
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) != len(paths) {
+		return nil, fmt.Errorf("git rev-parse --git-path: %d paths for %d names", len(lines), len(paths))
+	}
+	for i, p := range lines {
+		// Relative to the directory git ran in.
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(root, p)
+		}
+		paths[i] = p
+	}
+	return paths, nil
+}
+
 // CheckoutState implements types.CheckoutStateReporter with two reads of refs and none of
 // the working tree: `symbolic-ref` names the branch HEAD points at and exits 1 when HEAD
 // names a commit, and `for-each-ref` lists refs/remotes.

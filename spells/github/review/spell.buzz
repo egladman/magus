@@ -55,6 +55,7 @@ import "http";
 import "os";
 import "serialize";
 import "magus";
+import "magus/spell";
 
 export fun mgs_getName() > str { return "github-review"; }
 
@@ -210,7 +211,7 @@ export fun reviewBody(summary: str, verdict: str, drafts: [any]) > any {
 // find_review reports the pull request open for this branch, or an empty number when there is
 // none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
 // so it is never an error and never a reason a diff fails to open.
-export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
+export fun find_review(target: Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
     if (!has_token()) {
@@ -313,7 +314,7 @@ fun viewerLogin(io: any) > str !> any {
 // Returns the review id and the drafts it accepted, so the caller can mark exactly those
 // published. A partial result is a real answer here: GitHub rejects an inline comment whose
 // line is not in the diff, and the rest of the review still lands.
-export fun publish_review(target: magus\Target, cb: fun(any)) > any !> any {
+export fun publish_review(target: Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
     if (!has_token()) {
@@ -366,7 +367,7 @@ fun decodeThreads(body: str) > [any] !> any {
 // after the thirtieth". A page that fails discards the pages before it for the same reason:
 // the return has no way to say "incomplete", so a short list would read as a finished
 // conversation. The 10-page cap bounds an unbounded loop against a paging bug.
-export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
+export fun review_threads(target: Target, cb: fun(any)) > [any] !> any {
     final io = {<str: any>};
     cb(io);
     final repo = "{io["repo"] ?? ""}";
@@ -395,7 +396,7 @@ export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
 }
 
 // reply_review answers one existing thread, so a conversation can be finished without leaving.
-export fun reply_review(target: magus\Target, cb: fun(any)) > bool !> any {
+export fun reply_review(target: Target, cb: fun(any)) > bool !> any {
     final io = {<str: any>};
     cb(io);
     final repo = "{io["repo"] ?? ""}";

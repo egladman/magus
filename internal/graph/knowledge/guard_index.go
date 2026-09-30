@@ -136,36 +136,32 @@ type GuardCheckout struct {
 	Operation string
 }
 
-// operationReporter is the capability to name the history rewrite a checkout is in the
-// middle of. A backend without it is read through its unresolved conflicts instead, which
-// miss a rebase stopped on a clean pick.
-type operationReporter interface {
-	OperationInProgress(ctx context.Context, root string) (string, error)
+// ReadGuardCheckout reads the checkout at root through the vcs layer, whichever backend
+// claims it, starting one version control process for the revision. A read that fails
+// leaves its field empty.
+func ReadGuardCheckout(ctx context.Context, root string) GuardCheckout {
+	return readGuardCheckout(ctx, root, false)
 }
 
-// conflictedOperation is what a checkout with unresolved conflicts is known to be in.
-const conflictedOperation = "merge, rebase or cherry-pick"
-
-// ReadGuardCheckout reads the checkout at root through the vcs layer, whichever backend
-// claims it. A read that fails leaves its field empty.
-func ReadGuardCheckout(ctx context.Context, root string) GuardCheckout {
+// readGuardCheckout skips the revision for an operation underway when untilOperation is
+// set, since StaleAt never reads it then.
+func readGuardCheckout(ctx context.Context, root string, untilOperation bool) GuardCheckout {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
 		return GuardCheckout{}
 	}
-	var c GuardCheckout
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		if commit, err := res.VCS.FindCommit(ctx, root, ""); err == nil {
-			c.Revision = commit.ID
-		}
-	})
-	wg.Go(func() { c.Operation = operationUnderway(ctx, res.VCS, root) })
-	wg.Wait()
+	c := GuardCheckout{Operation: operationUnderway(ctx, res.VCS, root)}
+	if c.Operation != "" && untilOperation {
+		return c
+	}
+	if commit, err := res.VCS.FindCommit(ctx, root, ""); err == nil {
+		c.Revision = commit.ID
+	}
 	return c
 }
 
-// ReadGuardOperation is ReadGuardCheckout's Operation alone.
+// ReadGuardOperation is ReadGuardCheckout's Operation alone, which starts no process on a
+// backend that keeps its operation state in files.
 func ReadGuardOperation(ctx context.Context, root string) string {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
@@ -175,17 +171,11 @@ func ReadGuardOperation(ctx context.Context, root string) string {
 }
 
 func operationUnderway(ctx context.Context, v types.VCSDriver, root string) string {
-	if r, ok := v.(operationReporter); ok {
-		if op, err := r.OperationInProgress(ctx, root); err == nil {
-			return op
-		}
+	op, err := v.OperationInProgress(ctx, root)
+	if err != nil {
+		return ""
 	}
-	if r, ok := v.(types.ConflictResolver); ok {
-		if conflicts, err := r.Conflicts(ctx, root); err == nil && len(conflicts) > 0 {
-			return conflictedOperation
-		}
-	}
-	return ""
+	return op
 }
 
 // StaleAt says why an index built at c cannot answer for the checkout now, or "" when it
@@ -542,10 +532,10 @@ func (x *GuardIndex) RefSites(name string) ([]types.KnowledgeRefSite, error) {
 
 // Stale says why the index describes another tree than the checkout's, "" when it does
 // not: a history rewrite underway now or when it was built, or a build at another
-// revision. It reads the checkout once, starting a version control process or two.
+// revision. It reads the checkout once, starting at most one version control process.
 func (x *GuardIndex) Stale() string {
 	x.staleOnce.Do(func() {
-		x.stale = x.built.StaleAt(ReadGuardCheckout(context.Background(), x.root))
+		x.stale = x.built.StaleAt(readGuardCheckout(context.Background(), x.root, true))
 	})
 	return x.stale
 }

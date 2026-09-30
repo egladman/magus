@@ -214,11 +214,28 @@ func TestGuardIndexStaleDuringARebase(t *testing.T) {
 	git("rebase", "main")
 
 	at := ReadGuardCheckout(t.Context(), root)
-	assert.Equal(t, conflictedOperation, at.Operation)
+	assert.Equal(t, types.OperationRebase, at.Operation)
 	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, at))
 	x, err := ReadGuardIndex(cacheDir, root)
 	require.NoError(t, err)
-	assert.Equal(t, "a merge, rebase or cherry-pick is in progress", x.Stale())
+	assert.Equal(t, "a rebase is in progress", x.Stale())
+	for _, kind := range guardKinds {
+		assert.False(t, x.Fresh(kind), kind)
+	}
+}
+
+// A rebase stopped on a pick that applied cleanly has no conflict to find, and the next
+// pick still moves the tree.
+func TestGuardIndexStaleDuringARebaseStoppedOnACleanPick(t *testing.T) {
+	root, cacheDir, g, git := guardRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Two() {}\n"), 0o644))
+	git("commit", "-q", "-am", "two")
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, ReadGuardCheckout(t.Context(), root)))
+	git("rebase", "--exec", "false", "HEAD~1")
+
+	x, err := ReadGuardIndex(cacheDir, root)
+	require.NoError(t, err)
+	assert.Equal(t, "a rebase is in progress", x.Stale())
 	for _, kind := range guardKinds {
 		assert.False(t, x.Fresh(kind), kind)
 	}
