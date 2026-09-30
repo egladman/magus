@@ -16,8 +16,8 @@ import test from "node:test";
 // Parsed out of the sources as TEXT rather than imported, because two of the three are not
 // JavaScript this test could load - which is the same reason the drift was possible.
 //
-// Paths are relative to the console/ package root, not to this file: pnpm always runs package
-// scripts from there, which is the same convention the surface stubs and the CSS tests use.
+// Paths are relative to the console/ project root, not to this file: the test target runs node
+// from there, which is the same convention the surface stubs and the CSS tests use.
 const GO = "../internal/service/console/url.go";
 const STUBS = "scripts/surface-stubs.mjs";
 const SHELL = "src/console/main.ts";
@@ -58,8 +58,8 @@ test("every clean-path surface the console routes is one the server serves", () 
 });
 
 test("each routed surface has a bundle the shell can load", () => {
-  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  const buildJs = pkg.scripts["build-js"];
+  // The esbuild entries live in the build target, not package.json.
+  const buildJs = readFileSync("magusfile.buzz", "utf8");
   const shell = readFileSync(SHELL, "utf8");
   for (const surface of arrayLiteral(SHELL, "CLEAN_PATH_SURFACES")) {
     // A surface is reachable two ways: its own esbuild entry, or the shell registering it against
