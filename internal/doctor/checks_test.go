@@ -704,6 +704,44 @@ func TestCheckAgentSkills(t *testing.T) {
 		require.Equal(t, types.CheckFail, got.Status)
 		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
 	})
+
+	t.Run("stamped orphan -> the reinstall is the fix, since install prunes it", func(t *testing.T) {
+		root := t.TempDir()
+		writeDoctorHarness(t, root)
+		catalog := agent.Default(types.KnowledgeSchemaVersion)
+		_, _, err := catalog.WriteSkillTree(root, ".agents/skills", false, agent.FormBoth)
+		require.NoError(t, err)
+		orphan := filepath.Join(root, ".agents/skills/magus-retired")
+		require.NoError(t, os.MkdirAll(orphan, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
+			catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
+		r.opts.skills = catalog
+
+		got := r.checkAgentSkills()
+
+		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, "installed skills are behind this binary: .agents/skills", got.Message)
+		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
+	})
+
+	t.Run("empty leftover directory -> stale, named with the command that removes it", func(t *testing.T) {
+		root := t.TempDir()
+		writeDoctorHarness(t, root)
+		catalog := agent.Default(types.KnowledgeSchemaVersion)
+		_, _, err := catalog.WriteSkillTree(root, ".agents/skills", false, agent.FormBoth)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents/skills/magus-retired"), 0o755))
+		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
+		r.opts.skills = catalog
+
+		got := r.checkAgentSkills()
+
+		assert.Equal(t, types.CheckFail, got.Status, "misconfiguration is a failure, not a warning")
+		assert.Equal(t, "installed skills are behind this binary: .agents/skills; a reinstall leaves these directories, remove them by hand: .agents/skills/magus-retired", got.Message)
+		assert.Equal(t, []string{".agents/skills: magus-retired: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir .agents/skills/magus-retired"}, got.Details)
+		assert.Empty(t, got.Fix, "a reinstall changes nothing here, so --fix has nothing to run")
+	})
 }
 
 // The case this was written for: the root claims **/*.md through the markdown spell, which sweeps

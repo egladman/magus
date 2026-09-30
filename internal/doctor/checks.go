@@ -2404,29 +2404,31 @@ func (r *runner) checkAgentSkills() types.Check {
 
 	switch {
 	case len(stale) > 0:
-		// An ORPHANED skill (one a rename left behind) stays stale however often it is
-		// reinstalled, because --force rewrites only the names magus ships. Naming it as
-		// the remedy would make --fix run forever. No Fix rather than a pruning one:
-		// --prune deletes directories the caller has not reviewed, which is the
-		// judgment case the Fix contract reserves for a report.
-		if orphans := r.orphanedSkillDirs(root, stale); len(orphans) > 0 {
-			return types.Check{
-				Name:    name,
-				Status:  types.CheckFail,
-				Message: "installed skills are behind this binary, and a reinstall alone will not fix it: " + strings.Join(stale, ", "),
-				Details: append(details,
-					"a rename left these behind, and your agent host still loads them: "+strings.Join(orphans, ", "),
-					"review that list, then: "+hint.AgentInstall.With(stale[0], "--force", "--prune", "--dir", root)),
+		// Install prunes a skill it wrote and no longer ships, so a reinstall clears
+		// that too. What it cannot clear is a leftover directory with no readable
+		// stamp (empty, or a SKILL.md magus cannot read): the Detail names the command
+		// that removes each, and a location with nothing else wrong gets no Fix, since
+		// --fix would rerun a reinstall that changes nothing.
+		var leftovers []string
+		var fix []string
+		for _, st := range staleStatuses {
+			leftovers = append(leftovers, st.Leftovers...)
+			if fix == nil && !st.OnlyLeftovers {
+				// One check carries one remedy, so two stale locations need --fix
+				// twice; the message lists them all.
+				fix = skillInstallFix(st)
 			}
 		}
-		// One check carries one remedy, so two stale locations need --fix twice; the
-		// message lists them all.
+		msg := "installed skills are behind this binary: " + strings.Join(stale, ", ")
+		if len(leftovers) > 0 {
+			msg += "; a reinstall leaves these directories, remove them by hand: " + strings.Join(leftovers, ", ")
+		}
 		return types.Check{
 			Name:    name,
 			Status:  types.CheckFail,
-			Message: "installed skills are behind this binary: " + strings.Join(stale, ", "),
+			Message: msg,
 			Details: details,
-			Fix:     skillInstallFix(staleStatuses[0]),
+			Fix:     fix,
 		}
 	case pastedStale:
 		return types.Check{
@@ -2452,24 +2454,6 @@ func (r *runner) checkAgentSkills() types.Check {
 // read as one command, not two that can drift apart.
 func skillInstallFix(st agent.Status) []string {
 	return agent.ReinstallCommand(st.ID)
-}
-
-// orphanedSkillDirs returns the installed skill directories this binary no longer ships,
-// across the given locations. A read error reports no orphans: guessing yes on a
-// directory it could not read would withhold a remedy that works.
-func (r *runner) orphanedSkillDirs(root string, locations []string) []string {
-	var out []string
-	for _, loc := range locations {
-		// Dual: doctor grades a tree it did not install and cannot know the form of, so
-		// it asks the permissive question. A twin beside its primary is reported only
-		// when it is a name magus no longer ships at all.
-		dirs, err := r.opts.skills.StaleSkillDirs(root, loc, agent.FormBoth)
-		if err != nil {
-			continue
-		}
-		out = append(out, dirs...)
-	}
-	return out
 }
 
 // selfStalingScanLimits bound what checkSelfStalingOutputs is willing to read. A workspace

@@ -621,6 +621,13 @@ type Status struct {
 	Installed bool
 	Stale     bool
 	Detail    string
+	// Leftovers are the <Location>-relative directories a reinstall cannot clear: not
+	// shipped, and without a readable stamp to prove magus wrote them, so install
+	// never prunes them. Detail names each one with the command that removes it.
+	Leftovers []string
+	// OnlyLeftovers is set when Leftovers are the whole finding, so a reinstall would
+	// change nothing here.
+	OnlyLeftovers bool
 }
 
 type skillSource struct {
@@ -1033,7 +1040,7 @@ func (c *Catalog) checkInstalledNotNewer(path string) error {
 // by the host, still teaching whatever it said the day it was orphaned. Nothing
 // reported it either: a drift gate compares the files a generator DECLARES against
 // what it wrote, and an extra file is in neither set. This is what makes it
-// reportable; PruneSkillTree is what acts on it, and only when asked.
+// reportable; PruneSkillTree is what acts on it.
 //
 // The stamp is the authority on what is a candidate at all, and that is the whole
 // safety story: magus considers only files it can prove it wrote. A directory with
@@ -1072,11 +1079,9 @@ func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) 
 // PruneSkillTree removes the stale skill directories under <dir>/<dest> and returns
 // what it removed.
 //
-// Never a side effect of installing. Install writes files it can name in advance;
-// this deletes files the caller has not seen, chosen by a rule that lives in a
-// binary they may have just upgraded. Those are different enough acts that the
-// second one asks, so install reports what is stale and names this, and a person
-// decides. The stamp makes the deletion safe; it does not make it expected.
+// Install runs it after writing, and reports every directory it returns: the deletion
+// is chosen by a rule inside a binary the caller may have just upgraded, so the
+// report is what keeps it from being silent. The stamp makes the deletion safe.
 func (c *Catalog) PruneSkillTree(dir, dest string, form Form) ([]string, error) {
 	stale, err := c.StaleSkillDirs(dir, dest, form)
 	if err != nil {
@@ -1398,10 +1403,18 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	if expectedErr != nil {
 		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
 	}
-	var reasons []string
+	var reasons, leftovers []string
 	seen := make(map[string]bool, len(expected))
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
+		if err != nil && shippedErr == nil && !shipped[name] {
+			// Install prunes what it can prove it wrote, and no stamp can be read here, so
+			// the reinstall the other reasons name would leave this directory as it is.
+			leftover := filepath.Join(dest, name)
+			leftovers = append(leftovers, leftover)
+			reasons = append(reasons, name+": "+leftoverReason(filepath.Join(dir, leftover), leftover, err))
+			continue
+		}
 		if err != nil {
 			// A skill magus cannot READ is not a skill magus can vouch for; record it and
 			// move on rather than silently dropping it, which is the one answer that stops
@@ -1443,7 +1456,24 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
 	}
 	sortReasons(reasons)
-	return Status{Location: dest, Installed: true, Stale: true, Detail: strings.Join(reasons, "; ")}
+	return Status{
+		Location:      dest,
+		Installed:     true,
+		Stale:         true,
+		Detail:        strings.Join(reasons, "; "),
+		Leftovers:     leftovers,
+		OnlyLeftovers: len(leftovers) == len(reasons),
+	}
+}
+
+// leftoverReason names a directory install cannot prune and the command that removes
+// it. An empty one has nothing in it to lose; one whose SKILL.md cannot be read may
+// hold someone's files, so it is removed by the person after a look.
+func leftoverReason(abs, rel string, readErr error) string {
+	if entries, err := os.ReadDir(abs); err == nil && len(entries) == 0 {
+		return "empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir " + rel
+	}
+	return "cannot read its SKILL.md (" + readErr.Error() + "), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r " + rel
 }
 
 // sortReasons orders gradeDest's collected reasons so a version/schema mismatch

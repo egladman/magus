@@ -115,11 +115,6 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
 	af := gen.BindAgent(fset)
-	// Not implied by --force, and not the default. --force overwrites files this
-	// command is about to write and can name; --prune deletes directories the caller
-	// has not seen, picked by a rule inside a binary they may have just upgraded.
-	// Without it, install still SAYS what is stale, so the orphans stay visible
-	// rather than becoming invisible again.
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
@@ -160,50 +155,16 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 	}
 
-	var written, changed []string
-	var removed, stale []string
+	var written, changed, removed []string
 	for _, dest := range dests {
 		base, leaf := installTarget(af.Dir, dest, af.Global)
-		// Answers the question --prune is dangerous without: which directories go.
-		// Same two lists the real run reports, nothing touched.
-		if af.DryRun {
-			w, err := agentSkills.PlanSkillTree(base, leaf, form)
-			if err != nil {
-				return err
-			}
-			written = append(written, w...)
-			s, err := agentSkills.StaleSkillDirs(base, leaf, form)
-			if err != nil {
-				return err
-			}
-			if af.Prune {
-				removed = append(removed, s...)
-			} else {
-				stale = append(stale, s...)
-			}
-			continue
-		}
-		w, ch, err := agentSkills.WriteSkillTree(base, leaf, af.Force, form)
+		w, ch, r, err := installSkillTree(base, leaf, af.Force, af.DryRun, form)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
 		changed = append(changed, ch...)
-		// After writing, never before: a prune that ran first would delete a skill
-		// this install then failed to replace.
-		if af.Prune {
-			r, err := agentSkills.PruneSkillTree(base, leaf, form)
-			if err != nil {
-				return err
-			}
-			removed = append(removed, r...)
-			continue
-		}
-		s, err := agentSkills.StaleSkillDirs(base, leaf, form)
-		if err != nil {
-			return err
-		}
-		stale = append(stale, s...)
+		removed = append(removed, r...)
 	}
 	for _, p := range written {
 		if af.DryRun {
@@ -212,22 +173,43 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
-	// Reported at the same level as a write. A silent delete is how a person loses
-	// a skill they thought they had.
+	// On stdout, so a removal shows at the default log level. A silent delete is how
+	// a person loses a skill they thought they had.
 	for _, p := range removed {
 		if af.DryRun {
-			slog.InfoContext(ctx, "agent install: would remove skill this binary no longer ships", slog.String("path", p))
+			fmt.Fprintln(os.Stdout, "would remove skill this binary no longer ships: "+p)
 			continue
 		}
-		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
+		fmt.Fprintln(os.Stdout, "removed skill this binary no longer ships: "+p)
 	}
-	printAgentInstallNextSteps(af.Dir, written, changed, stale, form, af.DryRun)
+	printAgentInstallNextSteps(af.Dir, written, changed, form, af.DryRun)
 	return nil
+}
+
+// installSkillTree writes one skill tree, then removes the skill directories this
+// binary no longer ships. Only directories carrying magus's stamp are candidates
+// (see Catalog.StaleSkillDirs), so a hand-authored skill beside them survives.
+// Under dryRun it touches nothing and returns what a run would write and remove.
+func installSkillTree(base, leaf string, force, dryRun bool, form agent.Form) (written, changed, removed []string, err error) {
+	if dryRun {
+		if written, err = agentSkills.PlanSkillTree(base, leaf, form); err != nil {
+			return nil, nil, nil, err
+		}
+		removed, err = agentSkills.StaleSkillDirs(base, leaf, form)
+		return written, nil, removed, err
+	}
+	if written, changed, err = agentSkills.WriteSkillTree(base, leaf, force, form); err != nil {
+		return nil, nil, nil, err
+	}
+	// After writing, never before: a prune that ran first would delete a skill
+	// this install then failed to replace.
+	removed, err = agentSkills.PruneSkillTree(base, leaf, form)
+	return written, changed, removed, err
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, changed, stale []string, form agent.Form, dryRun bool) {
+func printAgentInstallNextSteps(dir string, written, changed []string, form agent.Form, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
@@ -249,20 +231,6 @@ func printAgentInstallNextSteps(dir string, written, changed, stale []string, fo
 	default:
 		interactive.Emit(os.Stderr, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
 			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
-	}
-	// Only when there is something to act on. Nothing is stale in the ordinary case
-	// (a fresh install, or an upgrade that renamed nothing), and a line that printed on
-	// every install is one a reader stops seeing by the third time, which is exactly
-	// when it finally matters. One line for the whole set, so a release that renames
-	// eight skills does not print eight lines.
-	if len(stale) > 0 {
-		names := make([]string, 0, len(stale))
-		for _, p := range stale {
-			names = append(names, filepath.Base(p))
-		}
-		interactive.Emit(os.Stderr, fmt.Sprintf(
-			"%d installed skill(s) this magus no longer ships are still in place, and your agent host still loads them: %s. Remove them with --prune",
-			len(stale), strings.Join(names, ", ")))
 	}
 	reportContextCost(dir, written)
 	if form == agent.FormBoth {
