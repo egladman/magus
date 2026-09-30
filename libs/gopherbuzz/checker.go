@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -128,6 +129,130 @@ type checker struct {
 	// magus-dialect-only checks that upstream's own suite would otherwise trip, such
 	// as RedundantImportAlias; see collectTopLevel.
 	embedded bool
+	// base holds the builtins and imported types beneath scopes[0] and types; nil
+	// means those two hold everything. A check writes to it only to memoize a
+	// namespace type (see namespaceType).
+	base *checkPrelude
+	// typeRefs, when non-nil, records each type name resolveType looks up: what a
+	// cached namespace type depends on.
+	typeRefs map[string]bool
+}
+
+// checkPrelude is what every check in a session registers before reading the
+// program: the builtins, the imported object and enum types, and the typed
+// namespaces of imported modules. A session keeps one and extends it as its
+// imports grow, so a check reads these types instead of rebuilding them.
+type checkPrelude struct {
+	imported []ast.Node
+	types    map[string]types.Type
+	scope    map[string]scopeEntry
+	ns       map[string]*preludeNS
+}
+
+// preludeNS is one module's namespace type and the enums it routes through the
+// namespace. It holds while the module's collected declarations are the ones it
+// was built from and no type name it resolved has been registered since.
+type preludeNS struct {
+	funcs []*ast.FunDecl
+	decls []ast.Node
+	vars  []*ast.DeclStmt
+	typ   *types.ObjectType
+	enums []string
+	refs  map[string]bool
+}
+
+func newCheckPrelude() *checkPrelude {
+	p := &checkPrelude{types: map[string]types.Type{}, scope: map[string]scopeEntry{}, ns: map[string]*preludeNS{}}
+	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}}
+	c.registerBuiltins()
+	return p
+}
+
+// sync returns p brought up to imported: it registers the declarations appended
+// since the last check, or starts over when imported does not extend what p
+// registered. A nil p starts over.
+func (p *checkPrelude) sync(imported []ast.Node) *checkPrelude {
+	if p == nil || len(imported) < len(p.imported) || !slices.Equal(imported[:len(p.imported)], p.imported) {
+		p = newCheckPrelude()
+	}
+	added := imported[len(p.imported):]
+	if len(added) == 0 {
+		return p
+	}
+	// Registered in order against the types before them, exactly as a check that
+	// registered the whole list itself would.
+	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}}
+	c.registerTypeDecls(added)
+	p.imported = append(p.imported, added...)
+	for name, e := range p.ns {
+		for _, d := range added {
+			if e.refs[typeDeclName(d)] {
+				delete(p.ns, name)
+				break
+			}
+		}
+	}
+	return p
+}
+
+// clone copies p for a sub-session, whose own imports must not reach p.
+func (p *checkPrelude) clone() *checkPrelude {
+	if p == nil {
+		return nil
+	}
+	return &checkPrelude{imported: slices.Clip(p.imported), types: maps.Clone(p.types), scope: maps.Clone(p.scope), ns: maps.Clone(p.ns)}
+}
+
+func typeDeclName(d ast.Node) string {
+	switch v := d.(type) {
+	case *ast.ObjectDecl:
+		return v.Name
+	case *ast.EnumDecl:
+		return v.Name
+	}
+	return ""
+}
+
+// namedType resolves a type name through this check's own declarations, then base.
+func (c *checker) namedType(name string) (types.Type, bool) {
+	if t, ok := c.types[name]; ok {
+		return t, true
+	}
+	if c.base == nil {
+		return nil, false
+	}
+	t, ok := c.base.types[name]
+	return t, ok
+}
+
+// ownBaseObject copies base's object type named name into this check, so the
+// caller can rewrite its methods without reaching later checks; nil when base
+// holds no such object type.
+func (c *checker) ownBaseObject(name string) *types.ObjectType {
+	if c.base == nil {
+		return nil
+	}
+	bt, _ := c.base.types[name].(*types.ObjectType)
+	if bt == nil {
+		return nil
+	}
+	own := *bt
+	own.Methods = maps.Clone(bt.Methods)
+	c.types[name] = &own
+	if e, ok := c.base.scope[name]; ok && e.typ == types.Type(bt) {
+		e.typ = &own
+		c.scopes[0][name] = e
+	}
+	return &own
+}
+
+// baseEntry is name's entry in base's scope, which sits beneath scopes[0].
+func (c *checker) baseEntry(name string) (scopeEntry, bool) {
+	if c.base == nil {
+		return scopeEntry{}, false
+	}
+	e, ok := c.base.scope[name]
+	return e, ok
 }
 
 // checkWithGlobals type-checks prog after pre-registering extraGlobals: as the typed
@@ -138,6 +263,19 @@ type checker struct {
 // the missing `export` instead of a bare "undefined". embedded mirrors
 // Session.embedded (see checker.embedded).
 func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
+	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, private, embedded)
+}
+
+// checkWithPrelude is checkWithGlobals with the builtins and imported types
+// already registered in prelude. The check reads prelude and adds to it only the
+// namespace types it builds.
+//
+// optimization: a session registers imported types and namespaces once, not per check.
+//
+//	measured: BenchmarkSessionImportedTypes -43% B/op, -77% allocs/op (benchstat, n=10).
+//	trade-off: a global resolves through two map layers (scopes[0], then base), and
+//	a type a check rewrites must be copied out of base first (ownBaseObject).
+func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
@@ -145,16 +283,15 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 		moduleVars:  moduleVars,
 		private:     private,
 		embedded:    embedded,
+		base:        prelude,
 	}
-	c.pushScope()
-	c.registerBuiltins()
-	// Register object/enum types pulled in from flat imports before collecting
-	// the current file's top-level names, so the importer can use them in
-	// annotations and literals. Same registration as collectTopLevel's
-	// Object/Enum cases; field cross-references resolve lazily via resolveType.
-	c.registerTypeDecls(imported)
+	// Sized for the globals and top-level declarations defined here up front.
+	c.scopes = append(c.scopes, make(map[string]scopeEntry, len(extraGlobals)+len(prog.Stmts)))
 	for _, name := range extraGlobals {
-		if _, ok := c.scopes[len(c.scopes)-1][name]; ok {
+		if _, ok := c.scopes[0][name]; ok {
+			continue
+		}
+		if _, ok := c.baseEntry(name); ok {
 			continue
 		}
 		// A host may bind a namespace as a GLOBAL rather than behind an import and
@@ -187,6 +324,33 @@ func (c *checker) namespaceType(name string) *types.ObjectType {
 	if len(fds) == 0 && len(decls) == 0 && len(vars) == 0 {
 		return nil
 	}
+	// Until this check declares a type of its own, it resolves names exactly as
+	// the prelude does, so the namespace built from it can be shared.
+	if c.base == nil || len(c.types) != 0 {
+		return c.buildNamespaceType(name, fds, decls, vars)
+	}
+	e := c.base.ns[name]
+	if e == nil || !slices.Equal(e.funcs, fds) || !slices.Equal(e.decls, decls) || !slices.Equal(e.vars, vars) {
+		saved := c.enumNS
+		c.enumNS, c.typeRefs = nil, map[string]bool{}
+		typ := c.buildNamespaceType(name, fds, decls, vars)
+		e = &preludeNS{funcs: fds, decls: decls, vars: vars, typ: typ, refs: c.typeRefs}
+		for enum := range c.enumNS {
+			e.enums = append(e.enums, enum)
+		}
+		c.enumNS, c.typeRefs = saved, nil
+		c.base.ns[name] = e
+	}
+	for _, enum := range e.enums {
+		if c.enumNS == nil {
+			c.enumNS = map[string]string{}
+		}
+		c.enumNS[enum] = name
+	}
+	return e.typ
+}
+
+func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []ast.Node, vars []*ast.DeclStmt) *types.ObjectType {
 	nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
 	for _, fd := range fds {
 		nt.Fields[fd.Name] = c.funDeclType(fd)
@@ -262,7 +426,7 @@ func (c *checker) lookup(name string) (scopeEntry, bool) {
 			return e, true
 		}
 	}
-	return scopeEntry{}, false
+	return c.baseEntry(name)
 }
 
 // errorf records a type error with NO code (an unclassified kind). Sites with a specific documented code
@@ -496,7 +660,10 @@ func (c *checker) resolveAnnot(s string) types.Type {
 func (c *checker) resolveType(t types.Type) types.Type {
 	switch v := t.(type) {
 	case *types.NamedType:
-		if resolved, ok := c.types[v.Name]; ok {
+		if c.typeRefs != nil {
+			c.typeRefs[v.Name] = true
+		}
+		if resolved, ok := c.namedType(v.Name); ok {
 			return resolved
 		}
 		return v
@@ -929,6 +1096,9 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 	}
 	ot, _ := c.types[v.Name].(*types.ObjectType)
 	if ot == nil {
+		ot = c.ownBaseObject(v.Name)
+	}
+	if ot == nil {
 		ot = c.buildObjectType(v)
 	}
 	c.checkProtocolConformance(v, ot)
@@ -1084,7 +1254,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// identically here otherwise: a type name is bound in scope carrying its own
 		// type, so inferring the operand answered `<A>` for either spelling.
 		if id, isName := v.Operand.(*ast.IdentExpr); isName {
-			if declared, isType := c.types[id.Name]; isType {
+			if declared, isType := c.namedType(id.Name); isType {
 				// Compared by identity so a local that SHADOWS the name with an
 				// instance still reports the instance's type.
 				if e, bound := c.lookup(id.Name); !bound || e.typ == declared {
@@ -1764,7 +1934,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	// (e.g. Boxed from a synthetic Go module) returns Unknown rather than Any so
 	// chained member access on synthetic-module values doesn't fire E28.
 	if nt, ok := ot.(*types.NamedType); ok {
-		if resolved, ok2 := c.types[nt.Name]; ok2 {
+		if resolved, ok2 := c.namedType(nt.Name); ok2 {
 			ot = resolved
 		} else {
 			return types.Unknown
@@ -2075,7 +2245,7 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 }
 
 func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
-	resolved, ok := c.types[v.TypeName]
+	resolved, ok := c.namedType(v.TypeName)
 	if !ok {
 		c.errorfc(v.Pos, UndefinedType, "undefined type %q", v.TypeName)
 		return types.Any
@@ -2263,7 +2433,8 @@ func (c *checker) matchCondOf(n ast.Node) matchCondShape {
 		// base is a bare identifier naming an enum, so `someRecord.field` stays
 		// matchCondOther and is never compared.
 		if id, isID := e.Object.(*ast.IdentExpr); isID {
-			if _, isEnum := c.types[id.Name].(*types.EnumType); isEnum {
+			t, _ := c.namedType(id.Name)
+			if _, isEnum := t.(*types.EnumType); isEnum {
 				return matchCondShape{kind: matchCondEnumCase, text: e.Name, pos: pos}
 			}
 		}
@@ -2678,7 +2849,8 @@ func (c *checker) checkCollectionMutator(pos ast.Pos, recv types.Type, name stri
 // declaration is the promise; this is what makes it one.
 func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectType) {
 	for _, name := range v.Conforms {
-		pt, ok := c.types[name].(*types.ObjectType)
+		t, _ := c.namedType(name)
+		pt, ok := t.(*types.ObjectType)
 		if !ok || !pt.IsProtocol {
 			// An unresolved or non-protocol name is a different error, reported where
 			// the conformance list is built. Nothing to verify against here.
@@ -2734,6 +2906,10 @@ func (c *checker) markAssigned(name string) {
 			return
 		}
 	}
+	if e, ok := c.baseEntry(name); ok {
+		e.assigned = true
+		c.scopes[0][name] = e
+	}
 }
 
 // checkUnassignedVars reports every `var` in the scope about to be popped that was
@@ -2784,6 +2960,10 @@ func (c *checker) markRead(name string) {
 			}
 			return
 		}
+	}
+	if e, ok := c.baseEntry(name); ok {
+		e.read = true
+		c.scopes[0][name] = e
 	}
 }
 

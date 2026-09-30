@@ -3,12 +3,15 @@ package buzz
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/types"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,5 +155,94 @@ func TestRejectImportMatchesEitherSpelling(t *testing.T) {
 			sess.RejectImport(tc.rejected, rejected)
 			require.ErrorIs(t, sess.Exec(ctx, tc.imported), rejected)
 		})
+	}
+}
+
+// A check that redeclares an imported type in a nested scope rewrites that type's
+// methods. The session's later checks share the imported types, so the rewrite
+// must stay inside the check that made it.
+func TestSession_NestedRedeclarationStaysInItsCheck(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	sess.SetModuleDecls("shapes", "export object P { n: int = 0 }\n")
+	require.NoError(t, sess.Exec(ctx, "import \"shapes\";\nfun f() > int {\n    object P { fun extra() > int { return 1; } }\n    return 0;\n}\n"))
+	err := sess.Exec(ctx, "import \"shapes\";\nfun g(p: P) > int { return p.extra(); }\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "extra")
+}
+
+// A module's namespace type is shared by a session's checks until a type it
+// names is imported; then the next check rebuilds it against that type.
+func TestCheckPrelude_NamespaceRebuiltWhenItsTypeArrives(t *testing.T) {
+	host, err := ParseEmbedded("export extern fun make() > Late;\n")
+	require.NoError(t, err)
+	late, err := ParseEmbedded("export object Late { n: int = 0 }\n")
+	require.NoError(t, err)
+	funcs := map[string][]*ast.FunDecl{"host": {host.Stmts[0].(*ast.FunDecl)}}
+	prog, err := ParseEmbedded("final x = 1;\n")
+	require.NoError(t, err)
+
+	p := (*checkPrelude)(nil).sync(nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true)
+	before := p.ns["host"]
+	require.NotNil(t, before)
+	assert.IsType(t, &types.NamedType{}, before.typ.Fields["make"].(*types.FuncType).Ret)
+
+	p = p.sync(late.Stmts)
+	assert.Nil(t, p.ns["host"])
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true)
+	assert.Same(t, p.types["Late"], p.ns["host"].typ.Fields["make"].(*types.FuncType).Ret)
+}
+
+// A sub-session's prelude is a copy: what it registers never reaches its parent's.
+func TestCheckPrelude_CloneIsIsolated(t *testing.T) {
+	late, err := ParseEmbedded("export object Late { n: int = 0 }\n")
+	require.NoError(t, err)
+	parent := (*checkPrelude)(nil).sync(nil)
+	child := parent.clone().sync(late.Stmts)
+	assert.Contains(t, child.types, "Late")
+	assert.NotContains(t, parent.types, "Late")
+	assert.Empty(t, parent.imported)
+}
+
+// hostShapedDecls is declaration source shaped like magus's generated bundles:
+// objects whose fields name one another, then one extern per host method.
+func hostShapedDecls(prefix string, objects, funcs int) string {
+	var b strings.Builder
+	for i := range objects {
+		fmt.Fprintf(&b, "export object %s%d {\n    n: int = 0,\n    name: str = \"\",\n    tags: [str] = [],\n    next: [%s%d] = [],\n    prev: %s%d? = null,\n}\n\n",
+			prefix, i, prefix, (i+1)%objects, prefix, (i+objects-1)%objects)
+	}
+	for i := range funcs {
+		fmt.Fprintf(&b, "export extern fun %s%d(v: str, n: int) > %s%d !> any;\n", strings.ToLower(prefix), i, prefix, i%objects)
+	}
+	return b.String()
+}
+
+// BenchmarkSessionImportedTypes loads one session the way magus loads a
+// magusfile: a typed host global, a large flat-imported types module, then a run
+// of small files, each checked against both.
+func BenchmarkSessionImportedTypes(b *testing.B) {
+	typesSrc := hostShapedDecls("T", 120, 0)
+	hostSrc := hostShapedDecls("H", 20, 80)
+	files := make([]string, 12)
+	for i := range files {
+		files[i] = fmt.Sprintf("import \"types\";\n"+
+			"fun f%d(x: T%d) > int { return x.n; }\n"+
+			"fun useHost%d() > H%d !> any { return host\\h%d(\"x\", n: 1); }\n"+
+			"export fun g%d() > int { return f%d(T%d{}); }\n", i, i, i, i, i, i, i, i)
+	}
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		s := NewSession(ctx, WithEmbedded())
+		s.SetGlobal("host", vm.NewMap())
+		s.DeclareModuleTypes("host", hostSrc)
+		s.SetModuleDecls("types", typesSrc)
+		for _, f := range files {
+			if err := s.Exec(ctx, f); err != nil {
+				b.Fatal(err)
+			}
+		}
 	}
 }
