@@ -81,7 +81,7 @@ A manifest (`go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`) declares w
 
 The magusfile declares how the workspace **builds, tests, and lints** it. A target that runs a script the manifest defines (`pnpm run build`, `npm test`, `poe lint`) hands those steps back to the manifest, where magus cannot see them: the commands, the files they read, and the files they write are all missing from the cache key and the affected set. `magus doctor` reports each such call as an error, [MGS1049](../reference/codes/magusfile/MGS1049.md). Move the script's steps into the target body, as spell ops or `proc\exec` calls.
 
-Which argv shapes run a manifest script is language knowledge, so each spell declares it with `mgs_listScriptRunners`, a list of `Command` argv prefixes. The `python` spell declares `poe`, `hatch run`, `pdm run`, and `pipenv run`; a spell that declares none contributes none. Doctor finds the calls by tracing each target body's `proc\exec` under the dry-run host, so a call made through a helper function is found and a branch the trace does not take is not.
+Which argv shapes run a manifest script is language knowledge, so each spell declares it with `mgs_listScriptRunners`, a list of `Command` argv prefixes. The `python` spell declares `poe`, `hatch run`, `pdm run`, and `pipenv run`; the `typescript` spell declares the `run`, `test`, and `start` forms of npm, pnpm, yarn, and bun; a spell that declares none contributes none. Doctor finds the calls by tracing each target body's `proc\exec` under the dry-run host, so a call made through a helper function is found and a branch the trace does not take is not.
 
 ```buzz
 export fun mgs_listScriptRunners() > [Command] {
@@ -252,7 +252,9 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 > For the full contract - every `mgs_` function, the built-in versus workspace-local
 > constraint, and the provider variants - see [Writing a spell](../guides/authoring-spells.md).
 
-A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, and `mgs_listTargets`.
+A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, `mgs_listScriptRunners`, `mgs_getModeArgs`, and `mgs_listTargets`.
+
+`mgs_getModeArgs` names, per op, the arguments that select it when its program does other things too: the `typescript` spell returns `{"node-test": ["--test"]}`, so the agent guard sends `node --test` to that op and leaves `node -e` and `node script.mjs` alone. An op whose program does one thing declares none, and every spelling of it is the op's.
 
 MGS functions are discovery-time declarations: they take no arguments and must be
 pure, because Magus calls them before it has selected a target or started an
