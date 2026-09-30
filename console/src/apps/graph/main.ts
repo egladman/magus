@@ -106,7 +106,12 @@ import {
   projectOwners as computeProjectOwners,
 } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
-import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../../desktop/commands";
+import {
+  installKeybindings,
+  mergeKeymap,
+  registerCommand,
+  type Keymap,
+} from "../../desktop/commands";
 import { wireToolbarOverflow } from "../../desktop/toolbar";
 import { persisted } from "../../lib/persist";
 import { isServing } from "../../lib/workspace";

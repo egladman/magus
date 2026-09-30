@@ -35,9 +35,7 @@ export function jobsTile(): Tile {
   detail.type = "button";
   detail.className = "pf-v6-c-button pf-m-link pf-m-inline";
   detail.append(h("span", "pf-v6-c-button__text", "All jobs"));
-  detail.addEventListener("click", () =>
-    openSurface({ pageId: "dashboard", mode: "jobs" }),
-  );
+  detail.addEventListener("click", () => openSurface({ pageId: "dashboard", mode: "jobs" }));
   card.body.append(summary, list, note, detail);
 
   let host = "";

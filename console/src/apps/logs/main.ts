@@ -58,7 +58,12 @@ import { graphAvailable, openInGraph, shareLink } from "./share";
 import { connectLive, setLiveVisible } from "./live";
 import { publishStatus } from "../../desktop/status";
 import { demoJournal, startDemo, stopDemo } from "./demo";
-import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../../desktop/commands";
+import {
+  installKeybindings,
+  mergeKeymap,
+  registerCommand,
+  type Keymap,
+} from "../../desktop/commands";
 import { mountZoomControl, type ZoomControl } from "../../desktop/zoomControl";
 import { wireToolbarOverflow } from "../../desktop/toolbar";
 import { persisted } from "../../lib/persist";

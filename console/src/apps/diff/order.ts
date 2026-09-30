@@ -234,7 +234,9 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   }
 
   if (a.surface === "public") {
-    const api = (a.symbols ?? []).filter((s) => s.public_beyond_workspace).map((s) => s.label ?? s.id);
+    const api = (a.symbols ?? [])
+      .filter((s) => s.public_beyond_workspace)
+      .map((s) => s.label ?? s.id);
     const across = [...new Set((a.symbols ?? []).flatMap((s) => s.public_to ?? []))];
     chips.push({
       text: "public surface",

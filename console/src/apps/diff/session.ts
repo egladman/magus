@@ -10,12 +10,7 @@
 // review. Pairing therefore needs no setup step anyone has to remember: opening the surface is
 // joining.
 
-import {
-  authHeaders,
-  readRefusal,
-  reportFetchFailure,
-  reportHttpStatus,
-} from "../../lib/server";
+import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "../../lib/server";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
