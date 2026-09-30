@@ -62,7 +62,6 @@ jobs:
           target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'
-          trusted-script-moved: 'false'
           blast-radius: 'false'
           unclaimed: 'false'
           skip-cache: 'false'

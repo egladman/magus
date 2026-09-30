@@ -2580,7 +2580,6 @@ var localAdvisors = []string{
 	"target-outputs.buzz",
 	"doctor.buzz",
 	"version-floor.buzz",
-	"trusted-script-moved.buzz",
 	"unclaimed.buzz",
 	"blast-radius.buzz",
 	"skip-cache.buzz",
@@ -2596,8 +2595,8 @@ var localAdvisors = []string{
 // same way they use the pull request's base branch in CI.
 //
 // An advisor that raises produces a note and never an error: one broken advisor must not
-// take the other ten down, because the caller is showing a reader what magus knows and
-// ten elevenths of that is still worth showing. The error return is for a failure that
+// take the other nine down, because the caller is showing a reader what magus knows and
+// nine tenths of that is still worth showing. The error return is for a failure that
 // makes the whole set meaningless.
 //
 // Not safe for concurrent use: the advisors read their inputs with os\env, so the two
