@@ -36,8 +36,8 @@ magus\project({
     // the suite has to re-check rather than replay. *.txt matches no go spell glob (it
     // takes *.go and *.txtar). Project-wide because test declares no ctx.readsFiles of
     // its own, so the baseline is what keys it; dprint.json is per-target instead, on
-    // the one target that reads it.
-    "sources": ["testdata/*.txt"],
+    // the one target that reads it. The .buzz programs are FuzzTokenize's seeds.
+    "sources": ["testdata/*.txt", "testdata/**/*.buzz", "examples/**/*.buzz"],
     // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
     "targets": {
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.

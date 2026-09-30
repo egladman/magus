@@ -484,6 +484,7 @@ func (l *lexer) skipWhitespaceAndComments() {
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 				l.pos++
 			}
+			l.col += l.pos - start + 2
 			if commentLine != l.lastTokenLine { // skip trailing comments
 				l.recordDoc(strings.TrimSpace(l.src[start:l.pos]), commentLine)
 			}
@@ -1070,9 +1071,14 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 					l.col += s2
 				}
 				if r2 == '\\' && l.pos < len(l.src) {
-					_, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
+					r3, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
 					l.pos += s3
-					l.col += s3
+					if r3 == '\n' {
+						l.line++
+						l.col = 1
+					} else {
+						l.col += s3
+					}
 					continue
 				}
 				if r2 == delim {
@@ -1083,6 +1089,8 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 		case '\n':
 			l.line++
 			l.col = 1
+			l.pos += size
+			continue
 		}
 		l.pos += size
 		l.col += size

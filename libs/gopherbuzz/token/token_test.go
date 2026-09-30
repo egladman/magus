@@ -253,6 +253,20 @@ func TestTokenize_Positions(t *testing.T) {
 			{Kind: Ident, Val: "fun name", Raw: true, Line: 1, Col: 1},
 			{Kind: EOF, Line: 1, Col: 12},
 		}},
+		{"newline inside an interpolation starts its line at col 1", "\"{a\n}\" x", []Token{
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "a\n"}}, Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 2, Col: 4},
+			{Kind: EOF, Line: 2, Col: 5},
+		}},
+		{"escaped newline in a string inside an interpolation counts a line", "\"{\"a\\\nb\"}\"\nx", []Token{
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "\"a\\\nb\""}}, Line: 1, Col: 1},
+			{Kind: Ident, Val: "x", Line: 3, Col: 1},
+			{Kind: EOF, Line: 3, Col: 2},
+		}},
+		{"line comment advances the column", "x // c", []Token{
+			{Kind: Ident, Val: "x", Line: 1, Col: 1},
+			{Kind: EOF, Line: 1, Col: 7},
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -439,6 +453,9 @@ func FuzzTokenize(f *testing.F) {
 		"\xef\xbb\xbfx",
 		"$\"\\d+\\\"\"",
 		"'\\n' 'a' '\\q'",
+		"\"{a\n}\" x",
+		"\"{\"a\\\nb\"}\"\nx",
+		"x // c",
 		"\"", "`", "{", "}", "@", "$",
 		strings.Repeat("a ", maxScratch+4000),
 		strings.Repeat("// doc\nx\n", maxScratch),
