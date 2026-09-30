@@ -80,7 +80,6 @@ func TestWriteGraphDOT_Empty(t *testing.T) {
 	assert.NotContains(t, got, "->", "unexpected edge in empty graph")
 }
 
-
 func TestWriteGraphDOT_GroupsNodesBySpellThenPath(t *testing.T) {
 	t.Parallel()
 	out := types.GraphOutput{
@@ -123,6 +122,7 @@ func TestWriteGraphDOT_Determinism(t *testing.T) {
 	require.NoError(t, WriteGraphDOT(&b2, out))
 	assert.Equal(t, b1.String(), b2.String(), "WriteGraphDOT is not deterministic")
 }
+
 // fakeRepo is a minimal in-memory DepGraphRepository. WriteTree only reaches for
 // Successors/Predecessors/Nodes (plus Graph.Project, which comes from the project
 // map handed to NewGraph), so the remaining interface methods are stubs that a
