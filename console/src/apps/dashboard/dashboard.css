@@ -1833,25 +1833,6 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 }
 .console-render-glosslink:hover { color: var(--console-status-running); border-bottom-color: var(--console-status-running); }
 
-/* Dense data tables (per-target, MCP tools). Header cells are sort buttons; the active column
-   shows an ascending/descending caret. The table scrolls inside its own container so a wide
-   table never scrolls the page body horizontally. */
-.console-dashboard-table__wrap { overflow-x: auto; }
-.console-dashboard-table { width: 100%; font-size: 0.78rem; margin: 0; border-collapse: collapse; }
-.console-dashboard-table th, .console-dashboard-table td { white-space: nowrap; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); text-align: left; }
-.console-dashboard-table th[data-num], .console-dashboard-table td[data-num] { text-align: right; font-family: var(--pf-t--global--font--family--mono); }
-.console-dashboard-table td[data-num] { color: var(--pf-t--global--text--color--regular); }
-.console-dashboard-table thead th { position: sticky; top: 0; background: var(--pf-t--global--background--color--primary--default); }
-.console-dashboard-table__sort {
-  margin: 0; padding: 0; width: auto; border: 0; background: none; cursor: pointer;
-  font: inherit; font-weight: var(--console-label-weight); color: var(--pf-t--global--text--color--subtle); text-transform: uppercase;
-  letter-spacing: var(--console-label-tracking); font-size: var(--console-label-size);
-}
-.console-dashboard-table__sort:hover { color: var(--console-status-running); }
-.console-dashboard-table th[data-sort="desc"] .console-dashboard-table__sort::after { content: " \25BE"; }
-.console-dashboard-table th[data-sort="asc"] .console-dashboard-table__sort::after { content: " \25B4"; }
-.console-dashboard-table tbody tr:hover { background: var(--pf-t--global--background--color--secondary--default); }
-
 /* Metric grid (Buzz, Sandbox): dense captioned groups of label + monospace value. */
 .console-dashboard-metric__groups { display: flex; flex-direction: column; gap: 0.6rem; }
 .console-dashboard-metric__caption { margin: 0 0 0.3rem; font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }

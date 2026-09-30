@@ -26,7 +26,7 @@ import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { h } from "../../desktop/view";
 import type { SurfaceInstance } from "../../desktop/standalone";
 import type { ToolsView } from "../dashboard/state";
-import { SortableTable } from "../dashboard/tiles/widgets";
+import { SortableTable } from "../../ui/table";
 import { demoToolsView } from "./demo";
 import {
   FILTERS,
@@ -65,7 +65,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const table = new SortableTable(columns(), {
     sortKey: "bin",
     emptyText: "Loading tools...",
-    area: "tools",
   });
   const refs = build(host, table, {
     onToggle: (key) => {

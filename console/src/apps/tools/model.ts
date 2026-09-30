@@ -12,7 +12,7 @@
 // magus/tool/v1alpha1/tool.proto.
 
 import type { LifecycleView, ToolRowView } from "../dashboard/state";
-import type { Column } from "../dashboard/tiles/widgets";
+import type { Column } from "../../ui/table";
 
 export type ToolFilterKey = "eol" | "unannounced" | "unpinned";
 

@@ -60,23 +60,9 @@
 .console-tools__note:not(:empty) { padding-block: 0.4rem; border-block-end: 1px solid var(--pf-t--global--border--color--default); }
 
 /* --- Table ----------------------------------------------------------------------
-   The table scrolls inside its own box, so a wide one never scrolls the page. Header cells are sort
-   buttons; the active column shows a caret. */
+   The table itself is the shared one (styles/table.css); this box scrolls it, so a wide one never
+   scrolls the page. */
 .console-tools__table { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding-inline: var(--console-pad); }
-.console-tools-table__wrap { overflow-x: auto; }
-.console-tools-table { width: 100%; font-size: 0.85rem; margin: 0; border-collapse: collapse; }
-.console-tools-table th, .console-tools-table td { white-space: nowrap; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); text-align: left; }
-.console-tools-table thead th { position: sticky; top: 0; background: var(--pf-t--global--background--color--primary--default); }
-.console-tools-table__sort {
-  margin: 0; padding: 0; border: 0; background: none; cursor: pointer;
-  font: inherit; font-weight: var(--console-label-weight); color: var(--pf-t--global--text--color--subtle); text-transform: uppercase;
-  letter-spacing: var(--console-label-tracking); font-size: var(--console-label-size);
-}
-.console-tools-table__sort:hover { color: var(--console-accent); }
-.console-tools-table th[data-sort="desc"] .console-tools-table__sort::after { content: " \25BE"; }
-.console-tools-table th[data-sort="asc"] .console-tools-table__sort::after { content: " \25B4"; }
-.console-tools-table tbody tr:hover { background: var(--pf-t--global--background--color--secondary--default); }
-.console-tools-row__empty { margin: 0; padding-block: 1.25rem; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* --- Connect prompt -------------------------------------------------------------- */
 .console-tools__empty { padding: 2.5rem var(--console-pad); max-inline-size: 34rem; }

@@ -7,6 +7,9 @@
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
    page loads; console.css holds only what is unique to the app surfaces. */
 
+/* The shared sortable table (ui/table.ts). Bundled at build time, so it is inlined here. */
+@import "./table.css";
+
 :root {
   --console-gap: 0.6rem;
   --console-pad: clamp(0.6rem, 1.6vw, 1rem);

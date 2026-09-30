@@ -114,7 +114,7 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
                      "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
-// The shared stylesheets, minified alone.
+// The shared stylesheets, each bundled with what it @imports (console.css takes table.css).
 final SHELL_CSS = ["tokens.css", "overrides.css", "console.css"];
 
 // appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
@@ -168,7 +168,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
         "--external:*.png", "--external:*.jpg", "--external:*.gif",
         "--outfile=gen/patternfly.css"]});
     foreach (c in SHELL_CSS) {
-        typescript["esbuild"](ctx, {"args": [fs\join("src", "styles", c), "--minify", "--outfile=" + fs\join("gen", c)]});
+        typescript["esbuild"](ctx, {"args": [fs\join("src", "styles", c), "--bundle", "--minify", "--outfile=" + fs\join("gen", c)]});
     }
     // An app's own sheets sit at the top of its directory; a view's sheet below it is @imported by
     // one of those, so every app sheet bundles.

@@ -28,7 +28,7 @@ import type {
   VolatilityRowView,
 } from "../state";
 import { fmtCount } from "../state";
-import { SortableTable, type Column } from "./widgets";
+import { SortableTable, type Column } from "../../../ui/table";
 import { Card, h, helpGlyph, type Tile } from "./card";
 import { REFRESH, svgGlyph } from "../../../ui/glyph";
 

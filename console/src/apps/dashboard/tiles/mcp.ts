@@ -4,7 +4,7 @@
 
 import type { DashboardState, McpToolView } from "../state";
 import { fmtBytes, fmtCount, fmtDur } from "../state";
-import { SortableTable, type Column } from "./widgets";
+import { SortableTable, type Column } from "../../../ui/table";
 import { Card, type Tile } from "./card";
 
 const columns: Column<McpToolView>[] = [

@@ -209,10 +209,10 @@ test("filters combine, and a combination matching nothing says so", async () => 
   filter("Unpinned").click();
   assert.deepEqual(tools(), []);
   assert.equal(
-    host.querySelector(".console-tools-row__empty")?.textContent,
+    host.querySelector(".console-table__empty")?.textContent,
     "No tool matches every active filter.",
   );
-  assert.equal(host.querySelector<HTMLElement>(".console-tools-row__empty")?.hidden, false);
+  assert.equal(host.querySelector<HTMLElement>(".console-table__empty")?.hidden, false);
 });
 
 test("a provider that did not answer is named, not left to blank columns", async () => {
@@ -237,7 +237,7 @@ test("a workspace declaring no probed tool says what to declare", async () => {
   serve([]);
   await mount();
   assert.deepEqual(table(), []);
-  assert.match(host.querySelector(".console-tools-row__empty")?.textContent ?? "", /supported/);
+  assert.match(host.querySelector(".console-table__empty")?.textContent ?? "", /supported/);
 });
 
 test("with no server address the connect prompt stands in for the table", async () => {
