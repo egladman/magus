@@ -6,7 +6,8 @@ name: Queue advice
 # and pr.yaml must not: a skipped required check on a label event would read as passing.
 # The same events rerender the pinned "Merge queue" issue (the dashboard job).
 #
-# It runs main's advisor with main's magus and executes no pull-request code.
+# It runs main's advisor with main's magus and executes no pull-request code. A step whose
+# script main lacks yet (a pull request that moves it) is skipped with a notice.
 
 on:
   pull_request:
@@ -99,8 +100,13 @@ jobs:
           installation-strategy: source
           source-path: .
 
+      - name: Note that main has no hack/ci/pull-requests.buzz yet
+        if: hashFiles('hack/ci/pull-requests.buzz') == ''
+        run: echo "::notice::hack/ci/pull-requests.buzz is not on main yet; this job runs main's copy and resumes once the change that adds it merges"
+
       # An unset variable arrives as an empty --issue, and the page goes to the summary alone.
       - name: Render the merge queue into the run summary and the pinned issue
+        if: hashFiles('hack/ci/pull-requests.buzz') != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAIN: ${{ github.event.repository.default_branch }}
