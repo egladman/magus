@@ -264,7 +264,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	// nothing to be graded against, and nothing to be told about the store either.
 	rel, inside := workspaceRelative(location.workspace, writePath)
 	if !inside {
-		return writeGrade{}
+		return denyOtherCheckout(ctx, location, actingLease, writePath)
 	}
 	leases, err := leaseRows(ctx, location)
 	if err != nil {
@@ -685,6 +685,32 @@ func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 		"magus workspace: fix the path pattern with the client tool (magus\\job\\put), then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
+}
+
+// denyOtherCheckout refuses a live lease's write into a magus checkout other than the one it
+// is graded in. Its write paths name files in its own checkout, so the same relative path in
+// another one, the session's tree above a worker's worktree included, is not the file the
+// orchestrator handed out. A write outside every checkout, a scratch file, is nobody's to
+// grade.
+func denyOtherCheckout(ctx context.Context, at location, lease, writePath string) writeGrade {
+	if lease == "" {
+		return writeGrade{}
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return writeGrade{}
+	}
+	if _, live := liveLease(liveLeases(rows), lease); !live {
+		return writeGrade{}
+	}
+	other, err := magus.FindRoot(filepath.Dir(writePath))
+	if err != nil || samePath(other, at.workspace) {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+		"magus workspace: write %s in %s, the checkout lease %s was taken in.\n"+
+			"%s is in another checkout, %s, and the lease's write paths name files in its own.",
+		filepath.Base(writePath), at.workspace, lease, writePath, other)}
 }
 
 // workspaceRelative resolves an incoming path to a workspace-relative, slash-separated
