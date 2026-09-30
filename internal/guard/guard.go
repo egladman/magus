@@ -446,17 +446,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	bound := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
+	// A subagent's first call registers the checkout it runs in, and only the host's report
+	// of the call's directory names that: a location magus fell back to is the hook process's
+	// own, the session's checkout for a worker isolated in a worktree. Without the report the
+	// worker's own `magus job exec` registers it.
+	hostPlaced := callDir != "" && location.workspace != "" && within(callDir, location.workspace)
 	switch {
-	case bound == "" || actingLease != bound:
+	case bound == "" || actingLease != bound || !hostPlaced:
 	case req.DryRun:
 		ctx = withRegisteredBase(ctx, deps, location, bound)
 	case registerAgentBase(ctx, deps, location, bound):
 		ctx = withJobStoreRows(ctx, location)
-	}
-	if at, moved := leaseCheckout(ctx, deps, location, actingLease); moved {
-		location = at
-		deps.scope = scopeAt(location)
-		ctx = context.WithValue(ctx, locationKey{}, location)
 	}
 	tool := hookToolCommand
 	switch {
@@ -1656,33 +1656,6 @@ func hookLocationAt(deps Dependencies, dir string) location {
 		}
 	}
 	return location{cacheDir: cacheDir, workspace: root, dir: dir}
-}
-
-// leaseCheckout is the checkout the acting lease was taken in, when that is not the one the
-// hook resolved. A worker isolated in a worktree has its hooks run from the session's
-// checkout, and its lease's paths name files in the worktree, so graded against the
-// session's they all read as outside the lease.
-func leaseCheckout(ctx context.Context, deps Dependencies, at location, lease string) (location, bool) {
-	snap, ok := job.SnapshotFromContext(ctx)
-	if lease == "" || !ok || snap.Err != nil {
-		return location{}, false
-	}
-	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == lease })
-	if i < 0 {
-		return location{}, false
-	}
-	row := snap.Rows[i]
-	if !row.State.Live() || row.CheckoutRoot == "" || samePath(row.CheckoutRoot, at.workspace) {
-		return location{}, false
-	}
-	moved := hookLocationAt(deps, row.CheckoutRoot)
-	if moved.cacheDir == "" || !samePath(moved.workspace, row.CheckoutRoot) {
-		return location{}, false
-	}
-	if at.dir != "" && within(at.dir, moved.workspace) {
-		moved.dir = at.dir
-	}
-	return moved, true
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host

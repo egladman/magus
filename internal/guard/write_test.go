@@ -1208,3 +1208,32 @@ func TestVCSOffSwitchPassesEverythingElse(t *testing.T) {
 			"a replacement that would not apply is one the host itself refuses; nothing here guesses at the result")
 	})
 }
+
+// A worker isolated in a worktree nested in the session's checkout has its hooks resolve the
+// session's checkout, while its lease names files in the worktree it took the lease in. The
+// same relative path in the session's checkout is another file, and a scratch directory
+// holding only a go.mod is no checkout at all.
+func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
+	ctx, outer := fleetFixture(t)
+	wt := filepath.Join(outer, ".claude", "worktrees", "w")
+	for _, dir := range []string{outer, wt} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	}
+	_, err := storeAt(ctx).Update(ctx, "w", func(cur *types.Job) {
+		*cur = types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
+			Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: wt}
+	})
+	require.NoError(t, err)
+	scratch := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(scratch, "go.mod"), []byte("module repro\n"), 0o644))
+
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(wt, "std", "module.go")).Decision)
+
+	other := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(outer, "std", "module.go"))
+	assert.Equal(t, "deny", other.Decision, "the same relative path in another checkout is not the file handed out")
+	assert.Contains(t, other.Reason, "another checkout")
+
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(scratch, "main.go")).Decision,
+		"a go.mod alone makes no magus checkout")
+}

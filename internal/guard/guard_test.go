@@ -1029,37 +1029,3 @@ func TestJobStoreRowsMemo(t *testing.T) {
 	plant(time.Now().Add(-time.Minute), types.Job{ID: "memo-only"})
 	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "a memo past its TTL is not trusted")
 }
-
-// A worker isolated in a worktree nested in the session's checkout has its hooks resolve the
-// session's checkout, while its lease names files in the worktree it took the lease in.
-func TestJudgeGradesALeasedWriteInTheLeasesCheckout(t *testing.T) {
-	testkit.Isolate(t)
-	outer := t.TempDir()
-	wt := filepath.Join(outer, ".claude", "worktrees", "w")
-	for _, dir := range []string{outer, wt} {
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
-	}
-	cacheDir := t.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: outer})
-	_, err := store.Update(t.Context(), "w", func(cur *types.Job) {
-		*cur = types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Checkpoint: "rev-a",
-			ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: wt}
-	})
-	require.NoError(t, err)
-	ctx := WithLocation(t.Context(), cacheDir, outer, outer)
-	deps := Dependencies{CacheDir: func(string) (string, error) { return cacheDir, nil }}
-	edit := func(path string) Verdict {
-		return Judge(ctx, deps, Request{Host: "claude-code", Lease: "w", Input: hookJSON(t, map[string]any{
-			"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Edit",
-			"tool_input": map[string]any{"file_path": path, "old_string": "a", "new_string": "b"},
-		})})
-	}
-
-	v := edit(filepath.Join(wt, "std", "module.go"))
-	assert.NotEqual(t, "deny", v.Decision, v.Reason)
-
-	v = edit(filepath.Join(outer, "std", "module.go"))
-	assert.Equal(t, "deny", v.Decision, "the same relative path in another checkout is not the file handed out")
-	assert.Contains(t, v.Reason, "another checkout")
-}
