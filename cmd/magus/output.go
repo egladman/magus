@@ -557,7 +557,6 @@ const (
 	// Graph-only output formats. Not accepted by other commands.
 
 	FormatDot      Format = "dot"
-	FormatMermaid  Format = "mermaid"
 	FormatTree     Format = "tree"
 	FormatMarkdown Format = "markdown" // describe graph: target catalog + dependency graph as a Markdown doc
 	FormatGraphML  Format = "graphml"  // graph export: GraphML XML for external graph viewers
@@ -577,7 +576,7 @@ type OutputOptions struct {
 
 // ResolveOutput parses an -o/--output value into an OutputOptions. An empty input
 // resolves to FormatText; a "template=<body>" input resolves to FormatTemplate
-// carrying the body. Any extra formats (e.g. the graph-only FormatDot/Mermaid/
+// carrying the body. Any extra formats (e.g. the graph-only FormatDot/
 // Tree) are matched verbatim and take precedence over the built-in set, letting
 // a command opt into formats beyond CommonFormats. Unknown values are an error.
 func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {

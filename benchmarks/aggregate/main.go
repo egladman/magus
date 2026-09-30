@@ -1,8 +1,8 @@
 // aggregate reads hyperfine JSON results and emits BENCHMARKS.md,
-// results/summary.csv, and results/chart.mmd.
+// and results/summary.csv.
 //
 // Usage: go run ./aggregate/ <results-dir>
-// Writes BENCHMARKS.md to stdout; csv/mmd alongside results-dir.
+// Writes BENCHMARKS.md to stdout; the csv alongside results-dir.
 package main
 
 import (
@@ -507,82 +507,6 @@ func main() {
 		}
 		csvF.Close()
 		fmt.Fprintf(os.Stderr, "wrote %s\n", csvPath)
-	}
-
-	// Write S5 chart (warm cache) for README embedding
-	writeMermaidChart(results, resultsDir)
-}
-
-func writeMermaidChart(results []*benchResult, resultsDir string) {
-	// Find the fixture+size with the most tools for S5
-	type fsKey struct {
-		fixture string
-		size    int
-	}
-	toolsByGroup := make(map[fsKey][]string)
-	minByGroup := make(map[string]float64) // key: fixture-size-tool, value: min ms
-
-	for _, r := range results {
-		if r.key.scenario != "S5" || r.key.daemon != "daemonless" || r.failed() {
-			continue
-		}
-		k := fsKey{r.key.fixture, r.key.size}
-		toolsByGroup[k] = append(toolsByGroup[k], r.key.tool)
-		mk := fmt.Sprintf("%s-%d-%s", r.key.fixture, r.key.size, r.key.tool)
-		if _, ok := minByGroup[mk]; !ok || r.minMS < minByGroup[mk] {
-			minByGroup[mk] = r.minMS
-		}
-	}
-
-	if len(toolsByGroup) == 0 {
-		return
-	}
-
-	// Pick the group with the most tools
-	var best fsKey
-	for k, tools := range toolsByGroup {
-		if len(tools) > len(toolsByGroup[best]) {
-			best = k
-		}
-	}
-
-	tools := toolsByGroup[best]
-	// Deduplicate
-	seen := map[string]bool{}
-	var uniqTools []string
-	for _, t := range tools {
-		if !seen[t] {
-			seen[t] = true
-			uniqTools = append(uniqTools, t)
-		}
-	}
-	sort.Slice(uniqTools, func(i, j int) bool {
-		ki := fmt.Sprintf("%s-%d-%s", best.fixture, best.size, uniqTools[i])
-		kj := fmt.Sprintf("%s-%d-%s", best.fixture, best.size, uniqTools[j])
-		return minByGroup[ki] < minByGroup[kj]
-	})
-
-	var sb strings.Builder
-	sizeStr := strconv.Itoa(best.size)
-	if best.size == 0 {
-		sizeStr = "fixed"
-	}
-	fmt.Fprintf(&sb, "```mermaid\nxychart-beta\n    title \"S5: Warm Cache Replay (%s, N=%s)\"\n", best.fixture, sizeStr)
-	var toolLabels []string
-	var vals []string
-	for _, t := range uniqTools {
-		toolLabels = append(toolLabels, fmt.Sprintf("%q", t))
-		mk := fmt.Sprintf("%s-%d-%s", best.fixture, best.size, t)
-		vals = append(vals, fmtMS(minByGroup[mk]))
-	}
-	fmt.Fprintf(&sb, "    x-axis [%s]\n", strings.Join(toolLabels, ", "))
-	sb.WriteString("    y-axis \"time (ms)\"\n")
-	fmt.Fprintf(&sb, "    bar [%s]\n", strings.Join(vals, ", "))
-	sb.WriteString("```\n")
-
-	chartPath := filepath.Join(resultsDir, "chart.mmd")
-	if err := os.WriteFile(chartPath, []byte(sb.String()), 0o644); err == nil {
-		fmt.Fprintf(os.Stderr, "wrote %s\n", chartPath)
 	}
 }
 

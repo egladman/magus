@@ -977,7 +977,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
 	fs.StringVar(&f.URL, FlagGraphExportURL, d.URL, "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
-	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
+	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot")
 	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
 	fs.BoolVar(&f.Symbols, FlagGraphExportSymbols, false, "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them")
 	return &f

@@ -58,6 +58,13 @@ inputs:
     description: Share of the workspace a change must reach before blast-radius comments.
     required: false
     default: '0.5'
+  console-base:
+    description: >
+      The console a comment links to for a graph it cannot draw itself. The graph travels in
+      the link's fragment, which the browser never sends to a server, so project names stay
+      private. Point it at your own console to keep the link inside your network.
+    required: false
+    default: 'https://eli.gladman.cc/magus/console/'
   unclaimed:
     description: >
       Comment when the pull request changes files no project declares, which the checks

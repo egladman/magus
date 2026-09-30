@@ -252,13 +252,12 @@ tight top-level numeric loop (`LoopSum`, sum `0..1e6`), one shape the JIT
 compiles to native code (it also compiles the nested float loops of the
 Mandelbrot kernel; see [`benchmarks/`](benchmarks/)):
 
-```mermaid
-xychart-beta
-    title "LoopSum 0..1e6, warm, ms/op (lower is better)"
-    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
-    y-axis "ms/op" 0 --> 430
-    bar [5.7, 50.5, 84.0, 424]
-```
+| Engine     | LoopSum 0..1e6, warm, ms/op (lower is better) |
+| ---------- | --------------------------------------------: |
+| gopherbuzz |                                           5.7 |
+| gopher-lua |                                          50.5 |
+| tengo      |                                          84.0 |
+| goja       |                                         424.0 |
 
 That 5.7 ms is the JIT engaged; the same VM with the JIT off runs the loop in
 40.6 ms, still ahead of the others, but the native-code path is the headline.
@@ -299,14 +298,11 @@ gopherbuzz is the interpreter behind **magus**, which fans out across a
 workspace and runs the tasks. The VM sits on the critical path of that flow,
 before any real work starts:
 
-```mermaid
-flowchart TD
-    A([magus run]) --> B["gopherbuzz: evaluate<br/>magusfile.buzz + host-call glue"]
-    B --> C{fan out across workspace}
-    C -->|widens| B
-    C --> D[run the real work]
-    B:::hot
-    classDef hot fill:#fde68a,stroke:#b45309,color:#111
+```text
+magus run
+  -> gopherbuzz: evaluate magusfile.buzz + host-call glue   (the hot step)
+  -> fan out across the workspace                           (widens: evaluate again)
+  -> run the real work
 ```
 
 Two constraints follow:
@@ -465,15 +461,10 @@ dry-runs a `magusfile.buzz`, with host calls recorded.
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    A[source] --> B[Parse]
-    B --> C[ast.Program]
-    C --> D[Checker]
-    D --> E["Compiler<br/>FoldConsts, FusePeephole"]
-    E --> F["Chunk<br/>bytecode"]
-    F --> G["VM.Exec<br/>register-window stack"]
-    G --> H[Value]
+```text
+source -> Parse -> ast.Program -> Checker
+       -> Compiler (FoldConsts, FusePeephole) -> Chunk (bytecode)
+       -> VM.Exec (register-window stack) -> Value
 ```
 
 - **`Instr`** `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.

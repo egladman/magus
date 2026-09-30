@@ -42,7 +42,7 @@ export function floatingActions(): HTMLElement {
     { passive: true },
   );
 
-  // Mermaid diagrams, highlighted code, and late-loading fonts all change the
+  // Highlighted code and late-loading fonts both change the
   // page height after first paint. Without this, a reader already parked at the
   // bottom keeps .at-end after the content grows out from under them.
   if (typeof ResizeObserver === "function") {

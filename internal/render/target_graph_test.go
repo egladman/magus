@@ -13,7 +13,7 @@ import (
 
 // TestWriteTargetGraphMarkdown pins the routing-index shape: a per-project target
 // list (name + one-line doc), the pointer to the commands that expand an entry,
-// and the deliberate absence of the old per-target dispatch plan and Mermaid graphs.
+// and the deliberate absence of the old per-target dispatch plan and of any embedded graph.
 func TestWriteTargetGraphMarkdown(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
 		Path:   ".",
@@ -256,120 +256,36 @@ func TestFirstDocLine(t *testing.T) {
 	assert.Equal(t, "trimmed", firstDocLine("  trimmed  "))
 }
 
-func TestWriteTargetGraphMermaidSingleProject(t *testing.T) {
+func TestWriteTargetGraphDOTSingleProject(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
 		Path:   ".",
 		Engine: "buzz",
 		Nodes: []types.TargetGraphNode{
-			{Name: "build", Dependencies: []string{"fmt"}},
+			{Name: "build", Dependencies: []string{"fmt", "undeclared"}},
 			{Name: "fmt"},
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&b, out))
+	require.NoError(t, WriteTargetGraphDOT(&b, out))
 	got := b.String()
-	// A single project with no shared-suffix targets renders flat — no project
-	// wrapper, no stage box, no id prefix.
-	assert.NotContains(t, got, "subgraph", "single project with no stages should not emit a subgraph")
-	for _, want := range []string{`build("build")`, `fmt("fmt")`, "fmt --> build"} {
+	assert.True(t, strings.HasPrefix(got, "digraph targets {"), "expected digraph header; got:\n%s", got)
+	for _, want := range []string{`".:build";`, `".:fmt";`, `".:fmt" -> ".:build";`} {
 		assert.Contains(t, got, want, "output missing %q", want)
 	}
+	assert.NotContains(t, got, "undeclared", "a dependency the project does not declare has no node to draw")
 }
 
-// TestWriteTargetGraphMermaidNoSpellBoxes pins that the dependency graph carries no
-// spell boxes: every target — spell-driving or not — is a single node coloured by
-// role. Spells live in the separate Toolchain graph instead.
-func TestWriteTargetGraphMermaidNoSpellBoxes(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes: []types.TargetGraphNode{
-			{Name: "lint", Spells: []types.TargetSpellUse{
-				{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}},
-				{Spell: "md", Ops: []string{"markdownlint"}},
-			}},
-			{Name: "noop"},
-		},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&b, out))
-	got := b.String()
-	// Targets are plain nodes; no per-target spell subgraph or spell box survives.
-	for _, want := range []string{`lint("lint")`, `noop("noop")`} {
-		assert.Contains(t, got, want, "target should be a plain node; missing %q", want)
-	}
-	for _, bad := range []string{`subgraph lint`, "lint_s0", "go: golangci-lint"} {
-		assert.NotContains(t, got, bad, "dependency graph should not box spells")
-	}
-}
-
-// TestWriteTargetGraphMermaidStages pins the pipeline-stage grouping: targets that
-// share a trailing `-<segment>` are boxed together; a singleton stays loose.
-func TestWriteTargetGraphMermaidStages(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes: []types.TargetGraphNode{
-			{Name: "man-generate"},
-			{Name: "docs-generate"},
-			{Name: "release"},
-			{Name: "generate", Dependencies: []string{"man-generate", "docs-generate"}},
-		},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&b, out))
-	got := b.String()
-	assert.Contains(t, got, `subgraph stage_generate["generate"]`, "expected a 'generate' stage subgraph")
-	// `release` has a unique suffix, so it must not be boxed.
-	assert.NotContains(t, got, `stage_release`, "singleton 'release' should stay loose")
-	// `generate` and the lone `release` are top-level (nothing depends on them); the
-	// `*-generate` workers are plain targets pulled in as dependencies.
-	for _, want := range []string{
-		"classDef anchor",
-		"class generate,release anchor",
-		"class docs_generate,man_generate target",
-	} {
-		assert.Contains(t, got, want, "output missing %q", want)
-	}
-}
-
-// TestWriteTargetGraphMermaidStageExcludesNonDependency pins that a same-suffix
-// target the composite does NOT depend on stays loose instead of being boxed by
-// name alone. `generate` depends only on `md-generate`; a standalone `pgo-generate`
-// must not land in a `generate` stage (and with one real worker, no box forms).
-func TestWriteTargetGraphMermaidStageExcludesNonDependency(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes: []types.TargetGraphNode{
-			{Name: "md-generate"},
-			{Name: "pgo-generate"},
-			{Name: "generate", Dependencies: []string{"md-generate"}},
-		},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&b, out))
-	got := b.String()
-	assert.NotContains(t, got, "subgraph stage_generate", "a single real worker should not form a stage box")
-	// pgo-generate is not a dependency of generate, so it stays a loose node, not a
-	// stage member, and draws no edge into generate.
-	assert.NotContains(t, got, "pgo_generate --> generate", "pgo-generate must not edge into generate")
-	for _, want := range []string{`pgo_generate("pgo-generate")`, "md_generate --> generate"} {
-		assert.Contains(t, got, want, "output missing %q", want)
-	}
-}
-
-func TestWriteTargetGraphMermaidMultiProject(t *testing.T) {
+func TestWriteTargetGraphDOTMultiProject(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build", Dependencies: []string{"fmt"}}, {Name: "fmt"}}},
 		{Path: "web", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
 		{Path: "legacy", Engine: "lua"}, // no nodes: dropped
 	}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&b, out))
+	require.NoError(t, WriteTargetGraphDOT(&b, out))
 	got := b.String()
-	// Two projects each have a `build`; the prefix keeps them distinct.
-	for _, want := range []string{`subgraph p0["api"]`, `subgraph p1["web"]`, "p0_fmt --> p0_build"} {
+	// Two projects each have a `build`; the project path keeps them distinct.
+	for _, want := range []string{`"api:build";`, `"web:build";`, `"api:fmt" -> "api:build";`} {
 		assert.Contains(t, got, want, "output missing %q", want)
 	}
 	assert.NotContains(t, got, "legacy", "empty (lua) project should be dropped")
@@ -377,7 +293,7 @@ func TestWriteTargetGraphMermaidMultiProject(t *testing.T) {
 
 // TestWriteTargetGraphDOTCrossProject pins that DOT — which is flat and has no
 // subgraphs — drops cross-project edges rather than emitting an edge to a phantom
-// `p0`/`p1` group id. Mermaid keeps those edges; DOT cannot represent them.
+// `p0`/`p1` group id.
 func TestWriteTargetGraphDOTCrossProject(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
@@ -528,37 +444,4 @@ func TestKindSizeWithholdsABinaryDependentCount(t *testing.T) {
 // the thing it exists for.
 func TestKindSizeKeepsAWorkspaceCount(t *testing.T) {
 	assert.Equal(t, "200+", kindSize(types.KnowledgeRoutingKind{Kind: types.KindTarget, Count: 273}))
-}
-
-// targetsClassDefNames are the exact classDef name strings the Go targets-flavor
-// emitter writes. They are listed here explicitly so that renaming one in
-// target_graph.go without updating this list causes a test failure. Only the two
-// role classes are emitted now; MAGUS.md no longer embeds per-project graphs.
-var targetsClassDefNames = []string{
-	"anchor", // targetRoleClasses[0].Name (target_graph.go)
-	"target", // targetRoleClasses[1].Name (target_graph.go)
-}
-
-// TestTargetGraphMermaidClassDefs asserts WriteTargetGraphMermaid writes the classDef
-// names its consumers style against. The CLI's `-o mermaid` is the only emitter, so
-// this is the whole contract: "anchor" and "target", via targetGraphIR.
-func TestTargetGraphMermaidClassDefs(t *testing.T) {
-	out := types.TargetGraphOutput{
-		Projects: []types.TargetGraphProject{{
-			Path: ".",
-			Nodes: []types.TargetGraphNode{
-				{Name: "ci", Dependencies: []string{"build"}}, // anchor (nothing depends on ci)
-				{Name: "build"}, // target (ci depends on build)
-			},
-		}},
-	}
-	var buf bytes.Buffer
-	require.NoError(t, WriteTargetGraphMermaid(&buf, out))
-	got := buf.String()
-	// Use a space suffix to avoid "classDef anchor" matching "classDef anchor2".
-	for _, name := range targetsClassDefNames {
-		require.True(t, strings.Contains(got, "classDef "+name+" "),
-			"WriteTargetGraphMermaid output missing classDef %q - "+
-				"update targetsClassDefNames in this test to match target_graph.go", name)
-	}
 }

@@ -149,6 +149,5 @@ finding: narrow the lens rather than asking for a bigger picture.
   figure with `rank`, `row`, `zone` and `boundary`, or split it.
 - **Hand-drawn code edges and path strings.** An edge nobody's code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
-- **Mermaid, out or in.** The module is its own format.
 
 Writing the Buzz itself, the syntax and the strict-mode rules: {{skill "buzz-write"}}.

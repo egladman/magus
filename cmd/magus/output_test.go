@@ -434,8 +434,8 @@ func TestWriteFormattedUnknownFormat(t *testing.T) {
 
 func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 	t.Parallel()
-	for _, fmt := range []Format{outputDot, outputMermaid, outputTree} {
-		opts, err := ResolveOutput(string(fmt), outputDot, outputMermaid, outputTree)
+	for _, fmt := range []Format{outputDot, outputTree} {
+		opts, err := ResolveOutput(string(fmt), outputDot, outputTree)
 		assert.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
 		assert.Equal(t, fmt, opts.Format)
 	}
@@ -443,10 +443,17 @@ func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 
 func TestResolveOutput_RejectsGraphFormatsWithoutExtras(t *testing.T) {
 	t.Parallel()
-	for _, fmt := range []Format{outputDot, outputMermaid, outputTree} {
+	for _, fmt := range []Format{outputDot, outputTree} {
 		_, err := ResolveOutput(string(fmt)) // no extra formats
 		assert.Error(t, err, "ResolveOutput(%q) should fail for non-graph commands", fmt)
 	}
+}
+
+func TestResolveOutput_MermaidIsUnknown(t *testing.T) {
+	t.Parallel()
+	_, err := ResolveOutput("mermaid", outputDot, outputTree, outputMarkdown, outputGraphML)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown output format "mermaid"`)
 }
 
 func TestParseTarget(t *testing.T) {

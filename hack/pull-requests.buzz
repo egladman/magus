@@ -10,10 +10,11 @@
 //	magus buzz hack/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
 //	    take the actions that change no code: queue what is green on a current base, and
 //	    rerun a red run once per head when the failure is outside the change's files
-//	magus buzz hack/pull-requests.buzz -- dashboard [--all] [--base <b>] [--out <file>] [--issue <n>]
-//	    the queue as one markdown page: a Mermaid chart of the queue, then a table per
-//	    section with each pull request's reason and a person's command; --issue replaces
-//	    that issue's body with it. `magus queue ls` needs GITHUB_TOKEN
+//	magus buzz hack/pull-requests.buzz -- dashboard [--all] [--base <b>] [--out <file>] [--issue <n>] [--console-base <url>]
+//	    the queue as one markdown page: a link that draws the queue in the console
+//	    (--console-base, the hosted one by default), then a table per section with each
+//	    pull request's reason and a person's command; --issue replaces that issue's body
+//	    with it. `magus queue ls` needs GITHUB_TOKEN
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -35,6 +36,7 @@ import "serialize";
 import "std";
 import "time";
 import "hack/commits" as commits;
+import "../.github/actions/advice/figure-link" as figurelink;
 
 import "assert";
 
@@ -204,11 +206,12 @@ object Selector {
     all: bool = false,
     method: str = "squash",
     // dashboard's: the queue's base, the file it writes, the issue whose body it
-    // replaces ("" for none), and the run that rendered it.
+    // replaces ("" for none), the run that rendered it, and the console its graph links to.
     base: str = "main",
     file: str = "",
     issue: str = "",
     runUrl: str = "",
+    console: str = figurelink\defaultConsoleBase,
 }
 
 fun encode(doc: {str: any}) > str {
@@ -1237,7 +1240,7 @@ export fun selected(open: [Pull], prs: [int], author: str) > [Pull] {
 final usage = "usage: magus buzz hack/pull-requests.buzz -- <step> <flags>\n"
     + "  status [--all | --author <login>] [--pr <n>]...\n"
     + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]\n"
-    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] [--out <file>] [--issue <n>] [--run-url <url>]";
+    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] [--out <file>] [--issue <n>] [--run-url <url>] [--console-base <url>]";
 
 // selectorOf parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
@@ -1277,7 +1280,7 @@ export fun selectorOf(step: str, argv: [str]) > Selector !> any {
         switches.append("--all");
     }
     if (step == "dashboard") {
-        foreach (f in ["--base", "--out", "--issue", "--run-url"]) {
+        foreach (f in ["--base", "--out", "--issue", "--run-url", "--console-base"]) {
             valued.append(f);
         }
     }
@@ -1312,7 +1315,8 @@ export fun selectorOf(step: str, argv: [str]) > Selector !> any {
         throw "pull-requests: --issue edits the issue with the --out file, so it needs --out\n{usage}";
     }
     return Selector{ prs = prs, author = author ?? "", all = all, method = method,
-        base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "" };
+        base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "",
+        console = parsed.values["--console-base"] ?? figurelink\defaultConsoleBase };
 }
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
@@ -1576,14 +1580,14 @@ final RFC3339 = "2006-01-02T15:04:05Z07:00";
 final VALIDATE_JOB = "queue validate #";
 // GitHub refuses an issue body past this many characters.
 final BODY_LIMIT = 65536;
-// Sections in page order: key, heading, and the class its chart nodes take.
+// Sections in page order: key, heading.
 final SECTIONS = [
-    ["flight", "In flight", "validating"],
-    ["queued", "Queued", "waiting"],
-    ["author", "Needs the author", "kicked"],
-    ["manual", "Needs a manual merge", "regeneration"],
-    ["join", "Could join", ""],
-    ["drafts", "Drafts and forks", ""],
+    ["flight", "In flight"],
+    ["queued", "Queued"],
+    ["author", "Needs the author"],
+    ["manual", "Needs a manual merge"],
+    ["join", "Could join"],
+    ["drafts", "Drafts and forks"],
 ];
 // Stages from which a green, approved pull request with no intent can join as it is.
 final JOINABLE = ["needs-queue", "behind", "conflicting"];
@@ -1620,6 +1624,8 @@ object Board {
     at: str,
     tip: str = "",
     runUrl: str = "",
+    // The console the queue's graph links to; "" is the default console.
+    console: str = "",
     // open is every open pull request, which stacks and intent read; pulls are the
     // ones the page shows.
     open: [Pull],
@@ -1705,16 +1711,6 @@ fun clip(s: str, n: int) > str {
 
 fun cell(s: str) > str {
     return ascii(s).replace("|", with: "\\|");
-}
-
-// nodeText is safe inside a Mermaid ["..."] label: a quote would end it, and "#...;"
-// reads as an entity.
-fun nodeText(s: str) > str {
-    var t = ascii(s);
-    foreach (c in ["\"", "#", ";", "<", ">", "[", "]", "\{", "}", "|", "\\", "`", "&"]) {
-        t = t.replace(c, with: " ");
-    }
-    return t;
 }
 
 // when is an RFC 3339 time as "2026-09-26 18:55", "-" when there is none.
@@ -1836,9 +1832,10 @@ fun rowOf(p: Pull, r: Record, section: str, b: Board) > str {
     return row([pr, head, "-", "approved; checks green", "`" + cell(joinCommand(p, r: r)) + "`"]);
 }
 
-// chart is the Mermaid flowchart: main, then each queued change behind the one it is
-// stacked on, a stack boxed; a change kicked back hangs off main by a dotted line.
-fun chart(b: Board, sections: {int: str}) > [str] {
+// figureLinkOf is the console link for the queue's graph: the base, then each queued change
+// after the one it is stacked on. A change kicked back is a node with no edge, since it is
+// stacked on nothing. "" when nothing is queued or kicked, or the link is too long to carry.
+export fun figureLinkOf(b: Board, sections: {int: str}) > str !> any {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -1851,93 +1848,28 @@ fun chart(b: Board, sections: {int: str}) > [str] {
         }
     }
     if (ids.len() == 0 and kicked.len() == 0) {
-        return [<str>];
+        return "";
     }
     final titles = mut {<int: str>};
     foreach (p in b.open) {
         titles[p.number] = p.title;
     }
-    final node = fun (n: int) > str => "pr{n}[\"#{n} " + nodeText(clip(titles[n] ?? "", n: 40)).trim() + "\"]";
-    final parents = mut {<int: int>};
-    foreach (q in b.queue) {
-        if (q.parent != null and ids.indexOf(q.parent!) != null) {
-            parents[q.id] = q.parent!;
-        }
-    }
-    final roots = mut [<int>];
-    final rootOf = mut {<int: int>};
-    foreach (q in b.queue) {
-        var root = q.id;
-        var depth = 0;
-        while (parents[root] != null and depth < 32) {
-            root = parents[root]!;
-            depth = depth + 1;
-        }
-        rootOf[q.id] = root;
-        if (roots.indexOf(root) == null) {
-            roots.append(root);
-        }
-    }
-    final lines = mut ["```mermaid", "flowchart LR", "  main([\"" + nodeText(b.base) + "\"])"];
-    foreach (root in roots) {
-        final group = mut [<int>];
-        foreach (n in ids) {
-            if (rootOf[n] == root) {
-                group.append(n);
-            }
-        }
-        if (group.len() == 1) {
-            lines.append("  " + node(root));
-            continue;
-        }
-        lines.append("  subgraph stack{root} [\"stack from #{root}\"]");
-        foreach (n in group) {
-            lines.append("    " + node(n));
-        }
-        lines.append("  end");
-    }
-    foreach (q in b.queue) {
-        var below = "main";
-        if (parents[q.id] != null) {
-            below = "pr{parents[q.id]!}";
-        }
-        lines.append("  {below} --> pr{q.id}");
-    }
-    foreach (n in kicked) {
-        lines.append("  " + node(n));
-        lines.append("  main -.- pr{n}");
-    }
-    lines.append("  classDef validating fill:#ddf4ff,stroke:#0969da,color:#0a3069");
-    lines.append("  classDef waiting fill:#f6f8fa,stroke:#8c959f,color:#24292f");
-    lines.append("  classDef kicked fill:#ffebe9,stroke:#cf222e,color:#82071e");
-    lines.append("  classDef regeneration fill:#fff8c5,stroke:#9a6700,color:#4d2d00");
-    final all = mut [<int>];
+    final nodes = mut [figurelink\FigureNode{ id = "base", label = ascii(b.base) }];
     foreach (n in ids) {
-        all.append(n);
+        nodes.append(figurelink\FigureNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
     }
     foreach (n in kicked) {
-        all.append(n);
+        nodes.append(figurelink\FigureNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
     }
-    foreach (s in SECTIONS) {
-        if (s[2] == "") {
-            continue;
+    final edges = mut [<[str]>];
+    foreach (q in b.queue) {
+        var below = "base";
+        if (q.parent != null and ids.indexOf(q.parent!) != null) {
+            below = "pr{q.parent!}";
         }
-        final classed = mut [<str>];
-        foreach (n in all) {
-            var key = sections[n] ?? "queued";
-            if (key != "flight" and key != "author" and key != "manual") {
-                key = "queued";
-            }
-            if (key == s[0]) {
-                classed.append("pr{n}");
-            }
-        }
-        if (classed.len() > 0) {
-            lines.append("  class {classed.join(",")} {s[2]}");
-        }
+        edges.append([below, "pr{q.id}"]);
     }
-    lines.append("```");
-    return lines;
+    return figurelink\figureLink(b.console, title: "Merge queue into " + ascii(b.base), nodes: nodes, edges: edges);
 }
 
 // mergedLine counts the week's merges into base by who merged them.
@@ -2024,17 +1956,13 @@ export fun dashboardOf(b: Board) > str !> any {
         mergedLine(b),
         "",
     ];
-    final picture = chart(b, sections: sections);
-    if (picture.len() == 0) {
+    final link = figureLinkOf(b, sections: sections);
+    if (link == "") {
         lines.append("Nothing is queued.");
-        lines.append("");
+    } else {
+        lines.append("[The queue as a graph]({link})");
     }
-    foreach (l in picture) {
-        lines.append(l);
-    }
-    if (picture.len() > 0) {
-        lines.append("");
-    }
+    lines.append("");
     foreach (s in SECTIONS) {
         final these = linesOf(s[0]);
         if (these.len() == 0) {
@@ -2107,7 +2035,7 @@ fun dashboard(sel: Selector) > void !> any {
     std\print("pull-requests: read {open.len()} open and {merged.len()} merged pull requests, {waits.len()} statuses and "
         + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
         + "{std\toInt(os\time() - began)}ms");
-    final body = dashboardOf(Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, open = open, pulls = pulls,
+    final body = dashboardOf(Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
         queue = queue, merged = merged, waits = waits, flights = flights });
     if (body.len() > BODY_LIMIT) {
         throw "pull-requests: the dashboard is {body.len()} characters, past the {BODY_LIMIT} GitHub takes in an issue body";
@@ -2501,6 +2429,8 @@ test "status and dashboard take --all; dashboard takes its page's flags" {
     assert\equal([d.base, d.file, d.issue, d.runUrl], want: ["trunk", "d.md", "12", "u"], message: "the page's flags");
     assert\equal(selectorOf("dashboard", argv: ["--all", "--out", "d.md", "--issue", ""]).issue, want: "", message: "an unset variable is no issue");
     assert\equal(selectorOf("dashboard", argv: ["--all"]).base, want: "main", message: "the default base");
+    assert\equal(selectorOf("dashboard", argv: ["--all"]).console, want: figurelink\defaultConsoleBase, message: "the default console");
+    assert\equal(selectorOf("dashboard", argv: ["--all", "--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
 }
 
 test "selection is the requested numbers or the author's pull requests" {
@@ -2636,6 +2566,35 @@ fun lacks(page: str, want: str) > void !> any {
     assert\equal(page.indexOf(want) == null, want: true, message: "no {want} in:\n{page}");
 }
 
+// figureIn decodes the graph a page links, and throws when it links none.
+fun figureIn(page: str) > serialize\Boxed !> any {
+    final open = "[The queue as a graph](";
+    final at = page.indexOf(open);
+    if (at == null) {
+        throw "no graph link in:\n{page}";
+    }
+    final rest = page.sub(at! + open.len());
+    return figurelink\decodeFigureLink(rest.sub(0, len: rest.indexOf(")")!));
+}
+
+// idsOf is the ids of the graph's nodes, in order.
+fun idsOf(doc: serialize\Boxed) > [str] {
+    final acc = mut [<str>];
+    foreach (n in doc.q("nodes").listValue()) {
+        acc.append(n.q("id").stringValue());
+    }
+    return acc;
+}
+
+// edgesOf is the graph's edges as "from>to".
+fun edgesOf(doc: serialize\Boxed) > [str] {
+    final acc = mut [<str>];
+    foreach (e in doc.q("edges").listValue()) {
+        acc.append(e.listValue()[0].stringValue() + ">" + e.listValue()[1].stringValue());
+    }
+    return acc;
+}
+
 fun isAscii(page: str) > bool {
     var i = 0;
     while (i < page.len()) {
@@ -2657,18 +2616,19 @@ fun kickedBy(n: int, code: str) > Pull {
             reason = "The merge queue cannot merge this change.", requeue = "gh pr merge {n} --auto --rebase", at = "2026-09-26T18:55:51Z" } };
 }
 
-test "an empty queue says so, draws nothing, and ends with the marker" {
+test "an empty queue says so, links nothing, and ends with the marker" {
     final page = dashboardOf(board([<Pull>], queue: [<Queued>]));
     has(page, want: "## Merge queue\n\nUpdated 2026-09-26 20:00 UTC, with `main` at `cba6465e8617`.");
     has(page, want: "In flight 0 | Queued 0 | Needs the author 0 | Needs a manual merge 0 | Could join 0 | Drafts and forks 0");
     has(page, want: "Nothing is queued.");
+    lacks(page, want: "#figure=");
     lacks(page, want: "```mermaid");
     lacks(page, want: "###");
     assert\equal(page.endsWith("\n" + DASHBOARD_MARKER + "\n"), want: true, message: "the marker closes the page");
     assert\equal(isAscii(page), want: true, message: "ASCII");
 }
 
-test "a partition of three draws each behind main, one validating, and tables them" {
+test "a partition of three links each behind the base, and tables them" {
     final open = [
         Pull{ number = 1, head = "a", title = "one", autoMerge = true, checks = [green("t")] },
         Pull{ number = 2, head = "b", title = "two", autoMerge = true, checks = [green("t")] },
@@ -2679,8 +2639,15 @@ test "a partition of three draws each behind main, one validating, and tables th
         waits = {2: Wait{ description = "waiting: WAIT_BEHIND a change validated beneath it did not merge", since = "2026-09-26T19:00:00Z" }},
         flights = {1: Flight{ url = "https://github.com/o/r/actions/runs/9/job/8", since = "2026-09-26T19:30:00Z" }} };
     final page = dashboardOf(b);
-    has(page, want: "```mermaid\nflowchart LR\n  main([\"main\"])\n  pr1[\"#1 one\"]\n  pr2[\"#2 two\"]\n  pr3[\"#3 three\"]\n  main --> pr1\n  main --> pr2\n  main --> pr3\n");
-    has(page, want: "  class pr1 validating\n  class pr2,pr3 waiting\n```");
+    has(page, want: "[The queue as a graph](" + figurelink\defaultConsoleBase + "graph/#figure=");
+    lacks(page, want: "```mermaid");
+    final doc = figureIn(page);
+    assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
+    assert\equal(doc.q("title").stringValue(), want: "Merge queue into main", message: "title");
+    assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
+    assert\equal(doc.q("nodes").listValue()[0].q("label").stringValue(), want: "main", message: "the base's label");
+    assert\equal(doc.q("nodes").listValue()[1].q("label").stringValue(), want: "#1 one", message: "a change's label");
+    assert\equal(edgesOf(doc), want: ["base>pr1", "base>pr2", "base>pr3"], message: "each behind the base");
     has(page, want: "In flight 1 | Queued 2 |");
     has(page, want: "### In flight\n\n| Pull request | Head | Since (UTC) | Why | What to do |\n| --- | --- | --- | --- | --- |\n"
         + "| #1 one | `a` | 2026-09-26 19:30 | validating in [its run](https://github.com/o/r/actions/runs/9/job/8) | wait for the run |");
@@ -2689,13 +2656,13 @@ test "a partition of three draws each behind main, one validating, and tables th
     lacks(page, want: "Nothing is queued.");
 }
 
-test "a stack is boxed, each member behind the one it is stacked on" {
+test "a stack links each member behind the one it is stacked on" {
     final open = [
         Pull{ number = 10, head = "s1", title = "bottom" },
         Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
     ];
     final page = dashboardOf(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
-    has(page, want: "  subgraph stack10 [\"stack from #10\"]\n    pr10[\"#10 bottom\"]\n    pr11[\"#11 top\"]\n  end\n  main --> pr10\n  pr10 --> pr11\n");
+    assert\equal(edgesOf(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
     has(page, want: "| #11 top | `s2` | - | stacked on #10, which has not merged | wait |");
 }
 
@@ -2714,17 +2681,20 @@ test "each kick code goes to the author, and a regeneration to a manual merge" {
         + "| #4 kicked KICK_REGENERATION | `k4` | 2026-09-26 18:55 | KICK_REGENERATION: The merge queue cannot merge this change. (2 files) "
         + "[comment](https://github.com/o/r/pull/4#issuecomment-1) | merge `main` in, run `magus run generate:rw`, push, then "
         + "`gh pr merge 4 --auto --rebase`; or a person merges it past the queue: `gh pr merge 4 --squash --admin` |");
-    has(page, want: "  pr4[\"#4 kicked KICK_REGENERATION\"]\n  main -.- pr4\n");
-    has(page, want: "  class pr1,pr2,pr3,pr5 kicked\n  class pr4 regeneration\n");
+    final doc = figureIn(page);
+    assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
+    assert\equal(doc.q("nodes").listValue()[4].q("label").stringValue(), want: "#4 kicked KICK_REGENERATION", message: "its label");
+    assert\equal(edgesOf(doc).len(), want: 0, message: "stacked on nothing");
     final labeled = dashboardOf(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
     has(labeled, want: "Needs a manual merge 1");
 }
 
-test "a draft and a fork are one line each, and neither is charted" {
+test "a draft and a fork are one line each, and neither is graphed" {
     final open = [Pull{ number = 7, title = "wip", draft = true, autoMerge = true }, Pull{ number = 8, title = "outside", fork = true, review = "APPROVED", checks = [green("t")] }];
     final page = dashboardOf(board(open, queue: [<Queued>]));
     has(page, want: "### Drafts and forks\n\n- #7 wip: a draft\n- #8 outside: from a fork, which the queue refuses; a person decides how it reaches `main`\n");
     has(page, want: "Drafts and forks 2");
+    lacks(page, want: "#figure=");
     lacks(page, want: "```mermaid");
 }
 
@@ -2741,12 +2711,12 @@ test "an approved green pull request with no intent could join, by the command t
     has(page, want: "2 more open, with no merge intent and not both approved and green: #23, #24.");
 }
 
-test "the page is ASCII, and a title cannot break a table or a chart" {
+test "the page is ASCII, and a title cannot break a table or the graph" {
     final open = [Pull{ number = 30, head = "t", title = "caf\195\169 | \"quoted\" #1; <b>", autoMerge = true }];
     final page = dashboardOf(board(open, queue: [Queued{ id = 30 }]));
     assert\equal(isAscii(page), want: true, message: page);
     has(page, want: "| #30 caf? \\| \"quoted\" #1; <b> | `t` |");
-    has(page, want: "  pr30[\"#30 caf?    quoted   1   b\"]");
+    assert\equal(figureIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <b>", message: "the label");
 }
 
 test "the week's merges are counted by who merged them" {

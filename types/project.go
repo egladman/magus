@@ -68,7 +68,7 @@ func (r ProjectRef) WorkspaceURI() string {
 
 // Display renders the project for human consumption: the bare path for
 // nested projects, the dir basename for the root (so a bare "." never
-// appears in logs or Mermaid labels), and "(workspace root)" as the final
+// appears in logs or graph labels), and "(workspace root)" as the final
 // fallback. This is the canonical rendering: the bare workspace-relative path
 // is also what every project arg takes, so what magus prints pastes back in.
 func (r ProjectRef) Display() string {

@@ -301,7 +301,7 @@ plan renders more than once without being computed again.`,
 		{"Force a fresh rebuild past a cache hit", "magus run build --no-cache"},
 		{"Full CI pipeline", "magus run ci"},
 		{"Show dependency graph for build target", "magus run build --graph"},
-		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},
+		{"Graph in DOT format", "magus run build --graph -o dot"},
 		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
 		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
 		{"Run every shard of the affected ci plan here", "magus affected ci --plan | magus run --stdin"},
@@ -635,7 +635,7 @@ Subcommands (the first argument):
            this is the manual trigger, after a branch switch or when the server
            is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
-           the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
+           the graph; -o selects text, json, yaml, dot, or tree. The
            same view scoped to a run is available as magus run <target> --graph
            and magus affected <target> --graph.
   export   The merged knowledge graph: the deterministic, cache-backed graph of
@@ -644,8 +644,8 @@ Subcommands (the first argument):
            node-link form; -o graphml emits GraphML. External graph viewers
            (Gephi, yEd) read both directly. --select "<terms>" narrows the
            export to a query's neighborhood (same engine as magus query); -o dot
-           and -o mermaid render only with --select, since the full graph has too
-           many nodes to lay out. The graph is cache-backed under
+           renders only with --select, since the full graph has too many nodes
+           to lay out. The graph is cache-backed under
            <cache>/knowledge; only shards whose sources changed are rebuilt.
            --open sends it to the hosted, interactive Graph Explorer instead of
            stdout (there is no separate "open" subcommand): by default the graph
@@ -691,7 +691,7 @@ Subcommands (the first argument):
 				{Name: "out", Kind: FlagString, Doc: "Write the graph here instead of stdout"},
 			},
 		},
-		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", Flags: []Flag{
+		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, tree)", Flags: []Flag{
 			{Name: "upstream", Kind: FlagBool, Doc: "Show dependents instead of dependencies"},
 			{Name: "depth", Kind: FlagInt, Doc: "Cap displayed depth (0 = unlimited)"},
 			{Name: "spell", Kind: FlagString, Doc: "Only projects driven by this spell"},
@@ -708,7 +708,7 @@ Subcommands (the first argument):
 			{Name: "print", Kind: FlagBool, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
 			{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/graph/", DefaultAtBind: true, Doc: "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)"},
 			{Name: "static", Kind: FlagBool, Doc: "Deprecated alias for --reproducible"},
-			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid"},
+			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot"},
 			{Name: "budget", Kind: FlagInt, Default: 50, DefaultAtBind: true, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
 			{Name: "symbols", Kind: FlagBool, Doc: "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them"},
 		}},
@@ -729,11 +729,11 @@ Subcommands (the first argument):
 		},
 	},
 	Examples: []Example{
-		{"Project DAG as Mermaid", "magus graph deps -o mermaid"},
+		{"Project DAG as DOT", "magus graph deps -o dot"},
 		{"DAG rooted at one project, dependents up", "magus graph deps pkg/api --upstream"},
 		{"Knowledge graph for an external viewer", "magus graph export -o json > graph.json"},
 		{"GraphML for Gephi or yEd", "magus graph export -o graphml > graph.graphml"},
-		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind=spell go' -o mermaid"},
+		{"A query's neighborhood as DOT", "magus graph export --select 'kind=spell go' -o dot"},
 		{"Where structural risk concentrates", "magus graph stats"},
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
 		{"Open knowledge graph in browser", "magus graph export --open"},

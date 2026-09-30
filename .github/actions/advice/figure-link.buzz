@@ -1,0 +1,123 @@
+// The link a pull-request comment or issue body carries in place of a drawn graph.
+//
+// GitHub cannot draw one of ours, so the comment links the hosted console, which draws it
+// client-side with magus/figure. The graph rides in the URL fragment and a fragment never
+// reaches a server, so project names stay on the reader's machine.
+//
+//	<consoleBase>graph/#figure=<base64url(utf-8 JSON)>
+//	{"v":1,"kind":"deps","title":"...","nodes":[{"id":"...","label":"...","seed":true}],
+//	 "edges":[["fromId","toId"]]}
+//
+// An edge runs from a dependency to its dependent. A seed is a node the change edited.
+// The console reads this shape, so a change here is a change there.
+//
+// Shared by the advisors here and by hack/pull-requests.buzz, which imports it by path:
+// this directory ships with the action and is the one place both can reach.
+import "serialize";
+// Used by the test blocks.
+import "assert";
+
+// The hosted console. A caller passes its own base (the `console-base` input or flag);
+// this stands in when it passes none.
+export final defaultConsoleBase = "https://eli.gladman.cc/magus/console/";
+
+// Past this the link is left out: a comment body holds 65536 characters, and the table
+// beside it needs most of them.
+final maxLinkLength = 16384;
+
+final marker = "#figure=";
+
+export object FigureNode {
+    id: str,
+    label: str,
+    seed: bool = false,
+}
+
+// figureLink returns the console link for a dependency graph, or "" when the encoded link
+// would run past maxLinkLength. base may be empty for the default and need not end in a slash.
+// edges holds [fromId, toId] pairs, dependency first.
+export fun figureLink(base: str, title: str, nodes: [FigureNode], edges: [[str]]) > str !> any {
+    final drawn = mut [<any>];
+    foreach (n in nodes) {
+        drawn.append({"id": n.id, "label": n.label, "seed": n.seed});
+    }
+    final json = serialize\jsonEncode({"v": 1, "kind": "deps", "title": title, "nodes": drawn, "edges": edges});
+    var payload = json.encodeBase64().replace("+", with: "-").replace("/", with: "_");
+    while (payload.endsWith("=")) {
+        payload = payload.sub(0, len: payload.len() - 1);
+    }
+    var root = base;
+    if (root == "") { root = defaultConsoleBase; }
+    if (!root.endsWith("/")) { root = root + "/"; }
+    final link = root + "graph/" + marker + payload;
+    if (link.len() > maxLinkLength) { return ""; }
+    return link;
+}
+
+// decodeFigureLink returns the JSON document a figureLink link carries. Throws on a link
+// without a figure fragment.
+export fun decodeFigureLink(link: str) > serialize\Boxed !> any {
+    final at = link.indexOf(marker);
+    if (at == null) { throw "figure-link: no " + marker + " fragment in " + link; }
+    var payload = link.sub(at! + marker.len()).replace("-", with: "+").replace("_", with: "/");
+    while (payload.len() % 4 != 0) { payload = payload + "="; }
+    return serialize\jsonDecode(payload.decodeBase64());
+}
+
+test "a link decodes to the graph it was built from" {
+    final link = figureLink("https://example.test/console/", title: "How far this change reaches",
+        nodes: [FigureNode{ id = "libs/a", label = "a", seed = true }, FigureNode{ id = "cmd/b", label = "b" }],
+        edges: [["libs/a", "cmd/b"]]);
+    assert\equal(link.startsWith("https://example.test/console/graph/#figure="), want: true, message: link);
+    final doc = decodeFigureLink(link);
+    assert\equal(doc.q("v").integerValue(), want: 1, message: "version");
+    assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
+    assert\equal(doc.q("title").stringValue(), want: "How far this change reaches", message: "title");
+    final nodes = doc.q("nodes").listValue();
+    assert\equal(nodes.len(), want: 2, message: "nodes");
+    assert\equal([nodes[0].q("id").stringValue(), nodes[0].q("label").stringValue(), nodes[0].q("seed").booleanValue()],
+        want: ["libs/a", "a", true], message: "the seed");
+    assert\equal(nodes[1].q("seed").booleanValue(), want: false, message: "a dependent is no seed");
+    final edges = doc.q("edges").listValue();
+    assert\equal([edges[0].listValue()[0].stringValue(), edges[0].listValue()[1].stringValue()],
+        want: ["libs/a", "cmd/b"], message: "dependency first");
+}
+
+test "the payload is unpadded base64url" {
+    // Bytes chosen so the standard alphabet would emit + and /.
+    final link = figureLink("", title: "???>>>", nodes: [FigureNode{ id = "x", label = "~~~" }], edges: [<[str]>]);
+    final payload = link.sub(link.indexOf(marker)! + marker.len());
+    assert\equal(payload.indexOf("+") == null and payload.indexOf("/") == null and payload.indexOf("=") == null,
+        want: true, message: payload);
+    assert\equal(decodeFigureLink(link).q("title").stringValue(), want: "???>>>", message: "round trip");
+}
+
+test "non-ASCII labels survive the round trip" {
+    final link = figureLink("", title: "caf\195\169", nodes: [FigureNode{ id = "p", label = "caf\195\169" }], edges: [<[str]>]);
+    assert\equal(decodeFigureLink(link).q("nodes").listValue()[0].q("label").stringValue(), want: "caf\195\169", message: "utf-8");
+}
+
+test "the base defaults and gains its trailing slash" {
+    final none = figureLink("", title: "t", nodes: [<FigureNode>], edges: [<[str]>]);
+    assert\equal(none.startsWith(defaultConsoleBase + "graph/#figure="), want: true, message: none);
+    final bare = figureLink("https://example.test/console", title: "t", nodes: [<FigureNode>], edges: [<[str]>]);
+    assert\equal(bare.startsWith("https://example.test/console/graph/#figure="), want: true, message: bare);
+}
+
+test "a graph too large for a comment yields no link" {
+    final many = mut [<FigureNode>];
+    for (var i = 0; i < 600; i = i + 1) {
+        many.append(FigureNode{ id = "projects/service-{i}", label = "service-{i}" });
+    }
+    assert\equal(figureLink("", title: "t", nodes: many, edges: [<[str]>]), want: "", message: "left out");
+}
+
+test "a link without a fragment is refused" {
+    var refused = false;
+    try {
+        decodeFigureLink("https://example.test/console/graph/");
+    } catch (e) {
+        refused = true;
+    }
+    assert\equal(refused, want: true, message: "no fragment");
+}

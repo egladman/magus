@@ -28,7 +28,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            this is the manual trigger, after a branch switch or when the server
            is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
-           the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
+           the graph; -o selects text, json, yaml, dot, or tree. The
            same view scoped to a run is available as magus run \<target\> --graph
            and magus affected \<target\> --graph.
   export   The merged knowledge graph: the deterministic, cache-backed graph of
@@ -37,8 +37,8 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            node-link form; -o graphml emits GraphML. External graph viewers
            (Gephi, yEd) read both directly. --select "\<terms\>" narrows the
            export to a query's neighborhood (same engine as magus query); -o dot
-           and -o mermaid render only with --select, since the full graph has too
-           many nodes to lay out. The graph is cache-backed under
+           renders only with --select, since the full graph has too many nodes
+           to lay out. The graph is cache-backed under
            \<cache\>/knowledge; only shards whose sources changed are rebuilt.
            --open sends it to the hosted, interactive Graph Explorer instead of
            stdout (there is no separate "open" subcommand): by default the graph
@@ -123,7 +123,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes
 
 **--select** *string*
-: Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid
+: Export only the neighborhood of a query (same grammar as magus query); required for -o dot
 
 **--serve**
 : With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)
@@ -177,7 +177,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Fetch a published knowledge graph; reads public artifacts with no credentials
 
 **deps**
-: Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)
+: Emit the project dependency DAG (text, json, yaml, dot, tree)
 
 **export**
 : Export the merged knowledge graph (json node-link or graphml)
@@ -190,10 +190,10 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 
 ## Examples
 
-*Project DAG as Mermaid*
+*Project DAG as DOT*
 
 ```sh
-magus graph deps -o mermaid
+magus graph deps -o dot
 ```
 
 *DAG rooted at one project, dependents up*
@@ -214,10 +214,10 @@ magus graph export -o json > graph.json
 magus graph export -o graphml > graph.graphml
 ```
 
-*A query's neighborhood as Mermaid*
+*A query's neighborhood as DOT*
 
 ```sh
-magus graph export --select 'kind=spell go' -o mermaid
+magus graph export --select 'kind=spell go' -o dot
 ```
 
 *Where structural risk concentrates*

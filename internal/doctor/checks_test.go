@@ -258,8 +258,8 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
 			Path: "docs", Name: "docs",
 			TargetOutputs: map[string][]types.OutputRef{
-				"generate":      {{Glob: "gen/**"}},
-				"build-mermaid": {{Glob: "gen/assets/mermaid.js"}},
+				"generate":     {{Glob: "gen/**"}},
+				"build-assets": {{Glob: "gen/assets/app.js"}},
 			},
 		}})
 		assert.Equal(t, types.Check{

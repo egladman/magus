@@ -293,7 +293,7 @@ func TestInsightRejectsAnUnknownOption(t *testing.T) {
 	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
 	for _, opts := range []map[string]any{
 		{"comits": 50.0},
-		{"mermaidStyle": "safe"},
+		{"layoutStyle": "safe"},
 		{"workspace": true},
 		{"commits": "not a number"},
 		{"since": 90.0},
