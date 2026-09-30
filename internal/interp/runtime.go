@@ -995,7 +995,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
-	if read := loadReader(ctx); read != nil {
+	if read := confineImportReads(ctx, src.Dir, loadReader(ctx)); read != nil {
 		buzzSess.SetSourceReader(read)
 	}
 	// Magusfiles run as whole files, not incrementally, so a non-exported,
@@ -1222,6 +1222,9 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	// line not typed yet.
 	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
 	buzzSess.SetIncludeDirs(nil)
+	if read := confineImportReads(ctx, dir, nil); read != nil {
+		buzzSess.SetSourceReader(read)
+	}
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs
@@ -1298,6 +1301,56 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		}
 	}
 	return paths
+}
+
+// confineImportReads wraps read, the session's import source reader (nil reads the
+// disk), so a file the module search resolved outside the workspace root is refused
+// with MGS1047 and never read. It answers where the search joins an import onto a
+// directory, the only point that sees the final path: gopherbuzz stats each candidate
+// before the reader runs, so an escaping candidate is stat'd but its bytes are never
+// opened. Allowed: the workspace root, the verified remote-spell view, and dir when
+// the importing file itself lives outside the root. With no workspace it returns read
+// unchanged.
+func confineImportReads(ctx context.Context, dir string, read func(path string) ([]byte, error)) func(path string) ([]byte, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil || ws.Root() == "" {
+		return read
+	}
+	root := absClean(ws.Root())
+	bounds := []string{root}
+	if view := remotespell.ImportsFromContext(ctx).View(); view != "" {
+		bounds = append(bounds, absClean(view))
+	}
+	if dir != "" && !within(root, absClean(dir)) {
+		bounds = append(bounds, absClean(dir))
+	}
+	return func(path string) ([]byte, error) {
+		abs := absClean(path)
+		if !slices.ContainsFunc(bounds, func(b string) bool { return within(b, abs) }) {
+			err := types.DiagnosticErrorf(types.SpellImportEscapesWorkspace,
+				"import resolves outside the workspace: %s is above the workspace root %s, and an import never loads a file outside the root; import a path inside the workspace",
+				abs, root)
+			ReportImportError(ctx, err)
+			return nil, err
+		}
+		if read == nil {
+			return os.ReadFile(path)
+		}
+		return read(path)
+	}
+}
+
+func absClean(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
+}
+
+// within reports whether the clean absolute path p is root or lies under it.
+func within(root, p string) bool {
+	rest, ok := strings.CutPrefix(p, root)
+	return ok && (rest == "" || rest[0] == filepath.Separator || strings.HasSuffix(root, string(filepath.Separator)))
 }
 
 // runTargetBody runs one target body, driving it as a fiber so a ctx.needs inside it

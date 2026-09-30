@@ -159,6 +159,52 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 	}
 }
 
+// The search joins `../x` onto the root as root/../x.buzz, a file beside the workspace,
+// which from a worktree is a sibling checkout. It must be refused and never read.
+func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
+	outer := t.TempDir()
+	root := filepath.Join(outer, "ws")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	const module = "export fun touch() > void {}\n"
+	above := filepath.Join(outer, "x.buzz")
+	require.NoError(t, os.WriteFile(above, []byte(module), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inside.buzz"), []byte(module), 0o644))
+
+	ctx := types.WithWorkspace(t.Context(), rootWorkspace{root: root})
+	oldJoin := strings.ReplaceAll(magusSearchPaths(ctx, root)[0], "?", "../x")
+	require.Equal(t, root+string(filepath.Separator)+".."+string(filepath.Separator)+"x.buzz", oldJoin)
+	require.Equal(t, above, filepath.Clean(oldJoin), "the old search resolves the planted module")
+
+	load := func(t *testing.T, magusfile string) ([]string, error) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		var reads []string
+		ctx := WithSourceReader(ctx, func(path string) ([]byte, error) {
+			reads = append(reads, path)
+			return os.ReadFile(path)
+		})
+		src, err := Find(root)
+		require.NoError(t, err)
+		load, err := execBuzzSrc(ctx, src, true)
+		if err == nil {
+			t.Cleanup(func() { _ = load.Session.Close() })
+		}
+		return reads, err
+	}
+
+	t.Run("a module above the root is refused unread", func(t *testing.T) {
+		reads, err := load(t, "import \"../x\";\nx\\touch();\n")
+		require.ErrorIs(t, err, types.SpellImportEscapesWorkspace)
+		assert.NotContains(t, reads, above)
+		assert.NotContains(t, reads, oldJoin)
+	})
+	t.Run("a module inside the root loads", func(t *testing.T) {
+		reads, err := load(t, "import \"inside\";\ninside\\touch();\n")
+		require.NoError(t, err)
+		assert.Contains(t, reads, filepath.Join(root, "inside.buzz"))
+	})
+}
+
 // importsWorkspace is a workspace carrying resolved spell imports, the way Magus does.
 type importsWorkspace struct {
 	rootWorkspace
