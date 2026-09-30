@@ -55,11 +55,7 @@ var heapAttr struct {
 // sampleHeapGrowth attributes heap growth since the last sample to f's current
 // position. Called from the interpreter loop on a masked counter.
 func sampleHeapGrowth(f *frame, lastLen *int) {
-	s := gHeapPtr.Load()
-	if s == nil {
-		return
-	}
-	n := len(*s)
+	n := int(gHeapAllocs.Load())
 	grown := n - *lastLen
 	*lastLen = n
 	if grown <= 0 || f == nil || f.chunk == nil {
@@ -153,13 +149,7 @@ func resetHeapAttr() {
 	heapAttr.full = false
 }
 
-// heapLen is the live object count, for seeding a new VM's sample baseline. See
-// VM.heapLastLen: an unseeded baseline makes the first sample charge every object
-// already on the process-wide heap to whichever line the tick landed on.
-func heapLen() int {
-	s := gHeapPtr.Load()
-	if s == nil {
-		return 0
-	}
-	return len(*s)
-}
+// heapLen is the allocation count so far, for seeding a new VM's sample baseline.
+// See VM.heapLastLen: an unseeded baseline makes the first sample charge every
+// object the process ever allocated to whichever line the tick landed on.
+func heapLen() int { return int(gHeapAllocs.Load()) }

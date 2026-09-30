@@ -1172,10 +1172,12 @@ func mapValue(mut bool) Value {
 	return heapValue(tagMap, m)
 }
 
-// MapSet stores key→val on a map Value. No-op if v is not a map.
+// MapSet stores key→val on a map Value. No-op if v is not a map. On a map a
+// session owns, val comes to belong to that session too.
 func (v Value) MapSet(key string, val Value) {
 	if v.tag() == tagMap {
 		v.asMap().set(key, val)
+		attach(v, val)
 	}
 }
 

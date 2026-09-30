@@ -33,7 +33,7 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 			merged := make([]Value, 0, len(leftList.Items)+len(rightList.Items))
 			merged = append(merged, leftList.Items...)
 			merged = append(merged, rightList.Items...)
-			return ListValue(merged), nil
+			return alloc(vm, tagList, &listObj{Items: merged}), nil
 		}
 		// Map merge, the counterpart of list concatenation above. Both operands are
 		// left untouched (a fresh map is built) because `+` is an expression, not a
@@ -42,8 +42,8 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 		// the language.
 		if left.tag() == tagMap && right.tag() == tagMap {
 			leftMap, rightMap := left.asMap(), right.asMap()
-			out := NewMap()
-			merged := out.asMap()
+			merged := newMapObj()
+			out := vm.allocMap(merged)
 			for i, k := range leftMap.keyVals {
 				merged.setVal(k, leftMap.Vals[i])
 			}
@@ -404,7 +404,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 	switch obj.tag() {
 	case tagList, tagStr, tagFib, tagPat, tagRange:
 		if d := builtinMethod(vm, obj, name); d != nil {
-			return heapValue(tagDirect, d), nil
+			return alloc(vm, tagDirect, d), nil
 		}
 		return Null, nil
 	case tagMap:
@@ -421,7 +421,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 			return v, nil
 		}
 		if bm := mapMethod(vm, obj, name); bm != nil {
-			return heapValue(tagDirect, bm), nil
+			return alloc(vm, tagDirect, bm), nil
 		}
 		return Null, nil
 	case tagObject:
@@ -1294,7 +1294,12 @@ func fibMethod(vm *VM, fib Value, name string) *directObj {
 func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, error) {
 	switch callee.tag() {
 	case tagDirect:
-		return vm.asDirect(callee).Fn(ctx, args)
+		result, err := vm.asDirect(callee).Fn(ctx, args)
+		if err != nil {
+			return Null, err
+		}
+		vm.adopt(result)
+		return result, nil
 	case tagFun:
 		// Parented to the caller's tree, so a collectable the callback allocates joins
 		// the one registry and is swept later. Detached, its registry died with this

@@ -848,3 +848,32 @@ func TestExecCtxBoundsImportExecution(t *testing.T) {
 		t.Fatal("Exec did not return within bound: the import's ctx deadline was not honored")
 	}
 }
+
+// Close releases every heap slot a session's values occupied, so a process that
+// opens sessions in a loop (the daemon, one per invocation) holds a bounded
+// number of heap objects. Before sessions owned their slots, each session's
+// stdlib bindings, closures and literals stayed in the table for the life of
+// the process.
+func TestSessionCloseReleasesItsHeapObjects(t *testing.T) {
+	const src = `
+var xs = [1, 2, 3];
+var m = {"a": xs, "b": {"c": true}};
+fun count() > int { return xs.len(); }
+object Point { x: int, y: int }
+var p = Point{ x = 1, y = 2 };
+`
+	run := func() {
+		s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+		require.NoError(t, s.Exec(context.Background(), src))
+		require.NoError(t, s.Close())
+	}
+	run()
+	base := vm.ReadHeapStats().Objects
+	const sessions = 50
+	for range sessions {
+		run()
+	}
+	if got := vm.ReadHeapStats().Objects; got > base {
+		t.Fatalf("%d sessions grew the live heap by %d objects; a closed session must leave none", sessions, got-base)
+	}
+}

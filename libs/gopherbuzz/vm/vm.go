@@ -95,6 +95,9 @@ type mcacheEntry struct {
 // through Session (Exec/ExecChunk/CallValue), never by constructing a vm.
 type VM struct {
 	ctx context.Context
+	// owner holds every heap slot this VM allocates or adopts; nil means the
+	// slots belong to nobody and live for the process. See Owner.
+	owner *Owner
 	// collectables are instances whose type declares a `collect()` method, tracked
 	// so CollectUnreachable can call it when the program can no longer reach them.
 	// One registry per fiber tree, held on the root VM (see gcParent, gcRoot), and
@@ -142,13 +145,13 @@ type VM struct {
 	stepMask StepMask
 	lastLine int // last source line a StepLine event fired for; 0 = none yet
 	// heapTick counts instructions for the masked heap-growth sample; heapLastLen
-	// is the heap length at the previous sample. See heapattr.go.
+	// is the process allocation count at the previous sample. See heapattr.go.
 	//
 	// heapLastLen is SEEDED at construction rather than left at zero. Zero would
-	// make a fresh VM's first sample compute grown = the entire process heap and
-	// charge all of it to whichever line the tick happened to land on, and the
-	// heap is process-global and never shrinks, so under the daemon that is every
-	// object every earlier run allocated, attributed to an innocent line.
+	// make a fresh VM's first sample compute grown = every allocation the process
+	// ever made and charge all of it to whichever line the tick happened to land
+	// on, which under the daemon is every earlier run's work, attributed to an
+	// innocent line.
 	heapTick    uint64
 	heapLastLen int
 	// faultHook, if set, is notified when this VM faults: FaultPanic for a Go panic
@@ -192,6 +195,11 @@ func NewVM(ctx context.Context) *VM {
 		frames:      make([]frame, 0, 16),
 		heapLastLen: heapLen(),
 		gcThreshold: gcMinThreshold,
+	}
+	// A VM made inside a host callable (a callback, a fiber, a collector) runs
+	// for the same session as the VM on that context, so it charges the same owner.
+	if parent := FromContext(ctx); parent != nil {
+		vm.owner = parent.owner
 	}
 	// The VM is reachable from the context every host callable receives, which is
 	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
@@ -523,7 +531,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpNewCell:
 			// Boxes the slot in place, keeping whatever it already holds -- which is how a
 			// captured PARAMETER keeps its argument.
-			vm.stack[f.base+int(ins.A)] = heapValue(tagCell, &cellObj{v: vget(vm.stack, f.base+int(ins.A))})
+			vm.stack[f.base+int(ins.A)] = alloc(vm, tagCell, &cellObj{v: vget(vm.stack, f.base+int(ins.A))})
 
 		case OpGetLocalCell:
 			vm.push(vm.asCell(vget(vm.stack, f.base+int(ins.A))).v)
@@ -938,7 +946,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			for i := n - 1; i >= 0; i-- {
 				items[i] = vm.pop()
 			}
-			vm.push(heapValue(tagList, &listObj{Items: items, Mut: ins.B&InstrMutBit != 0}))
+			vm.push(alloc(vm, tagList, &listObj{Items: items, Mut: ins.B&InstrMutBit != 0}))
 
 		case OpNewMap:
 			// optimization: read k/v pairs directly from stack — no intermediate slice.
@@ -1019,6 +1027,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					}
 					return Null, err
 				}
+				vm.adopt(result)
 				vm.stack[calleeIdx] = result
 				vm.stack = vm.stack[:calleeIdx+1]
 
@@ -1226,6 +1235,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					}
 					return Null, ferr
 				}
+				vm.adopt(result)
 				vm.stack[recvIdx] = result
 				vm.stack = vm.stack[:recvIdx+1]
 			case callee.tag() == tagFun:
@@ -2228,6 +2238,7 @@ func (vm *VM) Call(callee Value, args []Value) error {
 		if err != nil {
 			return err
 		}
+		vm.adopt(result)
 		vm.push(result)
 		return nil
 
@@ -2386,7 +2397,9 @@ func (vm *VM) raiseHostError(err error) bool {
 	vm.frames = vm.frames[:entry.frameIdx+1]
 	vm.stack = vm.stack[:entry.stackLen]
 	vm.frames[len(vm.frames)-1].ip = entry.catchIP
-	vm.push(caughtValue(err))
+	caught := caughtValue(err)
+	vm.adopt(caught)
+	vm.push(caught)
 	return true
 }
 

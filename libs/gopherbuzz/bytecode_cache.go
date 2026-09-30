@@ -194,6 +194,8 @@ func (s *Session) loadCachedChunk(ctx context.Context, code string) (*vmpackage.
 	if err != nil {
 		return nil, nil, false, nil
 	}
+	// Decoding builds fresh constants per session, exactly as compiling does.
+	claimChunk(s.owner, chunk)
 	if !s.closureFresh(importClosure(rec.imports)) || !s.closureFresh(rec.filterReads) {
 		return nil, nil, false, nil
 	}

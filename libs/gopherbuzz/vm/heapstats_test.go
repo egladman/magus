@@ -4,15 +4,14 @@ package vm
 
 import "testing"
 
-// The heap only ever grows today, so live and peak agree, but the peak is tracked
-// separately on purpose (see gHeapPeak) so this diagnostic survives a future
-// compaction pass. Asserting the relationship rather than either number keeps the
-// test honest through that change.
+// Live and peak agree until an owner release lowers the live count, and the peak
+// is what a diagnostic reports after that. Asserting the relationship rather
+// than either number keeps the test honest either side of a release.
 func TestHeapStatsGrowsAndRecordsAPeak(t *testing.T) {
 	before := ReadHeapStats().Objects
 	const n = 1000
 	for range n {
-		gHeapAlloc(&strObj{})
+		gHeapAlloc(&strObj{}, nil)
 	}
 	st := ReadHeapStats()
 	after, peak := st.Objects, st.Peak
@@ -30,9 +29,9 @@ func TestHeapStatsGrowsAndRecordsAPeak(t *testing.T) {
 // one large one, so a size-based reading would have looked unremarkable throughout.
 func TestHeapStatsCountsObjectsNotBytes(t *testing.T) {
 	before := ReadHeapStats().Objects
-	gHeapAlloc(&strObj{})
+	gHeapAlloc(&strObj{}, nil)
 	small := ReadHeapStats().Objects
-	gHeapAlloc(&listObj{})
+	gHeapAlloc(&listObj{}, nil)
 	large := ReadHeapStats().Objects
 
 	if small-before != 1 || large-small != 1 {
@@ -45,7 +44,7 @@ func TestHeapStatsCountsObjectsNotBytes(t *testing.T) {
 // later run and the attribution names a magusfile that finished hours ago.
 func TestResetHeapStatsRebasesThePeak(t *testing.T) {
 	for range 5000 {
-		gHeapAlloc(&strObj{})
+		gHeapAlloc(&strObj{}, nil)
 	}
 	busy := ReadHeapStats()
 	if busy.Peak < 5000 {
@@ -63,11 +62,71 @@ func TestResetHeapStatsRebasesThePeak(t *testing.T) {
 	}
 
 	for range 100 {
-		gHeapAlloc(&strObj{})
+		gHeapAlloc(&strObj{}, nil)
 	}
 	after := ReadHeapStats()
 	if after.Peak < 100 || after.Peak >= busy.Peak {
 		t.Fatalf("the second invocation must report its own peak (~100), not the first's (%d), got %d",
 			busy.Peak, after.Peak)
+	}
+}
+
+// A released owner hands its slots back: the live count drops and the next
+// allocation reuses a slot instead of growing the table.
+func TestOwnerReleaseFreesAndReusesSlots(t *testing.T) {
+	a := new(Owner)
+	before := ReadHeapStats().Objects
+	idx := gHeapAlloc(&listObj{}, a)
+	if got := ReadHeapStats().Objects; got != before+1 {
+		t.Fatalf("live count after one owned allocation: %d, want %d", got, before+1)
+	}
+	a.Release()
+	if got := ReadHeapStats().Objects; got != before {
+		t.Fatalf("live count after release: %d, want %d", got, before)
+	}
+	if gHeapGet(idx) != nil {
+		t.Fatalf("slot %d still holds its object after release", idx)
+	}
+	if again := gHeapAlloc(&listObj{}, nil); again != idx {
+		t.Fatalf("next allocation took slot %d; want the released slot %d", again, idx)
+	}
+}
+
+// Claim takes what no owner holds and stops at what one does, so releasing the
+// adopter leaves the other owner's values intact.
+func TestOwnerClaimStopsAtAnotherOwner(t *testing.T) {
+	owner, adopter := new(Owner), new(Owner)
+	inner := encodeHeap(tagList, gHeapAlloc(&listObj{}, owner))
+	outer := ListValue([]Value{inner})
+	adopter.Claim(outer)
+	adopter.Release()
+	if nanboxObj(outer) != nil {
+		t.Fatal("the adopted list survived its adopter's release")
+	}
+	if _, ok := nanboxObj(inner).(*listObj); !ok {
+		t.Fatal("the adopter released a slot another owner owns")
+	}
+	owner.Release()
+}
+
+// A member stored on a claimed map after the claim is unowned until something
+// hands it over: MapSet does so at once, and a Release given the map as a root
+// finds what reached the map another way.
+func TestOwnerTakesMembersAttachedAfterTheClaim(t *testing.T) {
+	var a Owner
+	m := NewMap()
+	a.Claim(m)
+	viaSet, viaWalk := ListValue(nil), ListValue(nil)
+	m.MapSet("set", viaSet)
+	if gHeapOwner[uint64(viaSet)&idxMaskHeap] != &a {
+		t.Fatal("MapSet on an owned map left the value unowned")
+	}
+	m.asMap().set("walk", viaWalk)
+	if gHeapOwner[uint64(viaWalk)&idxMaskHeap] != nil {
+		t.Fatal("a value stored past the owner is owned before anything reached it")
+	}
+	a.Release(m)
+	if nanboxObj(viaSet) != nil || nanboxObj(viaWalk) != nil {
+		t.Fatal("attached members survived the release")
 	}
 }
