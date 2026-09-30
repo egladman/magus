@@ -561,6 +561,10 @@ type leaseStanding struct {
 	row      types.Job
 	// rows is the whole store, for a rule that reads the job tree around row.
 	rows []types.Job
+	// endedBinding is the job the caller was bound to when its own record is a tombstone:
+	// the job store ended the binding when that job's checkout was removed (see
+	// job.Binding). "" for any other record.
+	endedBinding string
 }
 
 // terminal reports a row that is declared and has stopped running, so its rules are inert.
@@ -618,12 +622,21 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // the line it prints locked a checkout out of its own repair: the plan moved house once and
 // the bound worker could not read the plan, print a schema, or bind again, because each of
 // those is a command and every command was refused.
+//
+// A tombstoned binding is refused the same way, whatever the ledger holds: its job's
+// checkout is gone, and reading the caller as unbound would grade it as the orchestrator.
 func denyUndeclaredLease(standing leaseStanding, actingLease, command string) string {
-	if !standing.readable || standing.declared {
+	if standing.endedBinding == "" && (!standing.readable || standing.declared) {
 		return ""
 	}
 	if command != "" && undeclaredLeaseRepairs(command) {
 		return ""
+	}
+	if standing.endedBinding != "" {
+		return fmt.Sprintf("magus workspace: your binding to job %s ended when its checkout was removed; run `%s` from a checkout that exists to bind again.\n"+
+			"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
+			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.",
+			standing.endedBinding, hint.JobExec.With("<job>"))
 	}
 	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
 		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+

@@ -517,6 +517,51 @@ func TestUndeclaredLeaseRepairsReadsGitsSubcommand(t *testing.T) {
 	}
 }
 
+// A worker whose checkout was removed while it ran reads as bound to the job the sweep
+// ended, never as unbound: its work is refused with the reason and the one command that
+// binds it again, and that command still runs and rebinds over the tombstone.
+func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	gone := t.TempDir()
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, CheckoutRoot: gone, Registered: 1, ReportedBase: "77aa01c"}
+	next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
+	ctx, root := fleetFixture(t, held, next)
+	at := hookLocation(ctx, Dependencies{})
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(t, ctx, who, held.ID)
+	require.NoError(t, os.RemoveAll(gone))
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	require.NoError(t, err)
+	b := boundJob(who, at)
+	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+
+	type outcome struct {
+		Decision, Rule, Lease string
+	}
+	var reason string
+	judge := func(input string) outcome {
+		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
+		reason = v.Reason
+		return outcome{v.Decision, v.Rule, v.Lease}
+	}
+	refused := outcome{"deny", string(denyRuleLeaseUndeclared), held.ID}
+	edit := map[string]any{"file_path": filepath.Join(root, "internal", "held", "a.go"), "old_string": "a", "new_string": "b"}
+	write := hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": root,
+		"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
+
+	assert.Equal(t, refused, judge(write), "a write")
+	assert.Equal(t, "magus workspace: your binding to job held-job ended when its checkout was removed; run `magus job exec <job>` from a checkout that exists to bind again.\n"+
+		"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
+		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.\n"+
+		"see: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/", reason)
+	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
+	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
+
+	assert.NotEqual(t, "deny", judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
+	assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, at), "the exec rebinds over the tombstone")
+	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
+}
+
 // TestDenyLeaseScopedHarnessSeesPastGlobalFlags pins the two bypasses the harness rule had:
 // a global flag's value read as the subcommand (`--root .`), and a single-dash word holding
 // an h read as -h (`-o=template=hi`, `-root=/home/x`, `-cache-dir`), which exempted the call

@@ -1032,7 +1032,7 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 
 			v := Judge(ctx, Dependencies{}, Request{Input: "magus job exec next-job", Host: who.Host, Session: who.Session, Agent: who.Agent})
 			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, gradedAs(v))
-			assert.Equal(t, next.ID, boundJob(who, hookLocation(ctx, Dependencies{})))
+			assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, hookLocation(ctx, Dependencies{})))
 		})
 	}
 }
@@ -1055,7 +1055,7 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec other-job"))
 			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("client op=register id=other-job"))
 			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec held-job"))
-			assert.Equal(t, held.ID, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
+			assert.Equal(t, job.Binding{Job: held.ID}, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
 		})
 	}
 }

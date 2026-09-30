@@ -411,10 +411,10 @@ func TestARecordThatDoesNotReadIsNone(t *testing.T) {
 	assert.Equal(t, "wave/worker", s.Bound(Caller{}))
 }
 
-// The read that ends a job whose checkout is gone also drops every caller record naming
-// such a job. A record naming a job still taken somewhere, one never taken, or no job at
-// all stays.
-func TestListDropsRecordsWhoseCheckoutIsGone(t *testing.T) {
+// The read that ends a job whose checkout is gone also tombstones every caller record
+// naming such a job, so that caller reads as bound to an ended job rather than unbound.
+// A record naming a job still taken somewhere, one never taken, or no job at all stays.
+func TestListTombstonesRecordsWhoseCheckoutIsGone(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	s, _ := sweepStore(t, 1_000, time.Hour)
 	gone, here := t.TempDir(), t.TempDir()
@@ -439,20 +439,77 @@ func TestListDropsRecordsWhoseCheckoutIsGone(t *testing.T) {
 	_, err := s.List()
 	require.NoError(t, err)
 
-	got := map[string]string{}
-	for id, c := range callers {
-		got[id] = s.Bound(c)
+	type record struct {
+		Bound   string
+		Binding Binding
 	}
-	assert.Equal(t, map[string]string{
-		"w/gone":     "",
-		"w/returned": "",
-		"w/here":     "w/here",
-		"w/untaken":  "w/untaken",
-		"w/nobody":   "w/nobody",
+	got := map[string]record{}
+	for id, c := range callers {
+		got[id] = record{s.Bound(c), s.Binding(c)}
+	}
+	assert.Equal(t, map[string]record{
+		"w/gone":     {"", Binding{Job: "w/gone", Gone: true, swept: 1_000}},
+		"w/returned": {"", Binding{Job: "w/returned", Gone: true, swept: 1_000}},
+		"w/here":     {"w/here", Binding{Job: "w/here"}},
+		"w/untaken":  {"w/untaken", Binding{Job: "w/untaken"}},
+		"w/nobody":   {"w/nobody", Binding{Job: "w/nobody"}},
 	}, got)
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(s.path), agentRecordDir))
 	require.NoError(t, err)
-	assert.Len(t, entries, 3, "the sweep leaves nothing behind but the records it kept")
+	assert.Len(t, entries, 5, "the sweep leaves one record per caller and nothing beside them")
+}
+
+// A tombstone lasts jobs.stale_after from the sweep that wrote it, and then the caller
+// reads as unbound. A jobs.stale_after of 0 ends nothing, so it keeps every tombstone.
+func TestListPrunesTombstonesAfterStaleAfter(t *testing.T) {
+	for name, tc := range map[string]struct {
+		staleAfter time.Duration
+		want       map[string]Binding
+	}{
+		"an hour": {time.Hour, map[string]Binding{
+			"expired": {},
+			"fresh":   {Job: "w/fresh", Gone: true, swept: 4_601},
+		}},
+		"zero": {0, map[string]Binding{
+			"expired": {Job: "w/expired", Gone: true, swept: 4_600},
+			"fresh":   {Job: "w/fresh", Gone: true, swept: 4_601},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			s, _ := sweepStore(t, 8_200, tc.staleAfter)
+			callers := map[string]Caller{
+				"expired": {Host: "claude-code", Session: "s1", Agent: "a1"},
+				"fresh":   {Host: "claude-code", Session: "s1", Agent: "a2"},
+			}
+			require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(s.path), agentRecordDir), 0o700))
+			require.NoError(t, os.WriteFile(s.record(callers["expired"]), []byte("gone w/expired 4600\n"), 0o600))
+			require.NoError(t, os.WriteFile(s.record(callers["fresh"]), []byte("gone w/fresh 4601\n"), 0o600))
+
+			_, err := s.List()
+			require.NoError(t, err)
+
+			got := map[string]Binding{}
+			for name, c := range callers {
+				got[name] = s.Binding(c)
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A tombstoned caller binds again the way any caller does, and the new record replaces
+// the tombstone whole.
+func TestBindReplacesATombstone(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	s, _ := sweepStore(t, 1_000, time.Hour)
+	c := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(s.path), agentRecordDir), 0o700))
+	require.NoError(t, os.WriteFile(s.record(c), []byte("gone w/old 900\n"), 0o600))
+
+	require.NoError(t, s.Bind(c, "w/next"))
+
+	assert.Equal(t, []any{"w/next", Binding{Job: "w/next"}}, []any{s.Bound(c), s.Binding(c)})
 }
 
 // A caller rebound between the sweep's read and its removal keeps the new binding.
@@ -460,9 +517,9 @@ func TestDropRecordKeepsANewBinding(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "record")
 	require.NoError(t, os.WriteFile(path, []byte("w/new\n"), 0o600))
 
-	dropRecord(path, "w/old")
+	dropRecord(path, Binding{Job: "w/old", Gone: true, swept: 900})
 
-	assert.Equal(t, "w/new", readRecord(path))
+	assert.Equal(t, Binding{Job: "w/new"}, readBinding(path))
 	entries, err := os.ReadDir(filepath.Dir(path))
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "the record moved aside is not left behind")

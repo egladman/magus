@@ -11,7 +11,9 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
@@ -108,23 +110,53 @@ func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
 	return "", ""
 }
 
-// readRecord reads one binding record: "" when it is absent, cannot be read, or holds
-// anything but a lease id. Only the guard writes records, through a rename, so one that
-// does not read was damaged from outside magus, and reading it as none grades the call
-// exactly as a caller nobody bound.
-func readRecord(path string) string {
+// tombstoneTag opens a tombstone record: "gone <job> <unix seconds>".
+const tombstoneTag = "gone"
+
+// Binding is what a caller's record holds.
+type Binding struct {
+	// Job is the job the record names, "" when there is no record or it does not read.
+	Job string
+	// Gone marks a tombstone: the sweep found Job's checkout removed and ended the binding.
+	// The caller is not unbound, and the guard refuses its work until it binds again.
+	Gone bool
+	// swept is when the tombstone was written, in unix seconds.
+	swept int64
+}
+
+// readBinding reads one binding record: zero when it is absent, cannot be read, or holds
+// neither a lease id nor a tombstone. Only the guard and the sweep write records, through
+// a rename, so one that does not read was damaged from outside magus, and reading it as
+// none grades the call exactly as a caller nobody bound.
+func readBinding(path string) Binding {
 	if path == "" {
-		return ""
+		return Binding{}
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return Binding{}
 	}
-	id := strings.TrimSpace(string(raw))
-	if !types.ValidJobID(id) {
-		return ""
+	line := strings.TrimSpace(string(raw))
+	if types.ValidJobID(line) {
+		return Binding{Job: line}
 	}
-	return id
+	f := strings.Fields(line)
+	if len(f) != 3 || f[0] != tombstoneTag || !types.ValidJobID(f[1]) {
+		return Binding{}
+	}
+	swept, err := strconv.ParseInt(f[2], 10, 64)
+	if err != nil {
+		return Binding{}
+	}
+	return Binding{Job: f[1], Gone: true, swept: swept}
+}
+
+// readRecord is the job the record at path binds its caller to, "" for none or a tombstone.
+func readRecord(path string) string {
+	if b := readBinding(path); !b.Gone {
+		return b.Job
+	}
+	return ""
 }
 
 // Caller is who a hook call comes from, as its host names it on every call: the host, the
@@ -185,21 +217,30 @@ func (s *Store) Bind(c Caller, id string) error {
 	return nil
 }
 
-// Bound is the job c's own record names, "" when none does. Exact: a subagent never reads
-// its session's record, a session never reads a subagent's, and an identified caller never
-// reads the checkout's.
+// Bound is the job c's own record binds it to, "" when none does or the record is a
+// tombstone. Exact: a subagent never reads its session's record, a session never reads a
+// subagent's, and an identified caller never reads the checkout's.
 func (s *Store) Bound(c Caller) string {
 	return readRecord(s.record(c))
 }
 
-// dropRecords removes each identified caller's record whose job was taken in a checkout
-// w proves gone: nobody works that job again, and a record is otherwise never removed. A
-// record naming no row, or a row never taken, stays. Best effort: a read or removal that
-// fails leaves the record where it is.
+// Binding is c's own record as [Store.Bound] finds it, tombstone included.
+func (s *Store) Binding(c Caller) Binding {
+	return readBinding(s.record(c))
+}
+
+// sweepRecords turns each identified caller's record whose job was taken in a checkout w
+// proves gone into a tombstone, and removes each tombstone older than jobs.stale_after. A
+// record naming no row, or a row never taken, stays. Best effort: a read or write that
+// fails leaves the record as it was.
+//
+// A tombstone rather than a removal: the worker may still be running from the removed
+// checkout, and a caller with no record is graded as the orchestrator, which no lease
+// bounds.
 //
 // Checkout records are not swept: MarkerPath keys one on a hash of its cache dir, and
 // nothing maps the hash back to a checkout.
-func (s *Store) dropRecords(w *sweeper, rows []types.Job) {
+func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
 	if s.err != nil || s.path == "" {
 		return
 	}
@@ -210,27 +251,36 @@ func (s *Store) dropRecords(w *sweeper, rows []types.Job) {
 	}
 	for _, e := range entries {
 		path := filepath.Join(dir, e.Name())
-		id := readRecord(path)
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-		if id == "" || i < 0 || !w.checkoutGone(rows[i].CheckoutRoot) {
+		b := readBinding(path)
+		if b.Gone {
+			if window, err := w.window(); err == nil && window > 0 && w.now-b.swept >= int64(window/time.Second) {
+				dropRecord(path, b)
+			}
 			continue
 		}
-		dropRecord(path, id)
+		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == b.Job })
+		if b.Job == "" || i < 0 || !w.checkoutGone(rows[i].CheckoutRoot) {
+			continue
+		}
+		// Replaced in place, never moved aside first: while no record stands the caller
+		// reads as unbound, the opening a tombstone exists to close. A bind landing since
+		// the read is overwritten, and the guard's refusal tells that worker to bind again.
+		_ = file.ReplaceFile(path, fmt.Appendf(nil, "%s %s %d\n", tombstoneTag, b.Job, w.now), 0o600)
 	}
 }
 
-// dropRecord removes the record at path if it still names id.
+// dropRecord removes the record at path if it still holds b.
 //
 // Moved aside before it is read rather than re-read and removed: [Store.Bind] may rebind
 // the caller in between, and deleting that record would leave a bound worker unbound. A
-// record found to name another job is linked back, unless a newer bind already took its
+// record found to hold anything else is linked back, unless a newer bind already took its
 // place.
-func dropRecord(path, id string) {
+func dropRecord(path string, b Binding) {
 	aside := path + "." + rand.Text() + ".sweep"
 	if os.Rename(path, aside) != nil {
 		return
 	}
-	if readRecord(aside) != id {
+	if readBinding(aside) != b {
 		_ = os.Link(aside, path)
 	}
 	_ = os.Remove(aside)

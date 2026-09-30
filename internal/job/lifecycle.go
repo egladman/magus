@@ -394,8 +394,8 @@ func (w *sweeper) checkoutGone(root string) bool {
 	return gone
 }
 
-// sweep ends every row in f the [sweeper] proves dead, drops the binding records whose
-// job's checkout is gone (see [Store.dropRecords]), and returns the plan as written.
+// sweep ends every row in f the [sweeper] proves dead, tombstones the binding records
+// whose job's checkout is gone (see [Store.sweepRecords]), and returns the plan as written.
 func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	clock := s.clock
 	if clock == nil {
@@ -407,7 +407,7 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	if err != nil {
 		return jobsFile{}, err
 	}
-	s.dropRecords(w, f.Jobs)
+	s.sweepRecords(w, f.Jobs)
 	return f, nil
 }
 
