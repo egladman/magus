@@ -2015,9 +2015,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         // tree-wide conventions.
         final root = magus\projects().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
-            // TODO: its go.mod needs `go mod tidy`, so the go command cannot load it
-            // and no analyzer can either. Drop this skip once it is tidied.
-            if (mod.value == "libs/gopherbuzz/benchmarks/comparison/go.mod") { continue; }
             proc\exec(root + "/.magus/custom-gcl",
                       ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter"],
                       fs\dirname(mod.value));
@@ -2052,9 +2049,13 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
     // Not writesFiles: gofmt amends authored code, which must stay off the replay path.
-    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum",
+                              "libs/gopherbuzz/benchmarks/comparison/go.mod",
+                              "libs/gopherbuzz/benchmarks/comparison/go.sum");
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
+    // Not a project, so no project's format tidies it.
+    go["go-mod-tidy"](ctx.withCwd("libs/gopherbuzz/benchmarks/comparison"));
     // Scoped by argv: dprint formats a nested dprint.json's subtree under its own config,
     // which writes into child projects (MGS3001). Keep this list in step with dprint.json's
     // `includes`.
