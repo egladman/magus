@@ -64,6 +64,7 @@ func main() {
 	// First of all: a sandboxed child starts as this binary re-executed as its
 	// launcher, which must confine itself and exec the child before anything else runs.
 	magus.MaybeLaunchSandbox()
+	relaxStartupGC(startupGCWindow)
 	os.Exit(runCLI())
 }
 

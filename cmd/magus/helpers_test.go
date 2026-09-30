@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -674,6 +675,38 @@ func TestRelaxGCConcurrentCallersShareOneRestore(t *testing.T) {
 	releases[holders-1]()
 	got = debug.SetGCPercent(before)
 	assert.Equal(t, before, got, "GOGC must be restored to its pre-relax value once every holder released")
+}
+
+func TestRelaxStartupGCRestoresAfterTheWindow(t *testing.T) {
+	if orig, ok := os.LookupEnv("GOGC"); ok {
+		require.NoError(t, os.Unsetenv("GOGC"))
+		t.Cleanup(func() { _ = os.Setenv("GOGC", orig) })
+	}
+	const before = 111
+	debug.SetGCPercent(before)
+	t.Cleanup(func() { debug.SetGCPercent(before) })
+
+	// Held under gcRelaxMu so the timer's restore cannot land between the two calls.
+	peek := func() (percent, holders int) {
+		gcRelaxMu.Lock()
+		defer gcRelaxMu.Unlock()
+		percent = debug.SetGCPercent(before)
+		debug.SetGCPercent(percent)
+		return percent, gcRelaxCount
+	}
+
+	relaxStartupGC(50 * time.Millisecond)
+	percent, holders := peek()
+	assert.Equal(t, loadGCPercent, percent)
+	assert.Equal(t, 1, holders)
+
+	require.Eventually(t, func() bool {
+		_, holders := peek()
+		return holders == 0
+	}, 5*time.Second, 5*time.Millisecond)
+	percent, _ = peek()
+	assert.Equal(t, before, percent)
+	assert.Equal(t, time.Second, startupGCWindow)
 }
 
 func TestOpenedRootAcceptsEverySpellingOfItsWorkspace(t *testing.T) {
