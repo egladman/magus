@@ -31,6 +31,7 @@ import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
+import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
 import "hack/lint/provider-io-is-buzz" as providerio;
@@ -64,6 +65,7 @@ export fun rules() > [Rule] {
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
+        Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },

@@ -56,7 +56,7 @@ magus graph export -o json  # the whole graph
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
 | doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                         |
-| file       |     300+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
+| file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
 | function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
 | rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
