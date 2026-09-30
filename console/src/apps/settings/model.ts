@@ -1,0 +1,433 @@
+// model.ts - the pure export/import core for the Settings surface (no DOM, no storage). It turns
+// a snapshot of the browser-side console settings into a versioned envelope (buildSettingsEnvelope) and
+// merges an inbound envelope back onto the current values (importSettings), so both are unit-tested
+// without a browser.
+//
+// Forward-compat contract: the envelope is
+// { schemaVersion, settings: { poll, host, theme, focusRing, keymap }, layout: { ... } }.
+// On import, unknown keys are ignored and missing/wrong-typed keys keep the current value; only a
+// structurally broken envelope (not JSON, or no settings object) is a hard error.
+//
+// Two sections, because the two groups have different lifecycles. `settings` is what the Settings
+// surface EDITS - staged in a draft, diffed, then saved. `layout` is what the console picks up as
+// you use it (a split you dragged, a zoom you set, cards you collapsed); there is no form for it,
+// so it is read live on export and applied straight through on import rather than staged.
+//
+// `layout` is deliberately not "every remaining persisted cell". Excluded on purpose:
+//   - dashboard-collapse-seeded  one-time bookkeeping. Carrying it to a new machine would tell
+//                                that console the default collapse had already been applied, so
+//                                it would come up with nothing collapsed and never self-correct.
+//   - workspace, dashboard-server  session state (open tabs, last server), not preferences. The
+//                                intentional server choice is already `settings.host`.
+//   - t-* cells                  test fixtures.
+// The rule for adding one: export it if a person chose it on purpose and would want it on their
+// other machine.
+
+import type { Keymap } from "../../desktop/commands";
+import type { Persisted } from "../../lib/persist";
+import type { MotionPref } from "../../lib/settings";
+
+// The three theme states theme.ts persists: "auto" (no stored key), or an explicit "light"/"dark".
+// Mirrored here so the envelope can carry the theme without importing the pre-paint theme script.
+export type ThemePref = "auto" | "light" | "dark";
+
+// The envelope's schema version. Bump only on a breaking shape change; additive keys do not need one.
+export const SETTINGS_SCHEMA_VERSION = 1;
+
+// One full snapshot of the browser-side console settings the surface can export and import.
+export interface Settings {
+  poll: number; // insight/refresh poll interval, ms (settings.getPollMs)
+  host: string; // explicit default server host, "host:port" or "" (settings.getDefaultHost)
+  theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
+  focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
+  motion: MotionPref; // "auto" honors prefers-reduced-motion; "reduced" stills it here regardless
+  nodeShapes: boolean; // graph nodes carry a per-family shape as well as a color (settings.getNodeShapes)
+  keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
+}
+
+// The UI-shape preferences a person accumulates by USING the console. See the section note at the
+// top of this file for what is deliberately not here.
+export interface LayoutSettings {
+  splitMode: "row" | "col"; // pane split orientation (the shared "split-mode" cell)
+  bigPictureSplit: Record<string, number>; // Big Picture split handle positions ("dashboard-bigpicture-split")
+  logsZoom: number; // log viewer text zoom ("logs-zoom")
+  collapsedCards: string[]; // dashboard cards folded away ("dashboard-collapsed")
+  sidebarExpanded: boolean; // navigation rail showing labels vs icons ("sidebar-expanded")
+}
+
+export interface SettingsEnvelope {
+  schemaVersion: number;
+  settings: Partial<Settings>;
+  layout: Partial<LayoutSettings>;
+}
+
+// buildSettingsEnvelope wraps a snapshot in the current versioned envelope. Pure - the surface
+// passes the live values it read from the cells.
+export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): SettingsEnvelope {
+  return {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: {
+      poll: p.poll,
+      host: p.host,
+      theme: p.theme,
+      focusRing: p.focusRing,
+      motion: p.motion,
+      nodeShapes: p.nodeShapes,
+      keymap: p.keymap,
+    },
+    layout: {
+      splitMode: layout.splitMode,
+      bigPictureSplit: layout.bigPictureSplit,
+      logsZoom: layout.logsZoom,
+      collapsedCards: layout.collapsedCards,
+      sidebarExpanded: layout.sidebarExpanded,
+    },
+  };
+}
+
+// The outcome of an import: the merged next snapshot plus which keys the file actually supplied (for the
+// surface's messaging and its reload nudge), or a human error when the envelope is unusable. `unknown`
+// and `skipped` let the surface warn about what it silently dropped: `unknown` = keys present in the
+// settings object that magus does not know, `skipped` = known keys present but rejected by the type check
+// (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
+// ahead of this console's, so the surface can say the file came from a newer build.
+export type ImportResult =
+  | {
+      ok: true;
+      next: Settings;
+      // The merged layout snapshot. Separate from `next` because the surface applies it directly
+      // rather than staging it: there is no form to stage it against.
+      nextLayout: LayoutSettings;
+      applied: (keyof Settings)[];
+      appliedLayout: (keyof LayoutSettings)[];
+      unknown: string[];
+      skipped: string[];
+      newerSchema?: number;
+    }
+  | { ok: false; error: string };
+
+// The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
+// settings-object key outside this set is reported as unknown rather than silently dropped.
+const KNOWN_KEYS: readonly (keyof Settings)[] = [
+  "poll",
+  "host",
+  "theme",
+  "focusRing",
+  "motion",
+  "nodeShapes",
+  "keymap",
+];
+
+// The same contract for the layout section.
+const KNOWN_LAYOUT_KEYS: readonly (keyof LayoutSettings)[] = [
+  "splitMode",
+  "bigPictureSplit",
+  "logsZoom",
+  "collapsedCards",
+  "sidebarExpanded",
+];
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// isKeymap accepts a plain object whose every value is a string (a chord, or "" for a disabled binding).
+// A malformed keymap is skipped wholesale rather than partially applied, so an import never installs a
+// half-parsed binding table.
+function isKeymap(v: unknown): v is Keymap {
+  return isRecord(v) && Object.values(v).every((x) => typeof x === "string");
+}
+
+function isStr(v: unknown): v is string {
+  return typeof v === "string";
+}
+
+// Same whole-or-nothing stance as isKeymap: a split map with one bad entry is skipped entirely
+// rather than half-applied, so an import never leaves a pane at a nonsense position.
+function isNumberMap(v: Record<string, unknown>): v is Record<string, number> {
+  return Object.values(v).every((x) => typeof x === "number" && Number.isFinite(x));
+}
+
+// importSettings validates raw envelope text and merges its known, well-typed keys onto `current`.
+// Unknown keys are ignored; missing or wrong-typed keys keep the current value; only invalid JSON or a
+// missing settings object is a hard error. Pure - the surface applies `next` through the real cells.
+export function importSettings(
+  raw: string,
+  current: Settings,
+  currentLayout: LayoutSettings,
+): ImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // reported: the ImportResult carries this error to the Settings import form
+    return { ok: false, error: "The text is not valid JSON." };
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.settings)) {
+    return { ok: false, error: "Not a magus console settings file (no settings object)." };
+  }
+
+  const settings = parsed.settings;
+  const next: Settings = { ...current };
+  const applied: (keyof Settings)[] = [];
+  // A known key is `skipped` only when it is present but fails its type check; a key that is simply
+  // absent keeps the current value and is not reported. `skip` records the former.
+  const skipped: (keyof Settings | keyof LayoutSettings)[] = [];
+  const skip = (key: keyof Settings): void => {
+    if (key in settings) skipped.push(key);
+  };
+
+  if (typeof settings.poll === "number" && Number.isFinite(settings.poll)) {
+    next.poll = settings.poll;
+    applied.push("poll");
+  } else skip("poll");
+  if (typeof settings.host === "string") {
+    next.host = settings.host.trim();
+    applied.push("host");
+  } else skip("host");
+  if (settings.theme === "auto" || settings.theme === "light" || settings.theme === "dark") {
+    next.theme = settings.theme;
+    applied.push("theme");
+  } else skip("theme");
+  if (typeof settings.focusRing === "boolean") {
+    next.focusRing = settings.focusRing;
+    applied.push("focusRing");
+  } else skip("focusRing");
+  if (settings.motion === "auto" || settings.motion === "reduced") {
+    next.motion = settings.motion;
+    applied.push("motion");
+  } else skip("motion");
+  if (typeof settings.nodeShapes === "boolean") {
+    next.nodeShapes = settings.nodeShapes;
+    applied.push("nodeShapes");
+  } else skip("nodeShapes");
+  if (isKeymap(settings.keymap)) {
+    next.keymap = settings.keymap;
+    applied.push("keymap");
+  } else skip("keymap");
+
+  // The layout section is optional: a file exported before it existed, or one hand-trimmed to
+  // carry preferences only, must still import cleanly rather than being rejected as malformed.
+  const layout = isRecord(parsed.layout) ? parsed.layout : {};
+  const nextLayout: LayoutSettings = { ...currentLayout };
+  const appliedLayout: (keyof LayoutSettings)[] = [];
+  const skipLayout = (key: keyof LayoutSettings): void => {
+    if (key in layout) skipped.push(key);
+  };
+
+  if (layout.splitMode === "row" || layout.splitMode === "col") {
+    nextLayout.splitMode = layout.splitMode;
+    appliedLayout.push("splitMode");
+  } else skipLayout("splitMode");
+  if (isRecord(layout.bigPictureSplit) && isNumberMap(layout.bigPictureSplit)) {
+    nextLayout.bigPictureSplit = layout.bigPictureSplit;
+    appliedLayout.push("bigPictureSplit");
+  } else skipLayout("bigPictureSplit");
+  if (typeof layout.logsZoom === "number" && Number.isFinite(layout.logsZoom)) {
+    nextLayout.logsZoom = layout.logsZoom;
+    appliedLayout.push("logsZoom");
+  } else skipLayout("logsZoom");
+  if (Array.isArray(layout.collapsedCards) && layout.collapsedCards.every(isStr)) {
+    nextLayout.collapsedCards = layout.collapsedCards;
+    appliedLayout.push("collapsedCards");
+  } else skipLayout("collapsedCards");
+  if (typeof layout.sidebarExpanded === "boolean") {
+    nextLayout.sidebarExpanded = layout.sidebarExpanded;
+    appliedLayout.push("sidebarExpanded");
+  } else skipLayout("sidebarExpanded");
+
+  if (applied.length === 0 && appliedLayout.length === 0) {
+    return { ok: false, error: "No recognizable settings to import." };
+  }
+
+  const unknown = [
+    ...Object.keys(settings).filter((k) => !(KNOWN_KEYS as readonly string[]).includes(k)),
+    ...Object.keys(layout).filter((k) => !(KNOWN_LAYOUT_KEYS as readonly string[]).includes(k)),
+  ];
+  // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the surface
+  // the file came from a newer console so it can explain why some keys may not have applied.
+  const version = parsed.schemaVersion;
+  const newerSchema =
+    typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
+  return { ok: true, next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema };
+}
+
+// --- Pending diff (the transactional model) --------------------------------------------------------
+// The Settings surface stages edits in a DRAFT and shows the diff against the committed baseline before
+// it is saved or applied. One human-readable before -> after entry per changed field.
+export interface PendingChange {
+  key: string; // stable id: "poll" | "host" | "theme" | "focusRing" | "keymap:<commandId>"
+  label: string; // "Refresh rate", "Theme", "Server host", "Focus ring", "Keybinding Close pane or tab"
+  before: string; // display value of the committed side, e.g. "20s"
+  after: string; // display value of the draft side, e.g. "10s"
+}
+
+// The display formatters computePendingChanges needs, injected so the function stays pure and browser-free
+// (the surface wires the real formatters; a test passes stubs). effectiveChord resolves a command's
+// display chord from a user-override keymap (merging defaults); commandIds is the editable command set to
+// scan for keybinding changes.
+export interface DiffContext {
+  pollLabel: (ms: number) => string;
+  themeLabel: (t: ThemePref) => string;
+  hostLabel: (host: string) => string;
+  focusRingLabel: (on: boolean) => string;
+  motionLabel: (v: MotionPref) => string;
+  nodeShapesLabel: (on: boolean) => string;
+  commandLabel: (id: string) => string;
+  effectiveChord: (keymap: Keymap, id: string) => string;
+  commandIds: string[];
+}
+
+// computePendingChanges diffs a draft against the committed baseline into readable entries. Pure: no
+// storage, no DOM. Keymap changes are compared by EFFECTIVE chord (a dropped override that returns to
+// the default reads as a real change), one entry per affected command.
+export function computePendingChanges(
+  committed: Settings,
+  draft: Settings,
+  ctx: DiffContext,
+): PendingChange[] {
+  const changes: PendingChange[] = [];
+  if (committed.poll !== draft.poll) {
+    changes.push({
+      key: "poll",
+      label: "Refresh rate",
+      before: ctx.pollLabel(committed.poll),
+      after: ctx.pollLabel(draft.poll),
+    });
+  }
+  if (committed.host !== draft.host) {
+    changes.push({
+      key: "host",
+      label: "Server host",
+      before: ctx.hostLabel(committed.host),
+      after: ctx.hostLabel(draft.host),
+    });
+  }
+  if (committed.theme !== draft.theme) {
+    changes.push({
+      key: "theme",
+      label: "Theme",
+      before: ctx.themeLabel(committed.theme),
+      after: ctx.themeLabel(draft.theme),
+    });
+  }
+  if (committed.focusRing !== draft.focusRing) {
+    changes.push({
+      key: "focusRing",
+      label: "Focus ring",
+      before: ctx.focusRingLabel(committed.focusRing),
+      after: ctx.focusRingLabel(draft.focusRing),
+    });
+  }
+  if (committed.motion !== draft.motion) {
+    changes.push({
+      key: "motion",
+      label: "Motion",
+      before: ctx.motionLabel(committed.motion),
+      after: ctx.motionLabel(draft.motion),
+    });
+  }
+  if (committed.nodeShapes !== draft.nodeShapes) {
+    changes.push({
+      key: "nodeShapes",
+      label: "Node shapes",
+      before: ctx.nodeShapesLabel(committed.nodeShapes),
+      after: ctx.nodeShapesLabel(draft.nodeShapes),
+    });
+  }
+  for (const id of ctx.commandIds) {
+    const before = ctx.effectiveChord(committed.keymap, id);
+    const after = ctx.effectiveChord(draft.keymap, id);
+    if (before !== after) {
+      changes.push({
+        key: "keymap:" + id,
+        label: "Keybinding " + ctx.commandLabel(id),
+        before,
+        after,
+      });
+    }
+  }
+  return changes;
+}
+
+// --- Raw JSON diff (the "Raw" view of the pending changes) -----------------------------------------
+// The pending block can show the raw settings envelope as a git-style line diff (removed red, added
+// green) instead of the readable field list. diffLines is the pure LCS line diff behind it.
+export type DiffLineKind = "same" | "del" | "add";
+export interface DiffLine {
+  kind: DiffLineKind;
+  text: string;
+}
+
+// diffLines computes a minimal line-based diff (longest-common-subsequence) between two texts: shared
+// lines are "same", lines only in `before` are "del", lines only in `after` are "add". Pure. The inputs
+// are the pretty-printed settings envelope (tens of lines), so the O(n*m) table is inconsequential.
+export function diffLines(before: string, after: string): DiffLine[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const n = a.length;
+  const m = b.length;
+  // lcs[i][j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ kind: "same", text: a[i] });
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push({ kind: "del", text: a[i] });
+      i++;
+    } else {
+      out.push({ kind: "add", text: b[j] });
+      j++;
+    }
+  }
+  while (i < n) {
+    out.push({ kind: "del", text: a[i] });
+    i++;
+  }
+  while (j < m) {
+    out.push({ kind: "add", text: b[j] });
+    j++;
+  }
+  return out;
+}
+
+// createDraftCell adapts an in-memory value to the Persisted<T> interface so a component built to drive a
+// durable cell (the keybindings editor) can instead stage into the draft: get/set/update mutate the
+// in-memory value and notify local subscribers (so the editor re-renders live), and onChange fires so the
+// surface recomputes the pending diff. It never touches storage - persistOnly is a no-notify in-memory
+// write for interface completeness and is not used by the surface.
+export function createDraftCell<T>(initial: T, onChange: () => void): Persisted<T> {
+  let value = initial;
+  const listeners = new Set<(v: T) => void>();
+  const set = (v: T): void => {
+    value = v;
+    for (const fn of [...listeners]) fn(v);
+    onChange();
+  };
+  return {
+    get: () => value,
+    set,
+    update: (fn) => set(fn(value)),
+    persistOnly: (v) => {
+      value = v;
+    },
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    // A draft never writes to storage, so there is nothing to wait for. Resolved rather
+    // than rejecting or throwing: a caller awaiting durability should not have to know
+    // whether the cell behind the interface is durable.
+    flushed: () => Promise.resolve(),
+  };
+}

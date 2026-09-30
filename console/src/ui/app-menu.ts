@@ -5,7 +5,7 @@
 // somewhere you did not ask to go. It also links back to the documentation site. Mirrors the settings
 // gear's popover wiring (open/close, aria-expanded, click-outside, Escape, focus return) so the two
 // title-bar popovers behave identically. No-ops without the markup.
-import { dispatchCommand } from "../console/commands";
+import { dispatchCommand } from "../desktop/commands";
 
 export interface AppMenuItem {
   pageId: string;

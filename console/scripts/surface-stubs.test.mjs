@@ -6,7 +6,7 @@ import test from "node:test";
 //
 //   internal/service/console/url.go   KnownSurfaces        the server's SPA fallback
 //   console/scripts/surface-stubs.mjs SURFACES             the hosted static stubs
-//   console/src/console/main.ts       CLEAN_PATH_SURFACES  the boot router
+//   console/src/desktop/main.ts       CLEAN_PATH_SURFACES  the boot router
 //
 // Each carries a comment telling the next person to keep it in step with the others, and until now
 // that comment was the only thing enforcing it. The failure it guards against is quiet and
@@ -20,7 +20,7 @@ import test from "node:test";
 // from there, which is the same convention the surface stubs and the CSS tests use.
 const GO = "../internal/service/console/url.go";
 const STUBS = "scripts/surface-stubs.mjs";
-const SHELL = "src/console/main.ts";
+const SHELL = "src/desktop/main.ts";
 
 // arrayLiteral pulls the quoted entries out of the ONE LINE that assigns `name`. Line-based rather
 // than bracket-matched, which keeps it indifferent to the two syntaxes it has to read: Go spells the
@@ -66,7 +66,7 @@ test("each routed surface has a bundle the shell can load", () => {
     // another surface's bundle. Dashboard's "plan" mode is the second kind, so the check is that
     // SOMETHING builds it, not that every name has an entry of its own.
     const built =
-      buildJs.includes(`src/console/${surface}/main.ts`) ||
+      buildJs.includes(`src/apps/${surface}/main.ts`) ||
       shell.includes(`id: "${surface}"`) ||
       shell.includes(`pageId: "${surface}"`);
     assert.ok(built, `${surface} is routed but nothing builds or registers it`);

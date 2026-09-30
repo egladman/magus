@@ -1,6 +1,6 @@
 import { persisted } from "../lib/persist";
 import { createTextSearch, type TextSearchEntry } from "@magus/textsearch";
-import type { PageModule, PageController, SearchProvider } from "../console/page";
+import type { PageModule, PageController, SearchProvider } from "../desktop/page";
 
 // One docs-index record. It carries a url (for the result link) on top of the fields the
 // shared ranker reads; the engine ignores url and hands it back on each result. This is the

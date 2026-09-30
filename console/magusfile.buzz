@@ -27,7 +27,7 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs", "stylelint-label-token.mjs",
                 "src/assets/**",
-                "src/console/diff/demo.patch"],
+                "src/apps/diff/demo.patch"],
     // Not src/gen/**: proto declares it, and a second claim is MGS4002.
     "outputs": ["gen/**"],
     "targets": {
@@ -108,23 +108,23 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // Renders the Diff showcase's changeset from its .patch with the Go reader; the showcase
 // has no server to parse it. It lives here because the root writing into a descendant is MGS3001.
 export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("src/console/diff/gen/*.ts");
+    ctx.writesFiles("src/apps/diff/gen/*.ts");
     proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
-                     "-patch", "src/console/diff/demo.patch",
-                     "-out", "src/console/diff/gen/demo.ts"], ".", {});
+                     "-patch", "src/apps/diff/demo.patch",
+                     "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
 // Each surface's ESM bundle: [entry, outfile].
 final ESM_BUNDLES = [
-    ["src/console/main.ts", "gen/console.js"],
-    ["src/console/logs/main.ts", "gen/logs/log-viewer.js"],
-    ["src/console/graph/main.ts", "gen/graph/explorer.js"],
-    ["src/console/dashboard/main.ts", "gen/dashboard/dashboard.js"],
-    ["src/console/activity/main.ts", "gen/activity/activity.js"],
-    ["src/console/notes/main.ts", "gen/notes/notes.js"],
-    ["src/console/diff/main.ts", "gen/diff/diff.js"],
-    ["src/console/runs/main.ts", "gen/runs/runs.js"],
-    ["src/console/diagrams/main.ts", "gen/diagrams/diagrams.js"],
+    ["src/desktop/main.ts", "gen/console.js"],
+    ["src/apps/logs/main.ts", "gen/logs/log-viewer.js"],
+    ["src/apps/graph/main.ts", "gen/graph/explorer.js"],
+    ["src/apps/dashboard/main.ts", "gen/dashboard/dashboard.js"],
+    ["src/apps/activity/main.ts", "gen/activity/activity.js"],
+    ["src/apps/notes/main.ts", "gen/notes/notes.js"],
+    ["src/apps/diff/main.ts", "gen/diff/diff.js"],
+    ["src/apps/runs/main.ts", "gen/runs/runs.js"],
+    ["src/apps/graph/diagrams/main.ts", "gen/diagrams/diagrams.js"],
 ];
 
 // Stylesheets minified alone, then the two whose @imports bundle.
@@ -132,16 +132,16 @@ final CSS_MINIFIED = [
     ["src/styles/tokens.css", "gen/tokens.css"],
     ["src/styles/overrides.css", "gen/overrides.css"],
     ["src/styles/console.css", "gen/console.css"],
-    ["src/console/graph/graph.css", "gen/graph/graph.css"],
-    ["src/console/settings/settings.css", "gen/settings/settings.css"],
-    ["src/console/diff/diff.css", "gen/diff/diff.css"],
-    ["src/console/notes/notes.css", "gen/notes/notes.css"],
-    ["src/console/runs/runs.css", "gen/runs/runs.css"],
-    ["src/console/diagrams/diagrams.css", "gen/diagrams/diagrams.css"],
+    ["src/apps/graph/graph.css", "gen/graph/graph.css"],
+    ["src/apps/settings/settings.css", "gen/settings/settings.css"],
+    ["src/apps/diff/diff.css", "gen/diff/diff.css"],
+    ["src/apps/notes/notes.css", "gen/notes/notes.css"],
+    ["src/apps/runs/runs.css", "gen/runs/runs.css"],
+    ["src/apps/graph/diagrams/diagrams.css", "gen/diagrams/diagrams.css"],
 ];
 final CSS_BUNDLED = [
-    ["src/console/logs/logs.css", "gen/logs/logs.css"],
-    ["src/console/dashboard/dashboard.css", "gen/dashboard/dashboard.css"],
+    ["src/apps/logs/logs.css", "gen/logs/logs.css"],
+    ["src/apps/dashboard/dashboard.css", "gen/dashboard/dashboard.css"],
 ];
 
 fun copyInto(files: [str], dir: str) > void !> any {
@@ -197,7 +197,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     foreach (a in fs\glob("src/assets/*")) { assets.append(a.value); }
     copyInto(assets, dir: fs\join("gen", "assets"));
     foreach (surface in ["logs", "graph", "dashboard"]) {
-        copyInto([fs\join("src", "console", surface, "scaffold.html")], dir: fs\join("gen", surface));
+        copyInto([fs\join("src", "apps", surface, "scaffold.html")], dir: fs\join("gen", surface));
     }
     copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
               fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
