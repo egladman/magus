@@ -20,7 +20,7 @@ import "hack/lint/support" as support;
 // WHOLE_TREE are the root targets that compile or analyze the entire Go module, mapped
 // to the globs whose absence from the target's own footprint would make a Go edit replay
 // instead of re-measure. Every other readsFiles in the root magusfile narrows
-// deliberately (compress-cgo-test to one package, lint-build to libs/testlayout) and
+// deliberately (compress-cgo-test to one package, install-linter to libs/testlayout) and
 // must keep its narrow footprint.
 export final WHOLE_TREE = {
     "test": ["**/*.go", "go.mod", "go.sum"],

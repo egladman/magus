@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
-| target     |     100+ | `magus query kind=target`     | `lint-files`, `content-generate`, `site-generate`                                                                |
+| target     |     100+ | `magus query kind=target`     | `lint-rules`, `content-generate`, `site-generate`                                                                |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                       |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -117,8 +117,8 @@ magus graph export -o json  # the whole graph
 | `test`                   | Tests with race detection and a coverage floor.                                                                                                                                                 |
 | `coverage-render`        | Renders the three language coverage badges into gen/site/assets/.                                                                                                                               |
 | `build`                  | Compiles one artifact: the host binary, or the container image under the `container` charm.                                                                                                     |
-| `lint-build`             | Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.                                                                                                                   |
-| `lint-files`             | Holds the repository's non-Go files to conventions no off-the-shelf linter checks; each rule is hack/lint/<rule>.buzz, and hack/lint.buzz reports drift between their reads and this footprint. |
+| `install-linter`         | Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.                                                                                                                   |
+| `lint-rules`             | Holds the repository's non-Go files to conventions no off-the-shelf linter checks; each rule is hack/lint/<rule>.buzz, and hack/lint.buzz reports drift between their reads and this footprint. |
 | `lint`                   | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint.                                                                                      |
 | `format`                 | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown.                                                                                                                            |
 | `ci`                     | Runs the CI gates through their declared dependencies.                                                                                                                                          |

@@ -774,7 +774,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Reinstalls the agent skills from their embedded sources in internal/agent/skills.
 // The globs name only the shipped skills; hand-authored ones sit beside them. One
 // literal per skill: the static read sees only literals, and .gitattributes has no
-// brace expansion. lint-files keeps the list in step. AGENTS.md is hand-authored.
+// brace expansion. lint-rules keeps the list in step. AGENTS.md is hand-authored.
 export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(
         ".claude/skills/magus-architecture-review*/**",
@@ -1938,7 +1938,7 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
 // Runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its
 // cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
-export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
+export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     // gofmt rewrites libs/testlayout, which this compiles.
     ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
@@ -1956,7 +1956,7 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // Holds the repository's non-Go files to conventions no off-the-shelf linter checks;
 // each rule is hack/lint/<rule>.buzz, and hack/lint.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
-export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
+export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.readsFiles("hack/lint.buzz", "hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
@@ -1993,10 +1993,10 @@ export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
-// shellcheck, and actionlint. govulncheck lives in `security`. lint_build compiles
+// shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, lint_build, lint_files);
+    ctx.needs(format, install_linter, lint_rules);
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
