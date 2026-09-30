@@ -93,12 +93,9 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	g.nodes[n.ID] = existing
 }
 
-// sanitizeAttrs copies attrs with every value stripped and capped, nil when empty.
-// Attr values carry file-derived text (doc frontmatter, marker arguments), so they get
-// the control-char strip the other free-form fields get. The copy is fresh because the
-// read paths (Output, Select, Neighborhood) feed back nodes and edges whose maps alias
-// the live graph, and a query must not write shared state. maxLabelLen is ample: attrs
-// are keys and small scalars.
+// sanitizeAttrs copies attrs with every value stripped of control chars and capped, nil
+// when empty. The copy is fresh because the read paths (Output, Select, Neighborhood)
+// return maps that alias the live graph, and a query must not write shared state.
 func sanitizeAttrs(attrs map[string]string) map[string]string {
 	if len(attrs) == 0 {
 		return nil

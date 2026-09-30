@@ -19,11 +19,9 @@ const dirsShardName = "@dirs"
 
 // assembleDirs folds aggregate metadata onto each directory node: how many files it
 // holds transitively, the summed git churn (commit counts) across those files, and the
-// set of languages present. The directory nodes themselves are minted structurally by
-// containsChain in each path-bearing shard (buzz, docs, symbols) and by packageDirs for
-// every source package; this pass emits the
-// SAME dir IDs carrying only these attrs, which fold onto the structural nodes on merge
-// - the typed-partial-node pattern, order-independent like the @runtime shard.
+// set of languages present. containsChain in each path-bearing shard (buzz, docs,
+// symbols) and packageDirs mint the dir nodes; this pass emits the SAME dir IDs carrying
+// only these attrs, which fold onto them on merge, order-independent like @runtime.
 //
 // Every input is deterministic and OS-agnostic (git commit counts, extension-derived
 // languages, slash-relative workspace paths), so the shard is remote-shareable. It does
@@ -81,10 +79,8 @@ func assembleDirs(projects []types.TargetGraphProject, leafPaths []string, churn
 // directory, whether or not any other shard minted one.
 const packageDirsShardName = "@packagedirs"
 
-// packageLanguages maps a source extension to the language a symbol indexer reports that
-// file in: the extensions of the spells exporting mgs_getSymbolIndexer (golang,
-// typescript, python, rust). JavaScript is typescript here because scip-typescript indexes
-// it under that spell.
+// packageLanguages maps a source extension to the language its symbol indexer reports.
+// JavaScript is typescript because scip-typescript indexes it.
 var packageLanguages = map[string]string{
 	".go": "go",
 	".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript",
@@ -93,8 +89,7 @@ var packageLanguages = map[string]string{
 	".rs": "rust",
 }
 
-// packageLanguage is the indexed language of a non-test source file, or "" for anything
-// else.
+// packageLanguage is the indexed language of a non-test source file, or "".
 func packageLanguage(p string) string {
 	if isTestSource(p) {
 		return ""
@@ -102,9 +97,8 @@ func packageLanguage(p string) string {
 	return packageLanguages[strings.ToLower(path.Ext(p))]
 }
 
-// findPackageSources returns every workspace-relative source file packageLanguage
-// classifies, sorted, minus what the VCS ignores. It skips what findBuzzFiles skips
-// except gen: a generated package is still a package the hand-written ones import.
+// findPackageSources skips what findBuzzFiles skips except gen: a generated package is
+// still one the hand-written ones import.
 func findPackageSources(root string) []string {
 	var out []string
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -130,20 +124,14 @@ func findPackageSources(root string) []string {
 	return dropVCSIgnored(root, out)
 }
 
-// assemblePackageDirs builds the @packagedirs shard from the tree under root. See
-// packageDirs.
 func assemblePackageDirs(root string, projects []types.TargetGraphProject, layers map[string]string) Shard {
 	return packageDirs(findPackageSources(root), projects, layers)
 }
 
-// packageDirs mints a dir node for every directory holding a source file in sources,
-// the directory "." and a project's own path included, plus every directory between it
-// and its owning project, each contained by its parent. A source directory carries
-// AttrLanguage, the language most of its files are in (ties to the lexically first); every
-// dir carries the AttrLayer layers declares for it (types.LayerFor).
-//
-// Every input is read off the tree and the magusfiles, never the symbol index, so the
-// default graph holds the same dirs on a machine that never ran a scip op.
+// packageDirs mints a dir node for every directory holding a source file and every
+// directory between it and its owning project. A source dir carries AttrLanguage (the
+// majority, ties to the lexically first); every dir carries its declared AttrLayer. It
+// never reads the symbol index, so a machine that never ran a scip op gets the same dirs.
 func packageDirs(sources []string, projects []types.TargetGraphProject, layers map[string]string) Shard {
 	counts := map[string]map[string]int{}
 	owner := map[string]string{}
@@ -212,10 +200,9 @@ func majorityLanguage(counts map[string]int) string {
 	return best
 }
 
-// unionLayers joins every project's magus.project "layers", keyed by project path, into
-// the one map types.LayerFor reads. A layering describes the tree, not a project, so the
-// same directory or glob declared under two names, in one project or across two, is
-// LayerDeclarationInvalid: a directory sits in one layer.
+// unionLayers joins every project's "layers" into the one map types.LayerFor reads. A
+// directory sits in one layer, so one declared under two names, in any projects, is
+// LayerDeclarationInvalid.
 func unionLayers(byProject map[string]map[string]string) (map[string]string, error) {
 	out := map[string]string{}
 	declaredBy := map[string]string{}

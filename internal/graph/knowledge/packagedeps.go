@@ -25,10 +25,8 @@ type packageGraph map[string]map[string]bool
 func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
 
 // ImportGraph maps each workspace package directory ("." for the root) to the package
-// directories it imports, sorted, read off the dir -imports-> dir edges foldImports stored
-// at ingest. Languages takes each directory's language from its dir node, falling back to
-// the edges it imports along. Packages is empty, never nil, when no SCIP index was
-// ingested, and Indexed is false then.
+// directories it imports, sorted. Languages comes from each dir node, falling back to its
+// import edges. With no SCIP index ingested, Packages is empty (never nil) and Indexed false.
 func (g *Graph) ImportGraph() types.ImportGraph {
 	out := types.ImportGraph{Indexed: g.HasSymbols(), Packages: map[string][]string{}, Languages: map[string]string{}}
 	fallback := map[string]string{}

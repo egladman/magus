@@ -9,14 +9,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TargetRuns is one run's record of the targets it has run, each at most once. Whoever
-// reaches a target first runs it; everyone after waits on that run and gets its outcome,
-// error included, however many composers, projects or passes reach it. It is the live
-// counterpart of what `magus status` reports as a StatusRun's target runs. A body's own
-// record (buzz.TargetRuns) is seeded from it, never the other way round.
-//
-// A failed run is not retried within the run: a second composer reaching a target that
-// failed gets the same error rather than a second attempt.
+// TargetRuns records the targets one run has run, each at most once. The first caller to
+// reach a target runs it; later callers wait and get its outcome, error included, so a
+// failed target is not retried within the run. A body's buzz.TargetRuns is seeded from
+// it, never the other way round.
 type TargetRuns struct {
 	mu   sync.Mutex
 	runs map[types.TargetRef]*TargetRun
@@ -48,9 +44,8 @@ func TargetRunsFromContext(ctx context.Context) *TargetRuns {
 	return r
 }
 
-// TryRun reports whether the caller is first to reach ref, and so runs it. Either way the
-// returned TargetRun is ref's; a caller that is first must Complete it, deferred, or every
-// later caller waits forever. Once does both for a caller that runs in place.
+// TryRun returns ref's TargetRun and whether the caller is first to reach it. A first
+// caller must Complete it, deferred, or every later caller waits forever; Once does both.
 func (r *TargetRuns) TryRun(ref types.TargetRef) (*TargetRun, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -88,8 +83,7 @@ func (r *TargetRuns) MarkDone(ref types.TargetRef) {
 	}
 }
 
-// Passed lists project's targets that completed without error, sorted: the names a body's
-// record in that project is seeded with.
+// Passed lists project's targets that completed without error, sorted.
 func (r *TargetRuns) Passed(project string) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()

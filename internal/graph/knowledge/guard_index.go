@@ -33,10 +33,9 @@ import (
 // build. That errs one way only: a rewrite with identical bytes silences a rule for a while,
 // and nothing makes it deny on a stale answer.
 //
-// Stamps describe files, not where the checkout stands, so the index also records the
-// revision it was built at and any merge or rebase then underway. An index built at
-// another revision, or while one of those was underway or since one began, answers for
-// no kind: stamps taken mid-rebase hold until the next pick touches an indexed file.
+// Stamps describe files, not the checkout, so the index also records the revision and any
+// merge or rebase underway when built. Built at another revision, or during or since such
+// an operation, it answers for no kind: stamps taken mid-rebase can still match.
 
 // GuardSymbol is the pseudo-kind the index lists symbol NAMES under, the spelling a search
 // pattern and `magus refs <name>` use, rather than the full symbol ids.
@@ -136,9 +135,8 @@ type GuardCheckout struct {
 	Operation string
 }
 
-// ReadGuardCheckout reads the checkout at root through the vcs layer, whichever backend
-// claims it, starting one version control process for the revision. A read that fails
-// leaves its field empty.
+// ReadGuardCheckout reads the checkout at root, starting one version control process for
+// the revision. A read that fails leaves its field empty.
 func ReadGuardCheckout(ctx context.Context, root string) GuardCheckout {
 	return readGuardCheckout(ctx, root, false)
 }
@@ -202,11 +200,9 @@ func shortRevision(id string) string {
 	return id
 }
 
-// WriteGuardIndex writes the index for g, built from the workspace at root with the
-// checkout at at, which the caller reads before building g so a checkout that moves
-// meanwhile reads as stale. symbolsFresh says whether every built symbol index matched
-// its sources when g was assembled; false keeps symbol lookups non-definitive whatever the
-// stamps say. The write is atomic.
+// WriteGuardIndex atomically writes the index for g, built from the workspace at root.
+// The caller reads at before building g, so a checkout that moves meanwhile reads as
+// stale. symbolsFresh false keeps symbol lookups non-definitive whatever the stamps say.
 func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool, at GuardCheckout) error {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -540,11 +536,9 @@ func (x *GuardIndex) Stale() string {
 	return x.stale
 }
 
-// Fresh reports whether the index still describes the checkout (see Stale) and every
-// source kind's ids were derived from is unchanged since it was written, so a query of the
-// graph answers what the index says. A diagnostic's ids are compiled into the binary, but
-// the pages and emitters its node links come from every source, so it counts every stamp.
-// It stats the sources once per kind.
+// Fresh reports whether the index still describes the checkout (see Stale) and kind's
+// sources are unchanged since it was written. A diagnostic counts every stamp: its ids are
+// compiled in, but its node links come from every source. It stats once per kind.
 func (x *GuardIndex) Fresh(kind string) bool {
 	x.mu.Lock()
 	defer x.mu.Unlock()

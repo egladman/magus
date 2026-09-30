@@ -121,9 +121,8 @@ type Stats struct {
 type Step struct {
 	ProjectPath string       // repo-relative project directory
 	Sources     []types.Glob // for the cache key
-	// BeforeKey is the targets RunAll runs, through WithTargetRunner, once this step's
-	// upstreams have finished and before its key is hashed: the skip_cache members whose
-	// artifacts Sources reads. Never hashed itself; what they write is.
+	// BeforeKey are the skip_cache targets whose artifacts Sources reads. RunAll runs them
+	// through WithTargetRunner after the upstreams finish and before hashing the key.
 	BeforeKey []types.TargetRef
 	// IgnoreDirs are the non-source dir names this project's resolved spells generate
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
@@ -1395,8 +1394,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// stepErr is this step's REAL verdict and complete always gets it, even when
 			// nil is returned to the group. The two must not be the same value: the group
 			// learns of a failure only to cancel, while a dependent asks its upstream's
-			// run whether it succeeded. Collapsing them (the named-return form this
-			// replaced) would tell every dependent its upstream passed.
+			// run whether it succeeded. Collapsing them into a named return would tell
+			// every dependent its upstream passed.
 			var stepErr error
 			// ran distinguishes a step that reached fn from one that never started: a
 			// dependency failed, or the batch was already cancelled. Only the first kind

@@ -307,11 +307,10 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	return nil
 }
 
-// SymbolIndexDigest identifies the @symbols shards the manifest names, which are the shards
-// MergeSymbolShards loads: a hex SHA-256 over each project's shard fingerprint in project
-// path order. A shard fingerprint hashes the shard's content, so the digest moves exactly
-// when a symbol-reading answer can. No store, or a manifest naming no symbol shard, is
-// Indexed false with no error. Gaps are left to the caller, which knows the declarations.
+// SymbolIndexDigest identifies the @symbols shards MergeSymbolShards loads: a hex SHA-256
+// over each project's shard fingerprint in project path order, so it moves exactly when a
+// symbol-reading answer can. No store, or no symbol shard, is Indexed false with no error.
+// The caller reports gaps, since it knows the declarations.
 func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 	out := types.SymbolIndexDigest{Projects: []string{}}
 	man := s.readManifestOrNil()

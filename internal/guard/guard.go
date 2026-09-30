@@ -447,10 +447,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	bound := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
-	// A subagent's first call registers the checkout it runs in. A command line runs where
-	// the call does, so its own location names that. A host's hook may run from the
-	// session's checkout instead, so for an envelope only the call's reported directory
-	// names it; without one the worker's own `magus job exec` registers it.
+	// A subagent's first call registers its checkout. A command line runs where the call
+	// does; a host's hook may run from the session's checkout, so an envelope counts only
+	// the call's reported directory, and without one `magus job exec` registers it.
 	hostPlaced := location.workspace != "" && (!isEnvelope || callDir != "" && within(callDir, location.workspace))
 	switch {
 	case bound == "" || actingLease != bound || !hostPlaced:

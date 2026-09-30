@@ -32,7 +32,7 @@ type searchRoute struct {
 }
 
 // graphMovedBudget bounds reading the checkout, which starts version control processes.
-// Past it nothing is known to have moved and the rule judges as before.
+// Past it the checkout counts as unmoved.
 const graphMovedBudget = 150 * time.Millisecond
 
 // staleGraph is why the graph describes another tree than the one on disk.
@@ -43,12 +43,10 @@ type staleGraph struct {
 	underway bool
 }
 
-// graphMoved reads whether the graph a deny would route to describes this checkout: no
-// merge, rebase, cherry-pick or revert is underway, and the guard index was built at the
-// current revision. A rule that denies in favor of a graph answer asks it before denying,
-// since such a deny with a stale graph pushes the reader from a correct grep to a
-// possibly wrong answer. With no revision to compare, the index's own stamps decide
-// through the lookups.
+// graphMoved reports why the graph a deny would route to no longer describes this
+// checkout: a merge, rebase, cherry-pick or revert is underway, or the guard index was
+// built at another revision. A deny over a stale graph would push the reader from a
+// correct grep to a wrong answer. With no revision to compare, the index's stamps decide.
 func graphMoved(deps Dependencies) staleGraph {
 	if deps.scope.root == "" {
 		return staleGraph{}

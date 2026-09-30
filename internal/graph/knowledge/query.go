@@ -752,8 +752,7 @@ func (g *Graph) resolveOne(ref string) (string, bool) {
 
 // resolve maps a ref to a single node ID: an exact ID first, then the dir or file node
 // at exactly that path when ref is path-shaped, and only then the top-ranked match for
-// ref as a query. Ranking alone once resolved internal/handler/mcp to a target named
-// mcp-tools-generate, so a path never reaches the ranking while its node exists.
+// ref as a query, so a path never loses to a similarly named target.
 func (g *Graph) resolve(ref string) (string, types.KnowledgeResolution, bool) {
 	if _, ok := g.node(ref); ok {
 		return ref, types.ResolvedID, true

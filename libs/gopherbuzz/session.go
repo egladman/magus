@@ -159,12 +159,10 @@ type Session struct {
 	// checkPrelude is what the last check registered from the four fields above,
 	// extended by the next check rather than rebuilt. See checkPrelude.sync.
 	checkPrelude *checkPrelude
-	// hostTypes is every DeclareModuleTypes call made on this session or on any
-	// session made from it (NewChild, an aliased import), shared by all of them. A
-	// host declares into the session it holds, often lazily from its module
-	// resolver, so a sub-session that already copied the imported declarations
-	// would never see those types. hostTypesSeen counts the entries this session
-	// has collected.
+	// hostTypes is every DeclareModuleTypes call made on this session or any session
+	// made from it (NewChild, an aliased import), shared by all: a host often declares
+	// lazily, after a sub-session copied the imported declarations. hostTypesSeen
+	// counts the entries this session has collected.
 	hostTypes     *[]hostTypeDecl
 	hostTypesSeen int
 	// collectedDecls names the native modules whose declaration source this

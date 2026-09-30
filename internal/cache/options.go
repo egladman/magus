@@ -164,11 +164,10 @@ func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }
 }
 
-// WithTargetRunner is how RunAll runs a step's BeforeKey targets: once the step's upstreams
-// have finished and before its key is hashed, holding no slot, so what they write lands in
-// the key and each can take the slots it needs. An error fails the step as its own failure,
-// spending the failure budget like any other. Without it BeforeKey is ignored; RunAside
-// never runs it, so a caller of RunAside runs the same targets itself first.
+// WithTargetRunner sets how RunAll runs a step's BeforeKey targets: after the step's
+// upstreams finish and before its key is hashed, holding no slot. An error fails the step
+// and counts against the failure budget. Without it BeforeKey is ignored. RunAside never
+// runs BeforeKey, so its caller runs those targets first.
 func WithTargetRunner(fn func(context.Context, types.TargetRef) error) RunOption {
 	return func(rc *runCtx) { rc.runTarget = fn }
 }

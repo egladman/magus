@@ -14,10 +14,9 @@ type crossDispatchCtxKey struct{}
 type crossAncestorCtxKey struct{}
 
 // CrossDispatch runs cross-project target dependencies (declared via a project import,
-// then referenced as <alias>.<target>) and detects cross-project cycles. Which of them
-// already ran is the run's TargetRuns, so a remote target runs at most once whether a
-// body, a preflight pass or a composer's key reached it first. Dispatch is safe for
-// concurrent use.
+// then referenced as <alias>.<target>) and detects cross-project cycles. It records runs
+// in the run's TargetRuns, so a remote target runs at most once whoever reaches it first.
+// Dispatch is safe for concurrent use.
 type CrossDispatch struct {
 	runs *cache.TargetRuns
 	run  func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
@@ -74,16 +73,14 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target
 	return c.runs.Once(ctx, ref, func() error { return c.runRemote(ctx, dep, ref) })
 }
 
-// runRemote runs ref's target in dep for the one caller that reached it first.
 func (c *CrossDispatch) runRemote(ctx context.Context, dep *types.Project, ref types.TargetRef) error {
 	slog.DebugContext(ctx, "interp: cross-project dispatch", "target", ref.Ref())
 	// Mark before running: the parent's audit diffs after its body returns, and by then
 	// this child has already written its own outputs.
 	types.ActiveDispatchFromContext(ctx).Mark(dep.Dir)
 
-	// A fresh body record so the remote project's own ctx.needs runs each target once
-	// without colliding with the caller's (target names are per-project), seeded with what
-	// this run already ran there.
+	// A fresh body record, since target names are per-project, seeded with what this
+	// run already ran there.
 	rctx := buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(c.runs.Passed(dep.Path)...))
 	// Same reason the memo is fresh, applied to the dispatch ancestor stack: its
 	// entries are bare target names, and a name only means something within one

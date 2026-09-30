@@ -35,8 +35,7 @@ type ownedNode struct {
 }
 
 // ownedDirs lists every dir node in nodes as an ownedNode, so a package directory takes
-// the owner the last matching CODEOWNERS rule names for its path and a figure can zone a
-// box by owner without walking its files.
+// the owner the last matching CODEOWNERS rule names for its path.
 func ownedDirs(nodes []types.KnowledgeNode) []ownedNode {
 	var out []ownedNode
 	for _, n := range nodes {

@@ -76,11 +76,8 @@ var briefTargetPhraseRe = regexp.MustCompile("(?i)\\brun\\s+(?:the\\s+)?`?([A-Za
 
 // denyBriefOffCheck refuses a brief that tells the worker of a live row to run a magus target
 // other than that row's check and the targets declaring its write paths, quoting the line.
-// See denyWorkerCheckOnly for the incident; this half catches it before a worker exists.
-//
-// The spawn path hands the grader no context, so the store is read here, as the graph
-// lookups in read.go are. A brief naming no job, or one the store does not carry live, is
-// graded by nothing: there is no check to hold it to.
+// The spawn path hands the grader no context, so it reads the store itself. A brief naming
+// no live job passes: there is no check to hold it to.
 func denyBriefOffCheck(deps Dependencies, brief string) ShellVerdict {
 	ids := briefJobIDs(brief)
 	if len(ids) == 0 {

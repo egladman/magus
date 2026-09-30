@@ -293,12 +293,8 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 
 // denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
-// row's check and the targets declaring an output in its write paths, or returns "".
-//
-// On 2026-09-29 two workers ran `magus run lint docs` at once from two worktrees, because
-// their briefs said they "may also run" it. The cache dedupes a replay after a run lands and
-// never two runs in flight, and two trees share no key, so the pair doubled the machine's
-// load and proved nothing the orchestrator's one serial run after integration does not.
+// row's check and the targets declaring an output in its write paths, or returns "". Two
+// worktrees share no cache key, so a second run of the same target only doubles the load.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, a row that owns
 // the gate (the orchestrator's), or a row declaring no check at all, which denyLeaseGate
@@ -486,10 +482,9 @@ func targetName(s string) string {
 // leaseProducers reports which targets declare an output among writePaths, answered from
 // the workspace's own declarations.
 //
-// A workspace that cannot be read falls back to the spelling this repository gives its
-// producers, a `-generate` name or a charm such as `:rw`: refusing a legitimate
-// regeneration over a load failure would block the one run the row expects, and a rule
-// the guard cannot evaluate must not block a tool call.
+// A workspace that cannot be read falls back to this repository's producer spelling, a
+// `-generate` name or a charm such as `:rw`: a rule the guard cannot evaluate must not
+// block a tool call.
 func leaseProducers(ctx context.Context, deps Dependencies, workspace string, writePaths []string) func(target, project string) bool {
 	looksGenerating := func(target, _ string) bool {
 		name := targetName(target)

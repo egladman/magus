@@ -68,7 +68,6 @@ func Needs(members ...types.TargetRef) Calls { return Calls{Call(members)} }
 // Needs appends one more ctx.needs call, ordered after every call before it.
 func (c Calls) Needs(members ...types.TargetRef) Calls { return append(c, Call(members)) }
 
-// members is every member the calls dispatch, in body order.
 func (c Calls) members() []types.TargetRef {
 	var out []types.TargetRef
 	for _, call := range c {
@@ -402,7 +401,7 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 	for _, s := range steps {
 		inScope[stepRef(s)] = true
 	}
-	// coarse holds today's upstream edges (upstream -> dependent, same target).
+	// coarse holds the DependsOn edges (upstream -> dependent, same target).
 	coarse := map[types.TargetRef][]types.TargetRef{}
 	for _, s := range steps {
 		for _, dep := range s.DependsOn {

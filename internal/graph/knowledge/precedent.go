@@ -70,10 +70,9 @@ type precedentPackages struct {
 	ns map[string]string
 }
 
-// packages takes each package's layer from the AttrLayer magus.project's "layers" declares
-// on its dir node. Undeclared, the layer is the first segment of its directory, and "." for
-// the workspace root: the path alone decides it, since a top-level directory holding only
-// nested projects may have no node of its own. No directory name is special.
+// packages takes each package's layer from its dir node's declared AttrLayer, else the
+// first segment of its directory ("." for the root). The fallback reads the path alone:
+// a top-level directory holding only nested projects may have no node.
 func (m precedentMiner) packages() precedentPackages {
 	pk := precedentPackages{
 		deps: m.g.packageDepsExcept(m.x.generated), dir: map[string]string{}, layer: map[string]string{},

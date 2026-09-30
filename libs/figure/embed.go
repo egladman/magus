@@ -16,9 +16,8 @@ import (
 //go:embed figure.buzz
 var Source string
 
-// The Go mirror of the module's records, field for field; TestMirrorMatchesTheModule holds
-// it to the Buzz declarations. JSON names are the Buzz field names, and an enum field holds
-// its case's name, which Draw decodes into the case.
+// The types below mirror the module's records field for field, under the Buzz field names;
+// TestMirrorMatchesTheModule holds them to the declarations.
 
 // Look, Stroke, Direction and Axis each hold the name of one of the module's enum cases,
 // such as Look("plain") or Direction("down").
@@ -166,10 +165,9 @@ type Findings struct {
 
 func (f *Findings) Error() string { return "figure: " + f.Text }
 
-// drawEntry is constant: data reaches it as the arguments of a call, never as source.
-// A host cannot build a Buzz enum case, so it sends case names and decoded builds the
-// cases here, walking each enum's own cases; an imported enum is not callable by value.
-// draw catches the findings so a host tells a refusal from a fault.
+// drawEntry is constant: data reaches it as call arguments, never as source. A host
+// cannot build a Buzz enum case, so it sends case names and decoded walks each enum's
+// cases to rebuild them. draw catches findings so a host tells a refusal from a fault.
 const drawEntry = `import "magus/figure";
 
 export fun draw(f: figure\Figure, anchorHref: str) > [str] {

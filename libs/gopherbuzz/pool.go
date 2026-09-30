@@ -270,7 +270,7 @@ func TargetRunsFromContext(ctx context.Context) *TargetRuns {
 // That invariant does not, by itself, rule out every deadlock: two in-flight
 // SIBLINGS that mutually depend on each other (B needs C, C needs B) each hold
 // a goroutine and a slot just fine, but would block forever on each other's
-// TargetRuns entry — neither name appears in the other's static ancestor stack,
+// TargetRuns entry: neither name appears in the other's static ancestor stack,
 // so the ancestor-chain cycle check never fires. TargetRuns.TryRun detects this
 // dynamically (its waitingFor wait-for graph) and errors instead of hanging; see
 // TargetRuns's doc comment.

@@ -357,9 +357,9 @@ type runCommand struct {
 // shellSplit cuts a shell line at the operators that start another command.
 var shellSplit = strings.NewReplacer("&&", "\n", "||", "\n", "|", "\n", ";", "\n")
 
-// runCommands returns the `magus run` and `./magus run` commands on one shell line. A
-// spell op (`go::go-test`), a target given by --stdin, and a command whose target or a
-// project is a placeholder or variable name no literal target, so they are left out.
+// runCommands returns the `magus run` and `./magus run` commands on one shell line,
+// leaving out a spell op (`go::go-test`), a --stdin target, and any command whose target
+// or project is a placeholder or variable.
 func runCommands(line string) []runCommand {
 	line = strings.TrimPrefix(strings.TrimSpace(line), "$ ")
 	var out []runCommand
@@ -431,10 +431,9 @@ func newRunIndex(projects []types.TargetGraphProject) runIndex {
 }
 
 // resolve returns the target nodes c runs, and as "<project>:<target>" each target it
-// names in a project of this workspace that does not define it. With no project, magus
-// selects the root project, or every project when there is none; either way the reader
-// is at the workspace root, so a target missing there is no claim about this workspace.
-// A project this workspace does not have is an illustration, and resolves to nothing.
+// names in a workspace project that does not define it. With no project named, a missing
+// target claims nothing; a project this workspace lacks is an illustration and resolves
+// to nothing.
 func (ix runIndex) resolve(c runCommand) (ids, missing []string) {
 	all := func() []string {
 		var out []string

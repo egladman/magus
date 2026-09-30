@@ -158,21 +158,15 @@ type foldedImports struct {
 }
 
 // foldImports turns the package imports every index recorded into dir -imports-> dir
-// edges, keyed by the project whose index read each import. An indexer emits an imported
-// package as a reference to its namespace symbol, and every file of a package defines
-// that namespace, so a file defining A and referencing B is A importing B; a symbol in A
-// calling one declared in B is too, since it cannot compile otherwise. No language's
-// import syntax is parsed.
+// edges, keyed by the project whose index read each import. An indexer emits an import as
+// a reference to the package's namespace symbol, which every file of a package defines,
+// so a file defining A and referencing B is A importing B. No import syntax is parsed.
 //
 // A namespace's package is the lowest directory holding a non-test file that defines it,
-// read across every index at once: an import's target is often defined in another
-// project's index. Test files are left out, since a test may import what its package
-// cannot, and so are a package importing itself and a namespace no workspace file
-// defines (a module dependency).
-//
-// Each edge is extracted, carries AttrLanguage (the importing namespace's language, the
-// lexically first when two languages record one pair) and names as provenance the
-// lexically first file or symbol source it was read from.
+// read across every index, since an import's target is often in another project's index.
+// Test files are left out (a test may import what its package cannot), as are
+// self-imports and namespaces no workspace file defines. Each edge carries AttrLanguage
+// and, as provenance, the lexically first source it was read from.
 func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedImports {
 	nsDir := map[string]string{}
 	nsLang := map[string]string{}
