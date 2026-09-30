@@ -41,6 +41,9 @@ The command after `--` runs there. Its stdout, stderr and exit code are its own.
 | `magus buzz hack/count-refusals.buzz` | read-only: this checkout's recurring guard refusals by rule | none |
 | `magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
 | `magus buzz hack/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
+| `magus buzz hack/show-review-context.buzz -- [--rev <base>...<head> \| --patch <file\|-> \| --from <diff.json\|->] [--baseline <graph.json>] [--budget <n>] [--lens architecture\|code\|all] [-o json]` | read-only: a change's per-symbol review context (callers, callees, tests, the path to the API, cited diagnostics) and what it does to projects, dependencies and vocabulary | needs the code index; about six graph reads per carded symbol |
+
+A pull request's patch reads the same way: `gh pr diff <n> | magus buzz hack/show-review-context.buzz -- --patch -`.
 
 Named before the verb rule, each due a verb name:
 
