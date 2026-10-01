@@ -32,18 +32,20 @@ type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
 // the output attempt resolved in the worker's checkout, so a verifier in another
 // worktree does not need that checkout's cache to reopen the evidence.
 func Exit(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver) (types.Job, error) {
+	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
+	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
+	rows, err := store.List()
+	if err != nil {
+		return types.Job{}, err
+	}
+	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
+		return types.Job{}, fmt.Errorf("%w %q: nothing declared it, so there is nothing to end", ErrUnknownJob, id)
+	}
 	if result == nil {
 		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })
 	}
 	if resolve == nil {
 		return types.Job{}, fmt.Errorf("job: no output resolver files a result's validation evidence")
-	}
-	var rows []types.Job
-	if store.outputs != nil {
-		var err error
-		if rows, err = store.List(); err != nil {
-			return types.Job{}, err
-		}
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)

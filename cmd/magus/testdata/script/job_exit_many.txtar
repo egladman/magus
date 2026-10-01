@@ -1,0 +1,43 @@
+# `magus job exit` without --stdin ends every job it names. A job it cannot end does not
+# stop the rest: each is tried, and the command fails afterwards naming the refused ones.
+# A filed result belongs to one job, so --stdin takes exactly one.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork scout-a --read-only --criteria 'read the pricing code'
+exec magus job fork scout-b --read-only --criteria 'read the tax code'
+exec magus job fork scout-c --read-only --criteria 'read the tests'
+
+exec magus job exit scout-a scout-b
+stdout '^abandoned scout-a, recorded no_return$'
+stdout '^abandoned scout-b, recorded no_return$'
+
+! exec magus job exit scout-c nobody
+stdout '^abandoned scout-c, recorded no_return$'
+stderr '1 of 2 jobs not ended'
+stderr 'nobody'
+
+! exec magus job exit scout-a scout-b --stdin
+stderr '--stdin files one result onto one job, and 2 are named'
+
+! exec magus job exit
+stderr 'name the job to end'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the jobs here only read.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}
