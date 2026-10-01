@@ -1,0 +1,216 @@
+namespace bootstrapworktree;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "path";
+import "proc";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id>";
+final HELP = "cost: a Go build of ./magus and a graph build, about two minutes cold\n{USAGE}\n\n"
+    + "Makes a fresh worktree of this repository usable for the worker holding <id>: builds ./magus with the magus on\n"
+    + "PATH, builds the graph, takes the job's lease, then refuses unless the row names this worktree as its checkout\n"
+    + "and the base it recorded matches the row's checkpoint. Writes ./magus, the graph and the job row.";
+final MODULE = "module github.com/egladman/magus";
+
+// Row is what bootstrap reads back from `./magus describe job <id> -o json`.
+export object Row {
+    id: str,
+    state: str,
+    checkpoint: str,
+    reportedBase: str,
+    baseVerdict: str,
+    checkoutRoot: str,
+}
+
+export fun parseRow(described: str) > Row !> any {
+    final j = json\parse(described)["job"] ?? {<str: any>};
+    return Row{
+        id = j["id"] ?? "",
+        state = j["state"] ?? "",
+        checkpoint = j["checkpoint"] ?? "",
+        reportedBase = j["reported_base"] ?? "",
+        baseVerdict = j["base_verdict"] ?? "",
+        checkoutRoot = j["checkout_root"] ?? "",
+    };
+}
+
+// mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
+// other worktree hangs off.
+export fun mainWorktree(porcelain: str) > str {
+    foreach (line in porcelain.split("\n")) {
+        if (line.startsWith("worktree ")) {
+            return line.sub(9);
+        }
+    }
+    return "";
+}
+
+// problems is every way the taken lease is unfit for a worker in root, empty when it is fit.
+// A row with no checkpoint cannot be checked for its base, which render reports rather than
+// refuses: there is nothing to compare against. trackedClean is whether root's tracked files
+// match its HEAD: job exec digests a tree holding only untracked files as a dirty patch of
+// nothing, revision-match, which is the checkpoint's tree all the same.
+export fun problems(row: Row, root: str, main: str, trackedClean: bool) > [str] {
+    final found = mut [<str>];
+    if (path\clean(row.checkoutRoot) != path\clean(root)) {
+        final where = if (row.checkoutRoot == "") "no checkout" else row.checkoutRoot;
+        final why = if (row.checkoutRoot != "" and path\clean(row.checkoutRoot) == path\clean(main))
+            " (the main checkout: every write the worker makes here is graded against the wrong tree)" else "";
+        found.append("job {row.id} names {where} as its checkout, not {root}{why}; rerun `./magus job exec {row.id}` from {root}");
+    }
+    final sameTree = row.baseVerdict == "match" or (row.baseVerdict == "revision-match" and trackedClean);
+    if (row.checkpoint != "" and !sameTree) {
+        found.append("job {row.id} recorded base {row.reportedBase}, verdict {row.baseVerdict}, but its checkpoint is {row.checkpoint}; "
+            + "`git switch --detach {row.checkpoint}` (or the row's branch at it), then bootstrap again");
+    }
+    if (["declared", "running"].indexOf(row.state) == null) {
+        found.append("job {row.id} is {row.state}, so nobody may work it; ask whoever declared it");
+    }
+    return found;
+}
+
+// checkRepository refuses anything but a secondary worktree of this repository.
+fun checkRepository(root: str) > str !> any {
+    if (vcs\name() != "git") {
+        throw "bootstrap-worktree: makes git worktrees usable, and this checkout is {vcs\name()}";
+    }
+    final gomod = fs\readFile("{root}/go.mod") catch "";
+    if (!gomod.startsWith(MODULE + "\n")) {
+        throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script builds magus itself";
+    }
+    final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: {"dir": root, "quiet": true}).stdout);
+    if (path\clean(main) == path\clean(root)) {
+        throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and building here replaces "
+            + "the ./magus every other session in this checkout runs";
+    }
+    return main;
+}
+
+fun magusAt(bin: str, root: str, args: [str]) > str !> any {
+    final r = proc\exec(bin, args: args, dir: root, opts: {"quiet": true, "allow_failure": true});
+    if (r.code != 0) {
+        final said = if (r.stderr.trim() != "") r.stderr.trim() else r.stdout.trim();
+        throw "bootstrap-worktree: `{bin} {args.join(" ")}` exited {r.code}:\n{said}";
+    }
+    return r.stdout;
+}
+
+// bootstrap builds ./magus and the graph in root, takes job, and returns the row as the
+// fresh binary reads it back. Raises on any step that fails and on a row unfit for a worker
+// here, so a caller never starts work on a wrong binding.
+export fun bootstrap(root: str, job: str) > Row !> any {
+    final main = checkRepository(root);
+    final onPath = proc\which("magus") catch "";
+    if (onPath == "") {
+        throw "bootstrap-worktree: no magus on PATH to build ./magus with, and the hooks run that same name: with none "
+            + "they exit 127 and the guard is off. Install magus, then bootstrap again";
+    }
+    magusAt(onPath, root: root, args: ["run", "go-build", "."]);
+    final local = "{root}/magus";
+    if (!fs\isFile(local)) {
+        throw "bootstrap-worktree: `magus run go-build .` passed and left no {local}";
+    }
+    std\print("built {local} with {onPath}");
+    magusAt(local, root: root, args: ["graph", "build", "--silent"]);
+    std\print("built the graph");
+    final took = magusAt(local, root: root, args: ["job", "exec", job]);
+    foreach (line in took.split("\n")) {
+        if (line.trim() != "") {
+            std\print("  {line.trim()}");
+        }
+    }
+    final row = parseRow(magusAt(local, root: root, args: ["describe", "job", job, "-o", "json"]));
+    final trackedClean = (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0;
+    final wrong = problems(row, root: root, main: main, trackedClean: trackedClean);
+    if (wrong.len() > 0) {
+        throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  " + wrong.join("\n  ");
+    }
+    return row;
+}
+
+export fun render(row: Row, root: str) > [str] {
+    var base = "base {row.reportedBase} matches the row's checkpoint";
+    if (row.checkpoint == "") {
+        base = "base {row.reportedBase} recorded; the row names no checkpoint, so nothing verified it";
+    } else if (row.baseVerdict == "revision-match") {
+        base = "base {row.checkpoint} is the row's checkpoint; the tree adds only untracked files, which job exec reads as a patch";
+    }
+    return [
+        "took job {row.id} in {root}: checkout verified",
+        base,
+        "the guard sees this script, not the exec inside it: unless your spawn was titled for {row.id}, run `./magus job exec {row.id}` once so it binds your session",
+        "read the terms: ./magus describe job {row.id}",
+    ];
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--job"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final job = parsed.values["--job"] ?? "";
+    if (job == "") {
+        throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
+    }
+    final root = vcs\root();
+    foreach (line in render(bootstrap(root, job: job), root: root)) {
+        std\print(line);
+    }
+}
+
+final WT = "/work/magus/.claude/worktrees/w1";
+final MAIN = "/work/magus";
+
+fun fixture(name: str) > Row !> any {
+    return parseRow(fs\readFile("hack/testdata/{name}"));
+}
+
+test "a row taken here at its checkpoint is fit" {
+    final row = fixture("bootstrap-match.json");
+    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
+    assert\equal(render(row, root: WT)[1], want: "base 7472f16fc709ab3827cd38ff281fecc0a217ca88 matches the row's checkpoint", message: "base line");
+}
+
+test "a row bound to the main checkout is refused, naming it" {
+    assert\equal(problems(fixture("bootstrap-main.json"), root: WT, main: MAIN, trackedClean: true), want: [
+        "job agent-scripts names /work/magus as its checkout, not /work/magus/.claude/worktrees/w1 (the main checkout: every write the worker makes here is graded against the wrong tree); rerun `./magus job exec agent-scripts` from /work/magus/.claude/worktrees/w1",
+    ], message: "main");
+}
+
+test "a diverged base is refused with the checkpoint to switch to" {
+    assert\equal(problems(fixture("bootstrap-diverged.json"), root: WT, main: MAIN, trackedClean: true), want: [
+        "job agent-scripts recorded base 1111111111111111111111111111111111111111, verdict diverged, but its checkpoint is 7472f16fc709ab3827cd38ff281fecc0a217ca88; `git switch --detach 7472f16fc709ab3827cd38ff281fecc0a217ca88` (or the row's branch at it), then bootstrap again",
+    ], message: "diverged");
+}
+
+test "a row with no checkpoint passes and says nothing verified its base" {
+    final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
+    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
+    assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
+}
+
+test "an ended job is refused" {
+    final row = Row{ id = "j", state = "pass", checkpoint = "", reportedBase = "", baseVerdict = "", checkoutRoot = WT };
+    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: ["job j is pass, so nobody may work it; ask whoever declared it"], message: "ended");
+}
+
+test "revision-match passes only while the tracked files are the checkpoint's" {
+    final row = Row{ id = "j", state = "declared", checkpoint = "abc", reportedBase = "abc+e3b0", baseVerdict = "revision-match", checkoutRoot = WT };
+    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "untracked only");
+    assert\equal(render(row, root: WT)[1], want: "base abc is the row's checkpoint; the tree adds only untracked files, which job exec reads as a patch", message: "note");
+    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: false).len(), want: 1, message: "tracked edits");
+}
+
+test "the main worktree is the porcelain's first stanza" {
+    assert\equal(mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
+        want: "/work/magus", message: "main");
+}
