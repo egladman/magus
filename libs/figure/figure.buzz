@@ -6749,8 +6749,9 @@ export object DirSet {
 }
 
 // setOf is the set of the given dirs; a dir named twice is held once. Raises when an item
-// is not a Dir record.
-export fun setOf(dirs: [magus\Dir]) > DirSet !> str {
+// is not a Dir record. named, when set, is what findings print for the set in place of
+// every path: dirs("libs/gopherbuzz/**") for a set built from that glob.
+export fun setOf(dirs: [magus\Dir], named: str = "") > DirSet !> str {
     mustBeDirs(dirs, call: "setOf");
     final seen: mut {str: bool} = mut {<str: bool>};
     final kept: mut [magus\Dir] = mut [<magus\Dir>];
@@ -6760,6 +6761,7 @@ export fun setOf(dirs: [magus\Dir]) > DirSet !> str {
             kept.append(d);
         }
     }
+    if (named != "") { return DirSet{ dirs = sortedDirs(kept), named = named }; }
     return DirSet{ dirs = sortedDirs(kept), named = "setOf({pathList(dirs)})" };
 }
 
@@ -7806,6 +7808,15 @@ test "every directory in scope is drawn or excepted" {
     final d = f.except(setOf([serverDir()]), why: "builds the guard and mounts every route").diagram() catch Diagram{};
     assert\equal(d.omits["internal/server"] ?? "", want: "builds the guard and mounts every route", message: "the reason reaches the Diagram");
     std\assert(listHolds(d.scope, item: "internal/server"), message: "an excepted directory stays in scope");
+}
+
+test "a named set prints its name in findings" {
+    final glob = setOf([guardDir(), serverDir()], named: "dirs(\"internal/**\")");
+    final f = (serverHttp(handlers()) catch of("x")).scope(glob);
+    assert\equal(failure(f), want: "figure \"server-http\": \"internal/server\" is in scope(dirs(\"internal/**\")) but nothing draws it; add it to a box or a group, or except(setOf([...]), why:)",
+        message: "the name stands in for the paths");
+    final dropped = glob.without([serverDir()]) catch DirSet{};
+    assert\equal(dropped.named, want: "dirs(\"internal/**\").without([\"internal/server\"])", message: "set operations build on the name");
 }
 
 test "except is by set, with a reason, over a scope" {
