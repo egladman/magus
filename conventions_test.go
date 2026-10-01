@@ -183,6 +183,12 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
 	require.NotEmpty(t, cfg.Hooks["PreToolUse"], "%s declares no PreToolUse hooks", dogfoodedHookConfig)
 
+	// The one hook that runs with no magus, the session PATH fix, cannot invoke a template,
+	// because only magus resolves an embedded one. It is exempt here and held instead to the
+	// spell by TestRepoSessionPathHookIsWhatTheSpellPrints in cmd/magus, which links the
+	// harness spell loader this package cannot.
+	inlined := 0
+
 	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook
 	// inlining its own copy of a template drifts from the file a reader downloads
 	// exactly as a guard hook would, and used to do so unwatched.
@@ -190,6 +196,10 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 		for _, entry := range entries {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
+				if event == "SessionStart" && !strings.Contains(h.Command, hookTemplateDir) && !strings.Contains(h.Command, "buzz -s ") {
+					inlined++
+					continue
+				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
 						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
@@ -205,6 +215,7 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			}
 		}
 	}
+	assert.LessOrEqual(t, inlined, 1, "only the session PATH hook may inline its command")
 }
 
 // crosscheckLib holds the docs checks that compare a page with the files it documents:
