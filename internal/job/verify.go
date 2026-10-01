@@ -464,6 +464,12 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 // The args past `--` are NOT compared: the output store records a run by spell, target and
 // project and holds no argv, so a rule keyed on them would reject every ref there is.
 func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+	if c.Script != "" {
+		// `magus buzz --record` stores its run under `buzz <script>` in the workspace
+		// project, with no charms.
+		script, ran := strings.CutPrefix(a.Target, "buzz ")
+		return ran && path.Clean(script) == path.Clean(c.Script) && path.Clean(a.Project) == "."
+	}
 	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
 	if target == "" {
 		spell, target = "", spell

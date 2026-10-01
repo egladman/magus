@@ -666,6 +666,7 @@ export object GuardBinary {
 
 export object LeaseCheck {
     target: str = "",
+    script: str = "",
     project: str = "",
     args: [str] = [],
     noDefaultCharms: bool = false,

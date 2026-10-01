@@ -103,7 +103,11 @@
       "properties": {
         "target": {
           "type": "string",
-          "description": "Target is the magus target the check runs, without the `magus run` in front of it."
+          "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+        },
+        "script": {
+          "type": "string",
+          "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
         },
         "project": {
           "type": "string",
@@ -172,7 +176,11 @@
             "properties": {
               "target": {
                 "type": "string",
-                "description": "Target is the magus target the check runs, without the `magus run` in front of it."
+                "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+              },
+              "script": {
+                "type": "string",
+                "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
               },
               "project": {
                 "type": "string",

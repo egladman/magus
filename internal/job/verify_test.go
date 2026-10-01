@@ -331,6 +331,18 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	assert.False(t, bindsTo(c, att, nil), "another project is another run")
 }
 
+// A script check binds to the run `magus buzz --record` stored for that script, and to no
+// target run or other script.
+func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
+	t.Parallel()
+
+	c := types.LeaseCheck{Script: "probes/key.buzz"}
+	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
+	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
+	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
+	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
+}
+
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
 // invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
 // it are two runs; accepting either for the other made a drift gate satisfiable by the

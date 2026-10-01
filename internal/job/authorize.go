@@ -369,7 +369,7 @@ func goalsEqual(a, b []types.CompletionGate) bool {
 		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
 			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
 			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
-			a[i].Check.Target != b[i].Check.Target || a[i].Check.Project != b[i].Check.Project ||
+			a[i].Check.Target != b[i].Check.Target || a[i].Check.Script != b[i].Check.Script || a[i].Check.Project != b[i].Check.Project ||
 			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
 			return false
 		}

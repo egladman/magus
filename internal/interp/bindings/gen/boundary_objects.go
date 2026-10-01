@@ -2571,6 +2571,7 @@ func ObjectJobEntry(v types.JobEntry) vm.Value {
 func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("script", vm.StrValue(v.Script))
 	out.MapSet("project", vm.StrValue(v.Project))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {

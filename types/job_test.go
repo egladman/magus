@@ -413,6 +413,27 @@ func TestLeaseCheckRoundTripsThroughItsRenderedLine(t *testing.T) {
 	assert.Contains(t, err.Error(), "is not one")
 }
 
+func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
+	t.Parallel()
+
+	want := LeaseCheck{Script: "probes/key.buzz", Args: []string{"--deep"}}
+	assert.Equal(t, "magus buzz --record probes/key.buzz -- --deep", want.String())
+	got, err := ParseLeaseRunLine(want.String())
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+
+	gate := CompletionGate{ID: "probe", Kind: GateKindCheck, Check: LeaseCheck{Script: "probes/key.buzz"}}.Resolve()
+	require.NoError(t, gate.Validate())
+
+	both := gate
+	both.Check.Target = "test"
+	require.ErrorContains(t, both.Validate(), "a check names one")
+
+	scoped := gate
+	scoped.Check.Project = "cmd/magus"
+	require.ErrorContains(t, scoped.Validate(), "belongs to the workspace")
+}
+
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
 	return Job{ID: id, State: state, WritePaths: paths, DependsOn: []string{dependsOn}}
 }

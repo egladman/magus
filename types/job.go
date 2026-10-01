@@ -81,7 +81,12 @@ func (h JobHolder) OrSession() JobHolder {
 // `magus run -o json test .` to a target named json.
 type LeaseCheck struct {
 	// Target is the magus target the check runs, without the `magus run` in front of it.
+	// Empty when Script names the check instead.
 	Target string `json:"target"             yaml:"target"`
+	// Script is a Buzz script the check runs with `magus buzz --record` in place of a
+	// target, for a fact no target checks: a passing recorded run of it is the evidence. A
+	// check names a target or a script, never both.
+	Script string `json:"script,omitempty"   yaml:"script,omitempty"`
 	// Project is the project the target runs in, "." when the row names none.
 	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
 	// Args are forwarded to the tool after `--`, never to magus.
@@ -221,7 +226,7 @@ func (k GateKind) DefaultExpect() GateExpect {
 func (g CompletionGate) Subject() []string {
 	switch g.Kind {
 	case GateKindCheck:
-		if g.Check.Target == "" {
+		if g.Check.Target == "" && g.Check.Script == "" {
 			return nil
 		}
 		return []string{g.Check.String()}
@@ -258,6 +263,13 @@ func (u Job) EffectiveGoals() []CompletionGate {
 // satisfies the check: the charms it executes under, default_charms included, are the
 // charms the check is resolved to (internal/job.bindsTo).
 func (c LeaseCheck) String() string {
+	if c.Script != "" {
+		line := "magus buzz --record " + c.Script
+		if len(c.Args) > 0 {
+			line += " -- " + strings.Join(c.Args, " ")
+		}
+		return line
+	}
 	project := c.Project
 	if project == "" {
 		project = "."
@@ -316,8 +328,18 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 // no `check`): the line is what rows declared before the check record existed.
 func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 	words := strings.Fields(s)
-	if len(words) > 0 && words[0] != "run" {
+	if len(words) > 0 && words[0] != "run" && words[0] != "buzz" {
 		words = words[1:]
+	}
+	if len(words) >= 3 && words[0] == "buzz" && words[1] == "--record" {
+		c := LeaseCheck{Script: words[2]}
+		if rest := words[3:]; len(rest) > 0 {
+			if rest[0] != "--" {
+				return LeaseCheck{}, fmt.Errorf("a script check line is `magus buzz --record <script> [-- args]` and %q is not one", s)
+			}
+			c.Args = rest[1:]
+		}
+		return c, nil
 	}
 	if len(words) == 0 || words[0] != "run" {
 		return LeaseCheck{}, fmt.Errorf("a check line is `magus run <target> <project> [-- args]` and %q is not one", s)
@@ -1001,7 +1023,7 @@ func (g CompletionGate) Validate() error {
 	// Exactly one subject, named by the kind. A gate carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
-	if g.Kind != GateKindCheck && g.Check.Target != "" {
+	if g.Kind != GateKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
 		return fmt.Errorf("gate %q is a %s gate and also carries a check; a gate examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GateKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
@@ -1014,11 +1036,31 @@ func (g CompletionGate) Validate() error {
 		return fmt.Errorf("gate %q is a %s gate and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
 	}
 	if g.Kind == GateKindCheck {
+		if err := g.Check.validScript(); err != nil || g.Check.Script != "" {
+			return err
+		}
 		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validScript refuses a check naming both a script and a target, or a script with a
+// project: a recorded script run belongs to the workspace, not to one project.
+func (c LeaseCheck) validScript() error {
+	switch {
+	case c.Script == "":
+		return nil
+	case c.Target != "":
+		return fmt.Errorf("check names target %q and script %q; a check names one", c.Target, c.Script)
+	case c.Project != "" && c.Project != ".":
+		return fmt.Errorf("check script %q names project %q; a recorded script run belongs to the workspace", c.Script, c.Project)
+	case c.NoDefaultCharms:
+		return fmt.Errorf("check script %q sets no_default_charms; a script runs under no charms", c.Script)
+	default:
+		return nil
+	}
 }
 
 // ParseJobTimeout reads a declared timeout: empty is no bound and parses to zero, anything
@@ -1094,6 +1136,11 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 	switch {
 	case r.Check != nil && line != "":
 		return LeaseCheck{}, false, errors.New("job: a row carries `check` or a rendered `validation` line, not both")
+	case r.Check != nil && r.Check.Script != "":
+		if err := r.Check.validScript(); err != nil {
+			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+		}
+		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
 	case r.Check != nil:
 		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
