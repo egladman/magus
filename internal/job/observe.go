@@ -82,15 +82,11 @@ func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) {
 	return res.VCS, ""
 }
 
-// checkpointRevision is the revision half of a checkpoint token.
-//
-// The token is `<revision>` or `<revision>+<patch digest>`; only the revision half is
-// something a VCS can diff against, so the digest is cut. That digest still matters to a
-// reader deciding whether the worker saw the same tree, and it is on the row for exactly
-// that; it is not a revision, and asking a backend to resolve one would fail.
+// checkpointRevision is the revision half of a checkpoint token, the only half a VCS can
+// resolve; see [types.ParseCheckpointToken].
 func checkpointRevision(checkpoint string) string {
-	revision, _, _ := strings.Cut(checkpoint, "+")
-	return strings.TrimSpace(revision)
+	revision, _ := types.ParseCheckpointToken(checkpoint)
+	return revision
 }
 
 // changedSince asks driver what differs from the checkpoint's revision, and which

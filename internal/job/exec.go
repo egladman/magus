@@ -121,12 +121,12 @@ func (s *Store) fullRevisions(ctx context.Context, tokens ...string) map[string]
 // withFullRevision is token with its revision half replaced by the full revision full
 // names for it, the dirty-tree digest kept.
 func withFullRevision(token string, full map[string]string) string {
-	rev, digest, dirty := strings.Cut(strings.TrimSpace(token), "+")
+	rev, digest := types.ParseCheckpointToken(token)
 	id, ok := full[rev]
 	switch {
 	case !ok:
 		return token
-	case dirty:
+	case digest != "":
 		return id + "+" + digest
 	default:
 		return id
@@ -144,18 +144,11 @@ func compareBase(checkpoint, reported string) types.JobBaseVerdict {
 		return types.BaseUnknown
 	case checkpoint == reported:
 		return types.BaseMatch
-	case baseRevision(checkpoint) == baseRevision(reported):
+	case checkpointRevision(checkpoint) == checkpointRevision(reported):
 		return types.BaseRevisionMatch
 	default:
 		return types.BaseDiverged
 	}
-}
-
-// baseRevision is the revision half of a checkpoint token: everything before the "+" that
-// separates it from a dirty tree's patch digest.
-func baseRevision(token string) string {
-	rev, _, _ := strings.Cut(token, "+")
-	return rev
 }
 
 // BaseAdvice is what the registering worker is told: what the verdict means in
@@ -176,13 +169,13 @@ func BaseAdvice(row types.Job) string {
 			" The digest cannot give the patch back, so there is nothing here to restore from:"+
 			" have the orchestrator commit the work the job was cut against, or re-cut the checkpoint"+
 			" against the tree you are on.",
-			row.ID, baseRevision(row.ReportedBase), patchDigestOf(row.Checkpoint), patchDigestOf(row.ReportedBase))
+			row.ID, checkpointRevision(row.ReportedBase), patchDigestOf(row.Checkpoint), patchDigestOf(row.ReportedBase))
 
 	case types.BaseDiverged:
 		return fmt.Sprintf("recorded job %s's base, and it DIVERGED: your base %s is not the checkpoint %s the job was handed."+
 			" Respawn from %s, or materialize the files you touch from it before you edit them,"+
 			" so what you write lands on the tree the plan was cut against.",
-			row.ID, baseRevision(row.ReportedBase), baseRevision(row.Checkpoint), baseRevision(row.Checkpoint))
+			row.ID, checkpointRevision(row.ReportedBase), checkpointRevision(row.Checkpoint), checkpointRevision(row.Checkpoint))
 
 	case types.BaseUnknown:
 		return fmt.Sprintf("recorded job %s's base as %s. It carries no checkpoint, so there is nothing to compare"+
@@ -202,8 +195,8 @@ func BaseAdvice(row types.Job) string {
 // names both digests, and an empty one there reads as a rendering bug instead of as the
 // clean tree it is.
 func patchDigestOf(token string) string {
-	_, digest, dirty := strings.Cut(strings.TrimSpace(token), "+")
-	if !dirty || digest == "" {
+	_, digest := types.ParseCheckpointToken(token)
+	if digest == "" {
 		return "none (clean tree)"
 	}
 	return digest

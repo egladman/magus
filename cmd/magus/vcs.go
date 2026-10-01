@@ -746,16 +746,10 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cp)
 	case outputName:
-		return emitNames([]string{checkpointToken(cp)})
+		return emitNames([]string{cp.Token()})
 	}
 	fmt.Println(checkpointLine(cp))
 	return nil
-}
-
-// checkpointToken is [vcs.CheckpointToken]: `vcs checkpoint -o name`, `job exec` and the
-// guard all cite a checkout through it, so the three cannot spell one tree two ways.
-func checkpointToken(cp types.VCSCheckpoint) string {
-	return vcs.CheckpointToken(cp)
 }
 
 // checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty

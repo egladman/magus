@@ -431,7 +431,7 @@ func checkoutBaseForGuard(ctx context.Context, root string) string {
 	if err != nil {
 		return ""
 	}
-	return checkpointToken(cp)
+	return cp.Token()
 }
 
 // checkoutStateForGuard reads the checkout holding dir through the version control that

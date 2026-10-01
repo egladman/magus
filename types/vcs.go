@@ -2,9 +2,12 @@ package types
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -1523,6 +1526,35 @@ type VCSCheckpoint struct {
 	// one gets a tree back. Opaque and backend-native (see VCSDriver.Preserve), so only
 	// the backend VCS names can read it.
 	Preserved string `json:"preserved,omitempty" yaml:"preserved,omitempty"`
+}
+
+// Token is the checkpoint as the one string a ledger cell gives it, the form `magus vcs
+// checkpoint -o name` prints and a job row records: Revision for a clean tree,
+// `<Revision>+<digest>` for a dirty one. The "+" marks a revision PLUS uncommitted work
+// rather than a revision anyone can check out. [ParseCheckpointToken] reads it back.
+//
+// The digest is PatchDigest when nothing is untracked, so a tracked-only token still
+// compares with a review session's patch digest. Untracked files fold in beside it: a
+// job's diff since its checkpoint counts them as its work, and a token blind to them
+// would name a tree holding only new files by the digest of an empty patch.
+func (cp VCSCheckpoint) Token() string {
+	if !cp.Dirty {
+		return cp.Revision
+	}
+	if cp.UntrackedDigest == "" {
+		return cp.Revision + "+" + cp.PatchDigest
+	}
+	// The width of PatchDigest, so every dirty token's digest reads alike.
+	sum := sha256.Sum256([]byte(cp.PatchDigest + "\x00" + cp.UntrackedDigest))
+	return cp.Revision + "+" + hex.EncodeToString(sum[:16])
+}
+
+// ParseCheckpointToken splits a token [VCSCheckpoint.Token] printed into its revision and
+// its digest, trimming surrounding space. digest is empty for a clean tree's token. Only
+// the revision is something a VCS can resolve; the digest says whether two trees match.
+func ParseCheckpointToken(token string) (revision, digest string) {
+	revision, digest, _ = strings.Cut(strings.TrimSpace(token), "+")
+	return strings.TrimSpace(revision), digest
 }
 
 // DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see

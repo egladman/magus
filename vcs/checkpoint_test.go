@@ -143,21 +143,21 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 		dir, res := checkpointRepo(t)
 		clean, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
-		require.Equal(t, clean.Revision, CheckpointToken(clean), "a clean tree is its revision")
+		require.Equal(t, clean.Revision, clean.Token(), "a clean tree is its revision")
 
 		writeFile(t, dir, "new.txt", "fresh\n")
 		first, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
 		require.True(t, first.Dirty)
 		require.Equal(t, emptyPatch, first.PatchDigest, "no tracked file moved")
-		token := CheckpointToken(first)
+		token := first.Token()
 		assert.NotEqual(t, first.Revision+"+"+emptyPatch, token)
 		assert.Regexp(t, `^`+first.Revision+`\+[0-9a-f]{32}$`, token)
 
 		writeFile(t, dir, "new.txt", "edited\n")
 		edited, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
-		assert.NotEqual(t, token, CheckpointToken(edited), "an edit to an untracked file is a different tree")
+		assert.NotEqual(t, token, edited.Token(), "an edit to an untracked file is a different tree")
 	})
 
 	t.Run("tracked edits plus untracked", func(t *testing.T) {
@@ -166,14 +166,14 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 		tracked, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
 		require.Empty(t, tracked.UntrackedDigest)
-		assert.Equal(t, tracked.Revision+"+"+tracked.PatchDigest, CheckpointToken(tracked),
+		assert.Equal(t, tracked.Revision+"+"+tracked.PatchDigest, tracked.Token(),
 			"a tracked-only token stays the review session's patch digest")
 
 		writeFile(t, dir, "new.txt", "fresh\n")
 		both, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
 		assert.Equal(t, tracked.PatchDigest, both.PatchDigest, "the tracked patch did not move")
-		assert.NotEqual(t, CheckpointToken(tracked), CheckpointToken(both), "the untracked file is part of the tree")
+		assert.NotEqual(t, tracked.Token(), both.Token(), "the untracked file is part of the tree")
 	})
 }
 

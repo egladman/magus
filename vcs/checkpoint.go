@@ -66,26 +66,6 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 	return cp, nil
 }
 
-// CheckpointToken is the single most citable thing about a checkpoint, for the one cell a
-// ledger gives it: the revision for a clean tree, `<revision>+<digest>` for a dirty one.
-// The "+" marks the identity as a revision PLUS uncommitted work rather than a revision
-// anyone can check out.
-//
-// The digest is PatchDigest when nothing is untracked, so a tracked-only token still
-// compares with a review session's patch digest. Untracked files fold in beside it: git's
-// ChangedFiles lists them, so a job's diff since its checkpoint counts them as its work, and
-// a token blind to them would name a tree holding only new files by the digest of an empty
-// patch.
-func CheckpointToken(cp types.VCSCheckpoint) string {
-	if !cp.Dirty {
-		return cp.Revision
-	}
-	if cp.UntrackedDigest == "" {
-		return cp.Revision + "+" + cp.PatchDigest
-	}
-	return cp.Revision + "+" + patchDigest(cp.PatchDigest+"\x00"+cp.UntrackedDigest)
-}
-
 // PrunePreserved drops every capture --preserve minted in dir that has outlived the
 // retention its handle promises, and reports the handles it dropped.
 //

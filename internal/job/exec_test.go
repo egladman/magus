@@ -242,7 +242,7 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 
 			s := tmpStore(t, root)
 			seed(t, s, types.Job{ID: "u1", Checkpoint: rev, State: types.StateDeclared})
-			got, err := s.Exec(ctx, "u1", vcs.CheckpointToken(cp))
+			got, err := s.Exec(ctx, "u1", cp.Token())
 			require.NoError(t, err)
 
 			assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict)

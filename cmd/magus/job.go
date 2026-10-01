@@ -770,7 +770,7 @@ func checkoutBaseToken(ctx context.Context, root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return checkpointToken(cp), nil
+	return cp.Token(), nil
 }
 
 // listFlag accumulates one repeatable, comma-separated flag, on the same rule --skip
