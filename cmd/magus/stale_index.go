@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // The staleness line refs, query and explain print under an answer drawn from a symbol
@@ -134,7 +142,14 @@ func staleGraphAdvice(ctx context.Context) string {
 		}
 		return ""
 	})
-	return staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+	advice := staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+	if advice == "" {
+		return ""
+	}
+	if cause := indexCauseForGuard(); cause != "" {
+		advice += "\n" + cause
+	}
+	return advice
 }
 
 // staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
@@ -171,4 +186,77 @@ func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 	return fmt.Sprintf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
 		out.OccurrenceCount-out.VerifiedCount, out.StaleFiles) +
 		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)
+}
+
+// syncRequestDir is where `job run sync-graph` records its last request for the checkout
+// at root, beside the guard index it is compared against.
+func syncRequestDir(root string) (string, error) {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return "", err
+	}
+	return knowledge.StoreDir(cacheDir), nil
+}
+
+// observeSync gathers what this process can see of the server's sync-graph for the
+// checkout at root. Every probe is local: a socket dial, one status round trip when a
+// server answers, a git rev-parse for the hook, and two file reads.
+func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
+	o := maintenance.SyncObservation{Now: time.Now(), Version: version}
+	if addr := resolveServerAddr(""); proc.SocketLive(ctx, addr) {
+		if st, err := proc.QueryStatus(ctx, addr); err == nil {
+			o.ServerLive, o.ServerVersion, o.ServerPID = true, st.Version, st.ParentPID
+			if s, ok := maintenance.FindSync(st, root, magus.FindRoot); ok {
+				o.InFlight = &s
+			}
+		}
+	}
+	command, installed, err := vcs.GitRefreshHookCommand(ctx, root)
+	o.HookChecked = err == nil
+	if installed {
+		o.HookCommand = command
+		o.HookBinary, o.HookRunnable = maintenance.HookBinary(root, command)
+	}
+	if dir, err := syncRequestDir(root); err == nil {
+		if r, ok, err := maintenance.ReadSyncRequest(dir); err == nil && ok {
+			o.LastRequest = &r
+		}
+		if info, err := os.Stat(knowledge.GuardIndexPath(filepath.Dir(dir))); err == nil {
+			o.IndexBuilt = info.ModTime()
+		}
+	}
+	return o
+}
+
+// indexCause is the observed reason the checkout at root has an index missing or behind,
+// with its remedy.
+func indexCause(ctx context.Context, root string) maintenance.SyncCause {
+	return maintenance.DiagnoseSync(observeSync(ctx, resolveRootOrEmpty(root)), maintenance.Commands{
+		GraphBuild:  hint.GraphBuild.String(),
+		ServerStart: hint.ServerStart.String(),
+		ServerStop:  hint.ServerStop.String(),
+		JobRunSync:  hint.JobRun.With(job.NameSyncGraph),
+	})
+}
+
+// printIndexCause writes indexCause under a verdict block, in its indentation.
+func printIndexCause(ctx context.Context, w io.Writer, root string) {
+	c := indexCause(ctx, root)
+	fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Cause, c.Remedy)
+}
+
+// indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
+// within the guard's lookup budget.
+func indexCauseForGuard() string {
+	root, err := guardRoot()
+	if err != nil {
+		return ""
+	}
+	c, ok := withinBudget(guardLookupBudget, func() maintenance.SyncCause {
+		return indexCause(context.Background(), root)
+	})
+	if !ok {
+		return ""
+	}
+	return "Why: " + c.Cause + ". Fix: " + c.Remedy + "."
 }

@@ -689,8 +689,9 @@ func resolveServerAddr(explicit string) string {
 // jobRunCatalog submits one of the server's OWN jobs and returns immediately, the CLI
 // counterpart to the magus.job.v1alpha1 JobService RPC. The set is the shared jobs registry
 // (sync-graph, rotate-activities, rotate-logs, clear-cache); `job run` with no name lists
-// them. A no-op when no server is running, so the VCS refresh hook (which calls
-// `job run sync-graph`) never blocks or fails a checkout. The server coalesces an identical
+// them. With no server running it submits nothing, so the VCS refresh hook (which calls
+// `job run sync-graph`) never blocks or fails a checkout; for sync-graph it records that
+// outcome, like every other, for a later not-indexed verdict to name. The server coalesces an identical
 // in-flight job, reported back as an empty invocation id ("already running").
 //
 // It dials the server's own socket and nothing else: only the server runs a job that
@@ -711,6 +712,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	}
 	addr := resolveServerAddr("")
 	if !proc.SocketLive(ctx, addr) {
+		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncNoServer})
 		return nil // no server: quietly do nothing so a checkout hook is never delayed
 	}
 	inv, err := proc.SubmitJob(ctx, addr, job.Argv, version)
@@ -718,15 +720,40 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the next
 		// trigger (hook, RPC, or manual submit) will catch up.
 		slog.DebugContext(ctx, "server job: submit failed", slog.String("job", name), slog.String("error", err.Error()))
+		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncRefused, Detail: err.Error()})
 		return nil
 	}
 	if inv == "" { // the server coalesced this into an already-running job of the same kind
+		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncCoalesced})
 		fmt.Fprintf(os.Stderr, "magus: %s is already running\n", name)
 	} else {
+		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncSubmitted, Job: inv})
 		fmt.Fprintf(os.Stderr, "magus: submitted %s in the background (job %s)\n", name, inv)
 	}
 	printJobWatchHint(os.Stderr)
 	return nil
+}
+
+// recordSyncRequest leaves what a sync-graph submit did where a later not-indexed verdict
+// reads it (see indexCause). The VCS refresh hook discards this command's output, and
+// without the record a hook that ran with no server looks the same as one that never ran.
+// One small file write, so the hook stays fast; a failure is logged and never fails it.
+func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncRequest) {
+	if name != job.NameSyncGraph {
+		return
+	}
+	root := resolveRootOrEmpty("")
+	if root == "" {
+		return
+	}
+	dir, err := syncRequestDir(root)
+	if err == nil {
+		r.At = time.Now()
+		err = maintenance.RecordSyncRequest(dir, r)
+	}
+	if err != nil {
+		slog.DebugContext(ctx, "server job: sync request not recorded", slog.String("error", err.Error()))
+	}
 }
 
 // printJobWatchHint prints a link to watch jobs in the console dashboard.

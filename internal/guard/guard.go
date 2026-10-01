@@ -104,6 +104,11 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// IndexCause names the observed reason the symbol index is missing or behind (no
+	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
+	// sync running now) and the command that clears it, as advisory sentences. "" when it
+	// could not tell within the guard's budget.
+	IndexCause func() string
 	// SymbolSites lists each file defining or referencing ident, with its count and first
 	// lines, from SymbolDefined's index and definitive on the same terms.
 	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
