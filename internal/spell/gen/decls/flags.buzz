@@ -12,4 +12,4 @@ export object FlagParse {
     unknown: [str] = [],
 }
 
-export extern fun parse(argv: [str], switches: [str], valued: [str]) > FlagParse !> any;
+export extern fun parse(argv: [str], switches: [str], valued: [str], required: [str] = [<str>]) > FlagParse !> any;

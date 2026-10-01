@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -38,11 +39,14 @@ var Flags = Module{
 				"is typed, dashes included (\"--file\", not \"file\"), and values is keyed the same way. " +
 				"A bare word before `--` is unknown, not a positional; `magus buzz <file> -- <args>` " +
 				"consumes its own `--`, so a script taking paths is run with a second one. Errors when " +
-				"a valued flag is given no value.",
+				"a valued flag is given no value, and when a flag named in required is absent or given " +
+				"an empty value: a workflow passing an unset variable (`--issue \"$ISSUE\"`) is refused " +
+				"rather than read as a choice.",
 			Args: []Arg{
 				{Name: "argv", Type: TypeStringSlice},
 				{Name: "switches", Type: TypeStringSlice},
 				{Name: "valued", Type: TypeStringSlice},
+				{Name: "required", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FlagParse"}},
 			Raises:  true,
@@ -55,7 +59,29 @@ var Flags = Module{
 //
 // The separator ends flag parsing entirely, which is what `--` means everywhere else: a
 // word after it is data even when it is spelled like a flag this script declares.
-func FlagsParse(_ context.Context, argv, switches, valued []string) (types.FlagParse, error) {
+func FlagsParse(_ context.Context, argv, switches, valued, required []string) (types.FlagParse, error) {
+	for _, name := range required {
+		if !slices.Contains(valued, name) {
+			return types.FlagParse{}, fmt.Errorf("flags.parse: %s is required but not declared valued; a switch cannot be required", name)
+		}
+	}
+	parsed, err := flagsParse(argv, switches, valued)
+	if err != nil {
+		return types.FlagParse{}, err
+	}
+	var missing []string
+	for _, name := range required {
+		if parsed.Values[name] == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return types.FlagParse{}, fmt.Errorf("flags.parse: %s required and absent or empty", strings.Join(missing, ", "))
+	}
+	return parsed, nil
+}
+
+func flagsParse(argv, switches, valued []string) (types.FlagParse, error) {
 	isSwitch := make(map[string]bool, len(switches))
 	for _, name := range switches {
 		isSwitch[name] = true

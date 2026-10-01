@@ -16,15 +16,16 @@ Parse a script's argv against the flags it declares.
 
 ### parse
 
-Parse argv against the declared flags, returning {values, positionals, unknown}: switches take no value and record "true", valued flags take the next word or an =value suffix, everything after `--` is a positional, and every argument that was not declared is returned in unknown rather than guessed at. A flag is declared as it is typed, dashes included ("--file", not "file"), and values is keyed the same way. A bare word before `--` is unknown, not a positional; `magus buzz <file> -- <args>` consumes its own `--`, so a script taking paths is run with a second one. Errors when a valued flag is given no value.
+Parse argv against the declared flags, returning {values, positionals, unknown}: switches take no value and record "true", valued flags take the next word or an =value suffix, everything after `--` is a positional, and every argument that was not declared is returned in unknown rather than guessed at. A flag is declared as it is typed, dashes included ("--file", not "file"), and values is keyed the same way. A bare word before `--` is unknown, not a positional; `magus buzz <file> -- <args>` consumes its own `--`, so a script taking paths is run with a second one. Errors when a valued flag is given no value, and when a flag named in required is absent or given an empty value: a workflow passing an unset variable (`--issue "$ISSUE"`) is refused rather than read as a choice.
 
-**Signature:** `flags\parse(argv, switches, valued) -> FlagParse` - [source](https://github.com/egladman/magus/blob/main/std/flags.go#L58)
+**Signature:** `flags\parse(argv, switches, valued, [required]) -> FlagParse` - [source](https://github.com/egladman/magus/blob/main/std/flags.go#L62)
 
 | Parameter  | Type       | Optional | Description |
 | ---------- | ---------- | -------- | ----------- |
 | `argv`     | `[]string` |          |             |
 | `switches` | `[]string` |          |             |
 | `valued`   | `[]string` |          |             |
+| `required` | `[]string` | yes      |             |
 
 **Returns:** map[string]any
 

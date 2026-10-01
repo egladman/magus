@@ -111,7 +111,7 @@ func TestFlagsParse(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := FlagsParse(context.Background(), tc.argv, switches, valued)
+			got, err := FlagsParse(context.Background(), tc.argv, switches, valued, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
@@ -122,16 +122,39 @@ func TestFlagsParse(t *testing.T) {
 // silently became empty is what makes a misconfigured call look like a configured one,
 // which is the failure this module exists to stop repeating.
 func TestFlagsParseRefusesAValuedFlagWithNoValue(t *testing.T) {
-	_, err := FlagsParse(context.Background(), []string{"--session"}, nil, []string{"--session"})
+	_, err := FlagsParse(context.Background(), []string{"--session"}, nil, []string{"--session"}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--session takes a value and none followed it")
 }
 
+// A required flag refuses both absence and an empty value: `--issue "$ISSUE"` with the
+// variable unset is a misconfigured call, not a decision to edit no issue.
+func TestFlagsParseRefusesAnAbsentOrEmptyRequiredFlag(t *testing.T) {
+	valued := []string{"--issue", "--out"}
+	required := []string{"--issue"}
+	for name, argv := range map[string][]string{
+		"absent": {"--out", "d.md"},
+		"empty":  {"--issue", "", "--out", "d.md"},
+		"=empty": {"--issue=", "--out", "d.md"},
+	} {
+		_, err := FlagsParse(context.Background(), argv, nil, valued, required)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "--issue required and absent or empty", name)
+	}
+
+	got, err := FlagsParse(context.Background(), []string{"--issue", "12"}, nil, valued, required)
+	require.NoError(t, err)
+	assert.Equal(t, "12", got.Values["--issue"])
+
+	_, err = FlagsParse(context.Background(), nil, []string{"--all"}, valued, []string{"--all"})
+	require.ErrorContains(t, err, "a switch cannot be required")
+}
+
 // The empty groups come back as empty lists rather than nil, so a script reads an absent
 // group without a null check every caller would otherwise write.
 func TestFlagsParseReturnsEmptyGroupsNotNull(t *testing.T) {
-	got, err := FlagsParse(context.Background(), nil, nil, nil)
+	got, err := FlagsParse(context.Background(), nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, got.Values)

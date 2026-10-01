@@ -21,7 +21,8 @@ func RegisterFlags(ctx context.Context, sess *buzz.Session) vm.Value {
 		argv := ffi.StrSlice(bzArgs, 0)
 		switches := ffi.StrSlice(bzArgs, 1)
 		valued := ffi.StrSlice(bzArgs, 2)
-		ret0, err := std.FlagsParse(ctx, argv, switches, valued)
+		required := ffi.StrSlice(bzArgs, 3)
+		ret0, err := std.FlagsParse(ctx, argv, switches, valued, required)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
