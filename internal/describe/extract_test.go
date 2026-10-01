@@ -30,7 +30,7 @@ export fun foo_bar(ctx: magus\Context, args: [str]) > void {
 
 // separated by a blank line, so it must NOT attach
 
-export fun baz(ctx: magus\Context, args: [str]) > void { magus.doctor([]); }
+export fun baz(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
 
 export fun gen_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen"));
@@ -98,7 +98,7 @@ func TestHasCharmBothReceivers(t *testing.T) {
 export fun build(ctx: magus\Context, args: [str]) > void { if (ctx.hasCharm("container")) {} }
 `)
 	viaMagus := Extract(`import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void { if (magus.hasCharm("container")) {} }
+export fun build(ctx: magus\Context, args: [str]) > void { if (magus\hasCharm("container")) {} }
 `)
 	c, _ := nodeByName(viaCtx, "build")
 	m, _ := nodeByName(viaMagus, "build")
@@ -352,7 +352,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
-export fun scan(ctx: magus\Context, args: [str]) > void { proc.exec("trivy", []); other["x"](); }
+export fun scan(ctx: magus\Context, args: [str]) > void { proc\exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
@@ -410,7 +410,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 export fun help(ctx: magus\Context, args: [str]) > void {
-    proc.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
+    proc\exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
 }
 `)
@@ -468,7 +468,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    proc.exec("sh", ["-c", "echo }"]);
+    proc\exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -638,7 +638,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    magus.log.info("run ctx.needs(setup) and api.compile first");
+    magus\log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
 }
 export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }

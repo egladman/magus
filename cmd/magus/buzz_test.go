@@ -86,7 +86,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
 		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
 
@@ -180,7 +180,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
 	path := filepath.Join(root, "script.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))

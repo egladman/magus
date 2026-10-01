@@ -54,7 +54,7 @@ func TestSession_NativeModule(t *testing.T) {
 
 	require.NoError(t, s.Exec(context.Background(), `
 import "example/demo";
-var x = demo.answer;
+var x = demo\answer;
 `), "Exec")
 	v, ok := s.Globals()["x"]
 	require.True(t, ok, "global 'x' not bound; native import did not resolve")
@@ -440,7 +440,7 @@ func TestFFILibmStillWorks(t *testing.T) {
 	got := runBuzz(t, `
 import "std";
 final lib = zdef("libm", "double sqrt(double x);");
-final __r = std.toInt(lib.sqrt(9.0));
+final __r = std\toInt(lib.sqrt(9.0));
 `)
 	assert.Truef(t, strings.HasPrefix(got, "3"), "sqrt(9.0) = %q, want 3", got)
 }

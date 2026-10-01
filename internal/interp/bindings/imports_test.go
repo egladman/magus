@@ -118,8 +118,8 @@ func TestRemoteOverrideBindsTheWorkspaceCopy(t *testing.T) {
 	writeFile(t, root, "magusfile.buzz", `import "magus";
 import "ghcr.io/team/spells/lint";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    if (lint.name != "lintcopy") { error("lint.name: " + lint.name); }
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (lint.name != "lintcopy") { throw "lint.name: " + lint.name; }
 }
 `)
 	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{

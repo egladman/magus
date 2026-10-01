@@ -53,7 +53,7 @@ func TestPlanConflictsLeavesAnExcludedHandFileToAPerson(t *testing.T) {
 	root := t.TempDir()
 	magusfile := `import "magus";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");

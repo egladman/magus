@@ -298,13 +298,13 @@ func TestMagusModulesEndToEnd(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    final mods = magus.describeModule();
-    if (mods.len() == 0) { magus.fatal("describeModule() returned nothing"); }
+    final mods = magus\describeModule();
+    if (mods.len() == 0) { magus\fatal("describeModule() returned nothing"); }
 
-    final fs = magus.describeModule("fs")[0];
-    if (fs.name != "fs") { magus.fatal("describeModule(fs).name was not fs"); }
-    if (fs.methods.len() == 0) { magus.fatal("fs module has no methods"); }
-    if (fs.methods[0].buzz == "") { magus.fatal("fs method missing its Buzz signature"); }
+    final fs = magus\describeModule("fs")[0];
+    if (fs.name != "fs") { magus\fatal("describeModule(fs).name was not fs"); }
+    if (fs.methods.len() == 0) { magus\fatal("fs module has no methods"); }
+    if (fs.methods[0].buzz == "") { magus\fatal("fs method missing its Buzz signature"); }
 }`)
 	_, err := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, err, "magus.modules/module end-to-end")
@@ -323,9 +323,9 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 		"export fun check(ctx: magus\\Context, args: [str]) > void !> any {\n"+
 		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
 		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
-		"    final got = template.renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
+		"    final got = template\\renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
 		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n"+
-		"    if (got != want) { magus.fatal(\"renderPartials mismatch: got \" + got); }\n"+
+		"    if (got != want) { magus\\fatal(\"renderPartials mismatch: got \" + got); }\n"+
 		"}")
 	_, err := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, err, "template.renderPartials end-to-end")
@@ -342,8 +342,8 @@ func TestMagusBustCacheReachable(t *testing.T) {
 import "magus";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    magus.bustCache();
-    fs.writeFile("ran", "ok");
+    magus\bustCache();
+    fs\writeFile("ran", "ok");
 }
 `)
 	if err := runTargetIn(t, dir, "build"); err != nil {
@@ -371,7 +371,7 @@ export fun build(args: [str]) > void {}
 		dir := t.TempDir()
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void !> any { fs.writeFile("ran", "ok"); }
+export fun build(ctx: magus\Context, args: [str]) > void !> any { fs\writeFile("ran", "ok"); }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
 		got, err := os.ReadFile(sentinel(dir))
@@ -428,7 +428,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {}
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.needs(ctx.glob("form*"));
-    fs.writeFile("ran", "ok");
+    fs\writeFile("ran", "ok");
 }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
@@ -445,7 +445,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // magus.needs( was removed; so was magus.glob(
     final note = "magus.needs(";
     ctx.needs(format);
-    fs.writeFile("ran", note);
+    fs\writeFile("ran", note);
 }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
@@ -460,7 +460,7 @@ func TestRunTopLevelTarget(t *testing.T) {
 import "magus";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", "build");
+    fs\writeFile("ran", "build");
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "build"))
@@ -475,7 +475,7 @@ func TestRunPathTarget(t *testing.T) {
 import "magus";
 import "fs";
 export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", "db:migrate");
+    fs\writeFile("ran", "db:migrate");
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "db:migrate"))
@@ -493,7 +493,7 @@ func TestRunImportTargetCollision(t *testing.T) {
 import "magus";
 import "fs" as render;
 export fun render(ctx: magus\Context, args: [str]) > void {
-    render.writeFile("ran", "x");
+    render\writeFile("ran", "x");
 }
 `)
 	err := runTargetIn(t, dir, "render")
@@ -515,7 +515,7 @@ import "magus";
 import "fs";
 import "lib/calc";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", tag);
+    fs\writeFile("ran", tag);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "build"))
@@ -538,9 +538,9 @@ import "fs";
 import "charm";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    final joined = fs.join("a", "b", "c");
-    final patch = charm.append(["y", "z"]);
-    fs.writeFile("ran", joined + "|" + patch.ops[1].value);
+    final joined = fs\join("a", "b", "c");
+    final patch = charm\append(["y", "z"]);
+    fs\writeFile("ran", joined + "|" + patch.ops[1].value);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "verify"))
@@ -561,7 +561,7 @@ import "fs";
 import "markdown";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    fs.writeFile("ran", markdown.toHtml("# Hi"));
+    fs\writeFile("ran", markdown\toHtml("# Hi"));
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "verify"))
@@ -583,9 +583,9 @@ import "fmt";
 import "fs";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    final asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
-    final none = fmt.sprintf("literal");
-    fs.writeFile("ran", asset + "|" + none);
+    final asset = fmt\sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
+    final none = fmt\sprintf("literal");
+    fs\writeFile("ran", asset + "|" + none);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "verify"))
@@ -613,11 +613,11 @@ import "proc";
 import "crypto";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    final joined = fs.join("a", "b", "c");
-    final sc = proc.shell("printf hello");
-    final res = proc.exec(sc.bin, sc.args, "", {}).stdout;
-    final digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
-    fs.writeFile("ran", joined + "|" + res + "|" + digest);
+    final joined = fs\join("a", "b", "c");
+    final sc = proc\shell("printf hello");
+    final res = proc\exec(sc.bin, sc.args, "", {}).stdout;
+    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, "").hex();
+    fs\writeFile("ran", joined + "|" + res + "|" + digest);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "verify"))
@@ -638,7 +638,7 @@ func TestRunTargetWithArgs(t *testing.T) {
 import "magus";
 import "fs";
 export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", args.join(" "));
+    fs\writeFile("ran", args.join(" "));
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "db:migrate", "a", "b", "c"))
@@ -656,7 +656,7 @@ func TestRunTargetWithNoArgs(t *testing.T) {
 import "magus";
 import "fs";
 export fun probe(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", "len={args.len()}");
+    fs\writeFile("ran", "len={args.len()}");
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "probe"))
@@ -743,9 +743,9 @@ import "magus";
 import "fs";
 export fun top(ctx: magus\Context, _a: [str]) > void !> any {
     ctx.needs(dep);
-    fs.writeFile("ran", "top");
+    fs\writeFile("ran", "top");
 }
-export fun dep(ctx: magus\Context, _a: [str]) > void !> any { fs.writeFile("dep-ran", "dep"); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { fs\writeFile("dep-ran", "dep"); }
 `)
 	require.NoError(t, runTargetIn(t, dir, "top"))
 	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
@@ -808,7 +808,7 @@ func TestOsExitRaisesExitError(t *testing.T) {
 import "magus";
 import "os";
 
-export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(3); }
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os\exit(3); }
 `), 0o644))
 	err := runTargetIn(t, dir, "bail")
 	require.Error(t, err, "expected error from os.exit")
@@ -829,8 +829,8 @@ import "os";
 import "proc";
 
 export fun bail(ctx: magus\Context, _a: [str]) > void !> any {
-    try { os.exit(0); } catch (e) { }
-    proc.which("definitely-no-such-cmd-zzz");
+    try { os\exit(0); } catch (e) { }
+    proc\which("definitely-no-such-cmd-zzz");
 }
 `)
 	err := runTargetIn(t, dir, "bail")
@@ -848,7 +848,7 @@ func TestOsExitClampsToAProcessStatus(t *testing.T) {
 import "magus";
 import "os";
 
-export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(256); }
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os\exit(256); }
 `)
 	err := runTargetIn(t, dir, "bail")
 	var ex types.ExitError
@@ -867,8 +867,8 @@ import "magus";
 import "os";
 
 export fun nap(ctx: magus\Context, _a: [str]) > void !> any {
-    os.sleep(1.5);
-    os.sleep(0.0);
+    os\sleep(1.5);
+    os\sleep(0.0);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "nap"))
@@ -889,10 +889,10 @@ import "os";
 import "proc";
 
 export fun checkwhich(ctx: magus\Context, _a: [str]) > void !> any {
-    if (proc.which("sh") == "") { os.exit(2); }
+    if (proc\which("sh") == "") { os\exit(2); }
     var raised = false;
-    try { proc.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
-    if (!raised) { os.exit(3); }
+    try { proc\which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
+    if (!raised) { os\exit(3); }
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "checkwhich"))
@@ -907,8 +907,8 @@ func TestMagusHint(t *testing.T) {
 import "magus";
 
 export fun nudge(ctx: magus\Context, _a: [str]) > void {
-    magus.log.hint("stale generated code — run: magus run generate -- --write");
-    magus.log.hint("stale generated code — run: magus run generate -- --write");
+    magus\log.hint("stale generated code — run: magus run generate -- --write");
+    magus\log.hint("stale generated code — run: magus run generate -- --write");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "nudge"))
@@ -922,7 +922,7 @@ func TestMagusFatal(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
-export fun boom(ctx: magus\Context, _a: [str]) > void { magus.fatal("boom"); }
+export fun boom(ctx: magus\Context, _a: [str]) > void { magus\fatal("boom"); }
 `), 0o644))
 	err := runTargetIn(t, dir, "boom")
 	require.Error(t, err, "expected error from magus.fatal")
@@ -943,8 +943,8 @@ import "magus";
 import "proc";
 
 export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
-    final c = proc.shell("true", "sh");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("true", "sh");
+    proc\exec(c.bin, c.args, "", {});
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "viash"))
@@ -960,7 +960,7 @@ import "magus";
 import "os";
 import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc\shell("printf x >> mark"); proc\exec(c.bin, c.args, "", {}); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -1020,10 +1020,10 @@ func TestMagusLoggingBuzz(t *testing.T) {
 import "magus";
 
 export fun logit(ctx: magus\Context, _a: [str]) > void {
-    magus.log.info("hello");
-    magus.log.debug("dbg", {"k": "v"});
-    magus.log.warn("warn");
-    magus.log.error("err");
+    magus\log.info("hello");
+    magus\log.debug("dbg", {"k": "v"});
+    magus\log.warn("warn");
+    magus\log.error("err");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "logit"))
@@ -1062,8 +1062,8 @@ import "magus";
 import "os";
 import "proc";
 fun note(s: str) > void !> any {
-   final c = proc.shell("printf '%s\n' " + s + " >> ran");
-   proc.exec(c.bin, c.args, "", {});
+   final c = proc\shell("printf '%s\n' " + s + " >> ran");
+   proc\exec(c.bin, c.args, "", {});
 }
 export fun go_build(ctx: magus\Context, _a: [str]) > void !> any { note("go-build"); }
 export fun image_build(ctx: magus\Context, _a: [str]) > void !> any { note("image-build"); }
@@ -1107,12 +1107,12 @@ func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
 import "magus";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    fs.mkdirAll("sub");
-    fs.writeFile("sub/a.txt", "alpha");
-    fs.copyFile("sub/a.txt", "sub/b.txt");
+    fs\mkdirAll("sub");
+    fs\writeFile("sub/a.txt", "alpha");
+    fs\copyFile("sub/a.txt", "sub/b.txt");
     // glob returns paths relative to the project dir, sorted, each carrying that dir
     // as its base - so a caller can resolve one without knowing where the target ran.
-    final hits = fs.glob("sub/*.txt");
+    final hits = fs\glob("sub/*.txt");
     var acc = "";
     var first = true;
     var base = "";
@@ -1122,8 +1122,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
         base = h.base;
         first = false;
     }
-    fs.writeFile("glob.out", acc);
-    fs.writeFile("glob.base", base);
+    fs\writeFile("glob.out", acc);
+    fs\writeFile("glob.base", base);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "build"))
@@ -1160,8 +1160,8 @@ import "os";
 import "proc";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    final r: ExecResult = proc.exec("echo", ["hi"]);
-    fs.writeFile("ran", r.stdout);
+    final r: ExecResult = proc\exec("echo", ["hi"]);
+    fs\writeFile("ran", r.stdout);
 }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
@@ -1174,7 +1174,7 @@ import "magus";
 import "os";
 import "proc";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    final r: ExecResult = proc.exec("echo", ["hi"]);
+    final r: ExecResult = proc\exec("echo", ["hi"]);
     final x = r.stduot;
 }
 `)
@@ -1196,12 +1196,12 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		typ, expr, good, bad string
 		imports              string
 	}{
-		{"ExecResult", `proc.exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
-		{"Commit", `vcs.commit()`, "author", "auther", `import "vcs";`},
-		{"FileInfo", `fs.stat(".")`, "size", "sizes", `import "fs";`},
-		{"HttpResponse", `http.get("http://x")`, "status", "staus", `import "http";`},
-		{"SemverVersion", `semver.parse("1.2.3")`, "major", "majr", `import "semver";`},
-		{"URL", `url.parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
+		{"ExecResult", `proc\exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
+		{"Commit", `vcs\commit()`, "author", "auther", `import "vcs";`},
+		{"FileInfo", `fs\stat(".")`, "size", "sizes", `import "fs";`},
+		{"HttpResponse", `http\get("http://x")`, "status", "staus", `import "http";`},
+		{"SemverVersion", `semver\parse("1.2.3")`, "major", "majr", `import "semver";`},
+		{"URL", `url\parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
 	}
 
 	mkfile := func(c struct{ typ, expr, good, bad, imports string }, field string) string {
@@ -1214,7 +1214,7 @@ fun probe() > void !> any {
     final _ = r.%s;
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran", "ok");
+    fs\writeFile("ran", "ok");
 }
 `, c.imports, c.typ, c.expr, field)
 	}
@@ -1265,13 +1265,13 @@ import "magus";
 import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    final ok = proc.shell("true");
-    final rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
+    final ok = proc\shell("true");
+    final rc = proc\exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
     if (rc != 0) {
         throw "proc.shell('true') exited {rc}";
     }
-    final bad = proc.shell("false");
-    final rc2 = proc.exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
+    final bad = proc\shell("false");
+    final rc2 = proc\exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
     if (rc2 == 0) {
         throw "proc.shell('false') exited 0, expected non-zero";
     }
@@ -1290,9 +1290,9 @@ import "os";
 import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
-        final ec = proc.shell("echo $MY_BUZZ_VAR");
-        final captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
+    os\withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
+        final ec = proc\shell("echo $MY_BUZZ_VAR");
+        final captured = proc\exec(ec.bin, ec.args, "", {}).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1311,7 +1311,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    final p = fs.join("a", "b", "c");
+    final p = fs\join("a", "b", "c");
     if (p == "") {
         throw "fs.join returned empty string";
     }
@@ -1333,7 +1333,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    final entries = fs.listDir("subdir");
+    final entries = fs\listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
     }
@@ -1354,7 +1354,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    fs.removeAll("todelete");
+    fs\removeAll("todelete");
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
@@ -1394,8 +1394,8 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     // The target's own directory is a git repo, so every accessor answers about THAT
     // repo. The no-VCS path, where these RAISE rather than hand back "", is covered by
     // TestVcsCommitRaisesOutsideRepo.
-    final h = vcs.commit().short;
-    final b = vcs.ref();
+    final h = vcs\commit().short;
+    final b = vcs\ref();
     if (h == "") { throw "commit().short returned empty inside a repo"; }
     if (b == "") { throw "ref returned empty inside a git repo"; }
 
@@ -1403,9 +1403,9 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     // is the one untracked file - and seeing exactly it is what proves the probe read the
     // target's tree rather than the process cwd (magus's own checkout, which is a
     // different repo with entirely different dirty files).
-    final st = vcs.status();
+    final st = vcs\status();
     if (st.clean) { throw "status must see the untracked magusfile"; }
-    if (!vcs.isDirty()) { throw "isDirty must agree with status.clean"; }
+    if (!vcs\isDirty()) { throw "isDirty must agree with status.clean"; }
     var sawMagusfile = false;
     foreach (f in st.files) {
         if (f.value == "magusfile.buzz") { sawMagusfile = true; }
@@ -1504,7 +1504,7 @@ func BenchmarkFind(b *testing.B) {
 func BenchmarkRunBuzzParallel(b *testing.B) {
 	const nProjects = 16
 	ctx := context.Background()
-	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any { fs.writeFile(\"out.txt\", \"x\"); }\n"
+	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any { fs\\writeFile(\"out.txt\", \"x\"); }\n"
 
 	type proj struct {
 		src *interp.Source

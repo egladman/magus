@@ -31,7 +31,7 @@ import "magus/spell/go";
 import "magus/spell/bash";
 import "magus/spell/markdown";
 
-magus.project({"spells": [typescript, go, markdown, bash]})
+magus\project({"spells": [typescript, go, markdown, bash]})
 `), 0o644))
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err)
