@@ -880,7 +880,9 @@ test "a host that declares no gating hook is a row, not a failure; a missing fil
     assert\equal("{none.len()} {none[0].verdict} {none[0].ok}", want: "1 unwired true", message: "opencode");
     final stop = hostRows("codex", keys: [Wired{ file = ".codex/hooks.json", key = "hooks.Stop" }], root: "/w", all: [<Case>]);
     assert\equal(stop[0].verdict, want: "unwired", message: "only non-gating keys");
-    final missing = hostRows("cursor", keys: [Wired{ file = ".cursor/hooks.json", key = "hooks.preToolUse" }], root: "/nonexistent-checkout", all: [<Case>]);
+    // Inside the workspace: a sandboxed run (CI's) denies a read outside it before the file
+    // can be found missing.
+    final missing = hostRows("cursor", keys: [Wired{ file = ".cursor/hooks.json", key = "hooks.preToolUse" }], root: "hack/testdata/no-such-checkout", all: [<Case>]);
     assert\equal("{missing[0].verdict} {missing[0].ok}", want: "dead false", message: "declared but absent");
 }
 
