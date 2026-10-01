@@ -473,6 +473,22 @@ return figure\draw(figure\of("t").box(dir("a")).unscoped(why: "x"), theme: figur
 	assert.Equal(t, "refused", r.Result, "figure type-checks against magus\\Dir and raises its finding")
 }
 
+// TestEvalFigureKeepsItsPrivateNode draws from a script that declares its own
+// Node. figure's private Node must stay figure's: resolved to the script's, every
+// box carries both anchor and link and the figure refuses to draw.
+func TestEvalFigureKeepsItsPrivateNode(t *testing.T) {
+	r := Eval(context.Background(), `import "magus/figure";
+object Node {
+    anchor: str = "a",
+    link: str = "b",
+}
+final a = figure\external("a", link: "https://a.example");
+final b = figure\external("b");
+return figure\draw(figure\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: figure\Theme.light) catch "refused";`)
+	require.True(t, r.OK, "eval failed: %+v", r.Diag)
+	assert.True(t, strings.HasPrefix(r.Result, "<svg"), r.Result)
+}
+
 func TestPlaygroundSourceModules(t *testing.T) {
 	assert.Equal(t, []string{"figure"}, PlaygroundSourceModules())
 }

@@ -519,10 +519,10 @@ type compiler struct {
 	// control. Upstream's ffi.buzz assigns `data.id = 42` on a plain literal.
 	foreignStructs map[string]bool
 	// nsPrefix and privTop give a namespaced module its own Env keys for PRIVATE
-	// top-level vars and funcs. In SharedGlobals mode every module's top-level
-	// declarations land in one shared Env keyed by bare name, so two modules that
-	// each declare a private `var panel` would collide on the same slot. When a
-	// module has a `namespace X;`, privTop holds its private top-level names and
+	// top-level vars, funcs, objects and enums. In SharedGlobals mode every
+	// module's top-level declarations land in one shared Env keyed by bare name,
+	// so two modules that each declare a private `var panel` would collide on the
+	// same slot. When a module has a `namespace X;`, privTop holds its private top-level names and
 	// nsPrefix ("\0X\0") qualifies them at every def/load/store (see globalName).
 	// Exports stay bare — they're unique across modules and reached via the
 	// namespace object. Inherited by nested function compilers so a reference to a
@@ -689,11 +689,12 @@ func (c *compiler) nameConst(s string) int32 {
 	return c.chunk.AddConst(vmpackage.StrValue(s))
 }
 
-// globalName maps a top-level identifier to its shared-Env key. A private var or
-// func of a namespaced module is qualified with nsPrefix so it can't collide with
-// a same-named private in another module; exports, imports, builtins, and any name
-// not declared private here keep their bare spelling. Called at every OpDefName /
-// OpLoadName / OpStoreName site that touches a user-level top-level name.
+// globalName maps a top-level identifier to its shared-Env key. A private var,
+// func, object or enum of a namespaced module is qualified with nsPrefix so it
+// can't collide with a same-named declaration in another module or the importer;
+// exports, imports, builtins, and any name not declared private here keep their
+// bare spelling. Called at every OpDefName / OpLoadName / OpStoreName /
+// OpNewObject site that touches a user-level top-level name.
 func (c *compiler) globalName(name string) string {
 	if c.privTop != nil && c.privTop[name] {
 		return c.nsPrefix + name
@@ -702,10 +703,11 @@ func (c *compiler) globalName(name string) string {
 }
 
 // initModuleScope records the module's namespace and the set of its private
-// top-level vars/funcs, so globalName can give them per-module Env keys. Only
-// meaningful in SharedGlobals mode (where modules share one Env); a module with no
-// `namespace` — the entry program — keeps bare keys, which is unambiguous because
-// it is the only namespace-less module in a program.
+// top-level vars, funcs, objects and enums, so globalName can give them
+// per-module Env keys. Only meaningful in SharedGlobals mode (where modules share
+// one Env); a module with no `namespace` — the entry program — keeps bare keys,
+// which is unambiguous because it is the only namespace-less module in a program.
+// A protocol is left out: it binds nothing at run time.
 func (c *compiler) initModuleScope(prog *ast.Program) {
 	var ns string
 	for _, s := range prog.Stmts {
@@ -725,6 +727,14 @@ func (c *compiler) initModuleScope(prog *ast.Program) {
 				priv[d.Name] = true
 			}
 		case *ast.FunDecl:
+			if !d.IsExported {
+				priv[d.Name] = true
+			}
+		case *ast.ObjectDecl:
+			if !d.IsExported && !d.IsProtocol {
+				priv[d.Name] = true
+			}
+		case *ast.EnumDecl:
 			if !d.IsExported {
 				priv[d.Name] = true
 			}
@@ -1671,7 +1681,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		}
 	}
 	c.declareType(v)
-	nameIdx := c.nameConst(v.Name)
+	nameIdx := c.nameConst(c.globalName(v.Name))
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
 	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
@@ -1732,7 +1742,7 @@ func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
 	}
 	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases, values))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
-	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
+	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 	if c.depth == 0 {
 		if v.IsExported {
 			c.chunk.Exports = append(c.chunk.Exports, v.Name)
@@ -2199,7 +2209,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		}
-		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(c.globalName(v.TypeName)), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -2221,7 +2231,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
+	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(c.globalName(v.TypeName)), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
 	return nil
 }
 

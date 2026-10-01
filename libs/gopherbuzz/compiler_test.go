@@ -1,6 +1,7 @@
 package buzz
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -36,6 +37,40 @@ func TestCompileWith_SimpleFunction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, chunk, "CompileWith returned nil chunk")
 	assert.NotEmpty(t, chunk.Code, "compiled chunk has no instructions")
+}
+
+// TestCompileWith_PrivateTypesDoNotCollideWithImporter pins upstream Buzz at
+// 294d8f9, which prints "fig:inner:1:made:0 main:outer:3:2" for this pair: the
+// module's private Node and Color stay its own after the importer declares types
+// of the same names. Resolved to the importer's Node, the module's literal would
+// leave anchor null.
+func TestCompileWith_PrivateTypesDoNotCollideWithImporter(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("fig", `
+namespace fig;
+enum Color { teal, plum }
+object Node {
+    anchor: str,
+    color: Color = Color.plum,
+    static fun make() > Node { return Node{ anchor = "made" }; }
+}
+fun describe() > str {
+    final n = Node{ anchor = "inner" };
+    final m = Node.make();
+    return "fig:{n.anchor}:{n.color.value}:{m.anchor}:{Color.teal.value}";
+}
+export describe;
+`)
+	v, err := s.Eval(ctx, `
+import "fig";
+enum Color { red, green, blue }
+object Node { label: str, weight: int }
+final mine = Node{ label = "outer", weight = 3 };
+return "{fig\describe()} main:{mine.label}:{mine.weight}:{Color.blue.value}";
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "fig:inner:1:made:0 main:outer:3:2", v.String())
 }
 
 func TestCompileWith_EmptyProgram(t *testing.T) {
