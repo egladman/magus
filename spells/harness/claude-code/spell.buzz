@@ -151,10 +151,17 @@ fun claude_checkpoint_command() > str {
     return claude_named_command("magus-checkpoint", flags: [<str>]);
 }
 
+// A command that runs no shipped template ends with this, the only mark host JSON can
+// carry that this spell wrote it: a merge retires a marked entry once its command
+// changes, and leaves an unmarked one as the person's own. `sh -c` reads it as a comment.
+final OWNED = " # magus:harness";
+
 fun claude_command_hook(cmd: str) > {str: any} {
+    var command = cmd;
+    if (cmd.indexOf("exec \"$m\" buzz -s ") == null) { command = cmd + OWNED; }
     return {
         "type": "command",
-        "command": cmd,
+        "command": command,
         "timeout": 10,
     };
 }
@@ -471,7 +478,7 @@ test "the session PATH entry is the only one that runs no magus" {
         }
     }
     assert\equal(pathless.len(), 1, "every other entry launches the glue");
-    assert\equal(pathless[0], claude_session_path_command(), "and that one fixes PATH");
+    assert\equal(pathless[0], claude_session_path_command() + OWNED, "and that one fixes PATH, marked as this spell's");
     final cmd = claude_session_path_command();
     assert\isTrue(cmd.indexOf(">> \"$CLAUDE_ENV_FILE\"") != null, "appends, keeping what other hooks wrote");
     assert\isTrue(cmd.indexOf("printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\"") != null,

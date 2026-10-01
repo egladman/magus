@@ -386,13 +386,12 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	requireCurrent(t, root, "test-host")
 }
 
-// TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus pins the other kind of entry a
-// descriptor writes: one that prepares the environment a magus is found in and runs none,
-// like Claude Code's session PATH entry. It names no template, so it was never retired: a
-// rewritten one was merged in beside the old, and the plan then called the file current
-// because every declared entry was present. A second copy of a declared entry is the same
-// leftover and goes too.
-func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
+// TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus pins ownership to the two marks a
+// descriptor renders, a shipped template's path or types.HarnessOwnedMarker, and nothing a
+// command merely says. A marked `magus shell` entry whose command changed is retired
+// rather than kept beside its replacement, and so is a second copy of a declared entry. A
+// hook of the person's own stays where it was, whether it runs magus or only mentions it.
+func TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "env-host", `{
   "schema_version": 2,
@@ -403,7 +402,7 @@ func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
   "managed_entries": [{
     "path": ["hooks", "start"],
     "entries": [
-      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v2'"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell --agent-name env-host # magus:harness"}]},
       {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]}
     ]
   }]
@@ -413,8 +412,8 @@ func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{
   "hooks": {
     "start": [
-      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v1'"}]},
-      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v2'"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell -o json # magus:harness"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "echo \"remember to rebuild magus\""}]},
       {"match": "start", "commands": [{"type": "command", "command": "magus session notify"}]},
       {"match": "start", "commands": [{"type": "command", "command": "my-own-hook"}]},
       {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]},
@@ -424,10 +423,11 @@ func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
 }`), 0o644))
 
 	plan := mergeHarness(t, root, "env-host")
-	require.False(t, plan.Current(), "a stale entry the descriptor wrote is drift even with every declared entry present")
-	stale := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v1'"}}}
+	stale := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "magus shell -o json # magus:harness"}}}
+	wanted := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "magus shell --agent-name env-host # magus:harness"}}}
 	rehydrate := map[string]any{"match": "compact", "commands": []any{map[string]any{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}}}
 	assert.Equal(t, []types.HarnessChange{
+		{Op: types.HarnessAdd, Key: "hooks.start", Value: wanted},
 		{Op: types.HarnessRetire, Key: "hooks.start", Value: stale},
 		{Op: types.HarnessRetire, Key: "hooks.start", Value: rehydrate},
 	}, normalizeFiles(t, plan.Files)["env-host/hooks.json"].Changes)
@@ -446,13 +446,22 @@ func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
 		commands = append(commands, cmds...)
 	}
 	assert.Equal(t, []string{
-		"command -v magus >/dev/null || echo 'build one: v2'",
+		`echo "remember to rebuild magus"`,
 		"magus session notify",
 		"my-own-hook",
 		"magus buzz -s magus-rehydrate.buzz",
+		"magus shell --agent-name env-host # magus:harness",
 	}, commands, "the declared entries once each, and the person's own where they were")
 
 	requireCurrent(t, root, "env-host")
+}
+
+func TestCarriesOwnedMarkerOnlyAsATrailingComment(t *testing.T) {
+	assert.True(t, carriesOwnedMarker("magus shell # magus:harness"))
+	assert.True(t, carriesOwnedMarker("magus shell\t# magus:harness  "))
+	assert.False(t, carriesOwnedMarker("magus shell# magus:harness"), "no blank before it: part of a word the shell runs")
+	assert.False(t, carriesOwnedMarker("echo '# magus:harness'"), "quoted, so the shell prints it")
+	assert.False(t, carriesOwnedMarker("magus shell # magus:harness; rm -rf out"), "a comment ends the line, so the marker does too")
 }
 
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
@@ -479,12 +488,37 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [{
     "path": ["hooks"],
-    "entries": [{"command": "bypass"}]
+    "entries": [{"command": "bypass # magus:harness"}]
   }]
 }`)
 	_, _, err = LoadHarness(context.Background(), root, "bypass")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not invoke magus")
+}
+
+// TestHarnessDescriptorRefusesAnUnmarkedEntry pins the other half of explicit ownership: a
+// declared entry that runs no shipped template and carries no marker would be one a later
+// merge could not retire, so the descriptor is refused with the entry named and the fix.
+func TestHarnessDescriptorRefusesAnUnmarkedEntry(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "unmarked", `{
+  "schema_version": 2,
+  "id": "unmarked",
+  "display": {"name": "Unmarked"},
+  "config": {"path": "unmarked/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "before"],
+    "entries": [
+      {"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell -o json"}]}
+    ]
+  }]
+}`)
+	_, _, err := LoadHarness(context.Background(), root, "unmarked")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `managed_entries[0]: entries[1] (matcher "start", commands ["magus shell -o json"])`)
+	assert.Contains(t, err.Error(), `end its command with " # magus:harness"`)
 }
 
 // TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified pins the opencode.json defect:
@@ -588,7 +622,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			Skills:        HarnessSkills{Paths: []string{".agents/skills"}, Form: FormFull},
 			ManagedEntries: []HarnessEntries{{
 				Path:    []string{"hooks", "before"},
-				Entries: []map[string]any{{"command": "magus shell"}},
+				Entries: []map[string]any{{"command": "magus shell # magus:harness"}},
 			}},
 		}, "spell:test-host", true, nil
 	}

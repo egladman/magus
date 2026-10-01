@@ -262,10 +262,12 @@ func validateHarnessEntries(group HarnessEntries) error {
 		if len(entry) == 0 {
 			return fmt.Errorf("entries[%d] must be an object", i)
 		}
+		if !ownedByMagus(entry) {
+			matcher, cmds := EntryCommands(entry)
+			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it; end its command with %q",
+				i, matcher, cmds, " "+types.HarnessOwnedMarker)
+		}
 		collectCommands(entry, &commands)
-	}
-	if len(commands) == 0 {
-		return fmt.Errorf("entries must include at least one command that invokes magus")
 	}
 	// One invoking command per group, not every command: an entry may prepare the
 	// environment a magus is found in, like a host's session-start entry that puts the
@@ -687,36 +689,27 @@ func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (in
 // from the command means any rewrite of a command appends the new entry beside the old,
 // and every tool call is then judged twice, once by wiring the tree replaced.
 //
-// Host JSON has no field to mark an entry with (the hosts' schemas refuse unknown keys), so
-// ownership is read off the commands. Two kinds are magus's, and between them they cover
-// every entry a shipped harness spell renders, which TestShippedHarnessEntriesRetireWhenRewritten
-// in cmd/magus holds:
-//   - one that runs a template magus ships;
-//   - one that names magus without invoking it: the kind validateHarnessEntries admits
-//     beside an invoking entry to prepare the environment a magus is found in, like
-//     the session PATH entry spells/harness/claude-code renders. Nobody else writes
-//     magus into a hook that does not run it.
-//
-// An entry that invokes magus directly, like a person's own `magus session notify` hook,
-// stays theirs: nothing in it says a descriptor wrote it.
+// Two marks say so, and validateHarnessEntries refuses a declared entry carrying neither:
+// a command that runs a template magus ships, whose path is magus's own, or one ending in
+// types.HarnessOwnedMarker. Anything else is the person's, whatever it mentions.
 func ownedByMagus(entry map[string]any) bool {
 	var commands []string
 	collectCommands(entry, &commands)
-	for _, command := range commands {
-		if runsAShippedTemplate(command) || (namesMagus.MatchString(command) && !invokesMagus(command)) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(commands, func(command string) bool {
+		return runsAShippedTemplate(command) || carriesOwnedMarker(command)
+	})
 }
 
-// namesMagus matches magus as a word of its own: a program, an argument to `command -v`,
-// or the last component of a path.
-var namesMagus = regexp.MustCompile(`(?:^|[^\w.-])magus(?:[^\w.-]|$)`)
+// carriesOwnedMarker reports whether command ends in the marker as a shell comment. A
+// marker with no blank before it is part of a word, which the shell does run.
+func carriesOwnedMarker(command string) bool {
+	before, found := strings.CutSuffix(strings.TrimRight(command, " \t"), types.HarnessOwnedMarker)
+	return found && strings.TrimRight(before, " \t") != before
+}
 
 // runsAShippedTemplate reports whether command names a template this repository ships.
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
-// `magus ...` line, which ownedByMagus leaves to the person.
+// `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
 	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate"} {
 		if strings.Contains(command, template) {

@@ -107,7 +107,7 @@ func (v PrecedentFamily) Values() []string { return precedentFamilies.Strings() 
 func (v PrecedentFamily) Valid() bool      { return precedentFamilies.Valid(v) }
 func (v PrecedentFamily) String() string   { return enum.String(v) }
 
-var markerFamilies = enum.Set[MarkerFamily]{MarkerDiagram, MarkerCalls, MarkerSkills, MarkerObserved}
+var markerFamilies = enum.Set[MarkerFamily]{MarkerDiagram, MarkerCalls, MarkerSkills, MarkerObserved, MarkerHarness}
 
 func (v MarkerFamily) Values() []string { return markerFamilies.Strings() }
 func (v MarkerFamily) Valid() bool      { return markerFamilies.Valid(v) }

@@ -434,6 +434,7 @@ const (
 	MarkerCalls    MarkerFamily = "calls"    // a declared network call: <dst dir> <transport>
 	MarkerSkills   MarkerFamily = "skills"   // the AGENTS.md skills block; stamp pairs only
 	MarkerObserved MarkerFamily = "observed" // a generated diagram block; stamp pairs only
+	MarkerHarness  MarkerFamily = "harness"  // a host hook command a harness spell wrote; see HarnessOwnedMarker
 )
 
 // MarkerVerb is a marker node's shape after folding: a point marker is one line, and a

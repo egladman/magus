@@ -1,6 +1,6 @@
 ### Fixed
 
-- **`magus describe harness` retires a stale host entry it wrote that names no template.**
-  A rewritten Claude Code session PATH entry was merged in beside the old one, and the
-  plan then called the file current. An entry that names magus without running it is now
-  magus's to replace; a hook that runs magus directly stays yours.
+- **`magus describe harness` retires only the host entries a harness spell marked as its own.**
+  A hook entry is magus's when it runs a shipped template or its command ends in
+  `# magus:harness`; a harness spell declaring any other entry is refused. Every other
+  hook stays yours, whatever it mentions.

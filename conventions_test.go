@@ -198,6 +198,8 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			for _, h := range entry.Hooks {
 				if event == "SessionStart" && !strings.Contains(h.Command, hookTemplateDir) && !strings.Contains(h.Command, "buzz -s ") {
 					inlined++
+					assert.True(t, strings.HasSuffix(h.Command, " "+types.HarnessOwnedMarker),
+						"the inlined %s %q hook must end with the ownership marker, or a merge takes it for a hook of the person's own", event, entry.Matcher)
 					continue
 				}
 				assert.Contains(t, h.Command, hookTemplateDir,

@@ -40,6 +40,14 @@ type HarnessFile struct {
 	Changes  []HarnessChange `json:"changes"`
 }
 
+// HarnessOwnedMarker ends every host hook command a harness spell renders that runs no
+// shipped template, after a space: a shell comment, so the shell running the command
+// never reads it. Host schemas refuse an unknown key, so the command string is the only
+// place host JSON can carry it. A merge retires an entry carrying it once no declared
+// entry takes its place, and a descriptor declaring an entry that neither runs a shipped
+// template nor carries it is refused.
+const HarnessOwnedMarker = "# magus:" + string(MarkerHarness)
+
 // HarnessChange is one thing merging a HarnessFile changes.
 type HarnessChange struct {
 	Op    HarnessChangeOp `json:"op"`
