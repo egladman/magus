@@ -2,8 +2,9 @@
 import "magus";
 
 magus\project({
-    // No spell claims .buzz, so this line declares figure.buzz a source.
-    "sources": ["*.buzz"],
+    // No spell claims .buzz, so this line declares figure.buzz a source. embed.go is the
+    // root module's code that embeds it, compiled by the root's build and tested by its test.
+    "sources": ["*.buzz", "*.go"],
 });
 
 // test runs the in-file test blocks upstream-strict.

@@ -66,6 +66,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // directory has its own go.mod. Without the cgo_engines tag only the pure-Go engines
 // compile, and without -bench no benchmark runs.
 export fun buzzbench_test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     // The module replaces gopherbuzz and diagnostics with their checkouts, so both feed the key.
     ctx.readsFiles("**/*.go", "go.mod", "go.sum",
         "benchmarks/comparison/go.mod", "benchmarks/comparison/go.sum",
