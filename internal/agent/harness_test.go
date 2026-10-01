@@ -386,6 +386,75 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	requireCurrent(t, root, "test-host")
 }
 
+// TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus pins the other kind of entry a
+// descriptor writes: one that prepares the environment a magus is found in and runs none,
+// like Claude Code's session PATH entry. It names no template, so it was never retired: a
+// rewritten one was merged in beside the old, and the plan then called the file current
+// because every declared entry was present. A second copy of a declared entry is the same
+// leftover and goes too.
+func TestPlanHarnessRetiresAStaleEntryThatOnlyNamesMagus(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "env-host", `{
+  "schema_version": 2,
+  "id": "env-host",
+  "display": {"name": "Env Host"},
+  "config": {"path": "env-host/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "start"],
+    "entries": [
+      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v2'"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]}
+    ]
+  }]
+}`)
+	path := filepath.Join(root, "env-host", "hooks.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{
+  "hooks": {
+    "start": [
+      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v1'"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v2'"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus session notify"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "my-own-hook"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]}
+    ]
+  }
+}`), 0o644))
+
+	plan := mergeHarness(t, root, "env-host")
+	require.False(t, plan.Current(), "a stale entry the descriptor wrote is drift even with every declared entry present")
+	stale := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "command -v magus >/dev/null || echo 'build one: v1'"}}}
+	rehydrate := map[string]any{"match": "compact", "commands": []any{map[string]any{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}}}
+	assert.Equal(t, []types.HarnessChange{
+		{Op: types.HarnessRetire, Key: "hooks.start", Value: stale},
+		{Op: types.HarnessRetire, Key: "hooks.start", Value: rehydrate},
+	}, normalizeFiles(t, plan.Files)["env-host/hooks.json"].Changes)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var doc struct {
+		Hooks struct {
+			Start []map[string]any `json:"start"`
+		} `json:"hooks"`
+	}
+	require.NoError(t, json.Unmarshal(body, &doc))
+	var commands []string
+	for _, entry := range doc.Hooks.Start {
+		_, cmds := EntryCommands(entry)
+		commands = append(commands, cmds...)
+	}
+	assert.Equal(t, []string{
+		"command -v magus >/dev/null || echo 'build one: v2'",
+		"magus session notify",
+		"my-own-hook",
+		"magus buzz -s magus-rehydrate.buzz",
+	}, commands, "the declared entries once each, and the person's own where they were")
+
+	requireCurrent(t, root, "env-host")
+}
+
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "bad", `{

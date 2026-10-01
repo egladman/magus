@@ -56,8 +56,8 @@ const (
 	// HarnessReplace swaps an entry with the same matcher and commands for the declared one,
 	// so an edited timeout does not leave a second copy of the hook.
 	HarnessReplace HarnessChangeOp = "replace"
-	// HarnessRetire drops an entry that runs a shipped template the descriptor no longer
-	// declares, so an upgraded hook is not judged twice.
+	// HarnessRetire drops an entry a descriptor wrote that no declared entry takes the place
+	// of, so an upgraded hook is not judged twice.
 	HarnessRetire HarnessChangeOp = "retire"
 	// HarnessSet sets a key the file does not hold yet.
 	HarnessSet HarnessChangeOp = "set"

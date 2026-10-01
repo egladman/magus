@@ -185,8 +185,8 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 
 	// The one hook that runs with no magus, the session PATH fix, cannot invoke a template,
 	// because only magus resolves an embedded one. It is exempt here and held instead to the
-	// spell by TestRepoSessionPathHookIsWhatTheSpellPrints in cmd/magus, which links the
-	// harness spell loader this package cannot.
+	// spell by the harness-drift target, which plans this file with the spell and fails on a
+	// missing or stale copy.
 	inlined := 0
 
 	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook

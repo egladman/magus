@@ -98,16 +98,6 @@
       {
         "hooks": [
           {
-            "command": "[ -z \"$CLAUDE_ENV_FILE\" ] || printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\" >> \"$CLAUDE_ENV_FILE\"; [ -x \"$CLAUDE_PROJECT_DIR/magus\" ] || command -v magus >/dev/null || echo 'no ./magus in this checkout and no magus on PATH, so every guarded tool call is refused until one exists; build one: go run -trimpath ./cmd/magus run go-build --no-cache .'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "startup|resume|clear"
-      },
-      {
-        "hooks": [
-          {
             "command": "[ -z \"$CLAUDE_ENV_FILE\" ] || printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\" >> \"$CLAUDE_ENV_FILE\"; [ -x \"$CLAUDE_PROJECT_DIR/magus\" ] || command -v magus >/dev/null || echo 'no ./magus in this checkout and no magus on PATH, so every guarded tool call is refused until one exists; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .'",
             "timeout": 10,
             "type": "command"
