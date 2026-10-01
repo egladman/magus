@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,6 +69,9 @@ type versionOutput struct {
 	// so `-o json` and `-o template` see one record shape either way.
 	BuiltBy string `json:"built_by"   yaml:"built_by"`
 	Engine  string `json:"engine"     yaml:"engine"`
+	// Embedded is the identity of the Buzz modules compiled into this binary. Two builds
+	// at one commit share a version string even when their embedded sources differ.
+	Embedded versionEmbedded `json:"embedded" yaml:"embedded"`
 	// ServerVersion is what the server reported. A POINTER because the field has two
 	// different silences and one spelling for both: NIL is "the probe never ran"
 	// (--client, or an output format that does not render it) and the key is dropped,
@@ -77,6 +81,21 @@ type versionOutput struct {
 	// a nil one, which is exactly the collapse this pointer exists to undo. omitzero
 	// drops only the nil.
 	ServerVersion *string `json:"server,omitzero" yaml:"server,omitempty"`
+}
+
+// versionEmbedded digests the embedded sources a generated output can depend on.
+type versionEmbedded struct {
+	// FigureSHA256 is the hex SHA-256 of the magus/figure source; diagrams-generate in
+	// docs keys on it, since the figures render from this copy and not the checkout's.
+	FigureSHA256 string `json:"figure_sha256" yaml:"figure_sha256"`
+}
+
+// newVersionOutput is this binary's stamp, without the server half.
+func newVersionOutput() versionOutput {
+	return versionOutput{
+		Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz",
+		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256()},
+	}
 }
 
 // serverProbe is the server half of `magus version`: what, if anything, the server said
@@ -113,7 +132,7 @@ func runVersion(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	out := versionOutput{Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz"}
+	out := newVersionOutput()
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
 	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a server that is slow to answer must not be felt.

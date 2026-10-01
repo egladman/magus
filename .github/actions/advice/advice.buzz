@@ -142,7 +142,7 @@ export fun input(name: str) > str !> any {
 // allowed to change the repository it is reporting on. It reads whatever origin/<base> the
 // clone already has, which may be days old. Saying so is the DRIVER's job, not an advisor's:
 // the caveat is identical under every section, so `magus diff --impact` states the base and its
-// age once for the whole set (preflightAdvisorBaseLine) rather than ten times.
+// age once for the whole set (impactAdvisorBaseLine in cmd/magus/diff.go) rather than ten times.
 //
 // refspec selects the explicit "+refs/heads/<base>:refs/remotes/origin/<base>" form and
 // throws when it fails. A bare `git fetch origin <base>` writes FETCH_HEAD and updates
