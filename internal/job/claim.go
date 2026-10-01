@@ -14,13 +14,15 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// RefuseUngradableClaims refuses a fork whose write paths claim a declaration
+// RefuseUngradableClaims refuses a fork whose write or deny paths claim a declaration
 // (`run.go#executeStages`, see types.SplitClaim) that the footprint could never grade
 // (MGS3031): an empty declaration, a claim on a glob rather than one file, a checkout whose
 // version control does not place changed lines, or a file whose extension has no diff
 // driver. An entry that names an existing path as written (`notes/a#b.md`) is refused as
 // ambiguous, naming the two spellings that mean the path. A claim nothing checks reads as a boundary and is none, so it is an error rather
-// than a note on the row.
+// than a note on the row. A deny path is held to the same rules because the guard grades
+// it by the same placement, and one it cannot place denies the whole file while the row
+// names one declaration.
 //
 // Only a fork with a `#` entry reads the version control; any other fork refuses nothing
 // here. A nil store, or one with no workspace root, has no tree to ask and refuses nothing.
@@ -28,36 +30,47 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, id string, candid
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var claimed, refused []string
-	for _, entry := range candidate.WritePaths {
-		if !types.HasClaim(entry) {
-			continue
-		}
-		p, decl := types.SplitClaim(entry)
-		literal := strings.TrimSpace(entry)
-		if _, err := os.Lstat(filepath.Join(store.root, filepath.FromSlash(literal))); err == nil {
-			refused = append(refused, fmt.Sprintf("%q is a path in this tree and also reads as a claim on %q; spell the path `./%s` or `%s`,"+
-				" since an unescaped # starts a claimed declaration", entry, p, literal, strings.ReplaceAll(literal, "#", `\#`)))
-			continue
-		}
-		switch {
-		case decl == "":
-			refused = append(refused, fmt.Sprintf("%q names no declaration after its #", entry))
-		case p == "" || strings.ContainsAny(p, globMeta):
-			refused = append(refused, fmt.Sprintf("%q claims a declaration of a pattern, and a declaration lives in one file", entry))
-		default:
-			claimed = append(claimed, path.Clean(p))
+	type claimedFile struct{ field, path string }
+	var claimed []claimedFile
+	var refused []string
+	for _, list := range []struct {
+		field   string
+		entries []string
+	}{{"", candidate.WritePaths}, {"deny path ", candidate.DenyPaths}} {
+		for _, entry := range list.entries {
+			if !types.HasClaim(entry) {
+				continue
+			}
+			p, decl := types.SplitClaim(entry)
+			literal := strings.TrimSpace(entry)
+			if _, err := os.Lstat(filepath.Join(store.root, filepath.FromSlash(literal))); err == nil {
+				refused = append(refused, list.field+fmt.Sprintf("%q is a path in this tree and also reads as a claim on %q; spell the path `./%s` or `%s`,"+
+					" since an unescaped # starts a claimed declaration", entry, p, literal, strings.ReplaceAll(literal, "#", `\#`)))
+				continue
+			}
+			switch {
+			case decl == "":
+				refused = append(refused, list.field+fmt.Sprintf("%q names no declaration after its #", entry))
+			case p == "" || strings.ContainsAny(p, globMeta):
+				refused = append(refused, list.field+fmt.Sprintf("%q claims a declaration of a pattern, and a declaration lives in one file", entry))
+			default:
+				claimed = append(claimed, claimedFile{list.field, path.Clean(p)})
+			}
 		}
 	}
 	if len(refused) == 0 && len(claimed) > 0 {
-		drivers, why := claimDrivers(ctx, store.root, claimed)
-		for _, p := range claimed {
+		files := make([]string, len(claimed))
+		for i, c := range claimed {
+			files[i] = c.path
+		}
+		drivers, why := claimDrivers(ctx, store.root, files)
+		for _, c := range claimed {
 			switch {
 			case why != "":
-				refused = append(refused, fmt.Sprintf("%q: %s", p, why))
-			case drivers[p] == "":
-				refused = append(refused, fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration;"+
-					" give %s one in .gitattributes (`magus doctor` lists the managed ones)", p, driverPattern(p)))
+				refused = append(refused, c.field+fmt.Sprintf("%q: %s", c.path, why))
+			case drivers[c.path] == "":
+				refused = append(refused, c.field+fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration;"+
+					" give %s one in .gitattributes (`magus doctor` lists the managed ones)", c.path, driverPattern(c.path)))
 			}
 		}
 	}

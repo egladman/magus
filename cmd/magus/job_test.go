@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -415,6 +416,35 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 		require.NoError(t, err)
 	}
 	return root, cacheDir
+}
+
+// A deny path naming a declaration of a file no diff driver reads is refused at fork
+// (MGS3031): the guard could only honor it by denying the whole file.
+func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	root, cacheDir := execFixture(t)
+	for name, body := range map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	fork := func(id, deny string) error {
+		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "run.go,notes.txt", "--deny-paths", deny})
+	}
+
+	err = fork("refused", "notes.txt#Intro")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MGS3031")
+	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
+
+	require.NoError(t, fork("accepted", "run.go#A"))
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a refused fork writes no row")
+	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
 }
 
 // The store the CLI opens resolves a ref the worker recorded in its own checkout, so an
