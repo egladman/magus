@@ -29,14 +29,16 @@ fun claude_skills_paths() > [str] {
 
 // claude_buzz_command is one glue script as a plain magus command line.
 //
-// Claude Code exports CLAUDE_PROJECT_DIR, the root the session started in, to every hook
-// command, so the checkout's own build runs the glue from any session directory and the
-// string is the same on every machine. -C makes the root the working directory before
-// anything else, so the root-relative script path resolves wherever the session is; the
-// glue reads the session's own directory off the event.
+// PATH's magus, because this spell ships to workspaces that build no magus of their own.
+// One that does is still judged by its own build: magus re-execs into the ./magus of the
+// tree -C names before it does anything else. Claude Code exports CLAUDE_PROJECT_DIR, the
+// root the session started in, to every hook command, so the string is the same on every
+// machine. -C makes that root the working directory first, so the root-relative script
+// path resolves wherever the session is; the glue reads the session's own directory off
+// the event.
 //
-// With no ./magus the command exits 127, which Claude Code reports and does not treat as
-// a block: the guard is open until the checkout builds one.
+// With no magus on PATH the command exits 127, which Claude Code reports and does not
+// treat as a block: the guard is open until one resolves.
 //
 // `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other
 // BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
@@ -47,7 +49,7 @@ fun claude_skills_paths() > [str] {
 // script as its own argv, never in a leading `VAR=value`: the glue reads everything it
 // acts on off the event and its argv.
 fun claude_buzz_command(script: str, flags: [str]) > str {
-    final base = "\"$CLAUDE_PROJECT_DIR/magus\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/{script}.buzz";
+    final base = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/{script}.buzz";
     if (flags.len() == 0) { return base; }
     return base + " -- " + flags.join(" ");
 }
@@ -123,7 +125,7 @@ fun claude_checkpoint_command() > str {
 // the checkout's build rather than whatever the shell that launched Claude Code had.
 // CLAUDE_ENV_FILE is the file Claude Code sources before each Bash tool command; it
 // never reaches a hook command (code.claude.com/docs/en/hooks, "Persist environment
-// variables"), which is why every entry names the build by its path.
+// variables").
 fun claude_session_command() > str {
     return claude_buzz_command("magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]);
 }
@@ -298,7 +300,7 @@ test "no entry carries an environment assignment" {
                 final cmd = "{hook["command"]}";
                 assert\isTrue(cmd.indexOf("HOST_EVENT_RAW") == null, "the event decides that, not the entry: {cmd}");
                 assert\isTrue(cmd.indexOf("__MAGUS_SHELL_FLAGS") == null, "shell flags ride after --: {cmd}");
-                assert\isTrue(cmd.startsWith("\"$CLAUDE_PROJECT_DIR/magus\" buzz "), "the argv starts with the binary: {cmd}");
+                assert\isTrue(cmd.startsWith("magus buzz -C "), "the argv starts with the binary: {cmd}");
             }
         }
     }
@@ -374,7 +376,7 @@ test "the interpreter is the same string on every machine" {
     // merging checkout happened to have into a COMMITTED config, so every other
     // checkout computed the other one and reported the harness uncovered. The host
     // expands CLAUDE_PROJECT_DIR, so the string names no machine's layout.
-    final head = "\"$CLAUDE_PROJECT_DIR/magus\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
+    final head = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
     // Every surface, because one command built by hand rather than through the helper
     // is one entry describe keeps replacing against a config that already holds it.
     assert\isTrue(claude_guard_command().startsWith(head), "command mcp and skill surfaces");

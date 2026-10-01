@@ -100,9 +100,9 @@ test "plain argv and a prefix on a command that runs no Buzz glue pass" {
 }
 
 test "a working directory before the script is not a knob on the glue" {
-    final rooted = "\\\"$CLAUDE_PROJECT_DIR/magus\\\" buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz";
+    final rooted = "magus buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz";
     assert\equal(check(configs(rooted)).len(), want: 0, message: "-C");
-    final knobbed = "MAGUS_GUARD_ADVISE=1 \\\"$CLAUDE_PROJECT_DIR/magus\\\" buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz";
+    final knobbed = "MAGUS_GUARD_ADVISE=1 magus buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz";
     assert\equal(check(configs(knobbed)).len(), want: 1, message: "a knob in front of it is still reported");
 }
 

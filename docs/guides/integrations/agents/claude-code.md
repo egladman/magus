@@ -103,7 +103,7 @@ runs a shipped script, which talks to `magus shell`: file edits run
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "\"$CLAUDE_PROJECT_DIR/magus\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
         }]
       }
     ]
@@ -119,11 +119,11 @@ them.
 
 Claude Code runs a hook command through `sh -c` and exports `CLAUDE_PROJECT_DIR`,
 the root the session started in ([hooks reference](https://code.claude.com/docs/en/hooks)).
-So the string is the same on every machine, never an absolute path, and runs the
-checkout's own build from any session directory. `-C` makes the root the working
-directory before anything else, so the root-relative script path resolves wherever
-the session is; the glue reads the session's own directory off the event. The glue
-is Buzz and needs no `jq`, and no entry carries any shell of its own.
+So the string is the same on every machine, never an absolute path. `-C` makes the
+root the working directory before anything else, so the root-relative script path
+resolves wherever the session is; the glue reads the session's own directory off
+the event. The glue is Buzz and needs no `jq`, and no entry carries any shell of
+its own.
 
 Flags an entry declares ride after `--`, which `magus buzz` forwards to the script,
 never in a leading `VAR=value`: the glue reads whether to forward the whole event
@@ -133,15 +133,19 @@ off the event itself.
 
 Three things in a session resolve the word `magus`, and each has its own owner:
 
-| Who runs `magus`                                        | Resolved by                                         | Owner                                                                                                                                         |
-| ------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook commands (the guard's interpreter)                 | `$CLAUDE_PROJECT_DIR/magus`, by path                | every hook entry                                                                                                                              |
-| The agent's own Bash tool commands                      | PATH, with the session root put first               | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
-| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first | magus, on every child it spawns                                                                                                               |
+| Who runs `magus`                                        | Resolved by                                                                     | Owner                                                                                                                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one       | every hook entry, and magus's own re-exec                                                                                                     |
+| The agent's own Bash tool commands                      | PATH, with the session root put first                                           | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
+| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                             | magus, on every child it spawns                                                                                                               |
 
-The `SessionStart` entry cannot serve hooks: the hooks reference says
+A hook's `magus` is whatever the PATH Claude Code was started with finds. Before it
+does anything else, that magus walks up from the `-C` directory to the nearest
+magusfile and re-execs into the `./magus` there when one exists, so a workspace that
+builds its own binary is judged by it and one that builds none uses the installed
+one. The `SessionStart` entry cannot serve hooks: the hooks reference says
 `CLAUDE_ENV_FILE` persists variables "for subsequent Bash commands", and names no
-other consumer. That is why every hook names the build by its path.
+other consumer.
 
 `magus doctor`'s `guard-binary` check runs the interpreter a hook would run and
 fails when it is a different build from the doctor's own, or cannot print its
@@ -160,11 +164,12 @@ stderr appears in the transcript as a `<hook name> hook error` notice, and the t
 call goes ahead UNJUDGED. A bare `magus` with none on PATH exits 127 that way, and
 a whole session once ran with every guard rule open.
 
-So a checkout with no `./magus` runs its hooks open: each exits 127, Claude Code
-shows the notice, and the call goes ahead unjudged until the checkout builds one
-(`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` in
-this repository). A workspace that uses an installed magus and builds none adapts
-the spell so its entries name that binary instead.
+So with no magus on PATH every hook runs open: each exits 127, Claude Code shows
+the notice, and the call goes ahead unjudged. Start Claude Code from a shell whose
+PATH finds one. This repository's `mise.toml` puts the checkout root first on PATH,
+so an activated shell finds the checkout's own `./magus` once
+`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` has
+built it.
 
 A magus that is present but broken (too old, or unable to load the workspace)
 fails open the same way, with its own error as the notice. `magus doctor` and `magus agent

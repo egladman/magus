@@ -113,6 +113,24 @@ func TestBootstrapExecDecisionHonorsRootOverCwd(t *testing.T) {
 	assert.Equal(t, want, target)
 }
 
+// A hook runs PATH's magus as `magus buzz -C <root> ...` from whatever directory the
+// session is in, which may be another checkout with its own build. The -C after the
+// subcommand names the tree whose binary runs the glue.
+func TestBootstrapExecDecisionFollowsBuzzWorkDirOverCwd(t *testing.T) {
+	unsetBootstrapExecEnv(t)
+	root := t.TempDir()
+	want := writeBootstrapFixtureWorkspace(t, root)
+	decoy := t.TempDir()
+	writeBootstrapFixtureWorkspace(t, decoy)
+	t.Chdir(decoy)
+
+	argv := []string{"magus", "buzz", "-C", root, "-s", "docs/guides/integrations/agents/magus-command.buzz",
+		"--", "--agent-name", "claude-code"}
+	target, ok := bootstrapExecDecision(argv, filepath.Join(root, "not-it"))
+	require.True(t, ok)
+	assert.Equal(t, want, target)
+}
+
 // bootstrapExecIntoHelperTargetVar carries the fixture path into the subprocess
 // TestBootstrapExecIntoReplacesProcess spawns; its presence is what tells
 // TestBootstrapExecIntoHelperProcess it is running AS that subprocess rather than as
