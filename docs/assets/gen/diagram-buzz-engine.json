@@ -1,11 +1,11 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 2,
+    "flow": 1,
     "imports": 6
   },
   "figure": "buzz-engine",
   "findings": [],
-  "stamp": "sha256:efdfde5260ebddb25e3781141b67f8ecc4f54c5e79fc46a89c70858b9ed7e6f4",
-  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+  "stamp": "sha256:88d94ffefd4753a3dca99c89ede1eaeae4fb283a22d72648b605d8910fe32888",
+  "symbolIndex": "fde0ae812ad5138cf1896c83fdd8b5876c3bc8c4ee0aa5859cdf451fbb9658bb"
 }

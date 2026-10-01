@@ -27,6 +27,8 @@ import "site/diagrams/knowledge-graph" as _;
 import "site/diagrams/guard-path" as _;
 import "site/diagrams/agent-surface" as _;
 import "site/diagrams/buzz-engine" as _;
+import "site/diagrams/buzz-compile" as _;
+import "site/diagrams/buzz-run" as _;
 import "site/diagrams/merge-queue-risk" as _;
 import "site/diagrams/workspace-load" as _;
 import "site/diagrams/inputs-outputs" as _;
@@ -58,6 +60,8 @@ export fun allFigures() > [figure\Figure] !> any {
         guardPathFigure(),
         agentSurfaceFigure(),
         buzzEngineFigure(),
+        buzzCompileFigure(),
+        buzzRunFigure(),
         mergeQueueRiskFigure(),
         workspaceLoadFigure(),
         inputsOutputsFigure(),

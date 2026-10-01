@@ -58,6 +58,7 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .zone("no ./magus yet", dirs: figure\setOf([rule]), actors: [exempt])
         .zone("magus builds magus", dirs: figure\setOf([stamp]), actors: [target, spells])
         .zone("kept fresh", actors: [stale, escape])
+        .rank(dirs: figure\setOf([cli, rule]), actors: [person, exempt])
         .legend(figure\Look.focal, label: "the one go run")
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.store, label: "embedded in the binary")

@@ -2,10 +2,10 @@
   "claims": {
     "calls": 0,
     "flow": 2,
-    "imports": 5
+    "imports": 6
   },
   "figure": "workspace-load",
   "findings": [],
-  "stamp": "sha256:034a4c302346c1c45b33537f84dc316a60fe049d5f52c371581da3a08434dbe3",
-  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+  "stamp": "sha256:88239b9cb6c747298feacfcb07f22b0c903bc06a7044f23b623c071886049ebc",
+  "symbolIndex": "675d39c07b778056311e87a4e9387251167dadc6ca7fd3cf2f9272bdee36d131"
 }

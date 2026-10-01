@@ -131,10 +131,9 @@ superset -- compiling to bytecode is upstream behaviour, writing it to a file is
 
 This is the ordinary shape for a bytecode VM rather than an invention -- CPython's
 `.pyc`, the JVM's `.class`, `luac` and Lua's `string.dump`, and Erlang's `.beam` are
-all the same idea, and the split debug file mirrors a PDB or a DWARF `.dwo`. It is
-also load-bearing here: magus ships every built-in spell as a prebuilt `.bo`
-(`internal/spell/gen/*.bo`), so a spell loads without a compiler on the critical
-path.
+all the same idea, and the split debug file mirrors a PDB or a DWARF `.dwo`. magus
+uses it through the bytecode cache below, for the guard's policy files a hook loads
+in a fresh process on every command.
 
 Because it is ours and not upstream's, it is ours to keep whole. Every constant kind
 the compiler can mint -- null, bool, int, float, str, enum def, object declaration,
@@ -334,9 +333,6 @@ No cgo, no external toolchain. Pure-Go deps:
 [`purego`](https://github.com/ebitengine/purego) (`zdef()` FFI) and
 [`golang-asm`](https://github.com/twitchyliquid64/golang-asm) (JIT codegen, amd64).
 
-After bumping `BytecodeVersion`, run `go generate` in
-[`../internal/spell`](../internal/spell) to rebuild the embedded spell bytecode.
-
 ## CLI
 
 `cmd/buzz` is a standalone runner mirroring the upstream `buzz` CLI, built on the
@@ -462,23 +458,30 @@ dry-runs a `magusfile.buzz`, with host calls recorded.
 ## Architecture
 
 ```text
-source -> Parse -> ast.Program -> Checker
-       -> Compiler (FoldConsts, FusePeephole) -> Chunk (bytecode)
-       -> VM.Exec (register-window stack) -> Value
+source -> token.Tokenize -> []token.Token -> parser -> ast.Program
+       -> import resolution (each imported file runs through this pipeline first)
+       -> Checker -> Compiler -> vm.Chunk -> FoldConsts, FusePeephole
+       -> VM.Run -> baseline JIT if eligible, else VM.Exec -> Value
 ```
 
+The magus docs walk the same path with figures:
+[How gopherbuzz runs Buzz](../../docs/concepts/buzz.md).
+
 - **`Instr`** `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
-- **`Value`**: 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into a per-VM handle table, so the operand stack is `[]uint64` with no GC-visible pointers.
+- **`Value`**: 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into one process-wide handle table, so the operand stack is `[]uint64` with no GC-visible pointers. A `vm.Owner` holds the slots each session allocated and releases them when the session closes.
 
 ## Baseline JIT
 
-On **amd64 and arm64**, a hot top-level chunk whose body is the numeric
+On **amd64 and arm64**, a top-level chunk whose body is the numeric
 loop/arithmetic opcode subset is compiled to native code, deleting interpreter
-dispatch. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
+dispatch. There is no hotness counter: `VM.Run` offers its chunk on every run, the
+first run compiles it, and the verdict is cached per chunk. Functions the chunk calls
+always run interpreted. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
 
 - The pointerless `[]uint64` stack lets native code run with no GC cooperation; every value sits at a static slot offset at each opcode boundary, so interpreter state is always materialized.
-- Each op has an int and a double (SSE) fast path. Anything else (mixed
-  int/float, a non-number via `any`, NaN, float ÷0/`%`) **deopts** to the interpreter at the recorded ip; unsupported ops (calls, members, strings) make the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
+- Each op has an int and a double fast path, and a mixed int/float operand is
+  promoted to double. Anything else (a non-number via `any`, a NaN result, ÷0, float
+  `%`) **deopts** to the interpreter at the recorded ip; unsupported ops (calls, members, strings) make the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
 - Loop back-edges poll cancellation every 256 iterations (one predicted branch).
 - Eligibility (`depths()`) is also **validation**, not just an opcode filter: every
   local slot, branch target, const index, fused sub-opcode and absorbed-nop slot is
@@ -590,7 +593,7 @@ under `buzz_safe`.
   (`OpGetField`/`OpSetField`): pointer/index compares, no string scan. Per-VM,
   not per-Chunk (chunks are shared; verified `-race`).
 - **NaN-box + handle table**: zero write barriers on push/pop; the table pins
-  objects for the VM's life (fine for short per-target sessions).
+  objects until the session that owns them closes.
 - **Pooled lexer buffer**: `Tokenize` lexes into a `sync.Pool` scratch buffer
   and returns an exact-length copy. The pool keeps buffers up to 16K tokens,
   about 64 KB of source; a larger module lexes into a fresh buffer the pool
