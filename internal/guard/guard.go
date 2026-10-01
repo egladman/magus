@@ -1664,8 +1664,8 @@ func hookLocationAt(deps Dependencies, dir string) location {
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host
 // reported its tool call runs in. A host runs its hooks from wherever it likes, and the
-// process cwd is then the orchestrator's tree rather than the worker's: the marker bound
-// with `magus session lease` lives in the worker's checkout, so the envelope's cwd is the
+// process cwd is then the orchestrator's tree rather than the worker's: the binding
+// `magus job exec` records lives in the worker's checkout, so the envelope's cwd is the
 // only thing that finds it. A location already pinned (a test's) wins, and a cwd magus
 // cannot resolve to a workspace changes nothing. A relative cwd is ignored rather than
 // resolved against the hook process, whose directory is the thing it must not stand for.
