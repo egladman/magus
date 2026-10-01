@@ -389,6 +389,9 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
 	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
+
+	c.NoDefaultCharms = true
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 }
 
 // TestIdentityLessCallersShareTheCheckoutRecord pins the one binding keyed on the checkout:

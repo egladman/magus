@@ -829,6 +829,7 @@ export object LeaseCheck {
     target: str = "",
     project: str = "",
     args: [str] = [],
+    noDefaultCharms: bool = false,
 }
 
 export object CompletionGate {

@@ -285,6 +285,9 @@ func gateCommand(c types.LeaseCheck) string {
 		project = "."
 	}
 	args := []string{c.Target, project}
+	if c.NoDefaultCharms {
+		args = append(args, "--no-default-charms")
+	}
 	if len(c.Args) > 0 {
 		args = append(args, append([]string{"--"}, c.Args...)...)
 	}

@@ -86,6 +86,10 @@ type LeaseCheck struct {
 	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
 	// Args are forwarded to the tool after `--`, never to magus.
 	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
+	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
+	// the workspace's default_charms satisfies it: the charmless `generate` that compares
+	// against HEAD, in a workspace whose default is rw.
+	NoDefaultCharms bool `json:"no_default_charms,omitempty" yaml:"no_default_charms,omitempty"`
 }
 
 // PrimaryCompletionGateID names the existing singular check when it is projected
@@ -259,6 +263,9 @@ func (c LeaseCheck) String() string {
 		project = "."
 	}
 	line := "magus run " + c.Target + " " + project
+	if c.NoDefaultCharms {
+		line += " --no-default-charms"
+	}
 	if len(c.Args) > 0 {
 		line += " -- " + strings.Join(c.Args, " ")
 	}
@@ -278,6 +285,10 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 		words, args = words[:i], words[i+1:]
 	}
 	for _, w := range words {
+		if w == "--no-default-charms" {
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s;"+
+				" declare the check as a record with `no_default_charms: true` instead", s, w)
+		}
 		if strings.HasPrefix(w, "-") {
 			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
@@ -1075,6 +1086,7 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
 		}
 		parsed.Args = r.Check.Args
+		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
 		return parsed, true, nil
 	case line != "":
 		parsed, err := ParseLeaseRunLine(line)

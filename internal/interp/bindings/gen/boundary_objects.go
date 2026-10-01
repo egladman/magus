@@ -2029,6 +2029,7 @@ func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
 	}
 	out.MapSet("args", vm.ListValue(itemsArgs))
+	out.MapSet("noDefaultCharms", vm.BoolValue(v.NoDefaultCharms))
 	return out
 }
 

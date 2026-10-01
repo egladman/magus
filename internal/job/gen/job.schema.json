@@ -115,6 +115,10 @@
             "type": "string"
           },
           "description": "Args are forwarded to the tool after `--`, never to magus."
+        },
+        "no_default_charms": {
+          "type": "boolean",
+          "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
         }
       },
       "description": "Check is the one check this lease runs, and acceptance binds a worker's evidence to it."
@@ -180,6 +184,10 @@
                   "type": "string"
                 },
                 "description": "Args are forwarded to the tool after `--`, never to magus."
+              },
+              "no_default_charms": {
+                "type": "boolean",
+                "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
               }
             },
             "description": "Check is the run a GateKindCheck gate examines. Zero on every other kind."

@@ -371,6 +371,48 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 	}
 }
 
+// A check opting out of default_charms is the charmless drift gate an rw-default workspace
+// still needs: only a --no-default-charms run satisfies it, and the command served for it
+// carries the flag.
+func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	defaults := []string{types.CharmReadWrite}
+	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
+	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
+
+	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
+	assert.True(t, bindsTo(optOut, gated, defaults), "the --no-default-charms run")
+	assert.False(t, bindsTo(optOut, written, defaults), "a written run is not evidence of a gated one")
+
+	plain := types.LeaseCheck{Target: "generate", Project: "."}
+	assert.True(t, bindsTo(plain, written, defaults), "a plain check still binds the default-charm run")
+	assert.False(t, bindsTo(plain, gated, defaults))
+
+	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
+	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
+	assert.True(t, strings.HasSuffix(gateCommand(plain), " run generate ."), gateCommand(plain))
+}
+
+// The opt-out is a field on the check record and has one spelling: a check line carrying
+// the flag is refused with the field named, and a declared record keeps it.
+func TestCheckOptOutIsARecordField(t *testing.T) {
+	t.Parallel()
+
+	_, err := types.ParseLeaseCheck("generate . --no-default-charms")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no_default_charms: true")
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/drift"`,
+		`"check":{"target":"generate","project":".","no_default_charms":true}`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	require.NotNil(t, row.Check)
+	assert.True(t, row.Check.NoDefaultCharms)
+	assert.Equal(t, "magus run generate . --no-default-charms", row.Validation)
+}
+
 // A rejected run names the check as it resolved, so the reader sees which charm set the
 // evidence had to carry.
 func TestCheckGateUnderDefaultCharms(t *testing.T) {

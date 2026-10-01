@@ -476,11 +476,14 @@ func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 	return spell == "" || a.Spell == "" || spell == a.Spell
 }
 
-// resolveCheck is c with the charm set `magus run` would execute it under: defaults first,
-// the check's own charms stacked on top, duplicates dropped (cmd/magus withDefaultCharms),
-// and the write-granting charms removed from ci, which RunCI never runs with
-// (magus.CharmsForCI).
+// resolveCheck is c with the charm set `magus run` would execute it under: defaults first
+// unless the check opts out of them, the check's own charms stacked on top, duplicates
+// dropped (cmd/magus withDefaultCharms), and the write-granting charms removed from ci,
+// which RunCI never runs with (magus.CharmsForCI).
 func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
+	if c.NoDefaultCharms {
+		defaults = nil
+	}
 	spell, target, filtered := strings.Cut(c.Target, "::")
 	if !filtered {
 		spell, target = "", spell
