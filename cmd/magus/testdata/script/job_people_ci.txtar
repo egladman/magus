@@ -19,9 +19,6 @@ exec git commit -q -m 'merge the pricing and tax branches'
 exec magus job apply -f ci/jobs.jsonl
 cmp stdout $WORK/apply.out
 
-# A run in the same second as the apply predates the declaration, which records whole
-# seconds.
-exec sleep 1
 exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" ci/evidence.tmpl.json > "$WORK/evidence.json"'
 stdin $WORK/evidence.json
 exec magus job wait release/pricing --integration --stdin
@@ -84,9 +81,9 @@ integration: release/pricing passes in ~/src/shop; its state is unchanged
 release/pricing: 1 of 1 goal(s) met
   [met] check
 -- ls.out --
-JOB              HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-release/pricing  session  declared  -      1      alone  magus run test .
-release/tax      session  declared  -      1      alone  magus run test .
+JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
+release/pricing  -       declared  -      1      alone  magus run test .
+release/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

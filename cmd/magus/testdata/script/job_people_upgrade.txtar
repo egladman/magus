@@ -30,9 +30,6 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/holders.out
 
-# A run in the same second as the apply predates the declaration, which records whole
-# seconds.
-exec sleep 1
 cd ../ana
 cp $WORK/deps-1.3.txt api/deps.txt
 exec sh -c 'ref=$(magus run test api -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed -e "s/out<hex>/$ref/" "$WORK/api.json" > "$WORK/filed.json"'
@@ -102,9 +99,9 @@ footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-done.out --
-JOB          HOLDER   STATE  MODEL  PATHS  PROOF  CHECK
-upgrade/api  session  pass   -      1      alone  magus run test api
-upgrade/web  session  pass   -      1      alone  magus run test web
+JOB          HOLDER  STATE  MODEL  PATHS  PROOF  CHECK
+upgrade/api  ana     pass   -      1      alone  magus run test api
+upgrade/web  ben     pass   -      1      alone  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

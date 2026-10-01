@@ -81,9 +81,9 @@ done
 
 ```console
 $ magus ls jobs
-JOB          HOLDER   STATE  MODEL  PATHS  PROOF  CHECK
-upgrade/api  session  pass   -      1      alone  magus run test api
-upgrade/web  session  pass   -      1      alone  magus run test web
+JOB          HOLDER  STATE  MODEL  PATHS  PROOF  CHECK
+upgrade/api  ana     pass   -      1      alone  magus run test api
+upgrade/web  ben     pass   -      1      alone  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -110,7 +110,7 @@ in his, claims the same page for the section he wants:
 
 ```console
 $ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
-[error] magus job fork: [MGS3032] job: fr/upgrading declares "docs/fr/install.md", and fr/install (declared, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install
+[error] magus job fork: [MGS3032] job: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install
   see: https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3032/
 ```
 
@@ -125,7 +125,7 @@ $ magus job apply -f - <<'EOF'
 {"schema_version": 11, "id": "fr/install", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
 {"schema_version": 11, "id": "fr/upgrading", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 EOF
-updated fr/install, still declared:
+updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
 ```
@@ -137,9 +137,9 @@ the board shows the shared page and why it is not a conflict:
 
 ```console
 $ magus ls jobs
-JOB           HOLDER   STATE     MODEL  PATHS  PROOF     CHECK
-fr/install    session  declared  -      1      alone     magus run lint .
-fr/upgrading  session  declared  -      1      disjoint  magus run lint .
+JOB           HOLDER  STATE    MODEL  PATHS  PROOF     CHECK
+fr/install    ana     running  -      1      alone     magus run lint .
+fr/upgrading  ben     running  -      1      disjoint  magus run lint .
 
 overlaps
   fr/install and fr/upgrading claim common ground
@@ -190,9 +190,9 @@ The board says both items came back, and nothing more:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER   STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  session  exited  -      1      alone  -
-release-1.3/notes      session  exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
+release-1.3/changelog  changelog  exited  -      1      alone  -
+release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -233,9 +233,9 @@ read it. The board is the checklist:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER   STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  session  pass    -      1      alone  -
-release-1.3/notes      session  exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
+release-1.3/changelog  changelog  pass    -      1      alone  -
+release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

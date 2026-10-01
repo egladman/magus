@@ -36,9 +36,6 @@ cmp stdout $WORK/exec.out
 exec magus describe job refactor/pricing
 cmp stdout $WORK/describe.out
 
-# A run in the same second as the fork predates the declaration, which records whole
-# seconds, so wait would refuse it as historical output.
-exec sleep 1
 cp $WORK/total.sh pricing/total.sh
 exec magus run test .
 stderr '^ref  out[0-9a-f]{12}$'
@@ -101,9 +98,9 @@ total() { echo $(( $1 + $2 )); }
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-declared.out --
-JOB               HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-refactor/pricing  session  declared  -      1      alone  magus run test .
-refactor/tax      session  declared  -      1      alone  magus run test .
+JOB               HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
+refactor/pricing  -       declared  -      1      alone  magus run test .
+refactor/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -144,9 +141,9 @@ footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-done.out --
-JOB               HOLDER   STATE      MODEL  PATHS  PROOF  CHECK
-refactor/pricing  session  pass       -      1      alone  magus run test .
-refactor/tax      session  no_return  -      1      alone  magus run test .
+JOB               HOLDER        STATE      MODEL  PATHS  PROOF  CHECK
+refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
+refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

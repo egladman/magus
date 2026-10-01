@@ -132,6 +132,7 @@ var (
 	JobFork             = cmd("job", "fork")
 	JobExec             = cmd("job", "exec")
 	JobExit             = cmd("job", "exit")
+	JobApply            = cmd("job", "apply")
 	JobWait             = cmd("job", "wait")
 	JobWatch            = cmd("job", "watch")
 	JobRun              = cmd("job", "run")

@@ -105,6 +105,26 @@ func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
 	assert.Contains(t, text, hint.JobExit.With("root/orphan"))
 }
 
+// HOLDER says who took each job: the checkout it was taken in, the server for its own,
+// and nobody for one still waiting to be taken.
+func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
+	t.Parallel()
+
+	rows := []types.Job{
+		{ID: "taken", State: types.StateRunning, Holder: types.HolderSession, CheckoutRoot: "/src/ana"},
+		{ID: "waiting", State: types.StateDeclared},
+		{ID: "sweep", State: types.StateRunning, Holder: types.HolderServer},
+	}
+	var out strings.Builder
+	printJobTree(&out, types.NewJobList(rows))
+	holders := map[string]string{}
+	for _, line := range strings.Split(out.String(), "\n")[1:4] {
+		f := strings.Fields(line)
+		holders[f[0]] = f[1]
+	}
+	assert.Equal(t, map[string]string{"taken": "ana", "waiting": "-", "sweep": "server"}, holders)
+}
+
 // TestGeneratedBoundaryNamesWhatAnOutputCarvesOut: a brief fences a lease's generated
 // globs, and the hand files an exclusion carves out of one must read as the exception
 // rather than fenced with the rest.

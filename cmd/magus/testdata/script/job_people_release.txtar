@@ -75,9 +75,9 @@ created release-1.3/notes, declared, with 1 write path(s)
 -- exit-notes.out --
 exited release-1.3/notes, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait release-1.3/notes`
 -- ls-exited.out --
-JOB                    HOLDER   STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  session  exited  -      1      alone  -
-release-1.3/notes      session  exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
+release-1.3/changelog  changelog  exited  -      1      alone  -
+release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -98,9 +98,9 @@ unresolved risks its holder reported
   the notes need the final benchmark numbers
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-board.out --
-JOB                    HOLDER   STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  session  pass    -      1      alone  -
-release-1.3/notes      session  exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
+release-1.3/changelog  changelog  pass    -      1      alone  -
+release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

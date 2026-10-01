@@ -22,10 +22,16 @@ var (
 	errNoBase     = errors.New("job: a registration needs the base the worker landed on")
 )
 
-// Exec records the base a worker reports it actually landed on and returns the row
-// with the divergence verdict computed at that moment.
+// Exec takes a job in this store's checkout: it records the base a worker reports it
+// actually landed on, moves a declared row to running, and returns the row with the
+// divergence verdict computed at that moment. Taking it again from the same checkout
+// records the new base and nothing else.
 //
-// A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
+// It refuses a job another checkout holds. Wait grades the checkout the row names, so a
+// second taker would silently move that grade off the holder's tree; the job moves only
+// once its holder ends it and it is declared again, which clears the checkout.
+//
+// THE BASE VERDICT IS A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
 // leave the orchestrator with no record that a worker went to the wrong base, which is the
 // one case the record is for. The caller gets the verdict and [BaseAdvice]'s reading
 // of it, and decides.
@@ -59,15 +65,24 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take;"+
 				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
 		}
+		// Relative would be resolved against whichever process sweeps the row later.
+		here := ""
+		if s.root != "" {
+			if abs, err := filepath.Abs(s.root); err == nil {
+				here = abs
+			}
+		}
+		if cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
+			return fmt.Errorf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it."+
+				" Its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
+				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)
+		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))
 		cur.Registered = now
-		// Relative would be resolved against whichever process sweeps the row later.
-		cur.CheckoutRoot = ""
-		if s.root != "" {
-			if abs, err := filepath.Abs(s.root); err == nil {
-				cur.CheckoutRoot = abs
-			}
+		cur.CheckoutRoot = here
+		if cur.State == types.StateDeclared {
+			cur.State = types.StateRunning
 		}
 		return nil
 	})

@@ -30,6 +30,11 @@ cmp stdout $WORK/fork.out
 exec magus shell --path pricing/format.sh -o name
 cmp stdout $WORK/shell.out
 exec magus job exec currency
+
+# Ana's job stays hers: taking it from Ben's worktree is refused, naming where it is held.
+! exec magus job exec cents
+stderr 'job: cents is held in .*/ana \(running, updated [0-9]+s ago\)'
+stderr '`magus job exit cents`'
 exec magus ls jobs
 cmp stdout $WORK/ls-overlap.out
 
@@ -84,9 +89,9 @@ console: nothing is serving it; `magus server start` to watch this job without i
 -- shell.out --
 advise
 -- ls-overlap.out --
-JOB       HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-cents     session  declared  -      2      alone  magus run test .
-currency  session  declared  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      2      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -97,13 +102,13 @@ overlaps
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- apply.out --
-updated cents, still declared:
+updated cents, still running:
   write_paths -pricing/format.sh
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-handed.out --
-JOB       HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-cents     session  declared  -      1      alone  magus run test .
-currency  session  declared  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      1      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

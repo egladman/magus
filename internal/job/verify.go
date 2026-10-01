@@ -422,15 +422,15 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 		return status
 	}
 	if row.Created > 0 {
-		// Declaration time is persisted in seconds while run evidence is in
-		// milliseconds. Require the next whole second so same-second historical
-		// output never closes a job it predates.
-		declaredAt := row.Created*1000 + 999
+		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
+		// the declaring second cannot be ordered against it either way, and a check run
+		// straight after its fork is exactly that run.
+		captured := attempt.TimestampMs / 1000
 		switch {
 		case attempt.TimestampMs == 0:
 			status.Violations = append(status.Violations, "records no timestamp, so Magus cannot prove the evidence was captured after this job was declared")
-		case attempt.TimestampMs < declaredAt:
-			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (%d < %d), so historical output cannot close this job", attempt.TimestampMs, declaredAt))
+		case captured < row.Created:
+			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (second %d < %d), so historical output cannot close this job", captured, row.Created))
 		}
 	}
 	if !bindsTo(gate.Check, attempt) {

@@ -37,13 +37,14 @@ upgrade, a translation, a release checklist.
 - **Who holds what.** Each job names the files it may write. `magus describe job`
   lists the files other live jobs hold as off limits, and `magus ls jobs -o json`
   carries the checkout each job was taken in (`checkout_root`) and the login that
-  took it (`registered_by`).
+  declared it (`registered_by`). A job one checkout holds is not taken from another:
+  `job exec` there is refused until the holder gives it up.
 - **Since when.** The same record carries when the job was declared (`created`),
   taken (`registered`) and last moved (`updated`), in Unix seconds, and every file
   a job gave up, with the time and the sha256 the file had at that moment.
 - **What done means.** A job names one check, a target to run, and may declare
   goals. `magus job wait` grades evidence rather than anybody's word: a passing run
-  recorded after the job was declared, and the diff since the revision the job
+  recorded no earlier than the second the job was declared, and the diff since the revision the job
   started from. When it says no, it exits 1 and names every rule that failed.
 
 The store is kept per repository in your state directory
@@ -97,16 +98,17 @@ board:
 
 ```console
 $ magus ls jobs
-JOB               HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-refactor/pricing  session  declared  -      1      alone  magus run test .
-refactor/tax      session  declared  -      1      alone  magus run test .
+JOB               HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
+refactor/pricing  -       declared  -      1      alone  magus run test .
+refactor/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
-HOLDER reads `session` for every job a person declares; `server` marks magus's own
-housekeeping. `declared` means nobody has filed anything yet. PROOF is what the fork could prove
+HOLDER names the worktree a job was taken in, `-` until somebody takes it; `server`
+marks magus's own housekeeping. `declared` means nobody has taken it yet, and
+`job exec` moves it to `running`. PROOF is what the fork could prove
 about the write paths in that checkout: `alone`, `disjoint` or `overlapping`. The
 `in flight` line is about open pull requests, which this repository never fetched,
 and the `console` line says where to watch a job in a browser once
@@ -220,9 +222,9 @@ call; wait checks what is mechanical.
 
 ```console
 $ magus ls jobs
-JOB               HOLDER   STATE      MODEL  PATHS  PROOF  CHECK
-refactor/pricing  session  pass       -      1      alone  magus run test .
-refactor/tax      session  no_return  -      1      alone  magus run test .
+JOB               HOLDER        STATE      MODEL  PATHS  PROOF  CHECK
+refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
+refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -277,9 +279,9 @@ Ben takes his job, and the board shows the shared ground:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-cents     session  declared  -      2      alone  magus run test .
-currency  session  declared  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      2      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -304,7 +306,7 @@ $ magus job apply -f - <<'EOF'
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 EOF
-updated cents, still declared:
+updated cents, still running:
   write_paths -pricing/format.sh
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
@@ -318,9 +320,9 @@ the file Ana left. The overlap is gone:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-cents     session  declared  -      1      alone  magus run test .
-currency  session  declared  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      1      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
@@ -416,9 +418,9 @@ not move:
 
 ```console
 $ magus ls jobs
-JOB              HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
-release/pricing  session  declared  -      1      alone  magus run test .
-release/tax      session  declared  -      1      alone  magus run test .
+JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
+release/pricing  -       declared  -      1      alone  magus run test .
+release/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

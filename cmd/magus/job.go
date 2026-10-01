@@ -529,7 +529,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		}
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
-			string(row.lease.Holder.OrSession()), state, orDash(row.lease.Model),
+			jobHolderCell(row.lease), state, orDash(row.lease.Model),
 			len(row.lease.WritePaths), orDash(string(row.lease.WriteProof)), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
@@ -580,6 +580,20 @@ func printJobTree(out io.Writer, report types.JobList) {
 			fmt.Fprintf(out, "    %s\n", line)
 		}
 	}
+}
+
+// jobHolderCell is who holds row as the tree names it: the server for its own jobs, the
+// checkout a session job was taken in, and "-" for one nobody has taken. The checkout is
+// the one fact that tells holders apart: every person and agent on a machine runs as the
+// same OS account, and a CLI exec sees no other identity.
+func jobHolderCell(row types.Job) string {
+	switch {
+	case row.Holder.OrSession() == types.HolderServer:
+		return string(types.HolderServer)
+	case row.CheckoutRoot != "":
+		return filepath.Base(row.CheckoutRoot)
+	}
+	return "-"
 }
 
 // overlapFootprints compares what each overlapping pair has actually changed. Only the
@@ -1061,7 +1075,12 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Take a job here: record the base this tree is on beside the checkpoint the job")
 			fmt.Fprintln(os.Stderr, "was handed, with the divergence between them as a fact rather than a refusal,")
-			fmt.Fprintln(os.Stderr, "and the checkout it was taken in.")
+			fmt.Fprintln(os.Stderr, "and the checkout it was taken in. A declared job starts running.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A job another checkout holds is refused: wait grades the holder's checkout, so")
+			fmt.Fprintln(os.Stderr, "it moves only once its holder gives it up with `magus job exit` and whoever")
+			fmt.Fprintln(os.Stderr, "forked it declares it again with `magus job apply`. Taking it again in the")
+			fmt.Fprintln(os.Stderr, "same checkout records the new base.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The guard hook binds the caller to the job when it lets this command through,")
 			fmt.Fprintln(os.Stderr, "keyed on the session and subagent its agent host names, so every lease-scoped")
