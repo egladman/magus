@@ -47,5 +47,9 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .zone("a shard per source", actors: [core, files, symbols, vcs, notes])
         .legend(figure\Look.focal, label: "what every reader asks")
         .legend(figure\Look.input, label: "built by a SCIP indexer")
-        .scope(figure\setOf([graph]));
+        .scope(figure\setOf(magus\dirs("internal/graph/**", opts: magus\DirsOptions{ language = "go" })))
+        .except(figure\setOf([magus\dir("internal/graph/dependency")]),
+            why: "the project dependency DAG targets run in, a different graph")
+        .except(figure\setOf([magus\dir("internal/graph/url")]),
+            why: "composes the console explorer's URL; it reads no shard and asks no verb");
 }

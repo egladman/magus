@@ -60,9 +60,12 @@ export fun buzzCompileFigure() > figure\Figure !> any {
         .rank(dirs: figure\setOf([vm]), actors: [store])
         .legend(figure\Look.focal, label: "where an import runs")
         .legend(figure\Look.store, label: "optional, set by the host")
-        .scope(figure\setOf([session, lexer, tree, typeSystem, vm]))
+        .scope(gopherbuzzPackages())
         .except(figure\setOf([session]),
             why: "its steps are drawn one by one, each checked against the symbol that implements it")
         .except(figure\setOf([tree, typeSystem]),
-            why: "data packages: their types label the connectors");
+            why: "data packages: their types label the connectors")
+        .except(figure\setOf([magus\dir("libs/gopherbuzz/std"), magus\dir("libs/gopherbuzz/internal/codec")]),
+            why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled by these same steps")
+        .except(gopherbuzzAround(), why: AROUND_WHY);
 }

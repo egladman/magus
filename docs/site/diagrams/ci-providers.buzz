@@ -37,5 +37,7 @@ export fun ciProvidersFigure() > figure\Figure !> any {
         .zone("magus binary, names no ci system", dirs: figure\setOf([contract, quote]), actors: [run])
         .zone("provider spell, in buzz", actors: [ops, prefixes])
         .legend(figure\Look.external, label: "outside magus")
-        .scope(figure\setOf([contract, quote]));
+        .scope(figure\setOf(magus\dirs("internal/ci/**", opts: magus\DirsOptions{ language = "go" })))
+        .except(figure\setOf([magus\dir("internal/ci/forecast"), magus\dir("internal/ci/volatility")]),
+            why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
 }

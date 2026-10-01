@@ -37,5 +37,9 @@ export fun cacheTrustFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "the one shared store")
         .legend(figure\Look.store, label: "one pull request only")
         .legend(figure\Look.optional, label: "never replayed")
-        .scope(figure\setOf([remote]));
+        .scope(figure\setOf(magus\dirs("internal/cache/**", opts: magus\DirsOptions{ language = "go" })))
+        .except(figure\setOf([magus\dir("internal/cache/reflink")]),
+            why: "copy-on-write file clones for a local restore; no tier, key or signature")
+        .except(figure\setOf([magus\dir("internal/cache/remotetest")]),
+            why: "a test server for the remote protocols, linked only by tests");
 }

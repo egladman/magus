@@ -49,5 +49,10 @@ export fun buzzRunFigure() > figure\Figure !> any {
         .rank(actors: [native, interpreter])
         .zone("package vm", dirs: figure\setOf([vm]), actors: [compile, native, interpreter, heap])
         .legend(figure\Look.focal, label: "the native tier")
-        .scope(figure\setOf([session, vm]));
+        .scope(gopherbuzzPackages())
+        .except(figure\setOf([magus\dir("libs/gopherbuzz/token"), magus\dir("libs/gopherbuzz/ast"), magus\dir("libs/gopherbuzz/types")]),
+            why: "the compile side, drawn in buzz-compile; a run starts from the chunk")
+        .except(figure\setOf([magus\dir("libs/gopherbuzz/std"), magus\dir("libs/gopherbuzz/internal/codec")]),
+            why: "the Buzz stdlib and its JSON codec: modules a program calls, run by this same VM")
+        .except(gopherbuzzAround(), why: AROUND_WHY);
 }

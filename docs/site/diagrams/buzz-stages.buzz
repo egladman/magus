@@ -16,3 +16,25 @@ export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look
     }
     throw "codeStage(\"{name}\"): {symbol} has no definition directly in {dir.path}";
 }
+
+// gopherbuzzPackages is every Go package in the gopherbuzz tree. A figure scoped to it meets
+// a new package as a finding until a box draws it or an except names it.
+export fun gopherbuzzPackages() > figure\DirSet !> any {
+    final dirs: [magus\Dir] = magus\dirs("libs/gopherbuzz/**", opts: magus\DirsOptions{ language = "go" });
+    return figure\setOf(dirs);
+}
+
+// gopherbuzzAround is the gopherbuzz packages built on the pipeline rather than part of
+// it; a figure excepts them for AROUND_WHY.
+export fun gopherbuzzAround() > figure\DirSet !> any {
+    return figure\setOf([
+        magus\dir("libs/gopherbuzz/benchmarks/comparison"),
+        magus\dir("libs/gopherbuzz/benchmarks/upstream"),
+        magus\dir("libs/gopherbuzz/buzzgen"),
+        magus\dir("libs/gopherbuzz/cmd/buzz"),
+        magus\dir("libs/gopherbuzz/examples/ffi-c"),
+        magus\dir("libs/gopherbuzz/wasm"),
+    ]);
+}
+
+export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, two benchmarks and an example: built on the pipeline, not a stage of it";
