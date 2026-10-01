@@ -143,7 +143,9 @@ curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
 ```
 
-`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike.
+`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike; `mcp.http: false`
+takes it off loopback only, and the socket keeps serving it (see
+[Enabling and disabling](#enabling-and-disabling)).
 
 ## Available tools
 
@@ -301,6 +303,20 @@ mcp:
 
 Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the server.
 
+To stop serving MCP over the loopback HTTP listener while keeping the rest:
+
+```yaml
+# magus.yaml
+mcp:
+  http: false
+```
+
+Or `MAGUS_MCP_HTTP=false`. The server then mounts no `/mcp` route on its HTTP listener,
+so a request for it gets `404` whatever token it carries. `magus mcp` (stdio) and `/mcp`
+on the [server socket](#mcp-over-the-server-socket) keep serving, and the listener keeps
+the console and the health routes. `mcp.http: true` beside `mcp.enabled: false` is a
+config error, since the server serves no MCP at all then.
+
 To change the listen address:
 
 ```yaml
@@ -437,7 +453,18 @@ The [server socket](#mcp-over-the-server-socket) reads no token; the kernel's re
 the peer's uid stands in for it, so anything running as you reaches it, just as it
 could read your operator token.
 
-Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default, refuses any other address without `mcp.insecure_bind: true`, and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
+The token is the boundary on loopback `/mcp`, and the only one. The endpoint checks no
+`Host` or `Origin` header and answers any origin's CORS preflight with
+`Access-Control-Allow-Origin: *`, so a browser page with a token can drive it like any
+other client. A page without one, a DNS-rebinding page included, gets the same `401` a
+tokenless curl does, and reads nothing: the response carries no data, and CORS never
+allows credentials, so the browser attaches no cookie or other ambient credential. The
+console's routes keep their `Host` and `Origin` checks. If you would rather not serve MCP
+over HTTP at all, set `mcp.http: false` and use stdio or the socket.
+
+The server binds to `127.0.0.1` by default and refuses any other address without
+`mcp.insecure_bind: true`. Anyone who reads a token gains the same workspace access, so
+keep tokens out of shared places and keep the port closed.
 
 **Do not expose it over:**
 

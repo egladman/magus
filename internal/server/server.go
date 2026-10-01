@@ -1,7 +1,8 @@
 // Package server is the HTTP composition of `magus server`: it mounts the MCP
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
 // Explorer console onto one loopback listener, applying the shared bearer
-// and DNS-rebind guards, and mounts /mcp and the Connect services onto the
+// guard (and the DNS-rebind guard to the console routes; /mcp trusts the token
+// alone), and mounts /mcp and the Connect services onto the
 // server's unix socket as well. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
@@ -285,8 +286,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// cors (siteOrigin + the two loopback origins for this port) was built above,
 			// before the health-route loop, so it is shared rather than rebuilt here.
 
-			// The bridge routes share the same auth and DNS-rebind middleware as
-			// /mcp, header-only included: the explorer authenticates every /api
+			// The bridge routes share /mcp's header-only bearer guard, behind the DNS-rebind
+			// guard /mcp does without: the explorer authenticates every /api
 			// call (fetches AND the SSE event stream, a fetch()-based reader, not
 			// an EventSource) with an Authorization header, so the token never
 			// rides in the URL. CORS still advertises the Authorization header for
@@ -387,8 +388,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				// The dashboard is a cross-origin browser client (served from the hosted site).
 				// CORS wraps BearerGuard (not the reverse) so the browser's tokenless OPTIONS
 				// preflight is answered here rather than 401'd by the bearer check; the actual
-				// POST still carries and is verified against the bearer token. /mcp stays on
-				// the loopback-only accept-list.
+				// POST still carries and is verified against the bearer token.
 				f.service(mPath, mHandler)
 				// MetricsService is a read-only stream, so it joins the share read surface.
 				shareGuarded[mPath] = serviceRoute(mPath, mHandler)
@@ -677,21 +677,34 @@ func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[stri
 	f.socketMux.Handle(pattern, g)
 }
 
-// guard mounts h at pattern behind rebind, then (for a console route) CORS, so a tokenless
-// OPTIONS preflight is answered while a hosted-PWA Origin still clears rebind first, then the
-// bearer guard holding each path to its need. Every guarded mount goes through here.
-func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]types.Need, console bool, h http.Handler) {
+// guard mounts h at pattern behind wrap, then the bearer guard holding each path to its need.
+// wrap runs first, so it can answer a tokenless CORS preflight. Every guarded mount on the
+// loopback listener goes through here.
+func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]types.Need, wrap func(http.Handler) http.Handler, h http.Handler) {
 	g, err := httpx.ProcedureGuard(format, auth.Verify, needs, h)
 	if err != nil {
 		f.errs = append(f.errs, fmt.Errorf("server: %s: %w", pattern, err))
 		return
 	}
 	maps.Copy(f.needs, needs)
-	if !console {
-		f.server.Handle(pattern, httpx.GuardRebind(format, f.allowed, g))
-		return
+	f.server.Handle(pattern, wrap(g))
+}
+
+// consoleWrap is the wrap every console route takes: rebind first, so a forged Host or an
+// Origin other than loopback and the hosted site is refused, then CORS for those origins.
+func (f *frame) consoleWrap(format rpcerr.Format) func(http.Handler) http.Handler {
+	return func(g http.Handler) http.Handler {
+		return httpx.GuardRebind(format, f.siteAllowed, f.cors(g))
 	}
-	f.server.Handle(pattern, httpx.GuardRebind(format, f.siteAllowed, f.cors(g)))
+}
+
+// mcpCORS lets a page on any site drive /mcp with a token: the Streamable HTTP methods,
+// its session and protocol headers both ways, the baggage header naming the caller's lease,
+// and WWW-Authenticate so the page can read why it was refused.
+var mcpCORS = httpx.CORSPolicy{
+	Methods:       []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
+	AllowHeaders:  []string{"Authorization", "Content-Type", "Accept", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID", "baggage"},
+	ExposeHeaders: []string{"Mcp-Session-Id", "Mcp-Protocol-Version", "WWW-Authenticate"},
 }
 
 // api mounts a JSON console route at path behind the Need apiNeeds names for it.
@@ -701,7 +714,7 @@ func (f *frame) api(path string, h http.Handler) {
 		f.errs = append(f.errs, err)
 		return
 	}
-	f.guard(path, rpcerr.FormatJSON, needs, true, h)
+	f.guard(path, rpcerr.FormatJSON, needs, f.consoleWrap(rpcerr.FormatJSON), h)
 }
 
 // service mounts a Connect service at its path ("/<package>.<Service>/") behind the Need of
@@ -712,7 +725,7 @@ func (f *frame) service(path string, h http.Handler) {
 		f.errs = append(f.errs, err)
 		return
 	}
-	f.guard(path, rpcerr.FormatConnect, needs, true, h)
+	f.guard(path, rpcerr.FormatConnect, needs, f.consoleWrap(rpcerr.FormatConnect), h)
 	f.socketRoute(path, rpcerr.FormatConnect, needs, h)
 }
 
@@ -729,11 +742,10 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	// Serve the MCP Streamable-HTTP handler and any health routes from one
 	// mux/listener so health probes share the MCP port: no second http.Server.
 	//
-	// httpx.GuardRebind and the bearer guard are applied only to /mcp. Health
-	// routes are left unguarded so container orchestrators can probe them
-	// freely. The rebind check runs outermost so a forged cross-origin browser
-	// request is rejected before the bearer token is even examined; the bearer
-	// guard then enforces the shared secret on everything that gets past it.
+	// /mcp sits behind the bearer guard and nothing else: no rebind check, and CORS open to
+	// every origin. A forged Host or a hostile page reaches it only to be refused for want
+	// of a token, so the token is the whole boundary. Health routes are left unguarded so
+	// container orchestrators can probe them freely.
 	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]types.Need{}}
 	if s.socket != nil {
 		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]types.Need{}
@@ -751,7 +763,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		mcpHandler.ServeHTTP(w, r)
 	})
 	mcpNeeds := map[string]types.Need{"/mcp": needMCP}
-	f.guard("/mcp", rpcerr.FormatJSON, mcpNeeds, false, cappedMCP)
+	if s.opts.Config.MCP.HTTPEnabled() {
+		f.guard("/mcp", rpcerr.FormatJSON, mcpNeeds, httpx.OpenCORS(mcpCORS), cappedMCP)
+	}
 	f.socketRoute("/mcp", rpcerr.FormatJSON, mcpNeeds, cappedMCP)
 
 	// CORS allows the hosted explorer origin plus the two loopback origins derived from
@@ -769,8 +783,8 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		fmt.Sprintf("http://127.0.0.1:%d", port),
 	)
 	// siteAllowed widens the DNS-rebind accept-list for console browser routes so the
-	// hosted PWA Origin (eli.gladman.cc) is not 403'd before CORS can answer. /mcp keeps
-	// the loopback-only set.
+	// hosted PWA Origin (eli.gladman.cc) is not 403'd before CORS can answer. The static
+	// console shell keeps the loopback-only set.
 	f.siteAllowed = f.allowed
 	if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
 		f.siteAllowed = f.allowed.Allow(u.Host)

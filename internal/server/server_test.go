@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -257,7 +259,7 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 
 // TestServeConsoleHostedOriginCORS proves the hosted PWA Origin
 // (https://eli.gladman.cc) can clear rebind and get a CORS preflight answer on
-// /api/, while /mcp stays loopback-only on Origin and never reflects that site.
+// /api/, while any other Origin is refused there.
 func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
@@ -340,7 +342,8 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
 
-	// /mcp keeps loopback-only Origin posture: the site Origin is forbidden.
+	// /mcp answers any Origin's preflight, the hosted site's included, with "*" rather
+	// than the console's reflected allow-list.
 	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/mcp", nil)
 	require.NoError(t, err)
 	req.Header.Set("Origin", siteOrigin)
@@ -348,7 +351,8 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "/mcp must not admit the hosted Origin")
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
 
 	cancel()
 	select {
@@ -531,6 +535,169 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("server did not shut down")
 	}
+}
+
+// foreignOrigin and foreignHost are what a DNS-rebinding page sends: its own site as the
+// Origin and its own name as the Host, both resolving to loopback.
+const (
+	foreignOrigin = "https://evil.example"
+	foreignHost   = "evil.example"
+)
+
+// TestMCPAuthRunsBeforeTheHandler mounts the loopback surface around a handler that counts its
+// calls in place of MCP, then sends every mounted route every method from a foreign Origin and
+// a forged Host, as every kind of bearer. Only a credential holding mcp=write reaches the
+// handler; every other request, and every preflight, is answered before it.
+func TestMCPAuthRunsBeforeTheHandler(t *testing.T) {
+	testkit.Isolate(t)
+	d, addr := testServer(t, func(o mcp.Options) *Server { return New(o) })
+	_, _, err := d.prepare(t.Context())
+	require.NoError(t, err)
+	var reached atomic.Int32
+	f, err := d.mount(addr, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	require.NoError(t, err)
+	require.NoError(t, errors.Join(f.errs...))
+	ctx, cancel := context.WithCancel(t.Context())
+	served := make(chan error, 1)
+	go func() { served <- f.server.Serve(ctx) }()
+	t.Cleanup(func() { cancel(); <-served })
+	base := fmt.Sprintf("http://127.0.0.1:%d", addr.Port())
+	waitReady(t, base+"/readyz")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	send := func(method, path, token string) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, method, base+path, strings.NewReader("{}"))
+		require.NoError(t, err)
+		req.Host = foreignHost
+		req.Header.Set("Origin", foreignOrigin)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	bearers := matrixBearers(t)
+	methods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut, http.MethodPatch}
+	for _, pattern := range f.server.Patterns() {
+		if pattern == "/readyz" {
+			continue
+		}
+		for name, b := range bearers {
+			for _, method := range methods {
+				before := reached.Load()
+				status := send(method, pattern, b.token)
+				cell := fmt.Sprintf("%s %s as %s", method, pattern, name)
+				if b.ok && b.grant.Allows(needMCP) {
+					assert.Equal(t, before+1, reached.Load(), "%s: an mcp=write credential reaches the handler", cell)
+					continue
+				}
+				assert.Equal(t, before, reached.Load(), "%s reached the handler", cell)
+				assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status, cell)
+			}
+		}
+		before := reached.Load()
+		assert.Equal(t, http.StatusNoContent, send(http.MethodOptions, pattern, ""), "%s preflight", pattern)
+		assert.Equal(t, before, reached.Load(), "a preflight never reaches the handler")
+	}
+	assert.Equal(t, []string{"/mcp", "/readyz"}, f.server.Patterns(), "the walk saw every route mount serves")
+}
+
+// TestMCPTrustsTheTokenAlone drives /mcp on a real server from a foreign Origin and a forged
+// Host: no rebind refusal stands in the way of a connector token, which opens a session the
+// page can read, and nothing without a valid one gets past 401. The console's routes keep
+// refusing the same forged Host.
+func TestMCPTrustsTheTokenAlone(t *testing.T) {
+	base, _, _, _, _ := bootConsoleServer(t)
+	bearers := matrixBearers(t)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"browser","version":"1"}}}`
+	post := func(path, token string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, base+path, strings.NewReader(initialize))
+		require.NoError(t, err)
+		req.Host = foreignHost
+		req.Header.Set("Origin", foreignOrigin)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return resp
+	}
+
+	for _, name := range []string{"anonymous (no token)", "not a magus token", "revoked", "expired"} {
+		resp := post("/mcp", bearers[name].token)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, name)
+		assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"), "%s: the page can read its refusal", name)
+	}
+	resp := post("/mcp", bearers["console"].token)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a console token holds no mcp=write")
+
+	resp = post("/mcp", bearers["connector"].token)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NotEmpty(t, resp.Header.Get("Mcp-Session-Id"))
+	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, resp.Header.Get("Access-Control-Expose-Headers"), "Mcp-Session-Id", "the page can read its session id")
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Credentials"))
+
+	assert.Equal(t, http.StatusForbidden, post("/api/v1/graph", bearers["operator"].token).StatusCode,
+		"the console keeps its rebind guard")
+}
+
+// TestMCPHTTPOff takes /mcp off the loopback listener with mcp.http false, while the listener
+// keeps the console and the server socket keeps serving MCP.
+func TestMCPHTTPOff(t *testing.T) {
+	srv, _, socket := serverSocket(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	builtConsole(t)
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	require.NoError(t, err)
+	off := false
+	socketNeeds := make(chan map[string]types.Need, 1)
+	d, tcp := testServer(t, func(opts mcp.Options) *Server {
+		opts.Magus = m
+		opts.Config.MCP.HTTP = &off
+		return New(opts, WithSocket(srv))
+	})
+	d.onSocketMounted = func(n map[string]types.Need) { socketNeeds <- n }
+	base, patterns, needs := serveMounted(t, d, tcp)
+
+	assert.NotContains(t, patterns, "/mcp")
+	assert.NotContains(t, needs, "/mcp")
+	assert.Contains(t, patterns, "/api/", "the console stays on the listener")
+	op, err := auth.LoadOperator()
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+op)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "no /mcp on loopback, even for the operator")
+
+	assert.Contains(t, <-socketNeeds, "/mcp")
+	req, err = http.NewRequest(http.MethodPost, "http://magus/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"socket","version":"1"}}}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err = socket.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "the socket still serves MCP")
+	assert.NotEmpty(t, resp.Header.Get("Mcp-Session-Id"))
 }
 
 // A server whose workspace failed to load still listens: status and the console shell are

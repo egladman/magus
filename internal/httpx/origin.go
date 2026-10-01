@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ParseOrigin extracts the scheme://host[:port] origin from a page's base URL, for the
@@ -34,6 +35,48 @@ func CORS(origin string) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CORSPolicy is what [OpenCORS] advertises to a browser: the methods and request headers a
+// preflight allows, and the response headers a page's script may read.
+type CORSPolicy struct {
+	Methods       []string
+	AllowHeaders  []string
+	ExposeHeaders []string
+}
+
+// OpenCORS admits every Origin, for a route whose one boundary is the bearer token it
+// requires: a page from any site may call it with a token, and without one it gets the same
+// refusal any other client does. It answers Access-Control-Allow-Origin: * and never
+// Allow-Credentials, so the browser attaches no cookie or other ambient credential and the
+// page holds nothing it did not bring. An OPTIONS request is answered 204 here and never
+// reaches next, because a browser sends its preflight without the Authorization header;
+// wrap it OUTSIDE the bearer guard. Chrome's Private Network Access probe is honored, since
+// a public page calling a loopback server sends one.
+func OpenCORS(p CORSPolicy) func(http.Handler) http.Handler {
+	methods := strings.Join(p.Methods, ", ")
+	allow := strings.Join(p.AllowHeaders, ", ")
+	expose := strings.Join(p.ExposeHeaders, ", ")
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", "*")
+			if expose != "" {
+				h.Set("Access-Control-Expose-Headers", expose)
+			}
+			if r.Method != http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+			h.Set("Access-Control-Allow-Methods", methods)
+			h.Set("Access-Control-Allow-Headers", allow)
+			h.Set("Access-Control-Max-Age", "600")
+			if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+				h.Set("Access-Control-Allow-Private-Network", "true")
+			}
+			w.WriteHeader(http.StatusNoContent)
 		})
 	}
 }

@@ -440,10 +440,17 @@ type Secret struct {
 type MCP struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
+	// HTTP serves /mcp on the server's HTTP listener. False leaves the route unmounted while
+	// `magus mcp` (stdio) and the server socket keep serving MCP, and the listener keeps the
+	// console and health routes. Default true.
+	HTTP *bool `json:"http" yaml:"http"`
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
 	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
 }
+
+// HTTPEnabled reports whether the server mounts /mcp on its HTTP listener.
+func (m MCP) HTTPEnabled() bool { return m.HTTP == nil || *m.HTTP }
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
 // HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
@@ -822,6 +829,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW", "server.maintenance.check_review", "15m", "How often the server checks for a merge or a new remark on a review this tree took part in"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server `magus server` starts"},
+		{"MAGUS_MCP_HTTP", "mcp.http", "true", "When false, the server does not mount /mcp on its HTTP listener; `magus mcp` (stdio) and the server socket still serve MCP"},
 		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
 		{"MAGUS_CONSOLE_ENABLED", "console.enabled", "true when MCP is up", "When false, the MCP HTTP server does not mount the console's read-only API and job service"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},

@@ -190,6 +190,41 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 	}
 }
 
+// mcp.http is honored only while the server serves MCP at all; an explicit true beside
+// mcp.enabled false is refused rather than ignored.
+func TestValidate_MCPHTTP(t *testing.T) {
+	on, off := boolPtr(true), boolPtr(false)
+	for name, tc := range map[string]struct {
+		enabled, http *bool
+		wantHTTP      bool
+		wantFailure   bool
+	}{
+		"defaults":                   {wantHTTP: true},
+		"http off":                   {http: off},
+		"http on":                    {http: on, wantHTTP: true},
+		"mcp off, http unset":        {enabled: off, wantHTTP: true},
+		"mcp off, http off":          {enabled: off, http: off},
+		"http on without mcp":        {enabled: off, http: on, wantHTTP: true, wantFailure: true},
+		"mcp on explicitly, http on": {enabled: on, http: on, wantHTTP: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+			cfg.MCP.Enabled, cfg.MCP.HTTP = tc.enabled, tc.http
+			assert.Equal(t, tc.wantHTTP, cfg.MCP.HTTPEnabled())
+
+			err := Validate(cfg)
+			if !tc.wantFailure {
+				assert.NoError(t, err)
+				return
+			}
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve)
+			assert.Equal(t, []FieldFailure{{Field: "mcp.http", Tag: "mcp_enabled_required", Value: "true"}}, ve.Failures)
+			assert.Contains(t, ve.Error(), "cannot be true while mcp.enabled is false")
+		})
+	}
+}
+
 func TestSpellsConfigRegistry(t *testing.T) {
 	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")

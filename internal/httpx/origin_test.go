@@ -18,6 +18,44 @@ func TestParseOrigin(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// OpenCORS answers any Origin with "*", never with credentials, and answers the preflight
+// itself so the wrapped guard never sees a tokenless OPTIONS.
+func TestOpenCORS(t *testing.T) {
+	reached := 0
+	h := OpenCORS(CORSPolicy{
+		Methods:       []string{"GET", "POST"},
+		AllowHeaders:  []string{"Authorization", "Content-Type"},
+		ExposeHeaders: []string{"Mcp-Session-Id"},
+	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+
+	r := httptest.NewRequest(http.MethodOptions, "/mcp", nil)
+	r.Header.Set("Origin", "https://anywhere.example")
+	r.Header.Set("Access-Control-Request-Method", "POST")
+	r.Header.Set("Access-Control-Request-Private-Network", "true")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Zero(t, reached, "the preflight never reaches the guard")
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "GET, POST", w.Header().Get("Access-Control-Allow-Methods"))
+	assert.Equal(t, "Authorization, Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
+	assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Private-Network"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
+
+	r = httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	r.Header.Set("Origin", "https://anywhere.example")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, 1, reached, "every other method reaches the wrapped handler")
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "the wrapped handler's answer stands")
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"), "a refusal stays readable to the page")
+	assert.Equal(t, "Mcp-Session-Id", w.Header().Get("Access-Control-Expose-Headers"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
+}
+
 // corsTestHandler wraps a 200 OK handler in CORSAllow for the given origins.
 func corsTestHandler(origins ...string) http.Handler {
 	return CORSAllow(origins...)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
