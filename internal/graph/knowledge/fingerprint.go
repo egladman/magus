@@ -16,12 +16,10 @@ import (
 // inputs: a cross-project dependency rename changes the dependent shard's edges
 // and therefore its fingerprint, which per-project source hashing would miss.
 //
-// The tradeoff is that a shard must be assembled to be fingerprinted, so this
-// does not yet skip assembly for unchanged shards; Build re-derives the whole
-// graph each run and the fingerprint only governs writes. A Phase 8 optimization
-// may add a cheap pre-assembly source hash to skip re-deriving unchanged shards,
-// but that hash must cover cross-project and registry inputs, not just a
-// project's own magusfiles.
+// The tradeoff is that a shard must be assembled to be fingerprinted, so the
+// fingerprint only governs writes. Skipping assembly is the input stamps' job
+// (see Stamps): a stamp covers every input of a whole shard class, cross-project
+// and registry inputs included, which a per-project source hash would not.
 //
 // SHA256 matches the cache's hasher (benchmarked faster than BLAKE3 on this
 // workload; see the hasher memory).

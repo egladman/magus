@@ -100,6 +100,14 @@ type Inputs struct {
 	// the file nodes it annotates are the symbol shards'. Empty on a workspace that has
 	// never loaded a transcript, which is the default.
 	AgentContacts []AgentContact
+	// Extra is, per class, the workspace files the gatherer read for that class outside the
+	// tree walk, such as a source file a SCIP index points into an unwalked directory. The
+	// store records them so the caller can fold them into the class's next stamp.
+	Extra map[ShardClass][]string
+
+	// storedPathIDs are the file and dir node IDs of the stored shards a partial build
+	// leaves in place, which the @session overlay must still resolve against.
+	storedPathIDs map[string]bool
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -125,6 +133,87 @@ type Shard struct {
 // plus one per project in the graph. Order is registry first, then projects in
 // their TargetGraph order.
 func AssembleShards(in Inputs) []Shard {
+	return AssembleClasses(in, AllClasses)
+}
+
+// AssembleClasses builds the shards of the given classes only, reading only the inputs
+// those classes read: a domain build never touches Symbols, and a symbols build never
+// walks the tree. The @session overlay resolves against every class's nodes, so a build
+// that reassembles it without the others takes their node IDs from in.storedPathIDs.
+func AssembleClasses(in Inputs, classes []ShardClass) []Shard {
+	var shards []Shard
+	if slices.Contains(classes, ClassDomain) {
+		shards = append(shards, assembleDomain(in)...)
+	}
+	// The runtime shard carries both non-deterministic inputs: emits edges from
+	// prior diagnostics and timing attrs on existing targets. Timings are filtered
+	// to targets that actually exist so stale history never conjures a phantom node.
+	if slices.Contains(classes, ClassRuntime) {
+		if r := assembleRuntime(in.Runtime, in.Timings, in.OutputRefs, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
+			shards = append(shards, r)
+		}
+	}
+	if slices.Contains(classes, ClassSymbols) {
+		shards = append(shards, assembleSymbolClass(in)...)
+	}
+	// The observed coverage overlay: a single isolated shard folding a coverage ratio
+	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty
+	// shard is dropped rather than persisted.
+	if slices.Contains(classes, ClassCoverage) {
+		if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
+			shards = append(shards, c)
+		}
+	}
+	// The agent-contact overlay runs last because it resolves against nodes rather than
+	// paths: a file node minted by a symbols shard and a dir node minted by that shard's
+	// own roll-up are both targets it must be able to see, or it would drop them as
+	// unresolved. Computing the known set is gated on there being contacts at all, so a
+	// workspace that never loaded a transcript pays nothing.
+	if slices.Contains(classes, ClassSession) && len(in.AgentContacts) > 0 {
+		known := knownNodeIDs(shards, in.Graph)
+		for id := range in.storedPathIDs {
+			known[id] = true
+		}
+		if sess := assembleSession(in.AgentContacts, known); len(sess.Nodes) > 0 || sess.Dropped > 0 {
+			shards = append(shards, sess)
+		}
+	}
+	return shards
+}
+
+// assembleSymbolClass builds one @symbols shard per project that declared an index, in
+// sorted project order, each carrying its own dir roll-up and I/O edges. Those come from
+// the shard's own file nodes alone, never from the domain shards, so a symbols build
+// needs nothing the domain build produced.
+func assembleSymbolClass(in Inputs) []Shard {
+	shards := assembleSymbolShards(in.Symbols, in.Graph.Projects)
+	if len(shards) == 0 {
+		return nil
+	}
+	churnByPath := make(map[string]int, len(in.VCS))
+	for _, e := range in.VCS {
+		churnByPath[e.Path] = e.Commits
+	}
+	for i, sh := range shards {
+		own := map[string]string{}
+		for _, n := range sh.Nodes {
+			if n.Kind == types.KindFile {
+				own[n.Source] = n.ID
+			}
+		}
+		if a := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(own)), churnByPath); len(a.Nodes) > 0 {
+			shards[i].Nodes = append(shards[i].Nodes, a.Nodes...)
+		}
+		if io := assembleIO(in.Graph.Projects, own); len(io.Edges) > 0 {
+			shards[i].Edges = append(shards[i].Edges, io.Edges...)
+		}
+	}
+	return shards
+}
+
+// assembleDomain builds the domain class: the registry, one shard per project, and every
+// shard read off the working tree, its history and its manifests.
+func assembleDomain(in Inputs) []Shard {
 	shards := make([]Shard, 0, len(in.Graph.Projects)+3)
 	shards = append(shards, assembleRegistry(in))
 	for _, p := range in.Graph.Projects {
@@ -141,15 +230,11 @@ func AssembleShards(in Inputs) []Shard {
 	// are dropped so no empty files are persisted.
 	// pathToNode maps a workspace-relative path to the file/doc node sitting at it, so the
 	// I/O pass can resolve each target's output/input globs to the nodes they produce or
-	// consume. Populated as the path-bearing shards (docs, buzz, symbols) are built.
+	// consume. Populated as the path-bearing shards (docs, buzz) are built. A SCIP index
+	// contributes nothing here: it is CACHE state, not source, living under the gitignored
+	// cache dir on machines that ran the scip op, so anything it added would make a
+	// committed, drift-gated artifact vary with whether a developer had built one.
 	pathToNode := map[string]string{}
-	// symbolPaths is the subset of pathToNode contributed by a SCIP index. It is tracked
-	// separately because a symbol index is CACHE state, not source: it lives under the
-	// gitignored cache dir and exists only on a machine that has run the scip op. Anything
-	// it contributes must therefore stay in the lazily-loaded @symbols shards, or a
-	// committed, drift-gated artifact would vary with whether a developer happened to have
-	// built one. See the split at the @dirs pass below, which is where it used to leak.
-	symbolPaths := map[string]bool{}
 	// The doc shard's nodes double as the citation resolver's index (a URL is one of this
 	// workspace's own pages only when the graph holds that page), so they outlive the
 	// block below.
@@ -233,51 +318,21 @@ func AssembleShards(in Inputs) []Shard {
 	if pk := assemblePackages(in.Packages); len(pk.Nodes) > 0 {
 		shards = append(shards, pk)
 	}
-	// The runtime shard carries both non-deterministic inputs: emits edges from
-	// prior diagnostics and timing attrs on existing targets. Timings are filtered
-	// to targets that actually exist so stale history never conjures a phantom node.
-	if r := assembleRuntime(in.Runtime, in.Timings, in.OutputRefs, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
-		shards = append(shards, r)
-	}
-	// One @symbols shard per project that declared an index, in sorted project order
-	// so the shard slice is deterministic despite the map input.
-	for _, s := range assembleSymbolShards(in.Symbols, in.Graph.Projects) {
-		for _, n := range s.Nodes {
-			if n.Kind == types.KindFile {
-				pathToNode[n.Source] = n.ID
-				symbolPaths[n.Source] = true
-			}
-		}
-		shards = append(shards, s)
-	}
 	// The build I/O layer: produces/consumes edges from each target's declared outputs and
 	// inputs to the file and doc nodes they match. Runs after the path-bearing shards so
 	// every node is known; it links only existing nodes, never a phantom.
 	//
-	// Symbol paths are excluded for the same reason @dirs excludes them, and here the old
-	// behavior was not merely nondeterministic but broken: @io IS merged into the default
-	// graph while symbol file nodes are not, so a declared input matching a .go file
-	// produced an edge in the default graph pointing at a node only the lazy shard holds.
-	// Measured on this workspace: 138 dangling produces/consumes edges. Each symbols shard
-	// now carries its own, so the edge and its endpoint appear together or not at all.
-	defaultPathToNode := make(map[string]string, len(pathToNode))
-	for p, id := range pathToNode {
-		if !symbolPaths[p] {
-			defaultPathToNode[p] = id
-		}
-	}
-	if io := assembleIO(in.Graph.Projects, defaultPathToNode); len(io.Edges) > 0 {
+	// Symbol paths never reach it: @io IS merged into the default graph while symbol file
+	// nodes are not, so a declared input matching a .go file would produce an edge in the
+	// default graph pointing at a node only the lazy shard holds. Measured on this
+	// workspace: 138 dangling produces/consumes edges. Each symbols shard carries its own
+	// (assembleSymbolClass), so the edge and its endpoint appear together or not at all.
+	if io := assembleIO(in.Graph.Projects, pathToNode); len(io.Edges) > 0 {
 		shards = append(shards, io)
 	}
-	// The observed coverage overlay: a single isolated shard folding a coverage ratio
-	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty
-	// shard is dropped rather than persisted.
-	if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
-		shards = append(shards, c)
-	}
 	// Directory aggregates: roll up file count, summed churn, and languages onto each
-	// dir node from every path-bearing leaf. Runs last so it sees every file/doc/symbol
-	// path across the shards above; its dir attrs fold onto the structural dir nodes
+	// dir node from every path-bearing leaf. Runs last so it sees every file/doc path
+	// across the shards above; its dir attrs fold onto the structural dir nodes
 	// containsChain emitted in those shards.
 	//
 	// Symbol paths are held OUT of @dirs and aggregated into their project's @symbols
@@ -291,50 +346,15 @@ func AssembleShards(in Inputs) []Shard {
 		for _, e := range in.VCS {
 			churnByPath[e.Path] = e.Commits
 		}
-		var defaultPaths []string
-		for p := range pathToNode {
-			if !symbolPaths[p] {
-				defaultPaths = append(defaultPaths, p)
-			}
-		}
-		slices.Sort(defaultPaths)
-		if d := assembleDirs(in.Graph.Projects, defaultPaths, churnByPath); len(d.Nodes) > 0 {
+		if d := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(pathToNode)), churnByPath); len(d.Nodes) > 0 {
 			shards = append(shards, d)
 		}
-		// The symbol layer keeps its own aggregates, so a loaded symbol view is still
-		// complete rather than merely deterministic.
-		for i, sh := range shards {
-			if !isSymbolsShard(sh.Name) {
-				continue
-			}
-			own := map[string]string{}
-			for _, n := range sh.Nodes {
-				if n.Kind == types.KindFile && symbolPaths[n.Source] {
-					own[n.Source] = n.ID
-				}
-			}
-			if a := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(own)), churnByPath); len(a.Nodes) > 0 {
-				shards[i].Nodes = append(shards[i].Nodes, a.Nodes...)
-			}
-			if io := assembleIO(in.Graph.Projects, own); len(io.Edges) > 0 {
-				shards[i].Edges = append(shards[i].Edges, io.Edges...)
-			}
-		}
 	}
-	// The agent-contact overlay runs after every path-bearing shard AND after both dir
-	// passes, because it resolves against nodes rather than paths: a file node minted by a
-	// symbols shard and a dir node minted by that shard's own roll-up are both targets it
-	// must be able to see, or it would drop them as unresolved. Recomputing the known set
-	// is gated on there being contacts at all, so a workspace that never loaded a
-	// transcript pays nothing.
-	if len(in.AgentContacts) > 0 {
-		if sess := assembleSession(in.AgentContacts, knownNodeIDs(shards, in.Graph)); len(sess.Nodes) > 0 || sess.Dropped > 0 {
-			shards = append(shards, sess)
-		}
-	}
-	// Prose staleness runs LAST, over the finished shard set: it needs a doc or note from
-	// one shard, its subject from another, and the git dates from the VCS input. No-op
-	// when VCS history is unavailable, which is the default.
+	// Prose staleness runs LAST, over the finished domain shards: it needs a doc or note
+	// from one shard, its subject from another, and the git dates from the VCS input.
+	// Every subject a doc or note can name is a domain node (links mints a file node for
+	// each source path it cites), so the lazy shards have nothing to add. No-op when VCS
+	// history is unavailable, which is the default.
 	annotateProseStaleness(shards, vcsByPath(in.VCS))
 
 	return shards

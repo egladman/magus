@@ -169,7 +169,22 @@ func allModuleEntries() []types.ModuleEntry {
 // outputs the graph is composed from, resolves the cache dir, and runs the
 // cache-first build. ws is any workspace view that can describe itself (the
 // read-only Inspect result or a full *Magus).
+//
+// It answers from the store when the inputs are unchanged, and otherwise reassembles only
+// the shard classes whose input stamps moved (see knowledgeStamps). It brings the default
+// graph's classes up to date and leaves the lazily loaded symbol classes to the readers
+// that merge them (MergeWorkspaceSymbols), so a domain read never parses a SCIP index;
+// refresh rebuilds every class.
 func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+	want := knowledge.DefaultClasses
+	if refresh {
+		want = knowledge.AllClasses
+	}
+	return ensureKnowledgeGraph(ctx, ws, root, cfg, refresh, want, log)
+}
+
+// ensureKnowledgeGraph brings the classes in want up to date and returns the default graph.
+func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, want []knowledge.ShardClass, log *slog.Logger) (*knowledge.Graph, error) {
 	if log == nil {
 		// The loaders below log best-effort; a nil logger (some callers, e.g. describe,
 		// pass one) would panic on the first miss. Normalize once here.
@@ -188,43 +203,256 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 	if err != nil {
 		return nil, err
 	}
-
-	// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
-	// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead handed
-	// the other two an empty history on a hit, and they published it as zero churn and
-	// unmeasured prose. Reading it back off @vcs is no substitute either: that shard is
-	// filtered to paths with a file node, so it is a view of the scan and not a record of it.
-	vcsEntries := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, refresh, log)
-
-	in := knowledge.Inputs{
-		Graph:       graph,
-		Spells:      spells,
-		Modules:     allModuleEntries(),
-		Diagnostics: types.AllDiagnosticCodes(),
-		Root:        root,
-		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
-		Timings:     loadKnowledgeTimings(ctx, cfg),
-		OutputRefs:  loadKnowledgeOutputRefs(cacheDir),
-		Symbols: loadKnowledgeSymbols(ctx, symbolIngestInputs{
-			cfg: cfg, root: root, cacheDir: cacheDir,
-			projects: projects, spells: spells, log: log,
-		}),
-		Packages:       loadKnowledgePackages(ctx, projects, log),
-		VCS:            vcsEntries,
-		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
-		DeclaredSpells: declaredSpellSet(projects),
-		Coverage:       loadKnowledgeCoverage(root),
-		AgentContacts:  loadKnowledgeAgentContacts(root),
-		NotesPath:      cfg.Knowledge.Notes.Shared,
-		Notes:          loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Shared, notes.ScopeShared),
-		PrivateNotes:   loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Private, notes.ScopePrivate),
+	src := knowledgeSources{
+		cfg: cfg, root: root, cacheDir: cacheDir,
+		spells: spells, graph: graph, projects: projects, log: log,
 	}
-	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
+	if root != "" {
+		src.tree = knowledge.WalkTree(root)
+	}
+	store := knowledge.NewStore(cacheDir, true, 0, nil, log)
+	opts := knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
 		Remote:    remoteShards(ws),
-	}, in, log)
+		Stamps:    knowledgeStamps(ctx, src, store, want),
+		Root:      root,
+	}
+	return knowledge.Ensure(ctx, cacheDir, opts, want, func(stale []knowledge.ShardClass) (knowledge.Inputs, error) {
+		return gatherKnowledgeInputs(ctx, src, refresh, stale), nil
+	}, log)
+}
+
+// knowledgeSources is what both the stamps and the gathered inputs are derived from,
+// resolved once per build.
+type knowledgeSources struct {
+	cfg      config.Config
+	root     string
+	cacheDir string
+	spells   []types.Spell
+	graph    types.TargetGraphOutput
+	projects types.ProjectsOutput
+	tree     *knowledge.TreeWalk // nil when there is no root to walk
+	log      *slog.Logger
+}
+
+func (s knowledgeSources) symbolInputs() symbolIngestInputs {
+	return symbolIngestInputs{
+		cfg: s.cfg, root: s.root, cacheDir: s.cacheDir,
+		projects: s.projects, spells: s.spells, log: s.log,
+	}
+}
+
+// gatherKnowledgeInputs reads the inputs of the stale classes and nothing else: a domain
+// rebuild never reads a SCIP index or the session store, and a runtime rebuild never
+// reads the tree.
+func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bool, stale []knowledge.ShardClass) knowledge.Inputs {
+	needs := func(cs ...knowledge.ShardClass) bool {
+		return slices.ContainsFunc(cs, func(c knowledge.ShardClass) bool { return slices.Contains(stale, c) })
+	}
+	in := knowledge.Inputs{Graph: src.graph, Spells: src.spells, Root: src.root}
+	if needs(knowledge.ClassDomain, knowledge.ClassSymbols) {
+		// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
+		// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead
+		// handed the other two an empty history on a hit, and they published it as zero
+		// churn and unmeasured prose. Reading it back off @vcs is no substitute either: that
+		// shard is filtered to paths with a file node, so it is a view of the scan and not a
+		// record of it.
+		in.VCS = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
+	}
+	if needs(knowledge.ClassDomain) {
+		cfg := src.cfg
+		in.Modules = allModuleEntries()
+		in.Diagnostics = types.AllDiagnosticCodes()
+		in.Packages = loadKnowledgePackages(ctx, src.projects, src.log)
+		in.VCSAuthorship = cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
+		in.DeclaredSpells = declaredSpellSet(src.projects)
+		in.NotesPath = cfg.Knowledge.Notes.Shared
+		in.Notes = loadKnowledgeNotesAt(src.root, cfg.Knowledge.Notes.Shared, notes.ScopeShared)
+		in.PrivateNotes = loadKnowledgeNotesAt(src.root, cfg.Knowledge.Notes.Private, notes.ScopePrivate)
+	}
+	if needs(knowledge.ClassRuntime) {
+		in.Runtime = knowledge.LoadRuntimeEvents(src.cacheDir)
+		in.Timings = loadKnowledgeTimings(ctx, src.cfg)
+		in.OutputRefs = loadKnowledgeOutputRefs(src.cacheDir)
+	}
+	if needs(knowledge.ClassSymbols, knowledge.ClassCoverage) {
+		in.Symbols = loadKnowledgeSymbols(ctx, src.symbolInputs())
+		if extra := symbolSourcesOutside(src.tree, in.Symbols); len(extra) > 0 {
+			in.Extra = map[knowledge.ShardClass][]string{knowledge.ClassSymbols: extra}
+		}
+	}
+	if needs(knowledge.ClassCoverage) {
+		in.Coverage = loadKnowledgeCoverage(src.root)
+	}
+	if needs(knowledge.ClassSession) {
+		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
+	}
+	return in
+}
+
+// symbolSourcesOutside lists the defining files the symbols read that the tree walk did
+// not see: FingerprintBodies reads every one of them, and the walk's digest is all the
+// symbols stamp otherwise knows about the tree.
+func symbolSourcesOutside(tree *knowledge.TreeWalk, syms map[string][]types.KnowledgeSymbol) []string {
+	if tree == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, list := range syms {
+		for _, sym := range list {
+			p, _, ok := strings.Cut(sym.Source, ":")
+			if ok && !seen[p] && !tree.Contains(p) {
+				seen[p] = true
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// knowledgeStamps computes the input stamp of every class in want, plus the ones the
+// session stamp folds in when it is wanted. Each stamp covers everything that class's
+// assembly reads, by identity rather than content: the magus binary (assembly is code),
+// the config, the target graph and spells, and per class:
+//
+//   - domain: the tree walk's digest, the committed history's head, the notes stores and
+//     the package manifests and lockfiles.
+//   - runtime: the runtime records, the timing history and the output store.
+//   - symbols: the tree, the head, each declared SCIP index, and any defining file the
+//     last ingestion read outside the walk.
+//   - coverage: each SCIP index, the coverage profile and go.mod.
+//   - session: the domain, symbols and coverage stamps and the session store.
+//
+// A stamp that cannot be computed is left empty, which makes its class rebuild, never
+// match. The one input outside the stamps is an ignore rule kept outside the tree (a
+// VCS's own exclude file or a user-global one); `--refresh` covers a change to those.
+func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge.Store, want []knowledge.ShardClass) knowledge.Stamps {
+	out := knowledge.Stamps{}
+	session := slices.Contains(want, knowledge.ClassSession)
+	wants := func(c knowledge.ShardClass) bool {
+		return slices.Contains(want, c) || (session && c != knowledge.ClassRuntime)
+	}
+	base, ok := baseKnowledgeStamp(src)
+	if !ok || src.tree == nil {
+		return out
+	}
+	vcsHead := vcsInputFingerprint(ctx, src.cfg, src.root)
+	historyKnown := vcsHead != "" || !src.cfg.Knowledge.VCS.Enabled
+	var tree string
+	if wants(knowledge.ClassDomain) || wants(knowledge.ClassSymbols) {
+		tree = src.tree.Digest()
+	}
+	if wants(knowledge.ClassDomain) && historyKnown {
+		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
+		h.String(base)
+		h.String(tree)
+		h.String(vcsHead)
+		for _, s := range []struct {
+			scope    notes.Scope
+			declared string
+		}{{notes.ScopeShared, src.cfg.Knowledge.Notes.Shared}, {notes.ScopePrivate, src.cfg.Knowledge.Notes.Private}} {
+			if dir, err := notes.Dir(src.root, s.scope, s.declared); err == nil {
+				h.Path(dir)
+			}
+		}
+		for _, p := range src.projects.Projects {
+			for _, m := range p.Manifests {
+				h.Path(filepath.Join(p.Dir, m))
+			}
+			for _, l := range p.Lockfiles {
+				h.Path(filepath.Join(src.projects.Workspace, filepath.FromSlash(l)))
+			}
+		}
+		out[knowledge.ClassDomain] = h.Sum()
+	}
+	if wants(knowledge.ClassRuntime) {
+		h := knowledge.NewInputHash(string(knowledge.ClassRuntime))
+		h.String(base)
+		h.Path(knowledge.RuntimeRecordsPath(src.cacheDir))
+		if src.cfg.HistoryPath != "" {
+			h.Path(src.cfg.HistoryPath)
+		}
+		// Every descriptor is created or renamed into place, so directory mtimes see each
+		// run without reading its descriptor.
+		h.Dirs(filepath.Join(src.cacheDir, "outputs"))
+		out[knowledge.ClassRuntime] = h.Sum()
+	}
+	var indexes []resolvedSymbolIndex
+	if wants(knowledge.ClassSymbols) || wants(knowledge.ClassCoverage) {
+		indexes = symbolIndexDeclarations(ctx, src.symbolInputs())
+	}
+	foldIndexes := func(h *knowledge.InputHash) {
+		for _, decl := range indexes {
+			h.String(decl.project)
+			h.String(decl.language)
+			h.Path(decl.path)
+		}
+	}
+	if wants(knowledge.ClassSymbols) && historyKnown {
+		h := knowledge.NewInputHash(string(knowledge.ClassSymbols))
+		h.String(base)
+		h.String(tree)
+		h.String(vcsHead)
+		foldIndexes(h)
+		for _, rel := range store.ExtraInputs(knowledge.ClassSymbols) {
+			h.Path(filepath.Join(src.root, filepath.FromSlash(rel)))
+		}
+		out[knowledge.ClassSymbols] = h.Sum()
+	}
+	if wants(knowledge.ClassCoverage) {
+		h := knowledge.NewInputHash(string(knowledge.ClassCoverage))
+		h.String(base)
+		foldIndexes(h)
+		h.Path(filepath.Join(src.root, ".magus", "coverage.out"))
+		h.Path(filepath.Join(src.root, "go.mod"))
+		out[knowledge.ClassCoverage] = h.Sum()
+	}
+	if session {
+		h := knowledge.NewInputHash(string(knowledge.ClassSession))
+		// Not runtime: the overlay resolves contacts against file and dir nodes only, and
+		// @runtime mints neither, while its stamp moves with every run on the machine.
+		for _, c := range []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSymbols, knowledge.ClassCoverage} {
+			if out[c] == "" {
+				return out
+			}
+			h.String(out[c])
+		}
+		if dir, err := sessions.Dir(src.root); err == nil {
+			h.Path(dir)
+		} else {
+			h.String("no session store")
+		}
+		out[knowledge.ClassSession] = h.Sum()
+	}
+	return out
+}
+
+// baseKnowledgeStamp folds what every class reads: the binary, the store's schema, where
+// the workspace and its cache are, the knowledge config, and the target graph, projects
+// and spells the workspace describes.
+func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	h := knowledge.NewInputHash("base")
+	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
+	h.Binary(exe)
+	h.String(src.root)
+	h.String(src.cacheDir)
+	h.String(src.cfg.HistoryPath)
+	for _, v := range []any{src.cfg.Knowledge, src.graph, src.projects, src.spells} {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "", false
+		}
+		h.String(string(b))
+	}
+	return h.Sum(), true
 }
 
 // loadKnowledgePackages reads each project's third-party dependencies out of the
@@ -519,9 +747,13 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 }
 
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
-// a symbol-seeded query (the default graph excludes them for scale). Best-effort: no
-// store or no symbol shards is a no-op.
+// a symbol-seeded query (the default graph excludes them for scale), first bringing the
+// lazily loaded classes up to date with their inputs. No store or no symbol shards merges
+// nothing.
 func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+		return err
+	}
 	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
 }
 
@@ -530,6 +762,9 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string,
 // ID (the scale-safe reverse lookup), or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
 func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+		return err
+	}
 	store := symbolStore(ws, root, cfg, log)
 	// An exact symbol ID can route to just its shards; a fuzzy name (or any non-exact
 	// symbol: ref) yields no routing hit and MergeSymbolShardsByID falls back to loading
@@ -1305,15 +1540,17 @@ func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 }
 
 // warmKnowledgeGraph returns this handle's lazily-created warm-graph holder. The
-// rebuild closure is the same cache-first BuildKnowledgeGraph the CLI runs; the
-// holder adds an in-memory cache that is trusted only while WatchKnowledgeGraph
-// has a watcher invalidating it.
+// rebuild closure is the cache-first build the CLI runs, over every class rather than the
+// default ones: callers read the store behind this graph directly (SymbolIndexDigest
+// after KnowledgeGraph), so the lazy classes must be current too. The holder adds an
+// in-memory cache that is trusted only while WatchKnowledgeGraph has a watcher
+// invalidating it.
 func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	m.warmGraphOnce.Do(func() {
 		root := m.Root()
 		cfg := m.cfg
 		m.warmGraph = newWarmGraph(func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-			return BuildKnowledgeGraph(ctx, m, root, cfg, refresh, slog.Default())
+			return ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
 		}, slog.Default())
 	})
 	return m.warmGraph

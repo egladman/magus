@@ -706,11 +706,16 @@ func dropVCSIgnored(root string, files []string) []string {
 // dependency trees, and any secondary checkout of the same repo (a git worktree, hg
 // share, or jj workspace) whose files would otherwise be indexed twice.
 func skipDocWalkDir(path, name string) bool {
+	return skipDocWalkName(name) || vcs.IsSecondaryCheckout(path)
+}
+
+// skipDocWalkName is the half of skipDocWalkDir a directory's name decides.
+func skipDocWalkName(name string) bool {
 	switch name {
 	case ".git", ".magus", "node_modules", "vendor", "gen", "target", "dist":
 		return true
 	}
-	return vcs.IsSecondaryCheckout(path)
+	return false
 }
 
 // roleFromRel classifies a markdown file by what it IS, from cross-ecosystem filename
