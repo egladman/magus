@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"unicode/utf8"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -70,10 +68,7 @@ const (
 
 // --- heap payload types ---
 
-// strObj backs Buzz strings. V is the immutable content. ascii caches whether V
-// is pure ASCII (0 unknown, 1 yes, -1 no), computed once by isASCII; when true,
-// a rune index equals a byte index, letting rune-indexed methods (sub) slice
-// bytes directly instead of materializing a []rune of the whole string per call.
+// strObj backs Buzz strings. V is the immutable content.
 //
 // heapIdx is used only by the NaN-box build (internedStrValue): it caches this
 // interned string's global-heap index (stored as index+1, 0 = unset) so that
@@ -83,86 +78,6 @@ const (
 type strObj struct {
 	V       string
 	heapIdx uint64
-	ascii   int32
-	// runeCur memoizes one (rune index, byte offset) pair for the multibyte path of
-	// rune-indexed access: high 32 bits the rune index, low 32 the byte offset, packed
-	// into one word so an atomic load can never tear the pair apart and hand out a byte
-	// offset belonging to a different rune index. Zero means unset, which is also the
-	// correct answer for rune 0, so no sentinel is needed.
-	runeCur atomic.Uint64
-}
-
-// runeCursor returns the memoized (rune index, byte offset) hint, or (0, 0).
-func (o *strObj) runeCursor() (runeIdx, byteOff int) {
-	packed := o.runeCur.Load()
-	return int(packed >> 32), int(packed & 0xffffffff)
-}
-
-// setRuneCursor memoizes a known (rune index, byte offset) pair. Racing callers
-// derive genuine pairs for the same string, so whichever wins is still correct: the
-// cursor is a hint that changes how far scanRune walks, never what it returns.
-// Offsets past 4 GiB are not memoized rather than truncated to a wrong value.
-func (o *strObj) setRuneCursor(runeIdx, byteOff int) {
-	// Widened to uint64 before comparing, rather than testing against an untyped
-	// 0xffffffff: `int` is 32 bits on linux/armv6, linux/armv7 and 386, where that
-	// constant overflows it and this package does not compile AT ALL. Both operands are
-	// already known non-negative, so the conversion is total. On a 32-bit host the bound
-	// is simply unreachable, which is the correct reading: a >4 GiB offset cannot arise
-	// there in the first place.
-	if runeIdx < 0 || byteOff < 0 || uint64(runeIdx) > math.MaxUint32 || uint64(byteOff) > math.MaxUint32 {
-		return
-	}
-	o.runeCur.Store(uint64(runeIdx)<<32 | uint64(byteOff))
-}
-
-// scanRune returns the rune at rune index `at` and its byte offset, or ok=false when
-// `at` is past the end.
-//
-// This exists because rune-indexed access into a multibyte string used to convert the
-// WHOLE string with []rune on every call, which made any character-at-a-time walk
-// quadratic and allocated a fresh rune slice per character. The access pattern that
-// matters is sequential (i = 0, 1, 2, ...), so remembering where the last lookup landed
-// turns the walk into single-rune steps. A backwards or distant jump just restarts from
-// the beginning, which is no worse than the conversion it replaces and allocates nothing
-// either way.
-func (o *strObj) scanRune(at int) (r rune, byteOff int, ok bool) {
-	if at < 0 {
-		return 0, 0, false
-	}
-	ri, bi := o.runeCursor()
-	if at < ri {
-		ri, bi = 0, 0 // asked for an earlier rune: the hint cannot help, rescan
-	}
-	for bi < len(o.V) {
-		dr, size := utf8.DecodeRuneInString(o.V[bi:])
-		if ri == at {
-			o.setRuneCursor(ri, bi)
-			return dr, bi, true
-		}
-		bi += size
-		ri++
-	}
-	return 0, 0, false
-}
-
-// isASCII reports whether V is pure ASCII, caching the answer. Concurrent callers
-// derive the same value, so the store is idempotent and needs no lock.
-func (o *strObj) isASCII() bool {
-	switch atomic.LoadInt32(&o.ascii) {
-	case 1:
-		return true
-	case -1:
-		return false
-	}
-	v := int32(1)
-	for i := 0; i < len(o.V); i++ {
-		if o.V[i] >= utf8.RuneSelf {
-			v = -1
-			break
-		}
-	}
-	atomic.StoreInt32(&o.ascii, v)
-	return v == 1
 }
 
 // udObj boxes a foreign FFI pointer (`ud`). It is heap-allocated because a full
