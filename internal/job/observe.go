@@ -135,6 +135,22 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 	return regions, true, ""
 }
 
+// MeasureOverlaps is [OverlapFootprints] with the version control resolved at root, the one
+// measurement every read door that reports overlaps calls, so `magus ls jobs` and
+// magus\job\list cannot disagree about a footprint. Only the overlaps pay for it: a list
+// with none reads no VCS at all. Version control that is disabled or does not resolve
+// leaves each footprint unknown, naming why.
+func MeasureOverlaps(ctx context.Context, root string, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+	if len(overlaps) == 0 {
+		return overlaps
+	}
+	var driver types.VCSDriver
+	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.Source != types.VCSSourceDisabled {
+		driver = res.VCS
+	}
+	return OverlapFootprints(ctx, driver, rows, overlaps)
+}
+
 // OverlapFootprints fills each overlap's Footprint: whether the two jobs' diffs, each
 // taken in the checkout that job was taken in (its CheckoutRoot) against its own
 // checkpoint, touch a common declaration. It returns a copy and never fails; every
