@@ -694,8 +694,8 @@ func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (in
 //   - one that runs a template magus ships;
 //   - one that names magus without invoking it: the kind validateHarnessEntries admits
 //     beside an invoking entry to prepare the environment a magus is found in, like
-//     Claude Code's session PATH entry. Nobody else writes magus into a hook that does
-//     not run it.
+//     the session PATH entry spells/harness/claude-code renders. Nobody else writes
+//     magus into a hook that does not run it.
 //
 // An entry that invokes magus directly, like a person's own `magus session notify` hook,
 // stays theirs: nothing in it says a descriptor wrote it.
