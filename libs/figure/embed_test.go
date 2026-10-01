@@ -1,6 +1,8 @@
 package figure
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"reflect"
 	"strings"
@@ -16,6 +18,13 @@ func TestSourceIsTheFigureModule(t *testing.T) {
 	assert.True(t, strings.Contains(Source, "\nnamespace figure;\n"), "figure.buzz declares the figure namespace")
 	assert.True(t, strings.Contains(Source, "\nexport fun of(id: str,"), "of() is the module's entry point")
 	assert.True(t, strings.Contains(Source, "\nexport fun draw(f: Figure, theme: Theme,"), "draw() paints a Figure")
+}
+
+func TestSourceSHA256IsTheFileOnDisk(t *testing.T) {
+	disk, err := os.ReadFile("figure.buzz")
+	require.NoError(t, err)
+	sum := sha256.Sum256(disk)
+	assert.Equal(t, hex.EncodeToString(sum[:]), SourceSHA256())
 }
 
 // hostless names the record fields a host has no value for, so the Go mirror leaves them

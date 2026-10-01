@@ -2,7 +2,9 @@ package figure
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -15,6 +17,13 @@ import (
 //
 //go:embed figure.buzz
 var Source string
+
+// SourceSHA256 is the hex SHA-256 of Source: the identity of the figure engine this binary
+// renders with, which moves only when figure.buzz does.
+func SourceSHA256() string {
+	sum := sha256.Sum256([]byte(Source))
+	return hex.EncodeToString(sum[:])
+}
 
 // The types below mirror the module's records field for field, under the Buzz field names;
 // TestMirrorMatchesTheModule holds them to the declarations.
