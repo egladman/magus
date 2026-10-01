@@ -310,6 +310,22 @@ func TestStoreExecTakesAJobDeclaredAgainAfterItEnded(t *testing.T) {
 }
 
 // twoCheckouts places two worktrees of one repository, which share its job store.
+// A fork records the forking checkout, but nobody has taken the job yet, so a worker in
+// another checkout takes it: the refusal is for a job an exec already holds.
+func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	loc, other := twoCheckouts(t)
+	forker := NewStore(loc)
+	seed(t, forker, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared, CheckoutRoot: loc.Root})
+
+	got, err := NewStore(other).Exec(ctx, "u1", baseB)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateRunning, got.State)
+	assert.NotEqual(t, loc.Root, got.CheckoutRoot, "the worker's checkout takes it")
+}
+
 func twoCheckouts(t *testing.T) (main, worktree Location) {
 	t.Helper()
 	main = tmpLoc(t, t.TempDir())
