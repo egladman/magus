@@ -2230,11 +2230,9 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
 }
 
-// Shells out: docs/render.buzz resolves its flat imports with docs/ as the cwd.
+// A nested run: docs/render.buzz resolves its flat imports with docs/ as the cwd.
 fun rerender_docs() > void !> any {
-    var bin = os\env("MAGUS");
-    if (bin == null or ("{bin}") == "") { bin = "magus"; }
-    proc\exec("{bin}", ["run", "render", "docs"], ".", {});
+    magus\run(["render", "docs"]);
 }
 
 // Names every producer in one command: the root cannot depend on docs or console, since

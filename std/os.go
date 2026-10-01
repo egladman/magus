@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,20 +27,110 @@ import (
 
 func init() { Register(Os) }
 
-// magusWarnOnce fires at most once per process when a magusfile execs the magus
-// binary, directing the author to magus.cmd instead.
-var magusWarnOnce sync.Once
+// magusWarned holds each typed member warnIfMagusBinary has already named, so a script
+// looping over one invocation hears about it once.
+var magusWarned sync.Map
 
-// warnIfMagusBinary emits a one-shot slog warning when cmd resolves to the
-// magus binary. Execution is not blocked; the escape hatch stays open.
-func warnIfMagusBinary(ctx context.Context, cmd string) {
+// warnIfMagusBinary warns when cmd is the magus binary and args name an invocation a typed
+// magus\ member answers, naming that member: it returns a typed record where the exec
+// returns text to parse back, and runs the build that loaded the script rather than
+// whichever magus the path finds. An invocation no member answers (`job exec`, `queue ls`,
+// `server start`) is what proc.exec is for, so it stays silent. Execution is never blocked.
+func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
 	if filepath.Base(cmd) != "magus" {
 		return
 	}
-	magusWarnOnce.Do(func() {
-		slog.WarnContext(ctx, "magusfile: proc.exec called with 'magus' binary",
-			"hint", "use magus.cmd({...}) instead - in-process, version-pinned, no arg-quoting issues")
-	})
+	member := typedMagusMember(args)
+	if member == "" {
+		return
+	}
+	if _, seen := magusWarned.LoadOrStore(member, true); seen {
+		return
+	}
+	slog.WarnContext(ctx, "proc.exec runs magus for an invocation a typed member answers",
+		"invocation", strings.Join(append([]string{"magus"}, args...), " "),
+		"hint", "call magus\\"+member+" instead")
+}
+
+// typedMagusMembers maps a magus invocation, by its subcommand and, where the subcommand
+// alone does not decide it, the word after, to the magus\ member that answers it. The
+// two-word key wins. A subcommand whose member needs a particular shape of argv
+// (`affected`, `ls`) is decided in typedMagusMember instead.
+var typedMagusMembers = map[string]string{
+	"run":               "run",
+	"describe":          "describe",
+	"describe file":     "describeFile",
+	"describe module":   "describeModule",
+	"describe targets":  "targets",
+	"describe tools":    "tools",
+	"doctor":            "doctor",
+	"clean":             "clean",
+	"diff":              "diff",
+	"query":             "query",
+	"query output":      "output",
+	"explain":           "explain",
+	"path":              "path",
+	"refs":              "refs",
+	"insight":           "insight",
+	"graph stats":       "stats",
+	"ls jobs":           "job.list",
+	"ls targets":        "targets",
+	"job fork":          "job.put",
+	"job exit":          "job.exit",
+	"job wait":          "job.wait",
+	"vcs checkpoint":    "vcs.checkpoint",
+	"session attention": "attention",
+}
+
+// typedMagusMember is the magus\ member that answers `magus <args>`, or "" when none does.
+// Global flags ahead of the subcommand leave it undecided, and undecided is silent.
+func typedMagusMember(args []string) string {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return ""
+	}
+	sub, rest := args[0], args[1:]
+	if len(rest) > 0 {
+		if member, ok := typedMagusMembers[sub+" "+rest[0]]; ok {
+			return member
+		}
+	}
+	positional := hasPositional(rest)
+	switch sub {
+	case "ls":
+		// A bare `ls` lists the projects; `ls <noun>` has a member only where the table says.
+		if !positional {
+			return "projects"
+		}
+		return ""
+	case "affected":
+		// `affected <target>` runs the target across the affected set, which no member does.
+		if positional {
+			return ""
+		}
+		if slices.Contains(rest, "--impact") {
+			return "impact"
+		}
+		return "affected"
+	}
+	return typedMagusMembers[sub]
+}
+
+// valueFlags are the flags `ls` and `affected` take whose value is the next argument, so
+// that value is not mistaken for a positional one.
+var valueFlags = []string{"-o", "--output", "--base", "--root"}
+
+// hasPositional reports whether args carry a positional argument once flags and their
+// values are set aside.
+func hasPositional(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch {
+		case slices.Contains(valueFlags, args[i]):
+			i++
+		case !strings.HasPrefix(args[i], "-"):
+			return true
+		}
+	}
+	return false
 }
 
 // The cwd/path helpers (cwdKey, WithCwd, cwdFromContext, CwdFromContext,
@@ -356,7 +447,7 @@ func looksLikeShellCommand(cmd string) bool {
 // unless opts.allow_failure is true. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
-	warnIfMagusBinary(ctx, cmd)
+	warnIfMagusBinary(ctx, cmd, args)
 	wd := resolveDir(ctx, dir)
 	if wd != "" {
 		if err := checkRead(ctx, wd); err != nil {

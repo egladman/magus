@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -111,6 +112,18 @@ type HarnessPlan struct {
 	// <id> -o json` and pipes it into `magus buzz`, which merges each file with merge\json.
 	Merge   string `json:"merge,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
+	// Wired is every entry group the descriptor manages, as the host file reads once it is
+	// current, whether or not it already does. A current harness carries no Files, and this is
+	// where a reader finds what the host runs (each hook's command) without parsing the host file.
+	Wired []HarnessWired `json:"wired"`
+}
+
+// HarnessWired is one managed array in one host file: the file, the dotted key inside it,
+// and the entries the descriptor declares there, verbatim host JSON.
+type HarnessWired struct {
+	File    string           `json:"file"`
+	Key     string           `json:"key"`
+	Entries []map[string]any `json:"entries"`
 }
 
 // Current reports whether every host file already carries what the descriptor declares.
@@ -348,8 +361,11 @@ func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
 	if err != nil {
 		return HarnessPlan{}, err
 	}
-	plan := HarnessPlan{ID: d.ID}
+	plan := HarnessPlan{ID: d.ID, Wired: []HarnessWired{}}
 	if d.Config.Path != "" {
+		for _, group := range d.ManagedEntries {
+			plan.Wired = append(plan.Wired, HarnessWired{File: d.Config.Path, Key: strings.Join(group.Path, "."), Entries: group.Entries})
+		}
 		file, err := planHarnessConfig(root, d)
 		if err != nil {
 			return plan, err
@@ -769,14 +785,23 @@ func stringField(entry map[string]any, key string) string {
 	return v
 }
 
+// EntryCommands is the matcher a managed entry fires on (empty when it names none) and every
+// command it runs, in a stable order, for a reader who wants the wiring without the host
+// JSON around it.
+func EntryCommands(entry map[string]any) (matcher string, commands []string) {
+	collectCommands(entry, &commands)
+	return cmp.Or(stringField(entry, "matcher"), stringField(entry, "match")), commands
+}
+
 func collectCommands(v any, out *[]string) {
 	switch t := v.(type) {
 	case map[string]any:
 		if command, ok := t["command"].(string); ok && command != "" {
 			*out = append(*out, command)
 		}
-		for _, child := range t {
-			collectCommands(child, out)
+		// Sorted keys, so a rendering of the commands reads the same on every run.
+		for _, key := range slices.Sorted(maps.Keys(t)) {
+			collectCommands(t[key], out)
 		}
 	case []any:
 		for _, child := range t {

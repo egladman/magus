@@ -244,6 +244,18 @@ func writeHarnessPlan(w io.Writer, plan agent.HarnessPlan) error {
 		}
 		printf("merge it yourself (magus never writes host config):\n  %s\n", plan.Merge)
 	}
+	for _, wired := range plan.Wired {
+		printf("wired in %s %s:\n", wired.File, wired.Key)
+		for _, entry := range wired.Entries {
+			matcher, commands := agent.EntryCommands(entry)
+			if matcher == "" {
+				matcher = "any"
+			}
+			for _, command := range commands {
+				printf("  %s: %s\n", matcher, command)
+			}
+		}
+	}
 	if plan.MCPHint != "" {
 		printf("mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", plan.ID, plan.MCPHint)
 	}
