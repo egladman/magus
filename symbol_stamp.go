@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,13 +28,14 @@ import (
 // without forking, and any difference sends it back to the probe. The stamp can only skip
 // a probe. It never grants freshness the probe did not grant first.
 //
-// What it cannot see is a toolchain upgrade with unchanged sources: the index keeps
-// reading fresh until the next build. The stale notice asks whether the sources moved
-// since the index was built, and tool versions are not part of that question.
+// The indexer's own version is in the stamp: an upgraded indexer writes a different index,
+// and its observation probe is served from the probe cache by the binary's identity, so it
+// forks nothing once seen. What the stamp cannot see is a toolchain upgrade with unchanged
+// sources, which the scip key leaves out on purpose.
 
 // symbolStampFormat changes whenever the stamp's composition does, so a sidecar written
 // under an older meaning never matches.
-const symbolStampFormat = "symbol-stamp/1"
+const symbolStampFormat = "symbol-stamp/2"
 
 // symbolStampPath is the sidecar beside one project's SCIP index.
 func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
@@ -51,6 +53,11 @@ func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.P
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n%s\n", symbolStampFormat, key)
+	one := []*types.Project{p}
+	observed := m.probeObservations(ctx, one, symbolIndexDriven(one))[p.Path]
+	for _, name := range slices.Sorted(maps.Keys(observed)) {
+		fmt.Fprintf(&b, "observed %s=%s\n", name, observed[name])
+	}
 	writeFileIdentity(&b, indexPath)
 	for _, s := range step.Stamps {
 		writeFileIdentity(&b, filepath.Join(step.WorkspaceRoot, s))
