@@ -1241,7 +1241,8 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     // The version header selfupdate's ParseManifest requires, added last before signing.
     fs\writeFile(manifest, releases\manifestWithVersion(fs\readFile(manifest), version: version()));
     // A dry run signs nothing and returns "", leaving no .sig to check.
-    if (crypto\signFile(crypto\SignAlgorithm.Ed25519, path: manifest, key_env: "MAGUS_SIGNING_KEY") == "") { return; }
+    final key = magus\secret.read("MAGUS_SIGNING_KEY");
+    if (crypto\signFile(crypto\SignAlgorithm.Ed25519, path: manifest, key: key) == "") { return; }
     releases\verifySignature(fs\readFile(manifest), sig: fs\readFile(sigPath),
         pubHex: releases\activeReleaseKey(fs\readFile(releases\KEYRING)), sigPath: sigPath);
     magus\log.info("signed {manifest} -> {sigPath}, verified against the release key");

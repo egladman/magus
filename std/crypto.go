@@ -92,17 +92,17 @@ var Crypto = Module{
 		},
 		{
 			Name: "sign",
-			Doc: "Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is \"ed25519\". " +
-				"The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
-			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "key_env", Type: TypeString}},
+			Doc: "Sign data with key, the hex private key, and return the lowercase hex signature. alg is \"ed25519\". " +
+				"Read key with magus\\secret.read so it comes from the workspace's secret provider and stays out of run logs; an error never echoes it.",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "key", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    CryptoSign,
 		},
 		{
 			Name:    "sign_file",
-			Doc:     "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
-			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "path", Type: TypeString}, {Name: "key_env", Type: TypeString}},
+			Doc:     "Sign the file at path with key, the hex private key read through magus\\secret.read, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "path", Type: TypeString}, {Name: "key", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    CryptoSignFile,
@@ -117,8 +117,8 @@ var Crypto = Module{
 		},
 		{
 			Name:    "public_key",
-			Doc:     "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
-			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "key_env", Type: TypeString}},
+			Doc:     "Return the lowercase hex PUBLIC key for key, the hex private key read through magus\\secret.read, so a publisher can print what its readers must pin. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "key", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    CryptoPublicKey,
@@ -296,39 +296,33 @@ func checkAlg(alg string) error {
 	return nil
 }
 
-// signingKey reads the private key named by keyEnv for the given algorithm.
+// signingKey decodes keyHex, a hex private key, for the given algorithm.
 //
-// Taking the NAME rather than the key is the whole point of this shape. magus
-// captures the output of every run, and a magusfile that had to hold a signing key
-// in a variable would be one interpolation away from writing it into a log that
-// outlives the build. The key is read here, used here, and never crosses into Buzz.
-func signingKey(alg, keyEnv string) (ed25519.PrivateKey, error) {
+// The key comes from magus\secret.read, so the workspace's secret provider supplies it
+// (the environment by default, a keychain where one is selected) and the run's resolver
+// redacts it from captured output. No error here echoes the value: a decode error on a
+// secret must not print the secret back.
+func signingKey(alg, keyHex string) (ed25519.PrivateKey, error) {
 	if err := checkAlg(alg); err != nil {
 		return nil, err
 	}
-	if keyEnv == "" {
-		return nil, fmt.Errorf("crypto: key_env is required (name the variable holding the key, not the key)")
-	}
-	keyHex := os.Getenv(keyEnv)
-	if keyHex == "" {
-		return nil, fmt.Errorf("crypto: %s is not set", keyEnv)
+	if strings.TrimSpace(keyHex) == "" {
+		return nil, fmt.Errorf("crypto: key is empty; read it with magus\\secret.read(<ref>)")
 	}
 	raw, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil {
-		// Deliberately does not echo the value: a decode error on a secret must not
-		// print the secret back.
-		return nil, fmt.Errorf("crypto: %s is not valid hex", keyEnv)
+		return nil, fmt.Errorf("crypto: key is not valid hex")
 	}
 	if len(raw) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("crypto: %s must be %d bytes (%d hex chars), got %d bytes",
-			keyEnv, ed25519.PrivateKeySize, ed25519.PrivateKeySize*2, len(raw))
+		return nil, fmt.Errorf("crypto: key must be %d bytes (%d hex chars), got %d bytes",
+			ed25519.PrivateKeySize, ed25519.PrivateKeySize*2, len(raw))
 	}
 	return ed25519.PrivateKey(raw), nil
 }
 
-// CryptoSign signs data with the key named by keyEnv, returning hex.
-func CryptoSign(_ context.Context, alg, data, keyEnv string) (string, error) {
-	key, err := signingKey(alg, keyEnv)
+// CryptoSign signs data with keyHex, returning hex.
+func CryptoSign(_ context.Context, alg, data, keyHex string) (string, error) {
+	key, err := signingKey(alg, keyHex)
 	if err != nil {
 		return "", err
 	}
@@ -340,8 +334,8 @@ func CryptoSign(_ context.Context, alg, data, keyEnv string) (string, error) {
 // The signature is written as RAW bytes, not hex: that is the format every reader
 // of a magus signature already expects, from the installer's openssl pkeyutl to
 // internal/selfupdate. The hex return is for printing.
-func CryptoSignFile(ctx context.Context, alg, path, keyEnv string) (string, error) {
-	key, err := signingKey(alg, keyEnv)
+func CryptoSignFile(ctx context.Context, alg, path, keyHex string) (string, error) {
+	key, err := signingKey(alg, keyHex)
 	if err != nil {
 		return "", err
 	}
@@ -390,15 +384,15 @@ func CryptoVerify(_ context.Context, alg, data, sigHex, pubHex string) (bool, er
 	return ed25519.Verify(ed25519.PublicKey(pub), []byte(data), sig), nil
 }
 
-// CryptoPublicKey returns the hex public half of the key named by keyEnv.
-func CryptoPublicKey(_ context.Context, alg, keyEnv string) (string, error) {
-	key, err := signingKey(alg, keyEnv)
+// CryptoPublicKey returns the hex public half of keyHex.
+func CryptoPublicKey(_ context.Context, alg, keyHex string) (string, error) {
+	key, err := signingKey(alg, keyHex)
 	if err != nil {
 		return "", err
 	}
 	pub, ok := key.Public().(ed25519.PublicKey)
 	if !ok {
-		return "", fmt.Errorf("crypto: %s did not yield an ed25519 public half", keyEnv)
+		return "", fmt.Errorf("crypto: the key did not yield an ed25519 public half")
 	}
 	return hex.EncodeToString(pub), nil
 }
