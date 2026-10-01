@@ -365,6 +365,7 @@ func TestTraceProject_valToStringsShapes(t *testing.T) {
 // matches any target ending in -<pattern>.
 func TestRun_globNoStarPattern(t *testing.T) {
 	const src = `
+import "magus";
 export fun proto_generate(ctx: magus\Context, args: [str]) > void {}
 export fun mock_generate(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob("generate")); }

@@ -72,10 +72,11 @@ register();
 
 func TestGuardRulesFilterLeavesUnrelatedProgram(t *testing.T) {
 	prog := reduce(t, `
+import "magus";
 import "spells/harness/cursor" as harness;
 magus\harness.provider(harness);
 `, nil)
-	assert.Equal(t, []string{"import spells/harness/cursor", "expr"}, stmtKinds(prog))
+	assert.Equal(t, []string{"import magus", "import spells/harness/cursor", "expr"}, stmtKinds(prog))
 }
 
 func TestGuardRulesFilterKeepsFlatImport(t *testing.T) {

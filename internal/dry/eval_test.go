@@ -218,6 +218,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 
 func TestLoadMagusfile_patternNeeds(t *testing.T) {
 	const src = `
+import "magus";
 export fun proto_generate(ctx: magus\Context, args: [str]) > void {}
 export fun mock_generate(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob("*-generate")); }
@@ -261,6 +262,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["
 
 func TestRun_targetNameCasing(t *testing.T) {
 	const src = `
+import "magus";
 export fun mock_generate(ctx: magus\Context, args: [str]) > void {}
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
 `
@@ -374,7 +376,7 @@ export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"]();
 // TestEval_tracerParseError surfaces a compile failure as a Diag instead of a
 // bogus empty trace, so a broken example shows the error rather than passing.
 func TestEval_tracerParseError(t *testing.T) {
-	r := Eval(context.Background(), "export fun build(ctx: magus\\Context, args: [str]) > void { this is not buzz }", WithTracer())
+	r := Eval(context.Background(), "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void { this is not buzz }", WithTracer())
 	assert.False(t, r.OK)
 	assert.NotNil(t, r.Diag)
 }

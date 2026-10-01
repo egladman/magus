@@ -14,7 +14,8 @@ import (
 
 func TestAssembleBuzz(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "a.buzz", `import "b";
+	writeFile(t, root, "a.buzz", `import "magus";
+import "b";
 import "magus/spell/go";
 export fun build(ctx: magus\Context, args: [str]) > void {
     // NOTE: build is tricky
@@ -78,7 +79,8 @@ fun helper() > void {}
 
 func TestBuzzUnresolvableImportTaggedMGS7001(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "a.buzz", `import "fs";
+	writeFile(t, root, "a.buzz", `import "magus";
+import "fs";
 import "buzz:os";
 import "magus/spell";
 import "spells/missing";
@@ -131,7 +133,8 @@ func writeBenchTree(b *testing.B, nBuzz, nDocs int) string {
 			b.Fatal(err)
 		}
 		next := (i + 1) % max(nBuzz, 1)
-		src := fmt.Sprintf(`import "pkg%04d/mod";
+		src := fmt.Sprintf(`import "magus";
+import "pkg%04d/mod";
 import "magus/spell/go";
 // package-level doc
 export fun build(ctx: magus\Context, args: [str]) > void {

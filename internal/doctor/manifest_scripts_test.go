@@ -94,7 +94,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 	})
 
 	t.Run("an untraceable magusfile is unknown, not ok", func(t *testing.T) {
-		const broken = "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }"
+		const broken = "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }"
 		_, diag := dry.Execs(context.Background(), broken)
 		require.NotNil(t, diag)
 		root, projects := workspace(t, map[string]string{"magusfile.buzz": broken})

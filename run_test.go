@@ -318,7 +318,8 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 // step.Outputs), joined to the project path, without leaking to a sibling target.
 func TestInputsOutputsColocation(t *testing.T) {
 	root := t.TempDir()
-	const mf = `magus\project({"outputs": ["legacy/**"]});
+	const mf = `import "magus";
+magus\project({"outputs": ["legacy/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**", "tsconfig.json");
     ctx.writesFiles("dist/**");
@@ -363,7 +364,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
 	root := t.TempDir()
 	// A footprint naming one unrelated file: the narrowest a target can declare.
-	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**");
 }
 `
@@ -385,7 +387,8 @@ func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
 // does; see types.ChainSkipCacheOutputs for why.
 func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun index_generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("MAGUS.md");
 }
 export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -424,7 +427,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 // declares and maintains.
 func TestComposerInheritsAComposedTargetsUpdates(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
     ctx.modifiesExistingFiles("CHANGELOG.md");
 }
 export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -664,7 +668,8 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 // error, because a computed footprint is invisible to the static cache read.
 func TestInputsDynamicArgIsLoadError(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
     ctx.readsFiles(extra);
 }
@@ -685,7 +690,8 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 // that tripped it: it must load, with or without the interpreter linked in.
 func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
     go["go-build"](ctx.withEnv(env), {});
 }
@@ -1560,10 +1566,12 @@ func TestToolVersionsByProjectTakesTheNilGateMap(t *testing.T) {
 // own output changed, and the root reported it as an undeclared source mutation.
 func TestOwnedOutputsSpanEveryProjectNotJustTheRunningOne(t *testing.T) {
 	root := t.TempDir()
-	const rootMF = `magus\project({"sources": ["**/*.md"]});
+	const rootMF = `import "magus";
+magus\project({"sources": ["**/*.md"]});
 export fun ci(ctx: magus\Context, args: [str]) > void {}
 `
-	const leafMF = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const leafMF = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("INDEX.md");
 }
 `

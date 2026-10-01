@@ -1504,7 +1504,7 @@ func BenchmarkFind(b *testing.B) {
 func BenchmarkRunBuzzParallel(b *testing.B) {
 	const nProjects = 16
 	ctx := context.Background()
-	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any { fs\\writeFile(\"out.txt\", \"x\"); }\n"
+	body := "import \"magus\";\nimport \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any { fs\\writeFile(\"out.txt\", \"x\"); }\n"
 
 	type proj struct {
 		src *interp.Source

@@ -58,7 +58,8 @@ export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // names (including the built-in "rw"), sorted and deduped, while a has_charm
 // mention in a comment or string does not count.
 func TestCharms(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     if (ctx.hasCharm("container")) { ctx.needs(image_build); }
     else { ctx.needs(go_build); }
 }
@@ -136,7 +137,8 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {}
 // magus.outputs string-literal globs are collected per target, a mention in a comment
 // is ignored, and a target that declares neither carries empty sets.
 func TestInputsOutputs(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**", "tsconfig.json");
     ctx.writesFiles("dist/**");
     // ctx.readsFiles("ignored") in a comment must not count
@@ -167,7 +169,8 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 // Deduplicating the flat list across calls folded the second call's exclusion onto the
 // first call's glob, so a/x.go read as excluded though the first call declared it.
 func TestFootprintExclusionsStayWithTheirCall(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("a/x.go");
     ctx.writesFiles("!a/x.go", "a/*.go");
 }
@@ -184,7 +187,8 @@ func TestFootprintExclusionsStayWithTheirCall(t *testing.T) {
 // against the globs the call declares in THAT project, so one with none there is refused
 // even though the call declares globs of its own.
 func TestFootprintExclusionNarrowsOnlyItsOwnProject(t *testing.T) {
-	g := Extract(`import "project/site";
+	g := Extract(`import "magus";
+import "project/site";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**", site.file("gen/*.html"), site.file("!gen/hand.html"));
 }
@@ -207,7 +211,8 @@ export fun bad(ctx: magus\Context, args: [str]) > void {
 // argument that is not a string literal sets DynamicIO (the load path turns that into
 // an error), while any literal args in the same call are still collected.
 func TestReadsWritesDynamic(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
     ctx.readsFiles("src/**", extra);
 }
@@ -223,7 +228,8 @@ func TestReadsWritesDynamic(t *testing.T) {
 // flags have to stay apart because the load path cannot tell the cases apart any other
 // way; see describe.flagDynamic.
 func TestExecOverrideDynamic(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
     final dir = "sub";
     go["go-build"](ctx.withEnv(env), {});
@@ -241,7 +247,8 @@ func TestExecOverrideDynamic(t *testing.T) {
 // invisible to the static read, and classifies by the member's name exactly as a computed
 // argument does.
 func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     final e = ctx.withEnv({"K": "V"});
     go["go-build"](e.withCwd("sub"), {});
 }
@@ -258,7 +265,8 @@ func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 // were not there and replay a stale answer, which is exactly what it was reaching
 // past skip_cache to avoid.
 func TestObservesExtraction(t *testing.T) {
-	g := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", "2026-08-15");
     ctx.observes("schema-rev", "a1b2c3");
 }
@@ -271,7 +279,8 @@ func TestObservesExtraction(t *testing.T) {
 
 	// A probe cannot reach the key: the key is minted before the body runs, so a
 	// computed value would be an observation magus never sees.
-	computed := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+	computed := Extract(`import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", probe());
 }
 `)
@@ -280,7 +289,8 @@ func TestObservesExtraction(t *testing.T) {
 
 	// An unpaired key contributes nothing to the key while reading, in the source,
 	// like a target that declared its dependence on something.
-	odd := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+	odd := Extract(`import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", "2026-08-15", "schema-rev");
 }
 `)
@@ -290,7 +300,8 @@ func TestObservesExtraction(t *testing.T) {
 
 	// "a=b=c" is both a=b -> c and a -> b=c, so a key carrying the separator is
 	// rejected at declaration rather than hashed as whichever half a splitter picks.
-	ambiguous := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+	ambiguous := Extract(`import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("schema-rev", "a1b2c3");
     ctx.observes("trivy-db=stable", "2026-08-15");
 }
@@ -305,7 +316,8 @@ func TestObservesExtraction(t *testing.T) {
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
 // unreferenced helper or used as a value IS; it would never enter a cache key.
 func TestUnreachedIO(t *testing.T) {
-	orphans := UnreachedIO(`export fun build(ctx: magus\Context, args: [str]) > void {
+	orphans := UnreachedIO(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**");
     helper();
 }
@@ -328,15 +340,16 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 }
 
 func TestRemovedContextMethods(t *testing.T) {
-	removed := RemovedContextMethods(`export fun build(ctx: magus\Context, args: [str]) > void {
+	removed := RemovedContextMethods(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.inputs("src/**");
     ctx.outputs("dist/**");
     ctx.updates("CHANGELOG.md");
 }`)
 	require.Equal(t, []RemovedContextMethod{
-		{Name: "inputs", Replacement: "readsFiles", Line: 2},
-		{Name: "outputs", Replacement: "writesFiles", Line: 3},
-		{Name: "updates", Replacement: "modifiesExistingFiles", Line: 4},
+		{Name: "inputs", Replacement: "readsFiles", Line: 3},
+		{Name: "outputs", Replacement: "writesFiles", Line: 4},
+		{Name: "updates", Replacement: "modifiesExistingFiles", Line: 5},
 	}, removed)
 }
 
@@ -345,7 +358,8 @@ func TestRemovedContextMethods(t *testing.T) {
 // order, but only for handles a spell import brought into scope — a host call
 // (proc.exec) or a call on a non-spell identifier is dropped.
 func TestSpellOps(t *testing.T) {
-	g := Extract(`import "magus/spell/go";
+	g := Extract(`import "magus";
+import "magus/spell/go";
 import "magus/spell/md";
 import "os";
 import "proc";
@@ -376,7 +390,8 @@ export fun scan(ctx: magus\Context, args: [str]) > void { proc\exec("trivy", [])
 // helper must not loop (cycle guard), and a helper's own spell ops only attribute
 // to callers, never leak between sibling targets.
 func TestSpellOpsThroughHelper(t *testing.T) {
-	g := Extract(`import "magus/spell/docker";
+	g := Extract(`import "magus";
+import "magus/spell/docker";
 import "magus/spell/cosign";
 
 fun build_variant(tag: str) > void {
@@ -410,7 +425,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // text inside a string literal — an echo/help/error message — does not register a
 // phantom spell op. Only the op string of a real bracket call is read.
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
-	g := Extract(`import "magus/spell/go";
+	g := Extract(`import "magus";
+import "magus/spell/go";
 export fun help(ctx: magus\Context, args: [str]) > void {
     proc\exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
@@ -427,7 +443,8 @@ export fun help(ctx: magus\Context, args: [str]) > void {
 // its own context: any other statement, argument, callee or helper call withholds it,
 // since the engine schedules a dispatch-only target as the ops themselves.
 func TestDispatchOnly(t *testing.T) {
-	g := Extract(`import "magus/spell/typescript";
+	g := Extract(`import "magus";
+import "magus/spell/typescript";
 import "magus/spell/md";
 fun helper(ctx: magus\Context) > void { typescript["pnpm-install"](ctx); }
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
@@ -457,7 +474,8 @@ export fun empty(ctx: magus\Context, args: [str]) > void {}
 // registers targets (kebab-case), so a camelCase function and a hyphenated
 // node reconcile.
 func TestNameNormalization(t *testing.T) {
-	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`import "magus";
+export fun goBuild(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 `)
 	_, ok := nodeByName(g, "go-build")
@@ -469,7 +487,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 // TestBraceInString guards that a `}` inside a string literal does not truncate the
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     proc\exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
@@ -482,7 +501,8 @@ export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // TestTrailingComment guards that a magus.needs handle in a trailing inline comment
 // is prose, not an edge.
 func TestTrailingComment(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(real); // ctx.needs(fake)
 }
 export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -499,7 +519,8 @@ export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // sorted: it iterates a Go map, so anything else would vary between runs. Describing
 // edges in a different order than they dispatch is the drift this consolidation removes.
 func TestNeedsGlobMultiPattern(t *testing.T) {
-	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen", "check-*"));
 }
 export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -514,7 +535,8 @@ export fun check_lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // excluded target must not appear as an edge, or `magus describe`/`magus graph` would show
 // a dependency that never runs.
 func TestNeedsGlobNegation(t *testing.T) {
-	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
+	g := Extract(`import "magus";
+export fun all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen", "!skip-gen"));
 }
 export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -529,7 +551,8 @@ export fun skip_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // target names (a starless pattern is suffix shorthand), a multi-pattern glob
 // yields every match, and a handle in a trailing comment is prose, not an edge.
 func TestNeedsHandles(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun b_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun test(ctx: magus\Context, args: [str]) > void {
@@ -548,7 +571,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // is the order the body writes, ACROSS ctx.needs calls, and a glob step expands in
 // place. Dependencies happens to agree here; Chain is what promises it.
 func TestChainIsSourceOrdered(t *testing.T) {
-	g := Extract(`export fun generate(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun test(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -567,7 +591,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TestChainCallIndexKeepsTheFirstMention: a target named twice runs once, when the
 // earlier call reaches it, so the later mention neither duplicates the step nor moves it.
 func TestChainCallIndexKeepsTheFirstMention(t *testing.T) {
-	g := Extract(`export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`import "magus";
+export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
@@ -584,7 +609,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // locality, so neither can answer this on its own, the reason Chain is built from the
 // argument list rather than folded from those two afterwards.
 func TestChainInterleavesCrossSteps(t *testing.T) {
-	g := Extract(`import "project/../lib";
+	g := Extract(`import "magus";
+import "project/../lib";
 export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
@@ -605,7 +631,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so the
 // describe surface prints no line rather than an empty one.
 func TestChainEmptyForALeafTarget(t *testing.T) {
-	g := Extract(`import "project/../lib";
+	g := Extract(`import "magus";
+import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"));
     go["go-build"]();
@@ -617,7 +644,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 func TestExternalCrossDependencies(t *testing.T) {
-	g := Extract(`import "project/../gopherbuzz";
+	g := Extract(`import "magus";
+import "project/../gopherbuzz";
 export fun build_playground(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(gopherbuzz.build);
@@ -638,7 +666,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // inside string literals (not code) are ignored — they must not register phantom
 // edges, which for an external edge would pollute the affected set.
 func TestDependencyTokensInStringLiterals(t *testing.T) {
-	g := Extract(`import "project/../api";
+	g := Extract(`import "magus";
+import "project/../api";
 export fun build(ctx: magus\Context, args: [str]) > void {
     magus\log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
@@ -657,7 +686,8 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
 // phantom cross-dependency. Same-project entries come first (arg order), cross after.
 func TestCrossFileInputs(t *testing.T) {
-	g := Extract(`import "project/../lib";
+	g := Extract(`import "magus";
+import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
     go["go-build"]();
@@ -676,7 +706,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // TestCrossFileInputsDynamic: a computed (non-literal) rel in alias.file(...) is invisible
 // to the static read, so it trips DynamicIO exactly like any other non-literal io arg.
 func TestCrossFileInputsDynamic(t *testing.T) {
-	g := Extract(`import "project/../lib";
+	g := Extract(`import "magus";
+import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file(args[0]));
     go["go-build"]();
@@ -689,13 +720,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 func TestCycle(t *testing.T) {
-	acyclic := Extract(`export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
+	acyclic := Extract(`import "magus";
+export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
 export fun b(ctx: magus\Context, args: [str]) > void { ctx.needs(c); }
 export fun c(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	assert.Nil(t, Cycle(acyclic), "acyclic graph reported cycle")
 
-	cyclic := Extract(`export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
+	cyclic := Extract(`import "magus";
+export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
 export fun b(ctx: magus\Context, args: [str]) > void { ctx.needs(c); }
 export fun c(ctx: magus\Context, args: [str]) > void { ctx.needs(a); }
 `)
@@ -708,7 +741,8 @@ export fun c(ctx: magus\Context, args: [str]) > void { ctx.needs(a); }
 // cycle written with mixed casing must still be detected once both sides are
 // normalized.
 func TestCycleAcrossNormalization(t *testing.T) {
-	g := Extract(`export fun aB(ctx: magus\Context, args: [str]) > void { ctx.needs(bC); }
+	g := Extract(`import "magus";
+export fun aB(ctx: magus\Context, args: [str]) > void { ctx.needs(bC); }
 export fun bC(ctx: magus\Context, args: [str]) > void { ctx.needs(aB); }
 `)
 	assert.NotNil(t, Cycle(g), "mixed-case cycle aB→bC→aB not detected")
@@ -717,7 +751,8 @@ export fun bC(ctx: magus\Context, args: [str]) > void { ctx.needs(aB); }
 // TestDeclaredName checks the raw as-written target name is captured when the
 // normalizer rewrites it, and left empty when the spelling already matches.
 func TestDeclaredName(t *testing.T) {
-	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void {}
+	g := Extract(`import "magus";
+export fun goBuild(ctx: magus\Context, args: [str]) > void {}
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	rewritten, _ := nodeByName(g, "go-build")
@@ -825,7 +860,8 @@ export fun lookalike(ctx: magus\Context, args: [str]) > void {
 // was about to judge.
 func TestWritesOutsideRWCharm(t *testing.T) {
 	t.Run("a write before the rw branch is the finding", func(t *testing.T) {
-		got := WritesOutsideRWCharm(`export fun badge(ctx: magus\Context, args: [str]) > void {
+		got := WritesOutsideRWCharm(`import "magus";
+export fun badge(ctx: magus\Context, args: [str]) > void {
     final wanted = render();
     fs\writeFile("assets/badge.svg", content: wanted);
     if (ctx.hasCharm("rw")) { return; }
@@ -837,7 +873,8 @@ func TestWritesOutsideRWCharm(t *testing.T) {
 	})
 
 	t.Run("a write inside the rw branch is correct and silent", func(t *testing.T) {
-		got := WritesOutsideRWCharm(`export fun badge(ctx: magus\Context, args: [str]) > void {
+		got := WritesOutsideRWCharm(`import "magus";
+export fun badge(ctx: magus\Context, args: [str]) > void {
     final wanted = render();
     if (ctx.hasCharm("rw")) {
         fs\writeFile("assets/badge.svg", content: wanted);
@@ -850,7 +887,8 @@ func TestWritesOutsideRWCharm(t *testing.T) {
 	})
 
 	t.Run("a target with no rw branch is never reported", func(t *testing.T) {
-		got := WritesOutsideRWCharm(`export fun generate(ctx: magus\Context, args: [str]) > void {
+		got := WritesOutsideRWCharm(`import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("gen/out.json", content: "{}");
 }
 `)

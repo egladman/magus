@@ -34,7 +34,8 @@ func TestSizedRuns(t *testing.T) {
 // its input, so the gate runs that reader; a magusfile edit can move the graph itself.
 func TestAssessChangeTiersFromDeclarations(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun render(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun render(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("docs/**/*.md");
 }
 export fun ci(ctx: magus\Context, args: [str]) > void {

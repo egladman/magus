@@ -132,7 +132,8 @@ func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
 func TestGeneratedBoundaryNamesWhatAnOutputCarvesOut(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`export fun generate(ctx: magus\Context, args: [str]) > void {
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 `), 0o644))

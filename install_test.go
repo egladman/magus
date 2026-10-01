@@ -34,7 +34,8 @@ func TestADispatchOnlyInstallTargetSchedulesAsItsInstalls(t *testing.T) {
 	for _, p := range []string{"lib", "web"} {
 		write(p+"/package.json", "{}\n")
 		write(p+"/pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
-		write(p+"/magusfile.buzz", `import "magus/spell/typescript";
+		write(p+"/magusfile.buzz", `import "magus";
+import "magus/spell/typescript";
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 export fun lint(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); ctx.needs(install); }
 `)

@@ -19,13 +19,13 @@ func TestDiagnostics_CleanMagusfile(t *testing.T) {
 func TestDiagnostics_MultipleErrorsSorted(t *testing.T) {
 	// Two undefined references on different lines; both must surface (Exec would
 	// stop at the first), sorted by position.
-	src := "export fun a(ctx: magus\\Context, args: [str]) > void { missingOne(); }\n" +
+	src := "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { missingOne(); }\n" +
 		"export fun b(ctx: magus\\Context, args: [str]) > void { missingTwo(); }"
 	got := Diagnostics(context.Background(), src)
 	require.Len(t, got, 2, "both undefined references should be reported, got %+v", got)
-	assert.Equal(t, 1, got[0].Line)
+	assert.Equal(t, 2, got[0].Line)
 	assert.Contains(t, got[0].Msg, "missingOne")
-	assert.Equal(t, 2, got[1].Line)
+	assert.Equal(t, 3, got[1].Line)
 	assert.Contains(t, got[1].Msg, "missingTwo")
 }
 
@@ -70,13 +70,13 @@ func TestExecs_spellBufferAndFailure(t *testing.T) {
 	assert.Nil(t, diag)
 	assert.Empty(t, got, "a spell buffer's ops are declared, not traced")
 
-	got, diag = Execs(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
+	got, diag = Execs(context.Background(), "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
 	assert.Empty(t, got)
 	assert.NotNil(t, diag)
 }
 
 func TestDiagnostics_ParseError(t *testing.T) {
-	got := Diagnostics(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
+	got := Diagnostics(context.Background(), "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
 	require.Len(t, got, 1)
 	assert.NotZero(t, got[0].Line, "parse error should carry a position: %+v", got[0])
 	assert.NotEmpty(t, got[0].Msg)

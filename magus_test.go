@@ -837,7 +837,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	mkWS := func() string {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("export fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
+			[]byte("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
 		return root
 	}
 
@@ -905,11 +905,12 @@ func TestCrossFileInputs(t *testing.T) {
 	// Workspace root marker.
 	write("magusfile.buzz", "")
 	// The owning project and the file the consumer reaches for.
-	write("lib/magusfile.buzz", "export fun compile(ctx: magus\\Context, args: [str]) > void {}\n")
+	write("lib/magusfile.buzz", "import \"magus\";\nexport fun compile(ctx: magus\\Context, args: [str]) > void {}\n")
 	write("lib/go.mod", "module lib\n")
 	// The consumer declares a cross-project AND a same-project input on the same target.
 	write("consumer/app/main.go", "package app\n")
-	write("consumer/magusfile.buzz", `import "project/../lib";
+	write("consumer/magusfile.buzz", `import "magus";
+import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "app/**");
 }
