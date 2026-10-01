@@ -1,0 +1,34 @@
+{
+  "main": "/work/repo",
+  "own": "/work/repo/.claude/worktrees/own",
+  "now": 1790000000000,
+  "keep_recent": "2h",
+  "worktrees": [
+    {"path": "/work/repo", "branch": "main", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/own", "branch": "feat/prune", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 5, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/dirty", "branch": "worktree-agent-dirty", "dirty": 3, "unique": 0, "locked": "", "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/unique", "branch": "(detached)", "dirty": 0, "unique": 2, "locked": "", "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/leased", "branch": "feat/leased", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/busy", "branch": "worktree-agent-busy", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/bus", "branch": "worktree-agent-bus", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "removable"},
+    {"path": "/work/repo/.claude/worktrees/merged", "branch": "worktree-agent-merged", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "removable"},
+    {"path": "/work/repo/.claude/worktrees/finished-job", "branch": "fix/finished", "dirty": 0, "unique": 0, "locked": "", "idle_minutes": 600, "want": "removable"},
+    {"path": "/work/repo/.claude/worktrees/many", "branch": "worktree-agent-many", "dirty": 1, "unique": 4, "locked": "claude agent agent-many (pid 1)", "idle_minutes": 30, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/locked", "branch": "worktree-agent-locked", "dirty": 0, "unique": 0, "locked": "", "locked_without_reason": true, "idle_minutes": 600, "want": "keep"},
+    {"path": "/work/repo/.claude/worktrees/gone", "branch": "worktree-agent-gone", "dirty": -1, "unique": 0, "locked": "", "idle_minutes": 0, "want": "keep"}
+  ],
+  "jobs": [
+    {"id": "prune-worktrees", "state": "running", "checkout_root": "/work/repo/.claude/worktrees/leased"},
+    {"id": "old-fix", "state": "pass", "checkout_root": "/work/repo/.claude/worktrees/finished-job"},
+    {"id": "many-job", "state": "declared", "checkout_root": "/work/repo/.claude/worktrees/many"},
+    {"id": "unbound", "state": "running", "checkout_root": ""}
+  ],
+  "lsof": [
+    "p4242",
+    "fcwd",
+    "n/work/repo/.claude/worktrees/busy/sub",
+    "p77",
+    "fcwd",
+    "n/"
+  ]
+}
