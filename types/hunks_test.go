@@ -33,6 +33,37 @@ func TestDeclarations(t *testing.T) {
 	assert.Equal(t, []string{"", ""}, DiffDriver{}.Declarations([]string{"func A() {\n", "}\n"}))
 }
 
+// Buzz or Go held in a raw string, or in a block comment, is text: its column-0 `var` and
+// `func` lines declare nothing, so the lines stay with the Go declaration around them.
+func TestDeclarationsSkipGoStringsAndComments(t *testing.T) {
+	golang, _ := DiffDriverFor("a.go")
+	lines := SplitLines([]byte("package a\n" +
+		"\n" +
+		"const script = `\n" +
+		"var i = 0;\n" +
+		"fun main() > void {}\n" +
+		"`\n" +
+		"\n" +
+		"func A() {\n" +
+		"\trun(`\n" +
+		"func fake() {\n" +
+		"type T struct {\n" +
+		"`)\n" +
+		"}\n" +
+		"\n" +
+		"/*\n" +
+		"func commented() {\n" +
+		"*/\n" +
+		"var after = 1\n"))
+	const script, a, after = "const script = `", "func A() {", "var after = 1"
+	assert.Equal(t, []string{
+		"", "",
+		script, script, script, script, script,
+		a, a, a, a, a, a, a, a, a, a,
+		after,
+	}, golang.Declarations(lines))
+}
+
 func TestHunks(t *testing.T) {
 	golang, _ := DiffDriverFor("a.go")
 	old := "package a\n\nfunc A() {\n\treturn\n}\n\nfunc B() {\n\treturn\n}\n"

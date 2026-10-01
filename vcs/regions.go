@@ -419,6 +419,9 @@ const regionMarker = "\x01magus-region\x01"
 //
 // It runs outside the repository with only driver's attribute: the repository's own
 // .gitattributes outranks core.attributesFile, and a `*` rule there would replace the driver.
+//
+// git matches funcname patterns line by line, so a declaration it finds on a line inside a
+// Go string or comment is dropped afterwards (types.DiffDriver.DropOpaque).
 func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, body []byte) ([]string, error) {
 	lines := strings.SplitAfter(string(body), "\n")
 	if lines[len(lines)-1] == "" {
@@ -462,6 +465,11 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 		}
 		if _, after, ok := strings.Cut(l[2:], " @@"); ok {
 			decls[h.oldStart-1] = strings.TrimSpace(after)
+		}
+	}
+	for _, d := range types.DiffDrivers {
+		if d.Name == driver {
+			d.DropOpaque(lines, decls)
 		}
 	}
 	handLeadersDown(decls, lines, declarationLeaders[driver])
