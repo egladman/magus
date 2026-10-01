@@ -98,7 +98,7 @@ Targets import these; each runs through its target rather than by hand.
 | module | holds |
 | --- | --- |
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
-| `hack/magusfile/branch-stack.buzz` | the order a stack of job branches merges in |
+| `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
