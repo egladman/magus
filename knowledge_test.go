@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
@@ -849,6 +850,9 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 			[]knowledge.ShardClass{knowledge.ClassRuntime}},
 		{"a coverage profile", func() { write(filepath.Join(root, ".magus", "coverage.out"), "mode: set\n") },
 			[]knowledge.ShardClass{knowledge.ClassCoverage, knowledge.ClassSession}},
+		// No walk sees .git, but the tree scans drop what its rules ignore.
+		{"an ignore rule outside the tree", func() { write(filepath.Join(root, ".git", "info", "exclude"), "docs/\n") },
+			[]knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
 	} {
 		before := stamps()
 		step.change()
@@ -915,6 +919,82 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 	_, err = parseSymbolIndexCached(ctx, in, decl)
 	var decodeErr symbolDecodeError
 	assert.ErrorAs(t, err, &decodeErr, "a moved index is parsed again, and this one no longer decodes")
+}
+
+// indexedWorkspace is a one-project workspace whose SCIP index is declared in config, so
+// its symbols are ingested without a symbol-capable spell bound.
+func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
+	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
+	ws, err := Inspect(context.Background(), root)
+	require.NoError(t, err)
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
+	return root, ws, cfg
+}
+
+// The session store grows with every agent event while anyone works. A symbol read does
+// not rebuild @session, so an append costs it nothing: the store is not re-stamped, and
+// nothing is reassembled or rewritten.
+func TestSymbolReadIgnoresSessionStoreAppends(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ctx := context.Background()
+	root, ws, cfg := indexedWorkspace(t)
+	log := slog.New(slog.DiscardHandler)
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	events := filepath.Join(dir, "s1.jsonl")
+	require.NoError(t, os.WriteFile(events, []byte("{}\n"), 0o644))
+	read := func() {
+		t.Helper()
+		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		require.NoError(t, err)
+		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+	}
+	manifest := filepath.Join(root, ".magus", "knowledge", "manifest.json")
+	read()
+	before, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(events, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString("{}\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	read()
+
+	after, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "an append to the session store reassembled nothing")
+}
+
+// QueryKnowledgeGraph is a faster route to the answer the CLI's symbol query used to give,
+// and nothing else: it must equal building the graph, merging every symbol shard and
+// querying, byte for byte.
+func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
+	ctx := context.Background()
+	root, ws, cfg := indexedWorkspace(t)
+	log := slog.New(slog.DiscardHandler)
+
+	for _, input := range []string{"Foo", "Foo kind=symbol", "kind=symbol", "kind=file", "absentname kind=symbol"} {
+		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		require.NoError(t, err)
+		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.True(t, g.HasSymbols(), "the fixture's index is ingested")
+		want, err := json.Marshal(g.Query(input, 0))
+		require.NoError(t, err)
+
+		out, ranked, err := QueryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
+		require.NoError(t, err)
+		got, err := json.Marshal(out)
+		require.NoError(t, err)
+		assert.Equalf(t, string(want), string(got), "query %q", input)
+		assert.Equal(t, g.NearestNode(input), ranked.NearestNode(input), "a near miss is found among the same nodes")
+	}
 }
 
 // TestBuildKnowledgeGraphAnswersFromTheStore drives the read path end to end: a second

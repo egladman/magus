@@ -318,8 +318,9 @@ func symbolSourcesOutside(tree *knowledge.TreeWalk, syms map[string][]types.Know
 // assembly reads, by identity rather than content: the magus binary (assembly is code),
 // the config, the target graph and spells, and per class:
 //
-//   - domain: the tree walk's digest, the committed history's head, the notes stores and
-//     the package manifests and lockfiles.
+//   - domain: the tree walk's digest, the committed history's head, the ignore-rule files
+//     the VCS keeps outside the tree, the notes stores and the package manifests and
+//     lockfiles.
 //   - runtime: the runtime records, the timing history and the output store.
 //   - symbols: the tree, the head, each declared SCIP index, and any defining file the
 //     last ingestion read outside the walk.
@@ -327,8 +328,7 @@ func symbolSourcesOutside(tree *knowledge.TreeWalk, syms map[string][]types.Know
 //   - session: the domain, symbols and coverage stamps and the session store.
 //
 // A stamp that cannot be computed is left empty, which makes its class rebuild, never
-// match. The one input outside the stamps is an ignore rule kept outside the tree (a
-// VCS's own exclude file or a user-global one); `--refresh` covers a change to those.
+// match.
 func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge.Store, want []knowledge.ShardClass) knowledge.Stamps {
 	out := knowledge.Stamps{}
 	session := slices.Contains(want, knowledge.ClassSession)
@@ -345,11 +345,19 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) || wants(knowledge.ClassSymbols) {
 		tree = src.tree.Digest()
 	}
-	if wants(knowledge.ClassDomain) && historyKnown {
+	var ignoreSources []string
+	ignoreKnown := false
+	if wants(knowledge.ClassDomain) {
+		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
+	}
+	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
 		h.String(tree)
 		h.String(vcsHead)
+		for _, p := range ignoreSources {
+			h.Path(p)
+		}
 		for _, s := range []struct {
 			scope    notes.Scope
 			declared string
@@ -428,6 +436,31 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 		out[knowledge.ClassSession] = h.Sum()
 	}
 	return out
+}
+
+// ignoreSourcer is the optional VCS capability of naming the files outside the working
+// tree that hold ignore rules. The tree scans drop what the VCS ignores, so those rules are
+// a domain input even though no walk of the tree sees them.
+type ignoreSourcer interface {
+	IgnoreSources(ctx context.Context, root string) ([]string, error)
+}
+
+// vcsIgnoreSources returns the ignore-rule files outside root that the workspace's VCS
+// consults. ok is false when the VCS has them but could not say where, which leaves the
+// domain unstamped rather than stamped blind. No VCS filters nothing, so it is ok with
+// none; so is a backend that does not implement ignoreSourcer, which today is every one
+// but git, and whose out-of-tree rules therefore go unstamped.
+func vcsIgnoreSources(ctx context.Context, root string) (paths []string, ok bool) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		return nil, true
+	}
+	is, has := res.VCS.(ignoreSourcer)
+	if !has {
+		return nil, true
+	}
+	paths, err = is.IgnoreSources(ctx, root)
+	return paths, err == nil
 }
 
 // baseKnowledgeStamp folds what every class reads: the binary, the store's schema, where
@@ -745,13 +778,29 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
 // a symbol-seeded query (the default graph excludes them for scale), first bringing the
-// lazily loaded classes up to date with their inputs. No store or no symbol shards merges
-// nothing.
+// symbol and coverage classes up to date with their inputs; @session is merged as stored
+// (see knowledge.SymbolClasses). No store or no symbol shards merges nothing.
 func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
-	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.SymbolClasses, log); err != nil {
 		return err
 	}
 	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
+}
+
+// QueryKnowledgeGraph answers input the way BuildKnowledgeGraph, then MergeWorkspaceSymbols,
+// then Graph.Query would, byte for byte, without decoding every symbol shard: matches are
+// ranked from the store's names sidecar, and only the shards the answer's neighborhood
+// touches are read (see knowledge.Store.QuerySymbols). It returns the answer and the graph
+// the matches were ranked over, which holds every node a near-miss suggestion searches.
+func QueryKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error) {
+	g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
+	if err != nil {
+		return types.KnowledgeQueryOutput{}, nil, err
+	}
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.SymbolClasses, log); err != nil {
+		return types.KnowledgeQueryOutput{}, nil, err
+	}
+	return symbolStore(ws, root, cfg, log).QuerySymbols(ctx, g, input, budget)
 }
 
 // MergeWorkspaceSymbolsForRef merges symbols into g for `magus refs`, targeting only
@@ -759,7 +808,7 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string,
 // ID (the scale-safe reverse lookup), or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
 func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
-	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.SymbolClasses, log); err != nil {
 		return err
 	}
 	store := symbolStore(ws, root, cfg, log)

@@ -42,10 +42,16 @@ const (
 )
 
 // DefaultClasses are merged into the default graph; LazyClasses are persisted beside them
-// and merged only on the symbol-load path (see isLazyShard).
+// and merged only on the symbol-load path (see isLazyShard). SymbolClasses are the lazy
+// classes a symbol read brings up to date: @session is left out because the session store
+// moves on every agent event, so rebuilding it per read would cost every read a full pass
+// over that store while anyone works. A symbol read merges whatever @session the store
+// holds, onto existing nodes only (see mergeOverlayShard), and a build over AllClasses
+// refreshes it.
 var (
 	DefaultClasses = []ShardClass{ClassDomain, ClassRuntime}
 	LazyClasses    = []ShardClass{ClassSymbols, ClassCoverage, ClassSession}
+	SymbolClasses  = []ShardClass{ClassSymbols, ClassCoverage}
 	AllClasses     = []ShardClass{ClassDomain, ClassRuntime, ClassSymbols, ClassCoverage, ClassSession}
 )
 
