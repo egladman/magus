@@ -404,11 +404,27 @@ magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
 and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
 verdict is ever keyed on them{{else}} - the guard grades its writes only when that is
 set{{end}}. Require it to preserve
-unrelated changes, stay inside write paths, avoid generated outputs, run only its
-assigned Magus target, and return its result with `magus job exit --stdin` in the
-schema `magus job exit --schema` prints: changed paths, the validation it ran with
-the output ref that proves it, descendants it forked, and unresolved risks. A typed
-result is what makes verification mechanical{{if .Full}}; the same four facts in prose can only be
+unrelated changes, stay inside write paths, avoid generated outputs, and run only its
+assigned Magus target.
+
+End every brief with the step that files the result, as the worker's LAST act
+before it reports back. A brief that leaves it out gets a prose report and a row
+that never moves{{if .Full}}: the store keeps the write paths held, `magus job wait`
+has nothing to verify, and nobody notices until a sibling is refused over a path
+the finished worker no longer needs{{end}}. The step, with the shape `magus job exit
+--schema` prints:
+
+```sh
+magus job exit <job> --stdin <<'EOF'
+{"schema_version": 2, "job": "<job>",
+ "changed_paths": ["api/store.go", "api/store_test.go"],
+ "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "descendants": [],
+ "unresolved_risks": ["what is left, or what the worker could not verify"]}
+EOF
+```
+
+A typed result is what makes verification mechanical{{if .Full}}; the same four facts in prose can only be
 graded by reading, and a worker that ran a filtered subset writes the same
 paragraph as one that did not{{end}}. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
