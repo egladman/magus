@@ -769,6 +769,9 @@ func TestJobHelpCarriesAPersonRunExample(t *testing.T) {
 		help := captureStderr(t, func() { err = v.run([]string{"-h"}) })
 		require.ErrorIs(t, err, flag.ErrHelp, v.name)
 		_, example, found := strings.Cut(help, "\nExample:\n  ")
+		if !found {
+			_, example, found = strings.Cut(help, "\nExamples:\n  ")
+		}
 		require.True(t, found, "`magus %s -h` carries no Example:\n%s", v.name, help)
 		line, _, _ := strings.Cut(example, "\n")
 		assert.True(t, strings.HasPrefix(line, "magus "+v.name+" "), "`magus %s -h` example runs something else: %q", v.name, line)
