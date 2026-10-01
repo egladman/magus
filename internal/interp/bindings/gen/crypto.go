@@ -105,13 +105,6 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StrVal(ret0), nil
 	}))
-	m.MapSet("releasePublicKey", vm.DirectValue("crypto.releasePublicKey", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.CryptoReleasePublicKey(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.StrVal(ret0), nil
-	}))
 	m.MapSet("md5Hex", vm.DirectValue("crypto.md5Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		data := ffi.Str(bzArgs, 0)
 		ret0, err := std.CryptoMd5Hex(ctx, data)

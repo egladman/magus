@@ -18,6 +18,9 @@
 import "vcs";
 import "semver";
 import "crypto";
+import "encoding/json";
+import "fs";
+import "serialize";
 import "std"; // assert, for the in-file test blocks below
 
 // releasableModules enumerates every independently-versioned project: one whose
@@ -259,6 +262,40 @@ test "the manifest gains its version header exactly once" {
     std\assert(headed.endsWith(sums), message: "the entries are untouched");
     std\assert(manifestWithVersion(headed, version: "v0.4.2") == headed,
         message: "a headed manifest is unchanged");
+}
+
+// KEYRING is the release keyring in the tree being released: the keys selfupdate embeds
+// and trusts, exactly one of them active.
+export final KEYRING = "internal/selfupdate/release-keys.json";
+
+// activeReleaseKey is the hex public key of the one active entry in keyring, the
+// release-keys.json text. Raises unless exactly one entry is active, as selfupdate
+// refuses to start on any other ring.
+export fun activeReleaseKey(keyring: str) > str !> any {
+    final keys = serialize\Boxed.init(json\parse(keyring)).q(["keys"]).listValue();
+    final active = mut [<str>];
+    foreach (k in keys) {
+        if (k.q(["state"]).stringValue() == "active") {
+            active.append(k.q(["key"]).stringValue());
+        }
+    }
+    if (active.len() != 1) {
+        throw "{KEYRING} holds {active.len()} active keys, want exactly 1";
+    }
+    return active[0];
+}
+
+test "the active release key is the one active entry" {
+    final ring = "\{\"keys\": [\{\"state\": \"retired\", \"key\": \"aa\"}, \{\"state\": \"active\", \"key\": \"bb\"}, \{\"state\": \"standby\", \"key\": \"cc\"}]}";
+    std\assert(activeReleaseKey(ring) == "bb", message: "the active entry");
+    var raised = "";
+    try {
+        _ = activeReleaseKey("\{\"keys\": [\{\"state\": \"standby\", \"key\": \"cc\"}]}");
+    } catch (e: str) {
+        raised = e;
+    }
+    std\assert(raised == "{KEYRING} holds 0 active keys, want exactly 1", message: "no active key raises");
+    std\assert(activeReleaseKey(fs\readFile(KEYRING)).len() == 64, message: "this repository's ring names one 32-byte key");
 }
 
 // verifySignature raises unless sig, the raw bytes of the .sig file at sigPath, is an

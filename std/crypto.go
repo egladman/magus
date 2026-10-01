@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/types"
 )
 
@@ -123,14 +122,6 @@ var Crypto = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    CryptoPublicKey,
-		},
-		{
-			Name: "release_public_key",
-			Doc: "Return the lowercase hex public key of the ACTIVE release signing key this magus binary embeds, the one its self-update verifies against. " +
-				"Never a standby or retired key: a release checking what it just signed must match the current signer.",
-			Returns: []Ret{{Type: TypeString}},
-			Raises:  true,
-			Impl:    CryptoReleasePublicKey,
 		},
 		{
 			Name:    "md5_hex",
@@ -410,13 +401,4 @@ func CryptoPublicKey(_ context.Context, alg, keyEnv string) (string, error) {
 		return "", fmt.Errorf("crypto: %s did not yield an ed25519 public half", keyEnv)
 	}
 	return hex.EncodeToString(pub), nil
-}
-
-// CryptoReleasePublicKey returns the hex public half of the release keyring's active key.
-func CryptoReleasePublicKey(_ context.Context) (string, error) {
-	active, err := selfupdate.ReleaseKeys.Active()
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(active.Pub), nil
 }
