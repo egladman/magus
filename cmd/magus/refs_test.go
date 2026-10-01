@@ -10,11 +10,48 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// A bare name two workspace definitions carry must not quietly answer for one of them: refs
+// exits 2 and names each candidate as a command that asks for it alone.
+func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
+	const hintID, queueID, depID = "symbol:x `hint`/Classify().", "symbol:x `queue`/Workspace#Classify().", "symbol:dep/Classify()."
+	sym := func(id string) types.KnowledgeNode {
+		return types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: "Classify"}
+	}
+	defines := func(file, id string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}
+	}
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{sym(hintID), sym(queueID), sym(depID)},
+		[]types.KnowledgeEdge{defines("hint/a.go", hintID), defines("queue/b.go", queueID)})
+
+	var stderr bytes.Buffer
+	_, err := refsSymbol(&stderr, g, "Classify")
+
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, exitUsage, silent.exitCode)
+	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
+  `+hint.Refs.With("'"+hintID+"'")+`
+  `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
+
+	got, err := refsSymbol(&stderr, g, queueID)
+	require.NoError(t, err)
+	assert.Equal(t, queueID, got, "an exact id picks itself")
+
+	only := knowledge.NewGraph()
+	only.Merge([]types.KnowledgeNode{sym(hintID), sym(depID)}, []types.KnowledgeEdge{defines("hint/a.go", hintID)})
+	got, err = refsSymbol(&stderr, only, "Classify")
+	require.NoError(t, err)
+	assert.Equal(t, hintID, got, "the one workspace definition wins over a dependency's symbol of that name")
+}
 
 // checkDefinitions is what stands between a recorded range and a wrong edit. A file older
 // than its index verifies; a newer one keeps the range only as unverified; a start line

@@ -58,6 +58,16 @@ func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledg
 type manifest struct {
 	SchemaVersion int                  `json:"schema_version"`
 	Shards        map[string]shardMeta `json:"shards"`
+	// Inputs is the stamp each class's shards were last assembled under (see Stamps). A
+	// class with no entry matches no stamp, so a store written before stamps existed, or
+	// by a Sync that had none, is reassembled on its next build.
+	Inputs map[ShardClass]string `json:"inputs,omitempty"`
+	// Extra is, per class, the workspace files its assembly read that the tree walk does
+	// not cover, so the caller can fold them into that class's next stamp.
+	Extra map[ShardClass][]string `json:"extra,omitempty"`
+	// Routing is the symbolShardsKey the routing file was last written for, so a sync whose
+	// symbol shards came out unchanged leaves that multi-megabyte file alone.
+	Routing string `json:"routing,omitempty"`
 }
 
 type shardMeta struct {
@@ -110,16 +120,53 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 // build, so the stale shard is never rewritten; or one prunes a shard the other's
 // manifest still names.
 func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string, refresh bool) (*Graph, error) {
-	if s.immutable {
-		return s.sync(ctx, shards, fps, refresh)
+	if err := s.syncClasses(ctx, shards, fps, syncPlan{refresh: refresh}); err != nil {
+		return nil, err
 	}
-	var g *Graph
-	err := file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
-		var err error
-		g, err = s.sync(ctx, shards, fps, refresh)
-		return err
+	return mergeShards(shards, false), nil
+}
+
+// syncPlan says which part of the store a sync owns and what to record for it.
+type syncPlan struct {
+	// classes are the classes shards carries in full; nil means every class. Shards of any
+	// other class keep their manifest entries and files untouched, which is what lets a
+	// build reassemble one class without the inputs of the rest.
+	classes []ShardClass
+	stamps  Stamps
+	extra   map[ShardClass][]string
+	refresh bool
+}
+
+func (p syncPlan) covers(c ShardClass) bool { return p.classes == nil || slices.Contains(p.classes, c) }
+
+// syncClasses reconciles the shards of the plan's classes against the store, under the
+// cross-process lock unless the store is immutable.
+func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan) error {
+	if s.immutable {
+		return s.sync(ctx, shards, fps, plan)
+	}
+	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+		return s.sync(ctx, shards, fps, plan)
 	})
-	return g, err
+}
+
+// mergeShards merges shards into a fresh graph in shard-name order, the order Load uses,
+// so a graph answered from the store and one assembled in memory are the same graph:
+// AddNode and AddEdge are first-writer-wins on conflict, so merge order is content.
+// lazy selects the lazily loaded shards instead of the default ones.
+func mergeShards(shards []Shard, lazy bool) *Graph {
+	picked := make([]Shard, 0, len(shards))
+	for _, sh := range shards {
+		if isLazyShard(sh.Name) == lazy {
+			picked = append(picked, sh)
+		}
+	}
+	slices.SortFunc(picked, func(a, b Shard) int { return strings.Compare(a.Name, b.Name) })
+	g := NewGraph()
+	for _, sh := range picked {
+		g.Merge(sh.Nodes, sh.Edges)
+	}
+	return g
 }
 
 // syncLockWait bounds the wait for another Sync. A cold build of a large workspace
@@ -127,38 +174,54 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 // give up on a holder that is only busy.
 const syncLockWait = 2 * time.Minute
 
-func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string, refresh bool) (*Graph, error) {
+func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan) error {
 	old := s.readManifestOrNil()
-	if refresh {
-		old = nil
+	newMan := manifest{
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Shards:        map[string]shardMeta{},
+		Inputs:        map[ShardClass]string{},
+		Extra:         map[ShardClass][]string{},
 	}
-	newMan := manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{}}
-	g := NewGraph()
+	if old != nil {
+		newMan.Routing = old.Routing
+		for name, meta := range old.Shards {
+			if !plan.covers(shardClass(name)) {
+				newMan.Shards[name] = meta
+			}
+		}
+		for c, stamp := range old.Inputs {
+			if !plan.covers(c) {
+				newMan.Inputs[c] = stamp
+			}
+		}
+		for c, paths := range old.Extra {
+			if !plan.covers(c) {
+				newMan.Extra[c] = paths
+			}
+		}
+	}
+	prev := old
+	if plan.refresh {
+		prev = nil
+	}
 
 	present := make(map[string]bool, len(shards))
 	changed := false
 	var toWrite []shardWrite
 	for _, sh := range shards {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
 		present[sh.Name] = true
 		fp := fps[sh.Name]
-		// Symbol shards are PERSISTED (fingerprinted, written, manifested) but NOT
-		// merged into the default graph: they can dwarf the domain graph, so a query
-		// that needs them loads them lazily (MergeSymbolShards). The @symbols name
-		// suffix is the routing marker.
-		if !isLazyShard(sh.Name) {
-			g.Merge(sh.Nodes, sh.Edges)
-		}
 		if sh.Dropped > 0 {
 			s.log.DebugContext(ctx, "knowledge: shard inputs resolved to no node",
 				slog.String("shard", sh.Name), slog.Int("dropped", sh.Dropped), slog.Int("nodes", len(sh.Nodes)))
 		}
 		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
 
-		prev, ok := old.shard(sh.Name)
-		unchanged := ok && prev.Fingerprint == fp && s.shardExists(sh.Name)
+		p, ok := prev.shard(sh.Name)
+		unchanged := ok && p.Fingerprint == fp && s.shardExists(sh.Name)
 		if unchanged {
 			continue
 		}
@@ -168,56 +231,181 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		}
 		toWrite = append(toWrite, shardWrite{shard: sh, fp: fp})
 	}
+	for _, c := range AllClasses {
+		if !plan.covers(c) {
+			continue
+		}
+		if stamp := plan.stamps[c]; stamp != "" {
+			newMan.Inputs[c] = stamp
+		}
+		if paths := plan.extra[c]; len(paths) > 0 {
+			newMan.Extra[c] = paths
+		}
+	}
+	var pruned []string
+	if old != nil {
+		for name := range old.Shards {
+			if plan.covers(shardClass(name)) && !present[name] {
+				pruned = append(pruned, name)
+			}
+		}
+	}
 
 	if s.immutable {
 		// Warn only when a prior store exists and diverges: a first-ever run
 		// under immutable mode is uninitialized, not stale.
-		if old != nil && (changed || old.prunable(present)) {
+		if old != nil && (changed || len(pruned) > 0) {
 			s.log.WarnContext(ctx, "magus: knowledge graph is stale but cache.write.enabled is false; serving a freshly assembled in-memory graph without persisting")
 		}
-		return g, nil
+		return nil
 	}
 
 	if err := s.writeShards(ctx, toWrite); err != nil {
-		return nil, err
+		return err
+	}
+	s.recordPathIDs(ctx, shards, fps, newMan)
+
+	// Refresh the derived symbol xref routing index (best-effort: a failure just means
+	// `magus refs` falls back to loading all symbol shards, never a wrong result; the index
+	// is bound to newMan so a stale one is detected and ignored on read). Only a sync that
+	// carries the symbol shards can build it, and only one whose shards came out different
+	// needs to: the index is a pure function of them. Written before the manifest, so a
+	// crash between the two leaves an index bound to a manifest that never landed, which
+	// reads as stale.
+	if plan.covers(ClassSymbols) {
+		key := symbolShardsKey(&newMan)
+		if key != newMan.Routing || (key != "" && !fileExists(s.routingPath())) {
+			newMan.Routing = ""
+			if err := s.writeXref(shards, newMan); err != nil {
+				s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
+			} else {
+				newMan.Routing = key
+			}
+		}
 	}
 
-	// optimization: on a no-op rebuild (nothing changed, nothing to prune) the
-	// on-disk manifest already matches, so skip rewriting it. This is the common
-	// steady-state path (every query rebuilds the graph), and it removes an
-	// atomic write (temp+rename) plus keeps the manifest's mtime stable.
+	// optimization: on a no-op rebuild (nothing changed, nothing to prune, no new stamp)
+	// the on-disk manifest already matches, so skip rewriting it, which also keeps the
+	// manifest's mtime stable.
 	//   measured: folded into the BenchmarkBuildNoop delta above; removes the
 	//             one guaranteed write from the otherwise write-free hot path.
 	//   trade-off: none; the manifest is only skipped when it would be identical.
-	if !changed && !old.prunable(present) {
-		return g, nil
+	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) &&
+		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
+		return nil
 	}
 
 	// Write the manifest before pruning the shards it no longer references: the
 	// manifest is the index, so a crash after it lands leaves only orphan shard
 	// files (ignored by Load) rather than a manifest pointing at a deleted shard.
 	if err := s.writeManifest(newMan); err != nil {
-		return nil, err
+		return err
 	}
-	// Refresh the derived symbol xref routing index (best-effort: a failure just
-	// means `magus refs` falls back to loading all symbol shards, never a wrong result;
-	// the index is bound to newMan so a stale one is detected and ignored on read).
-	if err := s.writeXref(shards, newMan); err != nil {
-		s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
-	}
-	if old != nil {
-		for name := range old.Shards {
-			if !present[name] {
-				if err := s.removeShard(name); err != nil {
-					return nil, err
-				}
-			}
+	for _, name := range pruned {
+		if err := s.removeShard(name); err != nil {
+			return err
 		}
 	}
 	// Enforce the soft size cap last, once every current shard is on disk, so the
 	// newest shards survive and only cold ones are evicted.
 	s.pruneToSize()
-	return g, nil
+	return nil
+}
+
+// staleClasses returns the members of want whose recorded stamp is missing or differs
+// from stamps. refresh, or a store with no readable manifest, makes every one stale.
+func staleClasses(man *manifest, stamps Stamps, want []ShardClass, refresh bool) []ShardClass {
+	var stale []ShardClass
+	for _, c := range want {
+		cur := stamps[c]
+		if refresh || man == nil || cur == "" || man.Inputs[c] != cur {
+			stale = append(stale, c)
+		}
+	}
+	return stale
+}
+
+// ExtraInputs returns the files the last assembly of class read outside the tree walk.
+func (s *Store) ExtraInputs(class ShardClass) []string {
+	man := s.readManifestOrNil()
+	if man == nil {
+		return nil
+	}
+	return man.Extra[class]
+}
+
+// readClassShards reads every stored shard of the given classes, checking each file's
+// fingerprint against the manifest's. A class with any shard missing, unreadable or
+// rewritten since the manifest was read is returned in bad rather than read in part:
+// a class is answered whole from the store or reassembled.
+func (s *Store) readClassShards(ctx context.Context, man *manifest, classes []ShardClass) ([]Shard, []ShardClass, error) {
+	if man == nil || len(classes) == 0 {
+		return nil, classes, nil
+	}
+	var names []string
+	for name := range man.Shards {
+		if slices.Contains(classes, shardClass(name)) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	out := make([]Shard, len(names))
+	failed := make([]bool, len(names))
+	eg, egctx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.GOMAXPROCS(0))
+	for i, name := range names {
+		eg.Go(func() error {
+			if err := egctx.Err(); err != nil {
+				return err
+			}
+			sf, err := s.readVerifiedShard(egctx, man, name)
+			if err != nil {
+				s.log.DebugContext(egctx, "knowledge: stored shard unusable, reassembling its class",
+					slog.String("shard", name), slog.String("error", err.Error()))
+				failed[i] = true
+				return nil
+			}
+			out[i] = Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges}
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, nil, err
+	}
+	var bad []ShardClass
+	for i, name := range names {
+		if c := shardClass(name); failed[i] && !slices.Contains(bad, c) {
+			bad = append(bad, c)
+		}
+	}
+	kept := out[:0]
+	for i, sh := range out {
+		if !failed[i] && !slices.Contains(bad, shardClass(names[i])) {
+			kept = append(kept, sh)
+		}
+	}
+	return kept, bad, nil
+}
+
+// readVerifiedShard reads one shard, restoring an evicted file from the remote first, and
+// refuses a file whose fingerprint is not the manifest's: another process may have
+// rewritten it after this one read the manifest, and mixing the two would answer with a
+// graph no single build produced.
+func (s *Store) readVerifiedShard(ctx context.Context, man *manifest, name string) (shardFile, error) {
+	want := man.Shards[name].Fingerprint
+	sf, err := s.readShard(name)
+	if err != nil {
+		if s.restoreShard(ctx, name, want) == nil {
+			sf, err = s.readShard(name)
+		}
+		if err != nil {
+			return shardFile{}, err
+		}
+	}
+	if sf.Fingerprint != want {
+		return shardFile{}, fmt.Errorf("knowledge: shard %q holds fingerprint %.12s, the manifest names %.12s", name, sf.Fingerprint, want)
+	}
+	return sf, nil
 }
 
 // Load reads the persisted graph from disk without any assembly. Returns
@@ -308,9 +496,10 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 }
 
 // SymbolIndexDigest identifies the @symbols shards MergeSymbolShards loads: a hex SHA-256
-// over each project's shard fingerprint in project path order, so it moves exactly when a
-// symbol-reading answer can. No store, or no symbol shard, is Indexed false with no error.
-// The caller reports gaps, since it knows the declarations.
+// over each shard's fingerprint, keyed by project (and directory, for a split project) in
+// sorted order, so it moves exactly when a symbol-reading answer can. No store, or no symbol
+// shard, is Indexed false with no error. The caller reports gaps, since it knows the
+// declarations.
 func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 	out := types.SymbolIndexDigest{Projects: []string{}}
 	man := s.readManifestOrNil()
@@ -327,17 +516,18 @@ func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 		if meta.Fingerprint == "" {
 			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint; rebuild with `magus graph build`", name)
 		}
-		project := strings.TrimSuffix(name, symbolsShardSuffix)
-		out.Projects = append(out.Projects, project)
-		fps[project] = meta.Fingerprint
+		fps[symbolsShardKey(name)] = meta.Fingerprint
+		if p := symbolsShardProject(name); !slices.Contains(out.Projects, p) {
+			out.Projects = append(out.Projects, p)
+		}
 	}
 	if len(out.Projects) == 0 {
 		return out, nil
 	}
 	slices.Sort(out.Projects)
 	h := sha256.New()
-	for _, p := range out.Projects {
-		fmt.Fprintf(h, "%s\x00%s\n", p, fps[p])
+	for _, k := range slices.Sorted(maps.Keys(fps)) {
+		fmt.Fprintf(h, "%s\x00%s\n", k, fps[k])
 	}
 	out.Digest = hex.EncodeToString(h.Sum(nil))
 	out.Indexed = true
@@ -536,14 +726,13 @@ func (s *Store) writeShards(ctx context.Context, writes []shardWrite) error {
 func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	// Persist in canonical sorted order so identical inputs produce byte-identical
 	// files (diffable, and the content fingerprint is stable).
-	g := NewGraph()
-	g.Merge(sh.Nodes, sh.Edges)
+	nodes, edges := sh.canonicalContent()
 	sf := shardFile{
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Name:          sh.Name,
 		Fingerprint:   fp,
-		Nodes:         g.Nodes(),
-		Edges:         g.Edges(),
+		Nodes:         nodes,
+		Edges:         edges,
 	}
 	b, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
@@ -710,18 +899,139 @@ func (m *manifest) shard(name string) (shardMeta, bool) {
 	return sm, ok
 }
 
-// prunable reports whether the manifest names any shard absent from present,
-// i.e. whether a prune would occur.
-func (m *manifest) prunable(present map[string]bool) bool {
+// inputs and extra read the manifest's stamp records; the nil receiver has none.
+func (m *manifest) inputs() map[ShardClass]string {
 	if m == nil {
-		return false
+		return nil
 	}
-	for name := range m.Shards {
-		if !present[name] {
-			return true
+	return m.Inputs
+}
+
+func (m *manifest) extra() map[ShardClass][]string {
+	if m == nil {
+		return nil
+	}
+	return m.Extra
+}
+
+func (m *manifest) routing() string {
+	if m == nil {
+		return ""
+	}
+	return m.Routing
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// pathIDsFile is a sidecar holding each shard's file and dir node IDs, bound to the
+// fingerprint they were read at. The @session overlay resolves contacts against exactly
+// those IDs across every class, so reassembling it alone reads this instead of decoding
+// every stored symbol shard to learn which files exist.
+const pathIDsFile = "paths.json"
+
+type pathIDEntry struct {
+	Fingerprint string   `json:"fingerprint"`
+	IDs         []string `json:"ids"`
+}
+
+func (s *Store) pathIDsPath() string { return filepath.Join(s.dir, pathIDsFile) }
+
+// isPathID reports whether id names a file or dir node, the only kinds assembleSession
+// looks up.
+func isPathID(id string) bool {
+	return strings.HasPrefix(id, types.KindFile+":") || strings.HasPrefix(id, types.KindDir+":")
+}
+
+func pathIDsOf(nodes []types.KnowledgeNode) []string {
+	var ids []string
+	for _, n := range nodes {
+		if isPathID(n.ID) {
+			ids = append(ids, n.ID)
 		}
 	}
-	return false
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
+func (s *Store) readPathIDs() map[string]pathIDEntry {
+	b, err := os.ReadFile(s.pathIDsPath())
+	if err != nil {
+		return nil
+	}
+	var idx map[string]pathIDEntry
+	if json.Unmarshal(b, &idx) != nil {
+		return nil
+	}
+	return idx
+}
+
+// recordPathIDs brings the sidecar in line with man: entries for shards it no longer
+// names, or names at another fingerprint, are dropped, and every synced shard is indexed.
+// Best-effort: a sidecar that is missing or behind only costs the next overlay rebuild a
+// read of the shards it lacks.
+func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[string]string, man manifest) {
+	old := s.readPathIDs()
+	next := make(map[string]pathIDEntry, len(man.Shards))
+	for name, meta := range man.Shards {
+		if e, ok := old[name]; ok && meta.Fingerprint != "" && e.Fingerprint == meta.Fingerprint {
+			next[name] = e
+		}
+	}
+	for _, sh := range shards {
+		fp := fps[sh.Name]
+		if fp == "" {
+			continue // an unfingerprinted shard cannot be told apart from its next version
+		}
+		if e, ok := next[sh.Name]; ok && e.Fingerprint == fp {
+			continue
+		}
+		next[sh.Name] = pathIDEntry{Fingerprint: fp, IDs: pathIDsOf(sh.Nodes)}
+	}
+	if maps.EqualFunc(old, next, func(a, b pathIDEntry) bool {
+		return a.Fingerprint == b.Fingerprint && slices.Equal(a.IDs, b.IDs)
+	}) {
+		return
+	}
+	b, err := json.Marshal(next)
+	if err == nil {
+		err = file.WriteFileAtomic(s.pathIDsPath(), b, 0o644)
+	}
+	if err != nil {
+		s.log.DebugContext(ctx, "knowledge: path id sidecar write failed", slog.String("error", err.Error()))
+	}
+}
+
+// storedPathIDs returns the file and dir node IDs of every stored shard whose class is
+// not in skip, from the sidecar where it is current and from the shard file otherwise.
+func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardClass) (map[string]bool, error) {
+	out := map[string]bool{}
+	if man == nil {
+		return out, nil
+	}
+	idx := s.readPathIDs()
+	for _, name := range slices.Sorted(maps.Keys(man.Shards)) {
+		if slices.Contains(skip, shardClass(name)) {
+			continue
+		}
+		meta := man.Shards[name]
+		if e, ok := idx[name]; ok && meta.Fingerprint != "" && e.Fingerprint == meta.Fingerprint {
+			for _, id := range e.IDs {
+				out[id] = true
+			}
+			continue
+		}
+		sf, err := s.readVerifiedShard(ctx, man, name)
+		if err != nil {
+			return nil, fmt.Errorf("knowledge: read shard %q for the overlay's node set: %w", name, err)
+		}
+		for _, id := range pathIDsOf(sf.Nodes) {
+			out[id] = true
+		}
+	}
+	return out, nil
 }
 
 // --- runtime diagnostic records (the @runtime shard's persisted input) ---
@@ -730,16 +1040,16 @@ func (m *manifest) prunable(present map[string]bool) bool {
 // run history cannot grow the store without limit. Oldest records drop first.
 const defaultRuntimeCap = 5000
 
-// runtimeRecordsPath is where runtime diagnostic records live: next to the shards,
+// RuntimeRecordsPath is where runtime diagnostic records live: next to the shards,
 // but not among them (it is the @runtime shard's input, not an output).
-func runtimeRecordsPath(cacheDir string) string {
+func RuntimeRecordsPath(cacheDir string) string {
 	return filepath.Join(StoreDir(cacheDir), "runtime.json")
 }
 
 // LoadRuntimeEvents reads the persisted runtime diagnostic records; a missing or
 // unreadable file yields no events (runtime enrichment is best-effort).
 func LoadRuntimeEvents(cacheDir string) []types.DiagnosticEvent {
-	b, err := os.ReadFile(runtimeRecordsPath(cacheDir))
+	b, err := os.ReadFile(RuntimeRecordsPath(cacheDir))
 	if err != nil {
 		return nil
 	}
@@ -779,7 +1089,7 @@ func RecordRuntimeEvents(cacheDir string, fresh []types.DiagnosticEvent) error {
 	if err := os.MkdirAll(StoreDir(cacheDir), 0o755); err != nil {
 		return err
 	}
-	return file.WriteFileAtomic(runtimeRecordsPath(cacheDir), b, 0o644)
+	return file.WriteFileAtomic(RuntimeRecordsPath(cacheDir), b, 0o644)
 }
 
 func runtimeKey(e types.DiagnosticEvent) string { return e.Unit + "\x00" + string(e.Code) }

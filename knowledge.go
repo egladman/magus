@@ -1,10 +1,12 @@
 package magus
 
 import (
+	"bufio"
 	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
+	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -169,7 +171,22 @@ func allModuleEntries() []types.ModuleEntry {
 // outputs the graph is composed from, resolves the cache dir, and runs the
 // cache-first build. ws is any workspace view that can describe itself (the
 // read-only Inspect result or a full *Magus).
+//
+// It answers from the store when the inputs are unchanged, and otherwise reassembles only
+// the shard classes whose input stamps moved (see knowledgeStamps). It brings the default
+// graph's classes up to date and leaves the lazily loaded symbol classes to the readers
+// that merge them (MergeWorkspaceSymbols), so a domain read never parses a SCIP index;
+// refresh rebuilds every class.
 func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+	want := knowledge.DefaultClasses
+	if refresh {
+		want = knowledge.AllClasses
+	}
+	return ensureKnowledgeGraph(ctx, ws, root, cfg, refresh, want, log)
+}
+
+// ensureKnowledgeGraph brings the classes in want up to date and returns the default graph.
+func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, want []knowledge.ShardClass, log *slog.Logger) (*knowledge.Graph, error) {
 	if log == nil {
 		// The loaders below log best-effort; a nil logger (some callers, e.g. describe,
 		// pass one) would panic on the first miss. Normalize once here.
@@ -188,43 +205,251 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 	if err != nil {
 		return nil, err
 	}
-
-	// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
-	// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead handed
-	// the other two an empty history on a hit, and they published it as zero churn and
-	// unmeasured prose. Reading it back off @vcs is no substitute either: that shard is
-	// filtered to paths with a file node, so it is a view of the scan and not a record of it.
-	vcsEntries := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, refresh, log)
-
-	in := knowledge.Inputs{
-		Graph:       graph,
-		Spells:      spells,
-		Modules:     allModuleEntries(),
-		Diagnostics: types.AllDiagnosticCodes(),
-		Root:        root,
-		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
-		Timings:     loadKnowledgeTimings(ctx, cfg),
-		OutputRefs:  loadKnowledgeOutputRefs(cacheDir),
-		Symbols: loadKnowledgeSymbols(ctx, symbolIngestInputs{
-			cfg: cfg, root: root, cacheDir: cacheDir,
-			projects: projects, spells: spells, log: log,
-		}),
-		Packages:       loadKnowledgePackages(ctx, projects, log),
-		VCS:            vcsEntries,
-		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
-		DeclaredSpells: declaredSpellSet(projects),
-		Coverage:       loadKnowledgeCoverage(root),
-		AgentContacts:  loadKnowledgeAgentContacts(root),
-		NotesPath:      cfg.Knowledge.Notes.Shared,
-		Notes:          loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Shared, notes.ScopeShared),
-		PrivateNotes:   loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Private, notes.ScopePrivate),
+	src := knowledgeSources{
+		cfg: cfg, root: root, cacheDir: cacheDir,
+		spells: spells, graph: graph, projects: projects, log: log,
 	}
-	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
+	if root != "" {
+		src.tree = knowledge.WalkTree(root)
+	}
+	store := knowledge.NewStore(cacheDir, true, 0, nil, log)
+	opts := knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
 		Remote:    remoteShards(ws),
-	}, in, log)
+		Stamps:    knowledgeStamps(ctx, src, store, want),
+		Root:      root,
+	}
+	return knowledge.Ensure(ctx, cacheDir, opts, want, func(stale []knowledge.ShardClass) (knowledge.Inputs, error) {
+		return gatherKnowledgeInputs(ctx, src, refresh, stale), nil
+	}, log)
+}
+
+// knowledgeSources is what both the stamps and the gathered inputs are derived from,
+// resolved once per build.
+type knowledgeSources struct {
+	cfg      config.Config
+	root     string
+	cacheDir string
+	spells   []types.Spell
+	graph    types.TargetGraphOutput
+	projects types.ProjectsOutput
+	tree     *knowledge.TreeWalk // nil when there is no root to walk
+	log      *slog.Logger
+}
+
+func (s knowledgeSources) symbolInputs() symbolIngestInputs {
+	return symbolIngestInputs{
+		cfg: s.cfg, root: s.root, cacheDir: s.cacheDir,
+		projects: s.projects, spells: s.spells, log: s.log,
+	}
+}
+
+// gatherKnowledgeInputs reads the inputs of the stale classes and nothing else: a domain
+// rebuild never reads a SCIP index or the session store, and a runtime rebuild never
+// reads the tree.
+func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bool, stale []knowledge.ShardClass) knowledge.Inputs {
+	needs := func(cs ...knowledge.ShardClass) bool {
+		return slices.ContainsFunc(cs, func(c knowledge.ShardClass) bool { return slices.Contains(stale, c) })
+	}
+	in := knowledge.Inputs{Graph: src.graph, Spells: src.spells, Root: src.root, Tree: src.tree}
+	if needs(knowledge.ClassDomain, knowledge.ClassSymbols) {
+		// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
+		// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead
+		// handed the other two an empty history on a hit, and they published it as zero
+		// churn and unmeasured prose. Reading it back off @vcs is no substitute either: that
+		// shard is filtered to paths with a file node, so it is a view of the scan and not a
+		// record of it.
+		in.VCS = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
+	}
+	if needs(knowledge.ClassDomain) {
+		cfg := src.cfg
+		in.Modules = allModuleEntries()
+		in.Diagnostics = types.AllDiagnosticCodes()
+		in.Packages = loadKnowledgePackages(ctx, src.projects, src.log)
+		in.VCSAuthorship = cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
+		in.DeclaredSpells = declaredSpellSet(src.projects)
+		in.NotesPath = cfg.Knowledge.Notes.Shared
+		in.Notes = loadKnowledgeNotesAt(src.root, cfg.Knowledge.Notes.Shared, notes.ScopeShared)
+		in.PrivateNotes = loadKnowledgeNotesAt(src.root, cfg.Knowledge.Notes.Private, notes.ScopePrivate)
+	}
+	if needs(knowledge.ClassRuntime) {
+		in.Runtime = knowledge.LoadRuntimeEvents(src.cacheDir)
+		in.Timings = loadKnowledgeTimings(ctx, src.cfg)
+		in.OutputRefs = loadKnowledgeOutputRefs(src.cacheDir)
+	}
+	if needs(knowledge.ClassSymbols, knowledge.ClassCoverage) {
+		in.Symbols = loadKnowledgeSymbols(ctx, src.symbolInputs())
+		if extra := symbolSourcesOutside(src.tree, in.Symbols); len(extra) > 0 {
+			in.Extra = map[knowledge.ShardClass][]string{knowledge.ClassSymbols: extra}
+		}
+	}
+	if needs(knowledge.ClassCoverage) {
+		in.Coverage = loadKnowledgeCoverage(src.root)
+	}
+	if needs(knowledge.ClassSession) {
+		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
+	}
+	return in
+}
+
+// symbolSourcesOutside lists the defining files the symbols read that the tree walk did
+// not see: FingerprintBodies reads every one of them, and the walk's digest is all the
+// symbols stamp otherwise knows about the tree.
+func symbolSourcesOutside(tree *knowledge.TreeWalk, syms map[string][]types.KnowledgeSymbol) []string {
+	if tree == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, list := range syms {
+		for _, sym := range list {
+			p, _, ok := strings.Cut(sym.Source, ":")
+			if ok && !seen[p] && !tree.Contains(p) {
+				seen[p] = true
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// knowledgeStamps computes the input stamp of every class in want, plus the ones the
+// session stamp folds in when it is wanted. Each stamp covers everything that class's
+// assembly reads, by identity rather than content: the magus binary (assembly is code),
+// the config, the target graph and spells, and per class:
+//
+//   - domain: the tree walk's digest, the committed history's head, the notes stores and
+//     the package manifests and lockfiles.
+//   - runtime: the runtime records, the timing history and the output store.
+//   - symbols: the tree, the head, each declared SCIP index, and any defining file the
+//     last ingestion read outside the walk.
+//   - coverage: each SCIP index, the coverage profile and go.mod.
+//   - session: the domain, symbols and coverage stamps and the session store.
+//
+// A stamp that cannot be computed is left empty, which makes its class rebuild, never
+// match. The one input outside the stamps is an ignore rule kept outside the tree (a
+// VCS's own exclude file or a user-global one); `--refresh` covers a change to those.
+func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge.Store, want []knowledge.ShardClass) knowledge.Stamps {
+	out := knowledge.Stamps{}
+	session := slices.Contains(want, knowledge.ClassSession)
+	wants := func(c knowledge.ShardClass) bool {
+		return slices.Contains(want, c) || (session && c != knowledge.ClassRuntime)
+	}
+	base, ok := baseKnowledgeStamp(src)
+	if !ok || src.tree == nil {
+		return out
+	}
+	vcsHead := vcsInputFingerprint(ctx, src.cfg, src.root)
+	historyKnown := vcsHead != "" || !src.cfg.Knowledge.VCS.Enabled
+	var tree string
+	if wants(knowledge.ClassDomain) || wants(knowledge.ClassSymbols) {
+		tree = src.tree.Digest()
+	}
+	if wants(knowledge.ClassDomain) && historyKnown {
+		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
+		h.String(base)
+		h.String(tree)
+		h.String(vcsHead)
+		for _, s := range []struct {
+			scope    notes.Scope
+			declared string
+		}{{notes.ScopeShared, src.cfg.Knowledge.Notes.Shared}, {notes.ScopePrivate, src.cfg.Knowledge.Notes.Private}} {
+			if dir, err := notes.Dir(src.root, s.scope, s.declared); err == nil {
+				h.Path(dir)
+			}
+		}
+		for _, p := range src.projects.Projects {
+			for _, m := range p.Manifests {
+				h.Path(filepath.Join(p.Dir, m))
+			}
+			for _, l := range p.Lockfiles {
+				h.Path(filepath.Join(src.projects.Workspace, filepath.FromSlash(l)))
+			}
+		}
+		out[knowledge.ClassDomain] = h.Sum()
+	}
+	if wants(knowledge.ClassRuntime) {
+		h := knowledge.NewInputHash(string(knowledge.ClassRuntime))
+		h.String(base)
+		h.Path(knowledge.RuntimeRecordsPath(src.cacheDir))
+		if src.cfg.HistoryPath != "" {
+			h.Path(src.cfg.HistoryPath)
+		}
+		// Every descriptor is created or renamed into place, so directory mtimes see each
+		// run without reading its descriptor.
+		h.Dirs(filepath.Join(src.cacheDir, "outputs"))
+		out[knowledge.ClassRuntime] = h.Sum()
+	}
+	var indexes []resolvedSymbolIndex
+	if wants(knowledge.ClassSymbols) || wants(knowledge.ClassCoverage) {
+		indexes = symbolIndexDeclarations(ctx, src.symbolInputs())
+	}
+	foldIndexes := func(h *knowledge.InputHash) {
+		for _, decl := range indexes {
+			h.String(decl.project)
+			h.String(decl.language)
+			h.Path(decl.path)
+		}
+	}
+	if wants(knowledge.ClassSymbols) && historyKnown {
+		h := knowledge.NewInputHash(string(knowledge.ClassSymbols))
+		h.String(base)
+		h.String(tree)
+		h.String(vcsHead)
+		foldIndexes(h)
+		for _, rel := range store.ExtraInputs(knowledge.ClassSymbols) {
+			h.Path(filepath.Join(src.root, filepath.FromSlash(rel)))
+		}
+		out[knowledge.ClassSymbols] = h.Sum()
+	}
+	if wants(knowledge.ClassCoverage) {
+		h := knowledge.NewInputHash(string(knowledge.ClassCoverage))
+		h.String(base)
+		foldIndexes(h)
+		h.Path(filepath.Join(src.root, ".magus", "coverage.out"))
+		h.Path(filepath.Join(src.root, "go.mod"))
+		out[knowledge.ClassCoverage] = h.Sum()
+	}
+	if session {
+		h := knowledge.NewInputHash(string(knowledge.ClassSession))
+		// Not runtime: the overlay resolves contacts against file and dir nodes only, and
+		// @runtime mints neither, while its stamp moves with every run on the machine.
+		for _, c := range []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSymbols, knowledge.ClassCoverage} {
+			if out[c] == "" {
+				return out
+			}
+			h.String(out[c])
+		}
+		if dir, err := sessions.Dir(src.root); err == nil {
+			h.Path(dir)
+		} else {
+			h.String("no session store")
+		}
+		out[knowledge.ClassSession] = h.Sum()
+	}
+	return out
+}
+
+// baseKnowledgeStamp folds what every class reads: the binary, the store's schema, where
+// the workspace and its cache are, the knowledge config, and the target graph, projects
+// and spells the workspace describes.
+func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
+	h := knowledge.NewInputHash("base")
+	if !foldBinary(h) {
+		return "", false
+	}
+	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
+	h.String(src.root)
+	h.String(src.cacheDir)
+	h.String(src.cfg.HistoryPath)
+	for _, v := range []any{src.cfg.Knowledge, src.graph, src.projects, src.spells} {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "", false
+		}
+		h.String(string(b))
+	}
+	return h.Sum(), true
 }
 
 // loadKnowledgePackages reads each project's third-party dependencies out of the
@@ -519,9 +744,13 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 }
 
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
-// a symbol-seeded query (the default graph excludes them for scale). Best-effort: no
-// store or no symbol shards is a no-op.
+// a symbol-seeded query (the default graph excludes them for scale), first bringing the
+// lazily loaded classes up to date with their inputs. No store or no symbol shards merges
+// nothing.
 func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+		return err
+	}
 	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
 }
 
@@ -530,12 +759,30 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string,
 // ID (the scale-safe reverse lookup), or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
 func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
+	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.LazyClasses, log); err != nil {
+		return err
+	}
 	store := symbolStore(ws, root, cfg, log)
 	// An exact symbol ID can route to just its shards; a fuzzy name (or any non-exact
 	// symbol: ref) yields no routing hit and MergeSymbolShardsByID falls back to loading
 	// all, so the fuzzy resolve still has every symbol to match against.
 	if strings.HasPrefix(ref, types.KindSymbol+":") {
 		return store.MergeSymbolShardsByID(ctx, g, []string{ref})
+	}
+	// A bare name routes to the shards of every symbol labeled exactly that. They hold
+	// each such symbol with every edge into it, which is what refs answers from, and every
+	// candidate refs weighs when the name is ambiguous. That holds only when one of them is
+	// defined here, since refs then picks among them by definition; otherwise refs falls
+	// back to ranking the name against every symbol, and ranking needs them all.
+	if names := store.SymbolShardsForLabel(ref); len(names) > 0 {
+		routed := knowledge.NewGraph()
+		if err := store.MergeSymbolShardsNamed(ctx, routed, names); err != nil {
+			return err
+		}
+		if len(routed.SymbolsNamed(ref)) > 0 {
+			knowledge.UnionInto(g, routed)
+			return nil
+		}
 	}
 	return store.MergeSymbolShards(ctx, g)
 }
@@ -557,28 +804,180 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 	}
 	out := map[string][]types.KnowledgeSymbol{}
 	for _, decl := range decls {
-		data, err := os.ReadFile(decl.path)
-		if err != nil {
-			// A not-yet-built index (the scip target has not run) is expected and quiet;
-			// any other read error (permissions) is a misconfig worth surfacing.
-			if errors.Is(err, fs.ErrNotExist) {
-				log.DebugContext(ctx, "knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
-			} else {
-				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
-			}
-			continue
-		}
-		syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
-		if err != nil {
+		syms, err := parseSymbolIndexCached(ctx, in, decl)
+		var decodeErr symbolDecodeError
+		switch {
+		case errors.As(err, &decodeErr):
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss; surface it.
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			continue
+		case errors.Is(err, fs.ErrNotExist):
+			// A not-yet-built index (the scip target has not run) is expected and quiet.
+			log.DebugContext(ctx, "knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
+			continue
+		case err != nil:
+			// Any other read error (permissions) is a misconfig worth surfacing.
+			log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
 		symbols.FingerprintBodies(in.root, syms)
 		out[decl.project] = syms
 	}
 	return out
+}
+
+// symbolDecodeError marks an index that was read but would not parse, which callers
+// report apart from one that could not be read.
+type symbolDecodeError struct{ err error }
+
+func (e symbolDecodeError) Error() string { return e.err.Error() }
+func (e symbolDecodeError) Unwrap() error { return e.err }
+
+// symbolIndexCache locates the two things derived from one SCIP index and kept until the
+// index file moves: its parse (the graph's symbol records) and its occurrence file (every
+// symbol's exact sites, for `refs --occurrences`). A large module's index is a hundred
+// megabytes whose decode allocates over a gigabyte, and it changes only when its scip op
+// runs, while the symbols built from it are reassembled after every source edit and a
+// refs lookup wants one symbol's sites.
+type symbolIndexCache struct {
+	// key identifies what produced both: this binary, the project and language the parse
+	// was run for, and the index file. Empty when the binary cannot be located, and then
+	// nothing is cached.
+	key        string
+	parsedPath string
+	occPath    string
+}
+
+func symbolIndexCacheFor(in symbolIngestInputs, decl resolvedSymbolIndex) symbolIndexCache {
+	var c symbolIndexCache
+	h := knowledge.NewInputHash("symbol index caches")
+	if foldBinary(h) {
+		h.String(decl.project)
+		h.String(decl.language)
+		h.Path(decl.path)
+		c.key = h.Sum()
+	}
+	sum := sha256.Sum256([]byte(decl.path))
+	stem := filepath.Join(knowledge.StoreDir(in.cacheDir), "inputs", "scip", hex.EncodeToString(sum[:8]))
+	c.parsedPath, c.occPath = stem+".gob", stem+".occ"
+	return c
+}
+
+// decodeSymbolIndex reads and decodes decl's index once and derives both cached forms from
+// that one decode, writing them for the next reader: whichever of the parse or the
+// occurrences a process needs first, it never decodes the index a second time for the other.
+func decodeSymbolIndex(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, c symbolIndexCache) ([]types.KnowledgeSymbol, map[string]symbols.KeyOccurrences, error) {
+	data, err := os.ReadFile(decl.path)
+	if err != nil {
+		return nil, nil, err
+	}
+	idx, err := symbols.DecodeIndex(data)
+	if err != nil {
+		return nil, nil, symbolDecodeError{err}
+	}
+	syms := symbols.ParseDecoded(ctx, idx, decl.project, decl.language)
+	occ, err := symbols.IndexOccurrences(ctx, idx, decl.project)
+	if err != nil {
+		return nil, nil, err
+	}
+	if c.key != "" && !cacheImmutable(in.cfg) {
+		err := writeParsedSymbolIndex(c.parsedPath, c.key, syms)
+		if err == nil {
+			err = symbols.WriteOccurrenceFile(c.occPath, c.key, occ)
+		}
+		if err != nil {
+			in.log.DebugContext(ctx, "knowledge: caching a decoded symbol index failed", slog.String("index", decl.path), slog.String("error", err.Error()))
+		}
+	}
+	return syms, occ, nil
+}
+
+// parseSymbolIndexCached returns decl's parse, from the cache while the index is unmoved.
+// The cache holds the parse alone: FingerprintBodies reads the working tree into the
+// records afterwards, and the tree moves without the index.
+func parseSymbolIndexCached(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex) ([]types.KnowledgeSymbol, error) {
+	if _, err := os.Stat(decl.path); err != nil {
+		return nil, err
+	}
+	c := symbolIndexCacheFor(in, decl)
+	if c.key != "" {
+		if syms, ok := readParsedSymbolIndex(c.parsedPath, c.key); ok {
+			return syms, nil
+		}
+	}
+	syms, _, err := decodeSymbolIndex(ctx, in, decl, c)
+	return syms, err
+}
+
+// symbolKeyOccurrences returns key's sites in decl's index, from the occurrence file while
+// the index is unmoved.
+func symbolKeyOccurrences(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, key string) (symbols.KeyOccurrences, error) {
+	if _, err := os.Stat(decl.path); err != nil {
+		return symbols.KeyOccurrences{}, err
+	}
+	c := symbolIndexCacheFor(in, decl)
+	if c.key != "" {
+		occ, err := symbols.ReadKeyOccurrences(c.occPath, c.key, key)
+		if err == nil {
+			return occ, nil
+		}
+		if !errors.Is(err, symbols.ErrOccurrenceFileStale) {
+			in.log.DebugContext(ctx, "knowledge: occurrence file unreadable, decoding the index", slog.String("index", decl.path), slog.String("error", err.Error()))
+		}
+	}
+	_, occ, err := decodeSymbolIndex(ctx, in, decl, c)
+	if err != nil {
+		return symbols.KeyOccurrences{}, err
+	}
+	return occ[key], nil
+}
+
+// The cached parse is gob: the key first, so a stale file is rejected before its records
+// are decoded, then the records. gob because this is a private cache read back only by the
+// binary that wrote it, which the key names.
+func readParsedSymbolIndex(path, key string) ([]types.KnowledgeSymbol, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	dec := gob.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+	var got string
+	if dec.Decode(&got) != nil || got != key {
+		return nil, false
+	}
+	var syms []types.KnowledgeSymbol
+	if dec.Decode(&syms) != nil {
+		return nil, false
+	}
+	return syms, true
+}
+
+func writeParsedSymbolIndex(path, key string, syms []types.KnowledgeSymbol) error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(key); err != nil {
+		return err
+	}
+	if err := enc.Encode(syms); err != nil {
+		return err
+	}
+	return file.WriteFileAtomic(path, buf.Bytes(), 0o644)
+}
+
+// foldBinary folds the running magus binary's identity into h, reporting false when the
+// binary cannot be located, in which case nothing keyed on it may be trusted.
+func foldBinary(h *knowledge.InputHash) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	h.Binary(exe)
+	return true
 }
 
 // SymbolGaps reports every project that declares a SCIP index magus could not read, so a
@@ -702,32 +1101,35 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 			gap(decl.project, "not read: cancelled")
 			continue
 		}
-		data, err := os.ReadFile(decl.path)
-		if err != nil {
+		found, err := symbolKeyOccurrences(ctx, in, decl, key)
+		var decodeErr symbolDecodeError
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
 			// A not-yet-built index is the expected case, and SymbolGaps already reports it
 			// from its own Stat, so it stays quiet here rather than being counted twice.
-			// Any OTHER read error is a hole SymbolGaps cannot see.
-			if !errors.Is(err, fs.ErrNotExist) {
-				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
-				gap(decl.project, "unreadable")
-			}
 			continue
-		}
-		found, foundNames, err := symbols.ParseOccurrences(ctx, data, decl.project, key)
-		if err != nil {
+		case errors.As(err, &decodeErr):
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			gap(decl.project, "does not decode")
+			continue
+		case ctx.Err() != nil:
+			gap(decl.project, "not read: cancelled")
+			continue
+		case err != nil:
+			// Any OTHER read error is a hole SymbolGaps cannot see.
+			log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			gap(decl.project, "unreadable")
 			continue
 		}
 		// One index names the symbol; the others may only reference it. Union rather than
 		// first-wins, so a spelling that appears in a second project's index is still
 		// recognized at that project's occurrences.
-		for _, n := range foundNames {
+		for _, n := range found.Names {
 			if !slices.Contains(read.Names, n) {
 				read.Names = append(read.Names, n)
 			}
 		}
-		read.Files = append(read.Files, found...)
+		read.Files = append(read.Files, found.Files...)
 	}
 
 	// Each index contributes its own files, so the merged list needs re-sorting to stay
@@ -1305,15 +1707,17 @@ func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 }
 
 // warmKnowledgeGraph returns this handle's lazily-created warm-graph holder. The
-// rebuild closure is the same cache-first BuildKnowledgeGraph the CLI runs; the
-// holder adds an in-memory cache that is trusted only while WatchKnowledgeGraph
-// has a watcher invalidating it.
+// rebuild closure is the cache-first build the CLI runs, over every class rather than the
+// default ones: callers read the store behind this graph directly (SymbolIndexDigest
+// after KnowledgeGraph), so the lazy classes must be current too. The holder adds an
+// in-memory cache that is trusted only while WatchKnowledgeGraph has a watcher
+// invalidating it.
 func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	m.warmGraphOnce.Do(func() {
 		root := m.Root()
 		cfg := m.cfg
 		m.warmGraph = newWarmGraph(func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-			return BuildKnowledgeGraph(ctx, m, root, cfg, refresh, slog.Default())
+			return ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
 		}, slog.Default())
 	})
 	return m.warmGraph

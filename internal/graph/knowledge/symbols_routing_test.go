@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -105,6 +106,61 @@ func TestMergeSymbolShardsByIDFallsBackOnRoutingMiss(t *testing.T) {
 	require.NoError(t, store.MergeSymbolShardsByID(context.Background(), g, []string{"symbol:not-an-exact-id"}))
 	_, ok := g.node("symbol:S1")
 	assert.True(t, ok, "a routing miss loads all symbol shards for the fuzzy resolve")
+}
+
+// A bare name routes to the shards of the symbols carrying it, and only those.
+func TestSymbolShardsForLabelRoutesABareName(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	in.Graph.Projects = append(in.Graph.Projects, types.TargetGraphProject{Path: "."})
+	in.Symbols = map[string][]types.KnowledgeSymbol{
+		".": {
+			{Key: "x A().", Label: "Shared", Source: "a/a.go:1", Defs: []string{"a/a.go"}},
+			{Key: "x B().", Label: "Shared", Source: "b/b.go:1", Defs: []string{"b/b.go"}},
+			{Key: "x C().", Label: "Alone", Source: "c/c.go:1", Defs: []string{"c/c.go"}},
+		},
+	}
+	build(t, cacheDir, BuildOptions{}, in)
+	store := NewStore(cacheDir, false, 0, nil, nil)
+
+	assert.Equal(t, []string{".@symbols:a", ".@symbols:b"}, store.SymbolShardsForLabel("Shared"))
+	assert.Equal(t, []string{".@symbols:c"}, store.SymbolShardsForLabel("Alone"))
+	assert.Nil(t, store.SymbolShardsForLabel("Missing"), "an unknown name has nothing narrower than every shard")
+
+	g := NewGraph()
+	require.NoError(t, store.MergeSymbolShardsNamed(context.Background(), g, store.SymbolShardsForLabel("Shared")))
+	assert.Equal(t, []string{"symbol:x A().", "symbol:x B()."}, g.SymbolsNamed("Shared"))
+	_, loaded := g.node("symbol:x C().")
+	assert.False(t, loaded, "the unrelated directory's shard stays on disk")
+}
+
+// The routing file is a pure function of the symbol shards, so a sync whose symbol shards
+// came out unchanged leaves it alone, and one whose shards moved, or that finds it missing,
+// rewrites it.
+func TestRoutingFileIsRewrittenOnlyWhenSymbolShardsMove(t *testing.T) {
+	cacheDir, in := symsFixture(t)
+	build(t, cacheDir, BuildOptions{}, in)
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	path := store.routingPath()
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(path, old, old))
+	untouched := func() bool {
+		t.Helper()
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		return info.ModTime().Equal(old)
+	}
+
+	build(t, cacheDir, BuildOptions{Refresh: true}, in)
+	assert.True(t, untouched(), "every shard rewritten, none different: the routing file stays")
+
+	in.Symbols["pkg/a"] = append(in.Symbols["pkg/a"], types.KnowledgeSymbol{Key: "S3", Label: "S3", Source: "pkg/a/a.go:20", Defs: []string{"pkg/a/a.go"}})
+	build(t, cacheDir, BuildOptions{}, in)
+	assert.False(t, untouched(), "a new symbol rewrites it")
+	assert.Equal(t, []string{"pkg/a@symbols"}, store.SymbolShardsForLabel("S3"))
+
+	require.NoError(t, os.Remove(path))
+	build(t, cacheDir, BuildOptions{}, in)
+	assert.FileExists(t, path, "a missing routing file is written again")
 }
 
 // hasEdgeIn reports whether g has an edge from source to target (any relation).
