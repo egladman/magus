@@ -15,6 +15,8 @@ var inboundTypes = []inboundType{
 	{Name: "CommentBlock", Zero: spells.CommentBlock{}, Encode: func(v any) vm.Value { return gen.ObjectCommentBlock(v.(spells.CommentBlock)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeCommentBlock(v) }},
 	{Name: "Quote", Zero: spells.Quote{}, Encode: func(v any) vm.Value { return gen.ObjectQuote(v.(spells.Quote)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeQuote(v) }},
 	{Name: "CommentSyntax", Zero: spells.CommentSyntax{}, Encode: func(v any) vm.Value { return gen.ObjectCommentSyntax(v.(spells.CommentSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeCommentSyntax(v) }},
+	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any) vm.Value { return gen.ObjectStubSyntax(v.(spells.StubSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStubSyntax(v) }},
+	{Name: "Syntax", Zero: spells.Syntax{}, Encode: func(v any) vm.Value { return gen.ObjectSyntax(v.(spells.Syntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSyntax(v) }},
 	{Name: "Language", Zero: spells.Language{}, Encode: func(v any) vm.Value { return gen.ObjectLanguage(v.(spells.Language)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLanguage(v) }},
 }
 

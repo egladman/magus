@@ -27,6 +27,8 @@ var inboundTypes = []string{
 	"CommentBlock",
 	"Quote",
 	"CommentSyntax",
+	"StubSyntax",
+	"Syntax",
 	"Language",
 }
 

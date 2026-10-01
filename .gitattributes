@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-246-g7472f16fc (commit 7472f16fc, 2026-09-30T20:10:05-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-452-g42ab25091-dirty (commit 42ab25091, 2026-10-01T01:27:28-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -102,6 +102,7 @@ docs/changelog.md merge=magus linguist-generated
 docs/concepts/spells/*.md merge=magus linguist-generated
 docs/gen/** merge=magus linguist-generated
 docs/gen/assets/hljs.js merge=magus linguist-generated
+docs/gen/figure-engine.sha256 merge=magus linguist-generated
 docs/gen/playground/buzz.wasm merge=magus linguist-generated
 docs/gen/playground/editor.js merge=magus linguist-generated
 docs/gen/playground/wasm_exec.js merge=magus linguist-generated

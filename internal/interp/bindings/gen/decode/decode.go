@@ -183,6 +183,96 @@ func decodeCommentSyntax(v vm.Value, path string) (spells.CommentSyntax, error) 
 	return out, nil
 }
 
+// DecodeStubSyntax decodes a Buzz StubSyntax, an object instance or a map, into a spells.StubSyntax.
+func DecodeStubSyntax(v vm.Value) (spells.StubSyntax, error) {
+	return decodeStubSyntax(v, "stubSyntax")
+}
+
+func decodeStubSyntax(v vm.Value, path string) (spells.StubSyntax, error) {
+	var out spells.StubSyntax
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "StubSyntax", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "kinds":
+			listKinds, err := decodeList(item, path+".kinds", "[str]")
+			if err != nil {
+				return out, err
+			}
+			if len(listKinds) > 0 {
+				itemsKinds := make([]string, len(listKinds))
+				for indexKinds, itemKinds := range listKinds {
+					sKindsItem, err := decodeStr(itemKinds, fmt.Sprintf("%s[%d]", path+".kinds", indexKinds))
+					if err != nil {
+						return out, err
+					}
+					itemsKinds[indexKinds] = sKindsItem
+				}
+				out.Kinds = itemsKinds
+			}
+		case "bodyStyle":
+			sBodyStyle, err := decodeStr(item, path+".bodyStyle")
+			if err != nil {
+				return out, err
+			}
+			out.BodyStyle = sBodyStyle
+		case "body":
+			sBody, err := decodeStr(item, path+".body")
+			if err != nil {
+				return out, err
+			}
+			out.Body = sBody
+		default:
+			return out, unknownMember(path, "StubSyntax", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSyntax decodes a Buzz Syntax, an object instance or a map, into a spells.Syntax.
+func DecodeSyntax(v vm.Value) (spells.Syntax, error) {
+	return decodeSyntax(v, "syntax")
+}
+
+func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
+	var out spells.Syntax
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Syntax", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "comments":
+			if !item.IsNull() {
+				var optComments spells.CommentSyntax
+				xComments, err := decodeCommentSyntax(item, path+".comments")
+				if err != nil {
+					return out, err
+				}
+				optComments = xComments
+				out.Comments = &optComments
+			}
+		case "stubs":
+			if !item.IsNull() {
+				var optStubs spells.StubSyntax
+				xStubs, err := decodeStubSyntax(item, path+".stubs")
+				if err != nil {
+					return out, err
+				}
+				optStubs = xStubs
+				out.Stubs = &optStubs
+			}
+		default:
+			return out, unknownMember(path, "Syntax", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeLanguage decodes a Buzz Language, an object instance or a map, into a spells.Language.
 func DecodeLanguage(v vm.Value) (spells.Language, error) {
 	return decodeLanguage(v, "language")
@@ -219,15 +309,15 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 				}
 				out.Extensions = itemsExtensions
 			}
-		case "comments":
+		case "syntax":
 			if !item.IsNull() {
-				var optComments spells.CommentSyntax
-				xComments, err := decodeCommentSyntax(item, path+".comments")
+				var optSyntax spells.Syntax
+				xSyntax, err := decodeSyntax(item, path+".syntax")
 				if err != nil {
 					return out, err
 				}
-				optComments = xComments
-				out.Comments = &optComments
+				optSyntax = xSyntax
+				out.Syntax = &optSyntax
 			}
 		default:
 			return out, unknownMember(path, "Language", key)
