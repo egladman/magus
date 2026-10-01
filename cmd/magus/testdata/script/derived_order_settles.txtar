@@ -62,7 +62,7 @@ two
 -- magusfile.buzz --
 import "magus";
 import "proc";
-magus.project({
+magus\project({
     "sources": ["src/*.txt", "**/*.md"],
     "targets": {
         "index-generate": {"skip_cache": "derives from the whole tree; no input glob can key it"},
@@ -97,7 +97,7 @@ page: one
 import "magus";
 import "proc";
 import "project/.." as ws;
-magus.project({ "depends_on": [".."], "sources": ["*.md"] });
+magus\project({ "depends_on": [".."], "sources": ["*.md"] });
 export fun page_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(ws\file("SEED.md"));
     ctx.writesFiles("page.md");

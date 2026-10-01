@@ -901,18 +901,20 @@ stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 
 # case: command/deny
-# A session bound to a job lease is a worker, and workers do not publish: refused outright.
+# A session bound to a job forked under another is a worker, and workers do not publish:
+# lease-vcs refuses the push outright, before the push gate grades it. A parentless job is
+# the root's own, and its push is asked instead.
 # The guard binds each session that runs `magus job exec` through it, so every worker below
 # takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
-exec magus job fork harness/push-worker --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job fork harness/push-worker --parent harness --criteria 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"behavior":"deny"'
-stdout 'workers do not publish'
+stdout 'is a worker under harness.* stay with the orchestrator'
 
 # hosts: claude-code
 env HOST_NAME=testscript
@@ -925,7 +927,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/push-command-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'workers do not publish'
+stdout 'is a worker under harness.* stay with the orchestrator'
 
 # hosts: cursor
 
@@ -935,7 +937,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-push.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'workers do not publish'
+stdout 'is a worker under harness.* stay with the orchestrator'
 rm $WORK/home/state
 env HOME=/no-home
 env XDG_STATE_HOME=

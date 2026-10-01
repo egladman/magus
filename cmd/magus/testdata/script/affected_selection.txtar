@@ -90,7 +90,7 @@ changed-*.txt
 -- magusfile.buzz --
 import "magus";
 import "spells/acme";
-magus.project({ "spells": [acme] });
+magus\project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
 import "magus/spell";
@@ -102,7 +102,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint
 -- proj-b/magusfile.buzz --
 import "magus";
 import "spells/beta";
-magus.project({ "spells": [beta] });
+magus\project({ "spells": [beta] });
 export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(ctx); }
 -- proj-b/spells/beta/spell.buzz --
 import "magus/spell";

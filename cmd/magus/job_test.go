@@ -446,6 +446,7 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 // (MGS3031): the guard could only honor it by denying the whole file.
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
+	resetWorkspaceMemo(t)
 	root, cacheDir := execFixture(t)
 	for name, body := range map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))

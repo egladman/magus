@@ -33,7 +33,7 @@ concurrency: 2
 import "magus";
 import "spells/brief-host" as briefhost;
 magus\harness.provider(briefhost);
-magus.project({"sources": ["*.md"]});
+magus\project({"sources": ["*.md"]});
 -- AGENTS.md --
 # rules
 

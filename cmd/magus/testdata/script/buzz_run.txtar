@@ -55,7 +55,7 @@ stderr 'see: https://.*MGS1022'
 
 # magus\Context is the value a target receives: a script can name the type but not build one
 ! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
-stderr 'unknown object type "Context"'
+stderr 'magus\\Context is declared for type checking only and has no definition to construct'
 
 -- hello.buzz --
 import "std";

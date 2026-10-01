@@ -19,7 +19,7 @@ concurrency: 2
 -- magusfile.buzz --
 import "magus";
 import "spells/slow";
-magus.project({ "spells": [slow] });
+magus\project({ "spells": [slow] });
 -- spells/slow/spell.buzz --
 import "magus/spell";
 export fun mgs_getName() > str { return "slow"; }
