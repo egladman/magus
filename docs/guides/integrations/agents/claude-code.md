@@ -134,11 +134,11 @@ off the event itself.
 
 Three things in a session resolve the word `magus`, and each has its own owner:
 
-| Who runs `magus`                                        | Resolved by                                                                     | Owner                                                                                                                                         |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one       | every hook entry, and magus's own re-exec                                                                                                     |
-| The agent's own Bash tool commands                      | PATH, with the session root put first                                           | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
-| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                             | magus, on every child it spawns                                                                                                               |
+| Who runs `magus`                                        | Resolved by                                                               | Owner                                                                                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one | every hook entry, and magus's own re-exec                                                                                                          |
+| The agent's own Bash tool commands                      | PATH, with the session root put first                                     | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
+| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                       | magus, on every child it spawns                                                                                                                    |
 
 A hook's `magus` is whatever the PATH Claude Code was started with finds. Before it
 does anything else, that magus walks up from the `-C` directory to the nearest
