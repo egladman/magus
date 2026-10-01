@@ -336,6 +336,11 @@ type ReviewReport struct {
 	// Moved is the head the change moved to before anything was dismissed; nothing was,
 	// since the run on that head decides. Empty when it stayed.
 	Moved string `json:"moved,omitempty"`
+	// RegenerationOwed are the merges of the base into the change, beneath Head, that
+	// differ from their plain merge only in generated files. They are peeled as plan peels
+	// them, and an approval carried over them stands once the base's regeneration
+	// reproduces them, which apply proves before merging; each such carry's reason says so.
+	RegenerationOwed []string `json:"regeneration_owed,omitempty"`
 	// Reviews are the approvals given at an older commit than the one a review of Head
 	// covers; an approval given there needs no verdict.
 	Reviews []ReviewVerdict `json:"reviews"`

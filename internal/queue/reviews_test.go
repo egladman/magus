@@ -3,6 +3,7 @@ package queue
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // reviewing is a provider that reads reviews and dismisses them: each read answers the
@@ -37,13 +39,20 @@ func (r *reviewing) DismissReview(_ context.Context, _ types.Change, rv types.Re
 // whose head forked from carryNewBase: the listing, the base, the head and its fork
 // point, then cc for the approved carryOld.
 func reviewsOf(t *testing.T, c types.Change, cc carryCase, reads ...types.Reviews) (doubles, *reviewing) {
-	d := newDoubles(t)
-	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main"}).Return(types.Changes{Base: "main", Changes: []types.Change{c}}, nil)
-	d.tip(base)
+	d := listedAlone(t, c)
 	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
 	d.plain(c.Head)
 	d.carry(c, cc)
 	return d, &reviewing{MockProvider: d.provider, reads: reads}
+}
+
+// listedAlone is the doubles of a provider listing c alone on main, scoped to c, whose
+// base is at base.
+func listedAlone(t *testing.T, c types.Change) doubles {
+	d := newDoubles(t)
+	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main", Only: c.ID}).Return(types.Changes{Base: "main", Changes: []types.Change{c}}, nil)
+	d.tip(base)
+	return d
 }
 
 func approvedBy(reviewer, id, commit string) types.Review {
@@ -150,16 +159,62 @@ func TestReviewsWithoutDismissOrOnAnotherHeadOnlyReads(t *testing.T) {
 	assert.Equal(t, 1, prov.nreads)
 
 	moved := newDoubles(t)
-	moved.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main"}).Return(types.Changes{Base: "main", Changes: []types.Change{c}}, nil)
+	moved.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main", Only: "1"}).Return(types.Changes{Base: "main", Changes: []types.Change{c}}, nil)
 	stale := &reviewing{MockProvider: moved.provider, reads: []types.Reviews{{Head: c.Head, Approving: approving}}}
 	got, err = Reviews(t.Context(), moved.vcs, moved.facts, clone, stale, ReviewsQuery{Base: "main", Change: "1", Head: head("0"), Dismiss: true}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.ReviewReport{Change: "1", Head: c.Head, Moved: c.Head, Reviews: []types.ReviewVerdict{}}, got)
 }
 
+// An approved commit a force-push left for the remote to collect cannot be compared, so
+// its approval does not carry, and the dismissal names why rather than the run failing
+// and dismissing nothing.
+func TestReviewsDismissesAnApprovalAtACommitNoLongerReachable(t *testing.T) {
+	c := change("1", "a")
+	d := listedAlone(t, c)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	d.plain(c.Head)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]magustypes.Commit{{ID: c.Head, Parents: []string{carryNewBase}}}, nil)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, carryOld).Return(errors.New("fatal: remote error: upload-pack: not our ref"))
+	approving := []types.Review{approvedBy("ann", "12", carryOld)}
+	prov := &reviewing{MockProvider: d.provider, reads: []types.Reviews{{Head: c.Head, Approving: approving}}}
+
+	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
+	require.NoError(t, err)
+	reason := "the approved commit " + carryOld[:12] + " is no longer reachable"
+	assert.Equal(t, []types.ReviewVerdict{{Reviewer: "ann", ReviewID: "12", Commit: carryOld, Tier: types.CarryCode,
+		Changed: []types.ClassifiedPath{}, Reason: reason, Dismissed: true}}, got.Reviews)
+	assert.Equal(t, []string{"12: magus queue: " + reason + ". Review the head again."}, prov.dismissed)
+}
+
+// A merge of main into the change that differs from the plain merge only in generated
+// files is peeled as plan peels it: an approval given beneath it still covers the head,
+// so nothing is dismissed, and the report names the merge apply proves by regenerating.
+func TestReviewsPeelsAMergeOfTheBaseThatDiffersOnlyInGeneratedFiles(t *testing.T) {
+	c := change("1", "a")
+	reviewed, onMain := head("y"), head("main")
+	d := listedAlone(t, c)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, c.Head).Return(magustypes.Commit{ID: c.Head, Parents: []string{reviewed, onMain}}, nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, onMain, base).Return(true, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, c.Head).Return("merge-tree", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: onMain, Theirs: reviewed}).Return(magustypes.TreeMergeResult{Tree: "plain-tree"}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain-tree", "merge-tree").Return([]string{"gen/api.go"}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/api.go"}).Return(map[string]types.Writes{"gen/api.go": {Output: true}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, reviewed).Return(magustypes.Commit{ID: reviewed, Parents: []string{base}}, nil)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, reviewed).Return(nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, reviewed, []string(nil)).Return([]magustypes.Commit{{ID: reviewed, Parents: []string{base}}}, nil)
+	prov := &reviewing{MockProvider: d.provider, reads: []types.Reviews{{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", reviewed)}}}}
+
+	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
+	require.NoError(t, err)
+	assert.Equal(t, types.ReviewReport{Change: "1", Head: c.Head, RegenerationOwed: []string{c.Head}, Reviews: []types.ReviewVerdict{}}, got)
+	assert.Empty(t, prov.dismissed)
+}
+
 func TestReviewsRefusesAnUnlistedChangeAndAProviderReadingNoReviews(t *testing.T) {
 	d := newDoubles(t)
-	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main"}).Return(types.Changes{Base: "main"}, nil)
+	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main", Only: "9"}).Return(types.Changes{Base: "main"}, nil)
 	_, err := Reviews(t.Context(), d.vcs, d.facts, clone, &reviewing{MockProvider: d.provider}, ReviewsQuery{Base: "main", Change: "9"}, nil)
 	require.EqualError(t, err, "#9 is not an open change against main")
 

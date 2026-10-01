@@ -192,10 +192,13 @@ func readSide(ctx context.Context, v types.ReadVCS, root, rev, path string) []by
 }
 
 // replayBases returns where old's own delta starts and where now's does, reading what
-// [carryBase] decides over. why says, when non-empty, why old's delta cannot be replayed.
+// [carryBase] decides over. why says, when non-empty, why old's delta cannot be replayed:
+// among others, old is no longer reachable, as after a force-push once the remote
+// collected it. The base was just fetched from the same remote, so a failed fetch of old
+// is old's absence rather than the network's.
 func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, stackBase string, refs []stackRef) (oldBase, newBase, why string, err error) {
 	if err := v.FetchCommit(ctx, cl.Root, cl.Remote, old); err != nil {
-		return "", "", "", err
+		return "", "", "the approved commit " + short(old) + " is no longer reachable", nil //nolint:nilerr // an unreachable approved commit is a verdict: the approval does not carry
 	}
 	f := carryFacts{old: old}
 	if f.commits, err = v.RangeCommits(ctx, cl.Root, tip, old, nil); err != nil {

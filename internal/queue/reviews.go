@@ -38,7 +38,7 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 	if !ok {
 		return types.ReviewReport{}, errors.New("the provider reads no reviews")
 	}
-	listing, err := prov.ListChanges(ctx, types.ListQuery{Base: q.Base, RemoteURL: q.RemoteURL})
+	listing, err := prov.ListChanges(ctx, types.ListQuery{Base: q.Base, RemoteURL: q.RemoteURL, Only: q.Change})
 	if err != nil {
 		return types.ReviewReport{}, err
 	}
@@ -56,11 +56,11 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 		report.Moved = c.Head
 		return report, nil
 	}
-	verdicts, err := classifyReviews(ctx, v, f, cl, c, others, read.Approving, policy)
+	verdicts, owed, err := classifyReviews(ctx, v, f, cl, c, others, read.Approving, policy)
 	if err != nil {
 		return types.ReviewReport{}, err
 	}
-	report.Reviews = verdicts
+	report.Reviews, report.RegenerationOwed = verdicts, owed
 	if !q.Dismiss || !slices.ContainsFunc(verdicts, func(rv types.ReviewVerdict) bool { return !rv.Carry }) {
 		return report, nil
 	}
@@ -90,33 +90,34 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 }
 
 // classifyReviews runs the classifier once per distinct approved commit, from that
-// commit to the commit a review of c's head covers. An approval given there needs no
-// verdict. A merge of the base into the change that differs in generated outputs needs
-// the base's regeneration to prove it adds nothing, which only apply runs, so such a
-// head is compared whole, and an approval does not carry over it.
-func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, c types.Change, others types.Changes, approving []types.Review, policy types.CarryPolicy) ([]types.ReviewVerdict, error) {
+// commit to the commit a review of c's head covers, as plan admits c. An approval given
+// there needs no verdict. A merge of the base into the change that differs from the
+// plain merge only in generated files is peeled as plan peels it, and its commit is
+// returned owed: the approval stands, as at plan, once apply's regeneration of the base
+// reproduces that merge, which apply proves before it merges, and each carry says so.
+func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, c types.Change, others types.Changes, approving []types.Review, policy types.CarryPolicy) (verdicts []types.ReviewVerdict, owed []string, err error) {
 	out := []types.ReviewVerdict{}
 	if len(approving) == 0 {
-		return out, nil
+		return out, nil, nil
 	}
 	tip, err := fetchBase(ctx, v, cl, others.Base)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := fetchHead(ctx, v, cl, c); err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", c.Label(), err)
+		return nil, nil, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
-	now, owed, err := reviewTarget(ctx, v, f, cl.Root, tip, c.Head, "")
+	now, proofs, err := reviewTarget(ctx, v, f, cl.Root, tip, c.Head, "")
 	if err != nil {
-		return nil, fmt.Errorf("review target of %s: %w", c.Label(), err)
+		return nil, nil, fmt.Errorf("review target of %s: %w", c.Label(), err)
 	}
-	if len(owed) > 0 {
-		now = c.Head
+	for _, p := range proofs {
+		owed = append(owed, p.Commit)
 	}
 	refs := planRefs(others)
 	stackBase, err := deltaBase(ctx, v, cl, tip, now, refs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	decided := map[string]types.CarryVerdict{}
 	for _, r := range approving {
@@ -126,14 +127,27 @@ func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, c
 		verdict, ok := decided[r.Commit]
 		if !ok {
 			if verdict, err = carryApproval(ctx, v, f, cl, tip, r.Commit, now, stackBase, refs, policy); err != nil {
-				return nil, fmt.Errorf("compare %s with @%s's approved %s: %w", c.Label(), r.Reviewer, short(r.Commit), err)
+				return nil, nil, fmt.Errorf("compare %s with @%s's approved %s: %w", c.Label(), r.Reviewer, short(r.Commit), err)
 			}
 			decided[r.Commit] = verdict
 		}
+		reason := verdict.Reason
+		if verdict.Carry && len(owed) > 0 {
+			reason += "; it stands once the base's regeneration reproduces the generated files of the merge of the base at " +
+				shorts(owed) + ", which apply proves before merging"
+		}
 		out = append(out, types.ReviewVerdict{Reviewer: r.Reviewer, ReviewID: r.ID, Commit: r.Commit,
-			Carry: verdict.Carry, Tier: verdict.Tier, Changed: orEmpty(verdict.Changed), Reason: verdict.Reason})
+			Carry: verdict.Carry, Tier: verdict.Tier, Changed: orEmpty(verdict.Changed), Reason: reason})
 	}
-	return out, nil
+	return out, owed, nil
+}
+
+func shorts(commits []string) string {
+	out := make([]string, len(commits))
+	for i, c := range commits {
+		out[i] = short(c)
+	}
+	return strings.Join(out, ", ")
 }
 
 // deltaBase is where now's own delta starts, decided as [carryBase] decides it for an
