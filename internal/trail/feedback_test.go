@@ -32,6 +32,14 @@ func TestCommandShape(t *testing.T) {
 	}
 }
 
+func TestCommandShapes(t *testing.T) {
+	assert.Equal(t, []string{"cd <path>", "grep -rn <arg>", "head -<n>"}, CommandShapes("cd /x && grep -rn foo src | head -5"))
+	assert.Equal(t, []string{"echo <arg>", "git rev-parse <arg>"}, CommandShapes("echo $(git rev-parse HEAD)"))
+	assert.Equal(t, []string{"go test <path> 2>&1"}, CommandShapes("F=1 go test ./... 2>&1"))
+	assert.Empty(t, CommandShapes("X=1"), "a bare assignment runs no program")
+	assert.Nil(t, CommandShapes("echo 'unterminated"))
+}
+
 func TestServedNexts(t *testing.T) {
 	reason := "`sed -n 36,42p a.go` prints the declaration whole.\nnext:\n  sed -n 36,42p a.go\n      prints the whole declaration.\n  sed -n 1,9p b.go\n      prints it too.\nsee: https://example.test/rules/grep-reader/"
 	assert.Equal(t, []string{"sed -n 36,42p a.go", "sed -n 1,9p b.go"}, servedNexts(reason))

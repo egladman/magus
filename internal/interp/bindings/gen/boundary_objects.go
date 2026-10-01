@@ -84,6 +84,11 @@ func ObjectFeedbackObservation(v types.FeedbackObservation) vm.Value {
 	out.MapSet("nexts", vm.ListValue(itemsNexts))
 	out.MapSet("preauthorizedBy", vm.StrValue(v.PreauthorizedBy))
 	out.MapSet("shape", vm.StrValue(v.Shape))
+	itemsShapes := make([]vm.Value, len(v.Shapes))
+	for indexShapes := range v.Shapes {
+		itemsShapes[indexShapes] = vm.StrValue(v.Shapes[indexShapes])
+	}
+	out.MapSet("shapes", vm.ListValue(itemsShapes))
 	return out
 }
 

@@ -142,6 +142,7 @@ func feedbackObservation(base string, e Event) (types.FeedbackObservation, bool)
 	}
 	if req.Command != "" {
 		obs.Shape = CommandShape(req.Command)
+		obs.Shapes = CommandShapes(req.Command)
 	}
 	return obs, true
 }

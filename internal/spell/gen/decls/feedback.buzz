@@ -30,6 +30,7 @@ export object FeedbackObservation {
     nexts: [str] = [],
     preauthorizedBy: str = "",
     shape: str = "",
+    shapes: [str] = [],
 }
 
 export object FeedbackSpawn {
@@ -53,4 +54,5 @@ export object FeedbackTrail {
 export extern fun mark(mark: FeedbackMark) > FeedbackMark !> any;
 export extern fun marks() > [FeedbackMark] !> any;
 export extern fun shape(command: str) > str;
+export extern fun shapes(command: str) > [str];
 export extern fun trail(opts: {str: any} = {<str: any>}) > FeedbackTrail !> any;

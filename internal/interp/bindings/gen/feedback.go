@@ -35,6 +35,14 @@ func RegisterFeedback(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StrVal(ret0), nil
 	}))
+	m.MapSet("shapes", vm.DirectValue("feedback.shapes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		command := ffi.Str(bzArgs, 0)
+		ret0, err := std.FeedbackShapes(ctx, command)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StrSliceVal(ret0), nil
+	}))
 	m.MapSet("marks", vm.DirectValue("feedback.marks", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.FeedbackMarks(ctx)
 		if err != nil {

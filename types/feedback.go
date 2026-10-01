@@ -128,6 +128,10 @@ type FeedbackObservation struct {
 	// calls that differ only in what they name read alike; empty for a line the shell
 	// parser cannot read, and for a write or read.
 	Shape string
+	// Shapes are the shapes of each program the line runs, in order, each with its own
+	// redirections: what unguarded calls cluster by, since a whole line's shape is nearly
+	// unique once a session chains commands. Empty where Shape is.
+	Shapes []string
 }
 
 // FeedbackSpawn is one subagent a session started.

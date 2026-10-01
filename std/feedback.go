@@ -53,6 +53,13 @@ var Feedback = Module{
 			Impl:    FeedbackShape,
 		},
 		{
+			Name:    "shapes",
+			Doc:     "The shape of each program a shell line runs, in order, each with its own redirections: `cd x && grep -rn foo src | head -5` is [`cd <path>`, `grep -rn <arg>`, `head -<n>`]. Programs inside a loop or a command substitution count. Empty for a line the shell parser cannot read.",
+			Args:    []Arg{{Name: "command", Type: TypeString}},
+			Returns: []Ret{{Type: TypeStringSlice}},
+			Impl:    FeedbackShapes,
+		},
+		{
 			Name:    "marks",
 			Doc:     "Every verdict a person recorded on a feedback row in this repository, oldest first; a later mark on an id supersedes an earlier one. Kept per repository identity, so every checkout reads the same marks. Raises on a store line that does not decode, and MGS1022 outside a workspace.",
 			Returns: []Ret{{Type: TypeAny, Object: "[FeedbackMark]"}},
@@ -178,6 +185,11 @@ func feedbackWindow(opts map[string]any, now time.Time) (trail.FeedbackWindow, e
 // FeedbackShape normalizes a shell line into its shape; see trail.CommandShape.
 func FeedbackShape(_ context.Context, command string) (string, error) {
 	return trail.CommandShape(command), nil
+}
+
+// FeedbackShapes is the shape of each program a shell line runs; see trail.CommandShapes.
+func FeedbackShapes(_ context.Context, command string) ([]string, error) {
+	return trail.CommandShapes(command), nil
 }
 
 // FeedbackMarks reads this repository's feedback marks.

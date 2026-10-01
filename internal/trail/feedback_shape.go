@@ -26,6 +26,30 @@ func CommandShape(command string) string {
 	return stmtsShape(f.Stmts)
 }
 
+// CommandShapes is the shape of each program a shell line runs, in the order they
+// appear, each with its own redirections: `cd x && grep -rn foo src | head -5` is
+// `cd <path>`, `grep -rn <arg>` and `head -<n>`. A program inside a loop or a command
+// substitution counts. Nil when the line does not parse.
+//
+// It is what clusters unguarded calls: a whole line's shape is nearly unique once a
+// session chains a few commands, while the programs inside it repeat.
+func CommandShapes(command string) []string {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if s, ok := n.(*syntax.Stmt); ok {
+			if call, ok := s.Cmd.(*syntax.CallExpr); ok && len(call.Args) > 0 {
+				out = append(out, stmtShape(s))
+			}
+		}
+		return true
+	})
+	return out
+}
+
 func stmtsShape(stmts []*syntax.Stmt) string {
 	parts := make([]string, 0, len(stmts))
 	for _, s := range stmts {
