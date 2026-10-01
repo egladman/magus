@@ -262,6 +262,10 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
 	env := append(os.Environ(),
+		// What Claude Code exports to every hook: the root the session started in. Its
+		// wired commands find the checkout's own build through it, so a probe without it
+		// grades a different interpreter than the one a session runs.
+		"CLAUDE_PROJECT_DIR="+root,
 		"HOME="+scratch,
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
