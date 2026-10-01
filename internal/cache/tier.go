@@ -88,7 +88,7 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if err != nil {
 		return nil, err
 	}
-	if moved := movedStamps(s.WorkspaceRoot, s.Stamps, m.Stamps); len(moved) > 0 {
+	if moved := t.c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, m.Stamps); len(moved) > 0 {
 		slog.DebugContext(ctx, "cache.stamp", slog.String("project", s.ProjectPath),
 			slog.String("target", s.Target), slog.Any("moved", moved))
 		return nil, errTierMiss

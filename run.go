@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -498,6 +499,13 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			if p.Path != "." {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
 			}
+		}
+		// The index lands in the cache dir, outside every output glob, so a replay cannot
+		// restore it: an entry for reverted sources would replay over an index built from
+		// the edit. As a stamp, an entry replays only while the index is the one its run
+		// wrote.
+		if _, ok := symbolCapableLanguage(p); ok {
+			step.Stamps = append(step.Stamps, symbols.IndexPath(m.CacheDir(), p.Dir))
 		}
 	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.

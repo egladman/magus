@@ -207,12 +207,12 @@ type Step struct {
 	// because they move independently; see config.CacheInclude.
 	IncludeOS   bool
 	IncludeArch bool
-	// Stamps are files (relative to WorkspaceRoot) a tool writes when its work
-	// completes. They are not hashed: they change DURING the run, so the key computed
-	// before it could never match an entry filed after it. Instead the entry records
-	// each stamp's digest as the run left it, and a hit replays only while every stamp
-	// still reads the same. A stamped entry describes one local tree, so it is never
-	// fetched from or pushed to a remote.
+	// Stamps are files a tool writes when its work completes, relative to WorkspaceRoot
+	// or absolute for one outside the tree (a symbol index). They are not hashed: they
+	// change DURING the run, so the key computed before it could never match an entry
+	// filed after it. Instead the entry records each stamp's digest as the run left it,
+	// and a hit replays only while every stamp still reads the same. A stamped entry
+	// describes one local tree, so it is never fetched from or pushed to a remote.
 	Stamps     []string
 	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
 	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
@@ -503,7 +503,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+	return hash, mErr == nil && len(c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
