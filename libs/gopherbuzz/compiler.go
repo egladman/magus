@@ -45,6 +45,27 @@ type CompileOptions struct {
 	// defaults, so this is a parity fix, not an extension.
 	ImportedTypes []ast.Node
 
+	// ImportedNames are the names flat imports bound bare in the shared Env:
+	// their exports, of every kind. A namespace-less program's own non-exported
+	// top-level declaration of one of them takes a per-module key instead of
+	// replacing the export the exporting module's code reaches by that name.
+	ImportedNames map[string]bool
+
+	// EntryQualified are the names earlier namespace-less chunks of the session
+	// gave per-module keys, so a later chunk reaches the same binding they did.
+	EntryQualified map[string]bool
+
+	// EntryTypes are object types earlier namespace-less chunks declared under a
+	// per-module key, by name. A literal resolves to one after its own
+	// compile's declarations and before ImportedTypes; a qualified one never does.
+	EntryTypes map[string]*ast.ObjectDecl
+
+	// TypeBound reports whether the shared Env binds an object definition under
+	// key. A literal of an imported type nothing defines (a host declared it for
+	// the checker only) is then a compile error naming the type, not a run-time
+	// one. Nil skips the check.
+	TypeBound func(key string) bool
+
 	// SourceFile stamps Chunk.SourceFile on every chunk this compile emits
 	// (top-level and nested). Empty leaves SourceFile unset. Session.Compile
 	// passes the entry file under test so line coverage and DebugFrame.Source
@@ -67,7 +88,7 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	// here. topLevelKeepEnv IS this scan; it is reused rather than duplicated.
 	c.capturedLocals = topLevelKeepEnv(prog)
 	if opts.SharedGlobals {
-		c.initModuleScope(prog, opts.ImportedTypes) // per-module Env keys for private globals
+		c.initModuleScope(prog, opts) // per-module Env keys for private globals
 	}
 	if opts.SharedGlobals && opts.PromoteTopLevel {
 		c.promoteTopLevel = true
@@ -80,6 +101,8 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	// how a `ns\Name{...}` literal resolves -- see the parser). Local declarations
 	// below overwrite on a name clash, so a local type always shadows an import.
 	c.importedTypes = opts.ImportedTypes
+	c.typeBound = opts.TypeBound
+	c.entryTypes = opts.EntryTypes
 	for _, s := range prog.Stmts {
 		if od, ok := s.(*ast.ObjectDecl); ok {
 			c.declareType(od)
@@ -471,7 +494,11 @@ type compiler struct {
 	// importedTypes is CompileOptions.ImportedTypes, set on the top-level compiler
 	// only. A later entry shadows an earlier one, and any declaration shadows both.
 	importedTypes []ast.Node
-	loops         []loopInfo
+	// typeBound and entryTypes are CompileOptions.TypeBound and EntryTypes,
+	// likewise top-level only.
+	typeBound  func(key string) bool
+	entryTypes map[string]*ast.ObjectDecl
+	loops      []loopInfo
 	// blockExprs is a stack, one entry per `from { ... }` currently being
 	// compiled, holding the jump indexes each `out` inside it emitted. They are
 	// patched to the block's end once its body is done.
@@ -565,7 +592,39 @@ func (c *compiler) typeDecl(name string) (*ast.ObjectDecl, bool) {
 		}
 		root = cc
 	}
+	if d, ok := root.entryTypes[name]; ok {
+		return d, true
+	}
 	return root.importedType(name)
+}
+
+// localType reports whether this compile declares an object type called name.
+func (c *compiler) localType(name string) bool {
+	for cc := c; cc != nil; cc = cc.parent {
+		if _, ok := cc.typeDecls[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// checkConstructible refuses a literal of an imported type the shared Env holds
+// no definition for under key. A host can declare a type for the checker alone
+// (Session.DeclareModuleTypes); building one could only fail at run time, and in
+// a branch that rarely runs, so it fails here, naming the type.
+func (c *compiler) checkConstructible(v *ast.ObjectLit, key string) error {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	if root.typeBound == nil || root.typeBound(key) {
+		return nil
+	}
+	name := v.TypeName
+	if v.Namespace != "" {
+		name = v.Namespace + `\` + name
+	}
+	return fmt.Errorf("buzz: line %d:%d: %s is declared for type checking only and has no definition to construct", v.Line, v.Col, name)
 }
 
 // importedType finds the object type an import exports as name, skipping any
@@ -743,10 +802,11 @@ var builtinTypeShapes = map[string]bool{
 // one Env). A protocol is left out: it binds nothing at run time.
 //
 // A module with no `namespace` (the entry program) keeps bare keys, which host
-// lookups and later REPL chunks resolve by name. The exception is an object or
-// enum named like a type an import exports: exports bind bare too, so the entry's
+// lookups and later REPL chunks resolve by name. The exception is a declaration
+// named like something an import exports: exports bind bare too, so the entry's
 // would replace the one the exporting module's own code reaches by that name.
-func (c *compiler) initModuleScope(prog *ast.Program, imported []ast.Node) {
+// Names an earlier entry chunk qualified stay qualified (opts.EntryQualified).
+func (c *compiler) initModuleScope(prog *ast.Program, opts CompileOptions) {
 	var ns string
 	for _, s := range prog.Stmts {
 		if n, ok := s.(*ast.NamespaceStmt); ok {
@@ -754,9 +814,13 @@ func (c *compiler) initModuleScope(prog *ast.Program, imported []ast.Node) {
 			break
 		}
 	}
-	importedTypes := map[string]bool{}
+	priv := map[string]bool{}
 	if ns == "" {
-		for _, n := range imported {
+		for name := range opts.EntryQualified {
+			priv[name] = true
+		}
+		importedTypes := map[string]bool{}
+		for _, n := range opts.ImportedTypes {
 			switch d := n.(type) {
 			case *ast.ObjectDecl:
 				importedTypes[d.Name] = true
@@ -764,25 +828,15 @@ func (c *compiler) initModuleScope(prog *ast.Program, imported []ast.Node) {
 				importedTypes[d.Name] = true
 			}
 		}
-	}
-	priv := map[string]bool{}
-	for _, s := range prog.Stmts {
-		switch d := s.(type) {
-		case *ast.DeclStmt:
-			if !d.IsExported && ns != "" {
-				priv[d.Name] = true
+		for _, s := range prog.Stmts {
+			if name, private := topLevelPrivate(s); private && (opts.ImportedNames[name] || importedTypes[name]) {
+				priv[name] = true
 			}
-		case *ast.FunDecl:
-			if !d.IsExported && ns != "" {
-				priv[d.Name] = true
-			}
-		case *ast.ObjectDecl:
-			if !d.IsExported && !d.IsProtocol && (ns != "" || importedTypes[d.Name]) {
-				priv[d.Name] = true
-			}
-		case *ast.EnumDecl:
-			if !d.IsExported && (ns != "" || importedTypes[d.Name]) {
-				priv[d.Name] = true
+		}
+	} else {
+		for _, s := range prog.Stmts {
+			if name, private := topLevelPrivate(s); private {
+				priv[name] = true
 			}
 		}
 	}
@@ -791,6 +845,26 @@ func (c *compiler) initModuleScope(prog *ast.Program, imported []ast.Node) {
 	}
 	c.nsPrefix = "\x00" + ns + "\x00"
 	c.privTop = priv
+}
+
+// entryKeyPrefix is the nsPrefix of a namespace-less program, whose qualified
+// names a session tracks (see Session.noteEntryQualified).
+const entryKeyPrefix = "\x00\x00"
+
+// topLevelPrivate names the non-exported top-level binding s declares, if any.
+// An extern is left out: the host binds it under its bare name.
+func topLevelPrivate(s ast.Node) (string, bool) {
+	switch d := s.(type) {
+	case *ast.DeclStmt:
+		return d.Name, !d.IsExported
+	case *ast.FunDecl:
+		return d.Name, !d.IsExported && !d.IsExtern
+	case *ast.ObjectDecl:
+		return d.Name, !d.IsExported && !d.IsProtocol
+	case *ast.EnumDecl:
+		return d.Name, !d.IsExported
+	}
+	return "", false
 }
 
 // compileZdefDecl lowers a top-level `zdef("lib", "<decls>")` statement into
@@ -2277,6 +2351,11 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 		// A qualified name is an import's export, which binds under its bare name.
 		decl, ok = c.importedType(v.TypeName)
 		typeKey = v.TypeName
+	}
+	if ok && (v.Namespace != "" || !c.localType(v.TypeName)) {
+		if err := c.checkConstructible(v, typeKey); err != nil {
+			return err
+		}
 	}
 	if !ok {
 		for i, key := range v.Keys {

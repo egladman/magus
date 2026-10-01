@@ -228,6 +228,64 @@ return "default:{n.shade.value} local:{Shade.blue.value}";
 	assert.Equal(t, "default:1 local:2", v.String())
 }
 
+// TestCompileWith_ImporterFunAndVarKeepOffExports pins upstream Buzz at 294d8f9,
+// which prints "inside:fmod-tag:fmod-label qualified:fmod-tag:fmod-label
+// mine:main-tag:main-label": a script's own `tag` and `label` leave the ones fmod
+// exports, and fmod's code calls, untouched. The host reads the script's own.
+func TestCompileWith_ImporterFunAndVarKeepOffExports(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("fmod", `
+namespace fmod;
+export final label = "fmod-label";
+export fun tag() > str { return "fmod-tag"; }
+export fun describe() > str { return "{tag()}:{label}"; }
+`)
+	v, err := s.Eval(ctx, `
+import "fmod";
+final label = "main-label";
+fun tag() > str { return "main-tag"; }
+return "inside:{fmod\describe()} qualified:{fmod\tag()}:{fmod\label} mine:{tag()}:{label}";
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "inside:fmod-tag:fmod-label qualified:fmod-tag:fmod-label mine:main-tag:main-label", v.String())
+	assert.Equal(t, "main-label", s.GetGlobal("label").String(), "GetGlobal answers with the script's binding")
+}
+
+// TestCompileWith_LaterChunkReachesTheEntrysQualifiedType covers the REPL shape,
+// which upstream has no counterpart for: a chunk declares a Node an import also
+// exports, and a later chunk naming Node reaches the declaring chunk's type.
+func TestCompileWith_LaterChunkReachesTheEntrysQualifiedType(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("xmod", `
+namespace xmod;
+export object Node { who: str = "xmod" }
+export fun make() > Node { return Node{}; }
+`)
+	_, err := s.Eval(ctx, `import "xmod"; object Node { label: str = "outer" }`)
+	require.NoError(t, err)
+	v, err := s.Eval(ctx, `final n: any = Node{}; return "{(n as? Node) != null}:{xmod\make().who}";`)
+	require.NoError(t, err)
+	assert.Equal(t, "true:xmod", v.String())
+	v, err = s.Eval(ctx, `return Node{}.label;`)
+	require.NoError(t, err)
+	assert.Equal(t, "outer", v.String())
+}
+
+// TestCompileWith_RefusesAHostTypeNothingDefines covers a gopherbuzz host API with
+// no upstream counterpart: a type declared for the checker alone cannot be built,
+// so its literal fails to compile and names the type, even in a branch that would
+// never run.
+func TestCompileWith_RefusesAHostTypeNothingDefines(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.DeclareModuleTypes("host", `export object Ghost { shade: int = 1 }`)
+	_, err := s.Eval(ctx, `fun never() > Ghost { return Ghost{}; } return 1;`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Ghost is declared for type checking only and has no definition to construct")
+}
+
 func TestCompileWith_EmptyProgram(t *testing.T) {
 	prog, err := ParseEmbedded("")
 	require.NoError(t, err)
