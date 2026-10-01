@@ -57,7 +57,7 @@ export object Tag {
     id: str = "",
 }
 
-export extern fun base() > str;
+export extern fun base(dir: str = "") > str !> any;
 export extern fun changedFiles(base: str = "", dir: str = "") > [Path] !> any;
 export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun commit(rev: str = "") > Commit !> any;

@@ -29,9 +29,13 @@ var Vcs = Module{
 			Impl:    VcsName,
 		},
 		{
-			Name:    "base",
-			Doc:     "Resolved base ref for diffs.",
+			Name: "base",
+			Doc:  "Resolved base ref for diffs. dir resolves it for the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd, so it names that repository's VCS default. Raises only when dir does not exist.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsBase,
 		},
 		{
@@ -227,10 +231,11 @@ func VcsName(ctx context.Context) (string, error) {
 	return v.Name(), nil
 }
 
-// VcsBase returns the resolved base ref used for diffs (see VcsName).
-func VcsBase(ctx context.Context) (string, error) {
-	_, base := resolveVCS(ctx)
-	return base, nil
+// VcsBase returns the base ref resolved for the repository holding dir, "" meaning the
+// target's cwd; it raises only for a dir that does not exist.
+func VcsBase(ctx context.Context, dir string) (string, error) {
+	_, base, _, err := vcsAt(ctx, "base", dir)
+	return base, err
 }
 
 // VcsRoot returns the absolute path of the repository root, or "" if unresolved.

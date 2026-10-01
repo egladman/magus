@@ -27,7 +27,8 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("base", vm.DirectValue("vcs.base", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.VcsBase(ctx)
+		dir := ffi.Str(bzArgs, 0)
+		ret0, err := std.VcsBase(ctx, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

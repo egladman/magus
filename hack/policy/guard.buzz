@@ -162,7 +162,11 @@ fun remoteOf(req: CommandRequest) > branches\Remote {
     if (req.checkout != null) {
         return branches\Remote{ base = req.checkout!.base, branches = req.checkout!.remoteBranches };
     }
-    return branches\Remote{ base = vcs\base(), branches = [<str>] };
+    final base = vcs\base(dir: req.dir) catch null;
+    if (base == null) {
+        return branches\Remote{ base = "", branches = [<str>], unreadable = "the base ref of the checkout at `{req.dir}` cannot be resolved" };
+    }
+    return branches\Remote{ base = base!, branches = [<str>] };
 }
 
 // branchTopic is the topic of the branch's changes against the base in the checkout holding
@@ -333,6 +337,14 @@ fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {
 
 // go-build links buildStamp into ./magus from the root magusfile.
 export stale\buildStamp as buildStamp;
+
+test "the remote's base is read from the caller's checkout, and one that cannot be read says why" {
+    final here = remoteOf(CommandRequest{ dir = "." });
+    std\assert(here.unreadable == "" and here.base == (vcs\base() catch "?"), message: "the caller's own checkout: {here.unreadable}");
+    final missing = (fs\tempDir("remote-of") catch "") + "/gone";
+    final gone = remoteOf(CommandRequest{ dir = missing });
+    std\assert(gone.unreadable.indexOf(missing) != null, message: gone.unreadable);
+}
 
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {
     final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],

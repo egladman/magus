@@ -287,7 +287,11 @@ fun readBase(path: str) > BaseFile {
     if (vcs\name() == "") {
         return BaseFile{ text = null, missing = "no VCS" };
     }
-    final rev = vcs\base();
+    final resolved = vcs\base() catch null;
+    if (resolved == null) {
+        return BaseFile{ text = null, missing = "the base ref cannot be resolved here" };
+    }
+    final rev = resolved!;
     if (rev == "") {
         return BaseFile{ text = null, missing = "vcs.base_ref is empty" };
     }
