@@ -2,11 +2,13 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -210,4 +212,121 @@ func TestManifestEmptyPlatformMatchesAnyPlatform(t *testing.T) {
 	require.NoError(t, err, "Run c2")
 	require.True(t, r2.Hit, "an empty-platform (legacy) manifest must replay on any platform")
 	require.Equal(t, 0, calls)
+}
+
+// BenchmarkFlattenPath measures path flattening, called on every manifest/log/
+// remote path construction (per target, per cache op).
+func BenchmarkFlattenPath(b *testing.B) {
+	const p = "services/api/gateway/internal/handlers"
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = flattenPath(p)
+	}
+}
+
+// FuzzReadManifest verifies that readManifest never panics on
+// arbitrary manifest file contents. Truncated, garbage, or empty JSON
+// should always return a typed error, never a nil-manifest with a nil
+// error and never a panic.
+func FuzzReadManifest(f *testing.F) {
+	// Valid manifest JSON.
+	f.Add(`{"outputs":[{"path":"bin/api","blob":"abc123"}],"created_at":"2024-01-01T00:00:00Z"}`)
+	// Truncated JSON.
+	f.Add(`{"outputs":[{"path":"bin/`)
+	// Empty.
+	f.Add(``)
+	// Valid JSON but wrong type.
+	f.Add(`[]`)
+	// JSON null.
+	f.Add(`null`)
+	// Garbage binary-ish data.
+	f.Add("\x00\x01\x02\x03")
+
+	f.Fuzz(func(t *testing.T, data string) {
+		dir := t.TempDir()
+		c := &Cache{dir: dir}
+
+		path := filepath.Join(dir, "manifests", flattenPath("proj"), "hash.json")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := c.readManifest("proj", "hash")
+		if err != nil {
+			// Any error is acceptable; the important invariant is no panic.
+			return
+		}
+		// If no error, manifest must be non-nil.
+		if m == nil {
+			t.Error("readManifest: (nil, nil) — callers cannot distinguish from a valid miss")
+		}
+	})
+}
+
+// syntheticManifest builds a Manifest with n output records — representative
+// of a mid-size project cache entry.
+func syntheticManifest(n int) *Manifest {
+	outputs := make([]OutputRecord, n)
+	for i := range outputs {
+		outputs[i] = OutputRecord{
+			Path: fmt.Sprintf("dist/lib/component-%d.js", i),
+			Blob: fmt.Sprintf("%064x", i),
+			Mode: 0o644,
+			Size: int64(i * 1024),
+		}
+	}
+	return &Manifest{
+		ProjectPath: "apps/my-service",
+		Hash:        fmt.Sprintf("%064x", 42),
+		Outputs:     outputs,
+		CreatedAt:   time.Now().UTC(),
+	}
+}
+
+// BenchmarkManifestRead measures readManifest: one os.ReadFile + json.Unmarshal.
+func BenchmarkManifestRead(b *testing.B) {
+	dir := b.TempDir()
+	c := &Cache{dir: dir}
+	m := syntheticManifest(20)
+
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		b.Fatal(err)
+	}
+	p := c.manifestPath(m.ProjectPath, m.Hash)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		if _, err := c.readManifest(m.ProjectPath, m.Hash); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkManifestWrite measures util.MarshalIndent + writeAtomic for a
+// typical manifest.
+func BenchmarkManifestWrite(b *testing.B) {
+	dir := b.TempDir()
+	c := &Cache{dir: dir}
+	m := syntheticManifest(20)
+
+	b.ResetTimer()
+	for range b.N {
+		data, err := json.MarshalIndent(m, "", "  ")
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err := writeAtomic(c.manifestPath(m.ProjectPath, m.Hash), data); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
