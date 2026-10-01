@@ -4,6 +4,7 @@ import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
 import "../hack/magusfile/changelog" as changelog;
+import "crypto";
 import "fs";
 import "os";
 import "proc";
@@ -58,6 +59,7 @@ magus\project({
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
+        "figure-engine-digest-generate": {"skip_cache": "hashes the running magus binary, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
         // The build-* targets stay cached: esbuild and the npm deps are pinned.
     },
 });
@@ -335,8 +337,8 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
-    ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/figure/figure.buzz"),
+    ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
+    ctx.readsFiles("site/diagrams/*.buzz", "gen/figure-engine.sha256",
         workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"));
     ctx.writesFiles("assets/gen/diagram-*.svg", "assets/gen/diagram-*.json");
     final GENERATED = ["assets/gen"];
@@ -352,6 +354,19 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         throw "diagrams-generate: the figures changed " + moved.join(", ")
             + "; re-run `magus run diagrams-generate:rw docs` and commit" + drift\secondCause;
     }
+}
+
+// figure-engine-digest-generate writes the running magus binary's SHA-256 to
+// gen/figure-engine.sha256. The figures render from the magus/figure copy that binary
+// embeds, not from libs/figure/figure.buzz, so diagrams-generate keys on this file: an
+// edit to figure.buzz reaches the SVGs only once a rebuilt binary carries it.
+export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen/figure-engine.sha256");
+    final body = crypto\sha256File(os\executable()) + "\n";
+    final path = fs\join("gen", "figure-engine.sha256");
+    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    fs\mkdirAll("gen");
+    fs\writeFile(path, body);
 }
 
 // build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.
