@@ -71,6 +71,24 @@ func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
 	assert.Equal(t, "pwa/job-watch", got.Job)
 }
 
+// A deny path naming one declaration of a file leaves the file in the job's boundary: the
+// job may still write the rest of it, so its writes there are its own.
+func TestAttributeWriteKeepsAFileWithADeniedDeclaration(t *testing.T) {
+	rows := []types.Job{{
+		ID: "pwa/job-watch", State: types.StateRunning,
+		WritePaths: []string{"internal/trail"},
+		DenyPaths:  []string{"internal/trail/trail.go#Record", "internal/trail/*.go#Spawn"},
+	}}
+
+	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
+	assert.False(t, ok, "a declaration of a pattern names no one file, so it denies the file whole")
+
+	rows[0].DenyPaths = rows[0].DenyPaths[:1]
+	got, ok = AttributeWrite(rows, "internal/trail/trail.go")
+	assert.True(t, ok)
+	assert.Equal(t, "pwa/job-watch", got.Job)
+}
+
 // TWO LIVE JOBS OVER ONE PATH is the case the whole feed rests on not happening: fork
 // refuses a shared checkout and records write_proof, and `magus ls jobs` prints the
 // overlaps. When it happens anyway the answer is NEITHER, with both names, because a feed

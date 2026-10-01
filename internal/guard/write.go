@@ -412,7 +412,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	}
 	// A deny naming one declaration of rel is gradeDeniedDeclarations' to judge: at this,
 	// the path, level it would deny every edit to the file.
-	decl, denied, err := declarationCovering(wholeFileDenies(me.DenyPaths, rel), rel)
+	decl, denied, err := declarationCovering(job.WholeFileDenies(me.DenyPaths, rel), rel)
 	if err != nil {
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
@@ -492,16 +492,6 @@ func revokedCovering(me types.Job, rel string) (types.JobRelease, bool) {
 	return found, found.Path != ""
 }
 
-// wholeFileDenies are the deny paths that deny rel at the path level: every entry except
-// one naming a declaration of rel itself. A declaration of a pattern or a directory stays,
-// since no declaration of one file can be read from it.
-func wholeFileDenies(denyPaths []string, rel string) []string {
-	return slices.DeleteFunc(slices.Clone(denyPaths), func(entry string) bool {
-		p, decl := types.SplitClaim(entry)
-		return decl != "" && p != "" && path.Clean(p) == rel
-	})
-}
-
 // gradeDeniedDeclarations denies a write that changes a declaration me's deny paths name in
 // rel (`run.go#A`), and passes one that changes only other parts of the file.
 //
@@ -510,7 +500,7 @@ func wholeFileDenies(denyPaths []string, rel string) []string {
 // verdict, this one does too, and for a deny that verdict is the whole file: a write magus
 // cannot place may change the declaration, so it is denied.
 func gradeDeniedDeclarations(ctx context.Context, checkout string, me types.Job, rel string, fields writeFields) writeGrade {
-	denied := claimsOn(me.DenyPaths, rel)
+	denied := job.DeniedDeclarations(me.DenyPaths, rel)
 	if len(denied) == 0 {
 		return writeGrade{}
 	}

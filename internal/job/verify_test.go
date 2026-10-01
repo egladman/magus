@@ -2,6 +2,7 @@ package job
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -512,6 +513,41 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	assert.NotContains(t, VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, unread).Violations,
 		"job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked",
 		"a job claiming no declaration is not graded on its footprint")
+}
+
+// A deny path naming a declaration is graded against the footprint, the way a declaration
+// claim is: a change elsewhere in the file is no violation, a change to the named one is.
+func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"run.go"}, DenyPaths: []string{"run.go#executeStages"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
+	placed := func(decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	}
+	unplaced := types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{4, 4}}
+	verify := func(seen Observed) []string {
+		return VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen).Violations
+	}
+	seen := func(regions ...types.RegionChange) Observed {
+		return Observed{Changed: []string{"run.go"}, ChangedKnown: true, ChangedFrom: "abc1234", Regions: regions, RegionsKnown: true}
+	}
+	denied := func(violations []string) []string {
+		return slices.DeleteFunc(slices.Clone(violations), func(v string) bool { return !strings.Contains(v, "denied") })
+	}
+
+	assert.Empty(t, denied(verify(seen(placed("func RunCI() {"), placed("")))), "another declaration and the preamble")
+	assert.Equal(t, []string{"the diff since abc1234 changed run.go#func (m *Magus) executeStages() {, which the job is denied (run.go#executeStages)"},
+		denied(verify(seen(placed("func RunCI() {"), placed("func (m *Magus) executeStages() {")))))
+	assert.Equal(t, []string{"the diff since abc1234 changed run.go, which the job is denied (run.go#executeStages)"},
+		denied(verify(seen(unplaced))), "a region no driver placed could be the declaration")
+	assert.Equal(t, []string{`changed path "run.go" has declarations the job is denied (run.go#executeStages) and its footprint is not known (no regions), so the deny could not be checked`},
+		denied(verify(Observed{Changed: []string{"run.go"}, ChangedKnown: true, RegionsReason: "no regions"})))
+
+	whole := row
+	whole.DenyPaths = []string{"run.go"}
+	assert.Equal(t, []string{`changed path "run.go" is one the job is denied (run.go)`},
+		denied(VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, seen(placed("func RunCI() {"))).Violations))
 }
 
 func TestUnclaimedFootprint(t *testing.T) {
