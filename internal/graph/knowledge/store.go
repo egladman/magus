@@ -65,6 +65,9 @@ type manifest struct {
 	// Extra is, per class, the workspace files its assembly read that the tree walk does
 	// not cover, so the caller can fold them into that class's next stamp.
 	Extra map[ShardClass][]string `json:"extra,omitempty"`
+	// Routing is the symbolShardsKey the routing file was last written for, so a sync whose
+	// symbol shards came out unchanged leaves that multi-megabyte file alone.
+	Routing string `json:"routing,omitempty"`
 }
 
 type shardMeta struct {
@@ -180,6 +183,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		Extra:         map[ShardClass][]string{},
 	}
 	if old != nil {
+		newMan.Routing = old.Routing
 		for name, meta := range old.Shards {
 			if !plan.covers(shardClass(name)) {
 				newMan.Shards[name] = meta
@@ -261,6 +265,25 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	}
 	s.recordPathIDs(ctx, shards, fps, newMan)
 
+	// Refresh the derived symbol xref routing index (best-effort: a failure just means
+	// `magus refs` falls back to loading all symbol shards, never a wrong result; the index
+	// is bound to newMan so a stale one is detected and ignored on read). Only a sync that
+	// carries the symbol shards can build it, and only one whose shards came out different
+	// needs to: the index is a pure function of them. Written before the manifest, so a
+	// crash between the two leaves an index bound to a manifest that never landed, which
+	// reads as stale.
+	if plan.covers(ClassSymbols) {
+		key := symbolShardsKey(&newMan)
+		if key != newMan.Routing || (key != "" && !fileExists(s.routingPath())) {
+			newMan.Routing = ""
+			if err := s.writeXref(shards, newMan); err != nil {
+				s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
+			} else {
+				newMan.Routing = key
+			}
+		}
+	}
+
 	// optimization: on a no-op rebuild (nothing changed, nothing to prune, no new stamp)
 	// the on-disk manifest already matches, so skip rewriting it, which also keeps the
 	// manifest's mtime stable.
@@ -268,7 +291,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	//             one guaranteed write from the otherwise write-free hot path.
 	//   trade-off: none; the manifest is only skipped when it would be identical.
 	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) &&
-		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) {
+		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
 		return nil
 	}
 
@@ -277,16 +300,6 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	// files (ignored by Load) rather than a manifest pointing at a deleted shard.
 	if err := s.writeManifest(newMan); err != nil {
 		return err
-	}
-	// Refresh the derived symbol xref routing index (best-effort: a failure just
-	// means `magus refs` falls back to loading all symbol shards, never a wrong result;
-	// the index is bound to newMan so a stale one is detected and ignored on read). Only a
-	// sync that carries the symbol shards can build it; any other leaves their manifest
-	// entries, and so the index's binding, as they were.
-	if plan.covers(ClassSymbols) {
-		if err := s.writeXref(shards, newMan); err != nil {
-			s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
-		}
 	}
 	for _, name := range pruned {
 		if err := s.removeShard(name); err != nil {
@@ -900,6 +913,18 @@ func (m *manifest) extra() map[ShardClass][]string {
 		return nil
 	}
 	return m.Extra
+}
+
+func (m *manifest) routing() string {
+	if m == nil {
+		return ""
+	}
+	return m.Routing
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // pathIDsFile is a sidecar holding each shard's file and dir node IDs, bound to the

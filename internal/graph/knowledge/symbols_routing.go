@@ -48,6 +48,12 @@ func symbolRefKey(symbolID string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+// routingFormat versions what a routing file holds. It is folded into symbolShardsKey, so
+// a file written in an older format never matches and is rebuilt on the next sync.
+//
+//	2: Labels.
+const routingFormat = 2
+
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
 // manifest, the identity the routing index is bound to. Empty when there are none.
 func symbolShardsKey(man *manifest) string {
@@ -65,6 +71,7 @@ func symbolShardsKey(man *manifest) string {
 	}
 	slices.Sort(names)
 	h := sha256.New()
+	_, _ = h.Write([]byte{routingFormat})
 	for _, name := range names {
 		_, _ = h.Write([]byte(name))
 		_, _ = h.Write([]byte{0})
@@ -146,7 +153,7 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 		}
 		return nil
 	}
-	b, err := json.MarshalIndent(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index, Labels: buildLabelIndex(shards)}, "", "  ")
+	b, err := json.Marshal(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index, Labels: buildLabelIndex(shards)})
 	if err != nil {
 		return err
 	}
