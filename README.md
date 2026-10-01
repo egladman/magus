@@ -17,6 +17,8 @@ Change a file and magus works out which projects it reaches, rebuilds only those
 
 magus informs; it never decides. It hands you everything it knows about your repository (what a change reaches, which files are generated, where a symbol is used) and the call stays yours. It was built for humans, not for agents: agents drive it well anyway, because an interface legible to a person is legible to anything, and that ordering is the design.
 
+Prove it before you plan it. A hunch about what a change will break is cheap to test, and a plan built on an untested one fails late, where it costs most. Run the smallest thing that settles it and point at the run: every run leaves an output ref (`magus query output <ref>`) that anyone can reopen, so a plan, a review comment or a job's goal cites evidence instead of asserting it.
+
 <!-- README terminal recordings are rendered by `magus run termcast-generate` from
      tapes/core-loop.capture. Re-record that real CLI session with `magus run
      termcast-record` when its output changes; commit the capture and SVG together.
