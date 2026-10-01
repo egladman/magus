@@ -80,7 +80,10 @@ type Applier struct {
 	// from a verdict, which a job running the change's code wrote. A zero Reproduction
 	// shows none.
 	Reproduce types.Reproduction
-	Events    *Events
+	// CarryPolicy is the planner's (see [Planner.CarryPolicy]); apply checks approval
+	// again by it.
+	CarryPolicy types.CarryPolicy
+	Events      *Events
 
 	vcs      types.PushVCS
 	clone    Clone
@@ -628,12 +631,12 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	if c.Below == "" || r.merged[c.Below] {
 		stackBase = c.StackBase
 	}
-	a, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, tip, c, stackBase, stackRefs(r.plan))
+	a, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, tip, c, stackBase, stackRefs(r.plan), r.CarryPolicy)
 	if err != nil {
 		return nil, err
 	}
-	if a.carried != "" {
-		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: carriedNotice(a)})
+	if notice := carriedNotice(a); notice != "" {
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: notice})
 	}
 	if a.Head == c.Head {
 		r.confirmed[c.ID] = a.Head
@@ -992,7 +995,7 @@ func (r *applyRun) retarget(ctx context.Context, c types.Change, a approvalResul
 	if err := r.provider.Retarget(ctx, c, r.plan.Base); err != nil {
 		return nil, fmt.Errorf("retarget %s at %s: %w", c.Label(), r.plan.Base, err)
 	}
-	again, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, tip, c, stackBase, stackRefs(r.plan))
+	again, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, tip, c, stackBase, stackRefs(r.plan), r.CarryPolicy)
 	if err != nil {
 		return nil, err
 	}

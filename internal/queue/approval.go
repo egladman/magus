@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
@@ -14,15 +15,17 @@ type approvalResult struct {
 	types.Approval
 	reviewed string              // the commit asked about
 	owed     []regenerationProof // what reviewed covers only once the base's regeneration proves it
-	carried  string              // the older commit an approval was carried over from
+	// carry is the verdict on carrying an approval over from an older commit, nil when
+	// none was asked for.
+	carry *types.CarryVerdict
 }
 
 // approval asks prov for c's approval at the commit a review of c.Head covers. stackBase
 // is c's stack base once the change beneath it merged, else "". When the approval stands
 // only at an older commit, it carries over if c.Head is that commit rebased with nothing
-// else changed. A provider that reports no head, base or method is broken: without them
-// the queue cannot tell what it would merge.
-func approval(ctx context.Context, prov types.Provider, v types.ReadVCS, f types.BuildFacts, cl Clone, tip string, c types.Change, stackBase string, refs []stackRef) (approvalResult, error) {
+// changed beyond what policy allows. A provider that reports no head, base or method is
+// broken: without them the queue cannot tell what it would merge.
+func approval(ctx context.Context, prov types.Provider, v types.ReadVCS, f types.BuildFacts, cl Clone, tip string, c types.Change, stackBase string, refs []stackRef, policy types.CarryPolicy) (approvalResult, error) {
 	reviewed, owed, err := reviewTarget(ctx, v, f, cl.Root, tip, c.Head, stackBase)
 	if err != nil {
 		return approvalResult{}, fmt.Errorf("review target of %s: %w", c.Label(), err)
@@ -44,12 +47,18 @@ func approval(ctx context.Context, prov types.Provider, v types.ReadVCS, f types
 	if !types.IsObjectID(a.ApprovedCommit) {
 		return approvalResult{}, fmt.Errorf("approval of %s: provider reported approvals at %q, not a commit id", c.Label(), a.ApprovedCommit)
 	}
-	ok, err := rebasedFrom(ctx, v, cl, tip, a.ApprovedCommit, reviewed, c.StackBase, refs)
+	verdict, err := carryApproval(ctx, v, f, cl, tip, a.ApprovedCommit, reviewed, c.StackBase, refs, policy)
 	if err != nil {
 		return approvalResult{}, fmt.Errorf("compare %s with its approved %s: %w", c.Label(), short(a.ApprovedCommit), err)
 	}
-	if ok {
-		res.Approved, res.Reason, res.carried = true, "", a.ApprovedCommit
+	res.carry = &verdict
+	switch {
+	case verdict.Carry:
+		res.Approved, res.Reason = true, ""
+	case res.Reason == "":
+		res.Reason = verdict.Reason
+	default:
+		res.Reason += "; " + verdict.Reason
 	}
 	return res, nil
 }
@@ -71,41 +80,146 @@ func admission(c *types.Change, a approvalResult, caps types.Capabilities) *type
 	return nil
 }
 
-// rebasedFrom reports whether now is old moved onto a new base with its own delta
-// unchanged: it reads what [carryBase] decides over, and when that finds old's delta,
-// replays it onto now's base.
-func rebasedFrom(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, stackBase string, refs []stackRef) (bool, error) {
+// CarryQuery names one approval for [CarryApproval] to classify.
+type CarryQuery struct {
+	// Approved is the commit the approval was given at.
+	Approved string
+	// Now is the commit the approval has to cover: a change's head, or the commit a
+	// review of the head covers.
+	Now string
+	// StackBase is the head of the change Now is stacked on, where Now's own delta
+	// starts; empty measures it from where Now leaves the base's history.
+	StackBase string
+	// Listing is the provider's listing Now's change came from. Its changes, merged
+	// changes and unqueued changes decide where Approved's own delta starts.
+	Listing types.Changes
+}
+
+// CarryApproval reports whether the approval given at q.Approved still covers q.Now
+// under policy. It is the classifier the queue admits changes by, so a caller that
+// dismisses the reviews it would not count agrees with the merge gate. It fetches
+// q.Listing.Base and q.Approved from cl's remote, and runs none of either commit's code.
+func CarryApproval(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, q CarryQuery, policy types.CarryPolicy) (types.CarryVerdict, error) {
+	if !types.IsObjectID(q.Approved) || !types.IsObjectID(q.Now) {
+		return types.CarryVerdict{}, fmt.Errorf("carry an approval from %q to %q: both must be commit ids", q.Approved, q.Now)
+	}
+	tip, err := fetchBase(ctx, v, cl, q.Listing.Base)
+	if err != nil {
+		return types.CarryVerdict{}, err
+	}
+	return carryApproval(ctx, v, f, cl, tip, q.Approved, q.Now, q.StackBase, planRefs(q.Listing), policy)
+}
+
+// carryApproval replays old's own delta onto now's base and classifies, path by path,
+// what now holds beyond that replay. A delta [replayBases] cannot tell apart from another
+// change's, or one that conflicts on the new base, is code: what the approval saw is
+// then not a diff the head still has.
+func carryApproval(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, tip, old, now, stackBase string, refs []stackRef, policy types.CarryPolicy) (types.CarryVerdict, error) {
+	verdict := types.CarryVerdict{From: old, Head: now, Tier: types.CarryCode}
+	oldBase, newBase, why, err := replayBases(ctx, v, cl, tip, old, now, stackBase, refs)
+	if err != nil || why != "" {
+		verdict.Reason = why
+		return verdict, err
+	}
+	r, err := v.MergeTrees(ctx, cl.Root, magustypes.TreeMerge{Base: oldBase, Ours: newBase, Theirs: old})
+	if err != nil {
+		return verdict, err
+	}
+	if len(r.Conflicts) > 0 {
+		for _, c := range r.Conflicts {
+			verdict.Refused = append(verdict.Refused, c.Path)
+		}
+		verdict.Reason = "the approved " + short(old) + "'s diff conflicts with " + short(newBase) + " in " + strings.Join(verdict.Refused, ", ")
+		return verdict, nil
+	}
+	tree, err := v.TreeID(ctx, cl.Root, now)
+	if err != nil {
+		return verdict, err
+	}
+	if r.Tree != tree {
+		changed, err := v.DiffTrees(ctx, cl.Root, r.Tree, tree)
+		if err != nil {
+			return verdict, err
+		}
+		if len(changed) == 0 {
+			verdict.Reason = "head " + short(now) + "'s tree differs from the approved " + short(old) + " replayed, in no path the VCS names"
+			return verdict, nil
+		}
+		for _, p := range changed {
+			c, err := classifyChanged(ctx, v, f, cl.Root, r.Tree, now, p)
+			if err != nil {
+				return verdict, err
+			}
+			verdict.Changed = append(verdict.Changed, c)
+		}
+	}
+	verdict.Decide(policy)
+	return verdict, nil
+}
+
+// classifyChanged asks the build tool for the tier of path's edit from the replayed tree
+// to now. A tier the build tool has no business answering for a path is code.
+func classifyChanged(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, replayed, now, path string) (types.ClassifiedPath, error) {
+	c, err := f.ClassifyEdit(ctx, path, readSide(ctx, v, root, replayed, path), readSide(ctx, v, root, now, path))
+	if err != nil {
+		return types.ClassifiedPath{}, fmt.Errorf("classify %s: %w", path, err)
+	}
+	c.Path = path
+	switch c.Tier {
+	case types.CarryGenerated, types.CarryProse, types.CarryCommentOnly, types.CarryCode:
+	default:
+		c.Why = fmt.Sprintf("the build tool answered tier %q for a path", c.Tier)
+		c.Tier = types.CarryCode
+	}
+	return c, nil
+}
+
+// readSide is path's content at rev, nil where rev does not hold it. An unreadable path
+// reads as absent, which no comment-only edit is.
+func readSide(ctx context.Context, v types.ReadVCS, root, rev, path string) []byte {
+	content, err := v.ReadFileAt(ctx, root, rev, path)
+	if err != nil {
+		return nil
+	}
+	return []byte(content)
+}
+
+// replayBases returns where old's own delta starts and where now's does, reading what
+// [carryBase] decides over. why says, when non-empty, why old's delta cannot be replayed.
+func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, stackBase string, refs []stackRef) (oldBase, newBase, why string, err error) {
 	if err := v.FetchCommit(ctx, cl.Root, cl.Remote, old); err != nil {
-		return false, err
+		return "", "", "", err
 	}
 	f := carryFacts{old: old}
-	var err error
 	if f.commits, err = v.RangeCommits(ctx, cl.Root, tip, old, nil); err != nil {
-		return false, err
+		return "", "", "", err
 	}
 	for _, r := range refs {
 		cr := carryRef{stackRef: r}
 		if !r.unqueued && r.head != now {
 			if err := v.FetchCommit(ctx, cl.Root, cl.Remote, r.head); err != nil {
-				return false, err
+				return "", "", "", err
 			}
 			if cr.own, err = ownCommits(ctx, v, cl.Root, tip, r.head); err != nil {
-				return false, err
+				return "", "", "", err
 			}
 		}
 		f.refs = append(f.refs, cr)
 	}
 	oldBase, ok := carryBase(f)
 	if !ok {
-		return false, nil
+		return "", "", "the approved " + short(old) + "'s own diff cannot be told apart from another change's", nil
 	}
-	newBase := stackBase
+	newBase = stackBase
 	if newBase == "" {
 		if newBase, err = forkPoint(ctx, v, cl.Root, tip, now); err != nil {
-			return false, err
+			return "", "", "", err
 		}
 	}
-	return trivialRebase(ctx, v, cl.Root, oldBase, old, newBase, now)
+	if oldBase == "" || newBase == "" {
+		return "", "", "the approved " + short(old) + " or head " + short(now) + " merged the base's history in more than once, so no replay moves its diff", nil
+	}
+	return oldBase, newBase, "", nil
 }
 
 // carryFacts is what carrying an approval over from old reads.
@@ -204,6 +318,11 @@ func sitsOn(delta, own map[string]bool, parents map[string][]string, base string
 	return true
 }
 
+// carriedNotice is the notice an approval carried over from an older commit writes, ""
+// when none did.
 func carriedNotice(a approvalResult) string {
-	return "head " + short(a.reviewed) + " is " + short(a.carried) + " rebased with its diff unchanged, so its approval carried over"
+	if a.carry == nil || !a.carry.Carry {
+		return ""
+	}
+	return a.carry.Reason + ", so its approval carried over"
 }
