@@ -1166,7 +1166,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "tried, and the command fails at the end if any could not be ended. To end every job")
 			fmt.Fprintln(os.Stderr, "nobody is working in one call, use `magus job prune`.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Examples:")
+			fmt.Fprintln(os.Stderr, "Example:")
 			fmt.Fprintln(os.Stderr, "  magus job exit refactor/pricing --stdin < result.json")
 			fmt.Fprintln(os.Stderr, "  magus job exit scout-a scout-b scout-c")
 			fmt.Fprintln(os.Stderr, "")
