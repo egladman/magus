@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/types"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // typeError is a type-checking diagnostic. Code is its BZZ diagnostic code, or empty for an error kind that
@@ -72,8 +73,11 @@ type scopeEntry struct {
 	// survives: deliberately narrow, and only consulted where a null would be a
 	// hard error rather than a value.
 	optional bool
-	pos      ast.Pos
-	name     string
+	// module marks the name an import binds to a module, whose members are
+	// reached as name\member and never name.member.
+	module bool
+	pos    ast.Pos
+	name   string
 }
 
 type checker struct {
@@ -136,6 +140,13 @@ type checker struct {
 	// typeRefs, when non-nil, records each type name resolveType looks up: what a
 	// cached namespace type depends on.
 	typeRefs map[string]bool
+	// anonMaps holds the map types inferred for anonymous object literals. The VM
+	// represents `.{ name = ... }` as a map, so `.name` on one reads a field and is
+	// not a map method.
+	anonMaps map[*types.MapType]bool
+	// builtinRecv is the list or map receiver of each builtin method member, so a
+	// call through one can tell an element type argument from a result type.
+	builtinRecv map[*ast.MemberExpr]types.Type
 }
 
 // checkPrelude is what every check in a session registers before reading the
@@ -396,12 +407,6 @@ func (c *checker) registerBuiltins() {
 	c.define("int", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
 	c.define("double", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Double}, true)
 	c.define("bool", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Bool}, true)
-	c.define("len", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
-	c.define("keys", &types.FuncType{Params: []types.Type{types.Any}, Ret: &types.ListType{Elem: types.Str}}, true)
-	c.define("values", &types.FuncType{Params: []types.Type{types.Any}, Ret: &types.ListType{Elem: types.Any}}, true)
-	c.define("append", anyRet, true)
-	c.define("range", anyRet, true)
-	c.define("error", anyRet, true)
 	c.define("assert", anyRet, true)
 	c.define("type", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Str}, true)
 	// resume/resolve are keyword-expressions; they are not callable identifiers.
@@ -510,6 +515,13 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				// No tracked function signatures (native module or no exported funs):
 				// use Unknown so member access on the namespace doesn't fire E28.
 				c.define(name, types.Unknown, false)
+			}
+			// A magus spell or project import binds an object whose ops are read with
+			// a dot (`markdown.markdownlint(ctx)`), so only a real module is marked.
+			if !importBindsByValue(v.Path) || strings.HasPrefix(v.Path, "buzz:") {
+				e := c.scopes[len(c.scopes)-1][name]
+				e.module = true
+				c.scopes[len(c.scopes)-1][name] = e
 			}
 		case *ast.FunDecl:
 			c.define(v.Name, c.funDeclType(v), true)
@@ -917,6 +929,12 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 	if v.Value != nil && !c.retOptional && c.retTyp != nil && c.retTyp != types.Void && c.retTyp != types.Any && c.retTyp != types.Unknown {
 		if name, isNull := c.possiblyNullName(v.Value); isNull {
 			c.errorfc(ast.NodePos(v.Value), TypeMismatch, "return value may be null: %q is optional but %s declares a non-optional return", name, "this function")
+		}
+		// Upstream types null as void, so this is its "Return value: got type `void`,
+		// expected `int`". A fiber's or an erased generic's return type is not the
+		// value this statement returns, so neither is asserted.
+		if returnsNullLiteral(v.Value) && !retIsFibType && c.retTyp != types.Fib && c.retTyp != types.Null && !hasErasedType(c.retTyp) {
+			c.errorfc(ast.NodePos(v.Value), TypeMismatch, "return value is null but this function declares a non-optional > %s; declare > %s? to allow null", c.retTyp.TypeName(), c.retTyp.TypeName())
 		}
 	}
 	if c.retTyp != nil && c.retTyp != types.Any && c.retTyp != types.Fib && !retIsFibType && c.yieldTyp == nil && !types.Compat(ret, c.retTyp) {
@@ -1650,6 +1668,17 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 }
 
 func (c *checker) inferCall(v *ast.CallExpr) types.Type {
+	if id, ok := v.Callee.(*ast.IdentExpr); ok {
+		if _, defined := c.lookup(id.Name); !defined {
+			if hint := undefinedCallHint(id.Name, v.Args); hint != "" {
+				c.errorfc(id.Pos, UndefinedName, "undefined: %s%s", id.Name, hint)
+				for _, a := range v.Args {
+					c.infer(a)
+				}
+				return types.Unknown
+			}
+		}
+	}
 	calleeTyp := c.infer(v.Callee)
 	ft, ok := calleeTyp.(*types.FuncType)
 	argsResolved := true
@@ -1746,6 +1775,16 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			// caller's own declared return decides. Falling through instead would
 			// report the erased lambda's return as void.
 			return types.Unknown
+		}
+		// On a collection's `map` the argument names the ELEMENT: upstream's list.map
+		// is `fun map::<T>(...) > [T]`, and map.map takes a key and a value type.
+		if m, isMember := v.Callee.(*ast.MemberExpr); isMember && m.Name == "map" {
+			switch c.builtinRecv[m].(type) {
+			case *types.ListType:
+				return &types.ListType{Elem: t}
+			case *types.MapType:
+				return types.Unknown
+			}
 		}
 		return t
 	}
@@ -1948,6 +1987,7 @@ func hasDefault(ft *types.FuncType) bool {
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	ot := c.infer(v.Object)
+	c.checkNamespaceDot(v)
 	// Resolve NamedType before the Any check: a field typed as Foo (unresolved
 	// at buildObjectType time) may be resolvable here. An unresolvable NamedType
 	// (e.g. Boxed from a synthetic Go module) returns Unknown rather than Any so
@@ -1998,6 +2038,8 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if v.Name == "len" {
 			return types.Int
 		}
+		c.checkBuiltinMethod(v, vm.ListReceiver, t)
+		c.noteBuiltinRecv(v, t)
 		c.checkCollectionMutator(v.Pos, t, v.Name)
 		c.noteMutatingUse(v)
 		if mut, ok := collectionSelfMethodMut(listSelfMethods, t.Mut, v.Name); ok {
@@ -2008,6 +2050,10 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if v.Name == "len" {
 			return types.Int
 		}
+		if !c.anonMaps[t] {
+			c.checkBuiltinMethod(v, vm.MapReceiver, t)
+		}
+		c.noteBuiltinRecv(v, t)
 		c.checkCollectionMutator(v.Pos, t, v.Name)
 		c.noteMutatingUse(v)
 		if mut, ok := collectionSelfMethodMut(mapSelfMethods, t.Mut, v.Name); ok {
@@ -2039,6 +2085,12 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		}
 		c.errorf(v.Pos, "enum %s has no case %q", t.Name, v.Name)
 		return types.Unknown
+	}
+	if ot == types.Str {
+		if v.Name == "len" {
+			return types.Int
+		}
+		c.checkBuiltinMethod(v, vm.StrReceiver, ot)
 	}
 	return types.Unknown
 }
@@ -2144,9 +2196,11 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	savedRet := c.retTyp
 	savedYield := c.yieldTyp
 	savedRaise := c.raiseDeclared
+	savedRetOpt := c.retOptional
 	c.retTyp = ret
 	c.yieldTyp = yield
 	c.raiseDeclared = v.ErrAnnot != ""
+	c.retOptional = strings.HasSuffix(v.RetAnnot, "?")
 	c.pushScope()
 	savedFnBase := c.fnScopeBase
 	c.fnScopeBase = len(c.scopes) - 1
@@ -2161,6 +2215,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
 	c.raiseDeclared = savedRaise
+	c.retOptional = savedRetOpt
 
 	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults}
 }
@@ -2238,7 +2293,14 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 	}
 	// Carry tuple-ness onto the type: it is what lets inferMember tell `.{ 1, 2 }.0`
 	// (legal) from `.{ @"0" = 1 }.0` (not), which are the same map otherwise.
-	return &types.MapType{Key: keyTyp, Val: valTyp, Mut: v.Mut, Tuple: v.Tuple}
+	mt := &types.MapType{Key: keyTyp, Val: valTyp, Mut: v.Mut, Tuple: v.Tuple}
+	if v.Anon {
+		if c.anonMaps == nil {
+			c.anonMaps = map[*types.MapType]bool{}
+		}
+		c.anonMaps[mt] = true
+	}
+	return mt
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
@@ -3127,4 +3189,22 @@ func (c *checker) possiblyNullName(n ast.Node) (string, bool) {
 		return c.possiblyNullName(e.Else)
 	}
 	return "", false
+}
+
+// returnsNullLiteral reports whether n is the literal null, looking through the
+// same pass-through arms possiblyNullName does.
+func returnsNullLiteral(n ast.Node) bool {
+	switch e := n.(type) {
+	case *ast.NullLit:
+		return true
+	case *ast.MatchExpr:
+		for _, br := range e.Branches {
+			if returnsNullLiteral(br.Body) {
+				return true
+			}
+		}
+	case *ast.IfExpr:
+		return returnsNullLiteral(e.Then) || returnsNullLiteral(e.Else)
+	}
+	return false
 }
