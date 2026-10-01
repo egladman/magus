@@ -33,11 +33,16 @@ import (
 // Argv is the same command as an argument vector, unquoted: Run is for a person to
 // paste and Argv for a caller to exec, so the two differ wherever an argument needs
 // shell quotes.
+//
+// Reads marks a workspace script that declares it changes nothing (see ScriptsFor).
+// ServableTo honors it for a single `buzz` invocation only, so it cannot clear any
+// other command for a reviewer.
 type Next struct {
-	ID   string   `json:"id"             yaml:"id"`
-	Run  string   `json:"run"            yaml:"run"`
-	Argv []string `json:"argv,omitempty" yaml:"argv,omitempty"`
-	Why  string   `json:"why,omitempty"  yaml:"why,omitempty"`
+	ID    string   `json:"id"              yaml:"id"`
+	Run   string   `json:"run"             yaml:"run"`
+	Argv  []string `json:"argv,omitempty"  yaml:"argv,omitempty"`
+	Why   string   `json:"why,omitempty"   yaml:"why,omitempty"`
+	Reads bool     `json:"reads,omitempty" yaml:"reads,omitempty"`
 }
 
 // breadcrumb builds one entry from raw, unquoted args: Run gets them shell-quoted,
@@ -296,7 +301,7 @@ func LeaseRole(rows []types.Job, id string) (Role, []string) {
 
 // ServableTo drops the breadcrumbs role may not be served: every write for a
 // reviewer, and for a worker every write that does not land inside writePaths. Unbound
-// keeps the lot.
+// keeps the lot. A script declared read is not a write (see declaredRead).
 //
 // Dropped, never rewritten. A template narrowed to fit a role would be a command
 // nobody wrote, and the cap is applied afterwards so a filtered list still fills up
@@ -307,13 +312,21 @@ func ServableTo(role Role, writePaths []string, next []Next) []Next {
 	}
 	kept := make([]Next, 0, len(next))
 	for _, n := range next {
-		if !slices.ContainsFunc(pipelineStages(n.Argv), func(stage []string) bool {
+		if declaredRead(n) || !slices.ContainsFunc(pipelineStages(n.Argv), func(stage []string) bool {
 			return mutatesTree(stage) && (role != RoleWorker || !withinWritePaths(writePaths, stage))
 		}) {
 			kept = append(kept, n)
 		}
 	}
 	return capNext(kept)
+}
+
+// declaredRead reports whether n is a script read: Reads set on one `buzz <path>`
+// invocation and nothing else. `buzz` itself stays off readCommands, since a script
+// with no declaration, or one declaring a write, is a write.
+func declaredRead(n Next) bool {
+	stages := pipelineStages(n.Argv)
+	return n.Reads && len(stages) == 1 && len(stages[0]) >= 3 && slices.Equal(stages[0][1:2], Buzz.tokens)
 }
 
 // readCommands is every declared Command that cannot change the tree. It is the
