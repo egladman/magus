@@ -3,13 +3,22 @@ package magus
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/scip-code/scip/bindings/go/scip"
+	"golang.org/x/mod/modfile"
+
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 )
 
@@ -363,6 +372,137 @@ func readPatchFacts(patch string) patchFacts {
 	}
 	pf.removedText = all.String()
 	return pf
+}
+
+// parsedGoSymbols lists the top-level declarations of the Go file at path (relative to root)
+// that changed lines touch, read from the file's own syntax, for a file the symbol index
+// defines nothing in. Build constraints are not evaluated, test files count, and each ID is
+// the one scip-go gives the declaration, under the module of the nearest go.mod at or above
+// the file, so a nested module's file is named under its own module. Change follows the
+// patch rule touchedSymbols uses. It returns nil for a file it cannot read, one with no
+// go.mod above it inside root, and no changed lines.
+func parsedGoSymbols(root, path string, changed []int, pf patchFacts) []types.DiffSymbol {
+	if len(changed) == 0 {
+		return nil
+	}
+	src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+	if err != nil {
+		return nil
+	}
+	module, importPath, ok := goImportPath(root, path)
+	if !ok {
+		return nil
+	}
+	fset := token.NewFileSet()
+	// A file with syntax errors still yields the declarations parsed before them.
+	file, _ := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+	if file == nil || file.Name == nil {
+		return nil
+	}
+	if strings.HasSuffix(path, "_test.go") && strings.HasSuffix(file.Name.Name, "_test") {
+		importPath += "_test"
+	}
+	type decl struct {
+		label, id  string
+		start, end int
+	}
+	var decls []decl
+	add := func(name *ast.Ident, end token.Pos, descriptors ...*scip.Descriptor) {
+		if name == nil || name.Name == "_" {
+			return
+		}
+		descriptors = append([]*scip.Descriptor{{Name: importPath, Suffix: scip.Descriptor_Namespace}}, descriptors...)
+		id := "symbol:gomod " + module + " " + scip.DescriptorOnlyFormatter.FormatSymbol(&scip.Symbol{Descriptors: descriptors})
+		decls = append(decls, decl{label: name.Name, id: id, start: fset.Position(name.Pos()).Line, end: fset.Position(end).Line})
+	}
+	for _, d := range file.Decls {
+		switch d := d.(type) {
+		case *ast.FuncDecl:
+			method := &scip.Descriptor{Name: d.Name.Name, Suffix: scip.Descriptor_Method}
+			if d.Recv != nil && len(d.Recv.List) > 0 {
+				if recv := receiverType(d.Recv.List[0].Type); recv != "" {
+					add(d.Name, d.End(), &scip.Descriptor{Name: recv, Suffix: scip.Descriptor_Type}, method)
+				}
+				continue
+			}
+			add(d.Name, d.End(), method)
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					add(s.Name, s.End(), &scip.Descriptor{Name: s.Name.Name, Suffix: scip.Descriptor_Type})
+				case *ast.ValueSpec:
+					for _, n := range s.Names {
+						add(n, s.End(), &scip.Descriptor{Name: n.Name, Suffix: scip.Descriptor_Term})
+					}
+				}
+			}
+		}
+	}
+	spans := make([]impact.Span, len(decls))
+	for i, d := range decls {
+		spans[i] = impact.Span{ID: d.id, Start: d.start, End: d.end}
+	}
+	touched := impact.Touched(spans, changed)
+	removed := strings.Join(pf.removed[path], "\n")
+	var out []types.DiffSymbol
+	for _, d := range decls {
+		if !touched[d.id] {
+			continue
+		}
+		change := types.DiffChangeBody
+		if _, added := pf.added[path][d.start]; added {
+			change = types.DiffChangeAdded
+			if knowledge.IndexIdentifier(removed, d.label) >= 0 {
+				change = types.DiffChangeSignature
+			}
+		}
+		out = append(out, types.DiffSymbol{
+			ID: d.id, Label: d.label, Change: change, Qualified: qualifiedName(d.id, d.label),
+			PublicBeyondWorkspace: exportedFromModule(path, d.label, d.id),
+		})
+	}
+	return out
+}
+
+// receiverType is the type name a method receiver names, "" for a form Go does not allow.
+func receiverType(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return receiverType(t.X)
+	case *ast.ParenExpr:
+		return receiverType(t.X)
+	case *ast.IndexExpr:
+		return receiverType(t.X)
+	case *ast.IndexListExpr:
+		return receiverType(t.X)
+	}
+	return ""
+}
+
+// goImportPath returns the module of the nearest go.mod at or above the file at path
+// (relative to root, never above it) and the import path of the file's directory in it.
+func goImportPath(root, path string) (module, importPath string, ok bool) {
+	dir := filepath.Dir(filepath.FromSlash(path))
+	for {
+		data, err := os.ReadFile(filepath.Join(root, dir, "go.mod"))
+		if module = modfile.ModulePath(data); err == nil && module != "" {
+			rel, err := filepath.Rel(dir, filepath.Dir(filepath.FromSlash(path)))
+			if err != nil {
+				return "", "", false
+			}
+			if rel == "." {
+				return module, module, true
+			}
+			return module, module + "/" + filepath.ToSlash(rel), true
+		}
+		if dir == "." {
+			return "", "", false
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 // sourceLine is the line of a "<path>:<line>" source, or 0.
