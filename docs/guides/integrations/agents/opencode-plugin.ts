@@ -251,11 +251,14 @@ export const MagusGuard: Plugin = async () => {
       return null;
     }
     if (stdout.trim() === "") {
-      const nameIndex = args.indexOf("--agent-name");
-      // --renders-ask goes too: a binary that rejects it is too old to return an ask.
-      const withoutName = (
-        nameIndex === -1 ? args : [...args.slice(0, nameIndex), ...args.slice(nameIndex + 2)]
-      ).filter((arg) => arg !== "--renders-ask");
+      // --renders-ask and --session go too: a binary that rejects either predates them.
+      const withoutValued = (list: readonly string[], flag: string): string[] => {
+        const at = list.indexOf(flag);
+        return at === -1 ? [...list] : [...list.slice(0, at), ...list.slice(at + 2)];
+      };
+      const withoutName = withoutValued(withoutValued(args, "--agent-name"), "--session").filter(
+        (arg) => arg !== "--renders-ask",
+      );
       stdout = await runOnce(withoutName, input);
       if (stdout === null) {
         unguarded();
@@ -291,6 +294,11 @@ export const MagusGuard: Plugin = async () => {
   // --renders-ask: apply never lets an ask through unasked (it passes one to OpenCode's own
   // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
   const shellArgs = ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
+
+  // The session the call came from. A rule that must tell the main session from a subagent
+  // (a push) refuses a call that names none, so every judged call carries OpenCode's own id.
+  const inSession = (args: readonly string[], sessionID: string | undefined): string[] =>
+    sessionID ? [...args, "--session", sessionID] : [...args];
 
   /**
    * Throws on a deny, which is OpenCode's only way to stop a call, and on an ask that
@@ -329,7 +337,10 @@ export const MagusGuard: Plugin = async () => {
         if (command === "") return;
         const verb = plainPushVerb(command);
         const promptable = verb !== null && asksBeforePush(loadedConfig, verb);
-        remember(input.callID, apply(await judge(shellArgs, command), promptable));
+        remember(
+          input.callID,
+          apply(await judge(inSession(shellArgs, input.sessionID), command), promptable),
+        );
         return;
       }
 
@@ -339,7 +350,7 @@ export const MagusGuard: Plugin = async () => {
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
         const args = ["shell", "--path", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
-        remember(input.callID, apply(await judge(args, path), false));
+        remember(input.callID, apply(await judge(inSession(args, input.sessionID), path), false));
       }
     },
 
@@ -356,7 +367,7 @@ export const MagusGuard: Plugin = async () => {
       const command =
         typeof input.metadata.command === "string" ? input.metadata.command : input.title;
       if (plainPushVerb(command) === null) return;
-      const verdict = await judge(shellArgs, command);
+      const verdict = await judge(inSession(shellArgs, input.sessionID), command);
       switch (verdict?.decision) {
         case "pass":
         case "advise":

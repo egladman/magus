@@ -142,7 +142,7 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
 async function hooks() {
   const plugin = MagusGuard as unknown as () => Promise<{
     "tool.execute.before": (
-      input: { tool: string; callID: string },
+      input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
@@ -167,8 +167,10 @@ test("live: bash arm advises on git push and appends non-empty context", { skip 
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
+    // With the session OpenCode always passes: the push rule refuses a call that names none,
+    // since it cannot tell the main session from a subagent without one.
     await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
+      { tool: "bash", callID: "c1", sessionID: "s1" },
       { args: { command: "git push origin main" } },
     );
   });
