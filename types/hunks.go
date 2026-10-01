@@ -2,6 +2,8 @@ package types
 
 import (
 	"bytes"
+	"go/scanner"
+	"go/token"
 	"path"
 	"regexp"
 	"slices"
@@ -135,21 +137,76 @@ func (d DiffDriver) funcname(line string) string {
 }
 
 // Declarations returns the declaration enclosing each line of lines, indexed by line-1: the
-// nearest line at or above it d's funcname patterns name, "" above the first one. A driver
-// with no patterns places nothing.
+// nearest line at or above it d's funcname patterns name, "" above the first one. A line
+// that begins inside a string or comment of the driver's language (see OpaqueLines) names
+// nothing. A driver with no patterns places nothing.
 func (d DiffDriver) Declarations(lines []string) []string {
 	out := make([]string, len(lines))
 	if d.Funcname == "" {
 		return out
 	}
+	opaque := d.OpaqueLines(lines)
 	current := ""
 	for i, l := range lines {
-		if name := d.funcname(l); name != "" {
+		if name := d.funcname(l); name != "" && !opaque[i] {
 			current = name
 		}
 		out[i] = current
 	}
 	return out
+}
+
+// OpaqueLines reports, indexed by line-1, which lines begin inside a string literal or a
+// comment that spans lines, where a funcname pattern matches text rather than a declaration:
+// Buzz embedded in a Go raw string has `var i = 0;` at column 0. Only golang is lexed, with
+// go/scanner; every other driver reports no line opaque. Source go/scanner cannot read is
+// lexed as far as it goes.
+func (d DiffDriver) OpaqueLines(lines []string) []bool {
+	opaque := make([]bool, len(lines))
+	if d.Name != "golang" {
+		return opaque
+	}
+	src := []byte(strings.Join(lines, ""))
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, scanner.ScanComments)
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.STRING && tok != token.COMMENT {
+			continue
+		}
+		// The scanner drops a raw string's carriage returns from lit but keeps every newline.
+		first := file.Line(pos)
+		for line := first + 1; line <= first+strings.Count(lit, "\n") && line <= len(opaque); line++ {
+			opaque[line-1] = true
+		}
+	}
+	return opaque
+}
+
+// DropOpaque replaces each declaration in decls that begins on a line OpaqueLines reports
+// with the declaration enclosing it, so a placement made without lexing (git's own funcname
+// matching) reads as Declarations does. decls is indexed by line-1 like lines, and a
+// declaration begins where its text differs from the line above's.
+func (d DiffDriver) DropOpaque(lines, decls []string) {
+	opaque := d.OpaqueLines(lines)
+	enclosing, dropping, above := "", false, ""
+	for i, decl := range decls {
+		if i == 0 || decl != above {
+			dropping = decl != "" && i < len(opaque) && opaque[i]
+			if !dropping {
+				enclosing = decl
+			}
+		}
+		above = decl
+		if dropping {
+			decls[i] = enclosing
+		}
+	}
 }
 
 // maxHunkEdits bounds the edit script Hunks computes. The trace a shortest edit script
