@@ -1,84 +1,18 @@
 package maintenance
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
-
-// InFlightSync is a sync-graph job the server is running for one workspace, as its status
-// reports it. The server runs a job inside its own process, so PID is the server's.
-type InFlightSync struct {
-	Call proc.Call
-	PID  int
-}
-
-// FindSync returns the sync-graph job st reports in flight for the workspace at root.
-//
-// A call names its workspace by the submitter's root, or by its working directory when it
-// sent none, which is what the VCS refresh hook does. resolve maps that label to a
-// workspace root, so a job submitted from a subdirectory matches root and one from a git
-// worktree nested under root does not: a path-prefix test would take the second for the
-// first.
-func FindSync(st *proc.StatusReply, root string, resolve func(dir string) (string, error)) (InFlightSync, bool) {
-	if st == nil {
-		return InFlightSync{}, false
-	}
-	sync, _ := job.Lookup(job.NameSyncGraph)
-	for _, c := range st.Calls {
-		if !slices.Equal(c.Args, sync.Argv) || c.Workspace == "" {
-			continue
-		}
-		ws, err := resolve(c.Workspace)
-		if err != nil || filepath.Clean(ws) != filepath.Clean(root) {
-			continue
-		}
-		return InFlightSync{Call: c, PID: st.ParentPID}, true
-	}
-	return InFlightSync{}, false
-}
-
-// ErrServerGone is AwaitSync's report that the server stopped answering before the job
-// left its status. The job ran inside that server, so it died with it and stored nothing.
-var ErrServerGone = errors.New("the server stopped before the sync-graph job finished")
-
-// AwaitSync blocks until status no longer lists the job running under invocation inv,
-// asking every interval. It returns nil once the job is gone, ErrServerGone when status
-// fails first, or ctx's error. The job's own outcome is not in the status reply; the
-// caller reads the index the job left behind.
-func AwaitSync(ctx context.Context, status func(context.Context) (*proc.StatusReply, error), inv string, every time.Duration) error {
-	tick := time.NewTicker(every)
-	defer tick.Stop()
-	for {
-		st, err := status(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return ErrServerGone
-		}
-		if !slices.ContainsFunc(st.Calls, func(c proc.Call) bool { return c.Inv == inv }) {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-		}
-	}
-}
 
 // SyncOutcome is what one `magus job run sync-graph` did with its request.
 type SyncOutcome string
@@ -134,18 +68,17 @@ func ReadSyncRequest(dir string) (r SyncRequest, ok bool, err error) {
 // SyncObservation is what a client can see, from outside the server, of why the server's
 // sync-graph job did or did not keep a checkout's index current.
 type SyncObservation struct {
-	Now           time.Time
 	ServerLive    bool
 	ServerVersion string // the answering server's build, "" when none answered
 	ServerPID     int
-	Version       string        // this binary's build
-	InFlight      *InFlightSync // a sync-graph running for this checkout now
-	HookChecked   bool          // the VCS's hooks could be read; the Hook fields mean nothing otherwise
-	HookCommand   string        // what the VCS refresh hook runs, "" when none is installed
-	HookBinary    string        // the binary HookCommand starts, as the hook spells it
-	HookRunnable  bool          // HookBinary exists where the hook's shell would look
-	LastRequest   *SyncRequest  // the last recorded `job run sync-graph` in this checkout
-	IndexBuilt    time.Time     // when the index was last written, zero when never
+	Version       string            // this binary's build
+	Building      *GraphBuildHolder // a graph build, manual or server, holding this checkout's build lock now
+	HookChecked   bool              // the VCS's hooks could be read; the Hook fields mean nothing otherwise
+	HookCommand   string            // what the VCS refresh hook runs, "" when none is installed
+	HookBinary    string            // the binary HookCommand starts, as the hook spells it
+	HookRunnable  bool              // HookBinary exists where the hook's shell would look
+	LastRequest   *SyncRequest      // the last recorded `job run sync-graph` in this checkout
+	IndexBuilt    time.Time         // when the index was last written, zero when never
 }
 
 // Commands are the invocations a diagnosis names, rendered by the caller so they follow
@@ -154,19 +87,15 @@ type Commands struct {
 	GraphBuild, ServerStart, ServerStop, JobRunSync string
 }
 
-// DiagnoseSync names the first cause o shows, most specific first: a sync running now
+// DiagnoseSync names the first cause o shows, most specific first: a build running now
 // explains everything after it, and a hook that cannot start its binary explains a silent
 // server.
 func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 	once := "`" + c.GraphBuild + "` indexes it once now"
 	switch req := o.LastRequest; {
-	case o.InFlight != nil:
-		age := ""
-		if !o.InFlight.Call.StartedAt.IsZero() {
-			age = fmt.Sprintf(", running %s", o.Now.Sub(o.InFlight.Call.StartedAt).Round(time.Second))
-		}
+	case o.Building != nil:
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("the server's sync-graph job %s is indexing this checkout now (server pid %d%s)", o.InFlight.Call.Inv, o.InFlight.PID, age),
+			Why: fmt.Sprintf("%s is indexing this checkout now", o.Building),
 			Fix: "ask again when it finishes; `" + c.GraphBuild + "` waits for it rather than starting a second build",
 		}
 	case o.HookChecked && o.HookCommand == "":
@@ -215,8 +144,8 @@ func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 func stamp(t time.Time) string { return t.Local().Format("2006-01-02 15:04:05") }
 
 // HookBinary resolves the binary a hook command starts the way the hook's shell would: a
-// path relative to top, the checkout's top level where git runs hooks, or a bare name on
-// PATH. It returns the binary as the command spells it and whether it exists.
+// path relative to top, the repository's top level where git runs hooks, or a bare name
+// on PATH. It returns the binary as the command spells it and whether it exists.
 func HookBinary(top, command string) (string, bool) {
 	fields := strings.Fields(command)
 	if len(fields) == 0 {

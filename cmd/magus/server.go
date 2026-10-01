@@ -746,7 +746,7 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 	if root == "" {
 		return
 	}
-	dir, err := syncRequestDir(root)
+	dir, err := knowledgeStoreDir(root)
 	if err == nil {
 		r.At = time.Now()
 		err = maintenance.RecordSyncRequest(dir, r)

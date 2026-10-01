@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -188,9 +187,9 @@ func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)
 }
 
-// syncRequestDir is where `job run sync-graph` records its last request for the checkout
-// at root, beside the guard index it is compared against.
-func syncRequestDir(root string) (string, error) {
+// knowledgeStoreDir is the checkout at root's knowledge store: where graph builds take
+// their lock and `job run sync-graph` records its last request, beside the guard index.
+func knowledgeStoreDir(root string) (string, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return "", err
@@ -198,17 +197,14 @@ func syncRequestDir(root string) (string, error) {
 	return knowledge.StoreDir(cacheDir), nil
 }
 
-// observeSync gathers what this process can see of the server's sync-graph for the
-// checkout at root. Every probe is local: a socket dial, one status round trip when a
-// server answers, a git rev-parse for the hook, and two file reads.
+// observeSync gathers what this process can see of why the checkout at root's index is
+// current or not. Every probe is local: a socket dial, one status round trip when a server
+// answers, two git rev-parses for the hook, and three file reads.
 func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
-	o := maintenance.SyncObservation{Now: time.Now(), Version: version}
+	o := maintenance.SyncObservation{Version: version}
 	if addr := resolveServerAddr(""); proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil {
 			o.ServerLive, o.ServerVersion, o.ServerPID = true, st.Version, st.ParentPID
-			if s, ok := maintenance.FindSync(st, root, magus.FindRoot); ok {
-				o.InFlight = &s
-			}
 		}
 	}
 	hook, installed, err := vcs.ReadGitRefreshHook(ctx, root)
@@ -217,7 +213,10 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 		o.HookCommand = hook.Command
 		o.HookBinary, o.HookRunnable = maintenance.HookBinary(hook.Top, hook.Command)
 	}
-	if dir, err := syncRequestDir(root); err == nil {
+	if dir, err := knowledgeStoreDir(root); err == nil {
+		if h, ok := maintenance.RunningGraphBuild(dir); ok {
+			o.Building = &h
+		}
 		if r, ok, err := maintenance.ReadSyncRequest(dir); err == nil && ok {
 			o.LastRequest = &r
 		}
