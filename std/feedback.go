@@ -1,3 +1,5 @@
+//go:build !wasm
+
 package std
 
 import (
@@ -110,20 +112,19 @@ func FeedbackTrail(ctx context.Context, opts map[string]any) (types.FeedbackTrai
 // checkoutsOf is root and every other checkout of its repository. A repository whose
 // version control cannot list checkouts is root alone.
 func checkoutsOf(ctx context.Context, root string) []string {
-	out := []string{root}
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
-		return out
+		return []string{root}
 	}
 	lister, ok := res.VCS.(types.CheckoutLister)
 	if !ok {
-		return out
+		return []string{root}
 	}
 	others, err := lister.OtherCheckouts(root)
 	if err != nil {
-		return out
+		return []string{root}
 	}
-	return append(out, others...)
+	return append([]string{root}, others...)
 }
 
 // feedbackWindow reads the trail call's options. An unknown key raises, since a misspelled
@@ -164,8 +165,8 @@ func feedbackWindow(opts map[string]any, now time.Time) (trail.FeedbackWindow, e
 	if err != nil {
 		return w, err
 	}
-	switch {
-	case since == "":
+	switch since {
+	case "":
 		w.Since = w.Until.Add(-feedbackDefaultSince)
 	default:
 		if d, derr := time.ParseDuration(since); derr == nil && d > 0 {

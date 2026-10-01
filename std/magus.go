@@ -1425,7 +1425,7 @@ func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]an
 // It is the pure decision half of MagusCmd, split out so it can be tested without
 // the nested exec.
 func warnIfTypedSubcommand(ctx context.Context, sub string, args []string) {
-	hint := ""
+	var hint string
 	switch {
 	case typedMagusSubcommands[sub]:
 		hint = fmt.Sprintf("use magus\\%s([...]) instead of magus\\cmd(%q, [...])", sub, sub)
@@ -2015,7 +2015,7 @@ func nestedResult(label string, full []string, res run.ExecResult, err error, op
 		return types.ExecResult{}, err
 	}
 	var rec types.ExecResult
-	if res.Started || optBoolDefault(opts, "allow_failure", false) {
+	if res.Started || optBool(opts, "allow_failure") {
 		// Recorded even on a non-zero exit. A child that RAN said something, and
 		// that output is the answer for a command whose failure IS its report:
 		// doctor exits 1 because a check failed, and dropping stdout there left
@@ -2028,7 +2028,7 @@ func nestedResult(label string, full []string, res run.ExecResult, err error, op
 			OK:     res.Code == 0,
 		}
 	}
-	if res.Code == 0 || optBoolDefault(opts, "allow_failure", false) {
+	if res.Code == 0 || optBool(opts, "allow_failure") {
 		return rec, nil
 	}
 	if !res.Started {

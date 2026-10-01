@@ -356,17 +356,10 @@ func OsPlatform(_ context.Context) (string, string, string, error) {
 	return osName, arch, variant, nil
 }
 
-// optBoolDefault reads a boolean option from opts, returning def when absent.
-func optBoolDefault(opts map[string]any, key string, def bool) bool {
-	if opts == nil {
-		return def
-	}
-	if v, ok := opts[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return def
+// optBool reads a boolean option from opts: false when it is absent or not a bool.
+func optBool(opts map[string]any, key string) bool {
+	b, _ := opts[key].(bool)
+	return b
 }
 
 // optStringDefault reads a string option from opts, returning def when absent.
@@ -405,13 +398,13 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		Env:     overrides,
 		Stdin:   optStringDefault(opts, "stdin", ""),
 		Capture: true,
-		Quiet:   optBoolDefault(opts, "quiet", false),
-		TTY:     optBoolDefault(opts, "tty", false),
+		Quiet:   optBool(opts, "quiet"),
+		TTY:     optBool(opts, "tty"),
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
-	if res.Code != 0 && !optBoolDefault(opts, "allow_failure", false) {
+	if res.Code != 0 && !optBool(opts, "allow_failure") {
 		if !res.Started {
 			// Process never started. Common footgun: proc.exec runs a single program
 			// with no shell, so a command line ("a | b", "cd x", "$VAR") fails to

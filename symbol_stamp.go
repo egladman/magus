@@ -90,8 +90,9 @@ func writeSymbolStamp(indexPath, want string) {
 // probe runs. Two processes that agree on every value reach the same verdict about the
 // same tree; ones that do not may each be right about their own environment.
 func (m *Magus) SymbolFreshnessEnv() []string {
-	names := []string{"PATH"}
 	capable, _ := m.symbolCapableWithLanguage()
+	names := make([]string, 0, 1+len(capable))
+	names = append(names, "PATH")
 	for _, p := range capable {
 		names = append(names, m.buildStep(p, spells.SymbolIndexOp).EnvAllow...)
 	}

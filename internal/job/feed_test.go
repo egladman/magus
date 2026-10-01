@@ -80,11 +80,11 @@ func TestAttributeWriteKeepsAFileWithADeniedDeclaration(t *testing.T) {
 		DenyPaths:  []string{"internal/trail/trail.go#Record", "internal/trail/*.go#Spawn"},
 	}}
 
-	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
+	_, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.False(t, ok, "a declaration of a pattern names no one file, so it denies the file whole")
 
 	rows[0].DenyPaths = rows[0].DenyPaths[:1]
-	got, ok = AttributeWrite(rows, "internal/trail/trail.go")
+	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.True(t, ok)
 	assert.Equal(t, "pwa/job-watch", got.Job)
 }

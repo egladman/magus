@@ -1,10 +1,9 @@
-package decode_test
+package decode
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -106,40 +105,40 @@ func TestDecodeIsStrict(t *testing.T) {
 			block(str("/*"), str("*/")),
 			block(str("/*"), vm.IntValue(1)),
 		}))
-		_, err := decode.DecodeLanguage(lang(comments))
+		_, err := DecodeLanguage(lang(comments))
 		require.EqualError(t, err, "language.syntax.comments.blockComments[1].close: want str, got int")
 	})
 
 	t.Run("a wrong container kind names the Buzz type", func(t *testing.T) {
-		_, err := decode.DecodeLanguage(record("extensions", str(".go")))
+		_, err := DecodeLanguage(record("extensions", str(".go")))
 		require.EqualError(t, err, "language.extensions: want [str], got str")
 	})
 
 	t.Run("a record where a scalar belongs", func(t *testing.T) {
-		_, err := decode.DecodeLanguage(str("go"))
+		_, err := DecodeLanguage(str("go"))
 		require.EqualError(t, err, "language: want Language, got str")
 	})
 
 	t.Run("an unknown member is refused", func(t *testing.T) {
-		_, err := decode.DecodeLanguage(record("name", str("go"), "extension", vm.ListValue(nil)))
+		_, err := DecodeLanguage(record("name", str("go"), "extension", vm.ListValue(nil)))
 		require.EqualError(t, err, `language: Language has no member "extension"`)
 	})
 
 	t.Run("a null where a value belongs is a wrong kind", func(t *testing.T) {
-		_, err := decode.DecodeLanguage(record("name", vm.Null))
+		_, err := DecodeLanguage(record("name", vm.Null))
 		require.EqualError(t, err, "language.name: want str, got null")
 	})
 
 	t.Run("an absent or null optional stays nil", func(t *testing.T) {
-		got, err := decode.DecodeLanguage(record("name", str("go")))
+		got, err := DecodeLanguage(record("name", str("go")))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Language{Name: "go"}, got)
 
-		got, err = decode.DecodeLanguage(record("name", str("go"), "syntax", vm.Null))
+		got, err = DecodeLanguage(record("name", str("go"), "syntax", vm.Null))
 		require.NoError(t, err)
 		assert.Nil(t, got.Syntax)
 
-		got, err = decode.DecodeLanguage(lang(vm.Null))
+		got, err = DecodeLanguage(lang(vm.Null))
 		require.NoError(t, err)
 		require.NotNil(t, got.Syntax)
 		assert.Nil(t, got.Syntax.Comments)
@@ -151,7 +150,7 @@ func TestDecodeIsStrict(t *testing.T) {
 			"blockComments", vm.ListValue([]vm.Value{block(str("/*"), str("*/"))}),
 			"quotes", vm.ListValue([]vm.Value{record("open", str("`"), "close", str("`"), "ignoreEscape", vm.True)}),
 		)
-		got, err := decode.DecodeLanguage(lang(comments))
+		got, err := DecodeLanguage(lang(comments))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Language{Name: "go", Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{
 			LineComments:  []string{"//"},

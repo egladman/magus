@@ -40,7 +40,8 @@ func symbolsShardKey(name string) string { return strings.Replace(name, symbolsS
 
 // symbolsShardProject is the project a symbol shard belongs to.
 func symbolsShardProject(name string) string {
-	return name[:strings.Index(name, symbolsShardSuffix)]
+	project, _, _ := strings.Cut(name, symbolsShardSuffix)
+	return project
 }
 
 // splitSymbolShard partitions one project's assembled symbol shard by where each symbol is

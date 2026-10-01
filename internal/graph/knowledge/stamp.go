@@ -119,21 +119,27 @@ func (s *InputHash) Path(p string) {
 		s.file(p, info)
 		return
 	}
-	_ = filepath.WalkDir(p, func(sub string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(p, func(sub string, _ fs.DirEntry, err error) error {
 		if err != nil || sub == p {
 			return nil //nolint:nilerr // an unreadable entry contributes its absence below
 		}
-		s.String(sub)
-		info, err := os.Stat(sub)
-		if err != nil {
-			s.String("absent")
-			return nil
-		}
-		if !info.IsDir() {
-			s.file(sub, info)
-		}
+		s.entry(sub)
 		return nil
 	})
+}
+
+// entry folds one entry beneath a directory Path walks: its name, then absent or, for a
+// file, its size and mtime.
+func (s *InputHash) entry(p string) {
+	s.String(p)
+	info, err := os.Stat(p)
+	if err != nil {
+		s.String("absent")
+		return
+	}
+	if !info.IsDir() {
+		s.file(p, info)
+	}
 }
 
 // Binary folds the identity of the executable at p without ever reading it: a build

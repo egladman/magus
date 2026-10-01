@@ -89,6 +89,20 @@ func WriteScriptsIndex(cacheDir string, x ScriptsIndex) error {
 	return file.ReplaceFile(path, data, 0o600)
 }
 
+// readScriptsIndex reads scripts.idx under cacheDir, false when it is missing,
+// unreadable, or written in another magus's format.
+func readScriptsIndex(cacheDir string) (ScriptsIndex, bool) {
+	var x ScriptsIndex
+	data, err := os.ReadFile(ScriptsIndexPath(cacheDir))
+	if err != nil {
+		return x, false
+	}
+	if err := json.Unmarshal(data, &x); err != nil || x.Format != scriptsIndexFormat || x.Root == "" {
+		return x, false
+	}
+	return x, true
+}
+
 // Situation families: the prefix names the registry an id resolves against.
 const (
 	SituationEvent  = "event:"
@@ -153,12 +167,8 @@ func ScriptsFor(cacheDir, situation string, facts map[string]string) ([]Next, er
 	if cacheDir == "" {
 		return nil, nil
 	}
-	data, err := os.ReadFile(ScriptsIndexPath(cacheDir))
-	if err != nil {
-		return nil, nil
-	}
-	var x ScriptsIndex
-	if err := json.Unmarshal(data, &x); err != nil || x.Format != scriptsIndexFormat || x.Root == "" {
+	x, ok := readScriptsIndex(cacheDir)
+	if !ok {
 		return nil, nil
 	}
 	var next []Next

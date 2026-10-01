@@ -268,8 +268,8 @@ func validateHarnessEntries(group HarnessEntries) error {
 		return fmt.Errorf("entries must include at least one command that invokes magus")
 	}
 	// One invoking command per group, not every command: an entry may prepare the
-	// environment a magus is found in, like the claude-code SessionStart entry that puts
-	// the session root on PATH, and it can only do that without running one.
+	// environment a magus is found in, like a host's session-start entry that puts the
+	// session root on PATH, and it can only do that without running one.
 	if !slices.ContainsFunc(commands, invokesMagus) {
 		return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", commands[0])
 	}

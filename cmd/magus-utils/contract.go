@@ -92,20 +92,21 @@ func readContract(path string) ([]contractFunc, error) {
 	var out []contractFunc
 	seen := map[string]bool{}
 	for _, field := range st.Fields.List {
+		pos := fset.Position(field.Pos())
 		if len(field.Names) != 1 {
-			return nil, fmt.Errorf("%s: Contract fields are declared one per line", fset.Position(field.Pos()))
+			return nil, fmt.Errorf("%s: Contract fields are declared one per line", pos)
 		}
 		fieldName := field.Names[0].Name
 		if field.Tag == nil {
-			return nil, fmt.Errorf("Contract.%s has no mgs tag", fieldName)
+			return nil, fmt.Errorf("%s: Contract.%s has no mgs tag", pos, fieldName)
 		}
 		tag, _ := strconv.Unquote(field.Tag.Value)
 		name, opts, _ := strings.Cut(reflect.StructTag(tag).Get("mgs"), ",")
 		if !strings.HasPrefix(name, "mgs_") {
-			return nil, fmt.Errorf("Contract.%s: mgs tag %q does not name an mgs_ function", fieldName, name)
+			return nil, fmt.Errorf("%s: Contract.%s: mgs tag %q does not name an mgs_ function", pos, fieldName, name)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("Contract.%s: %s is declared twice", fieldName, name)
+			return nil, fmt.Errorf("%s: Contract.%s: %s is declared twice", pos, fieldName, name)
 		}
 		seen[name] = true
 		fn := contractFunc{Name: name, Field: fieldName, Doc: strings.Join(strings.Fields(field.Doc.Text()), " ")}
@@ -118,16 +119,16 @@ func readContract(path string) ([]contractFunc, error) {
 			case "handler":
 				handler = true
 			default:
-				return nil, fmt.Errorf("Contract.%s: unknown mgs tag option %q", fieldName, opt)
+				return nil, fmt.Errorf("%s: Contract.%s: unknown mgs tag option %q", pos, fieldName, opt)
 			}
 		}
 		rt, err := contractFieldType(field.Type, imports)
 		if err != nil {
-			return nil, fmt.Errorf("Contract.%s: %w", fieldName, err)
+			return nil, fmt.Errorf("%s: Contract.%s: %w", pos, fieldName, err)
 		}
 		fn.Returns, err = contractReturn(rt, handler)
 		if err != nil {
-			return nil, fmt.Errorf("Contract.%s: %w", fieldName, err)
+			return nil, fmt.Errorf("%s: Contract.%s: %w", pos, fieldName, err)
 		}
 		out = append(out, fn)
 	}
@@ -147,7 +148,7 @@ func contractStruct(file *ast.File) (*ast.StructType, error) {
 			}
 			st, ok := ts.Type.(*ast.StructType)
 			if !ok {
-				return nil, fmt.Errorf("Contract is not a struct")
+				return nil, fmt.Errorf("type Contract is not a struct")
 			}
 			return st, nil
 		}

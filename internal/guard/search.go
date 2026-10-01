@@ -1024,7 +1024,7 @@ func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
 		a.kind, a.ident, a.how = altDiagnostic, norm, "a diagnostic code"
 		return a
 	}
-	if m := declLookupRe.FindStringSubmatch(norm); m != nil && hint.IsIdentifier(m[1]) {
+	if m := declLookupRe.FindStringSubmatch(norm); len(m) > 1 && hint.IsIdentifier(m[1]) {
 		a.ident = m[1]
 		// `func main`, `function field`: a lowercase word names so many declarations that
 		// refs, which resolves one, would answer a narrower question.

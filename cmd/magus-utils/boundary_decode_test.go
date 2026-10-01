@@ -48,7 +48,7 @@ func TestRunBoundaryDecode(t *testing.T) {
 	assert.Contains(t, dec, `case "blockComments":`)
 	assert.Contains(t, dec, `case "ignoreEscape":`)
 	assert.NotContains(t, dec, "bindings/gen\"", "the decode package must stay light enough for internal/spell to import")
-	assert.Contains(t, list, "package decode_test")
+	assert.Contains(t, list, "package decode\n")
 	assert.Contains(t, list, `{Name: "Language", Zero: spells.Language{}`)
 
 	dec2, list2 := read("b")

@@ -6,7 +6,7 @@ import "github.com/egladman/magus/types"
 func DescribeTools() types.MCPToolReport {
 	entries := make([]types.MCPTool, 0, len(Registry))
 	for _, d := range Registry {
-		var params []types.MCPToolParam
+		params := make([]types.MCPToolParam, 0, len(d.Params))
 		for _, p := range d.Params {
 			params = append(params, types.MCPToolParam(p))
 		}

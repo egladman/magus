@@ -157,16 +157,14 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 		if err := s.MergeSymbolShards(ctx, g); err != nil {
 			return types.KnowledgeQueryOutput{}, nil, err
 		}
-		return g.Query(input, budget), g, nil
+		out := g.Query(input, budget)
+		return out, g, nil
 	}
 	if budget <= 0 {
 		budget = DefaultBudget
 	}
 
-	overlays, err := s.overlayShards(ctx, man)
-	if err != nil {
-		return types.KnowledgeQueryOutput{}, nil, err
-	}
+	overlays := s.overlayShards(ctx, man)
 	ranked := g.clone()
 	ranked.Merge(names.Nodes, nil)
 	for _, sh := range overlays {
@@ -232,7 +230,7 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 
 // overlayShards decodes the coverage and session overlays the manifest lists, in the order
 // MergeSymbolShards merges them.
-func (s *Store) overlayShards(ctx context.Context, man *manifest) ([]Shard, error) {
+func (s *Store) overlayShards(ctx context.Context, man *manifest) []Shard {
 	var out []Shard
 	for _, name := range []string{coverageShardName, sessionShardName} {
 		if _, ok := man.shard(name); !ok {
@@ -246,7 +244,7 @@ func (s *Store) overlayShards(ctx context.Context, man *manifest) ([]Shard, erro
 		}
 		out = append(out, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})
 	}
-	return out, nil
+	return out
 }
 
 // clone copies g's nodes and edges into a fresh graph, root included.

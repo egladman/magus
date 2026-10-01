@@ -1141,7 +1141,7 @@ func (tp *toolProber) dir(p *types.Project) string {
 // any key minted from them would leave that tool out.
 func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) (map[string][]string, error) {
 	if tp.mode == "off" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // probing off keys no tool lines; a nil map is that value
 	}
 	wanted := func(s *spells.Spell, tool string) bool {
 		t, _ := s.Tool(tool)
@@ -1227,7 +1227,7 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 	}
 	tp.mu.Unlock()
 	if len(wants) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nothing wanted reads as no readings; a nil map is that value
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -1316,7 +1316,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 			return toolReading{token: unprobedToken}, nil
 		case ctx.Err() != nil:
 			// A cancelled run keys nothing, and its failure says nothing about the tool.
-			return toolReading{token: unprobedToken}, nil
+			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
 		default:
 			return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
 				"%s:%s runs in %s but cannot say which build it is, so no cache key could tell its upgrades apart: %v",
