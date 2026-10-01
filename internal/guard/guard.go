@@ -123,6 +123,15 @@ type Dependencies struct {
 	// loaded, which proves nothing. It can build the graph, so a rule calls it only for a
 	// command it has already found a translation candidate.
 	GraphIDs func(ctx context.Context, kind string) (ids []string, definitive bool)
+	// IndexedIDs lists the ids of kind the last `magus graph build` recorded, current or
+	// not, and reports false when no index exists. It is for a rule that proves its answer
+	// against the disk itself, such as a listing walked entry for entry, where GraphIDs'
+	// freshness check would only silence it on the first edit.
+	IndexedIDs func(ctx context.Context, kind string) (ids []string, ok bool)
+	// TrackedFiles lists every file version control tracks in the checkout at root,
+	// relative to root, and reports false when it cannot say before ctx ends. A listing of
+	// tracked files is proved against it.
+	TrackedFiles func(ctx context.Context, root string) (files []string, ok bool)
 	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
@@ -1111,6 +1120,10 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Description = envelopeString(env.ToolInput, "description")
 	case env.Command != "":
 		req.Value = env.Command
+	case nativeSearchLine(env.ToolInput) != "" && envelopeWritePath(env.ToolInput) == "":
+		// A host's own content or file search, judged as the shell line it stands for so
+		// the search rules hold on that channel too.
+		req.Value = nativeSearchLine(env.ToolInput)
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
 		// Read by shape, like the path: a whole-file write carries its content, an edit the

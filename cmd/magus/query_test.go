@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -78,12 +79,29 @@ func TestSplitQueryNegations(t *testing.T) {
 		{"value flag keeps its value", []string{"--url", "-kind:op", "docker"}, []string{"--url", "-kind:op", "docker"}, nil},
 		{"equals spelling stays a flag error", []string{"-kind=op"}, []string{"-kind=op"}, nil},
 		{"double dash tail untouched", []string{"a", "--", "-kind:op"}, []string{"a", "--", "-kind:op"}, nil},
+		{"short help is a flag", []string{"-h"}, []string{"-h"}, nil},
+		{"long help is a flag", []string{"docker", "--help"}, []string{"--help", "docker"}, nil},
+		{"single-dash help is a flag", []string{"-help"}, []string{"-help"}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			kept, negations := splitQueryNegations(tc.args)
 			assert.Equal(t, tc.kept, kept)
 			assert.Equal(t, tc.negations, negations)
+		})
+	}
+}
+
+// TestQueryHelpPrintsUsage pins that a help flag prints query's usage and searches
+// nothing, rather than reaching the graph as a term.
+func TestQueryHelpPrintsUsage(t *testing.T) {
+	for _, arg := range []string{"-h", "--help", "-help"} {
+		t.Run(arg, func(t *testing.T) {
+			t.Cleanup(snapshotGlobals())
+			var err error
+			out := captureStderr(t, func() { err = queryCmd(context.Background(), t.TempDir(), []string{arg}) })
+			require.ErrorIs(t, err, flag.ErrHelp)
+			assert.Contains(t, out, "Usage: magus query <terms> [flags]")
 		})
 	}
 }

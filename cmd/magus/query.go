@@ -60,6 +60,12 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 		a := flags[i]
 		if len(a) >= 2 && a[0] == '-' && !strings.ContainsRune(a, '=') {
 			name := strings.TrimLeft(a, "-")
+			// flag.Parse answers -h and -help itself without registering them, so a lookup
+			// misses them; read as negations they searched the graph for "-h".
+			if name == "h" || name == "help" {
+				kept = append(kept, a)
+				continue
+			}
 			if f := fs.Lookup(name); f == nil {
 				negations = append(negations, a)
 				continue
