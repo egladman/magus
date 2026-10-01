@@ -272,6 +272,40 @@ func TestCarryApprovalByTier(t *testing.T) {
 	}
 }
 
+// A change that took main in after its approval, and added a commit, is classified from
+// the approved commit to the commit beneath the merge. Its own head, listed beside it,
+// carries the approved commit, which is no reason to refuse: that is the change itself,
+// not another change sharing its commits. Reviews compares the same way.
+func TestCarryApprovalIgnoresTheChangesOwnListedHead(t *testing.T) {
+	c := change("1", "a")
+	approved, reviewed, onMain, fork := head("x"), head("y"), head("main"), head("fork")
+	d := newDoubles(t)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, c.Head).Return(magustypes.Commit{ID: c.Head, Parents: []string{reviewed, onMain}}, nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, onMain, base).Return(true, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, c.Head).Return("merge-tree", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: onMain, Theirs: reviewed}).Return(magustypes.TreeMergeResult{Tree: "merge-tree"}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, reviewed).Return(magustypes.Commit{ID: reviewed, Parents: []string{approved}}, nil)
+	d.provider.EXPECT().ApprovalAt(mock.Anything, c, reviewed).
+		Return(types.Approval{Head: c.Head, Base: "main", Method: types.MethodSquash, Queued: true, Reason: "no review", ApprovedCommit: approved}, nil)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, approved).Return(nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, approved, []string(nil)).Return([]magustypes.Commit{{ID: approved, Parents: []string{fork}}}, nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, reviewed, []string(nil)).
+		Return([]magustypes.Commit{{ID: reviewed, Parents: []string{approved}}, {ID: approved, Parents: []string{fork}}}, nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Base: fork, Ours: fork, Theirs: approved}).Return(magustypes.TreeMergeResult{Tree: replayedTree}, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, reviewed).Return(headTree, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, replayedTree, headTree).Return([]string{"docs/a.md"}, nil)
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, replayedTree, "docs/a.md").Return("# a\n", nil)
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, reviewed, "docs/a.md").Return("# b\n", nil)
+	d.facts.EXPECT().ClassifyEdit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).RunAndReturn(classifyWith())
+	refs := planRefs(types.Changes{Base: "main", Changes: []types.Change{c}})
+
+	a, err := approval(t.Context(), d.provider, d.vcs, d.facts, clone, base, c, "", refs, types.DefaultCarryPolicy())
+	require.NoError(t, err)
+	require.NotNil(t, a.carry)
+	assert.True(t, a.Approved, a.carry.Reason)
+	assert.Equal(t, types.CarryProse, a.carry.Tier)
+}
+
 // CarryApproval is the classifier a caller outside planning asks: it fetches the base
 // itself and decides where each delta starts from the listing.
 func TestCarryApprovalFetchesTheBaseAndRefusesWhatIsNoCommit(t *testing.T) {
