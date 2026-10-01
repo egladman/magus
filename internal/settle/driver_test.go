@@ -13,11 +13,14 @@ import (
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // mergeDriverWorkspace builds a workspace whose generate target declares gen/** as its own
 // output via ctx.writesFiles (the shape rebuildTarget requires), and which would leave
