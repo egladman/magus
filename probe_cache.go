@@ -364,7 +364,10 @@ func writeMiseGlobals(b *strings.Builder) {
 	writeDirEntries(b, filepath.Join(config, "conf.d"))
 	writeDirEntries(b, "/etc/mise/conf.d")
 	writeDirEntries(b, filepath.Join(state, "trusted-configs"))
-	writeDirEntries(b, filepath.Join(state, "tracked-configs"))
+	// tracked-configs is left out: it is the list `mise prune` reads to see which configs
+	// still name a version, one symlink per config mise ever loaded (hundreds on a machine
+	// with many worktrees), and nothing in it changes which version a shim runs. Keying on
+	// it cost every probe a readlink per entry.
 	writeDirEntries(b, filepath.Join(data, "installs"))
 }
 
