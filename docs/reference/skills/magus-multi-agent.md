@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40769
-skill_short_bytes: 31492
+skill_full_bytes: 40941
+skill_short_bytes: 31664
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `107` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2233cadca9d8` |
+| `skill-content` | `ab67378e858b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -112,6 +112,9 @@ Four rules, in the order they bite:
   a gate is a reason to start the next merged unit.
 
 ## Run the graph-engineering loop
+
+Prove it before you plan it: a claim a plan or brief rests on cites the output ref
+of a run that settled it, not a sentence, and a guess nobody ran stays out of the plan.
 
 Treat graph engineering as
 an acceptance-criteria loop with graph-derived jobs: define, partition,
@@ -723,6 +726,9 @@ Four rules, in the order they bite:
   in half to have something to spawn buys wall clock with two fixed loads.
 
 ## Run the graph-engineering loop
+
+Prove it before you plan it: a claim a plan or brief rests on cites the output ref
+of a run that settled it, not a sentence, and a guess nobody ran stays out of the plan.
 
 Graph engineering is a natural evolution of loop engineering. The
 human supplies a goal and constraints; the root agent turns them into explicit

@@ -3,8 +3,8 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12674
-skill_short_bytes: 10469
+skill_full_bytes: 12669
+skill_short_bytes: 10464
 ---
 
 # magus-buzz-lang
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `107` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `082ef01a8dd4` |
+| `skill-content` | `908993f1210f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -76,7 +76,7 @@ magus buzz -t script.buzz         # run its test "..." {} blocks
    into a map declared without `mut`. Those fail only when run, with no line
    number. So run the script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
-   does not exist. Look it up in [Built-in methods](#built-in-methods).
+   does not exist. Look it up in the Built-in methods table below.
 
 ## One script with every common shape
 
@@ -324,7 +324,7 @@ magus buzz -t script.buzz         # run its test "..." {} blocks
    into a map declared without `mut`. Those fail only when run, with no line
    number. So run the script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
-   does not exist. Look it up in [Built-in methods](#built-in-methods).
+   does not exist. Look it up in the Built-in methods table below.
 
 ## One script with every common shape
 
