@@ -85,6 +85,16 @@
           }
         ],
         "matcher": "Agent|Task|SendMessage"
+      },
+      {
+        "hooks": [
+          {
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Grep|Glob"
       }
     ],
     "SessionStart": [
