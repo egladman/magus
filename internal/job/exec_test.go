@@ -318,7 +318,8 @@ func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
 	ctx := t.Context()
 	loc, other := twoCheckouts(t)
 	forker := NewStore(loc)
-	seed(t, forker, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared, CheckoutRoot: loc.Root})
+	// A hook may also record a base before anyone takes the job; it is still declared.
+	seed(t, forker, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared, CheckoutRoot: loc.Root, ReportedBase: baseA})
 
 	got, err := NewStore(other).Exec(ctx, "u1", baseB)
 	require.NoError(t, err)

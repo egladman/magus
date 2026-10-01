@@ -72,9 +72,10 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 				here = abs
 			}
 		}
-		// Taken means an exec reported a base. A fork records the forking checkout too, and
-		// that row is still the forker's to hand out, not a holder's to keep.
-		if cur.ReportedBase != "" && cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
+		// Held means running: an exec moves a declared row there. A declared row may carry a
+		// checkout already, the forker's or one a hook recorded before anyone took the job,
+		// and it is still the forker's to hand out, not a holder's to keep.
+		if cur.State == types.StateRunning && cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
 			return fmt.Errorf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it."+
 				" Its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
 				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)
