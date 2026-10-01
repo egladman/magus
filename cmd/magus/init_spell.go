@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 )
 
@@ -162,8 +163,7 @@ func printInitSpellNextSteps(name, pkgDir, path string) {
 	}
 	// A directory import (pkgDir) resolves to the spell.buzz inside it; the test
 	// harness takes the file path directly.
-	importPath := filepath.ToSlash(pkgDir)
 	interactive.Emit(os.Stderr, fmt.Sprintf("spell scaffolded: %s", path))
 	interactive.Emit(os.Stderr, fmt.Sprintf("test it:  magus buzz -t --embedded %s", filepath.ToSlash(path)))
-	interactive.Emit(os.Stderr, fmt.Sprintf("bind it:  import %q as %s;  then  magus\\project({ \"spells\": [%q] });", importPath, name, name))
+	interactive.Emit(os.Stderr, "bind it:  "+hint.BindSpellExample(filepath.ToSlash(pkgDir), name))
 }

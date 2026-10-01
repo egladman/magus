@@ -8,3 +8,14 @@ grep 'import "magus/spell"' spells/acme/spell.buzz
 # a second scaffold refuses to overwrite without --force
 ! exec magus init spell acme
 stderr 'already exists'
+
+# the bind hint is a line a magusfile loads as pasted
+env MAGUS_HINTS_ENABLED=true
+exec magus init spell --force acme
+stderr 'bind it:  import "magus"; import "./spells/acme" as acme; magus\\project\(\{ "spells": \[acme\] \}\);'
+exec magus ls targets .
+stdout 'bound'
+
+-- magusfile.buzz --
+import "magus"; import "./spells/acme" as acme; magus\project({ "spells": [acme] });
+export fun bound(ctx: magus\Context, args: [str]) > void {}

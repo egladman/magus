@@ -898,7 +898,7 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "To see what a project can run: `"+hint.LsTargets.With("[project]")+"`")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (each is an exported magusfile function, e.g.")
-	fmt.Fprintln(os.Stderr, "export fun build(ctx: magus\\Context, args: [str]) > void { ... }):")
+	fmt.Fprintln(os.Stderr, hint.TargetExample+"):")
 	fmt.Fprintln(os.Stderr, "  build / test / lint / format / clean / generate / ci")
 	fmt.Fprintln(os.Stderr, "  (fmt -> format and gen -> generate are accepted as aliases)")
 	fmt.Fprintln(os.Stderr, "")

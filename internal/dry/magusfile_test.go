@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // A real magusfile that imports a spell and calls magus.* must lint clean: the
@@ -27,6 +29,21 @@ func TestDiagnostics_MultipleErrorsSorted(t *testing.T) {
 	assert.Contains(t, got[0].Msg, "missingOne")
 	assert.Equal(t, 3, got[1].Line)
 	assert.Contains(t, got[1].Msg, "missingTwo")
+}
+
+// A magusfile line a hint tells the reader to paste must load as pasted, beside only
+// the targets it names.
+func TestDiagnostics_HintSnippetsTypeCheck(t *testing.T) {
+	for name, src := range map[string]string{
+		"target": hint.TargetExample,
+		"ci": hint.CITargetExample + "\n" + hint.TargetExample + "\n" +
+			"fun test(ctx: magus\\Context, args: [str]) > void {}\n" +
+			"fun lint(ctx: magus\\Context, args: [str]) > void {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Empty(t, Diagnostics(context.Background(), src))
+		})
+	}
 }
 
 // New-in-0.6 syntax (expression-body / arrow functions) must lint clean through

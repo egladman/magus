@@ -159,7 +159,7 @@ func (*runner) checkCITarget(projects []*types.Project) types.Check {
 		Message: fmt.Sprintf("no ci target defined in any project; `%s` / `%s` would gate nothing (silent no-op)",
 			hint.Run.With("ci"), hint.Affected.With("ci")),
 		Details: []string{
-			`define one in your magusfile, e.g.  export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build, test, lint); }`,
+			"define one in your magusfile, e.g.  " + hint.CITargetExample,
 			"run '" + hint.DescribeTargets.String() + "' to see the available stages to compose",
 			fmt.Sprintf("see %s: %s", types.NoCITarget, types.CodeURL(types.NoCITarget)),
 		},
