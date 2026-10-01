@@ -388,8 +388,8 @@ while (step < 10000) {
   while (i < n) {
     var j = i + 1;
     while (j < n) {
-      var dx = x[i] - x[j]; var dy = y[i] - y[j]; var dz = z[i] - z[j];
-      var d2 = dx * dx + dy * dy + dz * dz; var dist = math.sqrt(d2); var mag = dt / (d2 * dist);
+      final dx = x[i] - x[j]; final dy = y[i] - y[j]; final dz = z[i] - z[j];
+      final d2 = dx * dx + dy * dy + dz * dz; final dist = math.sqrt(d2); final mag = dt / (d2 * dist);
       vx[i] = vx[i] - dx * m[j] * mag; vy[i] = vy[i] - dy * m[j] * mag; vz[i] = vz[i] - dz * m[j] * mag;
       vx[j] = vx[j] + dx * m[i] * mag; vy[j] = vy[j] + dy * m[i] * mag; vz[j] = vz[j] + dz * m[i] * mag;
       j = j + 1;
@@ -824,6 +824,39 @@ func TestExtraStringWorkloadsAgree(t *testing.T) {
 			continue
 		}
 		t.Logf("%s = %d (buzz == lua == tengo == goja)", tc.name, bz)
+	}
+}
+
+// TestBuzzWorkloadsCompile compiles every workload's gopherbuzz source down the
+// same path its benchmark takes, so a checker change that rejects one fails here
+// instead of leaving a hole in the next benchmark run (NBody went missing that
+// way when unassigned `var` locals became an error).
+func TestBuzzWorkloadsCompile(t *testing.T) {
+	ctx := context.Background()
+	for _, w := range workloads {
+		t.Run(w.name, func(t *testing.T) {
+			if !w.session {
+				prog, err := buzz.ParseEmbedded(w.bzHot)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if _, err := buzz.CompileWith(prog, buzz.CompileOptions{}); err != nil {
+					t.Fatalf("compile: %v", err)
+				}
+				return
+			}
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			defer sess.Close()
+			if w.bzStd {
+				buzzstd.Register(sess)
+			}
+			if err := sess.Exec(ctx, w.bzSetup); err != nil {
+				t.Fatalf("define: %v", err)
+			}
+			if _, err := sess.Compile(w.bzHot); err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+		})
 	}
 }
 
