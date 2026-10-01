@@ -69,6 +69,9 @@ export fun mgs_getTools() > {str: Tool} {
                      key = VersionKey{upTo = VersionComponent.patch}},
         "tsc": Tool{probe = Command{bin = "pnpm", args = ["exec", "tsc", "--version"]},
                     key = VersionKey{upTo = VersionComponent.patch}},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "scip-typescript": Tool{observe = Command{bin = "scip-typescript", args = ["--version"]}},
     };
 }
 

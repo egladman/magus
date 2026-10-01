@@ -495,6 +495,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, magusfileGlobs(".")...)
 		}
 	}
+	// The symbol indexer reads its language's sources and nothing else the project
+	// declares. Keyed on the whole project, a rewrite of installed skills under the root
+	// project marked its Go index out of date when no symbol could have moved.
+	// An indexing spell that declares no sources keeps the whole project, which is the
+	// claim that can only over-invalidate.
+	if target == spells.SymbolIndexOp {
+		if indexed := symbolIndexSources(p); len(indexed) > 0 {
+			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
+			if p.Path != "." {
+				step.Sources = append(step.Sources, magusfileGlobs(".")...)
+			}
+		}
+	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
 	// already spans every target rather than the running one (a chained target's writes land
@@ -812,7 +825,15 @@ func alwaysRuns(p *types.Project, target string) bool {
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
+//
+// The scip step takes no tool versions: the indexer is its own binary, keyed through the
+// observation its spell declares for it, and of the spell's other tools only those the
+// indexer declares it uses (go for scip-go, never golangci-lint or tsc) key it, through
+// observationsForTarget.
 func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
+	if step.Target == spells.SymbolIndexOp {
+		toolVersions = nil
+	}
 	step.ToolVersions = toolVersions
 	// Appended, not assigned: buildStep already put the target's ctx.observes lines
 	// here, and a probed observation is the same input class from the other source.
@@ -1220,18 +1241,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	if t.Probe.Bin == "" {
 		return toolReading{token: t.Key.Const}
 	}
-	key, cacheable := probeCacheKey(t.Probe, dir)
-	probed, hit := "", false
-	if cacheable {
-		probed, hit = m.cachedProbe(key)
-	}
-	var err error
-	if !hit {
-		probed, err = s.ProbeVersion(ctx, tool, dir)
-		if err == nil && cacheable {
-			m.storeProbe(key, probed)
-		}
-	}
+	probed, err := m.probeCached(ctx, t.Probe, dir, func() (string, error) { return s.ProbeVersion(ctx, tool, dir) })
 	if err != nil {
 		slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
 			slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1273,25 +1283,30 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 	for _, p := range projects {
 		drivenHere := driven[p.Path]
 		for _, s := range p.ResolvedSpells {
-			if !s.HasObservationProbe() {
-				continue
-			}
 			for _, tool := range s.ToolNames() {
 				t, _ := s.Tool(tool)
+				probe, fork := t.Observe, func() (string, error) { return s.ProbeObservation(ctx, tool, p.Dir) }
+				drivenAs := s.Name() + ":" + tool
 				if !t.HasObservationProbe() {
-					continue
+					// A tool the symbol indexer uses is observed through its version argv,
+					// for the scip op alone: only a caller scoped to that op names it.
+					if driven == nil || !slices.Contains(indexerUses(s, spells.SymbolIndexOp), tool) {
+						continue
+					}
+					probe, fork = t.Probe, func() (string, error) { return s.ProbeVersion(ctx, tool, p.Dir) }
+					drivenAs = indexerUseKey(s.Name(), tool)
 				}
 				// The spawn the doc above promises a target does not pay for unless it
 				// drives the binary. observationsForTarget already dropped an undriven
 				// tool from the KEY, so skipping it here changes no key; it only stops
 				// `magus run build` paying govulncheck's spawn on every project.
-				if driven != nil && !drivenHere[s.Name()+":"+tool] {
+				if driven != nil && !drivenHere[drivenAs] {
 					continue
 				}
 				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
 				value, hit := memo[tk]
 				if !hit {
-					probed, err := s.ProbeObservation(ctx, tool, p.Dir)
+					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
 					if err != nil {
 						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1311,8 +1326,9 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 	return out
 }
 
-// targetDrivenBins is the "spell:bin" set target's body statically reaches, the same
-// walk observationsForTarget narrows the key with. Returning it separately is what lets
+// targetDrivenBins is the "spell:bin" set target's body statically reaches, plus the bin
+// of a spell op named target itself, which runs with no body to walk (the scip op, `magus
+// run go-vet`): the same walk observationsForTarget narrows the key with. Returning it separately is what lets
 // the SPAWN be skipped rather than only the key line: a nil result means the target
 // drives nothing, and probeObservations reads nil as "probe everything" for callers that
 // have no target to scope by, so the two are not interchangeable.
@@ -1327,6 +1343,14 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
 				driven[use.Spell+":"+op.Bin] = true
 			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok && op.Bin != "" {
+			driven[s.Name()+":"+op.Bin] = true
+		}
+		for _, tool := range indexerUses(s, target) {
+			driven[indexerUseKey(s.Name(), tool)] = true
 		}
 	}
 	return driven
@@ -1379,30 +1403,51 @@ func targetDrivenEnvKeys(p *types.Project, target string) []string {
 // through a helper the walk cannot follow is invisible, and TargetSpellUse.Spell is the
 // IMPORT HANDLE, which equals the spell name only for an unaliased import. Both leave a
 // target keyed as it was before, never keyed on the wrong thing.
+//
+// A spell op named target itself counts too, as in targetDrivenBins: a bare op has no
+// body for the walk to read, and the scip op keys on its indexer's version this way, and
+// on the version of each tool the indexer declares it uses.
 func observationsForTarget(p *types.Project, target string, probed map[string]string) []string {
 	if len(probed) == 0 {
 		return nil
 	}
 	var out []string
+	add := func(spell, tool string) {
+		key := spell + ":" + tool
+		value, ok := probed[key]
+		if !ok {
+			return
+		}
+		if line := key + ":" + value; !slices.Contains(out, line) {
+			out = append(out, line)
+		}
+	}
+	// A declared tool with no observe probe never counts through an op's binary. probed
+	// can still hold one the indexer uses, read through its version argv when scip runs
+	// beside a build, and that line keys the scip op alone.
+	addBin := func(handle string, s *spells.Spell, bin string) {
+		if t, ok := s.Tool(bin); ok && !t.HasObservationProbe() {
+			return
+		}
+		add(handle, bin)
+	}
 	for _, use := range p.TargetSpellOps[target] {
 		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
 		if i < 0 {
 			continue
 		}
-		sp := p.ResolvedSpells[i]
 		for _, opName := range use.Ops {
-			op, ok := sp.Op(opName)
-			if !ok || op.Bin == "" {
-				continue
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok {
+				addBin(use.Spell, p.ResolvedSpells[i], op.Bin)
 			}
-			key := use.Spell + ":" + op.Bin
-			value, ok := probed[key]
-			if !ok {
-				continue
-			}
-			if line := key + ":" + value; !slices.Contains(out, line) {
-				out = append(out, line)
-			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok {
+			addBin(s.Name(), s, op.Bin)
+		}
+		for _, tool := range indexerUses(s, target) {
+			add(s.Name(), tool)
 		}
 	}
 	return out

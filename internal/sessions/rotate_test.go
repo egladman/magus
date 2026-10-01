@@ -315,24 +315,95 @@ func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {
 // clean break stands, so this build reads none of them, but it must neither delete their
 // files nor report them as damage: a reader has to be told they exist and why they are not
 // shown.
-func TestASchemaOneFileIsCountedAndNeverPruned(t *testing.T) {
+// writeLegacy lays down a schema-1 file whose lines are dated at, with its modification
+// time backdated to match.
+func writeLegacy(t *testing.T, dir, id string, at time.Time) string {
+	t.Helper()
+	path := filepath.Join(dir, id+fileExt)
+	line := fmt.Sprintf(`{"v":1,"session":"%s","seq":1,"kind":"session_start","ts":%d,"payload":{}}`+"\n", id, at.UnixMilli())
+	require.NoError(t, os.WriteFile(path, []byte(line+line), 0o644))
+	require.NoError(t, os.Chtimes(path, at, at))
+	return path
+}
+
+// Schema-1 lines are never read as records, but they carry a timestamp. Keeping their
+// files forever is what left eleven thousand of them in one store after the rename.
+func TestASchemaOneFileIsCountedAndAgesOutByItsTimestamps(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	old := time.Now().Add(-90 * 24 * time.Hour)
-	path := filepath.Join(dir, "0123456789abcdef"+fileExt)
-	line := fmt.Sprintf(`{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":%d,"payload":{}}`+"\n", old.UnixMilli())
-	require.NoError(t, os.WriteFile(path, []byte(line+line), 0o644))
-	require.NoError(t, os.Chtimes(path, old, old))
-
-	Prune(dir, DefaultRetention)
-	assert.FileExists(t, path, "a file this build cannot read is never pruned")
+	old := writeLegacy(t, dir, "0123456789abcdef", time.Now().Add(-90*24*time.Hour))
+	young := writeLegacy(t, dir, "fedcba9876543210", time.Now().Add(-24*time.Hour))
+	undated := filepath.Join(dir, "undated"+fileExt)
+	require.NoError(t, os.WriteFile(undated, []byte("not a record\n"), 0o644))
+	ancient := time.Now().Add(-90 * 24 * time.Hour)
+	require.NoError(t, os.Chtimes(undated, ancient, ancient))
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records)
-	assert.Equal(t, 2, fold.Legacy)
-	assert.Zero(t, fold.Skipped, "a line written before the rename is not damage")
+	assert.Equal(t, 4, fold.Legacy)
+	assert.Equal(t, 1, fold.Skipped, "a line written before the rename is not damage; the undated one is")
+
+	Prune(dir, DefaultRetention)
+	assert.NoFileExists(t, old, "a schema-1 file past the window ages out like any other")
+	assert.FileExists(t, young)
+	assert.FileExists(t, undated, "a file with no dated line has no known age, so it stays")
+}
+
+func TestPruneCapsTheStoreAtItsNewestFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	for i := range 5 {
+		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
+			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+		})
+	}
+	writeLegacy(t, dir, "legacy", time.Now().Add(-30*time.Minute))
+
+	prune(dir, retention, 3, "inv4"+fileExt)
+
+	assert.Equal(t, []string{"inv0", "inv1", "inv4", "legacy"}, storedSessions(t, dir),
+		"the newest three by newest fact survive, schema-1 included, and the writer's own file is never past the cap")
+}
+
+func TestPruneCapSparesTheNewestLoadedSessions(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	writeAged(t, dir, "loaded", 3*time.Hour, []Record{
+		{V: SchemaVersion, Invocation: "loaded", Seq: 1, Kind: KindAgentEvent, Ts: msAgo(3 * time.Hour), Payload: []byte(`{"host":"h","event":"file.read","ref":"r","at":1}`)},
+	})
+	for i := range 3 {
+		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
+			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+		})
+	}
+
+	prune(dir, retention, 2, "")
+
+	assert.Equal(t, []string{"inv0", "inv1", "loaded"}, storedSessions(t, dir),
+		"a loaded host session is the rare kind the cap must not push out")
+}
+
+func TestPruneCapStillHonorsTheAttentionExemption(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	writeAged(t, dir, "asker", 5*time.Hour, []Record{
+		attRecord(t, "asker", 1, msAgo(5*time.Hour), KindAttentionOpen, openPayload("att-1", "approve?")),
+	})
+	for i := range 3 {
+		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
+			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+		})
+	}
+
+	prune(dir, retention, 2, "")
+
+	assert.Equal(t, []string{"asker", "inv0", "inv1"}, storedSessions(t, dir),
+		"a file holding a still-open request is exempt from the cap as from retention")
 }
 
 // TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency pins the fix for a plain

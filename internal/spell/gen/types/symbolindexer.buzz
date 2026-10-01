@@ -13,4 +13,5 @@ export enum<str> SymbolFormat {
 export object SymbolIndexer {
     format: SymbolFormat = SymbolFormat.none,
     command: Command = Command{},
+    uses: [str] = [],
 }

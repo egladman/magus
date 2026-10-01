@@ -11,7 +11,12 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 
 export fun mgs_getTools() > {str: Tool} {
-    return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"}};
+    return {
+        "python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "scip-python": Tool{observe = Command{bin = "scip-python", args = ["--version"]}},
+    };
 }
 
 // pip's and uv's caches, and the interpreters uv installs and runs.

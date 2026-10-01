@@ -665,6 +665,16 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 // Separate from decoding so the error can name the spell, and so a caller that only
 // reads a descriptor (docs, graph extraction) is not forced to handle it.
 func validateTools(m spells.Descriptor) error {
+	// A used tool with no version probe would key the index on nothing, so an upgrade
+	// that changes what the indexer reads could never stale it.
+	if m.SymbolIndexer != nil {
+		for _, tool := range m.SymbolIndexer.Uses {
+			if m.Tools[tool].Probe.Bin == "" {
+				return fmt.Errorf("spell %q: symbol indexer uses %q, which mgs_getTools does not declare with a version probe",
+					m.Name, tool)
+			}
+		}
+	}
 	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
 		// A malformed bound is knowable without running anything, and a window nobody
 		// can parse protects nobody, the same reasoning magus.yaml's required_version
@@ -757,7 +767,11 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if cmd.Bin == "" {
 		return nil, fmt.Errorf("symbol indexer: command.bin is required")
 	}
-	return &spells.SymbolIndexer{Format: f, Command: cmd}, nil
+	uses, err := rec.Strs("uses")
+	if err != nil {
+		return nil, fmt.Errorf("symbol indexer: uses: %w", err)
+	}
+	return &spells.SymbolIndexer{Format: f, Command: cmd, Uses: uses}, nil
 }
 
 // decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.
