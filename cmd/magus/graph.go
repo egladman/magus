@@ -19,6 +19,7 @@ import (
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
@@ -502,6 +503,12 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 	if err != nil {
 		return nil, err
 	}
+	return knowledgeGraphOf(ctx, ws, globalCfg, refresh, global, includeSymbols)
+}
+
+// knowledgeGraphOf is loadKnowledgeGraph over a workspace the caller already holds, read
+// under cfg: the form a server answering for one of many workspaces calls.
+func knowledgeGraphOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
 	if global {
 		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
 		// Warn rather than silently drop a symbol-seeded selection, so an empty result
@@ -509,7 +516,7 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 		if includeSymbols {
 			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
 		}
-		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
+		return magus.BuildGlobalKnowledgeGraph(ctx, ws, cfg, refresh, slog.Default())
 	}
 	if refresh {
 		// Before paying to rebuild, take the published copy if this workspace names one.
@@ -518,12 +525,12 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 		// through the VCS refresh hook's sync-graph job.
 		seedFromPublishedGraph(ws)
 	}
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
+	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
 	if includeSymbols {
-		if err := magus.MergeWorkspaceSymbols(ctx, ws, ws.Root(), globalCfg, g, slog.Default()); err != nil {
+		if err := magus.MergeWorkspaceSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
 			return nil, err
 		}
 	}
@@ -539,11 +546,15 @@ func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, r
 	if err != nil {
 		return nil, err
 	}
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
+	return knowledgeGraphForRefsOf(ctx, ws, globalCfg, refresh, ref)
+}
+
+func knowledgeGraphForRefsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error) {
+	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if err := magus.MergeWorkspaceSymbolsForRef(ctx, ws, ws.Root(), globalCfg, g, ref, slog.Default()); err != nil {
+	if err := magus.MergeWorkspaceSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
 		return nil, err
 	}
 	return g, nil

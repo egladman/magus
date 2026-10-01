@@ -161,6 +161,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 			hctx = console.WithRunSink(hctx, serverRuns)
 			return reg.dispatch(hctx, root, rc, args)
 		},
+		Read:            graphReads(reg),
 		OnJobDone:       recordJobActivity,
 		WorkspaceLister: reg.status,
 		ConfigReloader:  reg.evictAll,
@@ -208,6 +209,28 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		}
 		stopServer()
 	}()
+}
+
+// graphReads answers the CLI's graph reads (see askServer) from the workspaces reg holds,
+// opening one on its first read like any other request.
+func graphReads(reg *wsRegistry) func(ctx context.Context, root, verb string, request []byte) ([]byte, error) {
+	return func(ctx context.Context, root, verb string, request []byte) ([]byte, error) {
+		if root == "" {
+			return nil, fmt.Errorf("%w: a read names no workspace", proc.ErrNotAdoptable)
+		}
+		// Resolved per read rather than kept from the open, so the read honors magus.yaml
+		// as it is now, as the client's own read would.
+		cfg, err := loadWorkspaceCfg(root)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
+		}
+		e, err := reg.acquire(root)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
+		}
+		defer reg.release(e)
+		return serveGraphRead(ctx, e.m, cfg, verb, request)
+	}
 }
 
 // stopServer tears the server down: its socket, the runs it adopted, its workspaces. It

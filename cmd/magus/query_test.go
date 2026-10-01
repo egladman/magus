@@ -10,13 +10,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -333,6 +338,188 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 		printIdentifyRefSuggestion(context.Background(), m, "out123456789012")
 	})
 	assert.Empty(t, out, "an IdentifyRef error must skip the suggestion entirely, including the trailing --publish hint")
+}
+
+// graphReadFixture is a workspace holding a magusfile, a doc and a Go source, the
+// configuration a CLI run in it reads under, a locally opened handle on it, and an
+// in-process server answering reads through the graphReads handler `magus server` mounts.
+type graphReadFixture struct {
+	root  string
+	cfg   config.Config
+	local *magus.Magus
+	reg   *wsRegistry
+	addr  string
+}
+
+func newGraphReadFixture(t *testing.T) graphReadFixture {
+	t.Helper()
+	t.Cleanup(snapshotGlobals())
+	privateSockDir(t)
+	root := t.TempDir()
+	for name, body := range map[string]string{
+		"magusfile.buzz": "",
+		"docs/guide.md":  "# Guide\n\nHow searchVerdict decides.\n",
+		"pkg/verdict.go": "package pkg\n\nfunc SearchVerdict() {}\n",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+
+	// The configuration startup builds for a CLI run, tier for tier.
+	cfg, err := config.LoadWithRoot("", root)
+	require.NoError(t, err)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
+	globalCfg = cfg
+
+	ctx := context.Background()
+	local, err := magus.Open(ctx, root, magus.WithLoadedConfig(cfg))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = local.Close() })
+
+	reg := newWSRegistry(ctx, cache.NewLimiter(2), nil, time.Hour, nil)
+	t.Cleanup(reg.close)
+	srv, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Read:    graphReads(reg),
+		Version: version,
+	})
+	require.NoError(t, err)
+	t.Cleanup(srv.Close)
+	require.NoError(t, srv.Start())
+	return graphReadFixture{root: root, cfg: cfg, local: local, reg: reg, addr: srv.Addr()}
+}
+
+// answers returns the local answer to read and the server's, each as the JSON the CLI's
+// structured output is built from. The server's goes through the same decode the CLI
+// runs on it, so a field that does not survive the trip shows up as a difference.
+func (f graphReadFixture) answers(t *testing.T, verb string, read graphRead) (local, served string) {
+	t.Helper()
+	ctx := context.Background()
+	read.Config = readConfigDigest(f.cfg)
+	read.Env = envDigests()
+	var localRes, servedRes any
+	var err error
+	switch verb {
+	case readQuery:
+		localRes, err = searchGraph(ctx, f.local, f.cfg, read, false, false)
+		servedRes = &queryResult{}
+	case readExplain:
+		localRes, err = explainNode(ctx, f.local, f.cfg, read, false, false)
+		servedRes = &explainResult{}
+	case readRefs:
+		var g *knowledge.Graph
+		g, err = knowledgeGraphForRefsOf(ctx, f.local, f.cfg, false, read.Input)
+		if err == nil {
+			localRes = refsOf(ctx, f.local, f.cfg, g, read)
+		}
+		servedRes = &refsResult{}
+	}
+	require.NoError(t, err)
+	require.NoError(t, proc.Read(ctx, f.addr, version, f.root, verb, read, servedRes))
+	l, err := json.Marshal(localRes)
+	require.NoError(t, err)
+	s, err := json.Marshal(servedRes)
+	require.NoError(t, err)
+	return string(l), string(s)
+}
+
+var graphReadCases = []struct {
+	name string
+	verb string
+	read graphRead
+}{
+	{"query a domain term", readQuery, graphRead{Input: "guide", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"query a symbol", readQuery, graphRead{Input: "SearchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"query nothing", readQuery, graphRead{Input: "zzzunmatched", Budget: knowledge.DefaultBudget, Nearest: true}},
+	{"explain a dir", readExplain, graphRead{Input: "docs"}},
+	{"explain nothing", readExplain, graphRead{Input: "zzzunmatched"}},
+	{"refs with occurrences", readRefs, graphRead{Input: "SearchVerdict", Occurrences: true}},
+}
+
+// Accuracy is the edge over a text search, so a server answer is worth having only if
+// it is the answer: verdicts, coverage, the nearest suggestion and every fact identical
+// to what the same build reads locally.
+func TestServerGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
+	f := newGraphReadFixture(t)
+	for _, tc := range graphReadCases {
+		t.Run(tc.name, func(t *testing.T) {
+			local, served := f.answers(t, tc.verb, tc.read)
+			assert.JSONEq(t, local, served)
+		})
+	}
+}
+
+// The server's warm graph trusts a file watcher that ignores .go edits, though the tree
+// walk turns every source file into a node. A read must never answer from it: the server
+// runs the stamp-checked build, so an edit the watcher let through is still in the answer.
+func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
+	f := newGraphReadFixture(t)
+	ctx := context.Background()
+	e, err := f.reg.acquire(f.root)
+	require.NoError(t, err)
+	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
+	require.NoError(t, err)
+	t.Cleanup(stopWatch)
+	_, err = e.m.KnowledgeGraph(ctx, false)
+	require.NoError(t, err, "warm the watched graph before the edit")
+	f.reg.release(e)
+
+	read := graphRead{Input: "kind=dir", Budget: knowledge.DefaultBudget, Nearest: true}
+	_, before := f.answers(t, readQuery, read)
+	require.NotContains(t, before, `"dir:lib"`)
+	require.NoError(t, os.MkdirAll(filepath.Join(f.root, "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(f.root, "lib", "added.go"), []byte("package lib\n\nfunc Added() {}\n"), 0o644))
+
+	local, served := f.answers(t, readQuery, read)
+	assert.JSONEq(t, local, served)
+	assert.Contains(t, served, `"dir:lib"`, "a directory that exists only since the edit is in the server's answer")
+}
+
+func TestServerGraphReadsDeclineAnotherConfiguration(t *testing.T) {
+	f := newGraphReadFixture(t)
+	read := graphRead{Input: "guide", Config: "a configuration the server does not read under"}
+	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &queryResult{})
+	require.Error(t, err)
+	assert.True(t, proc.NotAdopted(err), "a declined read is answered locally, quietly: %v", err)
+}
+
+// An index freshness verdict reads the process environment, so a server started from
+// another shell can be right about its PATH and wrong about the client's.
+func TestServerGraphReadsDeclineAnotherEnvironment(t *testing.T) {
+	f := newGraphReadFixture(t)
+	env := envDigests()
+	env["PATH"] = envDigest("/somewhere/else/bin")
+	read := graphRead{Input: "guide", Config: readConfigDigest(f.cfg), Env: env}
+	err := proc.Read(context.Background(), f.addr, version, f.root, readQuery, read, &queryResult{})
+	require.Error(t, err)
+	assert.True(t, proc.NotAdopted(err), "%v", err)
+	assert.Contains(t, err.Error(), "PATH")
+}
+
+func TestServerGraphReadsDeclineAnotherBuild(t *testing.T) {
+	f := newGraphReadFixture(t)
+	read := graphRead{Input: "guide", Config: readConfigDigest(f.cfg)}
+	err := proc.Read(context.Background(), f.addr, "v0.0.0-another-build", f.root, readQuery, read, &queryResult{})
+	require.Error(t, err)
+	assert.True(t, proc.NotAdopted(err), "another build's answer is another program's answer: %v", err)
+}
+
+func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
+	f := newGraphReadFixture(t)
+	t.Setenv(proc.SocketEnv, f.addr)
+	globalCfg.Server.Enabled = true
+
+	var res queryResult
+	require.True(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide", Budget: knowledge.DefaultBudget}, &res))
+	assert.Positive(t, res.Out.MatchCount)
+
+	globalCfg.Knowledge.Notes.Shared = "elsewhere.md"
+	assert.False(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide"}, &queryResult{}),
+		"a client reading under other settings gets no server answer")
+
+	globalCfg.Server.Enabled = false
+	assert.False(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide"}, &queryResult{}),
+		"--server-enabled=false never asks")
 }
 
 // mustOutput runs cmd and fails the test on error, surfacing combined output.
