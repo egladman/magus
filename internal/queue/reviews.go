@@ -56,9 +56,24 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 		report.Moved = c.Head
 		return report, nil
 	}
-	verdicts, owed, err := classifyReviews(ctx, v, f, cl, c, others, read.Approving, policy)
+	verdicts, owed, shared, err := classifyReviews(ctx, v, f, cl, c, others, read.Approving, policy, true)
 	if err != nil {
 		return types.ReviewReport{}, err
+	}
+	if shared {
+		// The scoped listing left out merged changes other queued changes carry; plan's
+		// listing has them, and with an approved commit sharing commits with a queued
+		// change they can decide where its delta starts. Ask as plan asks.
+		full, err := prov.ListChanges(ctx, types.ListQuery{Base: q.Base, RemoteURL: q.RemoteURL})
+		if err != nil {
+			return types.ReviewReport{}, err
+		}
+		if _, others, ok = takeChange(full, q.Change); !ok {
+			return types.ReviewReport{}, fmt.Errorf("#%s is not an open change against %s", q.Change, q.Base)
+		}
+		if verdicts, owed, _, err = classifyReviews(ctx, v, f, cl, c, others, read.Approving, policy, false); err != nil {
+			return types.ReviewReport{}, err
+		}
 	}
 	report.Reviews, report.RegenerationOwed = verdicts, owed
 	if !q.Dismiss || !slices.ContainsFunc(verdicts, func(rv types.ReviewVerdict) bool { return !rv.Carry }) {
@@ -95,21 +110,28 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 // plain merge only in generated files is peeled as plan peels it, and its commit is
 // returned owed: the approval stands, as at plan, once apply's regeneration of the base
 // reproduces that merge, which apply proves before it merges, and each carry says so.
-func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, c types.Change, others types.Changes, approving []types.Review, policy types.CarryPolicy) (verdicts []types.ReviewVerdict, owed []string, err error) {
+//
+// scoped says others came from a listing scoped to c, which holds only the merged
+// changes c carries. shared then reports whether that can differ from plan's listing,
+// which holds the merged changes every queued change carries: a merged change matters
+// to an approved commit only through commits it shares with the queued change carrying
+// that merged change's head, so shared is whether some approved commit shares a commit
+// with another queued change.
+func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone, c types.Change, others types.Changes, approving []types.Review, policy types.CarryPolicy, scoped bool) (verdicts []types.ReviewVerdict, owed []string, shared bool, err error) {
 	out := []types.ReviewVerdict{}
 	if len(approving) == 0 {
-		return out, nil, nil
+		return out, nil, false, nil
 	}
 	tip, err := fetchBase(ctx, v, cl, others.Base)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	if err := fetchHead(ctx, v, cl, c); err != nil {
-		return nil, nil, fmt.Errorf("fetch %s: %w", c.Label(), err)
+		return nil, nil, false, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
 	now, proofs, err := reviewTarget(ctx, v, f, cl.Root, tip, c.Head, "")
 	if err != nil {
-		return nil, nil, fmt.Errorf("review target of %s: %w", c.Label(), err)
+		return nil, nil, false, fmt.Errorf("review target of %s: %w", c.Label(), err)
 	}
 	for _, p := range proofs {
 		owed = append(owed, p.Commit)
@@ -117,7 +139,7 @@ func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, c
 	refs := planRefs(others)
 	stackBase, err := deltaBase(ctx, v, cl, tip, now, refs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	decided := map[string]types.CarryVerdict{}
 	for _, r := range approving {
@@ -127,9 +149,14 @@ func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, c
 		verdict, ok := decided[r.Commit]
 		if !ok {
 			if verdict, err = carryApproval(ctx, v, f, cl, tip, r.Commit, now, stackBase, refs, policy); err != nil {
-				return nil, nil, fmt.Errorf("compare %s with @%s's approved %s: %w", c.Label(), r.Reviewer, short(r.Commit), err)
+				return nil, nil, false, fmt.Errorf("compare %s with @%s's approved %s: %w", c.Label(), r.Reviewer, short(r.Commit), err)
 			}
 			decided[r.Commit] = verdict
+			if scoped && !shared {
+				if shared, err = sharesQueuedCommits(ctx, v, cl, tip, r.Commit, others.Changes); err != nil {
+					return nil, nil, false, err
+				}
+			}
 		}
 		reason := verdict.Reason
 		if verdict.Carry && len(owed) > 0 {
@@ -139,7 +166,38 @@ func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, c
 		out = append(out, types.ReviewVerdict{Reviewer: r.Reviewer, ReviewID: r.ID, Commit: r.Commit,
 			Carry: verdict.Carry, Tier: verdict.Tier, Changed: orEmpty(verdict.Changed), Reason: reason})
 	}
-	return out, owed, nil
+	return out, owed, shared, nil
+}
+
+// sharesQueuedCommits reports whether approved, which carryApproval fetched, shares a
+// commit the base does not carry with one of queued. An approved commit it could not
+// fetch shares nothing: no listing changes that verdict.
+func sharesQueuedCommits(ctx context.Context, v types.ReadVCS, cl Clone, tip, approved string, queued []types.Change) (bool, error) {
+	if len(queued) == 0 {
+		return false, nil
+	}
+	if err := v.FetchCommit(ctx, cl.Root, cl.Remote, approved); err != nil {
+		return false, nil //nolint:nilerr // an unreachable approved commit was already decided
+	}
+	own, err := ownCommits(ctx, v, cl.Root, tip, approved)
+	if err != nil {
+		return false, err
+	}
+	for _, q := range queued {
+		if err := fetchHead(ctx, v, cl, q); err != nil {
+			return false, fmt.Errorf("fetch %s: %w", q.Label(), err)
+		}
+		theirs, err := ownCommits(ctx, v, cl.Root, tip, q.Head)
+		if err != nil {
+			return false, err
+		}
+		for id := range theirs {
+			if own[id] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func shorts(commits []string) string {

@@ -212,6 +212,44 @@ func TestReviewsPeelsAMergeOfTheBaseThatDiffersOnlyInGeneratedFiles(t *testing.T
 	assert.Empty(t, prov.dismissed)
 }
 
+// The approval was given while the change was stacked on #3, which has since merged as a
+// squash, and the change was rebased onto main. #2, still queued, is stacked on #3 too.
+// The listing scoped to #1 holds no #3, since #1 no longer carries it, and without it the
+// approved commit's delta cannot be told apart from #2's. Plan's listing holds #3 through
+// #2, and with it the delta starts at #3's head and the approval carries as a rebase. The
+// approved commit shares #3's commit with #2, so Reviews asks again as plan asks, and
+// answers as plan answers.
+func TestReviewsAsksPlansListingWhenAnApprovedCommitSharesCommitsWithAQueuedChange(t *testing.T) {
+	c := change("1", "a")
+	other := change("2", "b")
+	fork, merged := head("fork"), head("m")
+	d := newDoubles(t)
+	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main", Only: "1"}).
+		Return(types.Changes{Base: "main", Changes: []types.Change{c, other}}, nil)
+	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main"}).
+		Return(types.Changes{Base: "main", Changes: []types.Change{c, other},
+			Merged: []types.MergedChange{{ID: "3", Head: merged, Commit: head("squash"), Method: types.MethodSquash}}}, nil)
+	d.tip(base)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, mock.Anything).Return(nil)
+	d.plain(c.Head)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]magustypes.Commit{{ID: c.Head, Parents: []string{base}}}, nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, carryOld, []string(nil)).
+		Return([]magustypes.Commit{{ID: carryOld, Parents: []string{merged}}, {ID: merged, Parents: []string{fork}}}, nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, other.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: other.Head, Parents: []string{merged}}, {ID: merged, Parents: []string{fork}}}, nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, merged, []string(nil)).Return([]magustypes.Commit{{ID: merged, Parents: []string{fork}}}, nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Base: merged, Ours: base, Theirs: carryOld}).Return(magustypes.TreeMergeResult{Tree: replayedTree}, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, c.Head).Return(replayedTree, nil)
+	prov := &reviewing{MockProvider: d.provider, reads: []types.Reviews{{Head: c.Head, Approving: []types.Review{approvedBy("ann", "12", carryOld)}}}}
+
+	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
+	require.NoError(t, err)
+	assert.Equal(t, []types.ReviewVerdict{{Reviewer: "ann", ReviewID: "12", Commit: carryOld, Carry: true, Tier: types.CarryRebase,
+		Changed: []types.ClassifiedPath{}, Reason: "head " + c.Head[:12] + " is " + carryOld[:12] + " rebased with its diff unchanged"}}, got.Reviews)
+	assert.Empty(t, prov.dismissed, "the scoped listing alone would have dismissed it")
+	d.provider.AssertNumberOfCalls(t, "ListChanges", 2)
+}
+
 func TestReviewsRefusesAnUnlistedChangeAndAProviderReadingNoReviews(t *testing.T) {
 	d := newDoubles(t)
 	d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main", Only: "9"}).Return(types.Changes{Base: "main"}, nil)
