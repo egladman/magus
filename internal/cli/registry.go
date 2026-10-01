@@ -1844,7 +1844,7 @@ and every relative path resolves against it. The provider is a built-in name
 (github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
 on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.`,
-	Usage: "magus queue <describe|ls|plan|validate|gate|apply> [flags]",
+	Usage: "magus queue <describe|ls|plan|validate|gate|apply|reviews> [flags]",
 	Children: []Command{
 		{
 			Name:  "describe",
@@ -1952,6 +1952,33 @@ cache it withholds, is refused.`,
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 			}, queueFacts...), queueCheckout...),
 		},
+		{
+			Name:  "reviews",
+			Short: "Classify the change since each approval standing on a change, as the queue admits it, and dismiss the approvals it does not carry with --dismiss",
+			Long: `Read the approvals standing on one change and, for each given at an older commit
+than the one a review of its head covers, classify what changed since, path by
+path, with the classifier plan admits changes by: a rebase with its diff unchanged,
+regenerated outputs, prose, or comment-only edits carry an approval when the base's
+queue.carry_approvals allows that tier (default: all four), and code never does. A
+code owner's approval is classified like any other.
+
+--dismiss dismisses, through the provider, each approval that does not carry, telling
+its reviewer which paths changed. It reads the head again first and dismisses nothing
+when it moved, since the run on the new head decides. It needs the provider's write
+credential (github: MERGEQUEUE_TOKEN with pull-requests write); without --dismiss it
+only reads. Nothing runs the change's code: the classifier reads the base's own
+workspace and the compared commits' contents.
+
+-o json prints a mergequeue.reviews/v1 document.`,
+			Usage: "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]",
+			Flags: append(append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the change targets"},
+				{Name: "change", Kind: FlagString, Doc: "`id` of the change, as the provider names it (github: the pull request number)"},
+				{Name: "head", Kind: FlagString, Doc: "`commit` the change's head must be at; when it moved, nothing is classified or dismissed"},
+				{Name: "dismiss", Kind: FlagBool, Doc: "Dismiss each approval that does not carry, naming what changed since it"},
+			}, queueFacts...), queueCheckout...),
+		},
 	},
 	Examples: []Example{
 		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
@@ -1964,6 +1991,8 @@ cache it withholds, is refused.`,
 		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
 		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},
+		{"Say whether each approval on a pull request carries over the change since it", "magus queue reviews --provider github --base main --change 482"},
+		{"Dismiss the approvals it does not carry", "magus queue reviews --provider github --base main --change 482 --dismiss"},
 	},
 }
 

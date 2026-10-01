@@ -15,6 +15,8 @@ const (
 	// SchemaCapabilities names what `magus queue describe` prints: a provider's
 	// [Capabilities] on one base.
 	SchemaCapabilities = "mergequeue.capabilities/v1"
+	// SchemaReviews names what `magus queue reviews` prints: a [ReviewReport].
+	SchemaReviews = "mergequeue.reviews/v1"
 )
 
 // Changes is the queue's input: the changes carrying merge intent, in queue order.
@@ -323,4 +325,32 @@ func (v Verdict) Check() error {
 		return nil
 	}
 	return fmt.Errorf("unknown decision %q", v.Decision)
+}
+
+// ReviewReport is what `magus queue reviews` prints: whether each approval standing on a
+// change still covers its head, by the classifier the queue admits changes by.
+type ReviewReport struct {
+	Schema string `json:"schema"`
+	Change string `json:"change"`
+	Head   string `json:"head"`
+	// Moved is the head the change moved to before anything was dismissed; nothing was,
+	// since the run on that head decides. Empty when it stayed.
+	Moved string `json:"moved,omitempty"`
+	// Reviews are the approvals given at an older commit than the one a review of Head
+	// covers; an approval given there needs no verdict.
+	Reviews []ReviewVerdict `json:"reviews"`
+}
+
+// ReviewVerdict is one approval and whether the change since it leaves it standing.
+type ReviewVerdict struct {
+	Reviewer string `json:"reviewer"`
+	ReviewID string `json:"review_id"`
+	Commit   string `json:"commit"`
+	Carry    bool   `json:"carry"`
+	// Tier, Changed and Reason are the [CarryVerdict]'s.
+	Tier    CarryTier        `json:"tier"`
+	Changed []ClassifiedPath `json:"changed"`
+	Reason  string           `json:"reason"`
+	// Dismissed says this run dismissed the review.
+	Dismissed bool `json:"dismissed"`
 }

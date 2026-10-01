@@ -84,9 +84,9 @@ func carriable() string {
 // ClassifiedPath is the build tool's tier for one path's edit, and the fact it rests on,
 // so a reader can dispute it from the message alone.
 type ClassifiedPath struct {
-	Path string
-	Tier CarryTier
-	Why  string
+	Path string    `json:"path"`
+	Tier CarryTier `json:"tier"`
+	Why  string    `json:"why"`
 }
 
 // Line is how verdicts name the path: `<path> (<tier>: <why>)`.
