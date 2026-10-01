@@ -13,4 +13,9 @@
 - **The scip op keys on its language's sources and its indexer's version.** A rewrite of
   installed skills or an install that adds `node_modules` no longer marks a symbol index out
   of date, and upgrading scip-go or scip-typescript now does. Each indexing spell declares
-  its indexer as an observed tool, so its version keys only the scip op.
+  its indexer as an observed tool, so its version keys only the scip op. A `SymbolIndexer`
+  can name the spell's tools it also runs in `uses` (the go spell names `go`), and their
+  versions key the index too, never a build or test; a `uses` entry that is not a
+  version-probed tool is a load error.
+- **The push rule reads only gate verdicts.** It used to decode every invocation in the
+  session store on each push; it now reads the gate results through the same per-kind cache.
