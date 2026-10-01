@@ -371,3 +371,25 @@ tags/detach/
 # /development/ page is derived from a project, so there is nothing to alias to.
 development/libs-pricing/
 development/projects/libs-pricing/
+
+# libs/diagram became libs/figure (#508). A /development/ page is derived from the
+# project's directory name, so the old slug has nothing to alias to.
+development/libs-diagram/
+
+# The memory store was removed (#509): its API, verb, guard rule and skill pages are
+# generated per surface and have no successor. The decisions tag lost its second
+# carrier, the magus-memory manpage, and a one-page tag gets no index.
+reference/api/memory/
+reference/api/memory/v1alpha1/
+reference/api/memory/v1alpha1/memory/
+reference/manpage/magus-memory/
+reference/rules/memory-write/
+reference/skills/magus-memory/
+tags/decisions/
+
+# --preflight was removed (#512) with the two codes it raised. The exit-2 and preflight
+# tags were carried only by those pages.
+reference/codes/sandbox/MGS3020/
+reference/codes/sandbox/MGS3021/
+tags/exit-2/
+tags/preflight/
