@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -190,6 +191,7 @@ func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
 		{"Internal", Internal("plan"), types.InternalFailure, http.StatusInternalServerError, "INTERNAL"},
 		{"StreamingUnsupported", StreamingUnsupported(), types.StreamingUnsupported, http.StatusInternalServerError, "INTERNAL"},
 		{"ReviewHostFailed", ReviewHostFailed("publish: no token"), types.ReviewHostFailed, http.StatusBadGateway, "UNAVAILABLE"},
+		{"AuthFailuresThrottled", AuthFailuresThrottled(20, 40, 50*time.Millisecond, "the token was refused"), types.AuthFailuresThrottled, http.StatusTooManyRequests, "RESOURCE_EXHAUSTED"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

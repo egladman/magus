@@ -211,11 +211,14 @@ func renderProbeResults(stdout, stderr io.Writer, results []probeResult) (allOK 
 
 // evaluateMCPHealth reports whether the MCP endpoint is reachable, with a reason. A
 // reachable endpoint (serving or listening-but-not-ready) passes: for an ensure/liveness
-// check the server is up either way. Unreachable and disabled both fail, carrying the
-// status note (which points at `magus server start`, or names the disabling config).
+// check the server is up either way. Unreachable, disabled and http-off all fail, carrying
+// the status note (which points at `magus server start`, or names the disabling config).
 func evaluateMCPHealth(m *types.MCPEndpointStatus) (ok bool, reason string) {
 	if m == nil {
 		return false, "mcp endpoint status unavailable"
+	}
+	if m.State == mcpHTTPOff {
+		return false, m.Note
 	}
 	if m.Reachable {
 		return true, fmt.Sprintf("mcp endpoint %s at %s", m.State, m.URL)
@@ -259,6 +262,10 @@ func serverSnapshot(socket string) statusFunc {
 // inside it, and a reachable endpoint answers immediately.
 const mcpProbeTimeout = time.Second
 
+// mcpHTTPOff is the endpoint state with mcp.http false: the server is not asked to serve
+// /mcp over HTTP, though its listener may be up for the console.
+const mcpHTTPOff = "http-off"
+
 // buildMCPEndpointStatus reports the runtime health of the MCP HTTP endpoint an agent
 // host connects to. It probes the endpoint's own HTTP listener (not the proc socket
 // the Pool fields report), because that listener is what a connecting agent sees, and
@@ -273,13 +280,24 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 		}
 	}
 	addr := mcpAddress(mcp)
+	pctx, cancel := context.WithTimeout(ctx, mcpProbeTimeout)
+	defer cancel()
+	if !mcp.HTTPEnabled() {
+		// The listener still carries the console, so its reachability is probed for
+		// buildConsoleStatus; /mcp itself is never on it, so there is no URL to name.
+		code := probeMCPReadiness(pctx, addr)
+		return &types.MCPEndpointStatus{
+			Address:   addr,
+			Reachable: code == http.StatusOK || code == http.StatusServiceUnavailable,
+			State:     mcpHTTPOff,
+			Note:      "MCP over HTTP is off (mcp.http=false); agents reach MCP over stdio (`magus mcp`) or at /mcp on the server socket.",
+		}
+	}
 	st := &types.MCPEndpointStatus{
 		Enabled: true,
 		Address: addr,
 		URL:     "http://" + addr + "/mcp",
 	}
-	pctx, cancel := context.WithTimeout(ctx, mcpProbeTimeout)
-	defer cancel()
 	switch probeMCPReadiness(pctx, addr) {
 	case http.StatusOK:
 		st.Reachable = true
@@ -307,7 +325,7 @@ func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types
 			Note:  "the console is disabled (console.enabled=false); nothing is served at /console/.",
 		}
 	}
-	if mcp == nil || !mcp.Enabled {
+	if mcp == nil || !mcp.Enabled && mcp.State != mcpHTTPOff {
 		return &types.ConsoleStatus{
 			State: "disabled",
 			Note:  "the console is served by the MCP listener, which is disabled (mcp.enabled=false).",

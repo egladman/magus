@@ -143,7 +143,9 @@ curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
 ```
 
-`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike.
+`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike; `mcp.http: false`
+takes it off loopback only, and the socket keeps serving it (see
+[Enabling and disabling](#enabling-and-disabling)).
 
 ## Available tools
 
@@ -301,6 +303,20 @@ mcp:
 
 Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the server.
 
+To stop serving MCP over the loopback HTTP listener while keeping the rest:
+
+```yaml
+# magus.yaml
+mcp:
+  http: false
+```
+
+Or `MAGUS_MCP_HTTP=false`. The server then mounts no `/mcp` route on its HTTP listener,
+so a request for it gets `404` whatever token it carries. `magus mcp` (stdio) and `/mcp`
+on the [server socket](#mcp-over-the-server-socket) keep serving, and the listener keeps
+the console and the health routes. `mcp.http: true` beside `mcp.enabled: false` is a
+config error, since the server serves no MCP at all then.
+
 To change the listen address:
 
 ```yaml
@@ -311,10 +327,15 @@ mcp:
 
 Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
-A non-loopback address (`0.0.0.0:7391` for a Kubernetes health probe, say) sends
-every bearer token in cleartext, so the server refuses to start on one unless you
-also set `mcp.insecure_bind: true` (or `MAGUS_MCP_INSECURE_BIND=true`). Front such
-a listener with TLS or a tunnel.
+A non-loopback address (`0.0.0.0:7391` for a Kubernetes health probe, say) is a
+config error unless you also set `mcp.insecure_bind: true` (or
+`MAGUS_MCP_INSECURE_BIND=true`). With it, the server listens on exactly that address,
+and `/mcp` is exposed to every network that can route to it over **plaintext HTTP**,
+with a bearer token as its only guard: anyone on the path can read a token in flight
+and replay it. The operator token is still refused from any peer that is not loopback,
+so only connector tokens work from the network. The startup log names the bound address
+and warns. Front such a listener with TLS or a tunnel. The console is not mounted on a
+non-loopback listener.
 
 ## Security: keep this local
 
@@ -437,7 +458,41 @@ The [server socket](#mcp-over-the-server-socket) reads no token; the kernel's re
 the peer's uid stands in for it, so anything running as you reaches it, just as it
 could read your operator token.
 
-Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default, refuses any other address without `mcp.insecure_bind: true`, and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
+The token is the boundary on loopback `/mcp`, and the only one. The endpoint checks no
+`Host` or `Origin` header and answers any origin's CORS preflight with
+`Access-Control-Allow-Origin: *`, so a browser page with a token can drive it like any
+other client. CORS never allows credentials, so the browser attaches no cookie or other
+ambient credential.
+
+A page without a valid token, a DNS-rebinding page included, learns nothing it can read:
+
+- **Refusals are opaque.** Only an authenticated response carries
+  `Access-Control-Allow-Origin`. A `401`, `403` or `429` does not, so the browser hands
+  the page the same network error it gets when nothing listens on the port. The
+  preflight does carry the header, and the Private Network Access allowance, but a page
+  cannot read a preflight's answer.
+- **Failures are throttled.** Each caller, keyed by its `Origin` (which a page cannot
+  change) or else its peer address, may fail authentication 20 times a second in bursts of
+  40. Past that it gets `429` with `Retry-After`
+  ([MGS9030](../../reference/codes/auth/MGS9030.md)). A request whose token verifies is
+  never throttled.
+- **Failures are cheap.** Tokens are checked against an in-memory copy of the operator
+  file and the token store, reloaded when either changes on disk and at least once a
+  second, so a refused request costs a hash and three `stat` calls, never a file read.
+  A revoke made by another process takes effect within a second.
+
+What remains is timing. A refused request to a running server returns in about a
+millisecond, while a connection to a closed port is refused in about the same time or
+less, and the two are hard but not impossible to tell apart from a page by measuring.
+Treat "a page can guess magus is running" as possible; "a page can use it" needs a token.
+
+The console's routes keep their `Host` and `Origin` checks. If you would rather not serve
+MCP over HTTP at all, set `mcp.http: false` and use stdio or the socket.
+
+The server binds to `127.0.0.1` by default and refuses any other address without
+`mcp.insecure_bind: true` (see [Enabling and disabling](#enabling-and-disabling)).
+Anyone who reads a token gains the same workspace access, so keep tokens out of shared
+places and keep the port closed.
 
 **Do not expose it over:**
 

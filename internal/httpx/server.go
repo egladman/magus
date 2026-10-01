@@ -1,8 +1,7 @@
-// Package httpx owns the loopback-only HTTP server core and the DNS-rebind
-// guard shared by magus's server-facing HTTP surfaces. The server binds
-// 127.0.0.1 exclusively: serving to a network interface is never allowed, so
-// the bind host is not configurable; only the port is taken from the caller's
-// address. For a unix socket listener it owns the peer-uid admission
+// Package httpx owns the HTTP server core and the DNS-rebind guard shared by
+// magus's server-facing HTTP surfaces. NewServer binds 127.0.0.1 whatever host
+// it is handed; only NewNetworkServer binds another, for a caller that decided to
+// serve the network. For a unix socket listener it owns the peer-uid admission
 // (PeerConnContext, PeerGuard) instead, since no network interface reaches one.
 package httpx
 
@@ -17,10 +16,10 @@ import (
 	"time"
 )
 
-// Server is the loopback-bound HTTP core: a 127.0.0.1 listener, a mux, and an
-// *http.Server with a header-read timeout. It generalizes the inline server
-// hand-rolled by callers that need a single loopback port with a few mounted
-// routes and graceful, ctx-driven shutdown.
+// Server is the HTTP core: a listener, a mux, and an *http.Server with a
+// header-read timeout. It generalizes the inline server hand-rolled by callers
+// that need a single port with a few mounted routes and graceful, ctx-driven
+// shutdown.
 type Server struct {
 	ln       net.Listener
 	srv      *http.Server
@@ -37,12 +36,27 @@ func NewServer(addr netip.AddrPort) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bind loopback server: %w", err)
 	}
+	return newServer(ln), nil
+}
+
+// NewNetworkServer binds addr exactly as given, a non-loopback or unspecified host
+// included, so whatever can route to that address reaches every mounted route. The caller
+// owns that decision; the server's is mcp.insecure_bind.
+func NewNetworkServer(addr netip.AddrPort) (*Server, error) {
+	ln, err := net.Listen("tcp", addr.String())
+	if err != nil {
+		return nil, fmt.Errorf("bind %s: %w", addr, err)
+	}
+	return newServer(ln), nil
+}
+
+func newServer(ln net.Listener) *Server {
 	mux := http.NewServeMux()
 	return &Server{
 		ln:  ln,
 		mux: mux,
 		srv: &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second},
-	}, nil
+	}
 }
 
 // Handle mounts h at pattern on the server's mux.
@@ -78,17 +92,14 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
-// Addr is the loopback address actually bound: the real port even when the
-// caller requested port 0.
+// Addr is the address actually bound: the real port even when the caller requested port 0,
+// and 127.0.0.1 for a NewServer listener.
 func (s *Server) Addr() netip.AddrPort {
 	tcp, ok := s.ln.Addr().(*net.TCPAddr)
 	if !ok {
 		return netip.AddrPort{}
 	}
-	return netip.AddrPortFrom(
-		netip.AddrFrom4([4]byte{127, 0, 0, 1}),
-		uint16(tcp.Port),
-	)
+	return netip.AddrPortFrom(tcp.AddrPort().Addr().Unmap(), tcp.AddrPort().Port())
 }
 
 // Close releases the listener of a server that will not Serve.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ParseOrigin extracts the scheme://host[:port] origin from a page's base URL, for the
@@ -36,6 +37,62 @@ func CORS(origin string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// CORSPolicy is what [OpenCORS] advertises to a browser: the methods and request headers a
+// preflight allows, and the response headers a page's script may read.
+type CORSPolicy struct {
+	Methods       []string
+	AllowHeaders  []string
+	ExposeHeaders []string
+}
+
+// OpenCORS is CORS for a route whose one boundary is the bearer token it requires, split so
+// that no response to a caller without a valid token says the route exists. Neither half
+// ever sends Allow-Credentials, so the browser attaches no cookie or other ambient credential
+// and a page holds nothing it did not bring.
+//
+// preflight answers every OPTIONS request 204 with Access-Control-Allow-Origin: *, the
+// allowed methods and headers, and Chrome's Private Network Access allowance when asked; it
+// never calls next for one. Wrap it OUTSIDE the bearer guard: a browser sends its preflight
+// without the Authorization header, and a page cannot read a preflight's answer.
+//
+// allow sets Access-Control-Allow-Origin: * and the exposed headers before calling next.
+// Wrap it INSIDE the bearer guard, so only an admitted request's response carries them. A
+// refusal then lacks them, and the browser hands the page the same opaque network error it
+// gets when nothing listens on the port.
+func OpenCORS(p CORSPolicy) (preflight, allow func(http.Handler) http.Handler) {
+	methods := strings.Join(p.Methods, ", ")
+	headers := strings.Join(p.AllowHeaders, ", ")
+	expose := strings.Join(p.ExposeHeaders, ", ")
+	preflight = func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", "*")
+			h.Set("Access-Control-Allow-Methods", methods)
+			h.Set("Access-Control-Allow-Headers", headers)
+			h.Set("Access-Control-Max-Age", "600")
+			if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+				h.Set("Access-Control-Allow-Private-Network", "true")
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	allow = func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", "*")
+			if expose != "" {
+				h.Set("Access-Control-Expose-Headers", expose)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	return preflight, allow
 }
 
 // CORSAllow reflects the request Origin only when it is one of the given allow-list origins,

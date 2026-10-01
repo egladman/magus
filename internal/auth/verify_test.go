@@ -115,6 +115,62 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	}
 }
 
+// A flood of well-formed wrong tokens is answered from memory: 1,000 of them load the stores
+// at most once, a valid token among them still verifies, and a mint or a revoke is seen by
+// the very next call.
+func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
+	testkit.Isolate(t)
+	prev := revalidateEvery
+	revalidateEvery = time.Hour
+	t.Cleanup(func() { revalidateEvery = prev })
+	op, err := EnsureOperator(t.Context(), slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	dir, err := StoreDir()
+	require.NoError(t, err)
+	store, err := LoadStore(dir)
+	require.NoError(t, err)
+	good, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "good", Grant: types.GrantConnector, TTL: time.Hour})
+	require.NoError(t, err)
+	_, ok := Verify(good)
+	require.True(t, ok)
+
+	loads := func() int {
+		viewMu.Lock()
+		defer viewMu.Unlock()
+		return viewLoads
+	}
+	before := loads()
+	for i := range 1000 {
+		kind := types.KindStored
+		if i%2 == 1 {
+			kind = types.KindOperator
+		}
+		bad, err := mintSecret(kind)
+		require.NoError(t, err)
+		_, ok := Verify(bad)
+		require.False(t, ok)
+		if i == 500 {
+			_, ok := Verify(good)
+			require.True(t, ok, "a valid token verifies mid-flood")
+			_, ok = Verify(op)
+			require.True(t, ok, "and so does the operator")
+		}
+	}
+	assert.LessOrEqual(t, loads()-before, 1, "the flood loads the stores at most once")
+
+	fresh, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "fresh", Grant: types.GrantConnector, TTL: time.Hour})
+	require.NoError(t, err)
+	_, ok = Verify(fresh)
+	assert.True(t, ok, "a mint is seen at once")
+	_, err = store.Revoke(types.GrantOperator, "good")
+	require.NoError(t, err)
+	_, ok = Verify(good)
+	assert.False(t, ok, "a revoke is seen at once")
+	require.NoError(t, RevokeOperator())
+	_, ok = Verify(op)
+	assert.False(t, ok, "so is a revoked operator token")
+}
+
 // The share verifier accepts its own mgl_ secret and nothing else: an operator or stored token
 // whose hash it somehow held still fails, because the kind is wrong.
 func TestShareVerifierNeverAcceptsAnotherKind(t *testing.T) {
