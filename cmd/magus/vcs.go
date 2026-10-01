@@ -752,15 +752,10 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 	return nil
 }
 
-// checkpointToken is the single most citable thing about a checkpoint, for the one cell a
-// ledger gives it. A clean tree IS its revision. A dirty one is not (every worker on this
-// branch shares that revision), so the digest joins it, and the "+" marks the identity as
-// a revision PLUS uncommitted work rather than a revision anyone can check out.
+// checkpointToken is [vcs.CheckpointToken]: `vcs checkpoint -o name`, `job exec` and the
+// guard all cite a checkout through it, so the three cannot spell one tree two ways.
 func checkpointToken(cp types.VCSCheckpoint) string {
-	if !cp.Dirty {
-		return cp.Revision
-	}
-	return cp.Revision + "+" + cp.PatchDigest
+	return vcs.CheckpointToken(cp)
 }
 
 // checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty

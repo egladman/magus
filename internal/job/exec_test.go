@@ -1,10 +1,13 @@
 package job
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -206,6 +209,48 @@ func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 		got, err := s.List()
 		require.NoError(t, err)
 		assert.Empty(t, got[0].ReportedBase, state)
+	}
+}
+
+// Untracked files on a clean checkpoint's revision are work the job's diff later counts (the
+// footprint job wait grades lists them), so the tree is not the one handed out: the verdict
+// is revision-match, and the digest it reports is the untracked files', never the digest of
+// the empty tracked patch.
+func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
+	t.Parallel()
+
+	const emptyPatch = "e3b0c44298fc1c149afbf4c8996fb924"
+	for _, tt := range []struct {
+		name  string
+		edits map[string]string
+	}{
+		{name: "untracked only", edits: map[string]string{"new.txt": "fresh\n"}},
+		{name: "tracked edits plus untracked", edits: map[string]string{"a.txt": "a changed\n", "new.txt": "fresh\n"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			root := gitRepo(t, map[string]string{"a.txt": "a\n"})
+			rev := commitRepo(t, root)
+			for name, body := range tt.edits {
+				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+			}
+			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+			require.NoError(t, err)
+			cp, err := vcs.Checkpoint(ctx, root, res, false)
+			require.NoError(t, err)
+
+			s := tmpStore(t, root)
+			seed(t, s, types.Job{ID: "u1", Checkpoint: rev, State: types.StateDeclared})
+			got, err := s.Exec(ctx, "u1", vcs.CheckpointToken(cp))
+			require.NoError(t, err)
+
+			assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict)
+			assert.NotContains(t, got.ReportedBase, emptyPatch)
+			assert.NotContains(t, BaseAdvice(got), emptyPatch)
+			seen := changedSince(ctx, res.VCS, "", root, rev)
+			assert.Contains(t, seen.Changed, "new.txt", "the footprint counts the untracked file as the job's work")
+		})
 	}
 }
 
