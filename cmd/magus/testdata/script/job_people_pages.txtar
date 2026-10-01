@@ -1,0 +1,96 @@
+# Two translators divide one site's pages by write path. A second person claiming a
+# page another checkout already holds is refused (MGS3032), and the two split the page
+# by heading instead, which the store records as disjoint claims on one file.
+# docs/guides/jobs/other-work.md shows these commands and every golden below verbatim
+# (TestJobGuideMatchesItsScripts holds it to that).
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+env GIT_AUTHOR_DATE=2026-10-01T09:00:00Z
+env GIT_COMMITTER_DATE=2026-10-01T09:00:00Z
+cd site
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'english pages, french stubs'
+exec git worktree add -q ../ana
+exec git worktree add -q ../ben
+
+cd ../ana
+exec magus job fork fr/install --criteria 'install page in French' --write-paths docs/fr/install.md --check 'lint .'
+exec magus job exec fr/install
+
+# The refusal names how long ago the holder last moved, which a slow machine can push
+# past 0s.
+cd ../ben
+! exec magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
+cp stderr $WORK/raw
+exec sh -c 'sed -e "s/updated [0-9]*[smh] ago/updated 0s ago/" "$WORK/raw"'
+cmp stdout $WORK/refused.out
+
+cd ../ana
+stdin $WORK/split.jsonl
+exec magus job apply -f -
+cmp stdout $WORK/apply.out
+cd ../ben
+exec magus job exec fr/upgrading
+exec magus ls jobs
+cmp stdout $WORK/ls.out
+
+-- site/.gitignore --
+.magus/
+-- site/.gitattributes --
+*.md diff=markdown
+-- site/magus.yaml --
+concurrency: 2
+-- site/magusfile.buzz --
+import "magus";
+import "proc";
+
+// lint fails on an empty page.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("docs/**/*.md");
+    proc\exec("sh", ["-c", "for f in docs/*/*.md; do test -s \"$f\" || exit 1; done"]);
+}
+-- site/docs/en/install.md --
+# Install
+
+Download the archive.
+
+## Upgrading
+
+Replace the binary.
+-- site/docs/fr/install.md --
+# Installer
+
+Téléchargez l'archive.
+
+## Mettre à jour
+
+À traduire.
+-- split.jsonl --
+{"schema_version": 11, "id": "fr/install", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
+{"schema_version": 11, "id": "fr/upgrading", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+-- refused.out --
+[error] magus job fork: [MGS3032] job: fr/upgrading declares "docs/fr/install.md", and fr/install (declared, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install
+  see: https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3032/
+-- apply.out --
+updated fr/install, still declared:
+  write_paths +docs/fr/install.md#Installer -docs/fr/install.md
+created fr/upgrading, declared, with 1 write path(s)
+-- ls.out --
+JOB           HOLDER   STATE     MODEL  PATHS  PROOF     CHECK
+fr/install    session  declared  -      1      alone     magus run lint .
+fr/upgrading  session  declared  -      1      disjoint  magus run lint .
+
+overlaps
+  fr/install and fr/upgrading claim common ground
+    fr/install: docs/fr/install.md#Installer
+    fr/upgrading: docs/fr/install.md#Mettre à jour
+    claims: disjoint (different declarations of one file: an integration order, not a wait)
+    footprints: disjoint
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

@@ -1,0 +1,152 @@
+# One person splits a refactor across two worktrees of one repository: fork a job per
+# half, take each in its own worktree with exec, file one result and abandon the other
+# with exit, and verify the result with wait. docs/guides/jobs.md shows these commands
+# and every golden below verbatim (TestJobGuideMatchesItsScripts holds it to that), so a
+# change to what they print fails here first.
+#
+# The fixed commit dates pin the revision the outputs name. A path or an output ref
+# varies per run, so those outputs pass through sed into the ~/src and out<hex> the
+# guide prints.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+env GIT_AUTHOR_DATE=2026-10-01T09:00:00Z
+env GIT_COMMITTER_DATE=2026-10-01T09:00:00Z
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop before the refactor'
+
+exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
+cmp stdout $WORK/fork.out
+exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
+exec git worktree add -q ../shop-pricing
+exec git worktree add -q ../shop-tax
+exec magus ls jobs
+cmp stdout $WORK/ls-declared.out
+
+cd ../shop-pricing
+exec magus job exec refactor/pricing
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
+cmp stdout $WORK/exec.out
+exec magus describe job refactor/pricing
+cmp stdout $WORK/describe.out
+
+# A run in the same second as the fork predates the declaration, which records whole
+# seconds, so wait would refuse it as historical output.
+exec sleep 1
+cp $WORK/total.sh pricing/total.sh
+exec magus run test .
+stderr '^ref  out[0-9a-f]{12}$'
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json"'
+stdin $WORK/result.json
+exec magus job exit refactor/pricing --stdin
+cmp stdout $WORK/exit.out
+
+cd ../shop-tax
+exec magus job exec refactor/tax
+exec magus job exit refactor/tax
+cmp stdout $WORK/abandon.out
+
+cd ../shop
+exec magus job wait refactor/pricing
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
+cmp stdout $WORK/wait.out
+exec magus ls jobs
+cmp stdout $WORK/ls-done.out
+
+# Who holds what and since when: the checkout each job was taken in, the clock it was
+# taken and last moved on, and the run its result named.
+exec magus ls jobs -o json
+stdout '"checkout_root": ".*shop-pricing"'
+stdout '"registered": [1-9][0-9]+'
+stdout '"updated": [1-9][0-9]+'
+stdout '"timestamp_ms": [1-9][0-9]+'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the shell checks in test/run.sh.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh", "checkout/*.sh", "test/*.sh");
+    proc\exec("sh", ["test/run.sh"]);
+}
+-- shop/pricing/total.sh --
+total() { echo $(( $1 + $2 )); }
+-- shop/checkout/tax.sh --
+tax() { echo $(( $1 / 10 )); }
+-- shop/test/run.sh --
+. pricing/total.sh
+. checkout/tax.sh
+[ "$(total 2 3)" = 5 ] && [ "$(tax 50)" = 5 ]
+-- total.sh --
+# total adds two prices given in cents.
+total() { echo $(( $1 + $2 )); }
+-- result.in.json --
+{"schema_version": 2,
+ "changed_paths": ["pricing/total.sh"],
+ "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
+-- fork.out --
+forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- ls-declared.out --
+JOB               HOLDER   STATE     MODEL  PATHS  PROOF  CHECK
+refactor/pricing  session  declared  -      1      alone  magus run test .
+refactor/tax      session  declared  -      1      alone  magus run test .
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- exec.out --
+recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb, which is the checkpoint it was handed. Nothing to reconcile; carry on.
+took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
+-- describe.out --
+job: refactor/pricing
+
+criteria
+totals are computed in cents
+
+write paths
+  pricing/total.sh
+
+projects
+  .
+
+deny paths the workspace declares
+  checkout/tax.sh: owned by live lease refactor/tax: coordinate, never work around
+  magus.yaml: workspace configuration: changing it changes the plan every lease is running
+
+the only check you run
+magus run test .
+refactor/pricing: 0 of 1 goal(s) met
+  [unmet] check
+      carries no output_ref, so there is no run to reopen
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- exit.out --
+exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
+-- abandon.out --
+abandoned refactor/tax, recorded no_return
+-- wait.out --
+verified refactor/pricing, recorded pass
+its holder reports it ran magus run test .
+goal check: verified (out<hex>)
+footprint: where its diff since the checkpoint landed
+  pricing/total.sh:1-1
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- ls-done.out --
+JOB               HOLDER   STATE      MODEL  PATHS  PROOF  CHECK
+refactor/pricing  session  pass       -      1      alone  magus run test .
+refactor/tax      session  no_return  -      1      alone  magus run test .
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

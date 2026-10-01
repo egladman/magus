@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -687,4 +691,125 @@ func TestLsJobsClipsATitleAtAWord(t *testing.T) {
 	assert.Equal(t, "short", clipTitle("short", 48))
 	assert.Equal(t, "one two...", clipTitle("one two three", 9))
 	assert.Equal(t, "abcdefgh...", clipTitle("abcdefghijk", 8), "no space to cut at")
+}
+
+// Every job verb's help ends its prose with one command a person types, spelled with the
+// verb itself, so `-h` answers "what does a use of this look like" without a docs page.
+func TestJobHelpCarriesAPersonRunExample(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	ctx := t.Context()
+	verbs := []struct {
+		name string
+		run  func(args []string) error
+	}{
+		{"job fork", func(a []string) error { return jobFork(ctx, "", a) }},
+		{"job apply", func(a []string) error { return jobApply(ctx, "", a) }},
+		{"job exec", func(a []string) error { return jobExec(ctx, "", a) }},
+		{"job exit", func(a []string) error { return jobExit(ctx, "", a) }},
+		{"job wait", func(a []string) error { return jobWait(ctx, "", a) }},
+		{"job watch", func(a []string) error { return jobWatch(ctx, "", a) }},
+		{"job rm", func(a []string) error { return jobDelete(ctx, "", a) }},
+		{"job prune", func(a []string) error { return jobPrune(ctx, "", a) }},
+		{"ls jobs", func(a []string) error { return lsJobs("", a) }},
+		{"describe job", func(a []string) error { return describeJob(ctx, "", a) }},
+	}
+	for _, v := range verbs {
+		var err error
+		help := captureStderr(t, func() { err = v.run([]string{"-h"}) })
+		require.ErrorIs(t, err, flag.ErrHelp, v.name)
+		_, example, found := strings.Cut(help, "\nExample:\n  ")
+		require.True(t, found, "`magus %s -h` carries no Example:\n%s", v.name, help)
+		line, _, _ := strings.Cut(example, "\n")
+		assert.True(t, strings.HasPrefix(line, "magus "+v.name+" "), "`magus %s -h` example runs something else: %q", v.name, line)
+	}
+}
+
+// guideMarker pins the fenced block on the next line to a section of a job_people script.
+var guideMarker = regexp.MustCompile(`^<!-- golden: (job_people_[a-z]+\.txtar) (\S+) -->$`)
+
+// The job guides show people running the CLI, and their transcripts are the outputs the
+// job_people scripts compare byte for byte: a block marked with guideMarker must equal
+// "$ <the command>" plus the golden that command's stdout was compared against, or, for a
+// section no command's stdout is compared against (an input file), the section itself.
+// Every job_people script is shown somewhere, so a script nobody reads cannot pass for
+// documentation.
+func TestJobGuideMatchesItsScripts(t *testing.T) {
+	t.Parallel()
+	guides := filepath.Join("..", "..", "docs", "guides")
+	pages, err := filepath.Glob(filepath.Join(guides, "jobs*.md"))
+	require.NoError(t, err)
+	more, err := filepath.Glob(filepath.Join(guides, "jobs", "*.md"))
+	require.NoError(t, err)
+	pages = append(pages, more...)
+	require.NotEmpty(t, pages)
+
+	shown := map[string]bool{}
+	for _, page := range pages {
+		data, err := os.ReadFile(page)
+		require.NoError(t, err)
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			m := guideMarker.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			// One blank line may separate the two, as the formatter leaves it.
+			fence := i + 1
+			if fence < len(lines) && lines[fence] == "" {
+				fence++
+			}
+			require.Less(t, fence, len(lines), "%s:%d: a marker with no block under it", page, i+1)
+			require.True(t, strings.HasPrefix(lines[fence], "```"), "%s:%d: the marker must sit above a fence", page, i+1)
+			end := slices.Index(lines[fence+1:], "```")
+			require.GreaterOrEqual(t, end, 0, "%s:%d: the fenced block never closes", page, fence+1)
+			got := strings.Join(lines[fence+1:fence+1+end], "\n") + "\n"
+			assert.Equal(t, guideBlock(t, m[1], m[2]), got, "%s:%d shows something %s does not pin", page, i+1, m[1])
+			shown[m[1]] = true
+		}
+	}
+	scripts, err := filepath.Glob(filepath.Join("testdata", "script", "job_people_*.txtar"))
+	require.NoError(t, err)
+	require.NotEmpty(t, scripts)
+	for _, script := range scripts {
+		assert.True(t, shown[filepath.Base(script)], "no job guide shows %s", script)
+	}
+}
+
+// guideBlock renders what a guide must show for section of script: the section as is, or,
+// when a `cmp stdout $WORK/<section>` compares a command's output against it, that command
+// as a transcript line followed by the section. The command is the nearest `exec magus`
+// above the cmp, since the steps between only normalize its output. A stdin the archive
+// carries is shown as the heredoc a person would type; one the script generated, as a
+// redirect from the file of that name.
+func guideBlock(t *testing.T, script, section string) string {
+	t.Helper()
+	archive, err := txtar.ParseFile(filepath.Join("testdata", "script", script))
+	require.NoError(t, err)
+	files := map[string]string{}
+	for _, f := range archive.Files {
+		files[f.Name] = string(f.Data)
+	}
+	golden, ok := files[section]
+	require.True(t, ok, "%s has no section %s", script, section)
+
+	steps := strings.Split(string(archive.Comment), "\n")
+	cmp := slices.Index(steps, "cmp stdout $WORK/"+section)
+	if cmp < 0 {
+		return golden
+	}
+	run := cmp - 1
+	for run >= 0 && !strings.HasPrefix(strings.TrimPrefix(steps[run], "! "), "exec magus ") {
+		run--
+	}
+	require.GreaterOrEqual(t, run, 0, "%s compares %s against no magus command", script, section)
+	command := "$ " + strings.TrimPrefix(strings.TrimPrefix(steps[run], "! "), "exec ")
+	if run > 0 {
+		if in, ok := strings.CutPrefix(steps[run-1], "stdin $WORK/"); ok {
+			if body, archived := files[in]; archived {
+				return command + " <<'EOF'\n" + body + "EOF\n" + golden
+			}
+			command += " < " + in
+		}
+	}
+	return command + "\n" + golden
 }
