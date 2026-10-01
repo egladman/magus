@@ -59,7 +59,7 @@ func wireGuardHook(t *testing.T, root string) {
 func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -73,7 +73,7 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -115,7 +115,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.CheckFail, got.Status)
 	require.Equal(t, types.EvidenceUnknown, got.Evidence)
@@ -126,7 +126,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
 	bindCheckout(t, cacheDir, "adj/no-such-lease")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -144,7 +144,7 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
 	bindCheckout(t, cacheDir, "adj/done")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -164,7 +164,7 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/stateless","created":1,"updated":1}]}`), 0o644))
 	bindCheckout(t, cacheDir, "adj/stateless")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -179,7 +179,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
 	bindCheckout(t, cacheDir, "adj/live")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -192,7 +192,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 	cacheDir, root := registeredLease(t, "adj/unwired")
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -206,7 +206,7 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	cacheDir, root := registeredLease(t, "adj/enforcing")
 	wireGuardHook(t, root)
 
-	got := checkBoundLease(context.Background(), cacheDir, root, "test-host")
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, root, "test-host")
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
