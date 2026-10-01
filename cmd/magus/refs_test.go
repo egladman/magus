@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -262,4 +264,51 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.NotEmpty(t, errOut)
+}
+
+// A name refs cannot resolve, from a workspace with an unbuilt index: -o json prints the
+// record with its verdict and index cause on stdout, and the text block on stderr carries
+// the same why and fix in every format.
+func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
+	ans := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
+	ans.IndexCause = &types.KnowledgeIndexCause{
+		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
+		Fix: "`magus server start` keeps it current from now on",
+	}
+	miss := refsMiss{name: "Foo", answer: ans}
+
+	var stderr bytes.Buffer
+	var err error
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: outputJSON}, miss) })
+	require.NoError(t, err)
+	var record types.KnowledgeRefsOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
+	assert.Equal(t, "Foo", record.Symbol)
+	assert.Equal(t, types.VerdictUnknown, record.Answer.Verdict)
+	assert.Equal(t, ans.IndexCause, record.Answer.IndexCause)
+	assert.Contains(t, stdout, `"index_cause"`)
+	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
+	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
+
+	stderr.Reset()
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: FormatText}, miss) })
+	require.NoError(t, err)
+	assert.Empty(t, stdout, "text output keeps stdout for answers")
+	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)
+	assert.Contains(t, stderr.String(), "outside coverage: libs/api (not-indexed)")
+	assert.Contains(t, stderr.String(), "  why: "+ans.IndexCause.Why+"\n  fix: "+ans.IndexCause.Fix+"\n")
+}
+
+// withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean
+// answer stays without the key.
+func TestWithIndexCauseFillsOnlyAnIndexBehind(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	behind := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef(".", ""), State: types.SymbolIndexNotBuilt}})
+	got := withIndexCause(t.Context(), w.Root(), behind)
+	require.NotNil(t, got.IndexCause)
+	assert.NotEmpty(t, got.IndexCause.Why)
+	assert.NotEmpty(t, got.IndexCause.Fix)
+
+	clean := withIndexCause(t.Context(), w.Root(), types.ClassifyAnswer(true, "", nil))
+	assert.Nil(t, clean.IndexCause)
 }
