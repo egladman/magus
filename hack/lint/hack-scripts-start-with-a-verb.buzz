@@ -4,8 +4,10 @@
 //
 // A script a person or agent runs (hack/dev, hack/bench, hack/ci) starts with a verb from a
 // closed list, and the verb is the contract: ls, show, count, diff, summarize and example
-// only read; time runs what it names and reports how long, writing nothing in the tree;
-// rename and split write, and only with --apply. A script in hack/remote is named
+// only read; render only prints; time runs what it names and reports how long, writing
+// nothing in the tree; rename, split, mark, prune and merge print a plan and write only
+// with --apply; bootstrap prepares the checkout it runs in, writing there and to its job's
+// row only. A script in hack/remote is named
 // on-<where> and runs the command that follows it there, and only there. The modules
 // magusfiles import (hack/magusfile) keep their nouns, and hack/ itself holds no script.
 // lint, policy and git-hooks run through their own entry points and are not read.
@@ -16,8 +18,9 @@ import "path";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time"];
-final WRITE_VERBS = ["rename", "split"];
+final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time", "render"];
+final WRITE_VERBS = ["rename", "split", "mark", "prune", "merge"];
+final SETUP_VERBS = ["bootstrap"];
 
 // NOUNS are the scripts named before the verb rule, and the workflow steps a person never
 // runs. host-schemas keeps its noun: its fetch step writes, which no read verb allows.
@@ -59,7 +62,7 @@ export fun nameProblem(p: str) > str {
         return "";
     }
     final verb = name.split("-")[0];
-    if (READ_VERBS.indexOf(verb) != null or WRITE_VERBS.indexOf(verb) != null) {
+    if (READ_VERBS.indexOf(verb) != null or WRITE_VERBS.indexOf(verb) != null or SETUP_VERBS.indexOf(verb) != null) {
         return "";
     }
     return "{p} starts with `{verb}`, which is not a verb hack/ names scripts with";
@@ -78,7 +81,9 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (problem != "") {
             found.append(Finding{ path = f.value, line = 1, message = problem,
                 fix = "Move it to the directory of whoever runs it and name it <verb>-<object>. Read-only: {READ_VERBS.join(", ")}. "
-                    + "Writes, only with --apply: {WRITE_VERBS.join(", ")}. Runs a command elsewhere: hack/remote/on-<where>. "
+                    + "Writes, only with --apply: {WRITE_VERBS.join(", ")}. "
+                    + "Prepares the checkout it runs in, writing there and to its job's row only: {SETUP_VERBS.join(", ")}. "
+                    + "Runs a command elsewhere: hack/remote/on-<where>. "
                     + "Imported by a magusfile: hack/magusfile/<noun>." });
         }
         if (listed(p) and listing.indexOf(p) == null) {
@@ -90,7 +95,10 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 test "a verb in a script directory, on- in hack/remote, a module or a listed noun passes" {
-    foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/bench/time-startup.buzz",
+    foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/dev/mark-feedback.buzz", "hack/dev/show-feedback.buzz",
+                   "hack/dev/count-feedback.buzz", "hack/dev/show-session-figure.buzz", "hack/dev/render-brief.buzz",
+                   "hack/dev/bootstrap-worktree.buzz", "hack/dev/show-guard-health.buzz", "hack/dev/prune-worktrees.buzz",
+                   "hack/dev/merge-job-branches.buzz", "hack/bench/time-startup.buzz",
                    "hack/remote/on-linux.buzz", "hack/magusfile/changelog.buzz", "hack/ci/merge-queue.buzz",
                    "hack/lint/support.buzz", "hack/policy/guard.buzz"]) {
         assert\equal(nameProblem(p), want: "", message: p);
