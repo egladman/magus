@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,8 +17,24 @@ import (
 // probeTimeout bounds one guard-command probe. Matches the shipped hook templates'
 // own 10s hook timeout: a script that has to load the workspace to answer needs
 // that long, but verify must not hang a command or a doctor report on a wedged
-// subprocess.
+// subprocess. ContextWithProbeTimeout overrides it.
 const probeTimeout = 10 * time.Second
+
+type probeTimeoutKey struct{}
+
+// ContextWithProbeTimeout sets how long VerifyHarness waits for each wired command
+// it runs; d <= 0 keeps the 10s default. It is for tests whose stand-in commands
+// answer at once, where the default measures only how loaded the machine is.
+func ContextWithProbeTimeout(ctx context.Context, d time.Duration) context.Context {
+	return context.WithValue(ctx, probeTimeoutKey{}, d)
+}
+
+func probeTimeoutFrom(ctx context.Context) time.Duration {
+	if d, ok := ctx.Value(probeTimeoutKey{}).(time.Duration); ok && d > 0 {
+		return d
+	}
+	return probeTimeout
+}
 
 // guardUnavailableNotice is the literal English magus's own shipped guard scripts
 // print when they could not resolve or run a working binary. It is magus's own
@@ -254,7 +271,8 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	}
 	defer func() { _ = os.RemoveAll(scratch) }()
 
-	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	timeout := probeTimeoutFrom(ctx)
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	event, wantDecisions := probeEvent(command)
@@ -287,6 +305,18 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	runErr := cmd.Run()
 	combined := stdout.String() + stderr.String()
 
+	// A probe cut short or never started is evidence about this machine, not the
+	// config: a guard that answers in a second on an idle machine can miss the
+	// deadline under memory pressure, and fork fails the same way.
+	var exitErr *exec.ExitError
+	switch {
+	case ctx.Err() != nil:
+		return HarnessUnprobed, "the probe was canceled: " + ctx.Err().Error()
+	case probeCtx.Err() != nil:
+		return HarnessUnprobed, fmt.Sprintf("the wired command did not finish within %s, which cannot tell a wedged guard from a loaded machine", timeout)
+	case runErr != nil && !errors.As(runErr, &exitErr):
+		return HarnessUnprobed, "the wired command could not be started: " + runErr.Error()
+	}
 	if line, ok := firstLineContaining(combined, guardUnavailableNotice); ok {
 		return HarnessUnprobed, line
 	}
