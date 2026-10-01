@@ -14,10 +14,14 @@
 //	mark(change + {mark})                          > bool
 //	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
 //	required_checks(change + {commit})             > {checks: [{name, state}]}
+//	reviews(change)                                > {head, reviews: [{id, reviewer, commit}]}
+//	dismiss_review(change + {review, reviewer, commit, message}) > bool
 //
-// Every op but list_artifacts and required_checks is required; list_artifacts is
-// required of a provider apply follows a validation run through, and without
-// required_checks apply reads no required check. A change record carries the fields of
+// Every op but list_artifacts, required_checks, reviews and dismiss_review is required;
+// list_artifacts is required of a provider apply follows a validation run through,
+// without required_checks apply reads no required check, and `magus queue reviews` needs
+// reviews, and dismiss_review to dismiss. reviews lists only approving reviews.
+// dismiss_review's review is the id reviews reported. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
 // unqueued record those of [types.UnqueuedChange]. app is --app as the person gave it,
 // in the provider's own notation, which the queue never reads. describe's setup, asked
@@ -78,6 +82,8 @@ const (
 	opMark           = "mark"
 	opListArtifacts  = "list_artifacts"
 	opRequiredChecks = "required_checks"
+	opReviews        = "reviews"
+	opDismissReview  = "dismiss_review"
 )
 
 // Every op but those in optionalOps is required: branch protection requires the queue's
@@ -86,12 +92,13 @@ const (
 var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark}
 
 // optionalOps are the ops a provider script may leave out: without list_artifacts apply
-// follows only a directory, and without required_checks it reads no required check.
-var optionalOps = []string{opListArtifacts, opRequiredChecks}
+// follows only a directory, without required_checks it reads no required check, and
+// without reviews and dismiss_review `magus queue reviews` is refused.
+var optionalOps = []string{opListArtifacts, opRequiredChecks, opReviews, opDismissReview}
 
-// Script is a [types.Provider] backed by a Buzz script, and a
-// [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
-// VM session answers them all.
+// Script is a [types.Provider] backed by a Buzz script, a [types.ArtifactLister] when
+// it exports list_artifacts, and a [types.ReviewDismisser] when it exports reviews and
+// dismiss_review. Calls are serialized: one VM session answers them all.
 type Script struct {
 	name string
 	mu   sync.Mutex
@@ -100,8 +107,9 @@ type Script struct {
 }
 
 var (
-	_ types.Provider       = (*Script)(nil)
-	_ types.ArtifactLister = (*Script)(nil)
+	_ types.Provider        = (*Script)(nil)
+	_ types.ArtifactLister  = (*Script)(nil)
+	_ types.ReviewDismisser = (*Script)(nil)
 )
 
 // IsBuiltin reports whether [Open] reads spec as a built-in provider's name rather than
@@ -576,6 +584,48 @@ func (p *Script) ListArtifacts(ctx context.Context, source string) (types.Artifa
 		out.Artifacts = append(out.Artifacts, a)
 	}
 	return out, nil
+}
+
+// Reviews calls reviews. A head or an approved commit that is not a full commit id, or
+// a review without an id, is an error: the queue would classify or dismiss the wrong
+// thing.
+func (p *Script) Reviews(ctx context.Context, c types.Change) (types.Reviews, error) {
+	r, err := p.callRecord(ctx, opReviews, changeParams(c))
+	if err != nil {
+		return types.Reviews{}, err
+	}
+	var out types.Reviews
+	var rows []record
+	if err := r.decode(required("head", &out.Head), required("reviews", &rows)); err != nil {
+		return types.Reviews{}, err
+	}
+	if !types.IsObjectID(out.Head) {
+		return types.Reviews{}, fmt.Errorf("%s: head %q is not a full commit id", r.where, out.Head)
+	}
+	for _, row := range rows {
+		var rv types.Review
+		if err := row.decode(required("id", &rv.ID), required("reviewer", &rv.Reviewer), required("commit", &rv.Commit)); err != nil {
+			return types.Reviews{}, err
+		}
+		switch {
+		case rv.ID == "":
+			return types.Reviews{}, fmt.Errorf("%s: a review by %q has no id", row.where, rv.Reviewer)
+		case !types.IsObjectID(rv.Commit):
+			return types.Reviews{}, fmt.Errorf("%s: review %s: commit %q is not a full commit id", row.where, rv.ID, rv.Commit)
+		}
+		out.Approving = append(out.Approving, rv)
+	}
+	return out, nil
+}
+
+// DismissReview calls dismiss_review.
+func (p *Script) DismissReview(ctx context.Context, c types.Change, rv types.Review, message string) error {
+	params := changeParams(c)
+	params["review"] = rv.ID
+	params["reviewer"] = rv.Reviewer
+	params["commit"] = rv.Commit
+	params["message"] = message
+	return p.acknowledged(ctx, opDismissReview, params)
 }
 
 // acknowledged invokes an op answering a bool, reading anything but true as a refusal:

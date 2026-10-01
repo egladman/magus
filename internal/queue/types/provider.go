@@ -408,3 +408,29 @@ type Artifact struct {
 	Name string
 	URL  string // https
 }
+
+// ReviewDismisser is the provider's side of `magus queue reviews`: the approvals standing
+// on a change, and taking back one the queue would no longer count, so what reviewers
+// see agrees with what the queue merges by.
+type ReviewDismisser interface {
+	// Reviews reads c's head and, in the same read, the approvals standing on c: each
+	// reviewer's latest decisive review, when it approves and the provider counts that
+	// reviewer toward an approval (github: one who can push).
+	Reviews(ctx context.Context, c Change) (Reviews, error)
+	// DismissReview dismisses r on c, telling its reviewer message. A review that is
+	// already dismissed is success.
+	DismissReview(ctx context.Context, c Change, r Review, message string) error
+}
+
+// Reviews is a change's head and the approvals standing on it, read together.
+type Reviews struct {
+	Head      string
+	Approving []Review
+}
+
+// Review is one approving review.
+type Review struct {
+	ID       string // the provider's id for it, which DismissReview takes
+	Reviewer string // the provider's login for who gave it
+	Commit   string // the commit it was given at
+}
