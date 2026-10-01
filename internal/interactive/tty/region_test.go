@@ -834,3 +834,52 @@ func TestTerminalResetsStillFireOnACapableTerminal(t *testing.T) {
 	require.NoError(t, ResetMouseTracking(&mouse, terminal(80, 24)))
 	assert.Equal(t, mouseTrackOff, mouse.String())
 }
+
+// BenchmarkRegionRender covers both halves of the frame diff: a frame that
+// changed, and one that did not. The unchanged case is the steady state of any
+// view repainted on a timer.
+func BenchmarkRegionRender(b *testing.B) {
+	rows := []Line{
+		{Spans: []Span{{Text: "pool 6/8 running   9 ok  1 failed", Style: SGRDim}, {Text: "6.4s", Style: SGRDim, Align: AlignRight}}},
+		{Text: "[fail] test internal/sandbox (ran, 4.1s)", Style: SGRBoldRed},
+		{Text: "[fail] lint std (ran, 2.3s)", Style: SGRBoldRed},
+		{}, {}, {},
+	}
+	b.Run("unchanged", func(b *testing.B) {
+		r := newBenchRegion()
+		_ = r.render(rows)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for range b.N {
+			_ = r.render(rows)
+		}
+	})
+	b.Run("changed", func(b *testing.B) {
+		r := newBenchRegion()
+		alt := append([]Line(nil), rows...)
+		alt[1] = Line{Text: "[fail] test internal/proc (ran, 9.9s)", Style: SGRBoldRed}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := range b.N {
+			if i%2 == 0 {
+				_ = r.render(alt)
+				continue
+			}
+			_ = r.render(rows)
+		}
+	})
+}
+
+func newBenchRegion() *region {
+	r := newRegion(discardTTY{}, 6, terminal(120, 40))
+	_ = r.reserve()
+	return r
+}
+
+// discardTTY is a terminal-shaped sink: it has a descriptor so the region
+// enables, and throws the bytes away so the benchmark measures composition
+// rather than the write.
+type discardTTY struct{}
+
+func (discardTTY) Write(p []byte) (int, error) { return len(p), nil }
+func (discardTTY) Fd() uintptr                 { return 2 }
