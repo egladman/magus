@@ -43,10 +43,8 @@ import (
 // unambiguous, so no pair of distinct shards can hash alike by concatenation
 // (an "ab"+"c" versus "a"+"bc" collision).
 func fingerprintShardContent(sh Shard) string {
-	g := NewGraph()
-	g.Merge(sh.Nodes, sh.Edges)
 	h := sha256.New()
-	nodes, edges := g.Nodes(), g.Edges()
+	nodes, edges := sh.canonicalContent()
 
 	// One reused buffer, appended into and flushed per record. The obvious shape
 	// (io.WriteString(h, field) per field) costs an allocation EVERY field: a

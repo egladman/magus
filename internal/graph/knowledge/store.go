@@ -726,14 +726,13 @@ func (s *Store) writeShards(ctx context.Context, writes []shardWrite) error {
 func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	// Persist in canonical sorted order so identical inputs produce byte-identical
 	// files (diffable, and the content fingerprint is stable).
-	g := NewGraph()
-	g.Merge(sh.Nodes, sh.Edges)
+	nodes, edges := sh.canonicalContent()
 	sf := shardFile{
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Name:          sh.Name,
 		Fingerprint:   fp,
-		Nodes:         g.Nodes(),
-		Edges:         g.Edges(),
+		Nodes:         nodes,
+		Edges:         edges,
 	}
 	b, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {

@@ -130,6 +130,21 @@ type Shard struct {
 	// Err is a declaration the assembler refuses to index, such as an unknown marker
 	// family. Build fails on it; like Dropped it is never fingerprinted.
 	Err error
+
+	// canonical marks Nodes and Edges as already deduplicated and sorted the way a merge
+	// into a fresh Graph leaves them, so fingerprinting and writing can skip that merge.
+	canonical bool
+}
+
+// canonicalContent returns the shard's nodes and edges deduplicated and in canonical
+// order, merging them through a scratch graph unless the shard already holds them so.
+func (sh Shard) canonicalContent() ([]types.KnowledgeNode, []types.KnowledgeEdge) {
+	if sh.canonical {
+		return sh.Nodes, sh.Edges
+	}
+	g := NewGraph()
+	g.Merge(sh.Nodes, sh.Edges)
+	return g.Nodes(), g.Edges()
 }
 
 // AssembleShards builds every shard from the gathered inputs: the registry shard

@@ -69,11 +69,13 @@ func splitSymbolShard(project string, sh Shard) []Shard {
 			}
 		}
 	}
-	parts := map[string]*Shard{"": {Name: sh.Name}}
+	// Each part takes its nodes and edges in the order the merged graph lists them, so a
+	// part is already in canonical form and fingerprinting it need not merge it again.
+	parts := map[string]*Shard{"": {Name: sh.Name, canonical: true}}
 	part := func(dir string) *Shard {
 		p := parts[dir]
 		if p == nil {
-			p = &Shard{Name: sh.Name + ":" + dir}
+			p = &Shard{Name: sh.Name + ":" + dir, canonical: true}
 			parts[dir] = p
 		}
 		return p

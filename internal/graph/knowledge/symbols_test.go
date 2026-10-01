@@ -441,4 +441,11 @@ func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
 	assert.Equal(t, string(want), string(got), "the parts merge back into the unsplit shard")
 	assert.True(t, isSymbolsShard(".@symbols:a"))
 	assert.Equal(t, ".", symbolsShardProject(".@symbols:a"))
+
+	for _, p := range parts {
+		merged := p
+		merged.canonical = false
+		assert.Equalf(t, fingerprintShardContent(merged), fingerprintShardContent(p),
+			"%s is already canonical, so skipping the merge fingerprints it alike", p.Name)
+	}
 }
