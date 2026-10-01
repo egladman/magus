@@ -1,0 +1,9 @@
+{
+  "jobs": [
+    {"id": "base", "state": "pass", "model": "opus", "writePaths": ["types/a.go"], "check": "test", "created": 1790790000},
+    {"id": "job-a", "state": "pass", "model": "opus", "writePaths": ["a.go", "a_test.go", "b.go"], "check": "test", "created": 1790800000},
+    {"id": "job-b", "state": "exited", "model": "sonnet", "writePaths": ["c.go"], "dependsOn": ["base"], "check": "lint-rules", "created": 1790800001},
+    {"id": "job-a/eval", "parent": "job-a", "state": "no_return", "model": "haiku", "created": 1790800100},
+    {"id": "unrelated", "state": "declared", "model": "opus", "writePaths": ["z.go"], "created": 1790800200}
+  ]
+}
