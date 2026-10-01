@@ -156,6 +156,8 @@ Charms are shared, composable execution modifiers attached after `:`; see [charm
 `ci` is where the pieces come together. Compose it from your other targets with `ctx.needs`; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:
 
 ```buzz
+import "magus";
+
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
 }

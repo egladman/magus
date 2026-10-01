@@ -654,6 +654,8 @@ reads the class alone, not the tier. Code settles only where its project opts it
 project-relative globs beside `gate_low_risk`:
 
 ```buzz
+import "magus";
+
 magus\project({"merge_low_risk": ["testdata/golden/**"]});
 ```
 

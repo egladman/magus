@@ -20,6 +20,8 @@ aliases: [ci]
 `ci` is an ordinary magusfile target; magus does not hardcode its steps. Export a `ci` function, wire the flow with `magus\needs`, and magus runs it read-only.
 
 ```buzz
+import "magus";
+
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // declare the edges you want; independent steps run in parallel
     ctx.needs(generate, format, lint, build, test);

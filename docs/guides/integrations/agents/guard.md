@@ -259,6 +259,7 @@ magus\guard.shell({
     reason: "Prefer the workspace terraform target: magus run plan <project>.",
 })
 
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 import "ghcr.io/egladman/magus/spells/harness/codex";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;

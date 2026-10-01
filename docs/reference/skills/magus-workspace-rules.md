@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11006
-skill_short_bytes: 8841
+skill_full_bytes: 11022
+skill_short_bytes: 8857
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `68fe01aa5415` |
+| `skill-content` | `0a17f9fa21ed` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -180,6 +180,7 @@ tag each one tracks and `magus.lock` pins its digest, so a harness versions apar
 from the binary:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 import "ghcr.io/egladman/magus/spells/harness/codex";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;
@@ -389,6 +390,7 @@ tag each one tracks and `magus.lock` pins its digest, so a harness versions apar
 from the binary:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 import "ghcr.io/egladman/magus/spells/harness/codex";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;

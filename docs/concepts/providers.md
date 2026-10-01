@@ -21,6 +21,7 @@ magus calls a few reserved function names on it (a contract) and reads what come
 back. Every provider is wired the same way, at the top level of the root magusfile:
 
 ```buzz
+import "magus";
 import "spells/endoflife-date" as eol;
 magus\lifecycle.provider(eol);
 ```
@@ -112,6 +113,7 @@ by copying it:
 2. Wire it in the root magusfile:
 
    ```buzz
+   import "magus";
    import "spells/endoflife-date" as eol;
    magus\lifecycle.provider(eol);
    ```

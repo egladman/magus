@@ -368,6 +368,8 @@ or `snake_case` op, it now works instead of silently never running.
 Given a magusfile declaring:
 
 ```buzz
+import "magus";
+
 export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 ```
 

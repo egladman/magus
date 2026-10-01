@@ -130,6 +130,8 @@ The section above is about **built-in commands**. They declare an output type, s
 A target returns `void`. Its result to the outside world is an exit code plus text. So the type system is not absent, it is on the **inside**: helpers can return whatever they like, and only the boundary is untyped.
 
 ```buzz
+import "magus";
+
 // Typed where it matters. The list never leaves Buzz, so nothing has to parse it.
 fun publish_registries(ctx: magus\Context) > [Registry] {
     if (ctx.hasCharm("cd")) { return REGISTRIES; }
@@ -153,6 +155,8 @@ done
 That crosses the boundary in the worst direction: structured data leaves the type system, becomes whitespace, and gets rebuilt by `read`. Declare the table once and export a verb per action instead:
 
 ```buzz
+import "magus";
+
 object Registry {
     host: str = "",         // the registry: what `docker login` authenticates against
     repository: str = "",   // the repository reference, never carrying a tag
@@ -265,6 +269,8 @@ Two entry points into an interactive Buzz REPL, sharing one evaluator:
 - **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
+import "magus";
+
 export fun build(ctx: magus\Context, args: [str]) > void {
     proc\exec("go", ["generate", "./..."]);
     magus\pry();   // execution pauses here; inspect or modify state

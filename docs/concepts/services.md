@@ -122,6 +122,8 @@ A `magus buzz` script holds a service the way a target's `magus\needs` does, thr
 same broker:
 
 ```buzz
+import "magus";
+
 final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
 // lease.owned is false when the machine was already running.
 ```

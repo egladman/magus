@@ -40,6 +40,7 @@ Any other provider is an ordinary spell exposing one handler op, selected the sa
 [CI provider](../ci/providers.md) or a remote cache provider is:
 
 ```buzz
+import "magus";
 import "spells/onepassword" as secrets;
 magus\secret.provider(secrets);
 
@@ -88,6 +89,7 @@ secret-tool store --label=CLAUDE_BENCH_TOKEN service CLAUDE_BENCH_TOKEN  # Linux
 ```
 
 ```buzz
+import "magus";
 import "./spells/system-keychain" as system_keychain;
 if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
     magus\secret.provider(system_keychain);
@@ -120,6 +122,7 @@ provider and CI provider. Wire it as a third contract, when the workflow asks fo
 `SECRET_PROVIDER: github-actions` in its `env:`:
 
 ```buzz
+import "magus";
 import "spells/github/actions" as github;
 
 if (os\env("SECRET_PROVIDER") == "github-actions") {
@@ -191,6 +194,7 @@ op signin
 ```
 
 ```buzz
+import "magus";
 import "spells/onepassword" as secrets;
 magus\secret.provider(secrets);
 ```

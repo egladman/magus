@@ -55,6 +55,7 @@ Prefer wiring the Claude Code harness from the root magusfile when you bounce
 between hosts; `magus describe harness` then covers every wired provider:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;
 magus\harness.provider(claude);
 ```

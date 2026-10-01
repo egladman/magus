@@ -51,6 +51,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 The relationship is **compositional**: a target's body calls spell ops.
 
 ```buzz
+import "magus";
 import "magus/spell/go";
 magus\project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });   // bind the spell (runs nothing)
 
@@ -140,6 +141,7 @@ Built-in spells ship in the magus binary as their Buzz source and compile when m
 starts.
 
 ```buzz
+import "magus";
 import "magus/spell/go";
 magus\project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 ```
@@ -165,6 +167,7 @@ resolves `./spells/ruby.buzz` and binds the handle under the basename; `as`
 renames it):
 
 ```buzz
+import "magus";
 import "spells/ruby" as rb;
 magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
@@ -185,6 +188,7 @@ import "ghcr.io/<owner>/<repo>/spells/ruby" as rb;
 Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-Buzz `magus/spell`, `magus/charm` and `magus/lint` modules (the session that loads built-ins offers nothing else). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
 ```buzz
+import "magus";
 import "magus/spell/go";
 import "magus/spell/docker";
 magus\project.register(fun(p, cb) > bool { cb({ "spells": [go, docker] }); return true; });   // co-bound
@@ -290,6 +294,7 @@ export fun mgs_listTargets() > any {
 Then import it by path, bind it, and compose targets that call its ops:
 
 ```buzz
+import "magus";
 import "spells/ruby" as rb;
 magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 
@@ -360,6 +365,8 @@ that figure. A ceiling can be declared per target instead, which is opted into o
 target at a time and so may be tight where the workspace-wide one cannot:
 
 ```buzz
+import "magus";
+
 magus\project({
     "targets": {
         // The network-bound one. A scanner whose far end stops answering has no

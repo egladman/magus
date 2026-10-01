@@ -73,6 +73,7 @@ never gates on detecting where it runs; see
 
 ```buzz
 // magusfile.buzz
+import "magus";
 import "spells/github/actions" as github;
 magus\cache.remote(github);
 ```
@@ -96,6 +97,7 @@ The `github-actions` spell ([`spells/github/actions`](../../../spells/github/act
 stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.
 
 ```buzz
+import "magus";
 import "spells/github/actions" as github;
 magus\cache.remote(github);
 ```
@@ -121,6 +123,7 @@ stores artifacts in any S3-compatible bucket, signing every request with AWS
 Signature V4.
 
 ```buzz
+import "magus";
 import "spells/aws/s3-cache" as s3;
 magus\cache.remote(s3);
 ```

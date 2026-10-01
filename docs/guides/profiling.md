@@ -166,6 +166,8 @@ A target that legitimately needs a lot of memory can say so, and magus will keep
 peers off the machine while it runs:
 
 ```buzz
+import "magus";
+
 magus\project({
     "targets": {
         "test": {"memory_mb": 10240},

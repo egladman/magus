@@ -228,6 +228,7 @@ already built replays instead of running again. Wire the bundled spell into your
 magusfile:
 
 ```buzz
+import "magus";
 import "spells/github/actions" as github;
 
 magus\cache.remote(github);
@@ -263,6 +264,7 @@ The same spell carries a [secret provider](../../concepts/secrets.md). Select it
 workflow asks for it, since it resolves the environment a workflow injects:
 
 ```buzz
+import "magus";
 import "spells/github/actions" as github;
 
 if (os\env("SECRET_PROVIDER") == "github-actions") {

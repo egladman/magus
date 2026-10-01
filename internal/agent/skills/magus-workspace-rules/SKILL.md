@@ -144,6 +144,7 @@ tag each one tracks and `magus.lock` pins its digest, so a harness versions apar
 from the binary:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 import "ghcr.io/egladman/magus/spells/harness/codex";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;

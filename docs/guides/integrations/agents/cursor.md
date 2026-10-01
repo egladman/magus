@@ -62,6 +62,7 @@ Prefer wiring the Cursor harness from the root magusfile when you bounce between
 hosts; `magus describe harness` then covers every wired provider:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 magus\harness.provider(cursor);
 ```
