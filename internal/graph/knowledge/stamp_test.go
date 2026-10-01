@@ -154,6 +154,39 @@ func TestEnsureSessionAloneResolvesAgainstStoredShards(t *testing.T) {
 	assert.Equal(t, "1", n.Attrs[AttrAgentReads])
 }
 
+// The session store moves on every agent event, so a symbol read must not rebuild @session
+// for it: only the symbol and coverage classes are brought up to date.
+func TestEnsureSymbolClassesLeavesAStaleSessionAlone(t *testing.T) {
+	cacheDir, in := stampFixture(t)
+	in.AgentContacts = []AgentContact{{Session: "s1", Path: "pkg/a/a.go", Read: true}}
+	ensure(t, cacheDir, stampsAll("v1"), AllClasses, in)
+	stamps := stampsAll("v1")
+	stamps[ClassSession] = "a session-store append"
+
+	_, asked := ensure(t, cacheDir, stamps, SymbolClasses, in)
+
+	assert.Nil(t, asked, "nothing a symbol read needs moved")
+	assert.Equal(t, "v1session", readManifest(t, cacheDir).Inputs[ClassSession], "the stored @session stays as it was")
+}
+
+// @session merges onto nodes the graph already has and mints none, so an overlay built
+// before a file was deleted cannot bring the file back.
+func TestMergeOverlayPutsSessionOnlyOnExistingNodes(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: fileID("kept.go"), Kind: types.KindFile, Label: "kept.go"})
+	session := Shard{Name: sessionShardName, Nodes: []types.KnowledgeNode{
+		{ID: fileID("kept.go"), Kind: types.KindFile, Attrs: map[string]string{AttrAgentReads: "2"}},
+		{ID: fileID("deleted.go"), Kind: types.KindFile, Attrs: map[string]string{AttrAgentReads: "1"}},
+	}}
+
+	mergeOverlay(g, session)
+
+	n, _ := g.node(fileID("kept.go"))
+	assert.Equal(t, "2", n.Attrs[AttrAgentReads])
+	_, minted := g.node(fileID("deleted.go"))
+	assert.False(t, minted)
+}
+
 func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, body string) {

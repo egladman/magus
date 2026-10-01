@@ -2547,6 +2547,47 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 	return ignored, nil
 }
 
+// IgnoreSources lists the files outside the working tree that git reads ignore rules
+// from: the repository's info/exclude, which a linked worktree shares with its main
+// checkout, and core.excludesFile, or git's XDG default when that is unset. A listed file
+// need not exist. The .gitignore files inside the tree are not listed, since anything
+// that reads the tree already sees them.
+func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error) {
+	exclude, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse --git-path info/exclude: %w", err)
+	}
+	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.excludesFile")
+	switch {
+	case err == nil:
+	case exitCode(err) == 1: // unset: git falls back to its XDG location
+		global, err = gitDefaultExcludesFile()
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("git config core.excludesFile: %w", err)
+	}
+	out := []string{strings.TrimSpace(exclude)}
+	if g := strings.TrimSpace(global); g != "" {
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+// gitDefaultExcludesFile is where git looks for global ignore rules when core.excludesFile
+// is unset: $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore.
+func gitDefaultExcludesFile() (string, error) {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+		return filepath.Join(x, "git", "ignore"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "git", "ignore"), nil
+}
+
 // gitRedirectVars are the environment variables that move git off the repository the
 // caller named. They are the reason every git subprocess here needs a scrubbed environment
 // rather than just -C or cmd.Dir.

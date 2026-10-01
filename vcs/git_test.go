@@ -4025,3 +4025,39 @@ func TestReadGitRefreshHookOutsideARepositoryIsUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, types.ErrVCSUnsupported)
 	assert.False(t, installed)
 }
+
+// IgnoreSources names the out-of-tree rule files: info/exclude from the common gitdir, so
+// a linked worktree reports its main checkout's, and core.excludesFile or git's XDG default.
+func TestGitIgnoreSources(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "a\n"})
+	realRepo, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	got, err := gitVCS{}.IgnoreSources(ctx, repo)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	exclude, err := filepath.EvalSymlinks(filepath.Dir(got[0]))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude)
+	assert.Equal(t, "exclude", filepath.Base(got[0]))
+	assert.Equal(t, filepath.Join(home, "xdg", "git", "ignore"), got[1], "unset, git falls back to its XDG location")
+
+	global := filepath.Join(home, "global-ignore")
+	gitRun(t, repo, "config", "core.excludesFile", global)
+	got, err = gitVCS{}.IgnoreSources(ctx, repo)
+	require.NoError(t, err)
+	assert.Equal(t, global, got[1])
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, repo, "worktree", "add", "-q", linked)
+	fromLinked, err := gitVCS{}.IgnoreSources(ctx, linked)
+	require.NoError(t, err)
+	exclude, err = filepath.EvalSymlinks(filepath.Dir(fromLinked[0]))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude, "a linked worktree shares its main checkout's exclude file")
+}

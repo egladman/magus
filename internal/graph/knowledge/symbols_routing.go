@@ -48,11 +48,13 @@ func symbolRefKey(symbolID string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// routingFormat versions what a routing file holds. It is folded into symbolShardsKey, so
-// a file written in an older format never matches and is rebuilt on the next sync.
+// routingFormat versions what the routing file and the names sidecar hold. It is folded
+// into symbolShardsKey, so a file written in an older format never matches and is rebuilt
+// on the next sync.
 //
 //	2: Labels.
-const routingFormat = 2
+//	3: the names sidecar.
+const routingFormat = 3
 
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
 // manifest, the identity the routing index is bound to. Empty when there are none.
@@ -145,7 +147,14 @@ func (s *Store) routingPath() string { return filepath.Join(s.dir, "shards", sym
 // stale file when no symbols exist, so it is present exactly when useful). Best-effort
 // at the write layer: callers treat a failure as non-fatal (the graph still works,
 // lookups just fall back to loading all symbol shards).
+//
+// The names sidecar a symbol query ranks from is derived from the same shards under the
+// same key, so it is written here too.
 func (s *Store) writeXref(shards []Shard, man manifest) error {
+	key := symbolShardsKey(&man)
+	if err := s.writeSymbolNames(shards, key); err != nil {
+		return err
+	}
 	index := buildXref(shards)
 	if len(index) == 0 {
 		if err := os.Remove(s.routingPath()); err != nil && !os.IsNotExist(err) {
@@ -153,7 +162,7 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 		}
 		return nil
 	}
-	b, err := json.Marshal(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index, Labels: buildLabelIndex(shards)})
+	b, err := json.Marshal(symbolRouting{ShardsKey: key, Index: index, Labels: buildLabelIndex(shards)})
 	if err != nil {
 		return err
 	}

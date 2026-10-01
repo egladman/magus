@@ -274,7 +274,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	// reads as stale.
 	if plan.covers(ClassSymbols) {
 		key := symbolShardsKey(&newMan)
-		if key != newMan.Routing || (key != "" && !fileExists(s.routingPath())) {
+		if key != newMan.Routing || (key != "" && (!fileExists(s.routingPath()) || !fileExists(s.namesPath()))) {
 			newMan.Routing = ""
 			if err := s.writeXref(shards, newMan); err != nil {
 				s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
@@ -555,9 +555,28 @@ func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, 
 	if _, ok := man.shard(name); !ok {
 		return
 	}
-	if err := s.readMergeShard(ctx, g, man, name); err != nil {
+	sf, err := s.readVerifiedShard(ctx, man, name)
+	if err != nil {
 		s.log.DebugContext(ctx, "knowledge: overlay merge failed",
 			slog.String("shard", name), slog.String("error", err.Error()))
+		return
+	}
+	mergeOverlay(g, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})
+}
+
+// mergeOverlay folds an overlay into g. @session lands only on nodes g already holds: a
+// symbol read does not rebuild it (see SymbolClasses), so it can name a file that has
+// since gone, and an overlay mints no node. A current @session names only nodes the graph
+// has, so the filter changes nothing for it.
+func mergeOverlay(g *Graph, sh Shard) {
+	if !isSessionShard(sh.Name) {
+		g.Merge(sh.Nodes, sh.Edges)
+		return
+	}
+	for _, n := range sh.Nodes {
+		if _, ok := g.node(n.ID); ok {
+			g.AddNode(n)
+		}
 	}
 }
 
