@@ -128,36 +128,24 @@ test "the stamp lands inside the svg element" {
         message: "first child of the svg");
 }
 
-// receipt is the JSON beside a figure's SVGs. Keys stringify sorted, so symbolIndex is last.
-fun receipt(run: FigureRun, symbolIndex: str) > str !> any {
+// receipt is the JSON beside a figure's SVGs. It carries no symbol index digest: that moves
+// on every indexed edit anywhere, and the receipt must move only with its figure.
+fun receipt(run: FigureRun) > str !> any {
     final record: {str: any} = {
         "figure": run.id,
         "stamp": run.stamp,
         "claims": {"imports": run.imports, "calls": run.calls, "flow": run.flow},
         "findings": run.findings,
-        "symbolIndex": symbolIndex,
     };
     return json\stringify(record, indent: "  ") + "\n";
 }
 
-// sameReceipt compares two receipts up to their symbolIndex line. The digest moves on every
-// indexed edit anywhere, so a figure whose picture held still keeps the digest it was drawn at.
-fun sameReceipt(a: str, b: str) > bool {
-    final key = "\"symbolIndex\"";
-    final ia = a.indexOf(key);
-    final ib = b.indexOf(key);
-    if (ia == null or ib == null) { return false; }
-    return a.sub(0, len: ia!) == b.sub(0, len: ib!);
-}
-
-test "a receipt that moved only its index digest is the same receipt" {
-    final run = FigureRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 };
-    final a = receipt(run, symbolIndex: "aaa") catch "";
-    final b = receipt(run, symbolIndex: "bbb") catch "";
+test "a receipt counts the claims and records a finding" {
+    final a = receipt(FigureRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 }) catch "";
     assert\isTrue(a.indexOf("\"imports\": 2") != null, message: "claims counted: {a}");
-    assert\isTrue(sameReceipt(a, b: b), message: "digest alone");
-    final c = receipt(FigureRun{ id = "x", findings = ["figure \"x\": gone"] }, symbolIndex: "aaa") catch "";
-    assert\isFalse(sameReceipt(a, b: c), message: "a finding is a change");
+    assert\isTrue(a.indexOf("symbolIndex") == null, message: "no index digest: {a}");
+    final c = receipt(FigureRun{ id = "x", findings = ["figure \"x\": gone"] }) catch "";
+    assert\isTrue(a != c, message: "a finding is a change");
 }
 
 // writeFigures writes, for every registered figure, the dark and light pair GitHub loads
@@ -168,8 +156,7 @@ test "a receipt that moved only its index digest is the same receipt" {
 // Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
 // carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
 export fun writeFigures(dir: str) > [str] !> any {
-    final index: magus\SymbolIndexDigest = magus\symbolIndexDigest();
-    if (index.indexed == false) {
+    if (magus\symbolIndexDigest().indexed == false) {
         throw "diagrams-generate needs the symbol index, and magus\\symbolIndexDigest() answered indexed=false; build it with `magus graph build`, then rerun";
     }
     fs\mkdirAll(dir);
@@ -185,11 +172,7 @@ export fun writeFigures(dir: str) > [str] !> any {
             writeIfMoved(base + "-light.svg", content: run.light);
             writeIfMoved(base + "-page.svg", content: run.page);
         }
-        final body = receipt(run, symbolIndex: index.digest);
-        final path = base + ".json";
-        if (fs\exists(path) == false or sameReceipt(fs\readFile(path), b: body) == false) {
-            fs\writeFile(path, content: body);
-        }
+        writeIfMoved(base + ".json", content: receipt(run));
         foreach (suffix in [".svg", "-light.svg", "-page.svg", ".json"]) { expected["diagram-" + f.id + suffix] = true; }
     }
     prune(dir, expected: expected);
