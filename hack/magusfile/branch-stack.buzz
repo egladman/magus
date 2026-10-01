@@ -1,0 +1,258 @@
+namespace branchstack;
+
+import "serialize";
+
+import "assert";
+
+export final SCHEMA = "magus.branch-stack/v1";
+
+export final STATUSES = ["planned", "created", "merged", "needs-stub", "conflict"];
+
+// OwedCheck is a check a job's holder could not run and the root must: the same shape as a
+// job exit result's owed_checks entry.
+export object OwedCheck {
+    command: str,
+    why: str,
+}
+
+// StackLayer is one branch of the stack. parent is the branch it goes on top of: for a
+// split, the branch it was cut on; for a merge, the layer merged before it. Either way it
+// is the stack's base or another layer's branch.
+export object StackLayer {
+    branch: str,
+    parent: str,
+    job: str = "",
+    paths: [str],
+    declarations: [str],
+    check: str = "",
+    owed: [OwedCheck],
+    status: str,
+    reason: str = "",
+}
+
+export object BranchStack {
+    schema: str = "magus.branch-stack/v1",
+    base: str,
+    layers: [StackLayer],
+}
+
+fun cyclePath(start: str, parentOf: {str: str}) > str {
+    final path = mut [<str>];
+    var cur = start;
+    while (path.indexOf(cur) == null) {
+        path.append(cur);
+        cur = parentOf[cur]!;
+    }
+    final at = path.indexOf(cur)!;
+    final loop = mut [<str>];
+    for (i: int = at; i < path.len(); i = i + 1) { loop.append(path[i]); }
+    loop.append(cur);
+    return loop.join(" -> ");
+}
+
+// orderLayers puts every layer after its parent. Layers ready at the same step keep their
+// input order, so a plan already in order comes back unchanged.
+export fun orderLayers(stack: BranchStack) > BranchStack !> any {
+    final parentOf = mut {<str: str>};
+    foreach (l in stack.layers) {
+        if (l.branch == "") { throw "branch-stack: a layer names no branch"; }
+        if (l.branch == stack.base) { throw "branch-stack: layer {l.branch} is the stack's base"; }
+        if (parentOf[l.branch] != null) { throw "branch-stack: layer {l.branch} appears twice"; }
+        parentOf[l.branch] = l.parent;
+    }
+    foreach (l in stack.layers) {
+        if (l.parent != stack.base and parentOf[l.parent] == null) {
+            throw "branch-stack: layer {l.branch} goes on {l.parent}, which is neither the base {stack.base} nor a layer";
+        }
+    }
+    final placed = mut {<str: bool>};
+    final order = mut [<StackLayer>];
+    while (order.len() < stack.layers.len()) {
+        var picked = false;
+        foreach (l in stack.layers) {
+            if (placed[l.branch] != null) { continue; }
+            if (l.parent == stack.base or placed[l.parent] != null) {
+                placed[l.branch] = true;
+                order.append(l);
+                picked = true;
+                break;
+            }
+        }
+        if (!picked) {
+            foreach (l in stack.layers) {
+                if (placed[l.branch] == null) {
+                    throw "branch-stack: the layers form a cycle: {cyclePath(l.branch, parentOf: parentOf)}";
+                }
+            }
+        }
+    }
+    return BranchStack{ schema = stack.schema, base = stack.base, layers = order };
+}
+
+fun keysOf(m: {str: serialize\Boxed}, allowed: [str], where: str) > void !> any {
+    foreach (k in m.keys()) {
+        if (allowed.indexOf(k) == null) {
+            throw "branch-stack: {where} has unknown member {k}; it takes {allowed.join(", ")}";
+        }
+    }
+}
+
+fun strField(m: {str: serialize\Boxed}, key: str, where: str, required: bool) > str !> any {
+    final v = m[key];
+    if (v == null) {
+        if (required) { throw "branch-stack: {where} has no {key}"; }
+        return "";
+    }
+    final s = v!.string();
+    if (s == null) { throw "branch-stack: {where}'s {key} is not a string"; }
+    if (required and s! == "") { throw "branch-stack: {where}'s {key} is empty"; }
+    return s!;
+}
+
+fun listField(m: {str: serialize\Boxed}, key: str, where: str) > [serialize\Boxed] !> any {
+    final v = m[key];
+    if (v == null) { return [<serialize\Boxed>]; }
+    final l = v!.list();
+    if (l == null) { throw "branch-stack: {where}'s {key} is not a list"; }
+    return l!;
+}
+
+fun strsField(m: {str: serialize\Boxed}, key: str, where: str) > [str] !> any {
+    final acc = mut [<str>];
+    foreach (i, v in listField(m, key: key, where: where)) {
+        final s = v.string();
+        if (s == null) { throw "branch-stack: {where}'s {key}[{i}] is not a string"; }
+        acc.append(s!);
+    }
+    return acc;
+}
+
+fun mapOf(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
+    final m = b.map();
+    if (m == null) { throw "branch-stack: {where} is not an object"; }
+    return m!;
+}
+
+// readStack decodes a stack and refuses what it cannot act on: another schema, an unknown
+// member, a status outside STATUSES, an owed check missing its command or why. Members left
+// out read as empty. It does not order the layers; orderLayers does.
+export fun readStack(json: str) > BranchStack !> any {
+    final doc = mapOf(serialize\jsonDecode(json), where: "the stack");
+    keysOf(doc, allowed: ["schema", "base", "layers"], where: "the stack");
+    final schema = strField(doc, key: "schema", where: "the stack", required: true);
+    if (schema != SCHEMA) { throw "branch-stack: the stack is {schema}, and this reads {SCHEMA}"; }
+    final layers = mut [<StackLayer>];
+    foreach (i, lb in listField(doc, key: "layers", where: "the stack")) {
+        final where = "layer {i}";
+        final m = mapOf(lb, where: where);
+        keysOf(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "owed", "status", "reason"], where: where);
+        final owed = mut [<OwedCheck>];
+        foreach (j, ob in listField(m, key: "owed", where: where)) {
+            final ow = "{where}'s owed[{j}]";
+            final om = mapOf(ob, where: ow);
+            keysOf(om, allowed: ["command", "why"], where: ow);
+            owed.append(OwedCheck{ command = strField(om, key: "command", where: ow, required: true),
+                why = strField(om, key: "why", where: ow, required: true) });
+        }
+        final status = strField(m, key: "status", where: where, required: true);
+        if (STATUSES.indexOf(status) == null) {
+            throw "branch-stack: {where}'s status is {status}; it takes {STATUSES.join(", ")}";
+        }
+        layers.append(StackLayer{
+            branch = strField(m, key: "branch", where: where, required: true),
+            parent = strField(m, key: "parent", where: where, required: true),
+            job = strField(m, key: "job", where: where, required: false),
+            paths = strsField(m, key: "paths", where: where),
+            declarations = strsField(m, key: "declarations", where: where),
+            check = strField(m, key: "check", where: where, required: false),
+            owed = owed,
+            status = status,
+            reason = strField(m, key: "reason", where: where, required: false),
+        });
+    }
+    return BranchStack{ schema = schema, base = strField(doc, key: "base", where: "the stack", required: true), layers = layers };
+}
+
+// writeStack encodes every member, empty ones included, so readers never guess a default.
+export fun writeStack(stack: BranchStack) > str {
+    final layers = mut [<any>];
+    foreach (l in stack.layers) {
+        final owed = mut [<any>];
+        foreach (o in l.owed) { owed.append({"command": o.command, "why": o.why}); }
+        layers.append({
+            "branch": l.branch, "parent": l.parent, "job": l.job, "paths": l.paths,
+            "declarations": l.declarations, "check": l.check, "owed": owed,
+            "status": l.status, "reason": l.reason,
+        });
+    }
+    return serialize\jsonEncode(serialize\Boxed.init({"schema": stack.schema, "base": stack.base, "layers": layers}));
+}
+
+fun layer(branch: str, parent: str) > StackLayer {
+    return StackLayer{ branch = branch, parent = parent, paths = [<str>], declarations = [<str>], owed = [<OwedCheck>], status = "planned" };
+}
+
+fun branches(stack: BranchStack) > str {
+    final names = mut [<str>];
+    foreach (l in stack.layers) { names.append(l.branch); }
+    return names.join(" ");
+}
+
+fun raised(stack: BranchStack) > str {
+    try {
+        orderLayers(stack);
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "orderLayers puts each layer after its parent and keeps input order among ready ones" {
+    final stack = BranchStack{ base = "main", layers = [layer("c", parent: "b"), layer("x", parent: "main"),
+        layer("b", parent: "a"), layer("a", parent: "main")] };
+    assert\equal(branches(orderLayers(stack)), want: "x a b c", message: "order");
+    final chain = BranchStack{ base = "main", layers = [layer("a", parent: "main"), layer("b", parent: "a")] };
+    assert\equal(branches(orderLayers(chain)), want: "a b", message: "an ordered plan comes back unchanged");
+}
+
+test "orderLayers names a cycle, an unknown parent and a duplicate branch" {
+    assert\equal(raised(BranchStack{ base = "main", layers = [layer("x", parent: "main"), layer("a", parent: "b"), layer("b", parent: "a")] }),
+        want: "branch-stack: the layers form a cycle: a -> b -> a", message: "cycle");
+    assert\equal(raised(BranchStack{ base = "main", layers = [layer("a", parent: "gone")] }),
+        want: "branch-stack: layer a goes on gone, which is neither the base main nor a layer", message: "unknown parent");
+    assert\equal(raised(BranchStack{ base = "main", layers = [layer("a", parent: "main"), layer("a", parent: "main")] }),
+        want: "branch-stack: layer a appears twice", message: "duplicate");
+}
+
+test "writeStack and readStack round-trip every member" {
+    final l = StackLayer{ branch = "topic-1-root", parent = "main", job = "j", paths = ["a.go"], declarations = ["a.go#F"],
+        check = "magus run test .", owed = [OwedCheck{ command = "magus affected ci", why = "touches every project" }],
+        status = "conflict", reason = "a.go conflicts" };
+    final stack = BranchStack{ base = "main", layers = [l] };
+    final text = writeStack(stack);
+    final back = readStack(text);
+    assert\equal(writeStack(back), want: text, message: "round trip");
+    assert\equal(back.layers[0].owed[0].why, want: "touches every project", message: "owed");
+    final sparse = readStack(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned"}]}`);
+    assert\equal(sparse.layers[0].paths.len(), want: 0, message: "a left-out list reads empty");
+}
+
+fun refused(text: str) > str {
+    try {
+        readStack(text);
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "readStack refuses another schema, an unknown member, a bad status and an empty owed check" {
+    assert\equal(refused(`{"schema": "magus.branch-stack/v2", "base": "main", "layers": []}`),
+        want: "branch-stack: the stack is magus.branch-stack/v2, and this reads magus.branch-stack/v1", message: "schema");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [], "extra": 1}`),
+        want: "branch-stack: the stack has unknown member extra; it takes schema, base, layers", message: "unknown member");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "done"}]}`),
+        want: "branch-stack: layer 0's status is done; it takes planned, created, merged, needs-stub, conflict", message: "status");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "owed": [{"command": "", "why": "x"}]}]}`),
+        want: "branch-stack: layer 0's owed[0]'s command is empty", message: "owed");
+}
