@@ -1196,6 +1196,28 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
         }
     }
 
+    // A declaration removed from one file of a directory and present in another moved: one
+    // package cannot declare it twice, so the two halves land together.
+    final standing = mut {<str: [str]>};
+    foreach (k in sort\strings(units.keys())) {
+        final un = units[k]!;
+        if (un.change == "removed" or un.change == "file" or un.label == "(preamble)") { continue; }
+        final at = "{dirOf(un.path)}#{un.label}";
+        final acc = mut [<str>];
+        foreach (x in standing[at] ?? [<str>]) { acc.append(x); }
+        acc.append(k);
+        standing[at] = acc;
+    }
+    foreach (k in sort\strings(units.keys())) {
+        final gone = units[k]!;
+        if (gone.change != "removed") { continue; }
+        foreach (k2 in standing["{dirOf(gone.path)}#{gone.label}"] ?? [<str>]) {
+            if (units[k2]!.path != gone.path) {
+                unite(g, a: k, b: k2, why: "{gone.id} moved to {units[k2]!.id}");
+            }
+        }
+    }
+
     final perPath = mut {<str: [str]>};
     foreach (k in sort\strings(units.keys())) {
         final p = units[k]!.path;
@@ -2441,6 +2463,24 @@ test "the --by symbols plan is the branch stack merge-job-branches reads back" {
     assert\equal(text, want: fs\readFile("hack/testdata/branch-stack-split-symbols.json").trim(), message: "golden stack");
     final back = branchstack\orderLayers(branchstack\readStack(text));
     assert\equal(branchstack\writeStack(back), want: text, message: "the stack reads back in order");
+}
+
+test "a declaration moved between files of one package lands as one move" {
+    final change = SymbolChange{
+        regions = [
+            Region{ path = "p/a.go", side = "old", lo = 3, hi = 5, declaration = "func X() \{", driver = "golang" },
+            Region{ path = "p/b.go", side = "new", lo = 3, hi = 5, declaration = "func X() \{", driver = "golang" },
+        ],
+        symbols = [<Sym>],
+        files = [Change{ path = "p/a.go", project = ".", role = "source", claims = [<Claim>] },
+            Change{ path = "p/b.go", project = ".", role = "source", claims = [<Claim>] }],
+        indexed = ["p/a.go", "p/b.go"],
+        texts = {<str: FileText>},
+        languages = {<str: Lang>},
+    };
+    final p = planSymbols(change, budget: 1, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
+    assert\equal(layerIds(p), want: ["topic-1-p<-main: p/a.go#X p/b.go#X"], message: "never both, never neither");
+    assert\equal(p.layers[0].notes.indexOf("together: p/a.go#X moved to p/b.go#X") != null, want: true, message: "{p.layers[0].notes}");
 }
 
 test "settleRegions gives a doc comment and the blank line above it to the declaration they precede" {
