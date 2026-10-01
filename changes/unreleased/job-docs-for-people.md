@@ -4,5 +4,4 @@
   across two worktrees, two teammates sharing a file, and CI grading merged work with
   `magus job wait --integration`; `docs/guides/jobs/other-work.md` splits a dependency
   upgrade, a translation and a release checklist. Every transcript is compared byte for
-  byte against a `job_people_*` script. Each `magus job` verb's `-h`, `magus ls jobs -h`
-  and `magus describe job -h` now end with an example.
+  byte against a `job_people_*` script.
