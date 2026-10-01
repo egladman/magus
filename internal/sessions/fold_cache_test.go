@@ -91,7 +91,7 @@ func TestReadAgentEventsRefoldsFromATornCache(t *testing.T) {
 	_, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
 
-	cache := filepath.Join(dir, agentFoldCacheName)
+	cache := foldCachePath(dir, KindAgentEvent)
 	whole, err := os.ReadFile(cache)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(cache, whole[:len(whole)/2], 0o644))
@@ -118,7 +118,32 @@ func TestReadAgentEventsForgetsAPrunedFile(t *testing.T) {
 	got, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
 	assert.Equal(t, agentEventsOf(t, dir), got)
-	assert.NotContains(t, readAgentFoldCache(filepath.Join(dir, agentFoldCacheName)).Files, "a"+fileExt)
+	assert.NotContains(t, readFoldCache(foldCachePath(dir, KindAgentEvent), KindAgentEvent).Files, "a"+fileExt)
+}
+
+// Each kind keeps its own cache, so the push rule's read of gate verdicts never decodes the
+// agent events, and a gate result appended later is seen by the next read.
+func TestReadGateResultsFoldsOnlyGateVerdicts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeRaw(t, dir, "a", []Record{agentRecord("a", 1, "x.go")})
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Commit: "abc123", Outcome: OutcomePass}, InvocationStart{}))
+
+	_, err := ReadAgentEvents(dir)
+	require.NoError(t, err)
+	gates, err := ReadGateResults(dir)
+	require.NoError(t, err)
+	require.Len(t, gates.Records, 1)
+	assert.Equal(t, KindGateResult, gates.Records[0].Kind)
+	assert.Empty(t, readFoldCache(foldCachePath(dir, KindGateResult), KindGateResult).Files["a"+fileExt].Records,
+		"the gate cache holds no agent event")
+
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Commit: "def456", Outcome: OutcomeFail}, InvocationStart{}))
+	gates, err = ReadGateResults(dir)
+	require.NoError(t, err)
+	rec, ok := GateAt(gates, "def456", "ci")
+	require.True(t, ok)
+	assert.Equal(t, OutcomeFail, rec.Outcome)
 }
 
 // Readers and writers race on one store, as every worktree of a repository does. Each
