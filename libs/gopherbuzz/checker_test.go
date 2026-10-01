@@ -1464,3 +1464,27 @@ func TestTypeErrorWithNoCodeIsNotADiagnostic(t *testing.T) {
 		t.Errorf("an uncoded type error reported itself as %v", d)
 	}
 }
+
+// TestCheck_ErrorInsideInterpolationPointsIntoTheString: an interpolated
+// expression was parsed as its own one-line source, so every diagnostic in it
+// reported 1:1 wherever the string sat.
+func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
+	cases := []struct {
+		name, src string
+		line, col int
+	}{
+		{"undefined call", "final xs = [1, 2];\nfinal s = \"n={len(xs)}\";\n", 2, 15},
+		{"unknown method", "final xs = [1, 2];\nfinal s = \"{xs.zzz()}\";\n", 2, 15},
+		{"second expression", "final xs = [1, 2];\nfinal s = \"{xs.len()} {nope}\";\n", 2, 24},
+		{"raw string, second line", "final xs = [1, 2];\nfinal s = `a\n  {nope}`;\n", 3, 4},
+		{"nested string", "final xs = [1, 2];\nfinal s = \"{\"in {nope}\"}\";\n", 2, 18},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := checkSrc(tc.src)
+			require.NotEmpty(t, errs)
+			assert.Equal(t, tc.line, errs[0].Line, fmtErrors(errs))
+			assert.Equal(t, tc.col, errs[0].Col, fmtErrors(errs))
+		})
+	}
+}

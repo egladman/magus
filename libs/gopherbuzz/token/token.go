@@ -323,6 +323,9 @@ func Keywords() []string {
 type StringPart struct {
 	IsExpr bool
 	Text   string
+	// Line and Col are where an expression's source starts, just inside its `{`,
+	// so a diagnostic in it can point into the string. Zero for a literal run.
+	Line, Col int
 }
 
 // Token is a single lexical token.
@@ -860,11 +863,12 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
+			exprLine, exprCol := l.line, l.col
 			expr, err := l.captureInterpExpr(line, col, true)
 			if err != nil {
 				return Token{}, err
 			}
-			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
 			runStart = l.pos
 			continue
 		case '\n':
@@ -969,11 +973,12 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
+			exprLine, exprCol := l.line, l.col
 			expr, err := l.captureInterpExpr(line, col, false)
 			if err != nil {
 				return Token{}, err
 			}
-			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
 			runStart = l.pos
 		case '\n':
 			l.line++

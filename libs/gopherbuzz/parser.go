@@ -2704,7 +2704,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		}
 		// Sub-parse the interpolation expression in the same mode as the enclosing
 		// parser so strictness is consistent across the program.
-		sub, used, err := p.parseInterpPart(part.Text)
+		sub, used, err := p.parseInterpPart(part)
 		if err != nil {
 			if raw {
 				literal(part.Text)
@@ -2738,11 +2738,12 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 // parseInterpPart parses one interpolation expression and returns the tracked import
 // bindings it references. They are returned rather than marked so that a backtick brace
 // run that falls back to literal text marks nothing.
-func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
-	toks, err := (*ParseCache)(nil).tokenize(text + ";")
+func (p *parser) parseInterpPart(part token.StringPart) (*ast.Program, []string, error) {
+	toks, err := (*ParseCache)(nil).tokenize(part.Text + ";")
 	if err != nil {
 		return nil, nil, err
 	}
+	shiftTokens(toks, part.Line, part.Col)
 	sub := newParser(toks)
 	sub.strict = p.strict
 	if len(p.importUsage) > 0 {
@@ -2762,6 +2763,30 @@ func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
 		}
 	}
 	return prog, used, nil
+}
+
+// shiftTokens moves tokens lexed from an interpolation's own source to where
+// that source sits in the file, starting at line:col. A token past the first
+// line keeps its column, which is already counted from its own line start. A
+// zero line leaves the tokens where they are.
+func shiftTokens(toks []token.Token, line, col int) {
+	if line == 0 {
+		return
+	}
+	shift := func(l, c *int) {
+		if *l == 1 {
+			*c += col - 1
+		}
+		*l += line - 1
+	}
+	for i := range toks {
+		shift(&toks[i].Line, &toks[i].Col)
+		for j := range toks[i].Parts {
+			if toks[i].Parts[j].IsExpr {
+				shift(&toks[i].Parts[j].Line, &toks[i].Parts[j].Col)
+			}
+		}
+	}
 }
 
 // parseFunExpr parses `fun(params) rettype { body }` as an expression.
