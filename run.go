@@ -1220,18 +1220,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	if t.Probe.Bin == "" {
 		return toolReading{token: t.Key.Const}
 	}
-	key, cacheable := probeCacheKey(t.Probe, dir)
-	probed, hit := "", false
-	if cacheable {
-		probed, hit = m.cachedProbe(key)
-	}
-	var err error
-	if !hit {
-		probed, err = s.ProbeVersion(ctx, tool, dir)
-		if err == nil && cacheable {
-			m.storeProbe(key, probed)
-		}
-	}
+	probed, err := m.probeCached(ctx, t.Probe, dir, func() (string, error) { return s.ProbeVersion(ctx, tool, dir) })
 	if err != nil {
 		slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
 			slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1291,7 +1280,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
 				value, hit := memo[tk]
 				if !hit {
-					probed, err := s.ProbeObservation(ctx, tool, p.Dir)
+					probed, err := m.probeCached(ctx, t.Observe, p.Dir, func() (string, error) { return s.ProbeObservation(ctx, tool, p.Dir) })
 					if err != nil {
 						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),

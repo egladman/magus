@@ -2,8 +2,10 @@ package magus
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/spells"
@@ -28,17 +32,50 @@ import (
 // against, so building a Step just to hold it would be a heavier write path for the
 // common case (a plain os.ReadFile) than the read it exists to save.
 
-// probeInputs are the files a probed tool reads to pick its version, searched in the
-// probe's directory and every ancestor. Only these tools are cached: go switches
-// toolchains through GOTOOLCHAIN and go.mod, rustup proxies through rust-toolchain
-// files and its own settings, and a script wrapper can read anything, so none of those
-// has an input list that could be trusted.
-var probeInputs = map[string][]string{
-	"node --version": nil,
+// probeInputs says, per probe argv, what beyond the binary decides the answer. Only these
+// probes are cached: rustup proxies through rust-toolchain files and its own settings,
+// and a script wrapper can read anything, so neither has an input list that could be
+// trusted.
+var probeInputs = map[string]probeRecipe{
+	"node --version": {},
 	// pnpm switches to the version a manifest pins (manage-package-manager-versions),
 	// configured from any of these.
-	"pnpm --version": {"package.json", "pnpm-workspace.yaml", ".npmrc"},
+	"pnpm --version": {files: pnpmInputs},
+	// `pnpm exec` runs the nearest node_modules/.bin/tsc and falls back to PATH. pnpm
+	// links node_modules/typescript to a store path that names the version, so the link
+	// moves with an upgrade; package.json is read through it for an npm-style install.
+	"pnpm exec tsc --version": {
+		files:    append(slices.Clone(pnpmInputs), "node_modules/.bin/tsc", "node_modules/typescript", "node_modules/typescript/package.json"),
+		pathBins: []string{"tsc"},
+	},
+	"go version":              {goToolchain: true},
+	"golangci-lint --version": {},
+	"buf --version":           {},
+	// The symbol indexers' observe probes. govulncheck's is absent on purpose: it reports
+	// a vulnerability database that moves on a clock, not on any input listed here.
+	"scip-go --version":         {},
+	"scip-typescript --version": {},
+	"scip-python --version":     {},
 }
+
+var pnpmInputs = []string{"package.json", "pnpm-workspace.yaml", ".npmrc"}
+
+// probeRecipe is what one probe's answer depends on besides the binary it runs and the
+// variables probeEnvPrefixes names.
+type probeRecipe struct {
+	// files are read in the probe's directory and every ancestor.
+	files []string
+	// pathBins are other binaries the probe may run, found on PATH.
+	pathBins []string
+	// goToolchain marks go's toolchain switch: the go and toolchain lines of the go.work
+	// and go.mod it would read, the GOENV file, and the variables in goEnvInputs.
+	goToolchain bool
+}
+
+// goEnvInputs are the variables that move which toolchain `go version` reports. Reading
+// GOTOOLCHAIN here keys the cache on it as an input go itself reads; nothing in magus
+// behaves differently on its value.
+var goEnvInputs = []string{"GOTOOLCHAIN=", "GOWORK=", "GOENV=", "GOROOT=", "GOFLAGS="}
 
 // miseDirInputs are the files a mise shim reads, in any ancestor of the working
 // directory, to pick the version it runs.
@@ -52,12 +89,17 @@ var miseDirInputs = []string{
 
 // probeCacheFormat changes whenever the key's composition does, so an older entry is
 // never read under a new meaning.
-const probeCacheFormat = "probe-cache/1"
+const probeCacheFormat = "probe-cache/2"
 
 // probeCacheKey returns the key a probe of tool in dir caches under, or false when
 // that probe must fork.
+//
+// The directory itself is not part of the key, only the input files that exist along its
+// ancestry, by path and identity. Two project directories that see the same files resolve
+// the same version, so they share one answer; a file created in either adds a line and
+// moves its key, which is what an absent-file line used to catch.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
-	selectors, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	recipe, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
 	}
@@ -77,32 +119,113 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 		return "", false
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n%s %q\n%s\n%s\n", probeCacheFormat, probe.Bin, probe.Args, dir, found)
+	fmt.Fprintf(&b, "%s\n%s %q\n%s\n", probeCacheFormat, probe.Bin, probe.Args, found)
 	if !binaryCacheable(target) {
 		return "", false
 	}
 	writeBinaryIdentity(&b, target)
-	writeEnv(&b)
-	names := selectors
+	writeEnv(&b, recipe)
+	names := recipe.files
 	switch base := filepath.Base(target); {
 	case base == "mise":
-		names = append(slices.Clone(selectors), miseDirInputs...)
+		names = append(slices.Clone(recipe.files), miseDirInputs...)
 		names = append(names, miseEnvInputs()...)
 		writeMiseGlobals(&b)
 	case strings.Contains(base, "shim") || slices.Contains([]string{"asdf", "volta", "proto", "corepack", "rustup"}, base):
 		return "", false
 	}
+	for _, bin := range recipe.pathBins {
+		if path, err := exec.LookPath(bin); err == nil {
+			writePresentIdentity(&b, path)
+		}
+	}
 	for d := dir; ; d = filepath.Dir(d) {
 		for _, name := range names {
-			writeFileIdentity(&b, filepath.Join(d, name))
+			writePresentIdentity(&b, filepath.Join(d, name))
 		}
-		writeDirEntries(&b, filepath.Join(d, ".config", "mise", "conf.d"))
+		writePresentEntries(&b, filepath.Join(d, ".config", "mise", "conf.d"))
 		if filepath.Dir(d) == d {
 			break
 		}
 	}
+	if recipe.goToolchain {
+		writeGoToolchain(&b, dir)
+	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:]), true
+}
+
+// writePresentIdentity is writeFileIdentity for a file that exists, and nothing for one
+// that does not, so a directory chain contributes only what is really there.
+func writePresentIdentity(b *strings.Builder, path string) {
+	if _, err := os.Lstat(path); err == nil {
+		writeFileIdentity(b, path)
+	}
+}
+
+// writePresentEntries is writeDirEntries for a directory that exists, and nothing for one
+// that does not.
+func writePresentEntries(b *strings.Builder, dir string) {
+	if _, err := os.Stat(dir); err == nil {
+		writeDirEntries(b, dir)
+	}
+}
+
+// writeGoToolchain records what go reads to decide whether to switch toolchains: the go
+// and toolchain lines of the go.work and go.mod it would find from dir, and the GOENV file
+// `go env -w` writes. The lines are recorded by content rather than by file identity, so
+// a go.mod edit that leaves both alone keeps the answer.
+func writeGoToolchain(b *strings.Builder, dir string) {
+	switch work := os.Getenv("GOWORK"); work {
+	case "off":
+	case "":
+		writeToolchainLines(b, "go.work", nearest(dir, "go.work"))
+	default:
+		writeToolchainLines(b, "go.work", work)
+	}
+	writeToolchainLines(b, "go.mod", nearest(dir, "go.mod"))
+	env := os.Getenv("GOENV")
+	if env == "" {
+		if config, err := os.UserConfigDir(); err == nil {
+			env = filepath.Join(config, "go", "env")
+		}
+	}
+	if env != "" && env != "off" {
+		writeFileIdentity(b, env)
+	}
+}
+
+// nearest returns name in dir or its closest ancestor, or "" when none has it.
+func nearest(dir, name string) string {
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, name)); err == nil {
+			return filepath.Join(d, name)
+		}
+		if filepath.Dir(d) == d {
+			return ""
+		}
+	}
+}
+
+// writeToolchainLines records the go and toolchain directives of the file at path, under
+// label, or that there is none.
+func writeToolchainLines(b *strings.Builder, label, path string) {
+	if path == "" {
+		fmt.Fprintf(b, "%s -\n", label)
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(b, "%s unreadable\n", label)
+		return
+	}
+	fmt.Fprintf(b, "%s\n", label)
+	for line := range strings.Lines(string(data)) {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "go ") || strings.HasPrefix(line, "toolchain ") {
+			fmt.Fprintf(b, "  %s\n", line)
+		}
+	}
 }
 
 // binaryCacheable reports whether a probe of path may be cached at all: not a script,
@@ -173,12 +296,16 @@ var probeEnvPrefixes = []string{
 }
 
 // writeEnv records the variables the cached tools read to decide their version.
-func writeEnv(b *strings.Builder) {
+func writeEnv(b *strings.Builder, recipe probeRecipe) {
+	prefixes := probeEnvPrefixes
+	if recipe.goToolchain {
+		prefixes = append(slices.Clone(prefixes), goEnvInputs...)
+	}
 	env := os.Environ()
 	slices.Sort(env)
 	for _, kv := range env {
 		upper := strings.ToUpper(kv)
-		if slices.ContainsFunc(probeEnvPrefixes, func(p string) bool { return strings.HasPrefix(upper, p) }) {
+		if slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(upper, p) }) {
 			b.WriteString(kv)
 			b.WriteByte('\n')
 		}
@@ -241,24 +368,125 @@ func writeMiseGlobals(b *strings.Builder) {
 	writeDirEntries(b, filepath.Join(data, "installs"))
 }
 
-func (m *Magus) cachedProbe(key string) (string, bool) {
-	if m.cache == nil {
-		return "", false
+// probeFailureTTL bounds how long a cached failure answers. A success is a function of
+// the key's inputs; a failure usually is too (no node_modules, no installed toolchain,
+// each of which the key sees), but a download or a network hiccup is not, and this is
+// how long such a failure can outlive its cause.
+const probeFailureTTL = 10 * time.Minute
+
+// probeFailedSuffix names the file a failed probe is cached under, beside the key a
+// success would use.
+const probeFailedSuffix = ".failed"
+
+// probeCached answers probe in dir from the probe cache when the probe's inputs can be
+// enumerated, and otherwise runs fork, which forks it. What it forks for is cached,
+// failure included.
+//
+// Concurrent callers asking under one key share a single fork: project directories that
+// see the same inputs share a key, so a sweep over seven Go projects forks `go version`
+// once rather than seven times.
+func (m *Magus) probeCached(ctx context.Context, probe spells.Command, dir string, fork func() (string, error)) (string, error) {
+	key, cacheable := probeCacheKey(probe, dir)
+	// A Magus with no workspace has no cache directory to answer from.
+	if !cacheable || m.ws == nil {
+		return fork()
 	}
-	out, err := os.ReadFile(filepath.Join(m.CacheDir(), "probes", key))
-	if err != nil {
-		return "", false
+	if a, hit := m.cachedProbe(key); hit {
+		return a.out, a.err
 	}
-	return string(out), true
+	return probeFlights.do(m.CacheDir()+"\x00"+key, func() (string, error) {
+		// A flight that finished between the lookup above and this one stored its answer.
+		if a, hit := m.cachedProbe(key); hit {
+			return a.out, a.err
+		}
+		out, err := fork()
+		// A cancelled probe says nothing about the tool.
+		if ctx.Err() == nil {
+			m.storeProbe(key, out, err)
+		}
+		return out, err
+	})
 }
 
-// storeProbe caches a probe answer. Best-effort: a failed write costs the next run a fork.
-func (m *Magus) storeProbe(key, out string) {
-	if m.cache == nil || !m.cfg.Cache.WriteEnabled() {
+// probeAnswer is one cached probe: its output, or the error it failed with.
+type probeAnswer struct {
+	out string
+	err error
+}
+
+// probeFlights joins concurrent forks of one key. A flight is forgotten once it lands, so
+// the next caller reads the cache: holding answers here would outlive a failure's TTL in
+// a long-lived server.
+var probeFlights flightGroup
+
+type flightGroup struct {
+	mu      sync.Mutex
+	flights map[string]*flight
+}
+
+type flight struct {
+	done chan struct{}
+	out  string
+	err  error
+}
+
+func (g *flightGroup) do(key string, fn func() (string, error)) (string, error) {
+	g.mu.Lock()
+	if f, ok := g.flights[key]; ok {
+		g.mu.Unlock()
+		<-f.done
+		return f.out, f.err
+	}
+	if g.flights == nil {
+		g.flights = map[string]*flight{}
+	}
+	f := &flight{done: make(chan struct{})}
+	g.flights[key] = f
+	g.mu.Unlock()
+
+	f.out, f.err = fn()
+	g.mu.Lock()
+	delete(g.flights, key)
+	g.mu.Unlock()
+	close(f.done)
+	return f.out, f.err
+}
+
+// cachedProbe returns a cached answer under key: the output of a probe that succeeded, or
+// the error of one that failed within probeFailureTTL.
+//
+// It reads the cache directory whether or not this workspace opened the cache: an
+// Inspect-built workspace probes for the symbol-index verdict too, and a read-only lookup
+// needs none of what Open wires.
+func (m *Magus) cachedProbe(key string) (probeAnswer, bool) {
+	dir := filepath.Join(m.CacheDir(), "probes")
+	if out, err := os.ReadFile(filepath.Join(dir, key)); err == nil {
+		return probeAnswer{out: string(out)}, true
+	}
+	failed := filepath.Join(dir, key+probeFailedSuffix)
+	fi, err := os.Stat(failed)
+	if err != nil || time.Since(fi.ModTime()) >= probeFailureTTL {
+		return probeAnswer{}, false
+	}
+	msg, err := os.ReadFile(failed)
+	if err != nil {
+		return probeAnswer{}, false
+	}
+	return probeAnswer{err: errors.New(string(msg))}, true
+}
+
+// storeProbe caches a probe's answer, or its failure when err is set. Best-effort: a
+// failed write costs the next run a fork.
+func (m *Magus) storeProbe(key, out string, err error) {
+	if !m.cfg.Cache.WriteEnabled() {
 		return
 	}
 	dir := filepath.Join(m.CacheDir(), "probes")
 	if os.MkdirAll(dir, 0o755) != nil {
+		return
+	}
+	if err != nil {
+		_ = file.ReplaceFile(filepath.Join(dir, key+probeFailedSuffix), []byte(err.Error()), 0o644)
 		return
 	}
 	_ = file.WriteFileAtomic(filepath.Join(dir, key), []byte(out), 0o644)
