@@ -944,7 +944,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, Parent: row.Parent, DependsOn: row.DependsOn}
+	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, Parent: row.Parent, DependsOn: row.DependsOn}
 	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}

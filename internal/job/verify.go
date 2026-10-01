@@ -1,6 +1,7 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -258,11 +259,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
 	}
-	for _, p := range rep.ChangedPaths {
-		if d, ok := matching(row.DenyPaths, p); ok {
-			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
-		}
-	}
+	v.Violations = append(v.Violations, denyViolations(row, rep, seen)...)
 	var live []string
 	for _, d := range types.JobDescendants(declared, row.ID) {
 		if d.State.Live() {
@@ -525,6 +522,72 @@ func unclaimedFootprint(writePaths []string, regions []types.RegionChange) []str
 		}
 	}
 	return out
+}
+
+// denyViolations are the changes the job's deny paths exclude. A deny naming a declaration
+// of a changed file (`run.go#A`) is graded against the footprint the way a declaration claim
+// is, so a change elsewhere in the file is not one. A footprint nobody read, or a region no
+// driver placed, cannot show the declaration untouched, and is one.
+func denyViolations(row types.Job, rep types.JobResult, seen Observed) []string {
+	var out []string
+	for _, p := range rep.ChangedPaths {
+		if d, ok := matching(WholeFileDenies(row.DenyPaths, p), p); ok {
+			out = append(out, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
+			continue
+		}
+		denied := DeniedDeclarations(row.DenyPaths, p)
+		if len(denied) == 0 {
+			continue
+		}
+		entries := make([]string, len(denied))
+		for i, d := range denied {
+			entries[i] = path.Clean(p) + "#" + d
+		}
+		if !seen.RegionsKnown {
+			reason := cmp.Or(seen.RegionsReason, "nothing observed the tree")
+			out = append(out, fmt.Sprintf("changed path %q has declarations the job is denied (%s) and its footprint is not known (%s), so the deny could not be checked",
+				p, strings.Join(entries, ", "), reason))
+			continue
+		}
+		for _, r := range seen.Regions {
+			loc := r.Location()
+			if path.Clean(loc.Path) != path.Clean(p) {
+				continue
+			}
+			if loc.Declaration != "" && !slices.ContainsFunc(denied, func(d string) bool { return types.NamesDeclaration(d, loc.Declaration) }) {
+				continue
+			}
+			v := fmt.Sprintf("the diff since %s changed %s, which the job is denied (%s)",
+				cmp.Or(seen.ChangedFrom, "the job's checkpoint"), loc.String(), strings.Join(entries, ", "))
+			if !slices.Contains(out, v) {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// WholeFileDenies are the deny paths that exclude file at the path level: every entry but
+// one naming a declaration of file itself, which excludes only that declaration. A
+// declaration of a pattern or a directory stays, since no declaration of one file can be
+// read from it.
+func WholeFileDenies(denyPaths []string, file string) []string {
+	return slices.DeleteFunc(slices.Clone(denyPaths), func(entry string) bool {
+		p, decl := types.SplitClaim(entry)
+		return decl != "" && p != "" && path.Clean(p) == path.Clean(file)
+	})
+}
+
+// DeniedDeclarations are the declarations denyPaths exclude in file, the repository-relative
+// path of one file.
+func DeniedDeclarations(denyPaths []string, file string) []string {
+	var decls []string
+	for _, entry := range denyPaths {
+		if p, decl := types.SplitClaim(entry); decl != "" && p != "" && path.Clean(p) == path.Clean(file) {
+			decls = append(decls, decl)
+		}
+	}
+	return decls
 }
 
 // ClaimedDeclarations are the declarations writePaths claim in file, the repository-relative

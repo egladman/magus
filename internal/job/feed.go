@@ -57,7 +57,8 @@ func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 		if !covered {
 			continue
 		}
-		if _, denied := matching(row.DenyPaths, rel); denied {
+		// A deny naming one declaration of rel leaves the file in the job's boundary.
+		if _, denied := matching(WholeFileDenies(row.DenyPaths, rel), rel); denied {
 			continue
 		}
 		claimants = append(claimants, row.ID)

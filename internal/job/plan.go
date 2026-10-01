@@ -95,6 +95,10 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 		if err := RefuseAddedWritePaths(ctx, store, id, added); err != nil {
 			return "", err
 		}
+		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })
+		if err := RefuseUngradableClaims(ctx, store, id, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
+			return "", err
+		}
 		candidate := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
 		return "", RefuseUnorderedFileShare(ctx, store, rows, id, candidate)
 	}

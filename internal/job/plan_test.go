@@ -340,6 +340,33 @@ func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
 	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].WritePaths)
 }
 
+// MGS3031 holds for a deny path a put adds to a row that exists, as it does at fork: a
+// declaration deny on a file no diff driver reads is refused and writes nothing.
+func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := NewStore(tmpLoc(t, gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"})))
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.DenyPaths = append(u.DenyPaths, "notes.txt#X")
+	}, config.Jobs{}, nil)
+	require.ErrorIs(t, err, types.WritePathClaimUngradable)
+	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows[0].DenyPaths)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.DenyPaths = append(u.DenyPaths, "run.go#Run")
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+}
+
 // A job that writes is held to something wait can grade; one that writes nothing is not.
 func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()

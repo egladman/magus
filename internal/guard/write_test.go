@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -389,6 +390,85 @@ func TestDeclarationCovering(t *testing.T) {
 		assert.False(t, ok)
 		assert.Contains(t, err.Error(), "internal/[ledger", "the advisory has to name the pattern to fix")
 	})
+}
+
+// A deny path naming one declaration denies the edits that change it and no others.
+// Observed: a job denied `knowledge.go#loadKnowledgeAgentContacts` had every edit to
+// knowledge.go denied, a doc comment in another function included.
+func TestGradeLeasedEditDeniedDeclaration(t *testing.T) {
+	denier := claimLease("denier", "run.go", "notes.txt")
+	denier.DenyPaths = []string{"run.go#A", "notes.txt#Intro"}
+	ctx, root := claimFixture(t, denier)
+	run := filepath.Join(root, "run.go")
+	notes := filepath.Join(root, "notes.txt")
+	require.NoError(t, os.WriteFile(notes, []byte("Intro\nhello\n"), 0o644))
+	edit := func(oldText, newText string) writeFields { return writeFields{OldText: oldText, NewText: newText} }
+
+	for _, tc := range []struct {
+		name   string
+		path   string
+		fields writeFields
+		want   string // "" passes; otherwise a fragment of the deny reason
+	}{
+		{name: "another declaration", path: run, fields: edit("b()", "b2()")},
+		{name: "above the first declaration", path: run, fields: edit("package run\n", "package run\n\nimport \"fmt\"\n")},
+		{name: "a whole-file write leaving the declaration alone", path: run, fields: writeFields{Content: strings.Replace(claimedGo, "c()", "c2()", 1)}},
+		{name: "the named declaration", path: run, fields: edit("a()", "a2()"), want: `This edit changes func A() { in run.go, which your lease denier (work on denier) declared DENIED as "run.go#A"`},
+		{name: "every edit of a sequence is placed", path: run, fields: writeFields{Edits: []textEdit{
+			{OldText: "b()", NewText: "b2()"}, {OldText: "a()", NewText: "a2()"},
+		}}, want: `declared DENIED as "run.go#A"`},
+		{name: "a whole-file write changing the declaration", path: run, fields: writeFields{Content: strings.Replace(claimedGo, "a()", "a2()", 1)}, want: `declared DENIED as "run.go#A"`},
+		{name: "deleting the declaration", path: run, fields: edit("func A() {\n\ta()\n}\n\n", ""), want: `declared DENIED as "run.go#A"`},
+		{name: "an edit that does not apply is denied whole", path: run, fields: edit("absent()", "x()"), want: "could not be placed in a declaration"},
+		{name: "a write with no payload is denied whole", path: run, want: `declared "run.go#A" DENIED`},
+		{name: "a file no diff driver reads is denied whole", path: notes, fields: edit("hello", "bye"), want: `declared "notes.txt#Intro" DENIED`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := gradeLeasedEdit(ctx, Dependencies{}, "denier", tc.path, tc.fields)
+			if tc.want == "" {
+				assert.Empty(t, got.Decision, got.Reason)
+				return
+			}
+			require.Equal(t, "deny", got.Decision)
+			assert.Contains(t, got.Reason, tc.want)
+		})
+	}
+}
+
+// A deny path naming a file or a pattern still denies every edit to what it covers, and so
+// does a declaration of a pattern, which names no one file to read a declaration from.
+func TestGradeLeasedEditWholeFileDeny(t *testing.T) {
+	for _, deny := range []string{"run.go", "*.go", "**", "*.go#A"} {
+		t.Run(deny, func(t *testing.T) {
+			denier := claimLease("denier", "run.go")
+			denier.DenyPaths = []string{deny}
+			ctx, root := claimFixture(t, denier)
+			got := gradeLeasedEdit(ctx, Dependencies{}, "denier", filepath.Join(root, "run.go"), writeFields{OldText: "b()", NewText: "b2()"})
+			require.Equal(t, "deny", got.Decision)
+			assert.Contains(t, got.Reason, "is covered by "+strconv.Quote(deny))
+		})
+	}
+}
+
+// A declaration claim is graded per declaration only for a writer whose own write paths
+// claim declarations of the same file. A writer holding the file whole may edit the claimed
+// declaration: fork reports that pair as an overlap, and sequencing it is the plan's. A
+// writer claiming none of the file meets the claim at the path level, as owning the file.
+func TestGradeLeasedEditAgainstAnotherJobsDeclarationClaim(t *testing.T) {
+	stray := claimLease("stray")
+	ctx, root := claimFixture(t, claimLease("whole", "run.go"), stray)
+	run := filepath.Join(root, "run.go")
+	edit := func(oldText, newText string) writeFields { return writeFields{OldText: oldText, NewText: newText} }
+
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "whole", run, edit("c()", "c2()")).Decision)
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "whole", run, edit("a()", "a2()")).Decision,
+		"a whole-file holder is not graded against own-a's run.go#A")
+
+	for _, fields := range []writeFields{edit("c()", "c2()"), edit("a()", "a2()")} {
+		got := gradeLeasedEdit(ctx, Dependencies{}, "stray", run, fields)
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "run.go is owned by lease own-a")
+	}
 }
 
 // The lease-id shape itself is pinned in internal/trail's TestValidLeaseID; the guard's
