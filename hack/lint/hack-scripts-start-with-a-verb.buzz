@@ -5,7 +5,8 @@
 // A script a person or agent runs (hack/dev, hack/bench, hack/ci) starts with a verb from a
 // closed list, and the verb is the contract: ls, show, count, diff, summarize and example
 // only read; render only prints; time runs what it names and reports how long, writing
-// nothing in the tree; rename, split, mark, prune and merge print a plan and write only
+// nothing in the tree; check replays calls through what the workspace wires and reports
+// what was not refused, writing nothing in the tree; rename, split, mark, prune and merge print a plan and write only
 // with --apply; bootstrap prepares the checkout it runs in, writing there and to its job's
 // row only. A script in hack/remote is named
 // on-<where> and runs the command that follows it there, and only there. The modules
@@ -18,7 +19,7 @@ import "path";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time", "render"];
+final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time", "render", "check"];
 final WRITE_VERBS = ["rename", "split", "mark", "prune", "merge"];
 final SETUP_VERBS = ["bootstrap"];
 
@@ -97,7 +98,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 test "a verb in a script directory, on- in hack/remote, a module or a listed noun passes" {
     foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/dev/mark-feedback.buzz", "hack/dev/show-feedback.buzz",
                    "hack/dev/count-feedback.buzz", "hack/dev/show-session-figure.buzz", "hack/dev/render-brief.buzz",
-                   "hack/dev/bootstrap-worktree.buzz", "hack/dev/show-guard-health.buzz", "hack/dev/prune-worktrees.buzz",
+                   "hack/dev/bootstrap-worktree.buzz", "hack/dev/check-guard-blocks.buzz", "hack/dev/prune-worktrees.buzz",
                    "hack/dev/merge-job-branches.buzz", "hack/bench/time-startup.buzz",
                    "hack/remote/on-linux.buzz", "hack/magusfile/changelog.buzz", "hack/ci/merge-queue.buzz",
                    "hack/lint/support.buzz", "hack/policy/guard.buzz"]) {

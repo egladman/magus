@@ -22,7 +22,8 @@ magus buzz hack/dev/<script>.buzz -- --help
 
 A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
 `summarize` and `example` only read. `render` only prints. `time` runs what it names and
-reports how long, writing nothing in the tree. `rename`, `split`, `mark`, `prune` and
+reports how long, writing nothing in the tree. `check` replays calls through what the
+workspace wires and reports what was not refused, writing nothing in the tree. `rename`, `split`, `mark`, `prune` and
 `merge` print a plan and write only with `--apply`. `bootstrap` prepares the checkout it
 runs in, writing there and to its job's row only. `on-<where>` runs the command after it
 somewhere else. The first line a
@@ -51,13 +52,13 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/show-memory-kills.buzz -- [--since <duration\|timestamp>] [--until <timestamp>] [--name <substring>] [--all]` | read-only: the processes the OS killed or suspended under memory pressure in a window, and the swap state around them | none; reads the OS log |
 | `magus buzz hack/dev/count-symbols.buzz -- [--project <path>] [--kind <kind>]` | read-only: a project's code symbols by kind and by the first word of their names | needs the code index |
 | `magus buzz hack/dev/count-refusals.buzz` | read-only: this checkout's recurring guard refusals by rule | none |
+| `magus buzz hack/dev/check-guard-blocks.buzz` | writes nothing in the tree: replays a canonical set of tool calls through the hooks each host `magus describe harness` names (claude-code, codex, cursor) wires here, in that host's own event and reply format, and reports per host every call the guard answered weaker than expected; every case runs, a host with nothing wired is a row, and it exits non-zero at the end on any weak row | one hook process per call per host, about a second each |
 | `magus buzz hack/dev/show-feedback.buzz -- [--session <id>] [--since <duration\|RFC3339>] [--until <RFC3339>] [--page <n>] [-o json]` | read-only: one session's guard feedback, ten labelled rows a page: refused, advised, unguarded command shapes, served nexts not taken; each page ends with the command for the next | every checkout's trail that changed in the window |
 | `magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny\|should-advise\|wrong-deny\|fine [--note <text>] [--session <id>] [--since ...] [--until ...] [--apply] -- <label\|id>...` | records a verdict on feedback rows under their stable ids in the per-repository store; dry run by default | as show-feedback |
 | `magus buzz hack/dev/count-feedback.buzz -- [--since <duration>] [-o json]` | read-only: every mark across sessions folded into a ranked guard backlog | none |
 | `magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since ...] [--all] [-o svg] [--theme light\|dark] [--console <base>]` | read-only: a session's job hierarchy as a summary and the console link that explores it; `-o svg` prints the figure for you to redirect | every checkout's trail that changed in the window, and the job store |
 | `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] \| --check --from <checkout>)` | builds ./magus, builds the graph and takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` copies another checkout's ./magus instead, only when it was built at this HEAD with no declared build input changed on either side; `--check` prints that verdict and writes nothing | a Go build and a graph build, about two minutes cold; seconds when `--from` reuses |
 | `magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]` | read-only: a worker's complete brief from its job row | two job-store reads |
-| `magus buzz hack/dev/show-guard-health.buzz` | read-only in the tree: replays a canonical set of tool calls through the hooks `.claude/settings.json` wires and fails when the guard lets one through | one hook process per call |
 | `magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
 | `magus buzz hack/dev/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
 | `magus buzz hack/dev/show-review-context.buzz -- [--rev <base>...<head> \| --patch <file\|-> \| --from <diff.json\|->] [--baseline <graph.json>] [--budget <n>] [--lens architecture\|code\|all] [-o json]` | read-only: a change's per-symbol review context (callers, callees, tests, the path to the API, cited diagnostics) and what it does to projects, dependencies and vocabulary | needs the code index; about six graph reads per carded symbol |
