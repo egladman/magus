@@ -403,7 +403,7 @@ fun collect(base: str) > [Change] !> any {
     }
     if (paths.len() == 0) { return [<Change>]; }
     final changes = mut [<Change>];
-    foreach (f in magus\describeFile(sort\strings(paths)).files) {
+    foreach (f in magus\describe.file(sort\strings(paths)).files) {
         final claims = mut [<Claim>];
         foreach (cl in f.claims) {
             claims.append(Claim{ project = cl.project, target = cl.target, role = cl.role, glob = cl.glob });
