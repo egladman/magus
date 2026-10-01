@@ -1267,6 +1267,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
 	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
+	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -1276,6 +1277,39 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		obs.Phase(PhaseCheck, time.Since(checkStart), firstErr)
 	}
 	return prog, errs, warnings, nil
+}
+
+// adviseImports names the line to add on each UnimportedNamespace error whose
+// namespace a registered native module binds.
+func (s *Session) adviseImports(errs []typeError) {
+	for i, e := range errs {
+		if e.Code != UnimportedNamespace {
+			continue
+		}
+		if path, ok := s.nativeImportPath(e.namespace); ok {
+			errs[i].Msg += fmt.Sprintf("; add `import %q;`", path)
+		}
+	}
+}
+
+// nativeImportPath is the registered native module path an import binds as ns:
+// ns itself, else the only path whose last segment is ns. Two candidates name
+// nothing, since guessing between them would hand the reader a wrong line.
+func (s *Session) nativeImportPath(ns string) (string, bool) {
+	if _, ok := s.nativeModules[ns]; ok {
+		return ns, true
+	}
+	found := ""
+	for path := range s.nativeModules {
+		if path[strings.LastIndexByte(path, '/')+1:] != ns {
+			continue
+		}
+		if found != "" {
+			return "", false
+		}
+		found = path
+	}
+	return found, found != ""
 }
 
 // moduleError is an imported file failing to load: err is the failure, and its

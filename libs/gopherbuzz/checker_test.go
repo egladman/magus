@@ -1654,3 +1654,50 @@ func TestImport_EntryNamespaceOutlivesItsChunk(t *testing.T) {
 	require.NoError(t, sess.Exec(ctx, `import "example/demo";`))
 	require.NoError(t, sess.Exec(ctx, "fun g(t: demo\\Thing?) > int { return demo\\answer; }"))
 }
+
+// A namespace no import in the module binds is BZZ1009, apart from BZZ1002 (the
+// namespace is imported but declares no such type): the fix is an import line, not a
+// declaration. The line is named when a registered native module binds the namespace.
+func TestUnimportedNamespace(t *testing.T) {
+	const fix = "; add `import \"example/demo\";`"
+	for _, tc := range []struct {
+		name, src string
+		code      diagnostics.Code
+		msg       string
+	}{
+		{"type annotation", `fun f(t: demo\Thing?) > void {}`, UnimportedNamespace, `undefined type "demo\Thing": no import binds demo in this module` + fix},
+		{"object literal", `final t = demo\Thing{};`, UnimportedNamespace, `undefined type "demo\Thing": no import binds demo in this module` + fix},
+		{"value", `final n = demo\answer;`, UnimportedNamespace, `undefined: demo\answer: no import binds demo in this module` + fix},
+		{"unregistered namespace", `fun f(t: other\Thing?) > void {}`, UnimportedNamespace, `undefined type "other\Thing": no import binds other in this module`},
+		{"imported, type missing", "import \"example/demo\";\nfun f(t: demo\\Nope?) > void {}", UndefinedType, `undefined type "demo\Nope": demo declares no type Nope`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer sess.Close()
+			sess.SetNativeModule("example/demo", vmpackage.NewMap())
+			sess.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }\nexport final answer: int = 0;")
+
+			err := sess.Exec(ctx, tc.src)
+			d, ok := DiagnosticOf(err)
+			require.True(t, ok, "want a positioned diagnostic, got %v", err)
+			assert.Equal(t, tc.code, d.Code)
+			assert.Equal(t, tc.msg, d.Msg)
+		})
+	}
+}
+
+// Two registered modules binding the same name leave the import line unnamed rather
+// than guess between them.
+func TestUnimportedNamespace_AmbiguousPathNamesNoLine(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetNativeModule("a/demo", vmpackage.NewMap())
+	sess.SetNativeModule("b/demo", vmpackage.NewMap())
+
+	d, ok := DiagnosticOf(sess.Exec(ctx, `final n = demo\answer;`))
+	require.True(t, ok)
+	assert.Equal(t, UnimportedNamespace, d.Code)
+	assert.Equal(t, `undefined: demo\answer: no import binds demo in this module`, d.Msg)
+}
