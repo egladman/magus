@@ -22,8 +22,9 @@ Prove it before you plan it. A hunch about what a change will break is cheap to 
 <!-- README terminal recordings are rendered by `magus run termcast-generate` from
      tapes/core-loop.capture. Re-record that real CLI session with `magus run
      termcast-record` when its output changes; commit the capture and SVG together.
-     `termshots-generate` is separate: it makes the static interactive-surface SVGs
-     used in the documentation. -->
+     The same tool, cmd/magus-termcast, has a second mode: `magus run
+     termshots-generate` runs its `shots` subcommand, which renders the static
+     interactive-surface SVGs used in the documentation. -->
 
 <p align="center">
   <picture>

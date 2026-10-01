@@ -27,7 +27,6 @@ var scribes = map[string]func(args []string) error{
 	"boundaryobjects": runBoundaryObjects,
 	"boundarydecode":  runBoundaryDecode,
 	"contract":        runContract,
-	"mockassert":      runMockAssert,
 	"mcptools":        runMCPTools,
 	"jobschema":       runJobSchema,
 	"moduledecls":     runModuleDecls,
@@ -37,9 +36,7 @@ var scribes = map[string]func(args []string) error{
 	"diffdemo":        runDiffDemo,
 	"cliflags":        runCLIFlags,
 	"config":          runConfig,
-	"sign":            runSign,
 	"api":             runAPI,
-	"verify":          runVerify,
 	"cut":             runCut,
 	"release-index":   runReleaseIndex,
 }

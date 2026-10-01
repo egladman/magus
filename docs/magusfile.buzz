@@ -3,6 +3,7 @@ import "../hack/magusfile/toolchain-policy" as policy;
 import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
+import "../hack/magusfile/ruledocs" as ruledocs;
 import "../hack/magusfile/changelog" as changelog;
 import "fs";
 import "os";
@@ -48,7 +49,7 @@ magus\project({
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
-                "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go",
+                "../hack/magusfile/ruledocs.buzz", "../internal/guard/**/*.go",
                 "../cmd/magus-utils/**/*.go"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
@@ -91,7 +92,8 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
         workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
-        workspace\file("cmd/magus-ruledocs/**/*.go"), workspace\file("internal/guard/**/*.go"),
+        // ruledocs renders the running binary's guard catalog, which internal/guard compiles in.
+        workspace\file("hack/magusfile/ruledocs.buzz"), workspace\file("internal/guard/**/*.go"),
         workspace\file("cmd/magus-utils/**/*.go"),
         // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
@@ -111,7 +113,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-ruledocs", "-out", "./reference/rules"]});
+    ruledocs\write("reference/rules", rules: magus\describe.rule());
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     fs\mkdirAll("benchmarks");

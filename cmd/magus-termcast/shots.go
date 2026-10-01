@@ -1,13 +1,29 @@
-// Command magus-termshots renders magus's interactive terminal surfaces to SVG
-// for the documentation.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
+	"maps"
+	"path/filepath"
+	"slices"
+	"time"
+
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/internal/interactive/tty"
+)
+
+// The shots: magus's interactive terminal surfaces, rendered as stills for the
+// documentation.
 //
-// It is the deterministic sibling of magus-termcast, which records a real
-// session through a pseudo-terminal. Both are right, for different subjects. The
-// core loop is a sequence of commands anyone can type, so recording it for real
-// is the truthful thing to do. The surfaces here are conditions (a run stalled
-// on another process's lock, a target that failed, a prompt waiting on a
-// choice), and staging those in a real shell reliably enough to record is
-// painful.
+// They are the deterministic sibling of the recorded session in main.go. Both
+// are right, for different subjects. The core loop is a sequence of commands
+// anyone can type, so recording it for real is the truthful thing to do. The
+// surfaces here are conditions (a run stalled on another process's lock, a
+// target that failed, a prompt waiting on a choice), and staging those in a
+// real shell reliably enough to record is painful.
 //
 // So these are rendered instead of recorded: the frames come from driving the
 // REAL Zone, Notifier and picker through the terminal emulator, so the escape
@@ -16,44 +32,34 @@
 //
 // The output is deterministic (no timestamps, no randomness), which is what
 // lets it be committed and checked for drift like every other generated file.
-package main
 
-import (
-	"context"
-	"flag"
-	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"time"
-
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
-)
-
-func main() {
-	outDir := flag.String("out", filepath.Join("assets", "gen"), "directory to write the SVGs into")
-	flag.Parse()
-
-	shots, err := render()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus-termshots: %v\n", err)
-		os.Exit(1)
+// runShots is the `shots` subcommand: it writes every shot into -out.
+func runShots(args []string) error {
+	fs := flag.NewFlagSet("magus-termcast shots", flag.ExitOnError)
+	outDir := fs.String("out", filepath.Join("assets", "gen"), "directory to write the SVGs into")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	for name, svg := range shots {
-		path := filepath.Join(*outDir, name)
-		if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-termshots: write %s: %v\n", path, err)
-			os.Exit(1)
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+
+	svgs, err := renderShots()
+	if err != nil {
+		return err
+	}
+	// Sorted so the log lists the files in the same order every run.
+	for _, name := range slices.Sorted(maps.Keys(svgs)) {
+		if err := write(filepath.Join(*outDir, name), svgs[name]); err != nil {
+			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "magus-termshots: wrote %d shots to %s\n", len(shots), *outDir)
+	return nil
 }
 
-// render produces every shot, keyed by filename. Split from main so the drift
-// test can compare without writing.
-func render() (map[string]string, error) {
+// renderShots produces every shot, keyed by filename. Split from runShots so the
+// drift test can compare without writing.
+func renderShots() (map[string]string, error) {
 	out := map[string]string{}
 	for _, s := range []struct {
 		name string
@@ -78,19 +84,18 @@ const (
 	// Wide enough for the failure prompt's instruction row to sit clear of the
 	// right edge. At 84 the row is 83 columns and "[o] output" touched
 	// "[esc] done", which reads as a rendering fault rather than as the tight
-	// right-alignment it is. 100 also matches the core-loop recording, so the
-	// documentation's pictures share one terminal size.
-	cols = 132
+	// right-alignment it is. 132 also matches the showcase recording's width.
+	shotCols = 132
 	// Tall enough that the command producing the scene stays on screen. The real
 	// handler prints four lines per failure, which at 15 scrolled "$ magus
 	// affected ci" away and left a picture that could not say what made it.
-	rows = 21
+	shotRows = 21
 )
 
 // newTerminal returns a screen and a zone that draws on it.
 func newTerminal() (*screen.Screen, *tty.Zone) {
-	s := screen.New(cols, rows)
-	return s, tty.NewZone(s, tty.FixedProbe(cols, rows))
+	s := screen.New(shotCols, shotRows)
+	return s, tty.NewZone(s, tty.FixedProbe(shotCols, shotRows))
 }
 
 // runBand: ordinary output scrolling past a band that does not move. The
@@ -120,8 +125,8 @@ func runBand(t screen.Theme) (string, error) {
 // the drift gate (which compares the renderer to itself) stayed green
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
-	s := screen.New(cols, rows)
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.FixedProbe(cols, rows), demoClock())
+	s := screen.New(shotCols, shotRows)
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.FixedProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	fmt.Fprint(s, "[pass] build std (cached, 0.0s)\n")
@@ -204,19 +209,19 @@ func event(msg string, attrs ...slog.Attr) slog.Record {
 // picker: the interactive chooser, drawn in place with the highlight on the row
 // a click or Enter would take.
 func picker(t screen.Theme) (string, error) {
-	s := screen.New(cols, rows)
+	s := screen.New(shotCols, shotRows)
 	fmt.Fprint(s, "$ magus x\n")
 
 	// The REAL picker composition, not an imitation of it. Hand-writing this
 	// block is how the shot came to show a selection marker and a frame the
 	// picker had stopped drawing.
-	p := tty.FixedProbe(cols, rows)
+	p := tty.FixedProbe(shotCols, shotRows)
 	view := tty.NewInlineView(s, p)
 	frame := tty.RenderPick(s, p,
 		[]string{"console", "docs", "libs/gopherbuzz", "std", "types"},
 		tty.PickOptions{Prompt: "project"}, "gop", 0)
 	if !view.Paint(frame) {
-		return "", fmt.Errorf("the picker block does not fit %dx%d", cols, rows)
+		return "", fmt.Errorf("the picker block does not fit %dx%d", shotCols, shotRows)
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }

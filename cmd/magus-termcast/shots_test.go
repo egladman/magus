@@ -6,11 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/cache"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/screen"
 )
 
@@ -23,15 +22,48 @@ import (
 // to the langservice manifest before it grew one.
 func TestShotsUpToDate(t *testing.T) {
 	t.Parallel()
-	want, err := render()
+	want, err := renderShots()
 	require.NoError(t, err)
 
 	for name, svg := range want {
 		got, err := os.ReadFile(filepath.FromSlash("../../assets/gen/" + name))
 		require.NoError(t, err, "read the committed shot")
 		assert.Equal(t, svg, string(got),
-			"%s is out of date; regenerate with: go run ./cmd/magus-termshots", name)
+			"%s is out of date; run `magus run termshots-generate .`", name)
 	}
+}
+
+// TestShotsSubcommandWritesUnderOut drives the subcommand's own argument
+// handling, which the render-only tests above never reach.
+func TestShotsSubcommandWritesUnderOut(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, runShots([]string{"-out", dir}))
+
+	want, err := renderShots()
+	require.NoError(t, err)
+	for name, svg := range want {
+		got, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err, "the subcommand did not write %s under -out", name)
+		assert.Equal(t, svg, string(got), name)
+	}
+}
+
+func TestShotsSubcommandRejectsAStrayArgument(t *testing.T) {
+	t.Parallel()
+	err := runShots([]string{"-out", t.TempDir(), "extra"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"extra"`)
+}
+
+// TestCastRejectsAnUnknownSubcommand pins the dispatch: anything but shots
+// falls to the recorded mode, which must refuse a word it does not know rather
+// than ignore it and overwrite the committed SVGs with a default render.
+func TestCastRejectsAnUnknownSubcommand(t *testing.T) {
+	t.Parallel()
+	err := runCast([]string{"shot"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"shot"`)
 }
 
 // TestShotsAreDeterministic is what makes the gate above meaningful: a renderer
@@ -39,10 +71,10 @@ func TestShotsUpToDate(t *testing.T) {
 // everyone to regenerate without reading the diff.
 func TestShotsAreDeterministic(t *testing.T) {
 	t.Parallel()
-	first, err := render()
+	first, err := renderShots()
 	require.NoError(t, err)
 	for range 3 {
-		again, err := render()
+		again, err := renderShots()
 		require.NoError(t, err)
 		assert.Equal(t, first, again)
 	}
@@ -53,7 +85,7 @@ func TestShotsAreDeterministic(t *testing.T) {
 // answering would render empty frames and the gate would happily pin them.
 func TestShotsAreNotBlank(t *testing.T) {
 	t.Parallel()
-	shots, err := render()
+	shots, err := renderShots()
 	require.NoError(t, err)
 	// Three surfaces, each in both palettes.
 	require.Len(t, shots, 6)

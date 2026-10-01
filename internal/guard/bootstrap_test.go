@@ -75,7 +75,7 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "without --no-cache", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build .", deny: true, says: bootstrapCommand},
 		{name: "without -trimpath", cwd: fresh, command: "go run ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
 		{name: "another target", cwd: fresh, command: "go run -trimpath ./cmd/magus run test --no-cache .", deny: true},
-		{name: "another package", cwd: fresh, command: "go run -trimpath ./cmd/magus-ruledocs run go-build --no-cache .", deny: true},
+		{name: "another package", cwd: fresh, command: "go run -trimpath ./cmd/magus-docs run go-build --no-cache .", deny: true},
 		{name: "go generate", cwd: fresh, command: "go generate ./...", deny: true, says: bootstrapCommand},
 		{name: "chained", cwd: fresh, command: bootstrapCommand + " && go vet ./...", deny: true, says: "alone on its line"},
 		{name: "foreign module", cwd: foreign, command: bootstrapCommand, deny: true},
@@ -145,7 +145,6 @@ var recoveryForms = []string{
 	"go generate ./std/... ./internal/langservice",
 	"GOEXPERIMENT=jsonv2 go generate ./internal/handler/mcp",
 	"go run ./cmd/magus-utils jobschema -out internal/job/gen",
-	"go run -trimpath ./cmd/magus-utils mockassert",
 }
 
 // A checkout that cannot load its own sources gets the relink and the generators, with or
@@ -173,13 +172,13 @@ func TestRankOwnBuildDeniesEverythingElseWhileTheWorkspaceCannotLoad(t *testing.
 		"go vet ./...",
 		"go build ./cmd/magus",
 		"go build -o magus.new ./cmd/magus",
-		"go build -o magus ./cmd/magus-ruledocs",
+		"go build -o magus ./cmd/magus-docs",
 		"go build -o magus -ldflags=-s ./cmd/magus",
 		"go generate",
 		"go generate -run bindings ./std",
 		"go generate ../other",
 		"go generate /tmp/elsewhere",
-		"go run ./cmd/magus-utils sign dist/SHA256SUMS",
+		"go run ./cmd/magus-utils diffdemo",
 		"go run ./cmd/magus-utils cut",
 		"go run ./cmd/magus-utils release-index",
 		"go run ./cmd/magus run go-build .",
@@ -203,7 +202,7 @@ func TestRankOwnBuildLoadsTheWorkspaceOnlyForARecoveryForm(t *testing.T) {
 	root := checkoutFixture(t, ownModule, true)
 	loads := 0
 	deps := loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads)
-	for _, command := range []string{"go test ./...", "go vet ./...", "go run ./cmd/magus-utils sign x"} {
+	for _, command := range []string{"go test ./...", "go vet ./...", "go run ./cmd/magus-utils cut"} {
 		judgeOwnBuildWith(deps, root, command)
 	}
 	assert.Zero(t, loads)

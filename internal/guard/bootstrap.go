@@ -118,11 +118,11 @@ func (g goCall) linksMagus() bool {
 
 // magusUtilsGenerators are the cmd/magus-utils subcommands that write generated source, the
 // ones the *_generate targets and the go:generate directives they drive run. The rest
-// (sign, verify, cut, release-index, diffdemo) are release and demo tools, not part of
-// regenerating a tree.
+// (cut, release-index, diffdemo) are release and demo tools, not part of regenerating a
+// tree.
 var magusUtilsGenerators = []string{
 	"api", "bindings", "boundarylist", "boundaryobjects", "cliflags", "completions", "config",
-	"jobschema", "mcptools", "mockassert", "moduledecls", "moduleset", "types",
+	"jobschema", "mcptools", "moduledecls", "moduleset", "types",
 }
 
 // recoversMagus reports a command that rebuilds a checkout whose committed generated files

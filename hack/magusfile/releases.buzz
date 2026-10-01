@@ -17,6 +17,7 @@
 // that belongs to a human. See the `release` target for the policy that uses these.
 import "vcs";
 import "semver";
+import "crypto";
 import "std"; // assert, for the in-file test blocks below
 
 // releasableModules enumerates every independently-versioned project: one whose
@@ -203,28 +204,37 @@ test "a windows-joined asset path matches the upload glob" {
     std\assert(toSlash("") == "", message: "the empty path");
 }
 
-// overwriteRefusal is the write-once rule for release artifacts: with immutable set, a
-// path that already exists is refused rather than replaced. Returns the refusal message,
-// or "" when the write may proceed.
+// refuseOverwrite is the write-once rule for release artifacts: with immutable set, a path
+// that already exists raises rather than being replaced.
 //
 // Pure like everything here: the caller supplies exists (fs\exists at the call site), so
 // the rule tests without a filesystem. The default stays overwrite - the publish job
 // re-uploads on a re-run by design - and immutable is the opt-in for runs where an
 // existing artifact means a published file is about to be replaced.
-export fun overwriteRefusal(path: str, immutable: bool, exists: bool) > str {
-    if (!immutable or !exists) { return ""; }
-    return "release: `" + path + "` already exists and this run is immutable; refusing to "
+export fun refuseOverwrite(path: str, immutable: bool, exists: bool) > void !> str {
+    if (!immutable or !exists) { return; }
+    throw "release: `" + path + "` already exists and this run is immutable; refusing to "
         + "overwrite a release artifact. Delete it deliberately, or run without the "
         + "`immutable` charm to allow replacement.";
 }
 
+// overwriteRaised is what refuseOverwrite raised, or "" when the write may proceed.
+fun overwriteRaised(path: str, immutable: bool, exists: bool) > str {
+    try {
+        refuseOverwrite(path, immutable: immutable, exists: exists);
+    } catch (e: str) {
+        return e;
+    }
+    return "";
+}
+
 test "immutable refuses only an existing path" {
-    std\assert(overwriteRefusal("dist/a.tar.gz", immutable: false, exists: true) == "",
+    std\assert(overwriteRaised("dist/a.tar.gz", immutable: false, exists: true) == "",
         message: "the default overwrites");
-    std\assert(overwriteRefusal("dist/a.tar.gz", immutable: true, exists: false) == "",
+    std\assert(overwriteRaised("dist/a.tar.gz", immutable: true, exists: false) == "",
         message: "a fresh path writes");
-    final msg = overwriteRefusal("dist/a.tar.gz", immutable: true, exists: true);
-    std\assert(msg != "", message: "an existing path under immutable is refused");
+    final msg = overwriteRaised("dist/a.tar.gz", immutable: true, exists: true);
+    std\assert(msg != "", message: "an existing path under immutable raises");
     std\assert(msg.indexOf("dist/a.tar.gz") != null, message: "the refusal names the path");
     std\assert(msg.indexOf("immutable") != null, message: "the refusal names the charm");
 }
@@ -249,6 +259,40 @@ test "the manifest gains its version header exactly once" {
     std\assert(headed.endsWith(sums), message: "the entries are untouched");
     std\assert(manifestWithVersion(headed, version: "v0.4.2") == headed,
         message: "a headed manifest is unchanged");
+}
+
+// verifySignature raises unless sig, the raw bytes of the .sig file at sigPath, is an
+// Ed25519 signature over data by the hex public key pubHex.
+export fun verifySignature(data: str, sig: str, pubHex: str, sigPath: str) > void !> any {
+    if (sig.len() != 64) {
+        throw "{sigPath} is {sig.len()} bytes, want 64";
+    }
+    if (!crypto\verify(crypto\SignAlgorithm.Ed25519, data: data, sig_hex: sig.hex(), pub_hex: pubHex)) {
+        throw "signature check failed: {sigPath} does not match the active release key";
+    }
+}
+
+// raised is what verifySignature raised, or "" when it returned.
+fun raised(data: str, sig: str, pubHex: str) > str {
+    try {
+        verifySignature(data, sig: sig, pubHex: pubHex, sigPath: "S.sig");
+    } catch (e: str) {
+        return e;
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "a signature verifies only over its own data, key and length" {
+    // RFC 8032 section 7.1, TEST 2: the one-byte message "r".
+    final rfc8032Pub = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+    final sig = "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00".bin();
+    std\assert(raised("r", sig: sig, pubHex: rfc8032Pub) == "", message: "the RFC vector verifies");
+    std\assert(raised("s", sig: sig, pubHex: rfc8032Pub).startsWith("signature check failed: S.sig"),
+        message: "other data raises");
+    std\assert(raised("r", sig: "too short", pubHex: rfc8032Pub) == "S.sig is 9 bytes, want 64",
+        message: "a truncated .sig raises by length");
 }
 
 // currentVersion returns a module's highest STABLE released version, or "" when

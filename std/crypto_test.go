@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -312,4 +313,15 @@ func TestCryptoLegacyFileDigests(t *testing.T) {
 	_, err = CryptoMd5File(ctx, filepath.Join(dir, "absent"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "crypto.md5_file")
+}
+
+// The release key is the keyring's active entry, in the hex form crypto\verify takes.
+func TestCryptoReleasePublicKeyIsTheActiveKey(t *testing.T) {
+	got, err := CryptoReleasePublicKey(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, got, 2*ed25519.PublicKeySize)
+
+	active, err := selfupdate.ReleaseKeys.Active()
+	require.NoError(t, err)
+	assert.Equal(t, hex.EncodeToString(active.Pub), got)
 }

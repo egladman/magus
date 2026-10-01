@@ -314,7 +314,9 @@ func TestAddedCountsWhatScrolledAway(t *testing.T) {
 
 func TestWriteWritesTheRenderedSVG(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.svg")
-	write(path, "<svg/>")
+	if err := write(path, "<svg/>"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 
 	got, err := os.ReadFile(path)
 	if err != nil {

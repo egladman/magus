@@ -38,6 +38,7 @@ import "lcov";
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
 import "./hack/magusfile/releases" as releases;
+import "./hack/magusfile/mockassert" as mockassert;
 import "spells/golang/gomod";
 
 import "project/libs/gopherbuzz";
@@ -765,13 +766,14 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
               bindings_generate, config_generate);
     ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
+        "hack/magusfile/mockassert.buzz",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
     ctx.writesFiles("**/gen/mocks/*.go");
     proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
-    proc\exec("go", ["run", "./cmd/magus-utils", "mockassert"]);
+    mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));
 }
 
 // Reinstalls the agent skills from their embedded sources in internal/agent/skills.
@@ -1023,10 +1025,10 @@ export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the real PrettyHandler's band.
     ctx.needs(job_generate);
-    ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
+    ctx.readsFiles("cmd/magus-termcast/*.go", "internal/interactive/**/*.go",
         "internal/cache/*.go", "internal/job/gen/*.json");
     ctx.writesFiles("assets/gen/terminal-*.svg");
-    proc\exec("go", ["run", "./cmd/magus-termshots"]);
+    proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }
 
 // Must match release.yaml; verify_release_workflow checks the workflow against it.
@@ -1043,9 +1045,7 @@ fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
 }
 
 fun refuse_overwrite(ctx: magus\Context, path: str) > void !> any {
-    final msg = releases\overwriteRefusal(path,
-        immutable: ctx.hasCharm("immutable"), exists: fs\exists(path));
-    if (msg != "") { throw msg; }
+    releases\refuseOverwrite(path, immutable: ctx.hasCharm("immutable"), exists: fs\exists(path));
 }
 
 // Maps an asset arch token to its GOARM level, or "" for arches without one. ARMv7
@@ -1232,15 +1232,19 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Signs dist/SHA256SUMS with the Ed25519 key in MAGUS_SIGNING_KEY, then verifies the
-// signature against the embedded release key.
+// written signature against the active release key this binary embeds, so a mis-set
+// key fails here rather than in every client's self-update.
 export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
-    refuse_overwrite(ctx, fs\join("dist", "SHA256SUMS.sig"));
-    // The version header selfupdate's ParseManifest requires, added last before signing.
     final manifest = fs\join("dist", "SHA256SUMS");
+    final sigPath = manifest + ".sig";
+    refuse_overwrite(ctx, sigPath);
+    // The version header selfupdate's ParseManifest requires, added last before signing.
     fs\writeFile(manifest, releases\manifestWithVersion(fs\readFile(manifest), version: version()));
-    proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
-    proc\exec("go", ["run", "./cmd/magus-utils", "verify",
-        fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
+    // A dry run signs nothing and returns "", leaving no .sig to check.
+    if (crypto\signFile(crypto\SignAlgorithm.Ed25519, path: manifest, key_env: "MAGUS_SIGNING_KEY") == "") { return; }
+    releases\verifySignature(fs\readFile(manifest), sig: fs\readFile(sigPath),
+        pubHex: crypto\releasePublicKey(), sigPath: sigPath);
+    magus\log.info("signed {manifest} -> {sigPath}, verified against the release key");
 }
 
 // Builds docs/gen/public/release/index.json from releases/*.yaml, signs it, regenerates

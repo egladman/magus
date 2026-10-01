@@ -79,7 +79,7 @@ Two options, both off by default:
   usually means the code it drives never left `package main` either.
 
 magus leaves `report-main-tests` off. Its own `cmd/magus`, `cmd/magus-utils`, the
-docs generators, gopherbuzz's CLI, and termcast/termshots/swegrade all test from
+docs generators, gopherbuzz's CLI, and termcast/swegrade all test from
 inside `package main` today, and this repo moves that logic into domain packages
 over time rather than in one lift (see `plans/test-layers-lint-2026-09-26.md`).
 

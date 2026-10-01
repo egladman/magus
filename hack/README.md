@@ -110,7 +110,9 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
-| `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags and the release-index publish |
+| `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
+| `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
+| `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 
