@@ -164,6 +164,24 @@ func TestExplainStaleBinary_LeavesEverythingElseAlone(t *testing.T) {
 	}
 }
 
+// A file naming a namespace it never imported lacks an import line, which no newer magus
+// supplies, so "self update" would send its author in a circle.
+func TestExplainStaleBinary_LeavesAMissingImportAlone(t *testing.T) {
+	for _, src := range []string{
+		`fun f(ctx: magus\Context) > void {}`,
+		`final s = magus\Secret{value = "x"};`,
+		`final p = magus\project;`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			err := realBuzzErr(t, src)
+			require.ErrorContains(t, err, "no import binds magus in this module")
+			got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
+			assert.Equal(t, err, got, "must be returned untouched")
+			assert.NotErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
+		})
+	}
+}
+
 // TestExplainStaleBinary_WorksWithNothingDeclared is the case that matters for every
 // workspace that is not this one: no required_version, and a build with no stamp. The
 // hint still has to say something useful, because a workspace with no floor is exactly

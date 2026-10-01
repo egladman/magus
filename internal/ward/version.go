@@ -268,6 +268,8 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 const staleNameNote = "This build does not provide that name; unless it is misspelled, this magus is out of date."
 
 // staleShaped reports whether err carries one of the codes an out-of-date binary produces.
+// BZZ1009, a namespace the file never imported, is not one: no newer binary supplies a
+// missing import line.
 func staleShaped(err error) bool {
 	var d *diagnostics.Error
 	if !errors.As(err, &d) {

@@ -2,6 +2,7 @@ package hint
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,6 +80,12 @@ func TestExplainImplicitMagus(t *testing.T) {
 	require.ErrorIs(t, got, types.MagusNotImported)
 	assert.ErrorContains(t, got, "line 1:1: undefined: magus: add `import \"magus\";`")
 	assert.NotContains(t, got.Error(), "example.invalid", "the checker's own see: line is dropped")
+
+	qualified := errors.New("[BZZ1009] buzz: line 1:8: undefined type \"magus\\Context\": no import binds magus in this module; add `import \"magus\";`\n  see: https://example.invalid/BZZ1009")
+	got = ExplainImplicitMagus(qualified)
+	require.ErrorIs(t, got, types.MagusNotImported)
+	assert.ErrorContains(t, got, "no import binds magus in this module; add `import \"magus\";`; magus is an imported module since v0.5.0")
+	assert.Equal(t, 1, strings.Count(got.Error(), "add `import"), "the fix is named once")
 
 	other := errors.New("undefined: magusfile")
 	assert.Same(t, other, ExplainImplicitMagus(other), "a longer identifier is not the module")

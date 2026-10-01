@@ -72,15 +72,20 @@ func IgnoredKeyAdvice() string {
 		SelfUpdate.String() + "`, or delete the key if the workspace does not need it"
 }
 
-// undefinedMagus matches the checker's error for a program that calls magus\ without
-// importing it.
-var undefinedMagus = regexp.MustCompile(`undefined: magus\b`)
+// undefinedMagus matches the checker's errors for a program that names magus without
+// importing it: BZZ1009 for a qualified name (magus\project, magus\Context), BZZ1001
+// for the bare module name.
+var undefinedMagus = regexp.MustCompile(`no import binds magus\b|undefined: magus\b`)
 
-// ExplainImplicitMagus turns a load failure caused by calling magus\ without importing it
+// importMagus is the fix MGS1039 names. BZZ1009 already ends with it when the
+// session registered magus.
+const importMagus = "add `import \"magus\";`"
+
+// ExplainImplicitMagus turns a load failure caused by naming magus without importing it
 // into MGS1039, which names the one-line fix. Any other error comes back unchanged.
 //
 // magus was bound into every program implicitly until v0.5.0, so a file written for an
-// older magus fails with a bare `undefined: magus` that reads like a typo rather than a
+// older magus fails with an undefined name that reads like a typo rather than a
 // migration.
 func ExplainImplicitMagus(err error) error {
 	if err == nil || !undefinedMagus.MatchString(err.Error()) {
@@ -89,6 +94,8 @@ func ExplainImplicitMagus(err error) error {
 	// The first line only: the checker's error carries its own `see:` line, which would
 	// otherwise land between the position and the fix.
 	first, _, _ := strings.Cut(err.Error(), "\n")
-	return types.DiagnosticErrorf(types.MagusNotImported,
-		"%s: add `import \"magus\";` to the file; magus is an imported module since v0.5.0", first)
+	if !strings.HasSuffix(first, importMagus) {
+		first += ": " + importMagus + " to the file"
+	}
+	return types.DiagnosticErrorf(types.MagusNotImported, "%s; magus is an imported module since v0.5.0", first)
 }
