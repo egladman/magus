@@ -696,6 +696,53 @@ GitHub provider counts a review only from an account that can push to the reposi
 and only at the commit it was given on; an approving `reviewDecision` alone approves
 nothing, since GitHub can keep it from a review of an older commit.
 
+### An approval at an older commit
+
+When the change holds its approvals only at an older commit, as after a rebase or a
+push, the queue decides whether they still cover the head. It replays the approved
+commit's own diff onto the head's base and classifies, path by path, what the head
+holds beyond that replay:
+
+| Tier           | The change since the approval                                        |
+| -------------- | -------------------------------------------------------------------- |
+| `rebase`       | none: the approved diff, replayed onto the new base, is the head     |
+| `generated`    | only files a target declares as its output, or magus maintains       |
+| `prose`        | only files `gate_low_risk` claims (markdown by default)              |
+| `comment-only` | only comments, by the comment syntax the language's spell declares   |
+| `code`         | anything else, and any path the build tool cannot classify           |
+
+The tiers come from the workspace's own declarations, never from file extensions alone.
+The approval carries when the base's `queue.carry_approvals` in `magus.yaml` allows the
+tier of every changed path:
+
+```yaml
+queue:
+  carry_approvals: [rebase, generated, prose, comment-only]
+```
+
+Unset, it carries the four tiers above. `rebase` always carries and `code` never does,
+so `[]` or `[rebase]` is the strictest policy. Only the base's own `magus.yaml` counts;
+a user-global setting is ignored. A name that is not a tier, or `code`, stops the load
+with [MGS1050](../reference/codes/magusfile/MGS1050.md). A diff that conflicts when
+replayed, or that cannot be told apart from another change's, is `code`. When the
+approval does not carry, the change waits with `WAIT_NOT_APPROVED`, its reason naming
+each path that kept it from carrying and its tier.
+
+For another build tool, the `--facts` command answers `classify_edit` for each changed
+path: stdin is `{"path", "old", "cur"}`, each side's content or `null` where the path is
+absent, and it answers `{"tier", "why"}`. A failed or unknown answer is `code`.
+
+### Approvals the queue no longer counts
+
+`magus queue reviews --provider github --base main --change <n>` classifies every
+approval standing on one pull request the same way, a code owner's included, and prints
+whether each carries; `-o json` prints a `mergequeue.reviews/v1` document. With
+`--dismiss` it dismisses each one that does not carry, telling the reviewer which paths
+changed. It reads the head again first and dismisses nothing when it moved, since the
+run on the new head decides, and it skips a review already dismissed. So the reviews a
+person sees agree with what the queue merges by. A carry is noted only in the advice
+comment ("approval by @ann carries: prose").
+
 ## Verdicts: `mergequeue.verdict/v1`
 
 `validate --verdicts <dir>` first writes the plan there as `plan.json`, then one
@@ -930,6 +977,17 @@ and so is a slug GitHub has no `<slug>[bot]` user for, which names no app at all
 
 Require `merge-queue` only once the queue is on the default branch. Before that, nothing
 posts it, and every merge waits on it.
+
+Turn off "Dismiss stale pull request approvals when new commits are pushed" (in the
+ruleset's pull request rule, or the branch protection rule), and let the queue dismiss
+instead. GitHub's setting fires on every push, a rebase that changed nothing included,
+so the author has to ask for a review again for nothing. With it off, the `reviews` job
+in `queue-apply.yaml` runs on each push to a pull request from this repository, with
+main's workflow and main's code, and runs `magus queue reviews --dismiss` as the app:
+an approval the change since it does not carry is dismissed, naming the files, and one
+it carries stands. It needs the app's pull requests write, which the registration link
+already grants. GitHub lists no pull request for a fork's run, so a fork's approvals are
+never dismissed; the queue still rechecks every approval before it merges.
 
 The next `queue-apply` run finds the variable and the secret. `setup-magus` mints a token
 for this repository alone that expires when the job ends, and the queue merges, pushes,
