@@ -50,6 +50,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 				hint.Affected.With("ci", "--plan"))
 		}
 		p, err := readSavedPlan(os.Stdin)
+		// A stage upstream that failed printed no plan, so its failure is the one to report.
+		if werr := awaitPipeline(ctx, root); werr != nil {
+			return werr
+		}
 		if err != nil {
 			return err
 		}

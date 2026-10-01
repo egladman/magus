@@ -763,6 +763,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	}
+	// Before the plan reads the tree, which a stage upstream may still be writing.
+	if err := awaitPipeline(ctx, root); err != nil {
+		return err
+	}
 	plan, err := m.Plan(ctx, target, planOpts)
 	if err != nil {
 		return err
