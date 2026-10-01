@@ -8,5 +8,10 @@
     error names the builtin that does the job (`lists have append`).
   - `len(xs)`: `len` is a method; the error says `xs.len()`.
   - `return null` from a function declared `> int`: the error says to declare `> int?`.
+- **A call to a member an untyped value lacks names the member and the line.** It raised
+  `null is not callable` with no position; it now raises
+  `<file>:<line>: unknown method push on list`.
+- **A diagnostic inside an interpolated string points at the expression.** Every error
+  in `"{...}"` reported line 1, column 1.
 - **`magus\cmd`, `magus\run` and `magus\describe` honor `opts.allow_failure`.** A
   non-zero exit returns the result instead of raising, as `proc\exec` does.
