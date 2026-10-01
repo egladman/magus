@@ -13,9 +13,9 @@ Query: `magus query project=libs/gopherbuzz`
 | `lint`           |                                                                                           |
 | `build`          |                                                                                           |
 | `test`           | Runs the suite under the default tags, then again under buzz_safe.                        |
+| `buzzbench-test` | Runs the benchmarks/comparison module's tests, which test's ./...                         |
 | `fuzz`           | Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it. |
 | `buzz-build`     | Compiles the standalone buzz CLI, stamped with this module's version, not magus's.        |
 | `ci`             | The anchor `magus affected ci` keys off.                                                  |
 | `conformance`    | Runs the upstream buzz suite at the pinned commit against the allowlist.                  |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                                          |
-| `buzzbench-test` | Runs the benchmarks/comparison module's tests, which test's ./...                         |
