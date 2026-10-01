@@ -72,7 +72,7 @@ magus buzz hack/gha-run.buzz -- forget --run <id>
    and runs `queue gate --sandbox=<mode> --cache .magus -- magus <argv>` through
    `.github/actions/magus`. It reads main's signed remote tier and writes no shared tier.
    It uploads `.magus/logs/` as `magus-logs` on every outcome, kept 7 days.
-2. **A repository script, since replaced by `hack/on-actions.buzz`**, three steps, none of
+2. **A repository script, since replaced by `hack/remote/on-actions.buzz`**, three steps, none of
    which waits:
    - `dispatch` needs exactly one of `--ref <branch>` and `--push`. With `--ref` it asks
      GitHub for the branch tip and refuses unless it is HEAD. With `--push` it pushes
@@ -115,7 +115,7 @@ published.
 
 Anyone with write access can read every repository secret, and a dispatch at any branch
 runs that branch's copy of the file with those secrets in reach. `run.yaml` names no
-`secrets.*` beyond the job's token, and `hack/on-actions.buzz` starts `run.yaml` alone.
+`secrets.*` beyond the job's token, and `hack/remote/on-actions.buzz` starts `run.yaml` alone.
 The guard should prove the rest: deny a dispatch of any workflow whose file at the ref
 reads a secret beyond `GITHUB_TOKEN` (`release.yaml` and `release-index.yaml` carry
 `workflow_dispatch` and read `MAGUS_SIGNING_KEY`).
@@ -164,11 +164,11 @@ laptop.
 
 ## Amendment, 2026-09-29
 
-The script is `hack/on-actions.buzz`, a prefix in front of the command you would run
+The script is `hack/remote/on-actions.buzz`, a prefix in front of the command you would run
 here, like `sudo` or `nice`:
 
 ```sh
-magus buzz hack/on-actions.buzz -- magus affected ci
+magus buzz hack/remote/on-actions.buzz -- magus affected ci
 ```
 
 Its own options come first; the first word that is not one starts the command, which must

@@ -515,6 +515,24 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		"untrackedDigest": vm.StrValue(""), "vcs": vm.StrValue(""), "preserved": vm.StrValue(""),
 	}))
 	m.MapSet("vcs", vcs)
+	// A dry run reads no activity trail and writes no marks: every call answers empty.
+	trail := vm.NewMap()
+	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectFeedbackTrail(types.FeedbackTrail{}), nil
+	}))
+	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	trail.MapSet("shapes", fn("magus.trail.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	trail.MapSet("marks", fn("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectFeedbackMark(types.FeedbackMark{}), nil
+	}))
+	m.MapSet("trail", trail)
 
 	addPureMagus(m)
 

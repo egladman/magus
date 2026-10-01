@@ -6,8 +6,8 @@
   "description": "The magus native console: a standalone, decoupled tabbed + tiling PWA that hosts the log viewer, graph explorer, dashboard, and activity trail as live lenses on the server over loopback. Built independently of the docs site (no scribe templating); its output is slipped into the reserved /console/ path. Managed with pnpm (pinned in mise.toml), .npmrc's minimum-release-age is the supply-chain guard.",
   "dependencies": {
     "@bufbuild/protobuf": "2.9.0",
-    "@connectrpc/connect": "^2.1.2",
-    "@connectrpc/connect-web": "^2.1.2",
+    "@connectrpc/connect": "^2.2.0",
+    "@connectrpc/connect-web": "^2.2.0",
     "d3-drag": "3.0.0",
     "d3-force": "3.0.0",
     "d3-selection": "3.0.0",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
-    "@happy-dom/global-registrator": "^20.10.6",
+    "@happy-dom/global-registrator": "^20.14.5",
     "@patternfly/patternfly": "6.5.2",
     "@types/d3-drag": "3.0.7",
     "@types/d3-force": "3.0.10",
@@ -30,7 +30,7 @@
   },
   "pnpm": {
     "overrides": {
-      "fast-uri": "4.1.3",
+      "fast-uri": "4.1.4",
       "js-yaml": "5.2.2",
       "nanoid": "3.3.18",
       "postcss": "8.5.23"
