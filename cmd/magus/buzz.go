@@ -136,6 +136,24 @@ func contextKeyReadBy(read func(context.Context)) any {
 }
 
 func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
+	// A relative --root names a directory from where magus started, so it is pinned
+	// before -C moves the process.
+	if root != "" {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return fmt.Errorf("magus buzz: --root: %w", err)
+		}
+		root = abs
+	}
+	// A leading -C is taken here so it reaches `lsp`, which is intercepted before the
+	// flag parse; anywhere else it arrives through bf.C below.
+	if dir, rest, ok := cutBuzzWorkDir(args); ok {
+		if err := buzzChdir(dir); err != nil {
+			return err
+		}
+		args = rest
+	}
+
 	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
 	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
 	// than a top-level `magus lsp`, so serving other languages later needs no new
@@ -164,10 +182,15 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	if err != nil {
 		return err
 	}
+	if bf.C != "" {
+		if err := buzzChdir(bf.C); err != nil {
+			return err
+		}
+	}
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
-	if !isRepl && (bf.NoAutoload || bf.C != "") {
-		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
-			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
+	if !isRepl && bf.NoAutoload {
+		return usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
+			gen.FlagBuzzNoAutoload, gen.FlagBuzzE, gen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
 		return usagef("magus buzz: --%s requires -%s", gen.FlagBuzzCoverprofile, gen.FlagBuzzT)
@@ -213,7 +236,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, bf.C, bf.NoAutoload)
+		return buzzRepl(ctx, bf.NoAutoload)
 	}
 
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
@@ -641,6 +664,33 @@ func scriptImportDir(name string) string {
 	return filepath.Dir(abs)
 }
 
+// cutBuzzWorkDir takes a -C that leads args, in any spelling the flag package accepts.
+func cutBuzzWorkDir(args []string) (dir string, rest []string, ok bool) {
+	if len(args) == 0 {
+		return "", args, false
+	}
+	switch a := args[0]; {
+	case a == "-"+gen.FlagBuzzC || a == "--"+gen.FlagBuzzC:
+		if len(args) < 2 {
+			return "", args, false
+		}
+		return args[1], args[2:], true
+	case strings.HasPrefix(a, "-"+gen.FlagBuzzC+"="), strings.HasPrefix(a, "--"+gen.FlagBuzzC+"="):
+		_, v, _ := strings.Cut(a, "=")
+		return v, args[1:], true
+	}
+	return "", args, false
+}
+
+// buzzChdir moves the process to dir. `magus buzz` is never forwarded to a server, so
+// the directory it changes is its own.
+func buzzChdir(dir string) error {
+	if err := os.Chdir(dir); err != nil {
+		return usagef("magus buzz: -%s %s: %v", gen.FlagBuzzC, dir, errors.Unwrap(err))
+	}
+	return nil
+}
+
 // buzzResolveFile returns the path to use for reading a script. If the path
 // contains a separator it is used as-is. Otherwise BUZZ_INCLUDE_PATH
 // (colon-separated) is searched for the first match, falling back to the original
@@ -663,7 +713,8 @@ func buzzResolveFile(path string) string {
 }
 
 func buzzUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus buzz              # open a REPL with the magusfile loaded")
+	fmt.Fprintln(os.Stderr, "Usage: magus buzz [-C dir] ... # every form below takes -C")
+	fmt.Fprintln(os.Stderr, "       magus buzz              # open a REPL with the magusfile loaded")
 	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
 	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
 	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
@@ -685,7 +736,8 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
 	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
 	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
-	fmt.Fprintln(os.Stderr, "  -C <dir>    working directory for the REPL's import resolution")
+	fmt.Fprintln(os.Stderr, "  -C <dir>    change to dir before anything else, as go -C does; script")
+	fmt.Fprintln(os.Stderr, "              paths and imports resolve from it (lsp: only as the first flag)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Parsing is upstream-strict by default. A file written for the magusfile")
 	fmt.Fprintln(os.Stderr, "engine needs --embedded, or it fails on rules upstream Buzz enforces and")

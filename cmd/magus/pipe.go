@@ -160,6 +160,9 @@ func tradesRecords(args []string) bool {
 // A script read from stdin is not a stage: stdin is its source.
 func buzzScriptStage(args []string) bool {
 	own, _, _ := splitScriptArgs(args)
+	if _, rest, ok := cutBuzzWorkDir(own); ok {
+		own = rest
+	}
 	if len(own) > 0 && own[0] == "lsp" {
 		return false
 	}

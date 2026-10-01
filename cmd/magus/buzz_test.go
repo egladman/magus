@@ -409,6 +409,51 @@ func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
 	assert.Contains(t, stdout, "ok")
 }
 
+// A hook runs in whatever directory the session is in, so its command names the root
+// with -C and the script by a root-relative path.
+func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hooks", "lib"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub", "deeper"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "lib", "answer.buzz"), []byte(
+		"export fun answer() > str { return \"ok\"; }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "main.buzz"), []byte(
+		"import \"std\";\nimport \"lib/answer\";\nfun main() > void { std\\print(answer()); }\n"), 0o644))
+
+	for _, args := range [][]string{
+		{"-C", root, "-s", "hooks/main.buzz"},
+		{"-C=" + root, "hooks/main.buzz"},
+		{"-s", "-C", root, "hooks/main.buzz"},
+	} {
+		t.Run(strings.Join(args[:len(args)-1], " "), func(t *testing.T) {
+			t.Chdir(filepath.Join(root, "sub", "deeper"))
+			var runErr error
+			stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), "", args) })
+			require.NoError(t, runErr)
+			assert.Equal(t, "ok\n", stdout)
+		})
+	}
+}
+
+func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	missing := filepath.Join(t.TempDir(), "gone")
+	for _, args := range [][]string{
+		{"-C", missing, "-e", "fun main() > void {}"},
+		{"-e", "fun main() > void {}", "-C", missing},
+		{"-C", missing, "lsp"},
+	} {
+		err := buzzCmd(t.Context(), "", args)
+		require.Error(t, err, "%v", args)
+		assert.Contains(t, err.Error(), "-C "+missing+": no such file or directory")
+	}
+}
+
+func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
+	assert.False(t, buzzScriptStage([]string{"-C", "/x", "lsp"}), "lsp is no pipe stage")
+	assert.True(t, buzzScriptStage([]string{"-C", "/x", "hooks/main.buzz"}), "a script is")
+}
+
 // --root names the checkout a script's vcs calls read. The process cwd here is the
 // magus checkout this test runs in, a different repository on a different ref.
 func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {

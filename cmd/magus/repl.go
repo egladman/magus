@@ -19,16 +19,11 @@ import (
 // a REPL on that workspace. Outside one there is simply nothing to autoload, which
 // NewBuzzReplSession already treats as ordinary rather than an error.
 //
-// --no-autoload skips executing the magusfile; -C aims the import resolution
-// somewhere other than cwd.
-func buzzRepl(ctx context.Context, workDir string, noAutoload bool) error {
-	cwd := workDir
-	if cwd == "" {
-		var err error
-		cwd, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("buzz repl: getwd: %w", err)
-		}
+// --no-autoload skips executing the magusfile.
+func buzzRepl(ctx context.Context, noAutoload bool) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("buzz repl: getwd: %w", err)
 	}
 
 	sess, err := interp.NewBuzzReplSession(ctx, cwd, !noAutoload)

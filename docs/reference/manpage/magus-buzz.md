@@ -11,7 +11,7 @@ Run a Buzz script
 
 ## Synopsis
 
-**magus** buzz [file...|-|lsp] [flags]
+**magus** buzz [-C dir] [file...|-|lsp] [flags]
 
 ## Description
 
@@ -50,10 +50,13 @@ magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; --check is for the ones
 nothing loads.
 
+-C changes the working directory first, in every mode, so one command line
+runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
+
 ## Options
 
-**-C** *string*
-: Working directory for the REPL's import resolution (default: cwd)
+**-C** *dir*
+: Change to \`dir\` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 
 **--check**
 : Parse and type-check the named files without running them; report every diagnostic
@@ -141,6 +144,12 @@ magus buzz --profile scripts/report.buzz
 
 ```sh
 magus buzz --record probes/does-the-key-move.buzz
+```
+
+*Run a root-relative script from any directory*
+
+```sh
+magus buzz -C ~/src/app scripts/report.buzz
 ```
 
 ## See Also
