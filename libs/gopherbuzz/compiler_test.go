@@ -151,6 +151,83 @@ export both;
 	assert.Equal(t, "qualified:cmod:9 bare:amod", v.String())
 }
 
+// TestCompileWith_MatchTypeArmTellsSameNamedTypesApart pins upstream Buzz at
+// 294d8f9, which prints "main-other main-node mod-node mod-other": a `<Node>` arm
+// selects only the Node in scope where the match is written.
+func TestCompileWith_MatchTypeArmTellsSameNamedTypesApart(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("mmod", `
+namespace mmod;
+object Node { anchor: str = "inner" }
+fun make() > any { return Node{}; }
+fun check(v: any) > str {
+    return match (v) { <Node> -> "mod-node", else -> "mod-other" };
+}
+export make;
+export check;
+`)
+	v, err := s.Eval(ctx, `
+import "mmod";
+object Node { label: str = "outer" }
+fun which(v: any) > str {
+    return match (v) { <Node> -> "main-node", else -> "main-other" };
+}
+final theirs = mmod\make();
+final mine: any = Node{};
+return "{which(theirs)} {which(mine)} {mmod\check(theirs)} {mmod\check(mine)}";
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "main-other main-node mod-node mod-other", v.String())
+}
+
+// TestCompileWith_ImporterTypeKeepsOffAnExport pins upstream Buzz at 294d8f9,
+// which prints "q:xmod made:xmod mine:outer main-is-theirs:true main-is-mine:true
+// xmod-is:false xmod-is:true": the importer's own Node and the Node xmod exports
+// stay two types, so neither replaces the other in xmod's code or the importer's.
+func TestCompileWith_ImporterTypeKeepsOffAnExport(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("xmod", `
+namespace xmod;
+export object Node { who: str = "xmod" }
+export fun make() > Node { return Node{}; }
+export fun describe(v: any) > str { return "xmod-is:{v is Node}"; }
+`)
+	v, err := s.Eval(ctx, `
+import "xmod";
+object Node { label: str = "outer" }
+final q = xmod\Node{};
+final made = xmod\make();
+final mine = Node{};
+final mineAny: any = mine;
+return "q:{q.who} made:{made.who} mine:{mine.label} main-is-theirs:{made is xmod\Node} main-is-mine:{mineAny is Node} {xmod\describe(mine)} {xmod\describe(made)}";
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "q:xmod made:xmod mine:outer main-is-theirs:true main-is-mine:true xmod-is:false xmod-is:true", v.String())
+}
+
+// TestCompileWith_QualifiedLiteralDefaultResolvesInTheExporter pins upstream Buzz
+// at 294d8f9, which prints "default:1 local:2": dmod's `Shade.light` default
+// names dmod's private Shade even when the importer declares a Shade of its own.
+func TestCompileWith_QualifiedLiteralDefaultResolvesInTheExporter(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	s.SetModuleDecls("dmod", `
+namespace dmod;
+enum Shade { dark, light }
+export object Node { shade: Shade = Shade.light }
+`)
+	v, err := s.Eval(ctx, `
+import "dmod";
+enum Shade { red, green, blue }
+final n = dmod\Node{};
+return "default:{n.shade.value} local:{Shade.blue.value}";
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "default:1 local:2", v.String())
+}
+
 func TestCompileWith_EmptyProgram(t *testing.T) {
 	prog, err := ParseEmbedded("")
 	require.NoError(t, err)

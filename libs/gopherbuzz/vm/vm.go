@@ -1457,6 +1457,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			if err != nil {
 				return Null, err
 			}
+			// A `<Node>` arm is an `is` test, so it carries the same identity check.
+			if hit && cond.tag() == tagType && subject.tag() != tagType {
+				hit = vm.sameTypeDef(subject, f, ins.C)
+			}
 			vm.push(BoolValue(hit))
 
 		case OpAs:
@@ -2411,8 +2415,8 @@ func (vm *VM) purgeCatchFrame(frameIdx int) {
 	}
 }
 
-// sameTypeDef reports whether v, which already matched an OpIs or OpAs type by
-// name, belongs to the very object or enum the annotation names. keyConst is the
+// sameTypeDef reports whether v, which already matched an OpIs, OpAs or
+// OpMatchTest type by name, belongs to the very object or enum the annotation names. keyConst is the
 // instruction's C operand: one past the const holding that type's Env key, or 0
 // when the compiler named no declared type. Two modules may each declare a Node,
 // and only the one in scope at the test answers. A key that resolves to no type
