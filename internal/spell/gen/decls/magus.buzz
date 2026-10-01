@@ -54,54 +54,6 @@ export object ExecResult {
     ok: bool = false,
 }
 
-export object FileClaim {
-    project: str = "",
-    target: str = "",
-    role: str = "",
-    glob: str = "",
-    paths: [str] = [],
-}
-
-export object FileEntry {
-    path: str = "",
-    project: str = "",
-    role: str = "",
-    outputOf: [str] = [],
-    sourceOf: [str] = [],
-    claims: [FileClaim] = [],
-    dependsOn: [str] = [],
-    focus: str = "",
-    hint: str = "",
-    exists: bool = false,
-}
-
-export object FileReport {
-    definition: str = "",
-    count: int = 0,
-    files: [FileEntry] = [],
-    overlaps: [FileClaim] = [],
-}
-
-export object ModuleFieldEntry {
-    name: str = "",
-    @"type": str = "",
-    doc: str = "",
-}
-
-export object ModuleMethodEntry {
-    name: str = "",
-    doc: str = "",
-    buzz: str = "",
-    buzzStdlib: str = "",
-}
-
-export object Module {
-    name: str = "",
-    doc: str = "",
-    fields: [ModuleFieldEntry] = [],
-    methods: [ModuleMethodEntry] = [],
-}
-
 export object Path {
     value: str = "",
     base: str = "",
@@ -603,26 +555,6 @@ export object Graph {
     blastRadius: {str: int} = {},
 }
 
-export object ProjectEntry {
-    path: str = "",
-    name: str = "",
-    origin: str = "",
-    dir: str = "",
-    spell: str = "",
-    spells: [str] = [],
-    sources: [str] = [],
-    outputs: [str] = [],
-    dependsOn: [str] = [],
-    manifests: [str] = [],
-    lockfiles: [str] = [],
-}
-
-export object Projects {
-    workspace: str = "",
-    count: int = 0,
-    projects: [ProjectEntry] = [],
-}
-
 export object Match {
     id: str = "",
     kind: str = "",
@@ -713,106 +645,6 @@ export object SymbolIndexDigest {
     indexed: bool = false,
     projects: [str] = [],
     gaps: [KnowledgeSymbolGap] = [],
-}
-
-export object TargetSpellUse {
-    spell: str = "",
-    ops: [str] = [],
-}
-
-export object CrossTargetRef {
-    project: str = "",
-    target: str = "",
-}
-
-export object ChainStep {
-    project: str = "",
-    target: str = "",
-    callIndex: int = 0,
-}
-
-export object InputRef {
-    project: str = "",
-    glob: str = "",
-    except: [str] = [],
-}
-
-export object OutputRef {
-    project: str = "",
-    glob: str = "",
-    except: [str] = [],
-}
-
-export object UpdateRef {
-    project: str = "",
-    glob: str = "",
-    except: [str] = [],
-}
-
-export object TargetGraphNode {
-    name: str = "",
-    declared: str = "",
-    doc: str = "",
-    dependencies: [str] = [],
-    charms: [str] = [],
-    spells: [TargetSpellUse] = [],
-    dispatchOnly: bool = false,
-    crossDependencies: [CrossTargetRef] = [],
-    chain: [ChainStep] = [],
-    readsFiles: [InputRef] = [],
-    readsSecrets: bool = false,
-    secretRefs: [str] = [],
-    writesFiles: [OutputRef] = [],
-    modifiesExistingFiles: [UpdateRef] = [],
-    execOverrides: [str] = [],
-    envAllow: [str] = [],
-    observations: [str] = [],
-}
-
-export object TargetGraphProject {
-    path: str = "",
-    name: str = "",
-    engine: str = "",
-    nodes: [TargetGraphNode] = [],
-    cycle: [str] = [],
-    dependsOn: [str] = [],
-}
-
-export object TargetGraph {
-    projects: [TargetGraphProject] = [],
-}
-
-export object LifecycleStatus {
-    provider: str = "",
-    state: str = "",
-    sources: [str] = [],
-    asOf: str = "",
-    fetchedAt: str = "",
-    detail: str = "",
-}
-
-export object ToolRow {
-    project: str = "",
-    bin: str = "",
-    spell: str = "",
-    installedVersion: str = "",
-    probeError: str = "",
-    spellBounds: str = "",
-    workspaceBounds: str = "",
-    effective: str = "",
-    verdict: str = "",
-    diagnosticCode: str = "",
-    lifecycle: str = "",
-    cycle: str = "",
-    eol: str = "",
-    support: str = "",
-}
-
-export object ToolReport {
-    workspace: str = "",
-    count: int = 0,
-    lifecycle: LifecycleStatus = LifecycleStatus{},
-    tools: [ToolRow] = [],
 }
 
 export object GuardVerdict {
@@ -1156,6 +988,396 @@ export object JobStatus {
     entries: [JobEntry] = [],
 }
 
+export object CharmDeclaration {
+    project: str = "",
+    target: str = "",
+    spell: str = "",
+    before: [str] = [],
+    after: [str] = [],
+}
+
+export object CharmEntry {
+    name: str = "",
+    builtin: bool = false,
+    default: bool = false,
+    doc: str = "",
+    declarations: [CharmDeclaration] = [],
+}
+
+export object CharmTraceStep {
+    charm: str = "",
+    command: [str] = [],
+}
+
+export object CharmConflict {
+    name: str = "",
+    overriddenBy: str = "",
+}
+
+export object ServiceView {
+    readiness: [str] = [],
+    stop: [str] = [],
+    idle: str = "",
+    distinct: str = "",
+    fingerprint: str = "",
+}
+
+export object EvaluatedSpell {
+    name: str = "",
+    targetSources: [str] = [],
+    command: [str] = [],
+    charmTrace: [CharmTraceStep] = [],
+    conflicts: [CharmConflict] = [],
+    service: ServiceView? = null,
+}
+
+export object Target {
+    projectPath: str = "",
+    name: str = "",
+    charms: [str] = [],
+    files: [str] = [],
+    undeclared: [str] = [],
+    declared: str = "",
+    declaredCharms: [str] = [],
+    skip_cache: bool = false,
+    skip_cache_reason: str = "",
+    slots: int = 0,
+    memory_mb: int = 0,
+    timeout: str = "",
+    drift: str = "",
+    drift_reason: str = "",
+    retry_on_volatile: bool = false,
+    retry_on_volatile_reason: str = "",
+    advisory: bool = false,
+    advisory_reason: str = "",
+}
+
+export object EvaluatedProject {
+    path: str = "",
+    name: str = "",
+    origin: str = "",
+    dir: str = "",
+    spell: str = "",
+    spells: [str] = [],
+    sources: [str] = [],
+    outputs: [str] = [],
+    dependsOn: [str] = [],
+    manifests: [str] = [],
+    lockfiles: [str] = [],
+    resolvedSpells: [EvaluatedSpell] = [],
+    targetPolicies: {str: Target} = {},
+}
+
+export object ChainStep {
+    project: str = "",
+    target: str = "",
+    callIndex: int = 0,
+}
+
+export object TargetRef {
+    project: str = "",
+    target: str = "",
+}
+
+export object EvaluatedTarget {
+    project: str = "",
+    target: str = "",
+    dir: str = "",
+    sources: [str] = [],
+    outputs: [str] = [],
+    chain: [ChainStep] = [],
+    beforeKey: [TargetRef] = [],
+    dependsOn: [str] = [],
+    charms: [str] = [],
+    spells: [EvaluatedSpell] = [],
+    policy: Target? = null,
+}
+
+export object FileClaim {
+    project: str = "",
+    target: str = "",
+    role: str = "",
+    glob: str = "",
+    paths: [str] = [],
+}
+
+export object FileEntry {
+    path: str = "",
+    project: str = "",
+    role: str = "",
+    outputOf: [str] = [],
+    sourceOf: [str] = [],
+    claims: [FileClaim] = [],
+    dependsOn: [str] = [],
+    focus: str = "",
+    hint: str = "",
+    exists: bool = false,
+}
+
+export object FileReport {
+    definition: str = "",
+    count: int = 0,
+    files: [FileEntry] = [],
+    overlaps: [FileClaim] = [],
+}
+
+export object TargetSpellUse {
+    spell: str = "",
+    ops: [str] = [],
+}
+
+export object CrossTargetRef {
+    project: str = "",
+    target: str = "",
+}
+
+export object InputRef {
+    project: str = "",
+    glob: str = "",
+    except: [str] = [],
+}
+
+export object OutputRef {
+    project: str = "",
+    glob: str = "",
+    except: [str] = [],
+}
+
+export object UpdateRef {
+    project: str = "",
+    glob: str = "",
+    except: [str] = [],
+}
+
+export object TargetGraphNode {
+    name: str = "",
+    declared: str = "",
+    doc: str = "",
+    dependencies: [str] = [],
+    charms: [str] = [],
+    spells: [TargetSpellUse] = [],
+    dispatchOnly: bool = false,
+    crossDependencies: [CrossTargetRef] = [],
+    chain: [ChainStep] = [],
+    readsFiles: [InputRef] = [],
+    readsSecrets: bool = false,
+    secretRefs: [str] = [],
+    writesFiles: [OutputRef] = [],
+    modifiesExistingFiles: [UpdateRef] = [],
+    execOverrides: [str] = [],
+    envAllow: [str] = [],
+    observations: [str] = [],
+}
+
+export object TargetGraphProject {
+    path: str = "",
+    name: str = "",
+    engine: str = "",
+    nodes: [TargetGraphNode] = [],
+    cycle: [str] = [],
+    dependsOn: [str] = [],
+}
+
+export object TargetGraph {
+    projects: [TargetGraphProject] = [],
+}
+
+export object HarnessChange {
+    op: str = "",
+    key: str = "",
+    value: any? = null,
+}
+
+export object HarnessFile {
+    exists: bool = false,
+    fragment: {str: any?} = {},
+    content: str = "",
+    changes: [HarnessChange] = [],
+}
+
+export object HarnessWired {
+    file: str = "",
+    key: str = "",
+    entries: [{str: any?}] = [],
+}
+
+export object HarnessPlan {
+    id: str = "",
+    files: {str: HarnessFile} = {},
+    merge: str = "",
+    mcpHint: str = "",
+    wired: [HarnessWired] = [],
+}
+
+export object MCPToolParam {
+    name: str = "",
+    @"type": str = "",
+    required: bool = false,
+    description: str = "",
+}
+
+export object MCPTool {
+    name: str = "",
+    description: str = "",
+    params: [MCPToolParam] = [],
+}
+
+export object ModuleFieldEntry {
+    name: str = "",
+    @"type": str = "",
+    doc: str = "",
+}
+
+export object ModuleMethodEntry {
+    name: str = "",
+    doc: str = "",
+    buzz: str = "",
+    buzzStdlib: str = "",
+}
+
+export object Module {
+    name: str = "",
+    doc: str = "",
+    fields: [ModuleFieldEntry] = [],
+    methods: [ModuleMethodEntry] = [],
+}
+
+export object ProjectEntry {
+    path: str = "",
+    name: str = "",
+    origin: str = "",
+    dir: str = "",
+    spell: str = "",
+    spells: [str] = [],
+    sources: [str] = [],
+    outputs: [str] = [],
+    dependsOn: [str] = [],
+    manifests: [str] = [],
+    lockfiles: [str] = [],
+}
+
+export object Projects {
+    workspace: str = "",
+    count: int = 0,
+    projects: [ProjectEntry] = [],
+}
+
+export object Rule {
+    name: str = "",
+    decision: str = "",
+    catches: str = "",
+    why: str = "",
+}
+
+export object CommentBlock {
+    open: str = "",
+    close: str = "",
+}
+
+export object Quote {
+    open: str = "",
+    close: str = "",
+    ignoreEscape: bool = false,
+}
+
+export object CommentSyntax {
+    lineComments: [str] = [],
+    blockComments: [CommentBlock] = [],
+    nested: bool = false,
+    quotes: [Quote] = [],
+    directives: [str] = [],
+}
+
+export object StubSyntax {
+    kinds: [str] = [],
+    bodyStyle: str = "",
+    body: str = "",
+}
+
+export object Syntax {
+    comments: CommentSyntax? = null,
+    stubs: StubSyntax? = null,
+}
+
+export object SpellVersion {
+    tool: str = "",
+    version: str = "",
+    cacheKey: str = "",
+    error: str = "",
+}
+
+export object SpellToolchain {
+    command: str = "",
+    operations: [str] = [],
+}
+
+export object Spell {
+    name: str = "",
+    buzzImport: str = "",
+    builtIn: bool = false,
+    sources: [str] = [],
+    outputs: [str] = [],
+    targets: [str] = [],
+    opaque: bool = false,
+    language: str = "",
+    extensions: [str] = [],
+    syntax: Syntax? = null,
+    versionProbe: bool = false,
+    symbolFormat: str = "",
+    versions: [SpellVersion] = [],
+    targetDocs: {str: str} = {},
+    opCommands: {str: [str]} = {},
+    toolchains: [SpellToolchain] = [],
+}
+
+export object TargetEntry {
+    name: str = "",
+    kind: str = "",
+    spells: [str] = [],
+    projects: [str] = [],
+}
+
+export object LifecycleStatus {
+    provider: str = "",
+    state: str = "",
+    sources: [str] = [],
+    asOf: str = "",
+    fetchedAt: str = "",
+    detail: str = "",
+}
+
+export object ToolRow {
+    project: str = "",
+    bin: str = "",
+    spell: str = "",
+    installedVersion: str = "",
+    probeError: str = "",
+    spellBounds: str = "",
+    workspaceBounds: str = "",
+    effective: str = "",
+    verdict: str = "",
+    diagnosticCode: str = "",
+    lifecycle: str = "",
+    cycle: str = "",
+    eol: str = "",
+    support: str = "",
+}
+
+export object ToolReport {
+    workspace: str = "",
+    count: int = 0,
+    lifecycle: LifecycleStatus = LifecycleStatus{},
+    tools: [ToolRow] = [],
+}
+
+export object WorkspaceEntry {
+    root: str = "",
+    vcsBaseRef: str = "",
+    cacheDir: str = "",
+    concurrency: int = 0,
+    projectCount: int = 0,
+}
+
 export object ServiceLease {
     key: str = "",
     owned: bool = false,
@@ -1169,9 +1391,6 @@ export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
-export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
@@ -1189,7 +1408,6 @@ export extern fun output(ref: str) > OutputRecord !> any;
 export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > PathResult !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
-export extern fun projects() > Projects !> any;
 export extern fun pry() > void;
 export extern fun query(query: str, opts: {str: any} = {<str: any>}) > QueryResult !> any;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
@@ -1198,8 +1416,6 @@ export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
-export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
-export extern fun tools() > ToolReport !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
 export object log {
@@ -1251,7 +1467,7 @@ export object review {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Where this workspace learns when its tools' release cycles reach end of life. The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers for the products the spells' tools name (Tool.lifecycle); magus\tools() and `magus describe tools` carry the answer, and nothing it says fails a build. One provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.
+// Where this workspace learns when its tools' release cycles reach end of life. The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers for the products the spells' tools name (Tool.lifecycle); magus\describe.tool() and `magus describe tools` carry the answer, and nothing it says fails a build. One provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.
 export object lifecycle {
     static extern fun provider(spell: {str: any}) > void;
 }
@@ -1269,6 +1485,25 @@ export object job {
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
+}
+
+// Typed reads of what `magus describe <noun>` prints, one method per noun: `magus\describe.spell("go")` returns the Spell records `magus describe spell go -o json` carries. A method whose noun takes a name takes it as an optional SELECTOR and returns a collection either way, so detailing one reads `[0]`. A report that carries more than its collection (a file classification's overlaps, the tools' lifecycle state) comes back whole. The methods that fork a nested magus work from a `magus buzz` script with no workspace loaded; opts.root and opts.dir are as for magus.run. Bound by hand in internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by construction. A noun with no method here is reached through magus.cmd("describe", [...]).
+export object describe {
+    static extern fun charm(name: str = "", opts: {str: any} = {<str: any>}) > [CharmEntry] !> any;
+    static extern fun evaluatedProject(path: str = "", opts: {str: any} = {<str: any>}) > [EvaluatedProject] !> any;
+    static extern fun evaluatedTarget(ref: str, opts: {str: any} = {<str: any>}) > [EvaluatedTarget] !> any;
+    static extern fun file(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
+    static extern fun graph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
+    static extern fun graphMarkdown(projects: [str] = [<str>], opts: {str: any} = {<str: any>}) > str !> any;
+    static extern fun harness(id: str = "", opts: {str: any} = {<str: any>}) > [HarnessPlan] !> any;
+    static extern fun mcpTool(name: str = "", opts: {str: any} = {<str: any>}) > [MCPTool] !> any;
+    static extern fun module(name: str = "") > [Module] !> any;
+    static extern fun project() > Projects !> any;
+    static extern fun rule(name: str = "", opts: {str: any} = {<str: any>}) > [Rule] !> any;
+    static extern fun spell(name: str = "", opts: {str: any} = {<str: any>}) > [Spell] !> any;
+    static extern fun target(opts: {str: any} = {<str: any>}) > [TargetEntry] !> any;
+    static extern fun tool() > ToolReport !> any;
+    static extern fun workspace(opts: {str: any} = {<str: any>}) > [WorkspaceEntry] !> any;
 }
 
 // Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.

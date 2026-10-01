@@ -741,23 +741,23 @@ func (_c *MockWorkspaceRepository_Graph_Call) RunAndReturn(run func() (*types.Gr
 }
 
 // ListCharms provides a mock function for the type MockWorkspaceRepository
-func (_mock *MockWorkspaceRepository) ListCharms(ctx context.Context) ([]types.Charm, error) {
+func (_mock *MockWorkspaceRepository) ListCharms(ctx context.Context) ([]types.CharmEntry, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListCharms")
 	}
 
-	var r0 []types.Charm
+	var r0 []types.CharmEntry
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]types.Charm, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]types.CharmEntry, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []types.Charm); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []types.CharmEntry); ok {
 		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.Charm)
+			r0 = ret.Get(0).([]types.CharmEntry)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -792,12 +792,12 @@ func (_c *MockWorkspaceRepository_ListCharms_Call) Run(run func(ctx context.Cont
 	return _c
 }
 
-func (_c *MockWorkspaceRepository_ListCharms_Call) Return(charms []types.Charm, err error) *MockWorkspaceRepository_ListCharms_Call {
-	_c.Call.Return(charms, err)
+func (_c *MockWorkspaceRepository_ListCharms_Call) Return(charmEntrys []types.CharmEntry, err error) *MockWorkspaceRepository_ListCharms_Call {
+	_c.Call.Return(charmEntrys, err)
 	return _c
 }
 
-func (_c *MockWorkspaceRepository_ListCharms_Call) RunAndReturn(run func(ctx context.Context) ([]types.Charm, error)) *MockWorkspaceRepository_ListCharms_Call {
+func (_c *MockWorkspaceRepository_ListCharms_Call) RunAndReturn(run func(ctx context.Context) ([]types.CharmEntry, error)) *MockWorkspaceRepository_ListCharms_Call {
 	_c.Call.Return(run)
 	return _c
 }
