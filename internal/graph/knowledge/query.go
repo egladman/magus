@@ -450,6 +450,13 @@ func (g *Graph) citedRank(id, kind string) int {
 // depends on and what depends on it. When relations is non-empty, only edges with
 // those relations are traversed. Returns a fresh Graph for deterministic output.
 func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Graph {
+	sub, _ := g.neighborhood(seeds, budget, relations)
+	return sub
+}
+
+// neighborhood is Neighborhood that also returns every node the walk visited, sorted:
+// the nodes whose content and adjacency decided the result.
+func (g *Graph) neighborhood(seeds []string, budget int, relations []string) (*Graph, []string) {
 	g.ensureAdj()
 	relSet := toSet(relations)
 	visited := map[string]bool{}
@@ -515,7 +522,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 			sub.AddEdge(e)
 		}
 	}
-	return sub
+	return sub, slices.Sorted(maps.Keys(visited))
 }
 
 // Query resolves the input to seeds and returns the ranked matches plus their
