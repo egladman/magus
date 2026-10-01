@@ -78,7 +78,7 @@ model string is mapped to a tier.
 `magus\guard.count(key)` adds one to a key's tally in that session and returns it.
 Both work only while the guard runs the rule.
 
-`magus\job\list()` works inside the rule and answers from the job rows the guard read
+`magus\job.list()` works inside the rule and answers from the job rows the guard read
 for this call, so the rule and the built-in verdict it adds to read the same store.
 Every job member that writes raises inside a rule.
 

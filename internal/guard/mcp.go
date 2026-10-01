@@ -193,14 +193,16 @@ func (r *clientReader) visit(n ast.Node) bool {
 }
 
 // magusMember is the path below the magus module that n names (["job", "put"] for
-// magus\job\put), and ok false when n names nothing in it. An empty path is the
-// module itself.
+// magus\job.put), and ok false when n names nothing in it. An empty path is the
+// module itself. A namespace object's member takes a dot, so a dot is read only as
+// the last link, after a backslash; magus\job\put, which the checker refuses, still
+// reads as the same path so a script spelling it is judged rather than missed.
 func (r *clientReader) magusMember(n ast.Node) ([]string, bool) {
 	var path []string
 	for {
 		switch e := n.(type) {
 		case *ast.MemberExpr:
-			if !e.Namespaced {
+			if !e.Namespaced && (len(path) > 0 || !r.namesObject(e.Object)) {
 				return nil, false
 			}
 			path = append([]string{e.Name}, path...)
@@ -216,6 +218,18 @@ func (r *clientReader) magusMember(n ast.Node) ([]string, bool) {
 		}
 		return nil, false
 	}
+}
+
+// namesObject reports whether n reaches a member of the magus module: magus\job, or
+// job itself when the module's members are imported unprefixed.
+func (r *clientReader) namesObject(n ast.Node) bool {
+	switch e := n.(type) {
+	case *ast.MemberExpr:
+		return e.Namespaced
+	case *ast.IdentExpr:
+		return r.flat || r.only[e.Name]
+	}
+	return false
 }
 
 // call renders one call to a magus member.

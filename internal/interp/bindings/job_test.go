@@ -38,13 +38,13 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun abandon() > str !> any {
-    magus\job\put("optional-exit", opts: {"criteria": "exercise omitted result"});
-    final row = magus\job\exit("optional-exit");
+    magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result"});
+    final row = magus\job.exit("optional-exit");
     return row.state;
 }
 
 export fun waitOnNoReturn() > void !> any {
-    magus\job\wait("optional-exit");
+    magus\job.wait("optional-exit");
 }
 `))
 	fn, ok := sess.Exports()["abandon"]

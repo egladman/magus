@@ -176,7 +176,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 
 # case: mcp/deny
-# A client script calling magus\job\clear() would drop every job, which is the one thing a
+# A client script calling magus\job.clear() would drop every job, which is the one thing a
 # bound worker may never do, so leaseRebind refuses it and the same hookSpecificOutput reply
 # this file renders for the command surface carries the deny here. The job door is the
 # client tool's script: magus serves no per-verb job tool, so a call naming one is not a
@@ -1034,7 +1034,7 @@ exit 2
 -- exec-mcp-worker.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --
-{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\job\\clear();"}}
+{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\job.clear();"}}
 -- mcp-read.json --
 {"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")"}}
 -- spawn-call.json --

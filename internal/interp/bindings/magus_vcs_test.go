@@ -42,7 +42,7 @@ func TestVCSCheckpointNamespaceMatchesTheMember(t *testing.T) {
 import "magus";
 
 export fun revision() > str !> any {
-    return magus\vcs\checkpoint().revision;
+    return magus\vcs.checkpoint().revision;
 }
 `)
 	got, err := call("revision")

@@ -1,7 +1,7 @@
 package types
 
 // ServiceLease is one reference a `magus buzz` script holds on a shared service, taken
-// by magus\service\acquire. magus\service\release drops it early; the script's end
+// by magus\service.acquire. magus\service.release drops it early; the script's end
 // drops every lease it still holds, however the script ends.
 type ServiceLease struct {
 	// Key is the key the service is shared under; release names the lease by it.

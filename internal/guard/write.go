@@ -364,7 +364,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the client tool (magus\\job\\put) and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+		"magus workspace: declare the plan with the client tool (magus\\job.put) and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
 			"This process reports a spawner but names no lease, and this workspace's job store holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
@@ -493,7 +493,7 @@ func enterCall(id, rel string) string {
 
 // clientJobPut is a client tool script putting one key on row id.
 func clientJobPut(id, key, value string) string {
-	return fmt.Sprintf(`import "magus"; magus\job\put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
+	return fmt.Sprintf(`import "magus"; magus\job.put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its
@@ -687,7 +687,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-		"magus workspace: fix the path pattern with the client tool (magus\\job\\put), then retry this write.\n"+
+		"magus workspace: fix the path pattern with the client tool (magus\\job.put), then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
 }
 

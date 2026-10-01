@@ -107,7 +107,7 @@ fun countLines(text: str) > int {
 
 // jobsByCheckout is each checkout's newest job, as "<id> (<state>)".
 fun jobsByCheckout() > {str: str} !> any {
-    final list: magus\JobList = magus\job\list();
+    final list: magus\JobList = magus\job.list();
     final newest = mut {<str: int>};
     final label = mut {<str: str>};
     foreach (j in list.jobs) {
