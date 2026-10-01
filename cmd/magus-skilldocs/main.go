@@ -210,7 +210,7 @@ func writeVariantPanel(b *strings.Builder, dir, body string) {
 // writeFenced wraps body in a code fence LONGER than any backtick run inside it.
 //
 // A fixed three-backtick fence is broken here, and it shipped that way: every skill
-// body contains its own fenced examples (18 of them in magus-buzz-write), and Markdown
+// body contains its own fenced examples (6 of them in magus-buzz-lang), and Markdown
 // fences do not nest: the body's first ```sh closed the wrapper, so most of the page
 // rendered as live Markdown instead of verbatim text. CommonMark closes a fence only
 // on a run at least as long as the opener, so measuring the longest run and adding

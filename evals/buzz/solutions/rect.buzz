@@ -1,0 +1,20 @@
+import "std";
+
+object Rect {
+    width: int,
+    height: int,
+
+    fun area() > int {
+        return this.width * this.height;
+    }
+}
+
+fun scale(rect: Rect, factor: int) > Rect {
+    return Rect{ width = rect.width * factor, height = rect.height * factor };
+}
+
+fun main(args: [str]) > void {
+    final base = Rect{ width = 2, height = 3 };
+    final bigger = scale(base, factor: 3);
+    std\print("base={base.area()} scaled={bigger.area()}");
+}

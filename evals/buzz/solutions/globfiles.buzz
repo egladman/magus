@@ -1,0 +1,15 @@
+import "std";
+import "fs";
+
+fun main(args: [str]) > void !> any {
+    final dir = fs\tempDir();
+    foreach (name in ["b.txt", "a.txt", "c.md"]) {
+        fs\writeFile(fs\join(dir, name: name), content: "x");
+    }
+    final names = mut [];
+    foreach (found in fs\glob(fs\join(dir, pattern: "*.txt"))) {
+        names.append(fs\basename(found.value));
+    }
+    names.sort(fun (a: str, b: str) > bool => a < b);
+    std\print(names.join(" "));
+}

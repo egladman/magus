@@ -1,0 +1,22 @@
+import "std";
+
+fun parsePort(text: str) > int !> str {
+    final port = std\parseInt(text);
+    if (port == null) {
+        throw "invalid port: {text}";
+    }
+    if (port! < 1 or port! > 65535) {
+        throw "out of range: {text}";
+    }
+    return port!;
+}
+
+fun main(args: [str]) > void {
+    foreach (text in ["80", "x", "70000"]) {
+        try {
+            std\print("port {parsePort(text)}");
+        } catch (err: str) {
+            std\print("error: {err}");
+        }
+    }
+}

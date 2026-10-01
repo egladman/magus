@@ -1,0 +1,9 @@
+import "std";
+
+fun slugify(text: str) > str {
+    return text.trim().lower().replace(" ", with: "-");
+}
+
+test "slugify lowercases and hyphenates" {
+    std\assert(slugify("Hello World") == "hello-world", message: "two words");
+}
