@@ -1,10 +1,3 @@
-// cross-cutting: end-to-end runs through the public magus API; this package has no source
-
-// Package e2e holds end-to-end orchestration tests for the public magus
-// API. It lives in its own package because exercising Run/RunCI requires
-// blank-importing the host bindings, whose init() registers the built-in spells
-// process-wide — a side effect that would collide with the spell fixtures in the
-// magus package's own tests.
 package e2e
 
 import (
@@ -21,9 +14,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	// Link the host bindings so magusfile.buzz targets execute.
-	_ "github.com/egladman/magus/internal/interp/bindings"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
