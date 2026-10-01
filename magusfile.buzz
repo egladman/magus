@@ -789,7 +789,6 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".claude/skills/magus-change-summary*/**",
         ".claude/skills/magus-context-audit*/**",
         ".claude/skills/magus-docs-lookup*/**",
-        ".claude/skills/magus-memory*/**",
         ".claude/skills/magus-multi-agent*/**",
         ".claude/skills/magus-query*/**",
         ".claude/skills/magus-run*/**",
@@ -805,7 +804,6 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".agents/skills/magus-change-summary*/**",
         ".agents/skills/magus-context-audit*/**",
         ".agents/skills/magus-docs-lookup*/**",
-        ".agents/skills/magus-memory*/**",
         ".agents/skills/magus-multi-agent*/**",
         ".agents/skills/magus-query*/**",
         ".agents/skills/magus-run*/**",
@@ -821,7 +819,6 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".opencode/skills/magus-change-summary*/**",
         ".opencode/skills/magus-context-audit*/**",
         ".opencode/skills/magus-docs-lookup*/**",
-        ".opencode/skills/magus-memory*/**",
         ".opencode/skills/magus-multi-agent*/**",
         ".opencode/skills/magus-query*/**",
         ".opencode/skills/magus-run*/**",
@@ -2228,11 +2225,6 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // Explicit args replace go-test's `./...`, so this compiles one package under cgo.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
-}
-
-// A nested run: docs/render.buzz resolves its flat imports with docs/ as the cwd.
-fun rerender_docs() > void !> any {
-    magus\run(["render", "docs"]);
 }
 
 // Names every producer in one command: the root cannot depend on docs or console, since

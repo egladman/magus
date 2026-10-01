@@ -24,12 +24,6 @@
     {"id": "m/calc/TestTop().", "label": "TestTop", "path": "calc/top_test.go", "change": "added", "line": 5, "refs": []},
     {"id": "m/cmd/main().", "label": "main", "path": "cmd/main.go", "change": "body", "line": 5, "refs": []}
   ],
-  "languages": {
-    "golang": {
-      "stubs": {"kinds": ["Function", "Method"], "bodyStyle": "brace", "body": "{\n\tpanic(\"unimplemented: {{Name}} lands in {{Branch}}\")\n}"},
-      "comments": {"quotes": ["\"", "'", "`"], "line": ["//"], "blocks": [["/*", "*/"]]}
-    }
-  },
   "files": [
     {"path": "calc/base.go", "project": ".", "role": "source", "claims": [{"project": ".", "role": "source", "glob": "**/*.go"}]},
     {"path": "calc/calc.go", "project": ".", "role": "source", "claims": [{"project": ".", "role": "source", "glob": "**/*.go"}]},

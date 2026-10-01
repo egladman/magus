@@ -380,7 +380,7 @@ trying to understand, and fills the gap by guessing: this file looks generated,
 these two packages probably change together. Those guesses are frequently wrong,
 and the agent has no way to check them.
 
-The tools answer from what the workspace declares. Ask `client` (`magus\describeFile`)
+The tools answer from what the workspace declares. Ask `client` (`magus\describe.file`)
 about a path and it does not read the filename and infer; it checks the
 project's own globs and reports `role: output` with the note "generated: never
 hand-edit, regenerate." In one case an agent spent close to an hour working out

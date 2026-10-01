@@ -226,11 +226,13 @@ import "std";
 import "magus";
 
 fun main(args: [str]) > void !> any {
-    final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
-    std\print(res.stdout);
+    foreach (f in magus\describe.file(["MAGUS.md"]).files) {
+        std\print("{f.path}: {f.role}");
+    }
 }
 ```
 
+`magus\describe.<noun>` returns the typed record `magus describe <noun> -o json` prints.
 `magus\cmd(sub, args: [...])` runs any other subcommand. Members that declare into a
 loaded workspace (`magus\project`, the provider selections) exist only in a magusfile
 and raise {{mgslink "MGS1022"}} anywhere else.

@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 // The vcs accessors had no direct unit coverage at all: they were exercised only through
@@ -511,4 +516,38 @@ func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
 		"a.go new 4-6 func One() int {",
 		"a.go new 7-8 func Two() int {",
 	}, placed)
+}
+
+// vcs.cmd asks the lease gate before it runs anything, with the directory the command
+// would run in, so a worker cannot reach past lease-vcs through the escape hatch. Not
+// parallel: the job store resolves the per-repository state directory from the environment.
+func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	testkit.Isolate(t)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	dir := t.TempDir()
+	out, err := exec.Command("git", "-C", dir, "init", "-q", "-b", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	ws := types.WithWorkspace(WithCwd(t.Context(), dir), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: dir})
+	_, err = MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
+	require.NoError(t, err)
+	var asked []string
+	refusal := errors.New("lease-vcs: refused")
+	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, at string) error {
+		asked = append(asked, row.ID+" "+backend+" "+strings.Join(args, " ")+" "+at)
+		return refusal
+	})
+
+	_, err = VcsCmd(proc.WithLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
+	require.ErrorIs(t, err, refusal)
+	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
+
+	res, err := VcsCmd(ws, []string{"status", "--porcelain"}, map[string]any{"quiet": true})
+	require.NoError(t, err, "no acting lease, so the gate is not asked")
+	assert.True(t, res.OK)
+	assert.Len(t, asked, 1)
 }

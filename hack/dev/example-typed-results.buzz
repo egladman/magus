@@ -97,7 +97,7 @@ export fun main(args: [str]) > void !> any {
     }
 }
 
-test "describeFile names a path's owning project and role" {
+test "describe.file names a path's owning project and role" {
     assert\equal(fileLines(["go.mod"]), want: ["go.mod: project ., source"], message: "go.mod");
 }
 

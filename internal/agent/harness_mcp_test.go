@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,8 +56,9 @@ func TestHarnessMCPPlanDefaultsToStdioInTheCheckout(t *testing.T) {
 }`)
 	plan, err := PlanHarness(context.Background(), t.TempDir(), "stdio-host")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessPlan{
-		ID: "stdio-host",
+	assert.Equal(t, types.HarnessPlan{
+		ID:    "stdio-host",
+		Wired: []types.HarnessWired{},
 		MCPHint: "transport: stdio, ./magus mcp started per session in this checkout, so it serves this tree at this build\n" +
 			"register ./magus mcp with project scope\n" +
 			"command sketch (not executed): host mcp add magus -- ./magus mcp\n" +

@@ -1467,7 +1467,7 @@ object Config {
     count: int = 0,
 }
 enum Status { Ok, Err, Unknown }
-host.project.register(".");
+host\project.register(".");
 export fun build(_args: [str]) > void {}
 `
 	b.ReportAllocs()

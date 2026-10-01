@@ -1262,11 +1262,23 @@ func symbolIndexBuilt(deps Dependencies) bool {
 
 // symbolIndexCause is why the symbol index cannot vouch for every site, as a clause
 // completing "the symbol index ...". It is the one place that cause is worded.
-func symbolIndexCause(_ Dependencies, moved staleGraph) string {
+func symbolIndexCause(moved staleGraph) string {
 	if moved.reason != "" {
 		return "describes another tree (" + moved.reason + ")"
 	}
 	return "is older than the sources it covers"
+}
+
+// indexCauseNote is what deps observed about why the index fell behind and what keeps it
+// current, on a line of its own, or "" when it observed nothing within its budget.
+func indexCauseNote(deps Dependencies) string {
+	if deps.IndexCause == nil {
+		return ""
+	}
+	if cause := deps.IndexCause(); cause != "" {
+		return "\n" + cause
+	}
+	return ""
 }
 
 // classifiedLine is the deny's account of each alternative.
@@ -1310,8 +1322,8 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	v := ShellVerdict{
 		Deny: "`" + build + "`, then " + routeClause(js.routes) + " this exactly.\n" +
 			classifiedLine(js) + "\n" +
-			"The symbol index " + symbolIndexCause(deps, moved) + ", so it is rebuilt first; refs then checks every site against the tree, the generated and cross-language ones a pattern misses included." +
-			textNote + pipeNote(piped),
+			"The symbol index " + symbolIndexCause(moved) + ", so it is rebuilt first; refs then checks every site against the tree, the generated and cross-language ones a pattern misses included." +
+			indexCauseNote(deps) + textNote + pipeNote(piped),
 		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
 	}
 	argv := servedArgv(build)

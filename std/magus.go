@@ -82,7 +82,7 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\\describe methods) when one exists - magus.cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus\\cmd(sub, args, [opts]) beside magus\\run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\\describe methods) when one exists - magus\\cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -134,7 +134,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -225,7 +225,7 @@ var Magus = Module{
 		},
 		{
 			Name: "dir",
-			Doc:  "One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus.project's \"layers\" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\\project's \"layers\" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "path", Type: TypeString},
 			},
@@ -246,7 +246,7 @@ var Magus = Module{
 		},
 		{
 			Name: "layer",
-			Doc:  "One layer magus.project's \"layers\" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One layer magus\\project's \"layers\" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
 				{Name: "name", Type: TypeString},
 			},
@@ -298,7 +298,7 @@ var Magus = Module{
 		},
 		{
 			Name: "doctor",
-			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).",
+			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec).",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -331,7 +331,7 @@ var Magus = Module{
 		},
 		{
 			Name: "diagnose_drift",
-			Doc:  "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.",
+			Doc:  "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs\\status; does not replace it.",
 			Args: []Arg{
 				{Name: "outputs", Type: TypeStringSlice},
 				{Name: "inputs", Type: TypeStringSlice, Optional: true},
@@ -387,7 +387,7 @@ var Magus = Module{
 				"body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. " +
 				"current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. " +
 				"opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. " +
-				"An unknown option raises. Pair it with magus\\job.put and magus\\describe([\"job\", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. " +
+				"An unknown option raises. Pair it with magus\\job.put and magus\\cmd(\"describe\", [\"job\", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. " +
 				"Read from the workspace on the context; raises MGS1022 in a script run outside one.",
 			// Extern because the catalog lives in internal/agent, which imports std.
 			Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
@@ -439,13 +439,13 @@ var Magus = Module{
 			Methods: []Method{
 				{
 					Name:   "debug",
-					Doc:    "Log at debug level. See magus.info.",
+					Doc:    "Log at debug level. See magus\\log.info.",
 					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
 					Extern: true,
 				},
 				{
 					Name:   "error",
-					Doc:    "Log at error level. See magus.info. Logging an error does not abort; magus.fatal does.",
+					Doc:    "Log at error level. See magus\\log.info. Logging an error does not abort; magus\\fatal does.",
 					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
 					Extern: true,
 				},
@@ -463,7 +463,7 @@ var Magus = Module{
 				},
 				{
 					Name:   "warn",
-					Doc:    "Log at warn level. See magus.info.",
+					Doc:    "Log at warn level. See magus\\log.info.",
 					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
 					Extern: true,
 				},
@@ -810,9 +810,9 @@ var Magus = Module{
 				"a collection either way, so detailing one reads `[0]`. A report that carries more than " +
 				"its collection (a file classification's overlaps, the tools' lifecycle state) comes " +
 				"back whole. The methods that fork a nested magus work from a `magus buzz` script with " +
-				"no workspace loaded; opts.root and opts.dir are as for magus.run. Bound by hand in " +
+				"no workspace loaded; opts.root and opts.dir are as for magus\\run. Bound by hand in " +
 				"internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by " +
-				"construction. A noun with no method here is reached through magus.cmd(\"describe\", [...]).",
+				"construction. A noun with no method here is reached through magus\\cmd(\"describe\", [...]).",
 			Methods: []Method{
 				{
 					Name:    "file",
@@ -879,7 +879,7 @@ var Magus = Module{
 				},
 				{
 					Name:    "graph",
-					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus.projectGraph() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
+					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus\\projectGraph() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
 					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
 					Raises:  true,
@@ -1002,7 +1002,7 @@ var magusMCPTools = []MCPTool{
 	{
 		Name: hint.ToolClient.String(),
 		Doc: "Run a Buzz program against the magus client and return its value. " +
-			"Define `main(args: [str])` and return a JSON-encodable value; the result is under `json`, and std.print text under `stdout`. " +
+			"Define `main(args: [str])` and return a JSON-encodable value; the result is under `json`, and std\\print text under `stdout`. " +
 			"`import \"magus\"` is required to call the workspace. Also importable: std, math, crypto, serialize, buffer, and the pure host modules (those marked WASM) except env. " +
 			"File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. " +
 			"Call `magus\\describe.module(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. " +
@@ -1020,7 +1020,7 @@ var magusMCPTools = []MCPTool{
 		// No Member: MCP Buzz transforms supplied data in a forked interpreter.
 		// Workspace queries and effects go through the client tool.
 		Name: hint.ToolBuzz.String(),
-		Doc: "Transform a supplied JSON object with Buzz. Define `transform(input: any, args: [str])` and return a JSON-encodable value; the result is returned under `json`, and std.print text under `stdout`. " +
+		Doc: "Transform a supplied JSON object with Buzz. Define `transform(input: any, args: [str])` and return a JSON-encodable value; the result is returned under `json`, and std\\print text under `stdout`. " +
 			"Only std, math, crypto, serialize and buffer are importable. File imports, native FFI and workspace-changing host modules are unavailable. " +
 			"For workspace queries or actions, use the client tool. `import \"magus\"` returns a diagnostic explaining this boundary. " +
 			"Use the regular `magus buzz` CLI when a script needs the full host surface. Each call runs in a separate process, bounded by the workspace's target_timeout (30 seconds when unset).",
@@ -1267,8 +1267,8 @@ func MagusDescribeMCPTool(ctx context.Context, name string, opts map[string]any)
 	return report.MCPTools, err
 }
 
-// MagusAffected computes the affected project set in-process. See MagusProjects for why
-// the read-only verbs do not fork.
+// MagusAffected computes the affected project set in-process. See MagusDescribeProject
+// for why the read-only verbs do not fork.
 //
 // It deliberately does NOT swallow ErrAffectedFallback. When the VCS cannot produce a
 // diff, magus selects every project as a safety net (MGS1010); a magusfile branching on
@@ -1392,8 +1392,8 @@ func buzzCause(v any) (string, error) {
 	}
 }
 
-// MagusGraph returns the project dependency graph as a flat object. See MagusProjects for
-// why the read-only verbs are served in-process.
+// MagusGraph returns the project dependency graph as a flat object. See
+// MagusDescribeProject for why the read-only verbs are served in-process.
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -1428,13 +1428,13 @@ func warnIfTypedSubcommand(ctx context.Context, sub string, args []string) {
 	hint := ""
 	switch {
 	case typedMagusSubcommands[sub]:
-		hint = fmt.Sprintf("use magus.%s([...]) instead of magus.cmd(%q, [...])", sub, sub)
+		hint = fmt.Sprintf("use magus\\%s([...]) instead of magus\\cmd(%q, [...])", sub, sub)
 	case sub == "describe" && len(args) > 0 && typedDescribeNouns[args[0]] != "" && !asksForFormat(args):
-		hint = fmt.Sprintf("use magus\\describe.%s(...) instead of magus.cmd(\"describe\", [%q, ...])", typedDescribeNouns[args[0]], args[0])
+		hint = fmt.Sprintf("use magus\\describe.%s(...) instead of magus\\cmd(\"describe\", [%q, ...])", typedDescribeNouns[args[0]], args[0])
 	default:
 		return
 	}
-	slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
+	slog.WarnContext(ctx, "magus\\cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
 		"subcommand", sub, "hint", hint)
 }
 
@@ -1661,7 +1661,8 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 // disagree about the rows or the overlaps derived from them.
 //
 // Inside a guard rule it answers from the rows the guard pinned, so the rule and the
-// verdict it adds to read one store.
+// verdict it adds to read one store. That path leaves footprints unmeasured: it is the
+// guard's hot path, and measuring reads the version control.
 func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
@@ -1677,9 +1678,12 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	// The same join `magus ls jobs` makes, from the snapshot
+	// The same footprints and join `magus ls jobs` makes, the join from the snapshot
 	// `magus queue ls` keeps; it never fetches.
-	return queue.JoinInflight(ctx, types.WorkspaceFromContext(ctx).Root(), types.NewJobList(jobs), job.Identity{Lease: store.Actor().Lease})
+	root := types.WorkspaceFromContext(ctx).Root()
+	list := types.NewJobList(jobs)
+	list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
+	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 
 // MagusPutJob backs magus\job.put. The field merge is decoded by

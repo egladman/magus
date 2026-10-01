@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 // mergeHarness plans id and merges the plan into the files with the semantics of the printed
 // command, standing in for the person who runs it. TestHarnessMergeCommandLeavesTheFileCurrent
 // pins that the command and this agree.
-func mergeHarness(t *testing.T, root, id string) HarnessPlan {
+func mergeHarness(t *testing.T, root, id string) types.HarnessPlan {
 	t.Helper()
 	plan, err := PlanHarness(context.Background(), root, id)
 	require.NoError(t, err)
@@ -91,13 +92,13 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	own := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "my-own-hook"}}}
 	command := map[string]any{"match": "run", "commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz", "statusMessage": "magus guard: checking command"}}}
 	pathEntry := map[string]any{"match": "write", "commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-path.buzz", "timeout": float64(10)}}}
-	assert.Equal(t, map[string]HarnessFile{
+	assert.Equal(t, map[string]types.HarnessFile{
 		"test-host/hooks.json": {
 			Exists:   true,
 			Fragment: map[string]any{"hooks": map[string]any{"before": []any{own, command, pathEntry}}},
-			Changes: []HarnessChange{
-				{Op: HarnessAdd, Key: "hooks.before", Value: command},
-				{Op: HarnessAdd, Key: "hooks.before", Value: pathEntry},
+			Changes: []types.HarnessChange{
+				{Op: types.HarnessAdd, Key: "hooks.before", Value: command},
+				{Op: types.HarnessAdd, Key: "hooks.before", Value: pathEntry},
 			},
 		},
 	}, normalizeFiles(t, plan.Files))
@@ -113,19 +114,19 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := json.Marshal(current.Wired)
 	require.NoError(t, err)
-	var wired []HarnessWired
+	var wired []types.HarnessWired
 	require.NoError(t, json.Unmarshal(encoded, &wired))
-	assert.Equal(t, []HarnessWired{{File: "test-host/hooks.json", Key: "hooks.before", Entries: []map[string]any{command, pathEntry}}}, wired,
+	assert.Equal(t, []types.HarnessWired{{File: "test-host/hooks.json", Key: "hooks.before", Entries: []map[string]any{command, pathEntry}}}, wired,
 		"a current harness still names what it wires, and only the managed entries")
 }
 
 // normalizeFiles round-trips files through JSON, the form `describe harness -o json` prints,
 // so a whole-value comparison does not depend on which Go types the descriptor decoded into.
-func normalizeFiles(t *testing.T, files map[string]HarnessFile) map[string]HarnessFile {
+func normalizeFiles(t *testing.T, files map[string]types.HarnessFile) map[string]types.HarnessFile {
 	t.Helper()
 	encoded, err := json.Marshal(files)
 	require.NoError(t, err)
-	var out map[string]HarnessFile
+	var out map[string]types.HarnessFile
 	require.NoError(t, json.Unmarshal(encoded, &out))
 	return out
 }
@@ -260,7 +261,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 }`)
 
 	plan := mergeHarness(t, root, "flat")
-	assert.Equal(t, HarnessChange{Op: HarnessSet, Key: "version", Value: float64(1)}, normalizeFiles(t, plan.Files)["flat/hooks.json"].Changes[0])
+	assert.Equal(t, types.HarnessChange{Op: types.HarnessSet, Key: "version", Value: float64(1)}, normalizeFiles(t, plan.Files)["flat/hooks.json"].Changes[0])
 
 	body, err := os.ReadFile(filepath.Join(root, "flat/hooks.json"))
 	require.NoError(t, err)
@@ -328,7 +329,7 @@ func TestPlanHarnessReplacesSameIdentityInPlace(t *testing.T) {
 }`), 0o644))
 
 	plan := mergeHarness(t, root, "test-host")
-	assert.Equal(t, HarnessReplace, plan.Files["test-host/hooks.json"].Changes[0].Op)
+	assert.Equal(t, types.HarnessReplace, plan.Files["test-host/hooks.json"].Changes[0].Op)
 
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -366,7 +367,7 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	plan := mergeHarness(t, root, "test-host")
 	var retired []any
 	for _, change := range plan.Files["test-host/hooks.json"].Changes {
-		if change.Op == HarnessRetire {
+		if change.Op == types.HarnessRetire {
 			retired = append(retired, change.Value)
 		}
 	}
@@ -617,12 +618,12 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
 
 	plan := mergeHarness(t, root, "prompter")
-	assert.Equal(t, map[string]HarnessFile{
-		".codex/rules/magus.rules": {Content: promptRules, Changes: []HarnessChange{{Op: HarnessWrite}}},
+	assert.Equal(t, map[string]types.HarnessFile{
+		".codex/rules/magus.rules": {Content: promptRules, Changes: []types.HarnessChange{{Op: types.HarnessWrite}}},
 		"opencode.json": {
 			Exists:   true,
 			Fragment: map[string]any{"permission": map[string]any{"bash": map[string]any{"git push *": "ask"}}},
-			Changes:  []HarnessChange{{Op: HarnessSet, Key: "permission.bash.git push *", Value: "ask"}},
+			Changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "permission.bash.git push *", Value: "ask"}},
 		},
 	}, plan.Files)
 

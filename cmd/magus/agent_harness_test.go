@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,18 +98,18 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 // and never runs.
 func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 	var out bytes.Buffer
-	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
 		ID: "claude-code",
-		Files: map[string]agent.HarnessFile{
+		Files: map[string]types.HarnessFile{
 			".claude/settings.json": {
 				Exists:   true,
 				Fragment: map[string]any{"hooks": map[string]any{"Stop": []any{}}},
-				Changes: []agent.HarnessChange{
-					{Op: agent.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s magus-checkpoint.buzz"}},
-					{Op: agent.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s old/magus-checkpoint.buzz"}},
+				Changes: []types.HarnessChange{
+					{Op: types.HarnessAdd, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s magus-checkpoint.buzz"}},
+					{Op: types.HarnessRetire, Key: "hooks.Stop", Value: map[string]any{"command": "magus buzz -s old/magus-checkpoint.buzz"}},
 				},
 			},
-			".codex/rules/magus.rules": {Content: "rule\n", Changes: []agent.HarnessChange{{Op: agent.HarnessWrite}}},
+			".codex/rules/magus.rules": {Content: "rule\n", Changes: []types.HarnessChange{{Op: types.HarnessWrite}}},
 		},
 		Merge:   "merge-command",
 		MCPHint: "register it",
@@ -126,13 +127,13 @@ register it
 `, out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{ID: "cursor"}))
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{ID: "cursor"}))
 	assert.Equal(t, "cursor harness: current\n", out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
 		ID: "claude-code",
-		Wired: []agent.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
+		Wired: []types.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
 			{"matcher": "Bash", "hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}}},
 			{"hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-observe.buzz"}}},
 		}}},

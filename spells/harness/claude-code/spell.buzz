@@ -200,6 +200,9 @@ fun claude_entries() > [any] {
                 // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
                 // the read rules judge it like the shell read it replaces.
                 claude_pretool_entry("Read", argv: claude_guard_command()),
+                // Likewise a content or file search as the rg or find line it stands for,
+                // so the symbol-search and listing rules hold whichever way it was asked.
+                claude_pretool_entry("Grep|Glob", argv: claude_guard_command()),
                 claude_pretool_entry(SKILL_MATCHER, argv: claude_guard_command()),
                 claude_pretool_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, argv: claude_agent_command()),
             ],
@@ -483,7 +486,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and Subage
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 7, "Bash path mcp Read-observe Read-guard skill and spawn matchers");
+    assert\equal(pre_entries.len(), 8, "Bash path mcp Read-observe Read-guard search skill and spawn matchers");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

@@ -195,13 +195,16 @@ export fun figureOf(tr: JobTree) > figure\Figure !> any {
 }
 
 // link is the console URL that explores tr in a browser, "" when it is too long for one.
-// The link's format carries nodes and edges only, so the two edge kinds read alike there.
+// Spawn edges go solid and dependency edges dashed and labelled "after", as in the figure.
 export fun link(tr: JobTree, base: str) > str !> any {
     final nodes = mut [figurelink\FigureNode{ id = tr.root, label = tr.root, seed = true }];
     foreach (n in tr.nodes) {
         nodes.append(figurelink\FigureNode{ id = n.id, label = "{n.id} ({n.state})" });
     }
-    return figurelink\figureLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: tr.spawns + tr.depends);
+    final edges = mut [<[str]>];
+    foreach (e in tr.spawns) { edges.append(e); }
+    foreach (e in tr.depends) { edges.append([e[0], e[1], "optional", "after"]); }
+    return figurelink\figureLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges);
 }
 
 fun counts(tr: JobTree) > str {
@@ -315,5 +318,8 @@ test "the console link carries the tree and decodes to it" {
     assert\equal(nodes.len(), want: tr.nodes.len() + 1, message: "every job and the session");
     assert\equal(nodes[0].q("seed").booleanValue(), want: true, message: "the session is the seed");
     assert\equal(nodes[1].q("label").stringValue(), want: "job-a (pass)", message: "label");
-    assert\equal(doc.q("edges").listValue().len(), want: tr.spawns.len() + tr.depends.len(), message: "edges");
+    final edges = doc.q("edges").listValue();
+    assert\equal(edges.len(), want: tr.spawns.len() + tr.depends.len(), message: "edges");
+    final dep = edges[edges.len() - 1].listValue();
+    assert\equal([dep[2].stringValue(), dep[3].stringValue()], want: ["optional", "after"], message: "a dependency edge is dashed and says after");
 }

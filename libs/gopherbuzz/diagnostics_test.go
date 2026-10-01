@@ -87,21 +87,8 @@ func TestSession_Diagnostics_UnusedImport(t *testing.T) {
 	assert.Contains(t, got[0].Msg, "unused/mod")
 }
 
-// TestSession_Diagnostics_ImportUsedViaDotAccess verifies dot access on the imported
-// module (`mod.field`) counts as use, same as backslash access: gopherbuzz accepts
-// both, unlike upstream, which only has the backslash form.
-func TestSession_Diagnostics_ImportUsedViaDotAccess(t *testing.T) {
-	s := NewSession(context.Background(), WithEmbedded())
-	mod := vm.NewMap()
-	mod.MapSet("answer", vm.IntValue(42))
-	s.SetNativeModule("example/demo", mod)
-
-	got := s.Diagnostics("import \"example/demo\";\nvar x = demo.answer;")
-	assert.Empty(t, got, "dot access on the imported module must count as use")
-}
-
-// TestSession_Diagnostics_ImportUsedViaBackslashAccess is the DotAccess test's sibling
-// for the normal namespace-access form.
+// TestSession_Diagnostics_ImportUsedViaBackslashAccess verifies backslash access on the
+// imported module (`mod\field`), Buzz's namespace-access form, counts as use.
 func TestSession_Diagnostics_ImportUsedViaBackslashAccess(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
 	mod := vm.NewMap()

@@ -797,12 +797,15 @@ func TestTypedMagusMember(t *testing.T) {
 		want string
 	}{
 		{[]string{"run", "go-build", "."}, "run"},
-		{[]string{"describe", "file", "go.mod"}, "describeFile"},
-		{[]string{"describe", "job", "x"}, "describe"},
+		{[]string{"describe", "file", "go.mod"}, "describe.file"},
+		{[]string{"describe", "spells", "-o", "json"}, "describe.spell"},
+		{[]string{"describe", "targets"}, "describe.target"},
+		{[]string{"describe", "target", "go-build", "-o", "json"}, "describe.evaluatedTarget"},
 		{[]string{"query", "output", "ref1"}, "output"},
 		{[]string{"query", "kind=spell"}, "query"},
-		{[]string{"ls"}, "projects"},
-		{[]string{"ls", "-o", "json"}, "projects"},
+		{[]string{"ls"}, "describe.project"},
+		{[]string{"ls", "-o", "json"}, "describe.project"},
+		{[]string{"ls", "targets"}, "describe.graph"},
 		{[]string{"ls", "jobs", "-o", "json"}, "job.list"},
 		{[]string{"affected", "--impact"}, "impact"},
 		{[]string{"affected", "--base", "main"}, "affected"},
@@ -810,6 +813,8 @@ func TestTypedMagusMember(t *testing.T) {
 		{[]string{"job", "fork", "--stdin"}, "job.put"},
 		// No member answers these, so proc.exec is the right call and a warning is noise.
 		{[]string{"job", "exec", "tooling-gaps"}, ""},
+		{[]string{"describe", "job", "x"}, ""},
+		{[]string{"describe"}, ""},
 		{[]string{"affected", "ci"}, ""},
 		{[]string{"ls", "deps"}, ""},
 		{[]string{"queue", "ls"}, ""},
@@ -834,7 +839,7 @@ func TestTypedMagusMembersAreDeclared(t *testing.T) {
 			declared[ns.Name+"."+CamelCase(m.Name)] = true
 		}
 	}
-	named := []string{"projects", "affected", "impact"}
+	named := []string{"describe.project", "describe.target", "describe.evaluatedTarget", "affected", "impact"}
 	for _, member := range typedMagusMembers {
 		named = append(named, member)
 	}

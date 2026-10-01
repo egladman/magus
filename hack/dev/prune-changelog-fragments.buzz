@@ -648,7 +648,7 @@ fun declaredOutputs(commits: [Commit], fragments: [Fragment]) > {str: bool} !> a
     }
     final outputs = mut {<str: bool>};
     if (wanted.keys().len() == 0) { return outputs; }
-    foreach (f in magus\describeFile(sort\strings(wanted.keys())).files) {
+    foreach (f in magus\describe.file(sort\strings(wanted.keys())).files) {
         if (f.role == "output") { outputs[f.path] = true; }
     }
     return outputs;

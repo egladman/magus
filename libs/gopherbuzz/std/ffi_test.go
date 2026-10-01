@@ -248,9 +248,9 @@ final lib = zdef("` + lib + `", ` + "`" + `
     fn rec_at(x: f64) Pt;
 ` + "`" + `);
 final lay = lib.Rec;
-final r = ffi.alloc(lay["size"]);
+final r = ffi\alloc(lay["size"]);
 lib.rec_init(r, 7, 9.5);
-export final id = ffi.read(r, lay["offsets"][0], "c_int");
+export final id = ffi\read(r, lay["offsets"][0], "c_int");
 export final score = lib.rec_score(r);
 final p = lib.rec_at(3.0);
 export final py = p["y"];
@@ -355,10 +355,10 @@ func TestFFIPointerOutParam(t *testing.T) {
 	got := runBuzz(t, `
 import "ffi";
 final lib = zdef("`+lib+`", "void fill(int *out);");
-final p = ffi.alloc(ffi.sizeOf("int"));
+final p = ffi\alloc(ffi\sizeOf("int"));
 lib.fill(p);
-final __r = ffi.read(p, 0, "int");
-ffi.free(p);
+final __r = ffi\read(p, 0, "int");
+ffi\free(p);
 `)
 	assert.Equal(t, "99", got, "fill out-param")
 }
@@ -369,13 +369,13 @@ func TestFFIStructByReference(t *testing.T) {
 	got := runBuzz(t, `
 import "ffi";
 final lib = zdef("`+lib+`", "void rec_init(void *r, int id, double score); int rec_id(void *r);");
-final lay = ffi.structLayout(["int", "double"]);
-final r = ffi.alloc(lay["size"]);
+final lay = ffi\structLayout(["int", "double"]);
+final r = ffi\alloc(lay["size"]);
 lib.rec_init(r, 7, 9.5);
-final id = ffi.read(r, lay["offsets"][0], "int");
-final score = ffi.read(r, lay["offsets"][1], "double");
+final id = ffi\read(r, lay["offsets"][0], "int");
+final score = ffi\read(r, lay["offsets"][1], "double");
 final viaC = lib.rec_id(r);
-ffi.free(r);
+ffi\free(r);
 final __r = "{id}/{score}/{viaC}";
 `)
 	assert.Equal(t, "7/9.5/7", got, "struct-by-ref")
@@ -387,7 +387,7 @@ func TestFFICallback(t *testing.T) {
 import "ffi";
 final lib = zdef("`+lib+`", "int apply(void *f, int x);");
 fun triple(n: int) > int { return n * 3; }
-final cb = ffi.callback(triple, "int", ["int"]);
+final cb = ffi\callback(triple, "int", ["int"]);
 final __r = lib.apply(cb, 14);
 `)
 	assert.Equal(t, "42", got, "apply(triple, 14)")
@@ -405,7 +405,7 @@ func TestFFILibmStillWorks(t *testing.T) {
 	got := runBuzz(t, `
 import "std";
 final lib = zdef("libm", "double sqrt(double x);");
-final __r = std.toInt(lib.sqrt(9.0));
+final __r = std\toInt(lib.sqrt(9.0));
 `)
 	assert.Truef(t, strings.HasPrefix(got, "3"), "sqrt(9.0) = %q, want 3", got)
 }

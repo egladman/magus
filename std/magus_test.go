@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -456,6 +459,47 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, report.Jobs, 1)
 	assert.Equal(t, "on-disk", report.Jobs[0].ID, "nothing was written through the snapshot")
+}
+
+// magus\job.list measures overlaps through the function `magus ls jobs` calls, so the
+// typed call's footprints are exactly job.MeasureOverlaps over the same rows.
+func TestJobListMeasuresOverlapFootprints(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	testkit.Isolate(t)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	root := t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return strings.TrimSpace(string(out))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "api"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\treturn\n}\n"), 0o644))
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "seed")
+	rev := git("rev-parse", "HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
+		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
+		require.NoError(t, err)
+		_, _, err = MagusRegisterJob(ctx, id, rev)
+		require.NoError(t, err)
+	}
+
+	report, err := MagusListJob(ctx)
+	require.NoError(t, err)
+	require.Len(t, report.Overlaps, 1)
+	require.NotNil(t, report.Overlaps[0].Footprint, "the typed call measures footprints like `magus ls jobs`")
+	assert.Equal(t, types.FootprintShared, report.Overlaps[0].Footprint.Verdict, report.Overlaps[0].Footprint.Reason)
+	assert.Equal(t, job.MeasureOverlaps(ctx, root, report.Jobs, types.NewJobList(report.Jobs).Overlaps), report.Overlaps)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus

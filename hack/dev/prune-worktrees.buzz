@@ -392,7 +392,7 @@ fun processCwds() > [Cwd] !> any {
 }
 
 fun jobLeases() > [Lease] !> any {
-    final list: magus\JobList = magus\job\list();
+    final list: magus\JobList = magus\job.list();
     final found = mut [<Lease>];
     foreach (j in list.jobs) {
         found.append(Lease{ id = j.id, state = j.state, checkoutRoot = j.checkoutRoot });

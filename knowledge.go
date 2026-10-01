@@ -674,7 +674,9 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 // loadKnowledgeAgentContacts reads the per-repo session store for the agent events
 // `magus session load` folded into it, reduced to the path contacts the @session overlay
 // counts. It resolves the store through sessions.Dir, the same repo-identity keying
-// `magus session ls` uses, so every worktree of a repo sees one history.
+// `magus session ls` uses, so every worktree of a repo sees one history. It reads the
+// agent-event fold alone, which the store caches per kind and refreshes only for the
+// invocation files that changed, so a graph build never decodes the whole store.
 //
 // Best-effort throughout, and deliberately so: no store, an unreadable one, or zero
 // agent events all yield no contacts, so a workspace that has never loaded a transcript
@@ -689,15 +691,12 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := sessions.ReadAgentEvents(dir)
 	if err != nil {
 		return nil
 	}
 	var out []knowledge.AgentContact
 	for _, rec := range fold.Records {
-		if rec.Kind != sessions.KindAgentEvent {
-			continue
-		}
 		var ev sessions.AgentEvent
 		if json.Unmarshal(rec.Payload, &ev) != nil {
 			continue

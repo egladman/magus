@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/types"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
@@ -1529,4 +1530,38 @@ func TestCheck_PositionsMatchUpstream(t *testing.T) {
 			assert.Equal(t, [2]int{tc.line, tc.col}, [2]int{errs[0].Line, errs[0].Col}, "upstream: %s\ngot: %s", tc.upstream, fmtErrors(errs))
 		})
 	}
+}
+
+// A module's namespace type is shared by a session's checks until a type it
+// names is imported; then the next check rebuilds it against that type.
+func TestCheckPrelude_NamespaceRebuiltWhenItsTypeArrives(t *testing.T) {
+	host, err := ParseEmbedded("export extern fun make() > Late;\n")
+	require.NoError(t, err)
+	late, err := ParseEmbedded("export object Late { n: int = 0 }\n")
+	require.NoError(t, err)
+	funcs := map[string][]*ast.FunDecl{"host": {host.Stmts[0].(*ast.FunDecl)}}
+	prog, err := ParseEmbedded("final x = 1;\n")
+	require.NoError(t, err)
+
+	p := (*checkPrelude)(nil).sync(nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	before := p.ns["host"]
+	require.NotNil(t, before)
+	assert.IsType(t, &types.NamedType{}, before.typ.Fields["make"].(*types.FuncType).Ret)
+
+	p = p.sync(late.Stmts)
+	assert.Nil(t, p.ns["host"])
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	assert.Same(t, p.types["Late"], p.ns["host"].typ.Fields["make"].(*types.FuncType).Ret)
+}
+
+// A sub-session's prelude is a copy: what it registers never reaches its parent's.
+func TestCheckPrelude_CloneIsIsolated(t *testing.T) {
+	late, err := ParseEmbedded("export object Late { n: int = 0 }\n")
+	require.NoError(t, err)
+	parent := (*checkPrelude)(nil).sync(nil)
+	child := parent.clone().sync(late.Stmts)
+	assert.Contains(t, child.types, "Late")
+	assert.NotContains(t, parent.types, "Late")
+	assert.Empty(t, parent.imported)
 }

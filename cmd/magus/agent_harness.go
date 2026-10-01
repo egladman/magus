@@ -179,7 +179,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	if err != nil {
 		return fmt.Errorf("magus describe harness: %w", err)
 	}
-	plans := make([]agent.HarnessPlan, 0, len(ids))
+	plans := make([]types.HarnessPlan, 0, len(ids))
 	for _, harnessID := range ids {
 		plan, err := agent.PlanHarness(ctx, root, harnessID)
 		if err != nil {
@@ -199,7 +199,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		}
 		return emitFormatted(opts, plans)
 	case outputName:
-		return emitNamesOf(plans, func(p agent.HarnessPlan) string { return p.ID })
+		return emitNamesOf(plans, func(p types.HarnessPlan) string { return p.ID })
 	}
 	for i, plan := range plans {
 		if i > 0 {
@@ -212,7 +212,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	return nil
 }
 
-func writeHarnessPlan(w io.Writer, plan agent.HarnessPlan) error {
+func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
 	var err error
 	printf := func(format string, args ...any) {
 		if err == nil {
@@ -231,7 +231,7 @@ func writeHarnessPlan(w io.Writer, plan agent.HarnessPlan) error {
 			}
 			printf("  %s (%s)\n", path, state)
 			for _, change := range file.Changes {
-				if change.Op == agent.HarnessWrite {
+				if change.Op == types.HarnessWrite {
 					printf("    write the whole file\n")
 					continue
 				}

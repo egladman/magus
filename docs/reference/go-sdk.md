@@ -207,7 +207,7 @@ without checking the error first.
 > SDK. Read this before you build anything that depends on dispatching one.
 
 **Buzz magusfile evaluation is not reachable from outside this module.**
-Evaluating a `magusfile.buzz` - running `magus.project(...)`, discovering
+Evaluating a `magusfile.buzz` - running `magus\project(...)`, discovering
 `export fun` targets, binding spells - requires the Buzz interpreter engine
 to be linked in, and that link only happens through two `internal/` packages
 (`internal/interp/engine/buzz`, `internal/interp/bindings`) that only

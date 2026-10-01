@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // HarnessPrompt is one host-native approval setting a harness keeps in place, so a guard
@@ -58,20 +59,20 @@ func promptLocation(p HarnessPrompt) string {
 // planHarnessPrompt reports what p's file needs, with no Changes when it is in place. A key
 // already holding another value is an error: it was someone's choice, and no plan
 // overwrites it.
-func planHarnessPrompt(root string, p HarnessPrompt) (HarnessFile, error) {
+func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) {
 	path, err := harnessConfigPath(root, p.Path)
 	if err != nil {
-		return HarnessFile{}, err
+		return types.HarnessFile{}, err
 	}
 	existing, readErr := os.ReadFile(path)
 	if readErr != nil && !os.IsNotExist(readErr) {
-		return HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
+		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
 	}
-	file := HarnessFile{Exists: readErr == nil}
+	file := types.HarnessFile{Exists: readErr == nil}
 	if p.Content != "" {
 		if !bytes.Equal(existing, []byte(p.Content)) {
 			file.Content = p.Content
-			file.Changes = []HarnessChange{{Op: HarnessWrite}}
+			file.Changes = []types.HarnessChange{{Op: types.HarnessWrite}}
 		}
 		return file, nil
 	}
@@ -102,7 +103,7 @@ func planHarnessPrompt(root string, p HarnessPrompt) (HarnessFile, error) {
 	}
 	current[last] = p.Value
 	file.Fragment = fragment
-	file.Changes = []HarnessChange{{Op: HarnessSet, Key: strings.Join(p.Key, "."), Value: p.Value}}
+	file.Changes = []types.HarnessChange{{Op: types.HarnessSet, Key: strings.Join(p.Key, "."), Value: p.Value}}
 	return file, nil
 }
 

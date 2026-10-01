@@ -147,7 +147,7 @@ func scanImports(src string) []importBinding {
 
 // resolveModule maps a bound name at the cursor to a manifest module. It prefers an
 // explicit import (so an alias resolves to the right module), then falls back to the
-// bare module name, so `fs.` offers members even before the `import "fs"` is typed.
+// bare module name, so `fs\` offers members even before the `import "fs"` is typed.
 func resolveModule(base, src string) (Module, bool) {
 	for _, imp := range scanImports(src) {
 		if imp.Name == base {

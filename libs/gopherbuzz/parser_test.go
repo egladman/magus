@@ -513,7 +513,7 @@ object Config {
     }
 }
 enum Status { Ok, Err, Unknown }
-host.project.register(".");
+host\project.register(".");
 export fun build(_args: [str]) > void {}
 export fun test(_args: [str]) > void {}
 `

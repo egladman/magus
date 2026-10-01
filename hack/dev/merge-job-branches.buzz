@@ -356,7 +356,7 @@ fun regenerateWithMagus(base: str) > fun (dir: str) > void !> any {
         final changed = unstaged(dir);
         if (changed.len() == 0) { return; }
         final undeclared = mut [<str>];
-        foreach (f in magus\describeFile(changed, opts: {"dir": dir, "root": dir}).files) {
+        foreach (f in magus\describe.file(changed, opts: {"dir": dir, "root": dir}).files) {
             if (f.role != "output" and f.role != "maintained") { undeclared.append(f.path); }
         }
         if (undeclared.len() > 0) {

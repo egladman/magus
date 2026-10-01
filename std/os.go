@@ -47,39 +47,56 @@ func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
 	if _, seen := magusWarned.LoadOrStore(member, true); seen {
 		return
 	}
-	slog.WarnContext(ctx, "proc.exec runs magus for an invocation a typed member answers",
+	slog.WarnContext(ctx, "proc\\exec runs magus for an invocation a typed member answers",
 		"invocation", strings.Join(append([]string{"magus"}, args...), " "),
 		"hint", "call magus\\"+member+" instead")
 }
 
 // typedMagusMembers maps a magus invocation, by its subcommand and, where the subcommand
 // alone does not decide it, the word after, to the magus\ member that answers it. The
-// two-word key wins. A subcommand whose member needs a particular shape of argv
-// (`affected`, `ls`) is decided in typedMagusMember instead.
+// two-word key wins. `describe` takes its nouns singular or plural, so each is keyed
+// both ways; a noun with no method (`describe job`) has no member. A subcommand whose
+// member needs a particular shape of argv (`affected`, `ls`, `describe target <ref>`) is
+// decided in typedMagusMember instead.
 var typedMagusMembers = map[string]string{
-	"run":               "run",
-	"describe":          "describe",
-	"describe file":     "describeFile",
-	"describe module":   "describeModule",
-	"describe targets":  "targets",
-	"describe tools":    "tools",
-	"doctor":            "doctor",
-	"clean":             "clean",
-	"diff":              "diff",
-	"query":             "query",
-	"query output":      "output",
-	"explain":           "explain",
-	"path":              "path",
-	"refs":              "refs",
-	"insight":           "insight",
-	"graph stats":       "stats",
-	"ls jobs":           "job.list",
-	"ls targets":        "targets",
-	"job fork":          "job.put",
-	"job exit":          "job.exit",
-	"job wait":          "job.wait",
-	"vcs checkpoint":    "vcs.checkpoint",
-	"session attention": "attention",
+	"run":                 "run",
+	"describe charm":      "describe.charm",
+	"describe charms":     "describe.charm",
+	"describe file":       "describe.file",
+	"describe files":      "describe.file",
+	"describe graph":      "describe.graph",
+	"describe harness":    "describe.harness",
+	"describe mcp-tool":   "describe.mcpTool",
+	"describe mcp-tools":  "describe.mcpTool",
+	"describe module":     "describe.module",
+	"describe modules":    "describe.module",
+	"describe project":    "describe.project",
+	"describe projects":   "describe.project",
+	"describe rule":       "describe.rule",
+	"describe rules":      "describe.rule",
+	"describe spell":      "describe.spell",
+	"describe spells":     "describe.spell",
+	"describe tool":       "describe.tool",
+	"describe tools":      "describe.tool",
+	"describe workspace":  "describe.workspace",
+	"describe workspaces": "describe.workspace",
+	"doctor":              "doctor",
+	"clean":               "clean",
+	"diff":                "diff",
+	"query":               "query",
+	"query output":        "output",
+	"explain":             "explain",
+	"path":                "path",
+	"refs":                "refs",
+	"insight":             "insight",
+	"graph stats":         "stats",
+	"ls jobs":             "job.list",
+	"ls targets":          "describe.graph",
+	"job fork":            "job.put",
+	"job exit":            "job.exit",
+	"job wait":            "job.wait",
+	"vcs checkpoint":      "vcs.checkpoint",
+	"session attention":   "attention",
 }
 
 // typedMagusMember is the magus\ member that answers `magus <args>`, or "" when none does.
@@ -99,9 +116,18 @@ func typedMagusMember(args []string) string {
 	case "ls":
 		// A bare `ls` lists the projects; `ls <noun>` has a member only where the table says.
 		if !positional {
-			return "projects"
+			return "describe.project"
 		}
 		return ""
+	case "describe":
+		// `describe target` is the catalog; `describe target <ref>` evaluates one target.
+		if len(rest) == 0 || (rest[0] != "target" && rest[0] != "targets") {
+			return ""
+		}
+		if hasPositional(rest[1:]) {
+			return "describe.evaluatedTarget"
+		}
+		return "describe.target"
 	case "affected":
 		// `affected <target>` runs the target across the affected set, which no member does.
 		if positional {
@@ -159,7 +185,7 @@ var Os = Module{
 	Methods: []Method{
 		{
 			Name: "with_env",
-			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.",
+			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os\\env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env", Type: TypeStringMap},
 				{Name: "callback", Type: TypeFunc, Func: "fun () > void !> any"},
@@ -185,7 +211,7 @@ var Os = Module{
 		},
 		{
 			Name:    "sleep",
-			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
+			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os\\sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
 			Args:    []Arg{{Name: "ms", Type: TypeFloat}},
 			Returns: nil,
 			Raises:  true,
@@ -193,7 +219,7 @@ var Os = Module{
 		},
 		{
 			Name:    "num_cpu",
-			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
+			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\\with_slots).",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeInt}},
 			Impl:    OsNumCPU,
@@ -208,7 +234,7 @@ var Os = Module{
 		},
 		{
 			Name:    "executable",
-			Doc:     "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
+			Doc:     "Return the absolute path of the running magus binary. Pair it with fs\\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
@@ -394,8 +420,8 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			// right, faster default for a plain program).
 			if label == "proc.exec" && looksLikeShellCommand(cmd) {
 				interactive.Emit(os.Stderr, fmt.Sprintf(
-					"%q looks like a shell command line, but proc.exec runs a single program directly with no shell; "+
-						"use proc.shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
+					"%q looks like a shell command line, but proc\\exec runs a single program directly with no shell; "+
+						"use proc\\shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}

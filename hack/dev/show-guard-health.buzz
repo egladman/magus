@@ -275,12 +275,12 @@ export fun cases(root: str, lease: Lease) > [Case] {
     }
     final target = if (lease.outside == "") OUTSIDE_CANDIDATES[0] else lease.outside;
     return [
-        Case{ name = "symbol grep", tool = "Bash", input = {"command": "grep -rn resolveBin internal/"}, expect = "advise", agent = false, bind = "", skip = "" },
-        Case{ name = "file listing", tool = "Bash", input = {"command": "find . -name '*.go'"}, expect = "pass", agent = false, bind = "", skip = "" },
+        Case{ name = "symbol grep", tool = "Bash", input = {"command": "grep -rn resolveBin internal/"}, expect = "deny", agent = false, bind = "", skip = "" },
+        Case{ name = "file listing", tool = "Bash", input = {"command": "find . -name '*.go'"}, expect = "deny", agent = false, bind = "", skip = "" },
         Case{ name = "raw go test", tool = "Bash", input = {"command": "go test ./internal/guard/"}, expect = "deny", agent = false, bind = "", skip = "" },
         Case{ name = "sed -i", tool = "Bash", input = {"command": "sed -i '' 's/a/b/' magus.go"}, expect = "deny", agent = false, bind = "", skip = "" },
         Case{ name = "magus output pipe", tool = "Bash", input = {"command": "magus run lint . | tail -5"}, expect = "deny", agent = false, bind = "", skip = "" },
-        Case{ name = "push from a subagent", tool = "Bash", input = {"command": "git push origin HEAD"}, expect = "advise", agent = true, bind = "", skip = "" },
+        Case{ name = "push from a subagent", tool = "Bash", input = {"command": "git push origin HEAD"}, expect = "deny", agent = true, bind = "", skip = "" },
         Case{ name = "edit outside the lease", tool = "Edit", input = {"file_path": "{root}/{target}", "old_string": "package", "new_string": "package "},
             expect = "deny", agent = true, bind = lease.job, skip = editSkip },
     ];
@@ -344,7 +344,7 @@ export fun replay(c: Case, hooks: [HookCommand], launcher: str, root: str) > Row
 
 // leaseAt is the live job whose lease was taken in root.
 fun leaseAt(root: str) > Lease !> any {
-    final list: magus\JobList = magus\job\list();
+    final list: magus\JobList = magus\job.list();
     foreach (j in list.jobs) {
         if (j.checkoutRoot == root and ["declared", "running", "exited"].indexOf(j.state) != null) {
             return Lease{ job = j.id, outside = outsidePath(j.writePaths) };

@@ -553,29 +553,15 @@ export object Sym {
     refs: [Site],
 }
 
-// StubSyntax is how a spell says a function of its language is stubbed: which symbol kinds
-// may be (Function, Method), how a body is found (brace: the last top-level `{...}` of the
-// declaration; indent: everything after the header's last top-level `:`), and the body put
-// in its place, a template\render template over Name, Qualified, Kind and Branch.
-export object StubSyntax {
-    kinds: [str],
-    bodyStyle: str,
-    body: str,
-}
-
-// CommentSyntax is what the body scan skips: a language's string quotes, line comment
-// openers and block comment pairs.
-export object CommentSyntax {
-    quotes: [str],
-    line: [str],
-    blocks: [[str]],
-}
-
-// Lang is one diff driver's language as its spell declares it. A language with no stubs
-// is never stubbed: a symbol it needs early is pulled, or the layer needs a stub by hand.
+// Lang is one diff driver's language as its spell declares it. The stubs say which symbol
+// kinds may be stubbed (Function, Method), how a body is found (brace: the last top-level
+// `{...}` of the declaration; indent: everything after the header's last top-level `:`),
+// and the body put in its place, a template\render template over Name, Qualified, Kind and
+// Branch; the comments are what the body scan skips. A language with no stubs is never
+// stubbed: a symbol it needs early is pulled, or the layer needs a stub by hand.
 export object Lang {
-    stubs: StubSyntax?,
-    comments: CommentSyntax,
+    stubs: magus\StubSyntax?,
+    comments: magus\CommentSyntax,
 }
 
 // SymbolChange is everything --by symbols plans from. indexed are the paths the symbol index
@@ -829,12 +815,13 @@ export fun stemOf(path: str) > str {
 
 // topBraces walks lines lo..hi outside strings and comments and returns each top-level brace
 // pair as [openLine, openByte, closeLine, closeByte].
-fun topBraces(lines: [str], lo: int, hi: int, comments: CommentSyntax) > [[int]] {
+fun topBraces(lines: [str], lo: int, hi: int, comments: magus\CommentSyntax) > [[int]] {
     final pairs = mut [<[int]>];
     var depth = 0;
     var openLine = 0;
     var openByte = 0;
     var quote = "";
+    var escapes = true;
     var closing = "";
     for (n: int = lo; n <= hi and n <= lines.len(); n = n + 1) {
         final line = lines[n - 1];
@@ -846,19 +833,19 @@ fun topBraces(lines: [str], lo: int, hi: int, comments: CommentSyntax) > [[int]]
                 continue;
             }
             if (quote != "") {
-                if (rest.startsWith("\\")) { i = i + 2; continue; }
+                if (escapes and rest.startsWith("\\")) { i = i + 2; continue; }
                 if (rest.startsWith(quote)) { i = i + quote.len(); quote = ""; } else { i = i + 1; }
                 continue;
             }
             var skip = 0;
-            foreach (lc in comments.line) {
+            foreach (lc in comments.lineComments) {
                 if (skip == 0 and rest.startsWith(lc)) { skip = line.len() - i; }
             }
-            foreach (b in comments.blocks) {
-                if (skip == 0 and rest.startsWith(b[0])) { closing = b[1]; skip = b[0].len(); }
+            foreach (b in comments.blockComments) {
+                if (skip == 0 and rest.startsWith(b.open)) { closing = b.close; skip = b.open.len(); }
             }
             foreach (q in comments.quotes) {
-                if (skip == 0 and rest.startsWith(q)) { quote = q; skip = q.len(); }
+                if (skip == 0 and rest.startsWith(q.open)) { quote = q.close; escapes = !q.ignoreEscape; skip = q.open.len(); }
             }
             if (skip > 0) { i = i + skip; continue; }
             final c = line.sub(i, len: 1);
@@ -872,8 +859,8 @@ fun topBraces(lines: [str], lo: int, hi: int, comments: CommentSyntax) > [[int]]
             }
             i = i + 1;
         }
-        // A one-byte quote other than a backtick ends with its line; a raw string does not.
-        if (quote.len() == 1 and quote != "`") { quote = ""; }
+        // A one-byte quote that honors escapes ends with its line; a raw string does not.
+        if (quote.len() == 1 and escapes) { quote = ""; }
     }
     return pairs;
 }
@@ -2010,28 +1997,13 @@ fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > Symb
 // The spell each diff driver's language belongs to.
 final DRIVER_SPELLS = {"golang": "go", "typescript": "typescript", "python": "python", "rust": "rust", "buzz": "buzz"};
 
-fun stringsOf(b: serialize\Boxed?) > [str] {
-    final result = mut [<str>];
-    foreach (x in b?.list() ?? [<serialize\Boxed>]) {
-        if (x.string() != null) { result.append(x.string()!); }
-    }
-    return result;
-}
-
-// languageOf decodes the stub and comment syntax a spell's description declares. A spell
-// that declares no stubs comes back with none, so nothing in its language is stubbed.
-export fun languageOf(spell: serialize\Boxed) > Lang {
-    final c = spell.q(["comments"]);
-    final blocks = mut [<[str]>];
-    foreach (pair in c.q(["blocks"]).list() ?? [<serialize\Boxed>]) {
-        final ends = stringsOf(pair);
-        if (ends.len() == 2) { blocks.append(ends); }
-    }
-    final comments = CommentSyntax{ quotes = stringsOf(c.q(["quotes"])), line = stringsOf(c.q(["line"])), blocks = blocks };
-    final s = spell.q(["stubs"]);
-    if (s.map() == null or s.q(["body"]).string() == null) { return Lang{ stubs = null, comments = comments }; }
-    return Lang{ stubs = StubSyntax{ kinds = stringsOf(s.q(["kinds"])), bodyStyle = s.q(["bodyStyle"]).string() ?? "",
-        body = s.q(["body"]).string()! }, comments = comments };
+// languageOf is the stub and comment syntax a spell declares. A spell that declares no stub
+// body comes back with no stubs, so nothing in its language is stubbed.
+export fun languageOf(syntax: magus\Syntax?) > Lang {
+    final comments = syntax?.comments ?? magus\CommentSyntax{};
+    final stubs = syntax?.stubs;
+    if (stubs == null or stubs!.body == "") { return Lang{ stubs = null, comments = comments }; }
+    return Lang{ stubs = stubs, comments = comments };
 }
 
 fun languagesOf(regions: [Region]) > {str: Lang} !> any {
@@ -2039,9 +2011,8 @@ fun languagesOf(regions: [Region]) > {str: Lang} !> any {
     foreach (r in regions) {
         final spell = DRIVER_SPELLS[r.driver];
         if (spell == null or langs[r.driver] != null) { continue; }
-        final described = magus\describe(["spell", spell!, "-o", "json"], opts: {"quiet": true});
-        foreach (sp in serialize\jsonDecode(described.stdout).q(["spells"]).list() ?? [<serialize\Boxed>]) {
-            langs[r.driver] = languageOf(sp);
+        foreach (sp in magus\describe.spell(spell!)) {
+            langs[r.driver] = languageOf(sp.syntax);
         }
     }
     return langs;
@@ -2343,8 +2314,17 @@ fun symbolRepo() > Repo !> any {
     }
     final indexed = mut [<str>];
     foreach (p in paths) { if (p.endsWith(".go")) { indexed.append(p); } }
-    final languages = mut {<str: Lang>};
-    foreach (driver, spell in doc.q("languages").mapValue()) { languages[driver] = languageOf(spell); }
+    final golang = magus\Syntax{
+        comments = magus\CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [magus\CommentBlock{ open = "/*", close = "*/" }],
+            quotes = [magus\Quote{ open = "`", close = "`", ignoreEscape = true }, magus\Quote{ open = "\"", close = "\"" },
+                magus\Quote{ open = "'", close = "'" }],
+        },
+        stubs = magus\StubSyntax{ kinds = ["Function", "Method"], bodyStyle = "brace",
+            body = "\{\n\tpanic(\"unimplemented: \{\{&Name\}\} lands in \{\{&Branch\}\}\")\n\}" },
+    };
+    final languages = {"golang": languageOf(golang)};
     return Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed,
         texts = texts, languages = languages }, texts = texts, paths = paths };
 }

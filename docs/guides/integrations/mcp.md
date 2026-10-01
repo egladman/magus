@@ -218,8 +218,8 @@ The magus module, through `client`:
 
 | Call                                              | Purpose                                                                                    |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `magus\describe`                                  | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools |
-| `magus\describeFile`                              | Classify paths against declared globs: owning project and role                             |
+| `magus\describe.<noun>`                           | The typed record `magus describe <noun>` prints: spells, targets, projects, tools, rules   |
+| `magus\describe.file`                             | Classify paths against declared globs: owning project and role                             |
 | `magus\run`                                       | Run a target for one or more projects, with the same arguments as `magus run`              |
 | `magus\clean`                                     | Remove declared outputs. Arguments are `magus clean`'s                                     |
 | `magus\where`                                     | Which project contains a directory                                                         |

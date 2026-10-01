@@ -387,7 +387,7 @@ export fun brief(t: Terms, extra: str) > str !> str {
 
 // termsFor reads job's terms and neighbours through the magus module.
 export fun termsFor(job: str) > Terms !> any {
-    final described = magus\describe(["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
+    final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
     final terms = parseDescribed(described);
     if (terms.id != job) {
         throw "render-brief: `magus describe job {job}` returned no row for it";

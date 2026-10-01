@@ -48,7 +48,8 @@ magus\project({
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
-                "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go"],
+                "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go",
+                "../cmd/magus-utils/**/*.go"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},

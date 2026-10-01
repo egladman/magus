@@ -226,7 +226,7 @@ fun support() > void {
                 + "; support reads unknown");
         }
     } catch (e) {
-        std\print("toolchain lifecycle: could not read magus\\tools(): {e}");
+        std\print("toolchain lifecycle: could not read magus\\describe.tool(): {e}");
     }
 }
 

@@ -114,7 +114,7 @@ var Charm = Module{
 		},
 		{
 			Name:    "move",
-			Doc:     `Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).`,
+			Doc:     `Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMove,
@@ -128,7 +128,7 @@ var Charm = Module{
 		},
 		{
 			Name:    "copy",
-			Doc:     `Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).`,
+			Doc:     `Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
 			Raises:  true,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopy,
@@ -324,7 +324,7 @@ func CharmPathFunc(ctx context.Context, argv []string, fn Callback) (string, err
 // at author time with a hint rather than deferring to decode-time validation.
 func destPointer(to string) error {
 	if to == "" || to[0] != '/' {
-		return fmt.Errorf("charm: destination %q must be a JSON Pointer (%q, %q, or charm.path(argv, x))", to, "/-", "/0")
+		return fmt.Errorf("charm: destination %q must be a JSON Pointer (%q, %q, or charm\\path(argv, x))", to, "/-", "/0")
 	}
 	return nil
 }
