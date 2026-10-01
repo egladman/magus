@@ -26,5 +26,5 @@
   "         e.g. served `sed -n 4,8p b.go` after `grep -A3 'func Y' b.go`",
   "",
   "mark rows: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note \"...\"] --session s-fixture --since 2026-09-30T20:26:40Z --until 2026-10-01T02:26:40Z -- <label>...",
-  "figure: magus buzz hack/dev/show-session-figure.buzz -- --session s-fixture --out session.svg"
+  "figure: magus buzz hack/dev/show-session-figure.buzz -- --session s-fixture [-o svg]"
 ]

@@ -313,7 +313,7 @@ export fun page(r: Report, n: int, size: int = PAGE) > [str] !> any {
     if (n < total) {
         lines.append("next page: magus buzz hack/dev/show-feedback.buzz -- {window(r)} --page {n + 1}");
     } else {
-        lines.append("figure: magus buzz hack/dev/show-session-figure.buzz -- --session {r.session} --out session.svg");
+        lines.append("figure: magus buzz hack/dev/show-session-figure.buzz -- --session {r.session} [-o svg]");
     }
     return lines;
 }

@@ -11,11 +11,11 @@ import "../../.github/actions/advice/figure-link" as figurelink;
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--all] [--out <file.svg>] [--theme light|dark] [--console <base>]";
-final HELP = "cost: reads every checkout's activity trail that changed inside the window and the job store; writes only the --out file\n{USAGE}\n"
-    + "Draws one session's agent hierarchy: a box per job, an edge per spawn (solid) and per declared dependency (dashed), zoned by state.\n"
-    + "Without --out it writes nothing and prints the console link that explores the same tree in a browser. --all draws every job\n"
-    + "created in the window, not only the ones the session's trail names and their parents and dependencies.";
+final USAGE = "usage: magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--all] [-o svg] [--theme light|dark] [--console <base>]";
+final HELP = "cost: reads every checkout's activity trail that changed inside the window and the job store; writes nothing\n{USAGE}\n"
+    + "One session's agent hierarchy: a box per job, an edge per spawn (solid) and per declared dependency (dashed), zoned by state.\n"
+    + "Prints a summary and the console link that explores the tree in a browser; -o svg prints the figure instead, for you to redirect.\n"
+    + "--all draws every job created in the window, not only the ones the session's trail names and their parents and dependencies.";
 
 final STATES = [
     ["passed", "pass"],
@@ -221,13 +221,17 @@ fun counts(tr: JobTree) > str {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--all"], valued: ["--session", "--since", "--until", "--out", "--theme", "--console"]);
+    final parsed = flags\parse(args, switches: ["--help", "--all"], valued: ["--session", "--since", "--until", "-o", "--theme", "--console"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "show-session-figure: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "svg") {
+        throw "show-session-figure: -o is svg, or omitted for the summary and link\n{USAGE}";
     }
     final themeName = parsed.values["--theme"] ?? "light";
     if (themeName != "light" and themeName != "dark") {
@@ -238,17 +242,19 @@ export fun main(args: [str]) > void !> any {
         throw "show-session-figure: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
     }
     final tr = tree(t, jobs: magus\job.list().jobs, all: parsed.values["--all"] != null, start: std\toInt(t.start / 1000));
-    final svgPath = parsed.values["--out"];
-    final summary = "{tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {t.session}";
-    if (svgPath == null) {
-        std\print("read-only: {summary}; pass --out <file.svg> to draw it");
-    } else {
-        final theme = if (themeName == "dark") figure\Theme.dark else figure\Theme.light;
-        fs\writeFile(svgPath!, content: figure\draw(figureOf(tr), theme: theme));
-        std\print("wrote {svgPath!}: {summary}");
+    final theme = if (themeName == "dark") figure\Theme.dark else figure\Theme.light;
+    std\print(rendered(tr, format: format, theme: theme, console: parsed.values["--console"] ?? ""));
+}
+
+// rendered is what the script prints: the SVG alone for -o svg, so a redirect places it,
+// else a one-line summary and the console link that explores the tree.
+export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str) > str !> any {
+    if (format == "svg") {
+        return figure\draw(figureOf(tr), theme: theme);
     }
-    final url = link(tr, base: parsed.values["--console"] ?? "");
-    std\print(if (url != "") "explore: {url}" else "explore: the tree is too large for a link; open the SVG");
+    final url = link(tr, base: console);
+    return "read-only: {tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {tr.session}\n"
+        + (if (url != "") "explore: {url}" else "explore: the tree is too large for a link; -o svg prints the figure");
 }
 
 // fixture builds the tree of hack/testdata/session-figure-jobs.json over the feedback trail
@@ -290,8 +296,15 @@ test "the trail's leases select the jobs, with their parents and dependencies" {
     assert\equal(tr.depends, want: [["base", "job-b"]], message: "depends");
 }
 
-test "the figure renders its golden SVG" {
-    assert\equal(figure\draw(figureOf(fixture()), theme: figure\Theme.light), want: fs\readFile("hack/testdata/session-figure.svg"), message: "svg");
+test "-o svg prints the golden SVG and nothing else" {
+    assert\equal(rendered(fixture(), format: "svg", theme: figure\Theme.light, console: ""), want: fs\readFile("hack/testdata/session-figure.svg"), message: "svg");
+}
+
+test "without -o it prints a one-line summary and the console link" {
+    final lines = rendered(fixture(), format: "text", theme: figure\Theme.light, console: "https://example.test/console/").split("\n");
+    assert\equal(lines.len(), want: 2, message: "two lines");
+    assert\equal(lines[0], want: "read-only: 4 jobs (2 passed, 1 exited, awaiting integration, 1 no return or failed), 4 spawn and 1 dependency edges, session s-fixture", message: "summary");
+    assert\equal(lines[1].startsWith("explore: https://example.test/console/graph/#figure="), want: true, message: lines[1]);
 }
 
 test "the console link carries the tree and decodes to it" {
