@@ -83,6 +83,19 @@ export fun isNeverContentDir(name: str) > bool {
     return name == "node_modules";
 }
 
+// isNeverContentFile reports whether a file can never be a page, at ANY depth. A
+// project's MAGUS.md is the repository's routing index: the docs root's surfaces through
+// renderDevelopment, and a nested project's links up the tree to the workspace index
+// outside docs/, so rendered it would be an orphan with a dead link.
+export fun isNeverContentFile(name: str) > bool {
+    return name == "MAGUS.md";
+}
+
+test "isNeverContentFile catches MAGUS.md at any depth, and nothing else" {
+    assert\equal(isNeverContentFile("MAGUS.md"), true);
+    assert\equal(isNeverContentFile("README.md"), false);
+}
+
 test "isNeverContentDir catches node_modules at any depth, and nothing else" {
     assert\equal(isNeverContentDir("node_modules"), true);
     assert\equal(isNeverContentDir("gen"), false, "gen is root-only, handled by isGeneratorDir");

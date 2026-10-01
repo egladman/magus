@@ -371,3 +371,18 @@ tags/detach/
 # /development/ page is derived from a project, so there is nothing to alias to.
 development/libs-pricing/
 development/projects/libs-pricing/
+
+# Pages of removed features: the magus memory store (its API, skill, man page and guard
+# rule), MGS3020 and MGS3021, the libs diagram page, and tags no page carries any more.
+development/libs-diagram/
+reference/api/memory/
+reference/api/memory/v1alpha1/
+reference/api/memory/v1alpha1/memory/
+reference/codes/sandbox/MGS3020/
+reference/codes/sandbox/MGS3021/
+reference/manpage/magus-memory/
+reference/rules/memory-write/
+reference/skills/magus-memory/
+tags/decisions/
+tags/exit-2/
+tags/preflight/

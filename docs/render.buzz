@@ -7,7 +7,6 @@
 namespace render;
 
 import "markdown";
-import "proc";
 import "fs";
 import "io";
 import "os";
@@ -127,6 +126,7 @@ fun walk(rel: str, site: Site) > void !> any {
             if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {
+            if (isNeverContentFile(name)) { continue; }
             if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) {
                 // glossary.md renders AFTER the walk (in site_render), once glossaryRefs is
                 // complete, so its per-term "referenced on" backlinks are the full set.
@@ -402,20 +402,11 @@ export fun site_conventions(root: str, docs: str) > void !> any {
 }
 
 export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
+    // The browser bundles are site-generate's build_hljs and build_playground_editor, which
+    // run before this through ctx.needs.
     final site = site_render(root, docs, blog, outDir, targets, graph);
-    generateJsBundles();
     writeSiteManifest(site);
     if (updateUrls) { updateUrlLock(site); }
-}
-
-// generateJsBundles builds the committed browser bundles that import npm packages. pnpm
-// is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time
-// rather than behind an isDir check: an interrupted install leaves a node_modules that
-// exists but is incomplete, and the guard read that as ready and fed esbuild a half
-// tree. See the install() note in magusfile.buzz.
-fun generateJsBundles() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    proc\exec("pnpm", ["run", "build"], ".", {});
 }
 
 // site_figures writes every figure's SVGs and receipt for the diagrams-generate target and
