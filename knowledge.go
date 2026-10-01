@@ -1,10 +1,12 @@
 package magus
 
 import (
+	"bufio"
 	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
+	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -432,16 +434,11 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 // the workspace and its cache are, the knowledge config, and the target graph, projects
 // and spells the workspace describes.
 func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
-	exe, err := os.Executable()
-	if err != nil {
+	h := knowledge.NewInputHash("base")
+	if !foldBinary(h) {
 		return "", false
 	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
-	}
-	h := knowledge.NewInputHash("base")
 	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
-	h.Binary(exe)
 	h.String(src.root)
 	h.String(src.cacheDir)
 	h.String(src.cfg.HistoryPath)
@@ -792,28 +789,124 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 	}
 	out := map[string][]types.KnowledgeSymbol{}
 	for _, decl := range decls {
-		data, err := os.ReadFile(decl.path)
-		if err != nil {
-			// A not-yet-built index (the scip target has not run) is expected and quiet;
-			// any other read error (permissions) is a misconfig worth surfacing.
-			if errors.Is(err, fs.ErrNotExist) {
-				log.DebugContext(ctx, "knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
-			} else {
-				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
-			}
-			continue
-		}
-		syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
-		if err != nil {
+		syms, err := parseSymbolIndexCached(ctx, in, decl)
+		var decodeErr symbolDecodeError
+		switch {
+		case errors.As(err, &decodeErr):
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss; surface it.
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			continue
+		case errors.Is(err, fs.ErrNotExist):
+			// A not-yet-built index (the scip target has not run) is expected and quiet.
+			log.DebugContext(ctx, "knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
+			continue
+		case err != nil:
+			// Any other read error (permissions) is a misconfig worth surfacing.
+			log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
 		symbols.FingerprintBodies(in.root, syms)
 		out[decl.project] = syms
 	}
 	return out
+}
+
+// symbolDecodeError marks an index that was read but would not parse, which callers
+// report apart from one that could not be read.
+type symbolDecodeError struct{ err error }
+
+func (e symbolDecodeError) Error() string { return e.err.Error() }
+func (e symbolDecodeError) Unwrap() error { return e.err }
+
+// parseSymbolIndexCached parses decl's index, or returns the parse cached the last time this
+// binary read this exact file. A large module's index is a hundred megabytes whose decode
+// allocates over a gigabyte, and it changes only when its scip op runs, while the symbols
+// built from it are reassembled after every source edit.
+//
+// The cache holds the parse alone: FingerprintBodies reads the working tree into the
+// records afterwards, and the tree moves without the index.
+func parseSymbolIndexCached(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex) ([]types.KnowledgeSymbol, error) {
+	if _, err := os.Stat(decl.path); err != nil {
+		return nil, err
+	}
+	key := ""
+	h := knowledge.NewInputHash("parsed symbol index")
+	if foldBinary(h) {
+		h.String(decl.project)
+		h.String(decl.language)
+		h.Path(decl.path)
+		key = h.Sum()
+	}
+	sum := sha256.Sum256([]byte(decl.path))
+	cachePath := filepath.Join(knowledge.StoreDir(in.cacheDir), "inputs", "scip", hex.EncodeToString(sum[:8])+".gob")
+	if key != "" {
+		if syms, ok := readParsedSymbolIndex(cachePath, key); ok {
+			return syms, nil
+		}
+	}
+	data, err := os.ReadFile(decl.path)
+	if err != nil {
+		return nil, err
+	}
+	syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
+	if err != nil {
+		return nil, symbolDecodeError{err}
+	}
+	if key != "" && !cacheImmutable(in.cfg) {
+		if err := writeParsedSymbolIndex(cachePath, key, syms); err != nil {
+			in.log.DebugContext(ctx, "knowledge: caching a parsed symbol index failed", slog.String("index", decl.path), slog.String("error", err.Error()))
+		}
+	}
+	return syms, nil
+}
+
+// The cached parse is gob: the key first, so a stale file is rejected before its records
+// are decoded, then the records. gob rather than JSON because this is a private cache
+// read back only by the binary that wrote it (the key names that binary), and it decodes
+// the record slice several times faster.
+func readParsedSymbolIndex(path, key string) ([]types.KnowledgeSymbol, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	dec := gob.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+	var got string
+	if dec.Decode(&got) != nil || got != key {
+		return nil, false
+	}
+	var syms []types.KnowledgeSymbol
+	if dec.Decode(&syms) != nil {
+		return nil, false
+	}
+	return syms, true
+}
+
+func writeParsedSymbolIndex(path, key string, syms []types.KnowledgeSymbol) error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(key); err != nil {
+		return err
+	}
+	if err := enc.Encode(syms); err != nil {
+		return err
+	}
+	return file.WriteFileAtomic(path, buf.Bytes(), 0o644)
+}
+
+// foldBinary folds the running magus binary's identity into h, reporting false when the
+// binary cannot be located, in which case nothing keyed on it may be trusted.
+func foldBinary(h *knowledge.InputHash) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	h.Binary(exe)
+	return true
 }
 
 // SymbolGaps reports every project that declares a SCIP index magus could not read, so a

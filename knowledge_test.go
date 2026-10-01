@@ -863,6 +863,60 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 	}
 }
 
+// A domain rebuild reads no SCIP index, however many are declared; only a symbol class
+// rebuild does.
+func TestGatherKnowledgeInputsReadsSymbolsOnlyForTheirClasses(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	projects, spells := goWorkspace("pkg/a")
+	src := knowledgeSources{cfg: config.Config{}, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
+		tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler)}
+
+	domain := gatherKnowledgeInputs(ctx, src, false, knowledge.DefaultClasses)
+	assert.Nil(t, domain.Symbols)
+	assert.NoDirExists(t, filepath.Join(knowledge.StoreDir(cacheDir), "inputs", "scip"), "nothing parsed, so nothing cached")
+
+	lazy := gatherKnowledgeInputs(ctx, src, false, []knowledge.ShardClass{knowledge.ClassSymbols})
+	assert.Contains(t, lazy.Symbols, "pkg/a")
+}
+
+// TestParseSymbolIndexCachedReparsesOnlyAMovedIndex: the parse is reused while the index
+// file's identity holds, and redone the moment it moves.
+func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	index := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	writeSCIP(t, index)
+	settled := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(index, settled, settled))
+	projects, spells := goWorkspace("pkg/a")
+	in := ingest(config.Config{}, root, cacheDir, projects, spells)
+	decl := symbolIndexDeclarations(ctx, in)[0]
+
+	first, err := parseSymbolIndexCached(ctx, in, decl)
+	require.NoError(t, err)
+	require.NotEmpty(t, first)
+
+	// Same size and mtime, different bytes: only a reparse could notice, so a match proves
+	// the parse came from the cache.
+	good, err := os.ReadFile(index)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(index, bytes.Repeat([]byte{0xff}, len(good)), 0o644))
+	require.NoError(t, os.Chtimes(index, settled, settled))
+	cached, err := parseSymbolIndexCached(ctx, in, decl)
+	require.NoError(t, err)
+	assert.Equal(t, first, cached)
+
+	moved := settled.Add(time.Minute)
+	require.NoError(t, os.Chtimes(index, moved, moved))
+	_, err = parseSymbolIndexCached(ctx, in, decl)
+	var decodeErr symbolDecodeError
+	assert.ErrorAs(t, err, &decodeErr, "a moved index is parsed again, and this one no longer decodes")
+}
+
 // TestBuildKnowledgeGraphAnswersFromTheStore drives the read path end to end: a second
 // build with nothing changed reads the store and agrees with the first, and an edit is
 // seen by the next build rather than served stale.
