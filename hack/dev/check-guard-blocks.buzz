@@ -23,7 +23,7 @@ final HELP = "cost: one hook process per call per host, about a second each; the
     + "lets every call through, and a host reads a hook that cannot start as a non-blocking error.\n"
     + "A host with no hook config, such as opencode, is reported, not failed.\n"
     + "The edit case first replays `./magus job exec` for the job taken here, so the guard binds a replay identity to it.\n"
-    + "PATH is this shell's; a host that starts hooks with another PATH can still miss the launcher.";
+    + "PATH is this shell's; a host whose hooks find magus on PATH (codex, cursor) can still miss it under another.";
 // Claude Code's own limit for an entry that names none, in seconds.
 final DEFAULT_TIMEOUT = 60;
 // The prefix the hook glue opens its unavailable and could-not-judge notices with.

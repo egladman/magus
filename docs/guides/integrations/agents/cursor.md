@@ -177,7 +177,7 @@ script also accepts `file_path`.
 // the shell commands the guard already judges, and gated on preToolUse, because
 // a deny has to land before the tool runs.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 // magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
@@ -558,7 +558,7 @@ fun main(args: [str]) > void {
         unnamed(eventName);
         return;
     }
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"));
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(sessionOf(event), family: "unavailable", file: "cursor-hook.buzz")) {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;

@@ -2077,6 +2077,8 @@ var guardTemplateBasenames = []string{
 	// compacted session a brief the current binary would not have written, and the only
 	// sign is a model working from a summary that looked complete.
 	"magus-rehydrate.buzz",
+	// Judges nothing; a stale copy sets PATH the way an older config expected.
+	"magus-session.buzz",
 }
 
 // workspaceHarnesses returns magusfile-wired harness spell names when ws

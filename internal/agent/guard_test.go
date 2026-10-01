@@ -42,6 +42,7 @@ var hookTemplates = []string{
 	"magus-observe.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
+	"magus-session.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	"opencode-plugin.ts",

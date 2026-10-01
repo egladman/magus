@@ -28,10 +28,10 @@ fun codex_skills_paths() > [str] {
 }
 
 // codex_buzz_command runs one Buzz glue script as a plain argv. The interpreter is PATH's
-// `magus`, a constant, so the committed config is the same on every machine. Unlike the
-// claude-code spell's claude_launch, nothing here prefers the checkout's build or refuses
-// the call when no magus resolves. Flags ride after `--`, which `magus buzz` forwards to
-// the script.
+// `magus`, a constant, so the committed config is the same on every machine. Codex
+// documents no project-directory variable for a hook, so unlike the claude-code spell
+// nothing here names the checkout's build or runs from its root with `-C`. Flags ride
+// after `--`, which `magus buzz` forwards to the script.
 fun codex_buzz_command(script: str, flags: [str]) > str {
     final base = "magus buzz -s docs/guides/integrations/agents/{script}.buzz";
     if (flags.len() == 0) { return base; }

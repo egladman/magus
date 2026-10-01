@@ -105,7 +105,7 @@
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 19
+// magus-guard-template: 20
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -211,9 +211,10 @@ final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 final AGENT_NAME_FLAG = "--agent-name";
 
 
-// findUp returns the nearest ancestor holding relative, or "" when there is none.
-fun findUp(relative: str) > str {
-    var dir = path\abs(".") catch "";
+// findUp returns the nearest ancestor of start holding relative, or "" when there is none.
+fun findUp(relative: str, start: str) > str {
+    var dir = start;
+    if (dir == "") { dir = path\abs(".") catch ""; }
     while (dir != "") {
         final candidate = "{dir}/{relative}";
         final found = fs\isFile(candidate) catch false;
@@ -247,7 +248,7 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
     if (pushRule == null) {
         return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command";
     }
-    final rules = findUp(".codex/rules/magus.rules");
+    final rules = findUp(".codex/rules/magus.rules", start: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (rules != "") {
         // A file that is THERE and unreadable is not the same as one that carries no
         // matching rule, and collapsing the two produced a deny whose stated reason was

@@ -258,6 +258,7 @@ var guardGlueScripts = []string{
 	"magus-observe.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
+	"magus-session.buzz",
 	"cursor-hook.buzz",
 }
 
@@ -447,6 +448,23 @@ func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
 		require.Error(t, err, "%v", args)
 		assert.Contains(t, err.Error(), "-C "+missing+": no such file or directory")
 	}
+}
+
+// The SessionStart entry runs from the root with -C, and that root is what goes on PATH.
+func TestSessionGlueAppendsTheWorkDirToTheEnvFile(t *testing.T) {
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	t.Chdir(t.TempDir())
+	envFile := filepath.Join(t.TempDir(), "env")
+	require.NoError(t, os.WriteFile(envFile, []byte("export A=1\n"), 0o644))
+
+	glue := []string{"-C", repo, "-s", "docs/guides/integrations/agents/magus-session.buzz", "--"}
+	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", envFile)))
+	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", "")), "no env file is nothing to do")
+
+	body, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "export A=1\nexport PATH=\""+repo+":$PATH\"\n", string(body))
 }
 
 func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
