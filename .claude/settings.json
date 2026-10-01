@@ -1,4 +1,7 @@
 {
+  "env": {
+    "GOEXPERIMENT": "jsonv2"
+  },
   "hooks": {
     "PostToolUse": [
       {
