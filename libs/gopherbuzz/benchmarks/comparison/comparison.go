@@ -375,8 +375,8 @@ while (step < 10000) {
   while (i < n) {
     var j = i + 1;
     while (j < n) {
-      var dx = x[i] - x[j]; var dy = y[i] - y[j]; var dz = z[i] - z[j];
-      var d2 = dx * dx + dy * dy + dz * dz; var dist = math.sqrt(d2); var mag = dt / (d2 * dist);
+      final dx = x[i] - x[j]; final dy = y[i] - y[j]; final dz = z[i] - z[j];
+      final d2 = dx * dx + dy * dy + dz * dz; final dist = math\sqrt(d2); final mag = dt / (d2 * dist);
       vx[i] = vx[i] - dx * m[j] * mag; vy[i] = vy[i] - dy * m[j] * mag; vz[i] = vz[i] - dz * m[j] * mag;
       vx[j] = vx[j] + dx * m[i] * mag; vy[j] = vy[j] + dy * m[i] * mag; vz[j] = vz[j] + dz * m[i] * mag;
       j = j + 1;

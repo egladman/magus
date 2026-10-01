@@ -251,6 +251,72 @@ func TestExtraStringWorkloadsAgree(t *testing.T) {
 	}
 }
 
+// TestBuzzWorkloadsCompile compiles every workload's gopherbuzz source down the
+// same path its benchmark takes, so a checker change that rejects one fails here
+// instead of leaving a hole in the next benchmark run (NBody went missing that
+// way when unassigned `var` locals became an error).
+func TestBuzzWorkloadsCompile(t *testing.T) {
+	ctx := context.Background()
+	for _, w := range workloads {
+		t.Run(w.name, func(t *testing.T) {
+			if !w.session {
+				prog, err := buzz.ParseEmbedded(w.bzHot)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if _, err := buzz.CompileWith(prog, buzz.CompileOptions{}); err != nil {
+					t.Fatalf("compile: %v", err)
+				}
+				return
+			}
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			defer sess.Close()
+			if w.bzStd {
+				buzzstd.Register(sess)
+			}
+			if err := sess.Exec(ctx, w.bzSetup); err != nil {
+				t.Fatalf("define: %v", err)
+			}
+			if _, err := sess.Compile(w.bzHot); err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+		})
+	}
+}
+
+// TestBuzzWorkloadsCompile compiles every workload's gopherbuzz source down the
+// same path its benchmark takes, so a checker change that rejects one fails here
+// instead of leaving a hole in the next benchmark run (NBody went missing that
+// way when unassigned `var` locals became an error).
+func TestBuzzWorkloadsCompile(t *testing.T) {
+	ctx := context.Background()
+	for _, w := range workloads {
+		t.Run(w.name, func(t *testing.T) {
+			if !w.session {
+				prog, err := buzz.ParseEmbedded(w.bzHot)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if _, err := buzz.CompileWith(prog, buzz.CompileOptions{}); err != nil {
+					t.Fatalf("compile: %v", err)
+				}
+				return
+			}
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			defer sess.Close()
+			if w.bzStd {
+				buzzstd.Register(sess)
+			}
+			if err := sess.Exec(ctx, w.bzSetup); err != nil {
+				t.Fatalf("define: %v", err)
+			}
+			if _, err := sess.Compile(w.bzHot); err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+		})
+	}
+}
+
 func workloadByName(t *testing.T, name string) workload {
 	t.Helper()
 	for _, w := range workloads {
