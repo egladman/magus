@@ -24,11 +24,11 @@ export fun bootstrapFigure() > figure\Figure !> any {
             title: "One go run, then magus builds magus",
             eyebrow: "bootstrap",
             desc: "In a checkout with no ./magus, the guard's raw-tool rule advises exactly one "
-                + "command through, alone on its line: go run -trimpath ./cmd/magus run go-build "
-                + "--no-cache ., which runs the real go-build target. It regenerates the spell "
-                + "bytecode first and links a stamp of the sources the binary was built from. "
-                + "Every other raw go command, a bare go build included, is refused and served that "
-                + "command; once ./magus exists the rule names ./magus run go-build . instead. The "
+                + "command through, alone on its line: GOEXPERIMENT=jsonv2 go run -trimpath "
+                + "./cmd/magus run go-build --no-cache ., which runs the real go-build target. It "
+                + "regenerates the spell bytecode first and links a stamp of the sources the binary "
+                + "was built from. Every other raw go command, a bare go build included, is refused "
+                + "and served that command; once ./magus exists the rule names ./magus run go-build . instead. The "
                 + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
                 + "the checkout, and when a binary can no longer load the tree the escape moves it "
                 + "aside, which is the one way back to the bootstrap.",

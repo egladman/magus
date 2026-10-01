@@ -111,7 +111,7 @@ const (
 
 // bootstrapCmd builds a first binary in a checkout no magus on hand can load; the guard
 // serves the same command.
-const bootstrapCmd = "go run -trimpath ./cmd/magus run go-build --no-cache ."
+const bootstrapCmd = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.

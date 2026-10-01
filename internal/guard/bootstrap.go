@@ -73,22 +73,32 @@ func (g goCall) buildRoot(cwd string) string {
 	return filepath.Join(cwd, g.chdir)
 }
 
-// bootstrapArgv is the one command a checkout of magus with no binary runs to get one: the
-// real go-build target, driven by a magus compiled on the fly. The target's own key cannot
-// express the embedded-spell ordering, so its cache is bypassed; Go's content-addressed
-// build cache stays on, and -trimpath matches the target's build so packages compile once.
-var bootstrapArgv = []string{"go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}
+// bootstrapGoArgv is the go command a checkout of magus with no binary runs to get one:
+// the real go-build target, driven by a magus compiled on the fly. The target's own key
+// cannot express the embedded-spell ordering, so its cache is bypassed; Go's
+// content-addressed build cache stays on, and -trimpath matches the target's build so
+// packages compile once.
+var bootstrapGoArgv = []string{"go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}
+
+// bootstrapEnv is the one prefix the bootstrap carries. internal/json refuses to compile
+// without the experiment, and a fresh checkout cannot count on mise to set it; the
+// go-build target sets it for the builds it runs.
+const bootstrapEnv = "GOEXPERIMENT=jsonv2"
+
+// bootstrapArgv is the bootstrap as a shell line spells it, prefix first. The prefix is an
+// assignment, so it runs through a shell, never through exec.
+var bootstrapArgv = slices.Concat([]string{bootstrapEnv}, bootstrapGoArgv)
 
 var bootstrapCommand = strings.Join(bootstrapArgv, " ")
 
 const bootstrapWhy = "it runs the real go-build target (generate steps and stamped link) past a magus cache that cannot key it, while Go's build cache stays on."
 
-// bootstrapsMagus reports the one command the raw-tool rule exempts, bootstrapArgv, run in
+// bootstrapsMagus reports the go command the raw-tool rule exempts, bootstrapGoArgv, run in
 // the root it builds. The package may be spelled `cmd/magus` with or without `./` or a
 // trailing slash; any other flag, package or program argument is an ordinary `go run` and
-// stays denied.
+// stays denied. The prefix is the line's to carry; bootstrapLine checks it.
 func (g goCall) bootstrapsMagus() bool {
-	want := bootstrapArgv[1:]
+	want := bootstrapGoArgv[1:]
 	if len(g.args) != len(want) {
 		return false
 	}
@@ -164,25 +174,51 @@ func insidePackage(a string) bool {
 	return c != ".." && !strings.HasPrefix(c, "../")
 }
 
-// soleGoCommand reports a line that is one go command and nothing else: no pipe, chain,
-// redirect, wrapper or subshell, and no environment prefix but GOEXPERIMENT, which this
-// module's builds set.
-func soleGoCommand(command string, d Dialect) bool {
+// soleGoCall is the line's call when it is one go command and nothing else: no pipe,
+// chain, redirect, wrapper or subshell. Its environment prefix is left to the caller.
+func soleGoCall(command string, d Dialect) (*syntax.CallExpr, bool) {
 	f, err := parseFile(command, d)
 	if err != nil || len(f.Stmts) != 1 {
-		return false
+		return nil, false
 	}
 	st := f.Stmts[0]
 	call, ok := st.Cmd.(*syntax.CallExpr)
 	if !ok || st.Negated || st.Background || st.Coprocess || len(st.Redirs) > 0 || len(call.Args) == 0 {
+		return nil, false
+	}
+	return call, literalWord(call.Args[0].Parts) == "go"
+}
+
+// goExperiment reports a plain GOEXPERIMENT assignment and the value it sets.
+func goExperiment(a *syntax.Assign) (string, bool) {
+	if a.Name == nil || a.Name.Value != "GOEXPERIMENT" || a.Append || a.Naked || a.Array != nil || a.Index != nil {
+		return "", false
+	}
+	if a.Value == nil {
+		return "", true
+	}
+	return literalWord(a.Value.Parts), true
+}
+
+// soleGoCommand reports a line that is one go command and nothing else, with no
+// environment prefix but GOEXPERIMENT, which this module's builds set.
+func soleGoCommand(command string, d Dialect) bool {
+	call, ok := soleGoCall(command, d)
+	return ok && !slices.ContainsFunc(call.Assigns, func(a *syntax.Assign) bool {
+		_, ok := goExperiment(a)
+		return !ok
+	})
+}
+
+// bootstrapLine reports a line that is one go command prefixed by bootstrapEnv and
+// nothing else. Whether the command is the bootstrap is bootstrapsMagus's to say.
+func bootstrapLine(command string, d Dialect) bool {
+	call, ok := soleGoCall(command, d)
+	if !ok || len(call.Assigns) != 1 {
 		return false
 	}
-	for _, a := range call.Assigns {
-		if a.Name == nil || a.Name.Value != "GOEXPERIMENT" || a.Append || a.Naked || a.Array != nil || a.Index != nil {
-			return false
-		}
-	}
-	return literalWord(call.Args[0].Parts) == "go"
+	v, ok := goExperiment(call.Assigns[0])
+	return ok && "GOEXPERIMENT="+v == bootstrapEnv
 }
 
 // cannotLoad reports whether the workspace at root fails to load with MGS1021 for the
@@ -210,15 +246,17 @@ func hasMagusBinary(root string) bool {
 const ownRebuild = "`./magus run go-build .`"
 
 // ownBuildOutcome is the correction rankOwnBuild applies to a raw-tool deny of a go
-// command in a checkout of magus: whether the call is the bootstrap, whether root already
-// has a binary, whether the call shared its line with something else, and the verdict to
-// use when the bootstrap stands alone in a root with none.
+// command in a checkout of magus: whether the call is the bootstrap, whether its line
+// carries exactly the bootstrap's prefix, whether root already has a binary, whether the
+// call shared its line with something else, and the verdict to use when the bootstrap
+// stands alone in a root with none.
 type ownBuildOutcome struct {
 	root string
 	// bootstrapArgv is the bootstrap as the call's directory runs it: with -C when root
 	// lies elsewhere.
 	bootstrapArgv []string
 	bootstrap     bool
+	prefixed      bool
 	link          bool
 	hasBinary     bool
 	multipleCmds  bool
@@ -242,7 +280,7 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	case o.bootstrap && o.multipleCmds:
 		v.Deny += "\nThe bootstrap is exempt only alone on its line."
 		return v
-	case o.bootstrap:
+	case o.bootstrap && o.prefixed:
 		return o.advisory
 	}
 	v.Deny += "\n" + o.root + " has no magus binary yet. Get one with `" + strings.Join(o.bootstrapArgv, " ") + "`: " + bootstrapWhy
@@ -257,7 +295,7 @@ func ownBuildOutcomeFor(ctx context.Context, deps Dependencies, command string, 
 	argv := bootstrapArgv
 	if root != filepath.Clean(cwd) {
 		where = root
-		argv = append([]string{"go", "-C", root}, bootstrapArgv[1:]...)
+		argv = slices.Concat([]string{bootstrapEnv, "go", "-C", root}, bootstrapGoArgv[1:])
 	}
 	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
@@ -267,6 +305,7 @@ func ownBuildOutcomeFor(ctx context.Context, deps Dependencies, command string, 
 		root:          root,
 		bootstrapArgv: argv,
 		bootstrap:     call.bootstrapsMagus(),
+		prefixed:      bootstrapLine(command, d),
 		link:          call.linksMagus(),
 		hasBinary:     hasMagusBinary(root),
 		multipleCmds:  multipleCmds,
@@ -285,7 +324,7 @@ func ownBuildOutcomeFor(ctx context.Context, deps Dependencies, command string, 
 
 // ownBuildVerdict is the BOOTSTRAP correction for a go command aimed at magus's own
 // module: a fresh checkout has no ./magus, and every route to one runs through magus or
-// a raw toolchain command. bootstrapArgv, alone on its line, in a root with no binary
+// a raw toolchain command. bootstrapCommand, alone on its line, in a root with no binary
 // yet, is advised through instead of denied, and every other raw go command there is
 // served it. Nil when the line holds no go command denied in a checkout of magus.
 //

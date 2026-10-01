@@ -309,7 +309,7 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
 // rebuild itself.
 final deadlockEscape = "The host declarations moved, so the next load may fail with MGS1021, and a "
     + "binary that cannot load the tree cannot rebuild itself. The escape, one command at a time: "
-    + "`mv magus magus.old`, then `go run -trimpath ./cmd/magus run go-build --no-cache .`, which runs "
+    + "`mv magus magus.old`, then `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`, which runs "
     + "the real go-build target past a magus cache that cannot key it (if that fails with `undefined:` in a "
     + "gen/ package, the merge kept one side's generated code: restore those gen/ directories from "
     + "the side that produced them, or three-way merge them with `git merge-file`, then run it again).";

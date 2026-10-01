@@ -43,10 +43,11 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		// A lone word in a span names a program; it teaches no command line.
 		{"single word", "The script pipes the list into `cat`, then `grep`.", ""},
 		// Judged as the worker's fresh tree meets it, which has no binary yet.
-		{"bootstrap span", "Bootstrap with `go run -trimpath ./cmd/magus run go-build --no-cache .` first.", ""},
-		{"bootstrap block", "Setup:\n```bash\ngo run -trimpath ./cmd/magus run go-build --no-cache .\n./magus run go-build . -s\n```\n", ""},
-		{"bootstrap sharing its line", "Run `go run -trimpath ./cmd/magus run go-build --no-cache . && ls`.", denyRuleRawTool},
-		{"bootstrap beside a denied line", "Setup:\n```bash\ngo run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
+		{"bootstrap span", "Bootstrap with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` first.", ""},
+		{"bootstrap block", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\n./magus run go-build . -s\n```\n", ""},
+		{"bootstrap without its prefix", "Bootstrap with `go run -trimpath ./cmd/magus run go-build --no-cache .` first.", denyRuleRawTool},
+		{"bootstrap sharing its line", "Run `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache . && ls`.", denyRuleRawTool},
+		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
 		v := denyBriefCommand(testDependencies(), tt.brief)

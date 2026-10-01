@@ -292,7 +292,7 @@ func withoutBootstrap(cmd string) string {
 	for _, l := range lines {
 		cmds, ok := ParseCommandsDialect(l, DialectBash)
 		if ok && len(cmds) == 1 {
-			if call, isGo := readGoCall(cmds[0]); isGo && call.chdir == "" && call.bootstrapsMagus() {
+			if call, isGo := readGoCall(cmds[0]); isGo && call.chdir == "" && call.bootstrapsMagus() && bootstrapLine(l, DialectBash) {
 				continue
 			}
 		}

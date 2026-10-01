@@ -97,7 +97,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 			"every other call still runs on the built-in rules.\n" +
 			"The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
 			"If that cannot load the tree either, move it aside and bootstrap, one command at a time: `mv magus magus.old`, " +
-			"`go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.",
+			"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.",
 		Rule: workspaceCommandRule,
 	}, v)
 }

@@ -175,7 +175,7 @@ func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
 		"and the workspace declares no required_version floor.\n"+
 		"Fix it:\n"+
 		"  - released binary: magus self update\n"+
-		"  - built from source, in the checkout it came from: go run -trimpath ./cmd/magus run go-build --no-cache .\n",
+		"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\n",
 		"an unstamped build was built from source, so a rebuild is among the fixes")
 }
 
@@ -221,7 +221,7 @@ func TestStaleBuildAdvice(t *testing.T) {
 	t.Parallel()
 	const selfUpdate = "Fix it:\n  - released binary: magus self update"
 	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
-	const bootstrap = "\n  - if that cannot load the tree either: mv magus magus.old, then go run -trimpath ./cmd/magus run go-build --no-cache ."
+	const bootstrap = "\n  - if that cannot load the tree either: mv magus magus.old, then GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 	for name, tc := range map[string]struct {
 		build StaleBuild
 		want  string
@@ -241,7 +241,7 @@ func TestStaleBuildAdvice(t *testing.T) {
 		"a dev build outside a source tree": {
 			build: StaleBuild{Running: "v0.4.3-1-gabc", Floor: ">= 0.4.4"},
 			want: "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate +
-				"\n  - built from source, in the checkout it came from: go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"\n  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		"a dev build that meets the floor": {
 			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", SourceTree: true},

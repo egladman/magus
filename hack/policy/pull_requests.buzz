@@ -904,7 +904,7 @@ fun calibration() > [Fixture] {
             body = "MGS1040 printed one line per occurrence and repeated its stale-binary paragraph for every unknown key.\n"
                 + "\n"
                 + "- Each unknown key prints once, by dotted path (`watch.env`), with every line it appears on and any suggestion or rename.\n"
-                + "- The version gap is stated once, with the running version and the workspace floor, followed by runnable fixes: self update, the checkout's go-build, and the `go run -trimpath ./cmd/magus run go-build --no-cache .` bootstrap for a dev build.\n"
+                + "- The version gap is stated once, with the running version and the workspace floor, followed by runnable fixes: self update, the checkout's go-build, and the `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` bootstrap for a dev build.\n"
                 + "- The workspace that holds the file decides the relative path and the source-tree fixes, not the cwd, so `--root` and user-global files render correctly.\n"
                 + "- `config.UnknownKeysError` carries the keys and lines as data.\n"
                 + "- A test pins that 20 keys on 60 lines all reach both the message and the struct.",

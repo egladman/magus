@@ -136,7 +136,7 @@ Measured during the pass:
 | Every VCS backend honors exclusions. git: `.gitattributes` keeps positive output patterns and adds one `!merge !linguist-generated` line per tracked file an exclusion carves out, computed from the real files, because gitattributes has no exclusion and last match wins. Mercurial and Sapling: a carved file is routed to `:merge` ahead of the output patterns. jj, which routes no paths: `vcs resolve` picks the files through the same typed glob | done |
 | The hand-written runtime files move out of `internal/interp/bindings/gen/` into their own package, `internal/interp/bindings/ffi`; the exclusion feature stays for tests and shared directories | done |
 | Mercurial's and Sapling's fallback no longer picks the magus merge tool for every conflicted file; the Mercurial-family backend is renamed to `vcs/mercurial.go` | done |
-| A fresh checkout bootstraps with one command, `go run -trimpath ./cmd/magus run go-build --no-cache .`: the real target, magus cache bypassed, Go cache kept | done |
+| A fresh checkout bootstraps with one command, `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`: the real target, magus cache bypassed, Go cache kept | done |
 | The root project declares its dependency on `proto` (it uses the generated Go code), which the graph lacked; `split-change` found it | done |
 | `magus --root <dir> buzz` reads the VCS of `<dir>`, not of the process's working directory | done |
 | `vcs\ref()` on a detached checkout returns null (`str?`), so every caller must handle "no name"; it throws only on a real VCS error | done |

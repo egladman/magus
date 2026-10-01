@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -26,7 +26,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -36,7 +36,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -46,7 +46,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -56,7 +56,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -66,7 +66,17 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Grep|Glob"
+      },
+      {
+        "hooks": [
+          {
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -76,7 +86,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads",
             "timeout": 10,
             "type": "command"
           }
@@ -98,7 +108,17 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
+            "command": "[ -z \"$CLAUDE_ENV_FILE\" ] || printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\" >> \"$CLAUDE_ENV_FILE\"; [ -x \"$CLAUDE_PROJECT_DIR/magus\" ] || command -v magus >/dev/null || echo 'no ./magus in this checkout and no magus on PATH, so every guarded tool call is refused until one exists; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .'",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -110,7 +130,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -121,7 +141,7 @@
       {
         "hooks": [
           {
-            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 1; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }

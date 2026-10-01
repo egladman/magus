@@ -126,8 +126,10 @@ fun ownBinaryHint(root: str, disk: Disk) > str {
 // --no-cache because that target's key cannot express the embedded-spell ordering.
 final bootstrapArgs = ["run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."];
 
+// bootstrapIn is the bootstrap run from outside root. GOEXPERIMENT=jsonv2 because magus
+// refuses to compile without it, and a fresh checkout cannot count on mise to set it.
 fun bootstrapIn(root: str) > str {
-    return "go -C {root} " + bootstrapArgs.join(" ");
+    return "GOEXPERIMENT=jsonv2 go -C {root} " + bootstrapArgs.join(" ");
 }
 
 // bootstrap: bootstrapArgs exactly, the package spelled `cmd/magus` with or without `./`
@@ -190,7 +192,7 @@ test "another checkout's binary run against this one is denied, naming this one'
         std\assert(denial.indexOf("`/w/b/magus --root /w/b ...`") != null, message: "names the right binary");
     }
     final bare = binaryDenial([["/w/a/magus", "ls"]], where: inB, disk: fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a"]));
-    std\assert(bare.indexOf("go -C /w/b run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "names the bootstrap when there is no binary");
+    std\assert(bare.indexOf("GOEXPERIMENT=jsonv2 go -C /w/b run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "names the bootstrap when there is no binary");
 }
 
 test "a binary run against its own checkout, on PATH, unknown, or on a non-magus tree stays silent" {
@@ -258,6 +260,6 @@ test "the bootstrap into another checkout passes only while it has no binary" {
     ]) {
         final denial = binaryDenial([argv], where: inB, disk: fresh);
         std\assert(denial.indexOf("run <target>") != null, message: "not the bootstrap: " + argv.join(" "));
-        std\assert(denial.indexOf("go -C /w/a run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "serves the bootstrap");
+        std\assert(denial.indexOf("GOEXPERIMENT=jsonv2 go -C /w/a run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "serves the bootstrap");
     }
 }

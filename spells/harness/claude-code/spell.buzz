@@ -31,7 +31,7 @@ fun claude_skills_paths() > [str] {
 // internal/ward/version.go. The guard exempts exactly this line in a root with no ./magus
 // yet (internal/guard/catalog.go), and claude_launch exempts it too: a launcher that
 // refused it would leave a fresh checkout no way to get the binary it is asking for.
-final BOOTSTRAP = "go run -trimpath ./cmd/magus run go-build --no-cache .";
+final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
 
 // Exit 2 is the only code Claude Code treats as a block. Any other is a non-blocking
 // error and the tool call runs unjudged, which is how a session once ran every guard
