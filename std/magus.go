@@ -1335,13 +1335,13 @@ func MagusVCSCheckpoint(ctx context.Context) (types.VCSCheckpoint, error) {
 // positional url was unreachable without also passing a cause.
 func MagusRaise(_ context.Context, code, message string, opts map[string]any) error {
 	if code == "" {
-		return errors.New("magus.raise: needs a code, e.g. \"ACME1001\" - it is the stable identifier a caller branches on")
+		return errors.New(`magus\raise: needs a code, e.g. "ACME1001" - it is the stable identifier a caller branches on`)
 	}
 	if message == "" {
-		return fmt.Errorf("magus.raise: %s needs a message; a code is an identifier, not a sentence", code)
+		return fmt.Errorf(`magus\raise: %s needs a message; a code is an identifier, not a sentence`, code)
 	}
 	if strings.HasPrefix(strings.ToUpper(code), "MGS") {
-		return fmt.Errorf("magus.raise: %q is in magus's own MGS namespace, which is a closed catalog; pick a prefix for this workspace instead", code)
+		return fmt.Errorf(`magus\raise: %q is in magus's own MGS namespace, which is a closed catalog; pick a prefix for this workspace instead`, code)
 	}
 	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
 	// url field is captured at construction from the domain's function, never set later.
@@ -1856,10 +1856,10 @@ func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
 		var saved types.Diff
 		raw, err := os.ReadFile(from)
 		if err != nil {
-			return types.Diff{}, fmt.Errorf("magus.diff: read opts.from: %w", err)
+			return types.Diff{}, fmt.Errorf(`magus\diff: read opts.from: %w`, err)
 		}
 		if err := json.Unmarshal(raw, &saved); err != nil {
-			return types.Diff{}, fmt.Errorf("magus.diff: decode opts.from %s (expected `magus diff -o json` output): %w", from, err)
+			return types.Diff{}, fmt.Errorf("magus\\diff: decode opts.from %s (expected `magus diff -o json` output): %w", from, err)
 		}
 		return saved, nil
 	}

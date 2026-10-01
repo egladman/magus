@@ -418,7 +418,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			// start as a literal program name. Nudge toward proc.shell, but only on
 			// the not-found failure of a shell-shaped command (proc.exec stays the
 			// right, faster default for a plain program).
-			if label == "proc.exec" && looksLikeShellCommand(cmd) {
+			if label == `proc\exec` && looksLikeShellCommand(cmd) {
 				interactive.Emit(os.Stderr, fmt.Sprintf(
 					"%q looks like a shell command line, but proc\\exec runs a single program directly with no shell; "+
 						"use proc\\shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
@@ -480,7 +480,7 @@ func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map
 			return types.ExecResult{}, err
 		}
 	}
-	return runResult(ctx, cmd, args, wd, "proc.exec", cmd, opts)
+	return runResult(ctx, cmd, args, wd, `proc\exec`, cmd, opts)
 }
 
 // OsShell builds the argv that runs line through the platform shell and returns
@@ -552,7 +552,7 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // opts keys: backoff_ms (initial delay, default 500), max_backoff_ms (cap, default 30000).
 func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (any, error) {
 	if fn == nil {
-		return nil, fmt.Errorf("os.retry: fn must not be nil")
+		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
 	backoffMs := 500.0
 	maxBackoffMs := 30000.0
@@ -592,7 +592,7 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 			}
 		}
 	}
-	return nil, fmt.Errorf("os.retry: %d attempt(s): %w", max, lastErr)
+	return nil, fmt.Errorf(`os\retry: %d attempt(s): %w`, max, lastErr)
 }
 
 // retryFloat extracts a float64 from a Go any value (int, int64, or float64).

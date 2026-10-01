@@ -636,7 +636,7 @@ func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	_, err := OsRetry(context.Background(), 3, cb, covFastRetry)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the caller needs the reason, not just the count")
-	assert.Contains(t, err.Error(), "os.retry: 3 attempt(s)")
+	assert.Contains(t, err.Error(), `os\retry: 3 attempt(s)`)
 	assert.Equal(t, 3, cb.calls)
 }
 

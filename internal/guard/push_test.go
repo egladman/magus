@@ -287,15 +287,23 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 }
 
 // TestUngatedPushDeniesALeasedWorker pins that a bound session is never offered the prompt:
-// approving it would publish from a boundary that does not own the branch.
+// approving it would publish from a boundary that does not own the branch. lease-vcs
+// refuses a worker's push before the push gate grades it, since pushing stays with the
+// orchestrator whatever the gate record says, so the gate's own worker arm is pinned
+// directly.
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	lease := narrowLease()
 	v := judgePush(t, "", lease.ID, lease)
 	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Equal(t, string(denyRuleLeaseVCS), v.Rule)
 	assert.Contains(t, v.Reason, lease.ID)
-	assert.Contains(t, v.Reason, "workers do not publish")
+	assert.Contains(t, v.Reason, "Pushing, stashing")
 	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+
+	decision, reason := gradePushWithoutGate(gateAbsent, "abc1234", lease.ID)
+	assert.Equal(t, "deny", decision)
+	assert.Contains(t, reason, lease.ID)
+	assert.Contains(t, reason, "workers do not publish")
 }
 
 // TestGatedPushIsNeverAsked pins that the prompt appears only when consent is needed.

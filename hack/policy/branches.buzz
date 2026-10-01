@@ -472,9 +472,8 @@ export fun judgeName(name: str, topic: Topic) > Verdict {
         } else {
             failures.append(Failure{ rule = "namespace", why = "`{head}/` puts the branch in a namespace; branches here are one flat list of topics" });
         }
-        while (rest.indexOf("/") != null) {
-            rest = rest.sub(rest.indexOf("/")! + 1);
-        }
+        final segments = rest.split("/");
+        rest = segments[segments.len() - 1];
     }
     if (rest != rest.lower()) {
         failures.append(Failure{ rule = "case", why = "uppercase letters; git and every filesystem that folds case can disagree about the name" });

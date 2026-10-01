@@ -2645,7 +2645,8 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 	for i, rel := range []string{"internal/ledger/store.go", "cmd/magus/main.go"} {
 		preview := edit(rel, true)
 		assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), i, rel)
-		assert.Equal(t, edit(rel, false), preview, rel)
+		assert.NotContains(t, preview.Reason, verdictRefLine, rel)
+		assert.Equal(t, withoutVerdictRef(edit(rel, false)), preview, rel)
 	}
 	assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), 2, "the rename itself is recorded")
 }

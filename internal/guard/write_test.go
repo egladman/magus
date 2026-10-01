@@ -1052,6 +1052,8 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	assert.Equal(t, "advise", first.Decision)
 	assert.Equal(t, string(advisoryLeasedPath), first.Rule)
 	assert.Contains(t, first.Context, "if you are lease lease-a")
+	assert.NotContains(t, first.Context, "concurrent agent")
+	assert.Contains(t, first.Context, "whoever took it may be editing this file now", "fleetLeases registers lease-a with no checkout")
 
 	assert.Equal(t, "pass", write("s1", "internal/ledger/other.go").Decision, "the same lease, told once")
 	assert.Equal(t, "pass", write("s1", "internal/ledger/store.go").Decision)
@@ -1061,6 +1063,14 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	assert.Contains(t, other.Context, "if you are lease lease-b")
 
 	assert.Equal(t, string(advisoryLeasedPath), write("s2", "internal/ledger/store.go").Rule, "a new session has heard nothing")
+}
+
+// The holder of a leased path may be a person or an agent, so the advisory says where the
+// job was taken, or that nobody has taken it, and never guesses which.
+func TestHolderNoticeSaysWhereTheJobWasTaken(t *testing.T) {
+	assert.Contains(t, holderNotice(types.Job{Registered: 1, CheckoutRoot: "/src/ana"}), "whoever took it in /src/ana")
+	assert.Contains(t, holderNotice(types.Job{Registered: 1}), "whoever took it may be editing")
+	assert.Contains(t, holderNotice(types.Job{}), "nobody has taken it yet")
 }
 
 // entryFleet is an orchestrator lease and a worker forked beneath it, whose holder took

@@ -338,6 +338,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// so the database date `-version` prints reached targets that never run the
 			// scanner. See spells/golang/spell.buzz.
 			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -400,7 +401,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
+			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"}},
 	},
 	"markdown": {
 		Name:  "markdown",
@@ -446,9 +447,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"python": {
-		Name:               "python",
-		Needs:              []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
-		Tools:              map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"}},
+		Name:  "python",
+		Needs: []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
+		Tools: map[string]spells.Tool{
+			"python3":     {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
+			"scip-python": {Observe: spells.Command{Bin: "scip-python", Args: []string{"--version"}}},
+		},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
 		Syntax: &spells.Syntax{
@@ -496,9 +500,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"rust": {
-		Name:               "rust",
-		Needs:              []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
-		Tools:              map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"}},
+		Name:  "rust",
+		Needs: []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
+		Tools: map[string]spells.Tool{
+			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
+			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
+		},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -545,6 +552,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"scip-typescript": {Observe: spells.Command{Bin: "scip-typescript", Args: []string{"--version"}}},
 		},
 		Language:           "typescript",
 		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},

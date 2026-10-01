@@ -98,7 +98,7 @@ func record(kv ...any) vm.Value {
 func TestDecodeIsStrict(t *testing.T) {
 	block := func(open, close vm.Value) vm.Value { return record("open", open, "close", close) }
 	lang := func(comments vm.Value) vm.Value {
-		return record("name", str("go"), "comments", comments)
+		return record("name", str("go"), "syntax", record("comments", comments))
 	}
 
 	t.Run("a wrong kind names the field path", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestDecodeIsStrict(t *testing.T) {
 			block(str("/*"), vm.IntValue(1)),
 		}))
 		_, err := decode.DecodeLanguage(lang(comments))
-		require.EqualError(t, err, "language.comments.blockComments[1].close: want str, got int")
+		require.EqualError(t, err, "language.syntax.comments.blockComments[1].close: want str, got int")
 	})
 
 	t.Run("a wrong container kind names the Buzz type", func(t *testing.T) {
@@ -135,9 +135,14 @@ func TestDecodeIsStrict(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, spells.Language{Name: "go"}, got)
 
+		got, err = decode.DecodeLanguage(record("name", str("go"), "syntax", vm.Null))
+		require.NoError(t, err)
+		assert.Nil(t, got.Syntax)
+
 		got, err = decode.DecodeLanguage(lang(vm.Null))
 		require.NoError(t, err)
-		assert.Nil(t, got.Comments)
+		require.NotNil(t, got.Syntax)
+		assert.Nil(t, got.Syntax.Comments)
 	})
 
 	t.Run("nested records decode in full", func(t *testing.T) {
@@ -148,10 +153,10 @@ func TestDecodeIsStrict(t *testing.T) {
 		)
 		got, err := decode.DecodeLanguage(lang(comments))
 		require.NoError(t, err)
-		assert.Equal(t, spells.Language{Name: "go", Comments: &spells.CommentSyntax{
+		assert.Equal(t, spells.Language{Name: "go", Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{
 			LineComments:  []string{"//"},
 			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
 			Quotes:        []spells.Quote{{Open: "`", Close: "`", IgnoreEscape: true}},
-		}}, got)
+		}}}, got)
 	})
 }

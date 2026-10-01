@@ -855,6 +855,7 @@ func TestVendoredHostSchemasMatchTheirRecordedDigest(t *testing.T) {
 var storeMechanicsAllowed = map[string]string{
 	"internal/cache/artifact.go:copyBlob":                    "streams a blob into the CAS, hashing as it copies",
 	"internal/cache/snapshot.go:Cache.snapshotOne":           "streams a blob into the CAS, hashing as it copies",
+	"internal/maintenance/buildlock.go:AcquireGraphBuild":    "a graph build lock waits on the build it names and is held across a whole build",
 	"internal/queue/verdicts.go:VerdictDir.WritePlan":        "publishes a directory, not a file",
 	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
 	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",

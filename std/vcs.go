@@ -256,7 +256,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 	}
 	root, err := v.Root(ctx, vcsDir(ctx))
 	if err != nil {
-		return "", fmt.Errorf("vcs.root: %w", err)
+		return "", fmt.Errorf(`vcs\root: %w`, err)
 	}
 	return root, nil
 }
@@ -548,12 +548,12 @@ func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.Exec
 	}
 	if bin == "" {
 		return types.ExecResult{}, types.DiagnosticErrorf(types.VCSUnavailable,
-			"vcs.cmd: no VCS is resolved for this directory, so there is no binary to run")
+			`vcs\cmd: no VCS is resolved for this directory, so there is no binary to run`)
 	}
 	dir := resolveDir(ctx, optStringDefault(opts, "dir", ""))
 	v, _ := resolveVCS(ctx)
 	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir); err != nil {
 		return types.ExecResult{}, err
 	}
-	return runResult(ctx, bin, args, dir, "vcs.cmd", bin, opts)
+	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, opts)
 }

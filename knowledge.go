@@ -1806,7 +1806,7 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 		return err
 	}
 	fresh := !slices.ContainsFunc(m.SymbolIndexStatus(ctx), func(s types.SymbolIndexStatus) bool {
-		return s.Freshness == types.SymbolIndexStale
+		return s.Freshness == types.SymbolIndexStale || s.Freshness == types.SymbolIndexUnvouched
 	})
 	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh, at)
 }

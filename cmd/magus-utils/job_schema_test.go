@@ -48,6 +48,8 @@ type Check struct {
 	Target  string   @json:"target"@
 	Project string   @json:"project,omitempty"@
 	Args    []string @json:"args,omitempty"@
+	// Bare is optional by omitzero alone, the spelling jsonv2 drops a false by.
+	Bare bool @json:"bare,omitzero"@
 }
 `
 
@@ -94,6 +96,10 @@ const wantFixtureSchema = `{
           "items": {
             "type": "string"
           }
+        },
+        "bare": {
+          "type": "boolean",
+          "description": "Bare is optional by omitzero alone, the spelling jsonv2 drops a false by."
         }
       },
       "description": "Check is the one check this lease runs."

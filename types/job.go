@@ -89,7 +89,7 @@ type LeaseCheck struct {
 	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
 	// the workspace's default_charms satisfies it: the charmless `generate` that compares
 	// against HEAD, in a workspace whose default is rw.
-	NoDefaultCharms bool `json:"no_default_charms,omitempty" yaml:"no_default_charms,omitempty"`
+	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
 }
 
 // PrimaryCompletionGateID names the existing singular check when it is projected

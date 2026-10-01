@@ -630,7 +630,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	} {
 		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir)
 		require.Error(t, err, "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "`vcs.cmd(", "%s %v", c.backend, c.args)
+		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
 	}
 }
@@ -686,9 +686,12 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 		"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
 
 	assert.Equal(t, refused, judge(write), "a write")
+	ref := verdictRef.FindString(reason)
+	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	assert.Equal(t, "magus workspace: your binding to job held-job ended when its checkout was removed; run `magus job exec <job>` from a checkout that exists to bind again.\n"+
 		"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
-		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.\n"+
+		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run."+
+		verdictRefLine+"magus query output "+ref+"\n"+
 		"see: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/", reason)
 	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
 	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")

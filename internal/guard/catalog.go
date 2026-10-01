@@ -97,7 +97,7 @@ var denyRuleDocs = []types.RuleDoc{
 		Catches: "the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill",
 		Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
 			"Six errors in one session, by an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
-			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
+			"It grades the session, not the file: one Skill(magus-buzz-lang) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
 	{Name: string(denyRulePushUngated), Decision: "deny",
 		Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
 		Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
@@ -256,7 +256,13 @@ var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleLeaseHarness), Decision: "deny", Catches: "a leased worker rewriting the harness skill trees that steer it"},
 	{Name: string(denyRuleLeaseRebind), Decision: "deny", Catches: "a leased worker rewriting who it is or what its own job row says"},
 	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned"},
-	{Name: string(denyRuleLeaseVCS), Decision: "deny", Catches: "a worker lease committing, pushing, stashing or reverting the tree it is landed from"},
+	{Name: string(denyRuleLeaseVCS), Decision: "deny",
+		Catches: "a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout",
+		Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
+			"A commit is the one exception: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
+			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
+			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite), Decision: "deny",
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
 		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back on both surfaces, a file write and a shell line, in the same words. " +
@@ -343,7 +349,7 @@ var advisoryDocs = []types.RuleDoc{
 	{Name: string(advisoryLeaseTerminal), Decision: "advise", Catches: "a call naming a lease whose row has already finished"},
 	{Name: string(advisoryLeasedPath), Decision: "advise",
 		Catches: "a write into paths a running lease owns, by a caller that names no lease",
-		Why: "The writer is either that lease, not saying so, or a second agent about to collide with it; magus cannot tell which, so it advises rather than refuses. " +
+		Why: "The writer is either that lease, not saying so, or someone about to collide with whoever took it, a person or not; magus cannot tell which, so it advises rather than refuses, and says where the job was taken. " +
 			"It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first."},
 	{Name: string(advisoryInstruction), Decision: "advise", Catches: "a write to a cross-host instruction file, which every session loads whole",
 		Why: "A cross-host instruction file is read in full at the start of every session on every host, so a sentence there costs context forever. " +

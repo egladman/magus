@@ -270,7 +270,7 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputName {
-		list.Overlaps = overlapFootprints(ctx, root, list.Jobs, list.Overlaps)
+		list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
 	}
 	switch opts.Format {
 	case outputName:
@@ -594,19 +594,6 @@ func jobHolderCell(row types.Job) string {
 		return filepath.Base(row.CheckoutRoot)
 	}
 	return "-"
-}
-
-// overlapFootprints compares what each overlapping pair has actually changed. Only the
-// overlaps pay for it: a plan with none reads no VCS at all.
-func overlapFootprints(ctx context.Context, root string, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
-	if len(overlaps) == 0 {
-		return overlaps
-	}
-	var driver types.VCSDriver
-	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.Source != types.VCSSourceDisabled {
-		driver = res.VCS
-	}
-	return job.OverlapFootprints(ctx, driver, rows, overlaps)
 }
 
 // overlapFootprintLine is the footprint verdict under an overlapping pair, or "" when

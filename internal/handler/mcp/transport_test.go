@@ -249,7 +249,10 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	jobs := job.NewStore(job.Location{CacheDir: m.CacheDir(), Root: m.Root()})
 	for _, row := range []types.Job{
 		{ID: "root/worker", WritePaths: []string{"internal/job"}, State: types.StateRunning},
-		{ID: "root/other", WritePaths: []string{"internal/guard", "internal/hint"}, State: types.StateRunning},
+		// A row that writes must name what grades it, or the store refuses the put before
+		// it reaches the lease check this test is about.
+		{ID: "root/other", WritePaths: []string{"internal/guard", "internal/hint"}, State: types.StateRunning,
+			Check: &types.LeaseCheck{Target: "test", Project: "."}},
 	} {
 		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)

@@ -14,5 +14,14 @@
   `magus\describe.<noun>`, `magus\describe.project` or `magus\describe.graph`.
 - **`magus lsp` completes module members after a backslash.** Completion triggers on `\`
   and `/` instead of `.` and `/`.
+- **Host errors name the call the way a script writes it.** Errors from `vcs\root`,
+  `vcs\cmd`, `os\retry`, `proc\exec`, `magus\raise` and `magus\diff` begin with the
+  backslash form instead of `vcs.root:` and the like.
+
+### Fixed
+
+- **A job row no longer stores `"no_default_charms": false`.** A check that does not opt
+  out of the default charms leaves the field out, as it did before the field existed, and
+  the job schema reads a field tagged `omitzero` as optional.
 </content>
 </invoke>

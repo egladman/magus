@@ -261,7 +261,9 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 		"MISE_CONFIG_DIR":           "/runner/mise-config",
 		"MISE_TRUSTED_CONFIG_PATHS": "/work:/tmp",
 	}, box)
-	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
+	require.NotEmpty(t, seen["MAGUS"])
+	assert.Equal(t, filepath.Dir(seen["MAGUS"])+string(os.PathListSeparator)+os.Getenv("PATH"), seen["PATH"],
+		"the inherited PATH, behind the running magus's own directory, so a bare magus in a hook is this build")
 	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])

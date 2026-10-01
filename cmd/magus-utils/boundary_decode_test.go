@@ -70,7 +70,7 @@ func TestDecodeEmitterRefusesANestedTypeThatIsNotInbound(t *testing.T) {
 	e := newDecodeEmitter([]boundaryType{lang})
 	err := e.emitStruct(lang)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "add CommentSyntax to inboundTypes")
+	assert.Contains(t, err.Error(), "add Syntax to inboundTypes")
 }
 
 // Every spell contract type must already generate, so a later unit marking one inbound

@@ -89,6 +89,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Git integration](guides/integrations/git.md) - the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
 - [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Profiling](guides/profiling.md) - find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
+- [Jobs](guides/jobs.md) - coordinate work by hand: one person across worktrees, teammates sharing a file, CI checking merged work, and splitting other work.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
 - [MCP](guides/integrations/mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Merge queue](concepts/merge-queue.md) - `magus queue`: queue a pull request by enabling auto-merge, validate stages speculatively, merge each as its own commit; magus supplies the version control and the affected sets.

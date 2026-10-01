@@ -1712,6 +1712,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.lock",
                    "internal/agent/skills/**", "internal/agent/agents-section.md",
                    "docs/reference/codes/**/*.md",
+                   "docs/guides/jobs.md", "docs/guides/jobs/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
                    "internal/queue/testdata/**",
                    "benchmarks/agent/internal/bench/testdata/*",

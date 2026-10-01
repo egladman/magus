@@ -155,6 +155,7 @@ Two layers run together:
 - [MGS3032](MGS3032.md): a job forked into an unordered share of one claimable file another live job already holds.
 - [MGS3033](MGS3033.md): a buzz tool transform request was invalid or its script failed.
 - [MGS3034](MGS3034.md): a client MCP script was invalid, timed out, or failed.
+- [MGS3035](MGS3035.md): a tool runs but its version probe fails, so no cache key could tell its builds apart.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

@@ -2,13 +2,13 @@ package magus
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -137,13 +137,16 @@ func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 	idx := slices.IndexFunc(inventory, func(s types.Spell) bool { return s.Name == name })
 	require.GreaterOrEqual(t, idx, 0, "registered spell missing from inventory")
 
+	// The shared encoder `describe spell -o json` prints through, which under jsonv2 keeps a
+	// false that an omitempty tag names.
 	raw, err := json.Marshal(inventory[idx])
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"name": "`+name+`", "buzz_import": "magus/spell/`+name+`", "built_in": false,
+		"opaque": false, "version_probe": false,
 		"language": "demo", "extensions": [".demo"],
 		"syntax": {
-			"comments": {"lineComments": ["//"]},
+			"comments": {"lineComments": ["//"], "nested": false},
 			"stubs": {"kinds": ["Function"], "bodyStyle": "brace", "body": "{ todo }"}
 		}
 	}`, string(raw))

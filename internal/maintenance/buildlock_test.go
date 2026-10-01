@@ -3,7 +3,6 @@ package maintenance
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // Two acquisitions in one process exclude each other, the case of a manual build and the

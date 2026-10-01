@@ -45,7 +45,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 		return nil
 	}
 	if vcsLeaseGate == nil {
-		return fmt.Errorf("vcs.cmd: lease %s is acting and this binary registers no lease-vcs gate, so `%s %s` is refused rather than run unguarded",
+		return fmt.Errorf("vcs\\cmd: lease %s is acting and this binary registers no lease-vcs gate, so `%s %s` is refused rather than run unguarded",
 			lease, backend, strings.Join(args, " "))
 	}
 	rows, err := job.NewStore(job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}).List()
@@ -59,7 +59,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 	if dir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("vcs.cmd: the working directory cannot be read, so lease-vcs cannot place the command: %w", err)
+			return fmt.Errorf("vcs\\cmd: the working directory cannot be read, so lease-vcs cannot place the command: %w", err)
 		}
 		dir = wd
 	}

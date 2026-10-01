@@ -1288,7 +1288,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 
 func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
 
-// vcsCmdRefusal is lease-vcs for vcs.cmd, which a Buzz process runs under row in dir. The
+// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir. The
 // process knows no session or subagent, so row is graded as a worker: the answer the shell
 // rule gives a caller that names neither.
 func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string) error {
@@ -1298,7 +1298,7 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	if !refused {
 		return nil
 	}
-	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs.cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
+	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
 }
 
 // workerRole says why row, acted under by caller, is a worker rather than the root, ""
@@ -1343,7 +1343,7 @@ type vcsSite struct {
 }
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
-// vcs.cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
+// vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
 // the mutation, "" for a call that mutates nothing. A commit is refused with why; every
 // other mutation is refused with no why. unlocated is why site could not be read, which
 // refuses a commit, since a commit that cannot be placed cannot be shown to be in the

@@ -90,16 +90,23 @@ magus agent harness verify --id claude-code
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
 (recorded and judged), and sub-agent spawns. Each runs a shipped script that talks to
 `magus shell`, through a short launcher that picks which magus runs it. The Bash
-entry, as `magus describe harness claude-code` prints it:
+entry, as `magus describe harness claude-code` prints it, in the place it lands in
+`.claude/settings.json`:
 
 ```json
 {
-  "matcher": "Bash",
-  "hooks": [{
-    "type": "command",
-    "timeout": 10,
-    "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
-  }]
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "timeout": 10,
+          "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+        }]
+      }
+    ]
+  }
 }
 ```
 

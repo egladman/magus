@@ -1,7 +1,6 @@
 package maintenance
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 

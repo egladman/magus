@@ -2,7 +2,6 @@ package maintenance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 )
 
