@@ -1984,7 +1984,10 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.md", "libs/conventions/**/*.md",
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
-                   "libs/textsearch/**/*.md", "proto/**/*.md");
+                   "libs/textsearch/**/*.md", "proto/**/*.md",
+                   "**/*_test.go", "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
+                   "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
+                   "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go");
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
@@ -2010,11 +2013,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
         proc\exec(".magus/custom-gcl", ["run"]);
         // golangci-lint stops at a go.mod, so each other module gets its own run of the
-        // tree-wide conventions.
+        // tree-wide conventions. hack/lint/testlayout-pairing-has-no-exemptions.buzz
+        // refuses this list without testpair.
         final root = magus\projects().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
             proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter"],
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testlayout,testpair"],
                       fs\dirname(mod.value));
         }
     });

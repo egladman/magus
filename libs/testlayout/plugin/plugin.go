@@ -1,9 +1,13 @@
 // Package plugin adapts testlayout to golangci-lint's module plugin system.
 //
-// Separate from the analyzer so that testlayout itself carries no golangci-lint
+// Separate from the analyzers so that testlayout itself carries no golangci-lint
 // dependency and stays usable under go vet or singlechecker. Nothing calls into
 // this package: `golangci-lint custom` blank-imports it, and the init below is
 // the whole contract.
+//
+// It registers two linters. testpair is a plugin of its own, not a second analyzer
+// inside testlayout, because golangci-lint reports every analyzer a plugin builds
+// under the plugin's name, and a //nolint:testlayout would then silence pairing too.
 package plugin
 
 import (
@@ -16,6 +20,7 @@ import (
 
 func init() {
 	register.Plugin("testlayout", newPlugin)
+	register.Plugin("testpair", newPairingPlugin)
 }
 
 // newPlugin builds the plugin from its linters.settings.custom.testlayout.settings
@@ -28,25 +33,32 @@ func newPlugin(raw any) (register.LinterPlugin, error) {
 		return nil, fmt.Errorf("testlayout: settings: %w", err)
 	}
 
-	analyzer, err := testlayout.New(opts)
-	if err != nil {
-		return nil, err
+	return &linter{analyzer: testlayout.New(opts)}, nil
+}
+
+// newPairingPlugin builds testpair, which takes no settings. Decoding into an
+// empty struct is what refuses one: DecodeSettings rejects unknown keys, so an
+// allow list or a marker switch in the yaml fails the config load instead of
+// becoming an exemption.
+func newPairingPlugin(raw any) (register.LinterPlugin, error) {
+	if _, err := register.DecodeSettings[struct{}](raw); err != nil {
+		return nil, fmt.Errorf("testpair: takes no settings: %w", err)
 	}
 
-	return &linter{analyzer: analyzer}, nil
+	return &linter{analyzer: testlayout.Pairing}, nil
 }
 
 type linter struct {
 	analyzer *analysis.Analyzer
 }
 
-// BuildAnalyzers returns the one analyzer the settings configured.
+// BuildAnalyzers returns the one analyzer the plugin wraps.
 func (l *linter) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{l.analyzer}, nil
 }
 
-// GetLoadMode reports that syntax is enough: the analyzer matches file names and
-// never consults type information.
+// GetLoadMode reports that syntax is enough: the analyzers read file names and
+// package clauses and never consult type information.
 func (l *linter) GetLoadMode() string {
 	return register.LoadModeSyntax
 }

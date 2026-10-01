@@ -89,19 +89,19 @@ linters:
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
     # --- In-repo linters (see libs/testlayout/.custom-gcl.yml) ---
-    # Reports a test file whose name narrows a source file's name -
-    # resolver_edge_cases_test.go beside resolver.go - which is how a package
-    # accumulates test files no source file accounts for. `unpaired` below adds the
-    # broader house rule, "every X_test.go needs an X.go", which the Go standard
-    # library would fail on 34% of its test files. A test file with no single
-    # source file to cover is named in its allow setting below instead. The
-    # reasoning and the stdlib measurements are in libs/testlayout/readme.md.
+    # testpair reports every X_test.go with no X.go beside it, with no exemptions:
+    # no conventional names, no allow list, no marker, no exclusion below. It is a
+    # linter of its own so the //nolint:testlayout an import cycle earns cannot
+    # silence it, and hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses
+    # any directive or exclusion that would. testlayout reports a test file outside
+    # its package and a _unix file name. The reasoning is in libs/testlayout/readme.md.
     #
-    # This linter only exists in .magus/custom-gcl. The stock golangci-lint on PATH
-    # cannot read this config while the line below is present - it exits with
+    # These only exist in .magus/custom-gcl. The stock golangci-lint on PATH
+    # cannot read this config while the lines below are present - it exits with
     # `plugin("testlayout") not found`. That is the price of golangci-lint having
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
     - testlayout
+    - testpair
 
     # coldread reports a comment that tells a cold reader nothing the code does
     # not, and a comment spelling an em-dash with a spaced hyphen, which this repo
@@ -173,20 +173,17 @@ linters:
     custom:
       testlayout:
         type: module
-        description: reports a test file whose name narrows a source file's name
+        description: reports a test file outside its package, or named for unix
         original-url: github.com/egladman/magus/libs/testlayout
         settings:
-          report-unpaired: true
-          # Every unpaired test file names its reason here rather than in its own
-          # header, so the exceptions are one list a reviewer can read. That is why
-          # honor-marker stays off.
-          allow:
-            # Repo-wide gates over the tree's shape; no one source file owns them.
-            - conventions_test.go
-          # Benchmarks live in the _test.go of what they measure.
-          pair-benchmarks: true
           # Name the platforms (X_linux.go, X_darwin.go, X_other.go), never unix.
           report-unix-suffix: true
+
+      # No settings block: testpair takes none, and refuses one at config load.
+      testpair:
+        type: module
+        description: reports a test file with no source file of the same name
+        original-url: github.com/egladman/magus/libs/testlayout
 
       coldread:
         type: module
@@ -636,70 +633,31 @@ linters:
       - path: ^internal/report/
         linters: [sloglint]
 
-      # testlayout's unhonored marker, pair-benchmarks and report-unix-suffix landed with the
-      # root package clean and the files below outstanding. This list is the backlog,
-      # not a set of exemptions: each entry is a file to rename or fold into its
-      # source's _test.go, and the fix deletes the entry, so the list only shrinks.
+      # report-unix-suffix's backlog: each entry is a _unix file to rename after the
+      # platforms it serves, and the fix deletes the entry, so the list only shrinks.
       # Exact names rather than globs, so a new offender in the same directory still
       # fails the gate. rusage_unix.go is excluded from darwin builds, so only a linux
-      # run reports it.
-      - path: ^benchmarks/e2e/e2e_test\.go$
-        linters: [testlayout]
-      - path: ^broker/(activation_unix|activation_unix_test|broker_test)\.go$
+      # run reports it. Pairing is testpair's, so nothing here can hide an unpaired
+      # test file.
+      - path: ^broker/(activation_unix|activation_unix_test)\.go$
         linters: [testlayout]
       - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
         linters: [testlayout]
       - path: ^internal/audit/inode_unix\.go$
         linters: [testlayout]
-      - path: ^internal/cache/(bench_test|json_bench_test|manifest_bench_test|stat_bench_test)\.go$
-        linters: [testlayout]
-      - path: ^internal/ci/forecast/bench_test\.go$
-        linters: [testlayout]
-      - path: ^internal/describe/bench_test\.go$
-        linters: [testlayout]
       - path: ^internal/file/identity_unix\.go$
         linters: [testlayout]
-      - path: ^internal/file/record/bench_test\.go$
-        linters: [testlayout]
-      - path: ^internal/file/watch/bench_test\.go$
-        linters: [testlayout]
-      - path: ^internal/graph/dependency/bench_test\.go$
-        linters: [testlayout]
-      - path: ^internal/graph/knowledge/(bench_test|extract_fs_bench_test|scale_test)\.go$
-        linters: [testlayout]
-      - path: ^internal/httpx/refusal_test\.go$
-        linters: [testlayout]
-      - path: ^internal/interactive/tty/(bench_test|silence_test)\.go$
-        linters: [testlayout]
       - path: ^internal/job/store_unix_test\.go$
-        linters: [testlayout]
-      - path: ^internal/journal/bench_test\.go$
-        linters: [testlayout]
-      - path: ^internal/proc/adopt_bench_test\.go$
         linters: [testlayout]
       - path: ^internal/proc/run/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
         linters: [testlayout]
       - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
         linters: [testlayout]
-      - path: ^internal/queue/fakes_test\.go$
-        linters: [testlayout]
-      - path: ^internal/report/bench_test\.go$
-        linters: [testlayout]
       - path: ^internal/sandbox/owner_unix\.go$
-        linters: [testlayout]
-      - path: ^internal/server/grant_matrix_test\.go$
         linters: [testlayout]
       - path: ^internal/sessions/adapter_unix\.go$
         linters: [testlayout]
-      - path: ^internal/sys/mem/mem_test\.go$
-        linters: [testlayout]
       - path: ^internal/textindex/mmap_unix\.go$
-        linters: [testlayout]
-      - path: ^project/bench_test\.go$
-        linters: [testlayout]
-      - path: ^std/examples_test\.go$
-        linters: [testlayout]
-      - path: ^vcs/parity_test\.go$
         linters: [testlayout]
 
       # filenames' backlog: concatenations already in the tree when the rule
