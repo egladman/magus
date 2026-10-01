@@ -1,5 +1,3 @@
-// cross-cutting: this file holds the test doubles every step's tests share.
-
 package queue
 
 import (
