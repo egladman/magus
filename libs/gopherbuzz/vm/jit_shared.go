@@ -65,7 +65,7 @@ func jitEntry(code *byte, ctx *jitCtx)
 func JITAvailable() bool { return true }
 
 type compiledJIT struct {
-	code     []byte // mmap'd, RX; kept alive for the process (never unmapped)
+	code     []byte // mmap'd, RX; unmapped by jitEvict once its chunk is unreachable
 	entry    *byte
 	maxDepth int // max operand-stack slots needed above the locals
 	// entryDepth is depths()' per-ip operand-stack depth, retained so an exit can
