@@ -102,8 +102,8 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       // below turns these cases red on a tree that is fine; the store resolves from
       // <XDG state>/magus/jobs and offers no other seam to redirect it.
       //
-      // An EMPTY cache for the same reason: the push rule reads the workspace's run log, so
-      // a failed gate at this commit turns the push advisory into a refusal.
+      // An EMPTY cache for the same reason: a rule that reads the workspace's run log would
+      // otherwise answer from this checkout's own history.
       env: { ...process.env, XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
@@ -161,20 +161,21 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
 
 // go test ./... now has an exact magus equivalent (magus run go::go-test) and is
 // DENIED, not advised - the plan this test was written from predates that rule.
-// git push with no run log to read is an advise: the push rule refuses only a commit whose
-// gate it can prove did not pass (internal/guard/push.go).
-test("live: bash arm advises on git push and appends non-empty context", { skip }, async () => {
+// A push cannot be the advise case: the plugin reports no session, and push-authority
+// (hack/policy/branches.buzz) refuses a caller with none. ci-batch-poll advises once per
+// state directory, and this file's is fresh.
+test("live: bash arm advises on gh pr checks and appends non-empty context", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
     await h["tool.execute.before"](
       { tool: "bash", callID: "c1" },
-      { args: { command: "git push origin main" } },
+      { args: { command: "gh pr checks 5" } },
     );
   });
   assert.deepEqual(warnings, [], "an advise is delivered to the model, not logged for the person");
 
-  const result = { output: "pushed" };
+  const result = { output: "checks" };
   await h["tool.execute.after"]({ callID: "c1" }, result);
   assert.match(result.output, /\[magus guard\] .+\S/);
 });
