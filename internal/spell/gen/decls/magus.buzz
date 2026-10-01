@@ -988,6 +988,7 @@ export object SpawnRequest {
     prompt: str = "",
     background: bool = false,
     isolated: bool = false,
+    agent: str = "",
     parent: str = "",
     role: str = "",
     lease: Job? = null,

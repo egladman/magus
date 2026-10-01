@@ -2520,6 +2520,7 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	out.MapSet("prompt", vm.StrValue(v.Prompt))
 	out.MapSet("background", vm.BoolValue(v.Background))
 	out.MapSet("isolated", vm.BoolValue(v.Isolated))
+	out.MapSet("agent", vm.StrValue(v.Agent))
 	out.MapSet("parent", vm.StrValue(v.Parent))
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null

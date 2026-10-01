@@ -166,6 +166,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		Prompt:      env.Value,
 		Background:  env.Spawn.Background,
 		Isolated:    env.Spawn.Isolated,
+		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 	}
 	if env.IsContinue {
