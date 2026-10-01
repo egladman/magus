@@ -36,6 +36,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -719,7 +720,6 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	if profile.needsForward {
 		stopSock := trace.phase("startup.socket_lookup")
 		sock := os.Getenv(proc.SocketEnv)
-		serverSock := false
 		// topLevel: no parent exported a socket, so this process is the head of its own
 		// tree rather than a magus a magusfile spawned.
 		topLevel := sock == ""
@@ -737,24 +737,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		if topLevel && !profile.spawnsWork && globalCfg.Server.Enabled {
 			if s, ok := proc.LookupServerSocket(rootCtx); ok {
 				sock = s
-				serverSock = true
 				// Propagate to child processes spawned by this invocation.
 				_ = os.Setenv(proc.SocketEnv, sock)
 				_ = os.Setenv(proc.TokenEnv, proc.ReadToken(sock))
 			}
-		} else if !topLevel {
-			serverSock = strings.HasSuffix(sock, "/"+proc.ServerSocketName())
 		}
 		stopSock()
 		if sock != "" {
 			stopFwd := trace.phase("startup.forward")
-			// Skip client-side FindRoot when forwarding to the server; it walks itself.
-			var fwdRoot string
-			if !serverSock {
-				if r, err := magus.FindRoot(""); err == nil {
-					fwdRoot = r
-				}
-			}
 			// The flags are not parsed yet, so this is magus.yaml and the environment,
 			// the inherited floor included; a --sandbox flag rides in args and the server
 			// reads it there (see adoptedSandbox).
@@ -762,7 +752,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if globalCfg.Sandbox.Mode.Enabled() {
 				fwdCtx = proc.WithSandboxFloor(rootCtx, globalCfg.Sandbox.Mode)
 			}
-			code, fwdErr := proc.Forward(fwdCtx, args, version, fwdRoot)
+			// earlyRoot, not the cwd's root: --root is not parsed yet, and a run forwarded
+			// without it executes in whatever workspace the receiver resolves from the cwd.
+			code, fwdErr := proc.Forward(fwdCtx, args, version, earlyRoot)
 			stopFwd()
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
@@ -929,11 +921,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// parent is gone) hosts its own pool. loadMagus wires the limiter into the
 		// loaded workspace regardless, so a leaf still has its concurrency pool.
 		leaf := parentLive
-		if _, err := loadMagus(withBootstrapLimiter(rootCtx, lim), root); err == nil && !leaf {
+		if m, err := loadMagus(withBootstrapLimiter(rootCtx, lim), root); err == nil && !leaf {
 			srv, err := proc.New(proc.Options{
-				Handler: func(ctx context.Context, args []string) error {
+				Handler: poolHandler(m.Root(), func(ctx context.Context, args []string) error {
 					return dispatchAdopted(ctx, root, rc, args)
-				},
+				}),
 				// No Address: server.address is where the SERVER listens, and a per-process
 				// pool bound there would answer as the server for as long as this
 				// command ran.
@@ -1092,6 +1084,31 @@ func usage() {
 func snapshotGlobals() (restore func()) {
 	savedCfg, savedGlobal := globalCfg, global
 	return func() { globalCfg, global = savedCfg, savedGlobal }
+}
+
+// poolHandler is a per-process pool's handler: it hands dispatch the runs forwarded from
+// this process's own workspace, at poolRoot, and declines every other one, so a nested
+// magus aimed at another workspace runs that work itself, under that workspace's locks.
+// dispatch only ever opens poolRoot; adopting a foreign run would execute it against
+// this tree, where the project locks this process holds refuse it (MGS3007).
+func poolHandler(poolRoot string, dispatch func(context.Context, []string) error) func(context.Context, []string) error {
+	return func(ctx context.Context, args []string) error {
+		if client := proc.RootFromContext(ctx); !sameDir(client, poolRoot) {
+			return fmt.Errorf("%w: the client's workspace %q is not this process's %s", proc.ErrNotAdoptable, client, poolRoot)
+		}
+		return dispatch(ctx, args)
+	}
+}
+
+// sameDir reports whether a and b name one directory, either spelled through a symlink:
+// a cwd under macOS's /var reads back as /private/var.
+func sameDir(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // dispatchAdopted routes adopted child args; only "run" and "affected" are accepted.
