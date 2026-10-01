@@ -128,6 +128,20 @@ register it
 	out.Reset()
 	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{ID: "cursor"}))
 	assert.Equal(t, "cursor harness: current\n", out.String())
+
+	out.Reset()
+	require.NoError(t, writeHarnessPlan(&out, agent.HarnessPlan{
+		ID: "claude-code",
+		Wired: []agent.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
+			{"matcher": "Bash", "hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}}},
+			{"hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-observe.buzz"}}},
+		}}},
+	}))
+	assert.Equal(t, `claude-code harness: current
+wired in .claude/settings.json hooks.PreToolUse:
+  Bash: ./magus buzz -s magus-command.buzz
+  any: ./magus buzz -s magus-observe.buzz
+`, out.String(), "a current harness still prints the commands it wires")
 }
 
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
@@ -154,6 +168,10 @@ exec sh merge.sh
 cmp hooks.json want.json
 exec magus describe harness script-host
 stdout '^script-host harness: current$'
+stdout '^wired in hooks.json hooks.before:$'
+stdout '^  run: magus buzz -s magus-command.buzz$'
+exec magus describe harness script-host -o 'template={{range .wired}}{{.file}} {{.key}}{{range .entries}} {{.match}}{{end}}{{end}}'
+stdout '^hooks.json hooks.before run$'
 
 -- magusfile.buzz --
 import "magus";

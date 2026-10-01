@@ -108,6 +108,15 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	assert.Contains(t, string(body), "my-own-hook")
 	assert.Contains(t, string(body), `"other": {`)
 	requireCurrent(t, root, "test-host")
+
+	current, err := PlanHarness(context.Background(), root, "test-host")
+	require.NoError(t, err)
+	encoded, err := json.Marshal(current.Wired)
+	require.NoError(t, err)
+	var wired []HarnessWired
+	require.NoError(t, json.Unmarshal(encoded, &wired))
+	assert.Equal(t, []HarnessWired{{File: "test-host/hooks.json", Key: "hooks.before", Entries: []map[string]any{command, pathEntry}}}, wired,
+		"a current harness still names what it wires, and only the managed entries")
 }
 
 // normalizeFiles round-trips files through JSON, the form `describe harness -o json` prints,
