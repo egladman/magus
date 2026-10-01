@@ -114,6 +114,17 @@ export fun required_checks(io: {str: any}) > any {
     return {"checks": [{"name": "ci gate", "state": "failure"}, {"name": "{io["commit"]}", "state": "{io["title"]}"}]};
 }
 
+export fun reviews(io: {str: any}) > any {
+    if (io["title"] == "bad commit") {
+        return {"head": "` + headA + `", "reviews": [{"id": "12", "reviewer": "ann", "commit": "d"}]};
+    }
+    return {"head": "` + headA + `", "reviews": [{"id": "12", "reviewer": "{io["title"]}", "commit": "` + headD + `"}]};
+}
+
+export fun dismiss_review(io: {str: any}) > bool {
+    return io["id"] == "7" and io["review"] == "12" and io["reviewer"] == "ann" and io["commit"] == "` + headD + `" and io["message"] == "a.go changed";
+}
+
 export fun list_artifacts(io: {str: any}) > any {
     final run ={"repo": "o/r", "head_repo": "o/r", "head_branch": "main", "event": "push", "branch_event": true, "definition": "q.yaml"};
     if (io["source"] == "no run") {
@@ -431,6 +442,26 @@ func TestRequiredChecksDecodesEachStateAndIsOptional(t *testing.T) {
 	none, err := open(t, strings.Split(script, "export fun required_checks")[0]).RequiredChecks(context.Background(), c, headD)
 	require.NoError(t, err)
 	assert.Nil(t, none, "a provider that cannot read them reports none")
+}
+
+func TestReviewsDecodesTheApprovalsAndDismissReviewCarriesTheReview(t *testing.T) {
+	p, ctx := open(t, script), context.Background()
+	c := change
+	c.Title = "ann"
+	got, err := p.Reviews(ctx, c)
+	require.NoError(t, err)
+	assert.Equal(t, types.Reviews{Head: headA, Approving: []types.Review{{ID: "12", Reviewer: "ann", Commit: headD}}}, got)
+
+	require.NoError(t, p.DismissReview(ctx, c, got.Approving[0], "a.go changed"))
+	require.ErrorContains(t, p.DismissReview(ctx, c, got.Approving[0], "other"), "provider refused")
+
+	c.Title = "bad commit"
+	_, err = p.Reviews(ctx, c)
+	require.ErrorContains(t, err, `review 12: commit "d" is not a full commit id`)
+
+	none := open(t, strings.Split(script, "export fun reviews")[0]+"export fun list_artifacts"+strings.Split(script, "export fun list_artifacts")[1])
+	_, err = none.Reviews(ctx, c)
+	require.EqualError(t, err, `provider "echo" does not export reviews`, "reviews is optional")
 }
 
 func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {

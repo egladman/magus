@@ -26,9 +26,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-To run a cheap step everywhere before the rest, name it on the command line rather
-than in a target: `magus affected ci --preflight generate`. See
-[Failing fast with --preflight](../targets.md#failing-fast-with---preflight).
+To run a cheap step everywhere before the rest, pipe it in on the command line rather
+than adding a target: `magus affected generate --no-default-charms | magus affected ci`.
+See [Failing fast with a pipe](../targets.md#failing-fast-with-a-pipe).
 
 ## Recommendations
 

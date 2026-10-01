@@ -130,8 +130,8 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 	if len(spec.LanguageExtensions) > 0 {
 		extra = append(extra, spells.WithLanguageExtensions(spec.LanguageExtensions))
 	}
-	if spec.Comments != nil {
-		extra = append(extra, spells.WithComments(spec.Comments))
+	if spec.Syntax != nil {
+		extra = append(extra, spells.WithSyntax(spec.Syntax))
 	}
 	if spec.SymbolIndexer != nil {
 		extra = append(extra, spells.WithSymbolIndexer(spec.SymbolIndexer))

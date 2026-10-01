@@ -322,6 +322,7 @@ func TestMutatesTreeJudgesTheCommand(t *testing.T) {
 		{[]string{"magus", "config", "token", "generate"}, true},
 		{[]string{"magus", "job", "exec", "harness/worker"}, true},
 		{[]string{"magus", "brand-new-verb"}, true},
+		{[]string{"magus", "buzz", "hack/dev/show-guard-health.buzz"}, true},
 		{[]string{"magus"}, true},
 		{nil, true},
 	} {

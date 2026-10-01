@@ -1,0 +1,5 @@
+{"id":"fb0000000000a1","section":"unguarded","key":"grep -rn <arg>","verdict":"should-advise","session":"s1","at":1790800000000,"examples":["grep -rn foo src"]}
+{"id":"fb0000000000a1","section":"unguarded","key":"grep -rn <arg>","verdict":"should-deny","note":"use magus refs","session":"s2","at":1790800100000,"examples":["grep -rn bar lib"]}
+{"id":"fb0000000000b2","section":"unguarded","key":"cat <path>","verdict":"should-deny","session":"s1","at":1790800200000,"examples":["cat README.md"]}
+{"id":"fb0000000000c3","section":"refused","key":"output-pipe","rule":"output-pipe","verdict":"wrong-deny","note":"the pipe was into wc -l","session":"s2","at":1790800300000,"examples":["./magus ls | wc -l"]}
+{"id":"fb0000000000d4","section":"unguarded","key":"git status --short","verdict":"fine","session":"s2","at":1790800400000}

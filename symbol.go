@@ -455,7 +455,7 @@ func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolInde
 	// dishonest key MGS3035 exists to stop, and refusing every graph read in the
 	// workspace over one project's tool would hide every other project's answer too.
 	toolVersions, unprobeable := m.toolVersionsEach(ctx, capable)
-	observations := m.probeObservations(ctx, capable, nil)
+	observations := m.probeObservations(ctx, capable, symbolIndexDriven(capable))
 	c := m.freshnessCache(ctx)
 	out := make([]types.SymbolIndexStatus, 0, len(capable))
 	for _, p := range capable {
@@ -508,6 +508,54 @@ func (m *Magus) symbolIndexStep(p *types.Project, toolVersions []string, observa
 	step := m.buildStep(p, spells.SymbolIndexOp)
 	applyRunKeying(&step, toolVersions, observationsForTarget(p, spells.SymbolIndexOp, observations), nil)
 	return step
+}
+
+// symbolIndexSources is the source globs of each of p's spells that declares a symbol
+// indexer, rooted at p: what buildStep keys the scip op on.
+func symbolIndexSources(p *types.Project) []types.Glob {
+	var out []types.Glob
+	for _, s := range p.ResolvedSpells {
+		if s.SymbolIndexer() == nil {
+			continue
+		}
+		// A spell whose globs do not parse contributed none to the project either.
+		sources, _, err := types.SpellGlobs(s)
+		if err != nil {
+			continue
+		}
+		for _, g := range sources {
+			out = append(out, g.Root(p.Path))
+		}
+	}
+	return out
+}
+
+// indexerUses is the tools s's symbol indexer runs besides its own binary when target is
+// the scip op, and nil for any other target: their versions key the index and nothing else.
+func indexerUses(s *spells.Spell, target string) []string {
+	if target != spells.SymbolIndexOp || s.SymbolIndexer() == nil {
+		return nil
+	}
+	return s.SymbolIndexer().Uses
+}
+
+// indexerUseKey is how targetDrivenBins marks a tool the indexer uses: apart from the
+// "spell:bin" a build op that runs the same binary is driven under, so keying a build
+// never probes the indexer's view of it.
+func indexerUseKey(spell, tool string) string {
+	return spell + ":" + tool + "@" + spells.SymbolIndexOp
+}
+
+// symbolIndexDriven is, per project, the binaries the scip op drives: the set
+// ComputeTargetKey hands probeObservations for the same op. An observation outside it
+// never reaches the step's key, so probing it would fork for nothing; govulncheck's
+// database probe was seven of a query's forks.
+func symbolIndexDriven(ps []*types.Project) map[string]map[string]bool {
+	driven := make(map[string]map[string]bool, len(ps))
+	for _, p := range ps {
+		driven[p.Path] = targetDrivenBins(p, spells.SymbolIndexOp)
+	}
+	return driven
 }
 
 // freshnessCache is the handle a read-only freshness probe hashes against: the
@@ -596,7 +644,7 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 		// An unprobeable project reads as not current; its rebuild runs through m.Run,
 		// which refuses it with the MGS3035 that names the tool.
 		toolVersions, unprobeable := m.toolVersionsEach(ctx, ps)
-		observations := m.probeObservations(ctx, ps, nil)
+		observations := m.probeObservations(ctx, ps, symbolIndexDriven(ps))
 		out := map[string]bool{}
 		for _, p := range ps {
 			if unprobeable[p.Path] != nil {

@@ -2,6 +2,8 @@ package job
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -449,4 +451,28 @@ func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 		Reason:  "a: no version control answered here; b: b was declared without a checkpoint",
 	}, got[0].Footprint)
 	assert.Nil(t, overlaps[0].Footprint, "the caller's overlaps are not written through")
+}
+
+// MeasureOverlaps is the measurement every door reporting overlaps calls, so it is pinned
+// against a real checkout: two jobs taken in one tree whose edit lands in one declaration
+// share it, and a list with no overlaps reads no VCS at all.
+func TestMeasureOverlaps(t *testing.T) {
+	t.Parallel()
+
+	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	rev := commitRepo(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+	rows := []types.Job{
+		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api"}},
+		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api/x.go"}},
+	}
+	overlaps := types.NewJobList(rows).Overlaps
+	require.Len(t, overlaps, 1)
+
+	got := MeasureOverlaps(t.Context(), root, rows, overlaps)
+
+	require.NotNil(t, got[0].Footprint)
+	assert.Equal(t, types.FootprintShared, got[0].Footprint.Verdict, got[0].Footprint.Reason)
+	assert.Equal(t, []string{"api/x.go#func X() {"}, got[0].Footprint.Shared)
+	assert.Empty(t, MeasureOverlaps(t.Context(), "/nonexistent", rows, nil))
 }

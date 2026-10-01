@@ -45,12 +45,9 @@ with its tier to stderr; a trivial change runs nothing and exits 0. With --plan,
 a trivial change emits an empty matrix beside a risk block.
 --no-redundancy-check runs the full gate.
 
---preflight works as it does for magus run: the named targets run first across
-the affected set, a failure stops everything with exit 3 (MGS3020), and a name
-outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
-it gates the plan itself: the pass runs across the planned projects under the
-charms the invoked target would run with, and the plan prints only when it is
-green, so a CI workflow that fans shards out from the plan starts none.
+--plan downstream of magus in a pipe waits for every magus stage before it to
+end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
+that way: magus affected generate --no-default-charms | magus affected ci --plan.
 
 ## Options
 
@@ -94,7 +91,7 @@ green, so a CI workflow that fans shards out from the plan starts none.
 : Force a fresh run even on a cache hit; still refreshes the entry
 
 **--no-default-charms**
-: Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass
+: Ignore magus.yaml default_charms for this run
 
 **--no-redundancy-check**
 : Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
@@ -107,9 +104,6 @@ green, so a CI workflow that fans shards out from the plan starts none.
 
 **--plan** *string*
 : Emit a provider-neutral JSON CI shard plan for the affected set
-
-**--preflight** *string*
-: Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green
 
 **--race** *string*
 : Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
@@ -164,10 +158,7 @@ green, so a CI workflow that fans shards out from the plan starts none.
 : At least one target failed, already reported with the path to its captured log.
 
 **2**
-: Misuse: no target named, --step without an interactive terminal, or a --preflight target the invoked target never reaches (MGS3021).
-
-**3**
-: A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them.
+: Misuse: no target named, or --step without an interactive terminal.
 
 **75**
 : Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides).
@@ -216,16 +207,10 @@ magus affected build --graph -o dot | dot -Tsvg > graph.svg
 magus affected ci --plan
 ```
 
-*Fail fast on drift before the affected set runs ci*
-
-```sh
-magus affected ci --preflight generate
-```
-
 *Gate a CI shard plan on drift: no plan, and no shards, unless generate passes*
 
 ```sh
-magus affected ci --plan --preflight generate
+magus affected generate --no-default-charms | magus affected ci --plan
 ```
 
 *Shard a test plan across at most four workers*

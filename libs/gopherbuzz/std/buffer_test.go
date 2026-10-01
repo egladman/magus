@@ -27,7 +27,7 @@ func execBuffer(t *testing.T, src string) map[string]vm.Value {
 func TestBufferZigRoundTrip(t *testing.T) {
 	g := execBuffer(t, `
 import "buffer";
-final b = buffer.Buffer.init(16);
+final b = buffer\Buffer.init(16);
 // A CGPoint: two f64. writeZAt is byte-offset (0, 8); readZAt is element-index
 // (0, 1) — the upstream asymmetry, both mapping to bytes 0 and 8.
 b.writeZAt::<double>(0, "f64", [3.5]);
@@ -61,7 +61,7 @@ b.collect();
 func TestBufferPtrOutParam(t *testing.T) {
 	g := execBuffer(t, `
 import "buffer";
-final b = buffer.Buffer.init(8);
+final b = buffer\Buffer.init(8);
 final base = b.ptr();
 final at4 = b.ptr(4);
 final delta = at4 - base;
@@ -88,7 +88,7 @@ final delta = at4 - base;
 func TestBufferCollectIdempotent(t *testing.T) {
 	execBuffer(t, `
 import "buffer";
-final b = buffer.Buffer.init(8);
+final b = buffer\Buffer.init(8);
 b.ptr();
 b.collect();
 b.collect();
@@ -99,7 +99,7 @@ b.collect();
 	Register(sess)
 	err := sess.Exec(context.Background(), `
 import "buffer";
-final b = buffer.Buffer.init(8);
+final b = buffer\Buffer.init(8);
 b.ptr();
 b.collect();
 final v: int = b.readZAt::<int>(0, "i64");
@@ -113,7 +113,7 @@ final v: int = b.readZAt::<int>(0, "i64");
 func TestBufferLenAlign(t *testing.T) {
 	g := execBuffer(t, `
 import "buffer";
-final b = buffer.Buffer.init(64);
+final b = buffer\Buffer.init(64);
 b.ptr();
 final n: int = b.len();
 final n4: int = b.len(4);

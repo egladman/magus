@@ -14,7 +14,7 @@ import (
 )
 
 func (r *runner) checkCheckpointWiring() types.Check {
-	return checkCheckpointWiring(r.ws.Root(), workspaceHarnesses(r.ws)...)
+	return checkCheckpointWiring(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...)
 }
 
 // checkCheckpointWiring reports a host that magus is wired into but that records no
@@ -27,11 +27,11 @@ func (r *runner) checkCheckpointWiring() types.Check {
 //
 // Advice rather than a failure. Not every workspace wants this wired, and a doctor that
 // fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(root string, wired ...string) types.Check {
+func checkCheckpointWiring(ctx context.Context, root string, wired ...string) types.Check {
 	const name = "checkpoint-wiring"
 
 	var hosts, recording []string
-	for _, path := range HookConfigs(context.Background(), root, wired...) {
+	for _, path := range HookConfigs(ctx, root, wired...) {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			continue

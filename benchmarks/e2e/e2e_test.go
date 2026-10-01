@@ -1,10 +1,3 @@
-// cross-cutting: end-to-end runs through the public magus API; this package has no source
-
-// Package e2e holds end-to-end orchestration tests for the public magus
-// API. It lives in its own package because exercising Run/RunCI requires
-// blank-importing the host bindings, whose init() registers the built-in spells
-// process-wide — a side effect that would collide with the spell fixtures in the
-// magus package's own tests.
 package e2e
 
 import (
@@ -21,9 +14,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	// Link the host bindings so magusfile.buzz targets execute.
-	_ "github.com/egladman/magus/internal/interp/bindings"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -49,10 +39,10 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 import "magus";
 import "fs";
 export fun alpha(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran-alpha", "1");
+    fs\writeFile("ran-alpha", "1");
 }
 export fun beta(ctx: magus\Context, args: [str]) > void !> any {
-    fs.writeFile("ran-beta", "1");
+    fs\writeFile("ran-beta", "1");
 }
 `
 	for _, name := range []string{"svc-a", "svc-b"} {
@@ -115,7 +105,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(
 		`import "magus";`+"\n"+
 			`import "magus/spell/faketool";`+"\n"+
-			`magus.project("svc", {"spells": [faketool]});`+"\n",
+			`magus\project("svc", {"spells": [faketool]});`+"\n",
 	), 0o644))
 
 	ctx := context.Background()
@@ -153,10 +143,10 @@ func TestMagusfileTargetsRunWithoutBeingDeclared(t *testing.T) {
 	src := `import "magus";
 import "os";
 import "proc";
-magus.project("svc", {});
+magus\project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void !> any {
-    final c = proc.shell("printf x >> count");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("printf x >> count");
+    proc\exec(c.bin, c.args, "", {});
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
@@ -186,7 +176,7 @@ func TestDeclaringMagusfileAsASpellIsRejected(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	src := `import "magus";
 import "magus/spell/magusfile";
-magus.project("svc", {"spells": [magusfile]});
+magus\project("svc", {"spells": [magusfile]});
 export fun hit(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
@@ -258,8 +248,8 @@ import "magus";
 import "os";
 import "proc";
 fun record(name: str) > void !> any {
-    final c = proc.shell("printf '%s\n' " + name + " >> ci-order");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("printf '%s\n' " + name + " >> ci-order");
+    proc\exec(c.bin, c.args, "", {});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { record("build"); }
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
@@ -297,8 +287,8 @@ import "magus";
 import "proc";
 magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
 fun record(name: str) > void !> any {
-    final c = proc.shell("printf '%s\n' " + name + " >> cache-order");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("printf '%s\n' " + name + " >> cache-order");
+    proc\exec(c.bin, c.args, "", {});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("cache-order");
@@ -333,8 +323,8 @@ import "magus";
 import "proc";
 magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
 fun record(name: str) > void !> any {
-    final c = proc.shell("sleep 0.05; printf '%s\n' " + name + " >> " + name + "-runs");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("sleep 0.05; printf '%s\n' " + name + " >> " + name + "-runs");
+    proc\exec(c.bin, c.args, "", {});
 }
 export fun a(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("a-runs");
@@ -385,13 +375,13 @@ magus\project({"targets": {
     "generate": {"skip_cache": "always regenerate"},
 }});
 fun record(name: str) > void !> any {
-    final c = proc.shell("printf '%s\n' " + name + " >> ../generator-runs");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("printf '%s\n' " + name + " >> ../generator-runs");
+    proc\exec(c.bin, c.args, "", {});
 }
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("generated");
-    final c = proc.shell("printf generated > generated");
-    proc.exec(c.bin, c.args, "", {});
+    final c = proc\shell("printf generated > generated");
+    proc\exec(c.bin, c.args, "", {});
     record("generate");
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(generate); }

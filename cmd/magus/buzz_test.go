@@ -86,7 +86,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
 		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
 
@@ -143,6 +143,25 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 	assert.Equal(t, 2, *opens)
 }
 
+// A script run carries one evaluation memo, which std's graph members read through, so two
+// magus\refs calls in one script build the symbol graph once rather than once each.
+func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
+	ctx, err := buzzRunContext(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	memo := types.EvalMemoFromContext(ctx)
+	require.NotNil(t, memo, "graph reads in a script would each rebuild the graph")
+
+	builds := 0
+	for range 2 {
+		_, err := memo.Do("graph+symbols", func() (any, error) {
+			builds++
+			return nil, nil
+		})
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, builds)
+}
+
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
@@ -180,7 +199,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
 	path := filepath.Join(root, "script.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))

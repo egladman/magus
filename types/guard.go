@@ -158,6 +158,11 @@ type CommandRequest struct {
 	// sh -c, ...) the way the built-in rules see them. Empty when the line does not parse,
 	// which is also a line the shell would refuse to run.
 	Commands []CommandInvocation
+	// Agent is the subagent id the host reported for the caller, empty for the session's
+	// main agent and for a host that reports none. It is set whether or not magus saw the
+	// subagent spawned, so a rule can tell a subagent from the main agent of one Session
+	// even when Parent and Lease are empty.
+	Agent string
 	// Parent is the description the calling subagent was itself spawned with, empty for a
 	// root session or one whose spawn magus never saw finish.
 	Parent string
@@ -194,9 +199,10 @@ type GuardBinary struct {
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
 // write through its host's edit tools, with the text the host said it writes.
 type WriteRequest struct {
-	// Host, Session, Parent, Role and Lease are the caller's, as on CommandRequest.
+	// Host, Session, Agent, Parent, Role and Lease are the caller's, as on CommandRequest.
 	Host    string
 	Session string
+	Agent   string
 	Parent  string
 	Role    AgentRole
 	Lease   *Job

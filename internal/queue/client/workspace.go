@@ -8,6 +8,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 
@@ -207,6 +208,25 @@ func (w *Workspace) Generation(ctx context.Context, outputs, changed []string) (
 func (w *Workspace) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
 	verdict, ok := w.m.AutoResolvable(ctx, path, base, merged)
 	return verdict, ok, nil
+}
+
+// ClassifyEdit is magus's change classifier on one path's edit (Magus.ClassifyEdit), the
+// classes the ci gate sizes by.
+func (w *Workspace) ClassifyEdit(ctx context.Context, path string, old, cur []byte) (types.ClassifiedPath, error) {
+	c := w.m.ClassifyEdit(ctx, path, old, cur)
+	return types.ClassifiedPath{Path: path, Tier: carryTier(c.Class), Why: c.Why}, nil
+}
+
+func carryTier(c risk.Class) types.CarryTier {
+	switch c {
+	case risk.ClassGenerated:
+		return types.CarryGenerated
+	case risk.ClassProse:
+		return types.CarryProse
+	case risk.ClassCommentOnly:
+		return types.CarryCommentOnly
+	}
+	return types.CarryCode
 }
 
 // AllUnits is "/", the project reference magus reads as every project.

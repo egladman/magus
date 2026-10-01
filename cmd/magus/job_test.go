@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -417,6 +418,35 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	return root, cacheDir
 }
 
+// A deny path naming a declaration of a file no diff driver reads is refused at fork
+// (MGS3031): the guard could only honor it by denying the whole file.
+func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	root, cacheDir := execFixture(t)
+	for name, body := range map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	fork := func(id, deny string) error {
+		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "run.go,notes.txt", "--deny-paths", deny})
+	}
+
+	err = fork("refused", "notes.txt#Intro")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MGS3031")
+	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
+
+	require.NoError(t, fork("accepted", "run.go#A"))
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a refused fork writes no row")
+	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
+}
+
 // The store the CLI opens resolves a ref the worker recorded in its own checkout, so an
 // orchestrator can exit a job on its worker's behalf.
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
@@ -468,30 +498,39 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 	assert.Equal(t, []types.JobState{types.StateNoReturn, types.StateRunning}, []types.JobState{rows[0].State, rows[1].State})
 }
 
-// Edit previews by default and writes only under --apply, keeping the job's state either way.
-func TestJobEditDryRunsUntilApply(t *testing.T) {
+// Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
+// either way.
+func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	row := leaseRow("w", "")
-	row.State, row.WritePaths = types.StateRunning, []string{"a.go", "b.go"}
+	row.State, row.WritePaths, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(t, row)
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
-	args := []string{"w", "--add-write-path", "c.go", "--remove-write-path", "a.go"}
+	record := filepath.Join(t.TempDir(), "w.json")
+	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
+		`{"schema_version":%d,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		types.JobSchemaVersion), 0o644))
+	args := []string{"-f", record}
 
-	out := captureStdout(t, func() { require.NoError(t, jobEdit(t.Context(), root, args)) })
-	assert.Equal(t, "would edit w: add c.go; revoke a.go\n"+
-		"write paths would be b.go, c.go\n"+
-		"dry run: nothing written; rerun with --apply to write it\n", out)
+	globalCfg.DryRun = true
+	t.Cleanup(func() { globalCfg.DryRun = false })
+	out := captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
+	assert.Equal(t, "would update w, still running:\n"+
+		"  write_paths +c.go -a.go\n"+
+		"dry run: nothing written; rerun without --dry-run to write it\n", out)
 	rows, err := store.List()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a.go", "b.go"}, rows[0].WritePaths)
 
-	out = captureStdout(t, func() { require.NoError(t, jobEdit(t.Context(), root, append(args, "--apply"))) })
-	assert.True(t, strings.HasPrefix(out, "edited w: add c.go; revoke a.go\nwrite paths are b.go, c.go\n"), out)
+	globalCfg.DryRun = false
+	out = captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
+	assert.True(t, strings.HasPrefix(out, "updated w, still running:\n  write_paths +c.go -a.go\n"), out)
 	rows, err = store.List()
 	require.NoError(t, err)
 	assert.Equal(t, []any{[]string{"b.go", "c.go"}, types.StateRunning}, []any{rows[0].WritePaths, rows[0].State})
 
-	require.Error(t, jobEdit(t.Context(), root, []string{"w"}), "an edit naming no path is a usage error")
+	require.Error(t, jobApply(t.Context(), root, nil), "an apply naming no records is a usage error")
 }
 
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose

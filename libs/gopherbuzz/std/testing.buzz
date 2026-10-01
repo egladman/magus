@@ -18,7 +18,8 @@ namespace testing;
 //     Tester` binding. Upstream declares them plain `fun`.
 //   - Upstream's `assertThrows` is `::<T>(fn: fun () > void !> T, ...)`; this one
 //     takes `fn: fun () > void` with no error set, which is what lets a caller pass a
-//     `fun () > void !> str` literal (std/lib/lcov.buzz and badge.buzz both do).
+//     `fun () > void !> str` literal (std/lib/lcov.buzz and
+//     hack/magusfile/badges.buzz both do).
 //
 // `reset`, `failedAsserts`, `failedTests` and `succeededTests` DO exist here, with
 // upstream's names and arity. (An earlier revision of this header said they did not,

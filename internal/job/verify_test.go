@@ -1,9 +1,12 @@
 package job
 
 import (
+	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -305,19 +308,18 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	} {
 		c, err := types.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
-		assert.True(t, bindsTo(c, att), line)
+		assert.True(t, bindsTo(c, att, nil), line)
 	}
 
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(c, att), "another project is another run")
+	assert.False(t, bindsTo(c, att, nil), "another project is another run")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
 // invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
 // it are two runs; accepting either for the other made a drift gate satisfiable by the
-// run that produces the drift. This workspace sets default_charms, so `test:rw` is what
-// an ordinary run records and a check meaning that form has to say so.
+// run that produces the drift.
 func TestCheckBindsOnCharm(t *testing.T) {
 	t.Parallel()
 
@@ -326,13 +328,110 @@ func TestCheckBindsOnCharm(t *testing.T) {
 
 	charmless, err := types.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(charmless, written), "a written run is not evidence of a gated one")
-	assert.True(t, bindsTo(charmless, gated))
+	assert.False(t, bindsTo(charmless, written, nil), "a written run is not evidence of a gated one")
+	assert.True(t, bindsTo(charmless, gated, nil))
 
 	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
-	assert.True(t, bindsTo(rw, written))
-	assert.False(t, bindsTo(rw, gated), "a gated run is not evidence of a written one")
+	assert.True(t, bindsTo(rw, written, nil))
+	assert.False(t, bindsTo(rw, gated, nil), "a gated run is not evidence of a written one")
+}
+
+// A check is resolved the way `magus run` resolves it, so in a workspace whose
+// default_charms is rw, running the check verbatim records `test:rw` and satisfies it. The
+// charm set is still compared after resolution: a run without the defaults, of another
+// target or in another project is another run.
+func TestCheckBindsUnderDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	defaults := []string{types.CharmReadWrite}
+	cases := []struct {
+		name  string
+		check string
+		att   types.JobAttempt
+		want  bool
+	}{
+		{"the default charm applied", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"an explicit rw", "magus run test:rw .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"its own charm stacked on the default", "magus run test:verify .", types.JobAttempt{Project: ".", Target: "test:verify,rw"}, true},
+		{"narrowing args, which the store does not record", "magus run test . -- -run X", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"a spell filter", "magus run go::go-test .", types.JobAttempt{Project: ".", Target: "go-test:rw", Spell: "go"}, true},
+		{"ci, which never runs with rw", "magus run ci .", types.JobAttempt{Project: ".", Target: "ci"}, true},
+		{"a different target", "magus run test .", types.JobAttempt{Project: ".", Target: "lint:rw"}, false},
+		{"a different project", "magus run test docs", types.JobAttempt{Project: ".", Target: "test:rw"}, false},
+		{"a run without the defaults", "magus run test .", types.JobAttempt{Project: ".", Target: "test"}, false},
+		{"an extra charm", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw,verify"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			c, err := types.ParseLeaseRunLine(tc.check)
+			require.NoError(t, err)
+			tc.att.Found = true
+			assert.Equal(t, tc.want, bindsTo(c, tc.att, defaults))
+		})
+	}
+}
+
+// A check opting out of default_charms is the charmless drift gate an rw-default workspace
+// still needs: only a --no-default-charms run satisfies it, and the command served for it
+// carries the flag.
+func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	defaults := []string{types.CharmReadWrite}
+	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
+	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
+
+	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
+	assert.True(t, bindsTo(optOut, gated, defaults), "the --no-default-charms run")
+	assert.False(t, bindsTo(optOut, written, defaults), "a written run is not evidence of a gated one")
+
+	plain := types.LeaseCheck{Target: "generate", Project: "."}
+	assert.True(t, bindsTo(plain, written, defaults), "a plain check still binds the default-charm run")
+	assert.False(t, bindsTo(plain, gated, defaults))
+
+	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
+	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
+	assert.True(t, strings.HasSuffix(gateCommand(plain), " run generate ."), gateCommand(plain))
+}
+
+// The opt-out is a field on the check record and has one spelling: a check line carrying
+// the flag is refused with the field named, and a declared record keeps it.
+func TestCheckOptOutIsARecordField(t *testing.T) {
+	t.Parallel()
+
+	_, err := types.ParseLeaseCheck("generate . --no-default-charms")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no_default_charms: true")
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/drift"`,
+		`"check":{"target":"generate","project":".","no_default_charms":true}`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	require.NotNil(t, row.Check)
+	assert.True(t, row.Check.NoDefaultCharms)
+	assert.Equal(t, "magus run generate . --no-default-charms", row.Validation)
+}
+
+// A rejected run names the check as it resolved, so the reader sees which charm set the
+// evidence had to carry.
+func TestCheckGateUnderDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "fix/job-store"}
+	gate := types.CompletionGate{ID: "check", Kind: types.GateKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
+	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
+
+	status := verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "test:rw"}, seen)
+	assert.True(t, status.Verified, status.Violations)
+
+	status = verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "lint:rw"}, seen)
+	assert.False(t, status.Verified)
+	require.Len(t, status.Violations, 1)
+	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.
@@ -514,6 +613,41 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 		"a job claiming no declaration is not graded on its footprint")
 }
 
+// A deny path naming a declaration is graded against the footprint, the way a declaration
+// claim is: a change elsewhere in the file is no violation, a change to the named one is.
+func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"run.go"}, DenyPaths: []string{"run.go#executeStages"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
+	placed := func(decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	}
+	unplaced := types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{4, 4}}
+	verify := func(seen Observed) []string {
+		return VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen).Violations
+	}
+	seen := func(regions ...types.RegionChange) Observed {
+		return Observed{Changed: []string{"run.go"}, ChangedKnown: true, ChangedFrom: "abc1234", Regions: regions, RegionsKnown: true}
+	}
+	denied := func(violations []string) []string {
+		return slices.DeleteFunc(slices.Clone(violations), func(v string) bool { return !strings.Contains(v, "denied") })
+	}
+
+	assert.Empty(t, denied(verify(seen(placed("func RunCI() {"), placed("")))), "another declaration and the preamble")
+	assert.Equal(t, []string{"the diff since abc1234 changed run.go#func (m *Magus) executeStages() {, which the job is denied (run.go#executeStages)"},
+		denied(verify(seen(placed("func RunCI() {"), placed("func (m *Magus) executeStages() {")))))
+	assert.Equal(t, []string{"the diff since abc1234 changed run.go, which the job is denied (run.go#executeStages)"},
+		denied(verify(seen(unplaced))), "a region no driver placed could be the declaration")
+	assert.Equal(t, []string{`changed path "run.go" has declarations the job is denied (run.go#executeStages) and its footprint is not known (no regions), so the deny could not be checked`},
+		denied(verify(Observed{Changed: []string{"run.go"}, ChangedKnown: true, RegionsReason: "no regions"})))
+
+	whole := row
+	whole.DenyPaths = []string{"run.go"}
+	assert.Equal(t, []string{`changed path "run.go" is one the job is denied (run.go)`},
+		denied(VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, seen(placed("func RunCI() {"))).Violations))
+}
+
 func TestUnclaimedFootprint(t *testing.T) {
 	t.Parallel()
 
@@ -570,4 +704,88 @@ func TestUnclaimedFootprint(t *testing.T) {
 			assert.Equal(t, tc.want, unclaimedFootprint(tc.writePaths, tc.regions))
 		})
 	}
+}
+
+// integrationRow seeds a job checked by `test .` with one more check goal, in state.
+func integrationRow(t *testing.T, state types.JobState) *Store {
+	t.Helper()
+	s := tmpStore(t, t.TempDir())
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
+		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Check: forkCheck(), Goals: []types.CompletionGate{
+			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
+		}}.Apply(u)
+		u.State = state
+	})
+	require.NoError(t, err)
+	return s
+}
+
+// runs resolves each ref to a recorded run of target in project, failed when named so.
+func runs(byRef map[string][2]string, failed ...string) AttemptResolver {
+	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		run, ok := byRef[ref]
+		if !ok {
+			return types.JobAttempt{}, nil
+		}
+		return types.JobAttempt{Found: true, Ref: ref, TimestampMs: time.Now().Add(time.Minute).UnixMilli(),
+			Target: run[0], Project: run[1], Failed: slices.Contains(failed, ref)}, nil
+	}
+}
+
+func integrationEvidence() types.JobResult {
+	return types.JobResult{Job: "w", Validation: types.JobResultValidation{OutputRef: "out1"},
+		GateEvidence: []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}}
+}
+
+// A job that already passed where it was written gains an integration grade from runs in
+// the merged tree, and its state stays pass.
+func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	require.NoError(t, err)
+	assert.True(t, grade.Verified, "%+v", grade.Gates)
+	assert.Equal(t, []string{"check", "lint"}, []string{grade.Gates[0].ID, grade.Gates[1].ID})
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StatePass, rows[0].State)
+	require.NotNil(t, rows[0].Integration)
+	assert.Equal(t, "/merged", rows[0].Integration.Checkout)
+	assert.NotZero(t, rows[0].Integration.At)
+	assert.True(t, rows[0].Integration.Verified)
+}
+
+// A failing run in the merged tree records verified=false, names the goal, and moves
+// nothing else.
+func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StateExited)
+	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}}, "out2")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	require.NoError(t, err)
+	assert.False(t, grade.Verified)
+	assert.True(t, grade.Gates[0].Verified)
+	assert.Contains(t, strings.Join(grade.Gates[1].Violations, "\n"), "failed")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+	assert.False(t, rows[0].Integration.Verified)
+}
+
+func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	rep := integrationEvidence()
+	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "nope", OutputRef: "out3"})
+	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged")
+	require.ErrorContains(t, err, `goal "nope"`)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
 }

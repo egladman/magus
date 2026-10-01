@@ -66,7 +66,7 @@ lifecycle: endoflife-date, GET https://endoflife.date/api/v1/products/{go,nodejs
 The header line names every URL the provider read, so the network use is never
 silent. `-o json` carries the same facts as a `lifecycle` object: `provider`,
 `state`, `sources`, `as_of` and `fetched_at`. The console's Toolchain tile shows
-the same columns, and a script reads them with `magus\tools()`, which returns a
+the same columns, and a script reads them with `magus\describe.tool()`, which returns a
 `ToolReport`.
 
 Nothing here fails a build. The gate is the `tools` window a project declares;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,6 +37,9 @@ type symbolRouting struct {
 	// Index maps a symbol-id hash (compact at millions of symbols) to the sorted names
 	// of the shards whose index mentions that symbol.
 	Index map[string][]string `json:"index"`
+	// Labels maps a symbol label to the sorted id hashes of every symbol carrying it, so a
+	// bare name routes to the shards of the symbols it names without loading them all.
+	Labels map[string][]string `json:"labels,omitempty"`
 }
 
 // symbolRefKey hashes a symbol node ID to the routing index's compact key.
@@ -43,6 +47,14 @@ func symbolRefKey(symbolID string) string {
 	sum := sha256.Sum256([]byte(symbolID))
 	return hex.EncodeToString(sum[:8])
 }
+
+// routingFormat versions what the routing file and the names sidecar hold. It is folded
+// into symbolShardsKey, so a file written in an older format never matches and is rebuilt
+// on the next sync.
+//
+//	2: Labels.
+//	3: the names sidecar.
+const routingFormat = 3
 
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
 // manifest, the identity the routing index is bound to. Empty when there are none.
@@ -61,6 +73,7 @@ func symbolShardsKey(man *manifest) string {
 	}
 	slices.Sort(names)
 	h := sha256.New()
+	_, _ = h.Write([]byte{routingFormat})
 	for _, name := range names {
 		_, _ = h.Write([]byte(name))
 		_, _ = h.Write([]byte{0})
@@ -103,13 +116,45 @@ func buildXref(shards []Shard) map[string][]string {
 	return out
 }
 
+// buildLabelIndex maps each symbol label in the given shards to the id hashes of every
+// symbol carrying it, sorted and deduplicated.
+func buildLabelIndex(shards []Shard) map[string][]string {
+	byLabel := map[string]map[string]bool{}
+	for _, sh := range shards {
+		if !isSymbolsShard(sh.Name) {
+			continue
+		}
+		for _, n := range sh.Nodes {
+			if n.Kind != types.KindSymbol || n.Label == "" {
+				continue
+			}
+			if byLabel[n.Label] == nil {
+				byLabel[n.Label] = map[string]bool{}
+			}
+			byLabel[n.Label][symbolRefKey(n.ID)] = true
+		}
+	}
+	out := make(map[string][]string, len(byLabel))
+	for label, keys := range byLabel {
+		out[label] = slices.Sorted(maps.Keys(keys))
+	}
+	return out
+}
+
 func (s *Store) routingPath() string { return filepath.Join(s.dir, "shards", symbolsRoutingFile) }
 
 // writeXref persists the routing index bound to man's symbol shards (or removes a
 // stale file when no symbols exist, so it is present exactly when useful). Best-effort
 // at the write layer: callers treat a failure as non-fatal (the graph still works,
 // lookups just fall back to loading all symbol shards).
+//
+// The names sidecar a symbol query ranks from is derived from the same shards under the
+// same key, so it is written here too.
 func (s *Store) writeXref(shards []Shard, man manifest) error {
+	key := symbolShardsKey(&man)
+	if err := s.writeSymbolNames(shards, key); err != nil {
+		return err
+	}
 	index := buildXref(shards)
 	if len(index) == 0 {
 		if err := os.Remove(s.routingPath()); err != nil && !os.IsNotExist(err) {
@@ -117,7 +162,7 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 		}
 		return nil
 	}
-	b, err := json.MarshalIndent(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index}, "", "  ")
+	b, err := json.Marshal(symbolRouting{ShardsKey: key, Index: index, Labels: buildLabelIndex(shards)})
 	if err != nil {
 		return err
 	}
@@ -155,20 +200,52 @@ func (s *Store) MergeSymbolShardsByID(ctx context.Context, g *Graph, symbolIDs [
 	if routing == nil || routing.ShardsKey != symbolShardsKey(man) {
 		return s.MergeSymbolShards(ctx, g)
 	}
-	want := map[string]bool{}
+	keys := make([]string, 0, len(symbolIDs))
 	for _, id := range symbolIDs {
-		for _, name := range routing.Index[symbolRefKey(id)] {
+		keys = append(keys, symbolRefKey(id))
+	}
+	names := routedShards(routing, keys)
+	if len(names) == 0 {
+		return s.MergeSymbolShards(ctx, g)
+	}
+	return s.mergeShardsNamed(ctx, g, man, names)
+}
+
+// routedShards returns, sorted, the shards the routing index names for any of the given
+// symbol id hashes.
+func routedShards(routing *symbolRouting, keys []string) []string {
+	want := map[string]bool{}
+	for _, k := range keys {
+		for _, name := range routing.Index[k] {
 			want[name] = true
 		}
 	}
-	if len(want) == 0 {
-		return s.MergeSymbolShards(ctx, g)
+	return slices.Sorted(maps.Keys(want))
+}
+
+// SymbolShardsForLabel returns, sorted, every symbol shard holding a symbol labeled
+// exactly label, or nil when the routing index is absent, stale, or knows no such label:
+// the caller then has nothing narrower than every symbol shard.
+func (s *Store) SymbolShardsForLabel(label string) []string {
+	man := s.readManifestOrNil()
+	routing := s.readXref()
+	if man == nil || routing == nil || routing.ShardsKey != symbolShardsKey(man) {
+		return nil
 	}
-	names := make([]string, 0, len(want))
-	for name := range want {
-		names = append(names, name)
+	return routedShards(routing, routing.Labels[label])
+}
+
+// MergeSymbolShardsNamed merges the named symbol shards, and both overlays, into g in shard
+// name order: the lazy load for a caller that already chose its shards.
+func (s *Store) MergeSymbolShardsNamed(ctx context.Context, g *Graph, names []string) error {
+	man := s.readManifestOrNil()
+	if man == nil {
+		return nil
 	}
-	slices.Sort(names)
+	return s.mergeShardsNamed(ctx, g, man, slices.Sorted(slices.Values(names)))
+}
+
+func (s *Store) mergeShardsNamed(ctx context.Context, g *Graph, man *manifest, names []string) error {
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return err

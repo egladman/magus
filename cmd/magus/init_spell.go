@@ -142,15 +142,15 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 
 // A test block runs under ` + "`magus buzz -t`" + `. Call an op with a throwaway Target{}
 // and assert on the Command it returns: ops are static, so this pins the exact
-// argv magus will fork. assert.equal deep-compares lists.
+// argv magus will fork. assert\equal deep-compares lists.
 test "getName returns the handle" {
-    assert.equal(mgs_getName(), "SPELLNAME", "handle");
+    assert\equal(mgs_getName(), "SPELLNAME", "handle");
 }
 
 test "build op forks the expected command" {
     final cmd = build(Target{});
-    assert.equal(cmd.bin, "SPELLNAME", "binary");
-    assert.equal(cmd.args, ["build"], "argv");
+    assert\equal(cmd.bin, "SPELLNAME", "binary");
+    assert\equal(cmd.args, ["build"], "argv");
 }
 `
 
@@ -165,5 +165,5 @@ func printInitSpellNextSteps(name, pkgDir, path string) {
 	importPath := filepath.ToSlash(pkgDir)
 	interactive.Emit(os.Stderr, fmt.Sprintf("spell scaffolded: %s", path))
 	interactive.Emit(os.Stderr, fmt.Sprintf("test it:  magus buzz -t --embedded %s", filepath.ToSlash(path)))
-	interactive.Emit(os.Stderr, fmt.Sprintf("bind it:  import %q as %s;  then  magus.project({ \"spells\": [%q] });", importPath, name, name))
+	interactive.Emit(os.Stderr, fmt.Sprintf("bind it:  import %q as %s;  then  magus\\project({ \"spells\": [%q] });", importPath, name, name))
 }

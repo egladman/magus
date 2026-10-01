@@ -43,7 +43,7 @@ var fixtures = map[string]map[string]string{graphFixture: {
 	"magus.yaml": "concurrency: 4\n",
 	"magusfile.buzz": `import "magus";
 import "magus/spell/go";
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 // Format the Go sources.
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
@@ -72,7 +72,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 	// vet claims the Go files as sources, so the changed file reads as source rather than
 	// unclaimed without a spell.
 	"magusfile.buzz": `import "magus";
-magus.project({});
+magus\project({});
 
 // Vet the Go sources.
 export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles("*.go"); }

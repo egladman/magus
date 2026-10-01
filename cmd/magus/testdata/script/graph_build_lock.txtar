@@ -1,0 +1,42 @@
+# Two real `magus graph build` processes against one workspace serialize on the knowledge
+# store's build lock. The fixture's symbol indexer sleeps, so the first build still holds
+# the lock when the second starts: the second names the build it waits on, then loads what
+# the first stored.
+#
+# bash orchestrates because the second build must start only once the first holds the
+# lock, which its holder record on disk shows.
+exec bash -c 'magus graph build --no-sessions >first.out 2>first.err & first=$!; for i in $(seq 400); do [ -s .magus/knowledge/graph-build.holder.json ] && break; sleep 0.05; done; [ -s .magus/knowledge/graph-build.holder.json ] || exit 9; magus graph build --no-sessions >second.out 2>second.err; second=$?; wait $first; echo "first=$? second=$second"'
+stdout 'first=0 second=0'
+
+grep 'knowledge graph rebuilt' first.err
+! grep 'waiting for' first.err
+grep 'magus graph build: waiting for `magus graph build` \(pid [0-9]+, started [0-9-]+ [0-9:]+\), which is building this workspace''s graph' second.err
+grep 'knowledge graph current, built by `magus graph build` \(pid [0-9]+' second.err
+! grep 'took over' second.err
+
+# Each build released the lock, so no holder record is left for the next one to reclaim.
+! exists .magus/knowledge/graph-build.holder.json
+
+# The store both wrote is intact: a read answers from it.
+exec magus graph stats
+stdout 'nodes'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/slow";
+magus.project({ "spells": [slow] });
+-- spells/slow/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "slow"; }
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "sh", args = ["-c", "sleep 3; : > \"$0\"", "$MAGUS_SYMBOL_INDEX"]},
+    };
+}
+fun noop(target: Target) > Command {
+    return Command{bin = "true"};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"noop": noop}; }

@@ -108,6 +108,15 @@ func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	assert.Contains(t, string(body), "my-own-hook")
 	assert.Contains(t, string(body), `"other": {`)
 	requireCurrent(t, root, "test-host")
+
+	current, err := PlanHarness(context.Background(), root, "test-host")
+	require.NoError(t, err)
+	encoded, err := json.Marshal(current.Wired)
+	require.NoError(t, err)
+	var wired []HarnessWired
+	require.NoError(t, json.Unmarshal(encoded, &wired))
+	assert.Equal(t, []HarnessWired{{File: "test-host/hooks.json", Key: "hooks.before", Entries: []map[string]any{command, pathEntry}}}, wired,
+		"a current harness still names what it wires, and only the managed entries")
 }
 
 // normalizeFiles round-trips files through JSON, the form `describe harness -o json` prints,
@@ -173,7 +182,7 @@ func TestPlanHarnessCanWireReadObserver(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "magus-observe.buzz")
 
-	result, err := VerifyHarness(context.Background(), root, "reader")
+	result, err := VerifyHarness(untimedProbes(), root, "reader")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 	assert.True(t, result.Guarded)
@@ -220,7 +229,7 @@ func TestWorkspaceHarnessLoads(t *testing.T) {
 func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
-	result, err := VerifyHarness(context.Background(), root, "test-host")
+	result, err := VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Status)
 
@@ -229,7 +238,7 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	// them something real to run.
 	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
 	writeStubGuardScript(t, root, "magus-path.buzz", "advise")
-	result, err = VerifyHarness(context.Background(), root, "test-host")
+	result, err = VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 }
@@ -264,9 +273,9 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	// probe only checks that it answers something; magus-checkpoint.buzz renders no
 	// verdict at all and is never probed.
 	writeStubGuardScript(t, root, "cursor-hook.buzz", "ok")
-	result, err := VerifyHarness(context.Background(), root, "flat")
+	result, err := VerifyHarness(untimedProbes(), root, "flat")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Status)
+	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
 
 	requireCurrent(t, root, "flat")
 }
@@ -297,7 +306,7 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	// magus-checkpoint.buzz renders no verdict and is never probed; magus-command.buzz
 	// is, so it needs something real behind it now.
 	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
-	result, err := VerifyHarness(context.Background(), root, "managed")
+	result, err := VerifyHarness(untimedProbes(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 
@@ -423,7 +432,7 @@ func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
   "skills": {"paths": [".agents/skills"], "form": "both"}
 }`)
 
-	result, err := VerifyHarness(context.Background(), root, "skills-only")
+	result, err := VerifyHarness(untimedProbes(), root, "skills-only")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessSkillsOnly, result.Status)
 	assert.NotEqual(t, HarnessVerified, result.Status)
@@ -446,7 +455,7 @@ func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "empty"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "empty", "hooks.json"), []byte(`{"hooks":[]}`), 0o644))
 
-	result, err := VerifyHarness(context.Background(), root, "empty")
+	result, err := VerifyHarness(untimedProbes(), root, "empty")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Status)
 	assert.Contains(t, result.Reason, "does not invoke magus")
@@ -602,7 +611,7 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 	config := filepath.Join(root, "opencode.json")
 	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "permission": {"edit": "ask"}}`), 0o644))
 
-	before, err := VerifyHarness(context.Background(), root, "prompter")
+	before, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, before.PromptStatus)
 	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
@@ -631,7 +640,7 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 
 	requireCurrent(t, root, "prompter")
 
-	after, err := VerifyHarness(context.Background(), root, "prompter")
+	after, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, after.PromptStatus)
 	assert.Empty(t, after.PromptReason)
@@ -651,7 +660,7 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission.bash.git push *")
 
-	result, err := VerifyHarness(context.Background(), root, "prompter")
+	result, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.PromptStatus)
 }

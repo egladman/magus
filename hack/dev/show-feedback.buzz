@@ -1,0 +1,482 @@
+namespace showfeedback;
+
+import "crypto";
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus/feedback";
+import "std";
+import "strings";
+import "time";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/show-feedback.buzz -- [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--page <n>] [-o json]";
+final HELP = "cost: reads every checkout's activity trail that changed inside the window, since a session's hooks record into the checkout they ran from\n{USAGE}\n"
+    + "One session's guard feedback, ten rows a page: A refused, B advised, C passed with no rule (by command shape), D served nexts not taken.\n"
+    + "--session defaults to the newest session in the window, --since to 24h, --until to now. Mark rows with hack/dev/mark-feedback.buzz.";
+
+// PAGE is how many rows a page holds, so one page fits a terminal and an agent's context.
+final PAGE = 10;
+final EXAMPLE_WIDTH = 110;
+
+final SECTIONS = ["refused", "advised", "unguarded", "next-not-taken"];
+final LETTERS = ["A", "B", "C", "D"];
+final HEADINGS = [
+    "refused: rule, times, agents, and how often the agent ran the next it was served",
+    "advised: rule, times, agents, and in how many of them it fired only once",
+    "passed with no rule, by the shape of each program a line ran: the guard candidates",
+    "served nexts not taken: rule and the shape of the command it served",
+];
+
+// Row is one labelled line of the report. id is stable across pages, sessions and
+// re-renders: a digest of section and key, never the row's position.
+export object Row {
+    label: str,
+    id: str,
+    section: str,
+    key: str,
+    rule: str = "",
+    shape: str = "",
+    count: int,
+    agents: int,
+    // followed counts refusals whose served next was then run (A) or agents the advice
+    // fired in only once (B); 0 elsewhere.
+    followed: int = 0,
+    // offered is what followed is out of: refusals that served a next (A), agents (B).
+    offered: int = 0,
+    examples: [str],
+    mark: str = "",
+    note: str = "",
+}
+
+export object Report {
+    session: str,
+    host: str,
+    start: int,
+    end: int,
+    checkouts: int,
+    calls: int,
+    unparsed: int,
+    // rows are the labelled rows every page shows, in label order.
+    rows: [Row],
+    // once are the unguarded shapes that ran a single time: unlabelled, off the pages.
+    once: [Row],
+}
+
+// rowID is the stable id a mark is stored under.
+export fun rowID(section: str, key: str) > str {
+    return "fb" + crypto\sha256Hex("{section}|{key}").sub(0, len: 12);
+}
+
+fun agentOf(o: FeedbackObservation) > str {
+    return if (o.agent == "") "main" else o.agent;
+}
+
+// nextRun reports whether the agent behind obs[i] ran one of the nexts it was served:
+// a later call of the same agent, before the same rule refused it again, that is a served
+// command verbatim or that the guard let through as that rule's served next.
+export fun nextRun(obs: [FeedbackObservation], i: int) > bool {
+    final o = obs[i];
+    var j = i + 1;
+    while (j < obs.len()) {
+        final later = obs[j];
+        j = j + 1;
+        if (agentOf(later) != agentOf(o)) {
+            continue;
+        }
+        if (later.rule == o.rule and later.decision == o.decision) {
+            return false;
+        }
+        if (o.nexts.indexOf(later.command.trim()) != null or later.preauthorizedBy == "{o.decision}-{o.rule}") {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun clip(s: str) > str {
+    final one = strings\collapseWs(s);
+    return if (one.len() > EXAMPLE_WIDTH) one.sub(0, len: EXAMPLE_WIDTH - 3) + "..." else one;
+}
+
+object Group {
+    key: str,
+    rule: str,
+    shape: str,
+    count: int = 0,
+    agents: mut {str: int},
+    followed: int = 0,
+    offered: int = 0,
+    examples: mut [str],
+}
+
+fun bump(groups: mut {str: mut Group}, key: str, rule: str, shape: str, agent: str, example: str) > mut Group {
+    if (groups[key] == null) {
+        groups[key] = mut Group{ key = key, rule = rule, shape = shape, agents = mut {<str: int>}, examples = mut [<str>] };
+    }
+    final g = groups[key]!;
+    g.count = g.count + 1;
+    g.agents[agent] = (g.agents[agent] ?? 0) + 1;
+    if (example != "" and g.examples.len() < 2 and g.examples.indexOf(example) == null) {
+        g.examples.append(example);
+    }
+    return g;
+}
+
+fun ranked(groups: {str: Group}) > [Group] {
+    final all = mut [<Group>];
+    foreach (_, g in groups) {
+        all.append(g);
+    }
+    return all.sort(fun (a: Group, b: Group) > bool => a.count > b.count or (a.count == b.count and a.key < b.key));
+}
+
+// settledLast moves the groups a person already marked fine behind the rest, keeping each
+// part's order, so the first pages carry what still needs a verdict.
+fun settledLast(groups: [Group], section: str, latest: {str: FeedbackMark}) > [Group] {
+    final open = mut [<Group>];
+    final settled = mut [<Group>];
+    foreach (g in groups) {
+        final m = latest[rowID(section, key: g.key)];
+        if (m != null and m!.verdict == "fine") {
+            settled.append(g);
+        } else {
+            open.append(g);
+        }
+    }
+    return open + settled;
+}
+
+// rows folds a session's observations into the report's labelled rows, in label order.
+// marks are this repository's verdicts; a row shows the latest one made on its id.
+export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
+    final latest = mut {<str: FeedbackMark>};
+    foreach (m in marks) {
+        latest[m.id] = m;
+    }
+    final bySection = [mut {<str: mut Group>}, mut {<str: mut Group>}, mut {<str: mut Group>}, mut {<str: mut Group>}];
+    final obs = t.observations;
+    foreach (i, o in obs) {
+        final what = if (o.command != "") o.command else o.path;
+        if (o.decision == "deny") {
+            final g = bump(bySection[0], key: o.rule, rule: o.rule, shape: "", agent: agentOf(o), example: clip(what));
+            if (o.nexts.len() > 0) {
+                g.offered = g.offered + 1;
+                if (nextRun(obs, i: i)) {
+                    g.followed = g.followed + 1;
+                }
+            }
+        } else if (o.decision == "advise") {
+            bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: agentOf(o), example: clip(what));
+        } else if (o.decision == "pass" and o.tool == "shell.command" and o.rule == "" and o.preauthorizedBy == "") {
+            final seen = mut [<str>];
+            foreach (shape in o.shapes) {
+                if (seen.indexOf(shape) == null) {
+                    seen.append(shape);
+                    bump(bySection[2], key: shape, rule: "", shape: shape, agent: agentOf(o), example: clip(o.command));
+                }
+            }
+        }
+        if (o.nexts.len() > 0 and !nextRun(obs, i: i)) {
+            final shape = feedback\shape(o.nexts[0]);
+            bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: agentOf(o),
+                example: clip("served `{o.nexts[0]}` after `{what}`"));
+        }
+    }
+    foreach (_, g in bySection[1]) {
+        g.offered = g.agents.size();
+        foreach (_, n in g.agents) {
+            if (n == 1) {
+                g.followed = g.followed + 1;
+            }
+        }
+    }
+    final labelled = mut [<Row>];
+    foreach (s, groups in bySection) {
+        var n = 0;
+        foreach (g in settledLast(ranked(groups), section: SECTIONS[s], latest: latest)) {
+            final id = rowID(SECTIONS[s], key: g.key);
+            final m = latest[id];
+            // A shape that ran once is a long tail, not a candidate: it keeps its id, so
+            // -o json and mark-feedback still reach it, and takes no label on a page.
+            final once = SECTIONS[s] == "unguarded" and g.count == 1;
+            if (!once) {
+                n = n + 1;
+            }
+            labelled.append(Row{
+                label = if (once) "" else "{LETTERS[s]}{n}", id = id, section = SECTIONS[s], key = g.key, rule = g.rule, shape = g.shape,
+                count = g.count, agents = g.agents.size(), followed = g.followed, offered = g.offered, examples = g.examples,
+                mark = if (m != null) m!.verdict else "", note = if (m != null) m!.note else "",
+            });
+        }
+    }
+    return labelled;
+}
+
+// report reads the session and folds it into rows.
+export fun report(session: str, since: str, through: str) > Report !> any {
+    final t = feedback\trail({"session": session, "since": since, "until": through});
+    return fold(t, marks: feedback\marks());
+}
+
+export fun fold(t: FeedbackTrail, marks: [FeedbackMark]) > Report {
+    var unparsed = 0;
+    foreach (o in t.observations) {
+        if (o.tool == "shell.command" and o.command != "" and o.shape == "") {
+            unparsed = unparsed + 1;
+        }
+    }
+    final shown = mut [<Row>];
+    final once = mut [<Row>];
+    foreach (row in rows(t, marks: marks)) {
+        if (row.label == "") {
+            once.append(row);
+        } else {
+            shown.append(row);
+        }
+    }
+    return Report{
+        session = t.session, host = t.host, start = t.start, end = t.end, checkouts = t.checkouts.len(),
+        calls = t.observations.len(), unparsed = unparsed, rows = shown, once = once,
+    };
+}
+
+fun stamp(ms: int) > str {
+    return time\format(time\TimeLayout.rfc3339, unix_millis: std\toDouble(ms));
+}
+
+// window is the flags that reproduce r exactly: the session and the absolute window, so a
+// label read on one page resolves to the same row on the next page and in mark-feedback.
+export fun window(r: Report) > str {
+    return "--session {r.session} --since {stamp(r.start)} --until {stamp(r.end)}";
+}
+
+fun sectionCount(r: Report, section: str) > int {
+    var n = 0;
+    foreach (row in r.rows) {
+        if (row.section == section) {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+fun rowLine(row: Row) > str !> any {
+    final what = if (row.shape != "" and row.section == "unguarded") row.shape else row.key;
+    var tail = "{row.agents} agent" + (if (row.agents == 1) "" else "s");
+    if (row.section == "refused" and row.offered > 0) {
+        tail = tail + ", next run {row.followed}/{row.offered}";
+    } else if (row.section == "advised") {
+        tail = tail + ", once in {row.followed}/{row.offered}";
+    }
+    var line = "  {strings\padRight(row.label, length: 4)}{strings\padLeft("{row.count}x", length: 5)}  {what}  ({tail})";
+    if (row.mark != "") {
+        line = line + "  [marked {row.mark}" + (if (row.note != "") ": {row.note}" else "") + "]";
+    }
+    return line;
+}
+
+// page renders one page of r: the header, the rows that fall on it under their section
+// headings, and the command that reads the next page (or, on the last, what to do next).
+export fun page(r: Report, n: int, size: int = PAGE) > [str] !> any {
+    final pages = std\toInt((r.rows.len() + size - 1) / size);
+    final total = if (pages == 0) 1 else pages;
+    if (n < 1 or n > total) {
+        throw "show-feedback: page {n} does not exist; this report has {total}";
+    }
+    final lines = mut [
+        "read-only: guard feedback for session {r.session} ({r.host}), {stamp(r.start)} to {stamp(r.end)}, {r.calls} calls from {r.checkouts} checkouts; page {n} of {total}",
+        "  A refused {sectionCount(r, section: "refused")} rules, B advised {sectionCount(r, section: "advised")}, C unguarded {sectionCount(r, section: "unguarded")} shapes"
+            + (if (r.once.len() > 0) " ({r.once.len()} more ran once, in -o json)" else "")
+            + (if (r.unparsed > 0) " ({r.unparsed} lines did not parse)" else "") + ", D nexts not taken {sectionCount(r, section: "next-not-taken")}",
+    ];
+    var section = "";
+    var i = (n - 1) * size;
+    while (i < r.rows.len() and i < n * size) {
+        final row = r.rows[i];
+        if (row.section != section) {
+            section = row.section;
+            final s = SECTIONS.indexOf(section)!;
+            final continued = i > 0 and r.rows[i - 1].section == section;
+            lines.append("");
+            lines.append("{LETTERS[s]}  {HEADINGS[s]}" + (if (continued) " (continued)" else ""));
+        }
+        lines.append(rowLine(row));
+        foreach (e in row.examples) {
+            lines.append("         e.g. {e}");
+        }
+        i = i + 1;
+    }
+    lines.append("");
+    lines.append("mark rows: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note \"...\"] {window(r)} -- <label>...");
+    if (n < total) {
+        lines.append("next page: magus buzz hack/dev/show-feedback.buzz -- {window(r)} --page {n + 1}");
+    } else {
+        lines.append("figure: magus buzz hack/dev/show-session-figure.buzz -- --session {r.session} [-o svg]");
+    }
+    return lines;
+}
+
+fun rowsJSON(rows: [Row]) > [{str: any}] {
+    final encoded = mut [<{str: any}>];
+    foreach (row in rows) {
+        encoded.append({
+            "label": row.label, "id": row.id, "section": row.section, "key": row.key, "rule": row.rule, "shape": row.shape,
+            "count": row.count, "agents": row.agents, "followed": row.followed, "offered": row.offered,
+            "examples": row.examples, "mark": row.mark, "note": row.note,
+        });
+    }
+    return encoded;
+}
+
+// reportJSON is the -o json shape, schema 1: the rows every page shows, with their ids, and
+// the unlabelled shapes that ran once.
+export fun reportJSON(r: Report) > {str: any} {
+    return {
+        "schema": 1, "session": r.session, "host": r.host, "start": r.start, "end": r.end,
+        "checkouts": r.checkouts, "calls": r.calls, "unparsed": r.unparsed, "rows": rowsJSON(r.rows), "once": rowsJSON(r.once),
+    };
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--session", "--since", "--until", "--page", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-feedback: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "show-feedback: -o is json, or omitted for text\n{USAGE}";
+    }
+    final pageText = parsed.values["--page"] ?? "1";
+    final n = std\parseInt(pageText);
+    if (n == null) {
+        throw "show-feedback: --page is a number, not {pageText}\n{USAGE}";
+    }
+    final r = report(parsed.values["--session"] ?? "", since: parsed.values["--since"] ?? "", through: parsed.values["--until"] ?? "");
+    if (r.session == "") {
+        throw "show-feedback: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
+    }
+    if (format == "json") {
+        std\print(json\stringify(reportJSON(r), indent: "  "));
+        return;
+    }
+    foreach (line in page(r, n: n!)) {
+        std\print(line);
+    }
+}
+
+// trailFromJSON reads a fixture: a FeedbackTrail spelled as JSON, the shape -o json of
+// feedback\trail would print.
+export fun trailFromJSON(text: str) > FeedbackTrail !> any {
+    final raw = json\parse(text);
+    final obs = mut [<FeedbackObservation>];
+    foreach (o in raw["observations"] ?? []) {
+        final nexts = mut [<str>];
+        foreach (x in o["nexts"] ?? []) {
+            nexts.append(x);
+        }
+        final command = o["command"] ?? "";
+        obs.append(FeedbackObservation{
+            at = std\toInt(o["at"] ?? 0), agent = o["agent"] ?? "", lease = o["lease"] ?? "", tool = o["tool"] ?? "shell.command",
+            command = command, path = o["path"] ?? "", decision = o["decision"] ?? "", rule = o["rule"] ?? "",
+            nexts = nexts, preauthorizedBy = o["preauthorizedBy"] ?? "",
+            shape = feedback\shape(command), shapes = feedback\shapes(command),
+        });
+    }
+    final spawns = mut [<FeedbackSpawn>];
+    foreach (s in raw["spawns"] ?? []) {
+        spawns.append(FeedbackSpawn{
+            at = std\toInt(s["at"] ?? 0), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "", model = s["model"] ?? "",
+        });
+    }
+    final checkouts = mut [<str>];
+    foreach (c in raw["checkouts"] ?? []) {
+        checkouts.append(c);
+    }
+    return FeedbackTrail{
+        session = raw["session"] ?? "", host = raw["host"] ?? "", start = std\toInt(raw["start"] ?? 0), end = std\toInt(raw["end"] ?? 0),
+        checkouts = checkouts, observations = obs, spawns = spawns,
+    };
+}
+
+final FIXTURE = "hack/testdata/feedback-trail.json";
+
+fun fixtureReport() > Report !> any {
+    return fold(trailFromJSON(fs\readFile(FIXTURE)), marks: [
+        FeedbackMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = "unguarded", key = "grep -rn <arg>",
+            verdict = "should-deny", note = "use magus refs", session = "s-old", at = 1 },
+    ]);
+}
+
+test "commands that differ only in what they name share a shape" {
+    assert\equal(feedback\shape("grep -rn foo src"), want: feedback\shape("grep -rn bar lib"), message: "grep");
+    assert\equal(feedback\shape("grep -rn foo src"), want: "grep -rn <arg>", message: "shape");
+}
+
+test "a row id is a digest of section and key, not of its position" {
+    assert\equal(rowID("unguarded", key: "grep -rn <arg>"), want: "fb" + crypto\sha256Hex("unguarded|grep -rn <arg>").sub(0, len: 12), message: "id");
+    assert\equal(rowID("refused", key: "raw-tool"), want: rowID("refused", key: "raw-tool"), message: "stable");
+}
+
+test "the fixture renders its golden page" {
+    final want = mut [<str>];
+    foreach (line in json\parse(fs\readFile("hack/testdata/feedback-page.json"))) {
+        want.append(line);
+    }
+    assert\equal(page(fixtureReport(), n: 1), want: want, message: "page 1");
+}
+
+test "every page but the last ends with the command for the next one" {
+    final r = fixtureReport();
+    final first = page(r, n: 1, size: 4);
+    assert\equal(first[0].endsWith("page 1 of 2"), want: true, message: first[0]);
+    assert\equal(first[first.len() - 1], want: "next page: magus buzz hack/dev/show-feedback.buzz -- {window(r)} --page 2", message: "next");
+    final second = page(r, n: 2, size: 4);
+    assert\equal(second.indexOf("C  passed with no rule, by the shape of each program a line ran: the guard candidates (continued)") != null, want: true, message: "continued heading");
+    assert\equal(second[second.len() - 1].startsWith("figure: "), want: true, message: "last page names the figure");
+    var refused = "";
+    try {
+        page(r, n: 3, size: 4);
+    } catch (e: str) {
+        refused = e;
+    }
+    assert\equal(refused, want: "show-feedback: page 3 does not exist; this report has 2", message: "past the end");
+}
+
+test "a refusal whose next ran counts as followed, one that did not is a next not taken" {
+    final r = fixtureReport();
+    final a1 = r.rows[0];
+    assert\equal(a1.label, want: "A1", message: "label");
+    assert\equal(a1.key, want: "grep-reader", message: "rule");
+    assert\equal("{a1.followed}/{a1.offered}", want: "1/2", message: "next run");
+    var d = 0;
+    foreach (row in r.rows) {
+        if (row.section == "next-not-taken") {
+            d = d + 1;
+            assert\equal(row.key, want: "grep-reader -> sed -n <n> <path>", message: "D key");
+        }
+    }
+    assert\equal(d, want: 1, message: "one D row");
+}
+
+test "a marked row shows its mark" {
+    var shown = "";
+    foreach (row in fixtureReport().rows) {
+        if (row.key == "grep -rn <arg>") {
+            shown = "{row.label} {row.mark} {row.note}";
+        }
+    }
+    assert\equal(shown, want: "C1 should-deny use magus refs", message: "mark");
+}
+
+test "-o json carries the same rows with their ids" {
+    final r = fixtureReport();
+    final decoded = json\parse(json\stringify(reportJSON(r)));
+    assert\equal(decoded["rows"].len(), want: r.rows.len(), message: "rows");
+    assert\equal(decoded["rows"][0]["id"], want: r.rows[0].id, message: "id");
+}

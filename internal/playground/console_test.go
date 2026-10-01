@@ -25,7 +25,7 @@ const sampleMagusfile = `
 import "magus";
 import "magus/spell/go";
 
-magus.project({
+magus\project({
     "spells": [go],
     "outputs": ["bin/**"],
     "targets": {"regen-pgo": {"skip_cache": "test policy"}, "lint": {"slots": 4}},

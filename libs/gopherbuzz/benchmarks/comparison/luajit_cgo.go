@@ -3,7 +3,7 @@
 // LuaJIT 2.1 bindings for the comparison harness, via cgo. cgo is not permitted
 // in _test.go files, so the low-level primitives live here (a regular,
 // build-tagged .go file) and the benchmark loop that uses them lives in
-// engines_cgo_test.go. Compiled only under -tags cgo_engines (needs
+// engines_cgo.go. Compiled only under -tags cgo_engines (needs
 // CGO_ENABLED=1 + libluajit-5.1-dev).
 package comparison
 

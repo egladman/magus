@@ -2,6 +2,8 @@ package job
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -338,6 +340,33 @@ func TestForkMergeRefusesADirectoryAddedToARowThatExists(t *testing.T) {
 	assert.Equal(t, []string{"internal/job/store.go"}, rows[0].WritePaths)
 }
 
+// MGS3031 holds for a deny path a put adds to a row that exists, as it does at fork: a
+// declaration deny on a file no diff driver reads is refused and writes nothing.
+func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := NewStore(tmpLoc(t, gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"})))
+	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.DenyPaths = append(u.DenyPaths, "notes.txt#X")
+	}, config.Jobs{}, nil)
+	require.ErrorIs(t, err, types.WritePathClaimUngradable)
+	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows[0].DenyPaths)
+
+	_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+		u.DenyPaths = append(u.DenyPaths, "run.go#Run")
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+}
+
 // A job that writes is held to something wait can grade; one that writes nothing is not.
 func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()
@@ -370,5 +399,156 @@ func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 
 	_, err := ForkMerge(t.Context(), NewStore(tmpLoc(t, t.TempDir())), "w",
 		func(u *types.Job) { u.WritePaths = []string{"a.go"} }, config.Jobs{}, nil)
-	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job\\put hold a new row to it")
+	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job.put hold a new row to it")
+}
+
+// appliedRow seeds w as a job a worker took, holding write and checked by forkCheck, in a
+// root holding each path, the way `magus job apply` finds a live job.
+func appliedRow(t *testing.T, write ...string) (*Store, Location) {
+	t.Helper()
+	root := loadableRoot(t)
+	for _, p := range write {
+		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
+	}
+	loc := tmpLoc(t, root)
+	s := NewStore(loc)
+	_, err := s.Update(t.Context(), "w", Declare(spec(write...), 0))
+	require.NoError(t, err)
+	_, err = s.Exec(t.Context(), "w", "abc123")
+	require.NoError(t, err)
+	_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+	require.NoError(t, err)
+	return s, loc
+}
+
+func spec(write ...string) types.Declaration {
+	return types.Declaration{ID: "w", Criteria: "goal", WritePaths: write, Check: forkCheck()}
+}
+
+func storeBytes(t *testing.T, s *Store) string {
+	t.Helper()
+	path, err := s.Path()
+	require.NoError(t, err)
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(raw)
+}
+
+// Apply upserts the spec and leaves status alone: the holder keeps its job, its state and
+// its registration, where a re-fork hands the job out again as declared.
+func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
+	t.Parallel()
+
+	s, _ := appliedRow(t, "a.go")
+	before, err := s.List()
+	require.NoError(t, err)
+
+	got, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.False(t, got[0].Created)
+	assert.Equal(t, []string{"write_paths"}, got[0].Changed)
+
+	want := before[0].Clone()
+	want.WritePaths = []string{"a.go", "b.go"}
+	want.Updated = got[0].Next.Updated
+	assert.Equal(t, want, got[0].Next)
+	assert.Equal(t, types.StateRunning, got[0].Next.State)
+}
+
+// A worker's own row takes only the release: a spec dropping some of its paths, recorded as
+// its own release rather than a revocation. Anything else is refused.
+func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
+	t.Parallel()
+
+	s, loc := appliedRow(t, "a.go", "b.go")
+	worker := boundStore(loc, "w")
+
+	shrunk, err := Apply(t.Context(), worker, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err, "a worker may shrink its own row")
+	assert.Equal(t, []string{"a.go"}, shrunk[0].Next.WritePaths)
+	require.Len(t, shrunk[0].Next.Releases, 1)
+	assert.False(t, shrunk[0].Next.Releases[0].Revoked, "giving up its own path is a release, not a revocation")
+
+	var refused *RefusedError
+	_, err = Apply(t.Context(), worker, []types.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	require.ErrorAs(t, err, &refused, "widening")
+	criteria := spec("a.go")
+	criteria.Criteria = "another goal"
+	_, err = Apply(t.Context(), worker, []types.Declaration{criteria}, config.Jobs{}, nil, nil, true)
+	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.go"}, rows[0].WritePaths)
+	assert.Equal(t, "goal", rows[0].Criteria)
+}
+
+func TestApplyDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	s, _ := appliedRow(t, "a.go", "b.go")
+	before := storeBytes(t, s)
+
+	got, err := Apply(t.Context(), s, []types.Declaration{spec("b.go")}, config.Jobs{}, nil, nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.go"}, got[0].Next.WritePaths, "the dry run returns the row the apply would write")
+	require.Len(t, got[0].Next.Releases, 1)
+	assert.Equal(t, "a.go", got[0].Next.Releases[0].Path)
+	assert.True(t, got[0].Next.Releases[0].Revoked, "the orchestrator dropping a holder's path revokes it")
+	assert.Equal(t, before, storeBytes(t, s))
+}
+
+// The stream is checked whole before any of it is written: a refusal at the second record
+// (MGS3018) leaves the first unwritten too.
+func TestApplyRefusalLeavesEveryRowUnchanged(t *testing.T) {
+	t.Parallel()
+
+	s, _ := appliedRow(t, "a.go")
+	before := storeBytes(t, s)
+	fresh := types.Declaration{ID: "x", WritePaths: []string{"internal/**"}, Check: forkCheck()}
+
+	_, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go"), fresh}, config.Jobs{}, nil, nil, false)
+	require.ErrorIs(t, err, types.WritePathIsDirectory)
+	assert.Equal(t, before, storeBytes(t, s))
+
+	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go", "internal/**")}, config.Jobs{}, nil, nil, false)
+	require.ErrorIs(t, err, types.WritePathIsDirectory, "a path added to a row that exists is held to the fork's rule")
+	assert.Equal(t, before, storeBytes(t, s))
+}
+
+func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
+	t.Parallel()
+
+	s, _ := appliedRow(t, "a.go")
+	withState := spec("a.go")
+	withState.State = types.StatePass
+	for name, tc := range map[string]struct {
+		rec  types.Declaration
+		want string
+	}{
+		"state":          {rec: withState, want: "which is status"},
+		"no write paths": {rec: spec(), want: "`magus job exit w`"},
+	} {
+		_, err := Apply(t.Context(), s, []types.Declaration{tc.rec}, config.Jobs{}, nil, nil, false)
+		require.ErrorContains(t, err, tc.want, name)
+	}
+
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateFail })
+	require.NoError(t, err)
+	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	require.ErrorContains(t, err, "w already ended fail")
+}
+
+// A new id is a fork: declared, with this checkout's checkpoint when the record names none.
+func TestApplyCreatesANewJob(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(tmpLoc(t, loadableRoot(t)))
+	rec := types.Declaration{ID: "fresh", WritePaths: []string{"internal/job/store.go"}, Check: forkCheck()}
+	got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "rev-1" }, false)
+	require.NoError(t, err)
+	require.True(t, got[0].Created)
+	assert.Equal(t, types.StateDeclared, got[0].Next.State)
+	assert.Equal(t, "rev-1", got[0].Next.Checkpoint)
 }

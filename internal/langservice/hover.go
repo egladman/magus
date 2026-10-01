@@ -9,7 +9,7 @@ type Hover struct {
 
 // HoverAt returns hover information for the symbol at offset in src, or nil when the
 // cursor is not on a recognized symbol. It resolves module member accesses
-// (`fs.glob` -> the method's signature and doc), bare module names, the file's own
+// (`fs\glob` -> the method's signature and doc), bare module names, the file's own
 // top-level declarations, and builtins. Like completion it reads the raw text, so
 // it works on source the parser would reject.
 func HoverAt(src string, offset int) *Hover {
@@ -26,8 +26,8 @@ func HoverAt(src string, offset int) *Hover {
 		return nil
 	}
 
-	// Member access: `<base>.<word>`. Resolve base to a module and describe word.
-	if start > 0 && src[start-1] == '.' {
+	// Member access: `<base>\<word>`. Resolve base to a module and describe word.
+	if start > 0 && src[start-1] == '\\' {
 		b := start - 1
 		bs := b
 		for bs > 0 && isIdentByte(src[bs-1]) {
@@ -39,6 +39,10 @@ func HoverAt(src string, offset int) *Hover {
 				return memberHover(mod, word)
 			}
 		}
+		return nil
+	}
+	// A member of a value: no host docs describe it.
+	if start > 0 && src[start-1] == '.' {
 		return nil
 	}
 
@@ -75,7 +79,7 @@ func memberHover(mod Module, name string) *Hover {
 	}
 	for _, f := range mod.Fields {
 		if f.Name == name {
-			title := mod.Name + "." + f.Name
+			title := mod.Name + `\` + f.Name
 			if f.Type != "" {
 				title += ": " + f.Type
 			}

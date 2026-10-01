@@ -4,10 +4,15 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -30,6 +35,7 @@ type Config struct {
 	Secret     Secret     `json:"secret" yaml:"secret"`
 	Diff       Diff       `json:"diff" yaml:"diff"`
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
+	Queue      Queue      `json:"queue" yaml:"queue"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -121,6 +127,50 @@ type Config struct {
 	// worse than a flag: one MAGUS_REQUIRED_VERSION exported in a CI environment
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
+}
+
+// Queue configures the merge queue, `magus queue`.
+type Queue struct {
+	// CarryApprovals lists the tiers of change since an approval that leave it standing:
+	// rebase, generated, prose and comment-only. A rebase that changed nothing always
+	// carries, so [] and [rebase] are the strictest policy; code never carries. Unset is
+	// every tier but code.
+	//
+	// It has no environment variable or flag: the queue reads it from the base branch's
+	// own magus.yaml, and an override would loosen review where the base's file is
+	// reviewed.
+	CarryApprovals CarryApprovals `json:"carry_approvals" yaml:"carry_approvals" merge:"written"`
+}
+
+// CarryApprovals is queue.carry_approvals. Decoding refuses a name outside
+// [queuetypes.CarryTier.Values], and code, with MGS1050.
+type CarryApprovals queuetypes.CarryPolicy
+
+// Policy is the merge queue's policy.
+func (c CarryApprovals) Policy() queuetypes.CarryPolicy { return queuetypes.CarryPolicy(c) }
+
+// UnmarshalYAML reports every refused entry, each with its line.
+func (c *CarryApprovals) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.SequenceNode {
+		return types.DiagnosticErrorf(types.CarryApprovalsInvalid, "line %d: queue.carry_approvals must be a list of tiers", n.Line)
+	}
+	var problems []string
+	out := make(CarryApprovals, 0, len(n.Content))
+	for _, item := range n.Content {
+		if err := queuetypes.CheckCarryTier(item.Value); item.Kind != yaml.ScalarNode || err != nil {
+			if err == nil {
+				err = errors.New("a tier is a plain name")
+			}
+			problems = append(problems, fmt.Sprintf("line %d: queue.carry_approvals: %v", item.Line, err))
+			continue
+		}
+		out = append(out, queuetypes.CarryTier(item.Value))
+	}
+	if len(problems) > 0 {
+		return types.DiagnosticErrorf(types.CarryApprovalsInvalid, "%s", strings.Join(problems, "\n"))
+	}
+	*c = out
+	return nil
 }
 
 // Diff configures `magus diff`.
@@ -440,10 +490,17 @@ type Secret struct {
 type MCP struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
+	// HTTP serves /mcp on the server's HTTP listener. False leaves the route unmounted while
+	// `magus mcp` (stdio) and the server socket keep serving MCP, and the listener keeps the
+	// console and health routes. Default true.
+	HTTP *bool `json:"http" yaml:"http"`
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
 	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
 }
+
+// HTTPEnabled reports whether the server mounts /mcp on its HTTP listener.
+func (m MCP) HTTPEnabled() bool { return m.HTTP == nil || *m.HTTP }
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
 // HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
@@ -822,6 +879,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW", "server.maintenance.check_review", "15m", "How often the server checks for a merge or a new remark on a review this tree took part in"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server `magus server` starts"},
+		{"MAGUS_MCP_HTTP", "mcp.http", "true", "When false, the server does not mount /mcp on its HTTP listener; `magus mcp` (stdio) and the server socket still serve MCP"},
 		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
 		{"MAGUS_CONSOLE_ENABLED", "console.enabled", "true when MCP is up", "When false, the MCP HTTP server does not mount the console's read-only API and job service"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
@@ -905,6 +963,7 @@ func Defaults() Config {
 		HistoryPath:   DefaultHistoryPath(),
 		ShutdownGrace: DefaultShutdownGrace,
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour},
+		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
 		Secret: Secret{

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -21,7 +22,9 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 const (
@@ -517,11 +520,10 @@ func leaseProducers(ctx context.Context, deps Dependencies, workspace string, wr
 	}
 }
 
-// checkCommand renders a check as the command that runs it, quoted for a shell. A check
-// naming no charm is the charmless run, which --no-default-charms spells.
+// checkCommand renders a check as the command that runs it, quoted for a shell.
 func checkCommand(c types.LeaseCheck) string {
 	args := []string{c.Target, cmp.Or(c.Project, ".")}
-	if !c.NamesCharm() {
+	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}
 	if len(c.Args) > 0 {
@@ -753,9 +755,9 @@ func denyOverdueLease(me types.Job, now int64) string {
 // tool. Being told first costs one verdict; finding out from a store error costs a turn
 // and teaches nothing about why.
 //
-// A READ is untouched. `magus session lease` with no operand prints the binding, and
-// `magus ledger ls` prints the plan; refusing those would deny a worker the ability to
-// find out what it is bound to, which is the opposite of what this rule is for.
+// A READ is untouched. `magus describe job` prints the row a worker is bound to, and
+// `magus ls jobs` prints the plan; refusing those would deny a worker the ability to find
+// out what it is bound to, which is the opposite of what this rule is for.
 //
 // Unbound callers are untouched too, for the reason every lease rule here gives: an
 // orchestrator and a person at a terminal both name no lease, and they are the ones who
@@ -943,7 +945,7 @@ func childForkRebind(f childFork, h holder, verb string) string {
 	return ""
 }
 
-// forkFlagsUnbounded are the `job fork` flags, and the magus\job\put opts, that declare no
+// forkFlagsUnbounded are the `job fork` flags, and the magus\job.put opts, that declare no
 // boundary: the lineage, the prose, the timing and read_only.
 var forkFlagsUnbounded = map[string]bool{
 	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true,
@@ -1129,7 +1131,7 @@ func jobToolRebind(params map[string]string, h holder) string {
 	return "rewrite the job it holds"
 }
 
-// mcpFork reads the child a magus\job\put declares.
+// mcpFork reads the child a magus\job.put declares.
 func mcpFork(params map[string]string) childFork {
 	f := childFork{
 		id: strings.TrimSpace(params["id"]), parent: strings.TrimSpace(params["parent"]),
@@ -1227,38 +1229,386 @@ func validationNamesGate(validation string) bool {
 	return false
 }
 
-// denyLeaseScopedVCS refuses version-control mutation under a WORKER lease: a row with
-// a parent. The orchestrator lands every unit from the worker's tree, so a worker that
-// commits, pushes, stashes or reverts edits the state it is being integrated from, and a
-// whole-tree revert destroys a sibling's uncommitted work. A root lease, a lease with no
-// row, and no lease at all are untouched: a boundary nobody declared is not one of size
-// zero, the same rule the gate and the write arms follow.
+// denyLeaseScopedVCS refuses a worker lease the version-control operations the
+// orchestrator owns. The orchestrator lands every unit from the worker's tree, so a
+// worker that pushes, stashes, reverts or rewrites history edits the state it is being
+// integrated from, and a whole-tree revert destroys a sibling's uncommitted work. A commit
+// is the exception: one on the worker's own branch, in the checkout its lease was taken
+// in, adds to that tree without moving anything the orchestrator reads.
 //
 // The command is parsed before the ledger is read: every tool call under a bound lease
-// reaches this rule, and most of them are not git.
+// reaches this rule, and most of them are not version control.
 func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" || helpOnlyLine(command, DialectBash) {
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
+	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return vcsMutation(c) != "" }) {
+		return ""
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok {
 		return ""
 	}
+	role := workerRole(me, deps.caller)
+	if role == "" {
+		return ""
+	}
 	for _, c := range cmds {
-		op := vcsMutation(c)
-		if op == "" {
-			continue
+		if op := vcsMutation(c); op != "" && !recordsCommit(c) {
+			return workerVCSDenial("`"+command+"`", op, me, role, "")
 		}
-		me, ok := actingLiveLease(ctx, deps, actingLease)
-		if !ok || me.Parent == "" {
-			return ""
+	}
+	d := effectiveDialect(deps.ShellDialect)
+	cwd, _ := deps.workingDir()
+	calls, ok := locateCalls(command, d, cwd, recordsCommit, false)
+	if !ok {
+		return workerVCSDenial("`"+command+"`", "commit", me, role, "The line does not parse, so where it commits cannot be read.")
+	}
+	envDir, envWhy := gitDirAssigned(command, d)
+	for _, c := range calls {
+		site, unlocated := shellCommitSite(c)
+		if c.inv.Name == "git" && unlocated == "" {
+			switch {
+			case envWhy != "":
+				unlocated = envWhy
+			case envDir != "" && filepath.IsAbs(envDir):
+				site.gitDir = envDir
+			case envDir != "":
+				site.gitDir = filepath.Join(site.dir, envDir)
+			}
 		}
-		return fmt.Sprintf(
-			"magus workspace: leave version control to the orchestrator: report your worktree path and `git status --short`, and it lands the work from there.\n"+
-				"`%s` runs `%s`, and lease %s is a worker under %s in this workspace's ledger. A worker that commits, pushes, stashes or reverts changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+leaseActorClause("clear its parent"),
-			command, op, me.ID, me.Parent)
+		op, refused, why := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
+		if refused {
+			return workerVCSDenial("`"+command+"`", op, me, role, why)
+		}
 	}
 	return ""
+}
+
+func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
+
+// vcsCmdRefusal is lease-vcs for vcs.cmd, which a Buzz process runs under row in dir. The
+// process knows no session or subagent, so row is graded as a worker: the answer the shell
+// rule gives a caller that names neither.
+func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string) error {
+	inv := hint.Invocation{Name: backend, Args: args}
+	site, unlocated := argvSite(inv, dir)
+	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
+	if !refused {
+		return nil
+	}
+	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs.cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
+}
+
+// workerRole says why row, acted under by caller, is a worker rather than the root, ""
+// for the root. A row with a parent is some job's descendant; a subagent's session holds
+// a worker's lease whatever its row says; and a caller that names no session cannot show
+// it is the orchestrator, so it is graded as a worker. Only an identified root session
+// holding a parentless row is the root.
+func workerRole(row types.Job, caller job.Caller) string {
+	switch {
+	case row.Parent != "":
+		return "a worker under " + row.Parent + " in this workspace's ledger"
+	case caller.Agent != "":
+		return "held by a subagent, which makes it a worker"
+	case !caller.Identified():
+		return "held by a caller that names no session, which is graded as a worker"
+	}
+	return ""
+}
+
+// workerVCSDenial words a lease-vcs refusal. what is the refused call as the reader typed
+// it; why is the commit's own reason, "" for an operation no worker may run.
+func workerVCSDenial(what, op string, row types.Job, role, why string) string {
+	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
+	lead := "magus workspace: leave this to the orchestrator: report your worktree path, branch and `git status --short`, and it lands the work from there."
+	if why != "" {
+		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
+	} else {
+		why = "Pushing, stashing, reverting, resetting, cleaning, rebasing, merging, cherry-picking, discarding the tree and removing a worktree stay with the orchestrator."
+	}
+	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
+		"A worker may commit, with any backend, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
+		leaseActorClause("land it"),
+		lead, what, op, row.ID, role, why, checkout)
+}
+
+// vcsSite is where a version-control call acts: the directory it runs in once every
+// relocation it names is applied, or, when it names its repository by a git directory,
+// that directory.
+type vcsSite struct {
+	dir    string
+	gitDir string
+}
+
+// workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
+// vcs.cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
+// the mutation, "" for a call that mutates nothing. A commit is refused with why; every
+// other mutation is refused with no why. unlocated is why site could not be read, which
+// refuses a commit, since a commit that cannot be placed cannot be shown to be in the
+// worker's own checkout.
+func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
+	op = vcsMutation(inv)
+	switch {
+	case op == "":
+		return "", false, ""
+	case !recordsCommit(inv):
+		return op, true, ""
+	case unlocated != "":
+		return op, true, unlocated
+	}
+	if why := commitRefusal(ctx, opts, row, inv.Name, site); why != "" {
+		return op, true, why
+	}
+	return op, false, ""
+}
+
+// commitRefusal says why a worker's commit at site is refused, "" when it is in the
+// lease's own checkout, a secondary one, on a named branch other than the base.
+func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) string {
+	if row.CheckoutRoot == "" {
+		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one."
+	}
+	root, ok := siteCheckout(ctx, opts, backend, site)
+	if !ok {
+		return "Which checkout it commits in cannot be read."
+	}
+	if !samePath(root, row.CheckoutRoot) {
+		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot)
+	}
+	opts.Name = backend
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil || res.VCS == nil {
+		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read."
+	}
+	if !res.VCS.IsSecondaryCheckout(root) {
+		return root + " is the repository's primary checkout, the one the orchestrator integrates in."
+	}
+	ref, err := res.VCS.Ref(ctx, root)
+	switch {
+	case err != nil || ref == "":
+		return root + " has no branch checked out; switch to the job's branch first."
+	case isBaseBranch(ref, res.Base):
+		return fmt.Sprintf("%s is on %s, the base branch.", root, ref)
+	}
+	return ""
+}
+
+// isBaseBranch reports whether ref names the branch base tracks: base itself, or its last
+// segment for a remote-tracking base such as origin/main.
+func isBaseBranch(ref, base string) bool {
+	return ref == base || ref == path.Base(base)
+}
+
+// siteCheckout resolves site to the root of the checkout it stands in.
+func siteCheckout(ctx context.Context, opts types.VCSOptions, backend string, site vcsSite) (string, bool) {
+	if site.gitDir != "" {
+		return gitDirCheckout(site.gitDir)
+	}
+	if backend == "git" {
+		root, _, ok := gitCheckout(site.dir)
+		return root, ok
+	}
+	opts.Name = backend
+	res, err := vcs.Resolve(ctx, site.dir, "", opts)
+	if err != nil || res.VCS == nil {
+		return "", false
+	}
+	root, err := res.VCS.Root(ctx, site.dir)
+	return root, err == nil && root != ""
+}
+
+// gitDirCheckout is the checkout a git directory belongs to: the parent of a `.git`
+// directory, or the checkout a linked worktree's administrative directory names in its
+// gitdir file. False for any other directory, such as a bare repository, which has no
+// checkout to be the worker's.
+func gitDirCheckout(gitDir string) (string, bool) {
+	gitDir = realPath(gitDir)
+	if filepath.Base(gitDir) == ".git" {
+		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
+			return filepath.Dir(gitDir), true
+		}
+		return "", false
+	}
+	data, err := os.ReadFile(filepath.Join(gitDir, "gitdir"))
+	if err != nil {
+		return "", false
+	}
+	p := strings.TrimSpace(string(data))
+	if !filepath.IsAbs(p) || filepath.Base(p) != ".git" {
+		return "", false
+	}
+	return filepath.Dir(p), true
+}
+
+// shellCommitSite places a commit a shell line runs, or says why it cannot be placed.
+func shellCommitSite(c locatedCall) (vcsSite, string) {
+	switch {
+	case c.unfollowed:
+		return vcsSite{}, "It runs inside a conditional, a loop or a function, so where it commits cannot be read without running it."
+	case !c.at.known:
+		return vcsSite{}, "A cd before it does not name one literal directory, so where it commits cannot be read."
+	case c.args == nil:
+		// Reached through a wrapper, whose arguments arrive only as rendered text: a
+		// variable renders empty there, so a relocation cannot be read off them.
+		if vcsRelocates(c.inv.Name, c.inv.Args) {
+			return vcsSite{}, "It runs through a wrapper and names another repository, so where it commits cannot be read."
+		}
+		return vcsSite{dir: c.at.dir}, ""
+	}
+	if c.inv.Name == "git" {
+		lits := make([]string, 0, len(c.args))
+		for _, w := range c.args {
+			lit, ok := literalArg(w.Parts)
+			if !ok {
+				break
+			}
+			lits = append(lits, lit)
+		}
+		if g := parseGit(lits); g.at < 0 {
+			return vcsSite{}, "A word git reads before its subcommand is not literal, so where it commits cannot be read."
+		}
+		return argvSite(hint.Invocation{Name: c.inv.Name, Args: lits}, c.at.dir)
+	}
+	site, ok := pushFrom(c.inv.Name, c.args, c.at)
+	if !ok {
+		return vcsSite{}, "The repository it names is not one literal path, so where it commits cannot be read."
+	}
+	return vcsSite{dir: site.dir}, ""
+}
+
+// argvSite places a version-control argv that starts in dir, following git's -C chain and
+// --git-dir, and the relocating options of hg, sl and jj. A relocation spelled with `~`,
+// left empty, or made by git's --work-tree cannot be placed.
+func argvSite(inv hint.Invocation, dir string) (vcsSite, string) {
+	move := func(target string) bool {
+		if target == "" || strings.HasPrefix(target, "~") {
+			return false
+		}
+		if filepath.IsAbs(target) {
+			dir = filepath.Clean(target)
+		} else {
+			dir = filepath.Join(dir, target)
+		}
+		return true
+	}
+	const unplaced = "The directory it names is not one literal path, so where it commits cannot be read."
+	if inv.Name != "git" {
+		for i := 0; i < len(inv.Args); i++ {
+			name, value, joined := strings.Cut(inv.Args[i], "=")
+			if !slices.Contains(relocatingFlags[inv.Name], name) {
+				continue
+			}
+			if !joined {
+				if i++; i >= len(inv.Args) {
+					return vcsSite{}, unplaced
+				}
+				value = inv.Args[i]
+			}
+			if !move(value) {
+				return vcsSite{}, unplaced
+			}
+		}
+		return vcsSite{dir: dir}, ""
+	}
+	g := parseGit(inv.Args)
+	if g.at < 0 {
+		return vcsSite{}, "It names no subcommand."
+	}
+	gitDir := ""
+	for i := 0; i < g.at; i++ {
+		name, value, joined := strings.Cut(inv.Args[i], "=")
+		if joined && (name == "-C" || name == "-c") {
+			// git reads these two only in the separate form.
+			continue
+		}
+		if !joined && gitValuedGlobals[name] && i+1 < g.at {
+			i++
+			value = inv.Args[i]
+		}
+		switch name {
+		case "-C":
+			if value != "" && !move(value) {
+				return vcsSite{}, unplaced
+			}
+		case "--work-tree":
+			return vcsSite{}, "It names a work tree with --work-tree, which need not be any checkout's directory."
+		case "--git-dir":
+			if value == "" || strings.HasPrefix(value, "~") {
+				return vcsSite{}, unplaced
+			}
+			gitDir = value
+		}
+	}
+	if gitDir == "" {
+		return vcsSite{dir: dir}, ""
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	return vcsSite{dir: dir, gitDir: gitDir}, ""
+}
+
+// gitDirAssigned reads the git directory a line's environment names: a GIT_DIR assignment
+// as a command prefix, an export, or an `env` word, as written: a relative one resolves
+// where git runs. why says the line names a repository in a way that cannot be placed:
+// GIT_WORK_TREE, a value that is not literal, or more than one.
+func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return "", ""
+	}
+	var values []string
+	unplaced := false
+	note := func(name, value string, literal bool) {
+		switch name {
+		case "GIT_WORK_TREE":
+			unplaced = true
+		case "GIT_DIR":
+			values = append(values, value)
+			unplaced = unplaced || !literal
+		}
+	}
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.Assign:
+			if n.Name == nil {
+				return true
+			}
+			value, literal := "", n.Value == nil
+			if n.Value != nil {
+				value, literal = literalArg(n.Value.Parts)
+			}
+			note(n.Name.Value, value, literal)
+		case *syntax.CallExpr:
+			// env's assignments lead its arguments; the first word without `=` is the command.
+			if len(n.Args) == 0 || path.Base(literalWord(n.Args[0].Parts)) != "env" {
+				return true
+			}
+			for _, w := range n.Args[1:] {
+				lit, ok := literalArg(w.Parts)
+				if ok && strings.HasPrefix(lit, "-") {
+					continue
+				}
+				name, value, found := strings.Cut(lit, "=")
+				if !ok || !found {
+					break
+				}
+				note(name, value, true)
+			}
+		}
+		return true
+	})
+	switch {
+	case unplaced || len(values) > 1:
+		return "", "The line names its repository with GIT_DIR or GIT_WORK_TREE in a way that cannot be read as one checkout."
+	case len(values) == 0:
+		return "", ""
+	case values[0] == "" || strings.HasPrefix(values[0], "~"):
+		return "", "The GIT_DIR it names is not one literal path, so where it commits cannot be read."
+	}
+	return values[0], ""
 }
 
 // isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
@@ -1278,12 +1628,12 @@ func vcsSubcommand(c hint.Invocation) (sub string, rest []string) {
 }
 
 // vcsMutation names the version-control operation a parsed command performs when it is one
-// a worker must leave to the orchestrator, or "" for anything else. Global options before
-// the subcommand (git -C <dir>, hg -R <repo>, jj -R <repo>) are skipped so a relocated
-// commit is still a commit.
+// lease-vcs judges, or "" for anything else. Global options before the subcommand (git -C
+// <dir>, hg -R <repo>, jj -R <repo>) are skipped so a relocated commit is still a commit.
 //
-// Every backend's PUSH is read, because the push gate keys on it and a push it cannot see
-// publishes without the person being asked. The other mutations are git's alone: the
+// Every backend's PUSH and COMMIT are read: the push gate keys on the push, and a push it
+// cannot see publishes without the person being asked; a worker's commit is placed against
+// its checkout whichever backend records it. The other mutations are git's alone: the
 // Mercurial, Sapling and Jujutsu arms of the guard grade their destructive verbs in
 // nonGitVCSGuard, and a name here that promised more would be a rule nothing enforces.
 //
@@ -1299,8 +1649,11 @@ func vcsMutation(c hint.Invocation) string {
 	}
 	switch c.Name {
 	case "hg", "sl":
-		if sub == "push" {
+		switch sub {
+		case "push":
 			return c.Name + " push"
+		case "commit", "ci":
+			return c.Name + " commit"
 		}
 		return ""
 	case "jj":
@@ -1308,6 +1661,12 @@ func vcsMutation(c hint.Invocation) string {
 		// the same way.
 		if nested, _ := vcsSubcommand(hint.Invocation{Name: c.Name, Args: rest}); sub == "git" && nested == "push" {
 			return "jj git push"
+		}
+		switch sub {
+		case "commit":
+			return "jj commit"
+		case "describe", "desc":
+			return "jj describe"
 		}
 		return ""
 	case "git":

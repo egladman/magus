@@ -87,17 +87,16 @@ One thing to know: **`affected ci` errors when no project in scope declares a
 that lack them, but `ci` is the anchor the affected set keys off, so a missing
 one would exit 0 having gated nothing.
 
-To fail fast on a cheap check before the expensive part starts anywhere, name
-it with `--preflight`. It must be a target the invoked one already composes;
-a failure stops the run with exit 3 and names the fix on its first line, and
-with `--plan` a red pass prints no plan:
+To fail fast on a cheap check before the expensive part starts anywhere, run
+it first and pipe it in. A failed stage stops the stages after it (MGS3030),
+and a `--plan` downstream of one prints no plan:
 
 ```sh
-magus affected ci --preflight generate
-magus affected ci --plan --preflight generate
+magus affected generate --no-default-charms | magus affected ci
+magus affected generate --no-default-charms | magus affected ci --plan
 ```
 
-See [Failing fast with --preflight](../concepts/targets.md#failing-fast-with---preflight).
+See [Failing fast with a pipe](../concepts/targets.md#failing-fast-with-a-pipe).
 
 For a tight loop, pipe the watcher into it:
 

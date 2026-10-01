@@ -167,6 +167,7 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Command:     in.command,
 		Description: in.description,
 		Commands:    commandInvocations(in.command, in.dialect, at.dir),
+		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 		Role:        role,
 		Lease:       lease,

@@ -23,7 +23,7 @@ var (
 //
 // Windows has no mmap, and allocating RWX in one call is what W^X-enforcing
 // mitigations (and some EDR products) block, so this follows the same
-// write-then-reprotect shape as the unix half in jit_mem_unix.go.
+// write-then-reprotect shape as the mmap half in jit_mem_other.go.
 func mapExecutable(buf []byte) []byte {
 	n := uintptr(len(buf))
 	addr, err := windows.VirtualAlloc(0, n, windows.MEM_COMMIT|windows.MEM_RESERVE, windows.PAGE_READWRITE)
@@ -50,7 +50,7 @@ func mapExecutable(buf []byte) []byte {
 	// Required on Windows on ARM, whose instruction fetch is not coherent with the
 	// data writes above. Documented as mandatory after generating code on ANY
 	// architecture, so it is called unconditionally rather than gated on arm64;
-	// on x86 the kernel makes it cheap. Unlike the unix half this uses the Win32
+	// on x86 the kernel makes it cheap. Unlike the mmap half this uses the Win32
 	// API rather than emitting cache-maintenance instructions directly, because
 	// whether those are permitted at EL0 is the OS's business, not ours.
 	// CurrentProcess, not GetCurrentProcess: the pseudo-handle is a constant, so the
@@ -63,8 +63,8 @@ func mapExecutable(buf []byte) []byte {
 	return mem
 }
 
-// unmapExecutable releases an allocation mapExecutable returned. See the unix
-// half in jit_mem_unix.go for why this is safe only from cache eviction: a
+// unmapExecutable releases an allocation mapExecutable returned. See the mmap
+// half in jit_mem_other.go for why this is safe only from cache eviction: a
 // running chunk is reachable from vm.frames, so it cannot have been collected,
 // so this cannot fire underneath executing code.
 //

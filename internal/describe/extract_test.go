@@ -1,6 +1,8 @@
 package describe
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -30,7 +32,7 @@ export fun foo_bar(ctx: magus\Context, args: [str]) > void {
 
 // separated by a blank line, so it must NOT attach
 
-export fun baz(ctx: magus\Context, args: [str]) > void { magus.doctor([]); }
+export fun baz(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
 
 export fun gen_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen"));
@@ -98,7 +100,7 @@ func TestHasCharmBothReceivers(t *testing.T) {
 export fun build(ctx: magus\Context, args: [str]) > void { if (ctx.hasCharm("container")) {} }
 `)
 	viaMagus := Extract(`import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void { if (magus.hasCharm("container")) {} }
+export fun build(ctx: magus\Context, args: [str]) > void { if (magus\hasCharm("container")) {} }
 `)
 	c, _ := nodeByName(viaCtx, "build")
 	m, _ := nodeByName(viaMagus, "build")
@@ -352,7 +354,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
-export fun scan(ctx: magus\Context, args: [str]) > void { proc.exec("trivy", []); other["x"](); }
+export fun scan(ctx: magus\Context, args: [str]) > void { proc\exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
@@ -410,7 +412,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 export fun help(ctx: magus\Context, args: [str]) > void {
-    proc.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
+    proc\exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
 }
 `)
@@ -468,7 +470,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    proc.exec("sh", ["-c", "echo }"]);
+    proc\exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -638,7 +640,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    magus.log.info("run ctx.needs(setup) and api.compile first");
+    magus\log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
 }
 export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -877,5 +879,28 @@ func TestSpellHandle(t *testing.T) {
 		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias})
 		assert.Equal(t, tc.ok, ok, tc.path)
 		assert.Equal(t, tc.want, got, tc.path)
+	}
+}
+
+// BenchmarkExtract measures the static parse of the real magusfile.buzz — the
+// largest realistic input (every target the project ships). Extract runs once
+// per `magus describe graph` / `magus run generate` invocation, so this benchmark
+// exists to confirm it stays negligible against CLI-invocation cost, not because
+// it sits on a hot loop. Re-run:
+//
+//	go test -bench=BenchmarkExtract -benchmem -count=10
+func BenchmarkExtract(b *testing.B) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "magusfile.buzz"))
+	if err != nil {
+		b.Fatalf("read magusfile.buzz: %v", err)
+	}
+	s := string(src)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		nodes := Extract(s)
+		if len(nodes) == 0 {
+			b.Fatal("no nodes extracted")
+		}
 	}
 }

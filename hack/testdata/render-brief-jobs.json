@@ -1,0 +1,31 @@
+{
+  "jobs": [
+    {"id": "guard-shell-quoting", "state": "declared"},
+    {"id": "guard-tokenizer", "state": "pass"},
+    {"id": "guard-catalog", "state": "running"},
+    {"id": "guard-code-search", "state": "running"},
+    {"id": "guard-advisories", "state": "declared"}
+  ],
+  "overlaps": [
+    {
+      "footprint": {"verdict": "disjoint"},
+      "job_a": "guard-shell-quoting",
+      "job_b": "guard-code-search",
+      "paths_a": ["internal/guard/quote.go"],
+      "paths_b": ["internal/guard/*.go"]
+    },
+    {
+      "footprint": {"verdict": "shared", "shared": ["internal/guard/quote_test.go#TestQuotedPipe"]},
+      "job_a": "guard-advisories",
+      "job_b": "guard-shell-quoting",
+      "paths_a": ["internal/guard/*_test.go"],
+      "paths_b": ["internal/guard/quote_test.go"]
+    },
+    {
+      "job_a": "guard-code-search",
+      "job_b": "guard-advisories",
+      "paths_a": ["internal/guard/*.go"],
+      "paths_b": ["internal/guard/*_test.go"]
+    }
+  ]
+}

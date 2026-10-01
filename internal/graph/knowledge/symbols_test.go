@@ -1,8 +1,10 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -398,4 +400,94 @@ func TestAssembleSymbolShardsStoresTheFold(t *testing.T) {
 		g.AddNode(types.KnowledgeNode{ID: projectID(p.Path), Kind: types.KindProject, Label: p.Path, Source: p.Path})
 	}
 	assert.Empty(t, g.UndeclaredEdges())
+}
+
+// syntheticSymbols builds a symbol-ingest fixture. It is deliberately separate from
+// syntheticInputs: that fixture is shared by every other benchmark here and by the store
+// and scale tests, so growing it would silently invalidate benchstat comparisons against
+// every baseline already recorded against it.
+func syntheticSymbols(nSymbols, callsPerSymbol int) []types.KnowledgeSymbol {
+	out := make([]types.KnowledgeSymbol, nSymbols)
+	for i := range out {
+		file := fmt.Sprintf("pkg/p%05d/f.go", i%64)
+		calls := make([]types.KnowledgeSymbolCall, callsPerSymbol)
+		for c := range calls {
+			calls[c] = types.KnowledgeSymbolCall{Key: fmt.Sprintf("gomod example.com/x Sym%05d().", (i+c+1)%nSymbols), Count: c + 1}
+		}
+		out[i] = types.KnowledgeSymbol{
+			Key:      fmt.Sprintf("gomod example.com/x Sym%05d().", i),
+			Label:    fmt.Sprintf("Sym%05d", i),
+			Language: "go",
+			Source:   fmt.Sprintf("%s:%d", file, i),
+			Defs:     []string{file},
+			Refs:     []types.KnowledgeSymbolRef{{Path: file, Count: 3, Lines: []int{1, 2, 3}}},
+			Calls:    calls,
+		}
+	}
+	return out
+}
+
+// BenchmarkAssembleSymbols isolates what call edges add to shard assembly: calls=0 is the
+// pre-change cost, calls=16 an order of magnitude past what real indexes produce (the
+// repo's own index averages under one call edge per symbol).
+func BenchmarkAssembleSymbols(b *testing.B) {
+	projects := []types.TargetGraphProject{{Path: "pkg/p00000"}}
+	for _, calls := range []int{0, 16} {
+		syms := syntheticSymbols(4000, calls)
+		b.Run(fmt.Sprintf("calls=%d", calls), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = assembleSymbols("pkg/p00000", syms, projects)
+			}
+		})
+	}
+}
+
+// A project's symbols split by defining directory; merging every part is the unsplit shard,
+// and each symbol's part holds every edge that ends at it.
+func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "x A().", Label: "A", Source: "a/a.go:3", Defs: []string{"a/a.go"},
+			Refs: []types.KnowledgeSymbolRef{{Path: "b/b.go", Count: 1, Lines: []int{4}}}},
+		{Key: "x B().", Label: "B", Source: "b/b.go:1", Defs: []string{"b/b.go"},
+			Calls: []types.KnowledgeSymbolCall{{Key: "x A().", Count: 1}}},
+		{Key: "x Top().", Label: "Top", Source: "top.go:1", Defs: []string{"top.go"}},
+		{Key: "dep Ext().", Label: "Ext", Refs: []types.KnowledgeSymbolRef{{Path: "a/a.go", Count: 2, Lines: []int{5, 6}}}},
+	}
+	whole := assembleSymbols(".", syms, []types.TargetGraphProject{{Path: "."}})
+
+	parts := splitSymbolShard(".", whole)
+
+	var names []string
+	seen := map[string]string{}
+	for _, p := range parts {
+		names = append(names, p.Name)
+		for _, n := range p.Nodes {
+			require.NotContainsf(t, seen, n.ID, "%s is in %s and %s", n.ID, seen[n.ID], p.Name)
+			seen[n.ID] = p.Name
+		}
+	}
+	assert.Equal(t, []string{".@symbols", ".@symbols:a", ".@symbols:b"}, names)
+	assert.Equal(t, ".@symbols:a", seen["symbol:x A()."])
+	assert.Equal(t, ".@symbols", seen["symbol:x Top()."], "a top-level definition stays in the base shard")
+	assert.Equal(t, ".@symbols", seen["symbol:dep Ext()."], "a symbol defined nowhere here stays in the base shard")
+
+	a := mergeAll([]Shard{parts[1]})
+	assert.True(t, hasEdgeIn(a, "file:b/b.go", "symbol:x A()."), "the reference into A rides with A")
+	assert.True(t, hasEdgeIn(a, "symbol:x B().", "symbol:x A()."), "so does the call into A")
+
+	want, err := json.Marshal(mergeAll([]Shard{whole}).Output())
+	require.NoError(t, err)
+	got, err := json.Marshal(mergeAll(parts).Output())
+	require.NoError(t, err)
+	assert.Equal(t, string(want), string(got), "the parts merge back into the unsplit shard")
+	assert.True(t, isSymbolsShard(".@symbols:a"))
+	assert.Equal(t, ".", symbolsShardProject(".@symbols:a"))
+
+	for _, p := range parts {
+		merged := p
+		merged.canonical = false
+		assert.Equalf(t, fingerprintShardContent(merged), fingerprintShardContent(p),
+			"%s is already canonical, so skipping the merge fingerprints it alike", p.Name)
+	}
 }

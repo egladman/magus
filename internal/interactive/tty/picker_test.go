@@ -3,6 +3,7 @@ package tty
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -509,4 +510,123 @@ func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
 // assertion about an item does not restate the frame around it.
 func unboxRow(s *screen.Screen, row int) string {
 	return strings.TrimRight(strings.Trim(s.Row(row), boxV), " ")
+}
+
+// benchItems builds a realistic picker list: `magus x` offers project+target
+// pairs, so a large monorepo puts thousands of them in front of the filter.
+func benchItems(n int) []string {
+	items := make([]string, n)
+	for i := range items {
+		items[i] = fmt.Sprintf("internal/service/component-%04d:build", i)
+	}
+	return items
+}
+
+// BenchmarkFilter measures the work done on EVERY keystroke: the whole item
+// list is re-scanned to recompute the match set.
+func BenchmarkFilter(b *testing.B) {
+	for _, n := range []int{100, 1000, 5000} {
+		items := benchItems(n)
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				_ = filterIndices(items, "service comp")
+			}
+		})
+	}
+}
+
+// BenchmarkSessionDraw measures one repaint of the picker, which happens on
+// every keystroke AND on every mouse-motion event.
+func BenchmarkSessionDraw(b *testing.B) {
+	for _, n := range []int{100, 1000, 5000} {
+		items := benchItems(n)
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			p := terminal(120, 40)
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: io.Discard, probe: p, view: NewInlineView(io.Discard, p)}
+			_ = s.refilter(context.Background())
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				s.draw()
+			}
+		})
+	}
+}
+
+// BenchmarkPickerMouseSweep is one pointer sweep down the list.
+//
+// Any-event tracking reports every CELL the pointer crosses, not every row, and
+// a row is as wide as the terminal, so a diagonal sweep across ten items is
+// dozens of events of which only ten change anything. The two variants are the
+// picker before and after the redraw is guarded on the highlight actually
+// moving.
+func BenchmarkPickerMouseSweep(b *testing.B) {
+	items := benchItems(1000)
+	// A pointer crossing ten rows, eight cells wide each: 80 motion events.
+	sweep := func(s *session, onEvent func(*session, int)) {
+		for row := 10; row < 20; row++ {
+			for range 8 {
+				if i, ok := s.matchAt(row); ok {
+					onEvent(s, i)
+				}
+			}
+		}
+	}
+	run := func(b *testing.B, onEvent func(*session, int)) {
+		var total int
+		b.ReportAllocs()
+		b.ResetTimer()
+		for range b.N {
+			c := &countingTTY{}
+			p := terminal(120, 40)
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: c, probe: p,
+				view: NewInlineView(c, p), mouseOK: true, promptRow: 20}
+			_ = s.refilter(context.Background())
+			s.draw()
+			c.n = 0
+			sweep(s, onEvent)
+			total = c.n
+		}
+		b.ReportMetric(float64(total), "B_written/sweep")
+	}
+	b.Run("redraw-every-event", func(b *testing.B) {
+		run(b, func(s *session, i int) { s.cursor = i; s.draw() })
+	})
+	b.Run("redraw-on-change", func(b *testing.B) {
+		run(b, func(s *session, i int) { s.hover(i) })
+	})
+}
+
+// BenchmarkPickerArrowNavigation is holding down an arrow key: the filter does
+// not change, so only the two highlighted rows differ between frames.
+func BenchmarkPickerArrowNavigation(b *testing.B) {
+	items := benchItems(1000)
+	run := func(b *testing.B, whole bool) {
+		var total int
+		b.ReportAllocs()
+		b.ResetTimer()
+		for range b.N {
+			c := &countingTTY{}
+			p := terminal(120, 40)
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: c, probe: p,
+				view: NewInlineView(c, p)}
+			_ = s.refilter(context.Background())
+			s.draw()
+			c.n = 0
+			for range 10 {
+				s.cursor = (s.cursor + 1) % len(s.matches)
+				if whole {
+					// What it did before: forget the last frame, so every line
+					// counts as changed and the whole block is rewritten.
+					s.view.Reset()
+				}
+				s.draw()
+			}
+			total = c.n
+		}
+		b.ReportMetric(float64(total), "B_written/10keys")
+	}
+	b.Run("rewrite-whole-block", func(b *testing.B) { run(b, true) })
+	b.Run("diff-changed-lines", func(b *testing.B) { run(b, false) })
 }

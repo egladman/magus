@@ -1,8 +1,11 @@
 package watch
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -76,4 +79,95 @@ func TestRelativeIgnoreAdmitsTheRootItself(t *testing.T) {
 	assert.False(t, rel(root), "ignoring the root prunes the walk before it starts")
 	assert.False(t, rel(root+"/"), "and a trailing slash is the same directory")
 	assert.False(t, rel(root+"/internal"), "so the directories under it are reached at all")
+}
+
+// FuzzIgnorePatternsMatch probes the compiled-pattern matcher with
+// arbitrary regex/glob/literal patterns and arbitrary paths. The
+// invariant is "no panic across pattern types"; an invalid regex must
+// be silently dropped (not crash the matcher).
+func FuzzIgnorePatternsMatch(f *testing.F) {
+	f.Add("glob", "**/scratch/*", "/repo/api/scratch/foo")
+	f.Add("regex", `\.tmp$`, "/repo/api/main.tmp")
+	f.Add("literal", "node_modules", "/repo/web/node_modules/foo")
+	f.Add("regex", "(", "/repo/api/main.go") // invalid regex
+	f.Add("glob", "[", "/repo/api/main.go")  // invalid glob
+	f.Fuzz(func(t *testing.T, typ, pat, abs string) {
+		if strings.IndexByte(typ+pat+abs, 0) >= 0 {
+			t.Skip()
+		}
+		match := IgnorePatterns("/repo", []types.IgnorePattern{{Type: types.PatternType(typ), Pattern: pat}})
+		_ = match(abs) // panic = test failure
+	})
+}
+
+var builtinPaths = []string{
+	"/repo/api/main.go",
+	"/repo/.git/config",
+	"/repo/node_modules/lodash/index.js",
+	"/repo/api/target/debug/foo",
+	"/repo/.magus/abc123",
+	"/repo/magus-1234-abcd.sock",
+	"/repo/api/.main.go.swp",
+	"/repo/api/main_test.go~",
+	"/repo/web/app.ts",
+	"/repo/dist/bundle.js",
+}
+
+// BenchmarkBuiltinIgnore measures the per-event cost of the built-in ignore
+// predicate. It runs on every filesystem event, so the constant factor matters.
+func BenchmarkBuiltinIgnore(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, p := range builtinPaths {
+			_ = BuiltinIgnore(p)
+		}
+	}
+}
+
+// BenchmarkComposedIgnore measures the cost of the layered predicate used in
+// production: BuiltinIgnore + a set of glob patterns, composed via Compose.
+func BenchmarkComposedIgnore(b *testing.B) {
+	const wsRoot = "/repo"
+	patterns := []types.IgnorePattern{
+		{Type: types.PatternGlob, Pattern: "**/scratch/**"},
+		{Type: types.PatternGlob, Pattern: "**/testdata/**"},
+		{Type: types.PatternRegex, Pattern: `\.tmp$`},
+		{Type: types.PatternLiteral, Pattern: "vendor"},
+	}
+	ignore := Compose(
+		BuiltinIgnore,
+		IgnorePatterns(wsRoot, patterns),
+	)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, p := range builtinPaths {
+			_ = ignore(p)
+		}
+	}
+}
+
+// BenchmarkOutputsIgnore measures the per-event cost of the output-glob
+// predicate that guards against build→output-write→rebuild loops.
+func BenchmarkOutputsIgnore(b *testing.B) {
+	const wsRoot = "/repo"
+	globs := make([]types.Glob, 20)
+	for i := range globs {
+		globs[i] = types.Glob{Pattern: fmt.Sprintf("svc%02d/dist/**", i)}
+	}
+	ignore := OutputsIgnore(wsRoot, globs)
+
+	paths := []string{
+		"/repo/svc00/dist/out.bin",
+		"/repo/api/main.go",
+		"/repo/svc19/dist/index.js",
+		"/repo/web/app.ts",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, p := range paths {
+			_ = ignore(p)
+		}
+	}
 }

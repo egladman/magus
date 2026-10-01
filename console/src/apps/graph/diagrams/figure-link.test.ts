@@ -7,9 +7,10 @@ import { decodeFigureLink } from "./figure-link";
 import { figureForLink, linkedRows } from "./wasm";
 
 // The payload figure-link.buzz's figureLink writes for the graph decoded below: UTF-8 JSON as
-// unpadded base64url. The last node's label puts a "-" in it.
+// unpadded base64url. The last node's label puts a "-" in it. Two edges are plain and one is
+// optional and labelled, the way a session figure draws spawns and dependencies.
 const FIXTURE =
-  "eyJ2IjoxLCJraW5kIjoiZGVwcyIsInRpdGxlIjoiSG93IGZhciB0aGlzIGNoYW5nZSByZWFjaGVzIOKGkiBjYWbDqSIsIm5vZGVzIjpbeyJpZCI6ImxpYnMvYSIsImxhYmVsIjoiYSIsInNlZWQiOnRydWV9LHsiaWQiOiJjbWQvYiIsImxhYmVsIjoiYiIsInNlZWQiOmZhbHNlfSx7ImlkIjoiaW50ZXJuYWwvYyIsImxhYmVsIjoiY8OpPz8-Iiwic2VlZCI6ZmFsc2V9XSwiZWRnZXMiOltbImxpYnMvYSIsImNtZC9iIl0sWyJsaWJzL2EiLCJpbnRlcm5hbC9jIl1dfQ";
+  "eyJ2IjoyLCJraW5kIjoiZGVwcyIsInRpdGxlIjoiU2Vzc2lvbiBzLTE6IGNhZsOpIOKGkiBqb2JzIiwibm9kZXMiOlt7ImlkIjoic2Vzc2lvbiIsImxhYmVsIjoic2Vzc2lvbiIsInNlZWQiOnRydWV9LHsiaWQiOiJqb2ItYSIsImxhYmVsIjoiam9iLWEgKGRvbmUpIiwic2VlZCI6ZmFsc2V9LHsiaWQiOiJqb2ItYiIsImxhYmVsIjoiasO2Yi1iPz8-Iiwic2VlZCI6ZmFsc2V9XSwiZWRnZXMiOltbInNlc3Npb24iLCJqb2ItYSJdLFsic2Vzc2lvbiIsImpvYi1iIl0sWyJqb2ItYSIsImpvYi1iIiwib3B0aW9uYWwiLCJhZnRlciJdXX0";
 
 function encode(doc: unknown): string {
   return Buffer.from(JSON.stringify(doc), "utf8")
@@ -20,7 +21,7 @@ function encode(doc: unknown): string {
 }
 
 const ok = {
-  v: 1,
+  v: 2,
   kind: "deps",
   title: "t",
   nodes: [{ id: "a", label: "a", seed: true }],
@@ -37,18 +38,45 @@ test("the fixture decodes to the graph it was built from", () => {
   assert.deepEqual(decodeFigureLink(FIXTURE), {
     ok: true,
     figure: {
-      title: "How far this change reaches → café",
+      title: "Session s-1: café → jobs",
       nodes: [
-        { id: "libs/a", label: "a", seed: true },
-        { id: "cmd/b", label: "b", seed: false },
-        { id: "internal/c", label: "cé??>", seed: false },
+        { id: "session", label: "session", seed: true },
+        { id: "job-a", label: "job-a (done)", seed: false },
+        { id: "job-b", label: "jöb-b??>", seed: false },
       ],
       edges: [
-        ["libs/a", "cmd/b"],
-        ["libs/a", "internal/c"],
+        { from: "session", to: "job-a", stroke: "plain", label: "" },
+        { from: "session", to: "job-b", stroke: "plain", label: "" },
+        { from: "job-a", to: "job-b", stroke: "optional", label: "after" },
       ],
     },
   });
+});
+
+test("every stroke and label survives the round trip", () => {
+  const nodes = [
+    { id: "a", label: "a" },
+    { id: "b", label: "b" },
+  ];
+  const edges = [
+    ["a", "b"],
+    ["a", "b", "optional", "after"],
+    ["b", "a", "focal"],
+    ["b", "a", "external", "calls"],
+    ["a", "b", "plain", "spawns"],
+  ];
+  const read = decodeFigureLink(encode({ ...ok, nodes, edges }));
+  assert.ok(read.ok, read.ok ? "" : read.error);
+  assert.deepEqual(
+    read.figure.edges.map((e) => [e.from, e.to, e.stroke, e.label]),
+    [
+      ["a", "b", "plain", ""],
+      ["a", "b", "optional", "after"],
+      ["b", "a", "focal", ""],
+      ["b", "a", "external", "calls"],
+      ["a", "b", "plain", "spawns"],
+    ],
+  );
 });
 
 test("a padded payload is read as well", () => {
@@ -86,7 +114,7 @@ test("JSON that is not an object is refused", () => {
 });
 
 test("an unknown version is refused by name", () => {
-  assert.match(refusal(encode({ ...ok, v: 2 })), /version 2 and this console reads version 1/);
+  assert.match(refusal(encode({ ...ok, v: 1 })), /version 1 and this console reads version 2/);
   assert.match(refusal(encode({ kind: "deps" })), /version undefined/);
 });
 
@@ -114,10 +142,15 @@ test("a repeated node id is refused", () => {
   assert.match(refusal(encode({ ...ok, nodes })), /"a" appears twice/);
 });
 
-test("an edge that is not a pair of known ids is refused by index", () => {
+test("an edge that is not two known ids, a stroke and a label is refused by index", () => {
   assert.match(refusal(encode({ ...ok, edges: [["a"]] })), /edge 0 is not/);
   assert.match(refusal(encode({ ...ok, edges: [["a", 1]] })), /edge 0 is not/);
+  assert.match(refusal(encode({ ...ok, edges: [["a", "a", "plain", "x", "y"]] })), /edge 0 is not/);
   assert.match(refusal(encode({ ...ok, edges: [["a", "z"]] })), /edge 0 names "z", no node/);
+  assert.match(
+    refusal(encode({ ...ok, edges: [["a", "a", "dotted"]] })),
+    /edge 0 has stroke "dotted", not one of plain, focal, external, optional/,
+  );
 });
 
 // ---- the record the runtime draws --------------------------------------------------------
@@ -130,7 +163,7 @@ const linked = (seeds: number) => {
       edges: [
         ["a", "b"],
         ["b", "c"],
-        ["b", "d"],
+        ["b", "d", "optional", "after"],
       ],
     }),
   );
@@ -138,7 +171,7 @@ const linked = (seeds: number) => {
   return read.figure;
 };
 
-test("the record is actors and flows, dependency first, seeds tagged edited", () => {
+test("the record is actors and flows carrying each edge's stroke and label, seeds tagged edited", () => {
   const f = figureForLink(linked(1));
   assert.deepEqual(
     f.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
@@ -150,11 +183,11 @@ test("the record is actors and flows, dependency first, seeds tagged edited", ()
     ],
   );
   assert.deepEqual(
-    f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
+    f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name, fl.stroke, fl.label]),
     [
-      ["a", "b"],
-      ["b", "c"],
-      ["b", "d"],
+      ["a", "b", "plain", ""],
+      ["b", "c", "plain", ""],
+      ["b", "d", "optional", "after"],
     ],
   );
   assert.equal(f.title, "t");

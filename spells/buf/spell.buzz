@@ -20,13 +20,15 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "protobuf",
         extensions = [".proto"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            quotes = [
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                quotes = [
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+            },
         },
     };
 }

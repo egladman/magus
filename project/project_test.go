@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -212,4 +213,81 @@ func TestRegisterSpellNilPanics(t *testing.T) {
 	assert.Panics(t, func() {
 		DefaultSpellRegistry().RegisterSpell(nil)
 	}, "Register(nil) did not panic")
+}
+
+// writeMarker creates a magusfile.tl marker under root/path and returns the dir.
+func writeMarker(b *testing.B, root, relPath string) {
+	b.Helper()
+	dir := filepath.Join(root, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.tl"), []byte(""), 0o644); err != nil {
+		b.Fatal(err)
+	}
+}
+
+// buildSyntheticWorkspace creates a tree with n projects under root.
+func buildSyntheticWorkspace(b *testing.B, root string, n int) {
+	b.Helper()
+	for i := range n {
+		writeMarker(b, root, fmt.Sprintf("svc%02d", i))
+	}
+}
+
+// BenchmarkInspect measures the cost of walking a workspace directory tree
+// and discovering project markers. Scales with workspace size.
+func BenchmarkInspect(b *testing.B) {
+	for _, n := range []int{10, 50, 100} {
+		n := n
+		b.Run(fmt.Sprintf("projects=%d", n), func(b *testing.B) {
+			root := b.TempDir()
+			buildSyntheticWorkspace(b, root, n)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := Discover(context.Background(), root)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// ExampleDiscover shows how to discover projects in a workspace root using
+// the project package directly. Callers that want the full orchestrator
+// (cache, telemetry, VCS integration) should use magus.Inspect instead.
+func ExampleDiscover() {
+	// Create a minimal workspace with two projects for illustration.
+	root, err := os.MkdirTemp("", "magus-project-example-*")
+	if err != nil {
+		fmt.Println("setup error:", err)
+		return
+	}
+	defer os.RemoveAll(root)
+
+	for _, name := range []string{"api", "web"} {
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Println("setup error:", err)
+			return
+		}
+		if err := os.WriteFile(filepath.Join(dir, "magusfile.tl"), []byte(""), 0o644); err != nil {
+			fmt.Println("setup error:", err)
+			return
+		}
+	}
+
+	ws, err := Discover(context.Background(), root)
+	if err != nil {
+		fmt.Println("inspect error:", err)
+		return
+	}
+
+	for _, p := range ws.All() {
+		fmt.Println(p.Path)
+	}
+	// Output:
+	// api
+	// web
 }

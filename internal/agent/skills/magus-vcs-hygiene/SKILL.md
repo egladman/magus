@@ -14,7 +14,7 @@ each against the workspace's declared globs{{end}}:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `{{tool "client"}}` calling `{{buzz "describeFile"}}([paths])`. Each path comes back with its owning
+MCP: `{{tool "client"}}` calling `{{buzz "describe.file"}}([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.

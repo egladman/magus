@@ -24,6 +24,8 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
@@ -103,9 +105,9 @@ func graphUsage() {
 // way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
-func graphBuild(ctx context.Context, root string, args []string) error {
+func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
-	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
+	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
 		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
 		fs.Usage = func() {
@@ -124,6 +126,16 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	lock, waitedOn, err := acquireGraphBuild(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, lock.Release()) }()
+	if waitedOn != nil {
+		if current, err := loadBuiltGraph(ctx, root, *waitedOn); current || err != nil {
+			return err
+		}
 	}
 
 	if !skipSymbols {
@@ -162,6 +174,55 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 		}
 	}
 	return nil
+}
+
+// graphBuildPoll is how often a waiting graph build retries the build lock.
+const graphBuildPoll = 250 * time.Millisecond
+
+// acquireGraphBuild takes the build lock on the workspace's knowledge store, waiting for
+// the build that holds it, manual or the server's sync-graph job. The holder it returns
+// names that build, nil when the lock was free.
+func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+	wsRoot := resolveRootOrEmpty(root)
+	if wsRoot == "" {
+		return nil, nil, errors.New("magus graph build: no workspace root here, so no knowledge store to build")
+	}
+	dir, err := knowledgeStoreDir(wsRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
+	}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}
+	if proc.IsJob(ctx) {
+		me.By = "the server's sync-graph job"
+	}
+	return maintenance.AcquireGraphBuild(ctx, dir, me, os.Stderr, graphBuildPoll)
+}
+
+// loadBuiltGraph reports whether the build this one waited on left the graph current,
+// and if so loads it cache-first instead of repeating its indexing, the expensive half. A
+// project it left unindexed or behind, or a holder that died mid-build, returns false so
+// the caller builds.
+func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildHolder) (bool, error) {
+	left := staleIndexProjects(ctx, root)
+	gaps, probed := symbolGaps(ctx, root)
+	if len(gaps) > 0 {
+		left = append(left, types.DescribeGaps(gaps))
+	}
+	if !probed {
+		left = append(left, "the symbol indexes (unreadable)")
+	}
+	if len(left) > 0 {
+		fmt.Fprintf(os.Stderr, "magus graph build: %s finished and left these without a current index: %s; building here\n",
+			by, strings.Join(left, ", "))
+		return false, nil
+	}
+	g, err := loadKnowledgeGraph(ctx, root, false, false, false)
+	if err != nil {
+		return true, err
+	}
+	out := g.Output()
+	fmt.Fprintf(os.Stderr, "knowledge graph current, built by %s: %d nodes, %d edges\n", by, out.NodeCount, out.EdgeCount)
+	return true, nil
 }
 
 // ingestSessions runs the declared transcript adapters, reporting each one's own summary

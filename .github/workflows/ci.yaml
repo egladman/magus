@@ -204,15 +204,11 @@ jobs:
       # instead of being stepped over. A pull request needs none of it: origin/main
       # already IS its merge base, and an empty value falls through to that default.
       #
-      # --preflight generate fails the run before a single shard starts: it runs every
-      # planned project's generate first, and a drifted tree prints no plan, so nothing
-      # fans out. ci strips rw, so generate compares against HEAD and fails on drift,
-      # which is the gate. It covers the PLANNED projects, which is narrower than a bare
-      # `magus run generate` fan-out: six projects declare index-generate output that is
-      # a function of the WHOLE knowledge graph, and affected does not select them for
-      # every change that feeds it (a docs markdown change selects {docs} alone). A step
-      # narrowed that way once let three projects carry stale indexes from 6b4402e49
-      # until 5e32e73fa.
+      # generate runs first, across the affected projects, without rw, so it compares
+      # against HEAD and fails on drift. The plan stage waits for it and prints no plan
+      # when it fails, so no shard starts from a drifted tree. Only the affected
+      # projects are checked: index-generate output that is a function of the whole
+      # knowledge graph is not regenerated for a change affected scopes elsewhere.
       #
       # Before the replay step, which runs under rw and would rewrite a drifted file
       # before this gate could compare it.
@@ -231,7 +227,7 @@ jobs:
         # partial file.
         shell: bash
         run: |
-          magus affected ci --plan --preflight generate --no-default-charms --concurrency-profile aggressive > "$RUNNER_TEMP/plan.json"
+          magus affected generate --no-default-charms --concurrency-profile aggressive | magus affected ci --plan > "$RUNNER_TEMP/plan.json"
           magus run --stdin --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
           magus run --stdin --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
 

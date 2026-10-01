@@ -15,10 +15,36 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
+
+// With mcp.http false the endpoint names no URL and does not read as serving, even with the
+// listener up: the mcp probe fails with a note naming stdio and the socket, and the console,
+// which still rides the listener, still reads as served.
+func TestMCPEndpointStatusWithHTTPOff(t *testing.T) {
+	cfg := mcpServing(t, http.StatusOK)
+	cfg.HTTP = boolPtr(false)
+	got := buildMCPEndpointStatus(context.Background(), cfg)
+	require.NotNil(t, got)
+	assert.Equal(t, mcpHTTPOff, got.State)
+	assert.Empty(t, got.URL, "no /mcp URL to connect to")
+	assert.False(t, got.Enabled)
+	assert.True(t, got.Reachable, "the listener is up for the console")
+	assert.Contains(t, got.Note, "mcp.http=false")
+	assert.Contains(t, got.Note, "magus mcp")
+	assert.Contains(t, got.Note, "server socket")
+
+	ok, reason := evaluateMCPHealth(got)
+	assert.False(t, ok, "the mcp probe fails: nothing serves MCP over HTTP")
+	assert.Equal(t, got.Note, reason)
+
+	console := buildConsoleStatus(config.Console{}, got)
+	assert.Equal(t, "serving", console.State)
+	assert.Equal(t, cfg.Address, console.Address)
+}
 
 // makeReply builds a minimal StatusReply with the given pid and workspaces.
 func makeReply(pid int, roots ...string) *proc.StatusReply {

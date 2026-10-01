@@ -504,7 +504,7 @@ func TestImport_AsAlias(t *testing.T) {
 	sess.SetIncludeDirs([]string{dir})
 
 	// import as alias: "util" loaded, bound under "u"
-	require.NoError(t, sess.Exec(ctx, `import "util" as u; final got = u.helper;`), "exec")
+	require.NoError(t, sess.Exec(ctx, `import "util" as u; final got = u\helper;`), "exec")
 }
 
 // TestCyclicImportTerminates verifies that mutually-importing .buzz files do

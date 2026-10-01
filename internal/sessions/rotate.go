@@ -1,9 +1,13 @@
 package sessions
 
 import (
+	"bufio"
+	"bytes"
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +23,20 @@ import (
 // would let one worktree delete history the others still expect to read. Wiring a
 // workspace-level setting is a decision to take once, not a knob to add ahead of it.
 const DefaultRetention = 30 * 24 * time.Hour
+
+// DefaultMaxFiles caps how many invocation files a store keeps, newest fact first.
+// Retention alone did not bound it: every magus command that records a fact writes a
+// file, so an active repository wrote about eight hundred a day and held seventeen
+// thousand inside the window. The cap is a count for the reason internal/trail's
+// maxEvents is: what every reader of this store pays grows with the files it lists.
+const DefaultMaxFiles = 10000
+
+// agentFileFloor is how many of the newest files holding loaded agent events survive the
+// cap however many invocation files are newer. The same trade internal/trail's
+// perKindFloor makes: invocation files arrive by the hundred a day and would push out
+// every loaded host session, which are few, large, and the only input the graph's
+// @session overlay has.
+const agentFileFloor = 500
 
 // pruneInterval is how often [Open] prunes a store, tracked by the modification time
 // of pruneStamp inside it. The stamp carries no fileExt, so no reader sees an invocation.
@@ -42,7 +60,7 @@ func claimStalePruneStamp(dir, stamp, keep string) {
 		if fi, err := os.Stat(stamp); err == nil && time.Since(fi.ModTime()) < pruneInterval {
 			return nil // another caller already pruned and refreshed the stamp while this one waited
 		}
-		prune(dir, DefaultRetention, keep)
+		prune(dir, DefaultRetention, DefaultMaxFiles, keep)
 		now := time.Now()
 		if os.Chtimes(stamp, now, now) != nil {
 			_ = os.WriteFile(stamp, nil, 0o644)
@@ -51,7 +69,13 @@ func claimStalePruneStamp(dir, stamp, keep string) {
 	})
 }
 
-// Prune deletes whole invocation files whose newest fact is older than retain.
+// Prune deletes whole invocation files whose newest fact is older than retain, and then
+// the oldest of what remains past [DefaultMaxFiles], sparing the newest agentFileFloor
+// files that hold loaded agent events.
+//
+// A schema-1 file ages like any other: its lines still carry a timestamp, so its age is
+// known even though this build reads none of its records. A file with no dated line at
+// all is never deleted, by either rule, because nothing says how old it is.
 //
 // Deleting is all it does. Nothing here rolls a file over, renames one, or truncates
 // one: an invocation file is append-only or absent, and a truncation would produce a
@@ -78,19 +102,20 @@ func claimStalePruneStamp(dir, stamp, keep string) {
 //
 //  1. Every file naming a request that is currently OPEN is exempt, at any age. A
 //     request is closed by a person or not at all.
-//  2. A request's records are deleted as a UNIT: if any file naming a request is too
-//     young to delete, every file naming that request is exempt. So a disposed request
+//  2. A request's records are deleted as a UNIT: if any file naming a request is not up
+//     for deletion, every file naming that request is exempt. So a disposed request
 //     either disappears whole or stays whole, and neither half can outlive the other.
 //
 // Rule 2 keeps a file alive while a younger sibling shares one of its requests, which
 // delays that file rather than pinning it: the sibling ages out too, and then both go.
 // Rule 1 does pin, for as long as the request stays open, which is the intended trade.
-func Prune(dir string, retain time.Duration) { prune(dir, retain, "") }
+func Prune(dir string, retain time.Duration) { prune(dir, retain, DefaultMaxFiles, "") }
 
 // prune is [Prune] with the caller's own invocation file held back. Open passes its
 // invocation file so a writer can never delete the file it is about to append to,
-// whatever the clock or a reused invocation id says.
-func prune(dir string, retain time.Duration, keep string) {
+// whatever the clock or a reused invocation id says. maxFiles of zero or less leaves the
+// count uncapped.
+func prune(dir string, retain time.Duration, maxFiles int, keep string) {
 	if retain <= 0 {
 		return
 	}
@@ -106,10 +131,11 @@ func prune(dir string, retain time.Duration, keep string) {
 	// its records below. The filter can therefore only ever spare a file that could
 	// have gone (a copy or a restore rewrites a modification time without touching a
 	// record) and never delete one that should have stayed. That is what makes the
-	// common case, a store with nothing old enough to delete, cost a ReadDir and no
-	// file reads at all.
+	// common case, a store under its cap with nothing old enough to delete, cost a
+	// ReadDir and no file reads at all.
 	var names []string
-	stale := make(map[string]time.Time)
+	stale := make(map[string]bool)
+	modTimes := make(map[string]time.Time)
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), fileExt) {
 			continue
@@ -119,12 +145,16 @@ func prune(dir string, retain time.Duration, keep string) {
 			continue
 		}
 		info, err := e.Info()
-		if err != nil || info.ModTime().After(cutoff) {
+		if err != nil {
 			continue
 		}
-		stale[e.Name()] = info.ModTime()
+		modTimes[e.Name()] = info.ModTime()
+		if !info.ModTime().After(cutoff) {
+			stale[e.Name()] = true
+		}
 	}
-	if len(stale) == 0 {
+	overCap := maxFiles > 0 && len(names) > maxFiles
+	if len(stale) == 0 && !overCap {
 		return
 	}
 
@@ -132,8 +162,11 @@ func prune(dir string, retain time.Duration, keep string) {
 	var all []Record
 	requestFiles := make(map[string]map[string]bool)
 	candidates := make(map[string]bool)
+	newest := make(map[string]int64)
+	holdsAgentEvents := make(map[string]bool)
 	for _, name := range names {
-		records, _, _, vanished := readFile(filepath.Join(dir, name))
+		path := filepath.Join(dir, name)
+		records, _, legacy, vanished := readFile(path)
 		if vanished {
 			continue
 		}
@@ -143,6 +176,9 @@ func prune(dir string, retain time.Duration, keep string) {
 			if rec.Ts > last {
 				last = rec.Ts
 			}
+			if rec.Kind == KindAgentEvent {
+				holdsAgentEvents[name] = true
+			}
 			if id := attentionID(rec); id != "" {
 				if requestFiles[id] == nil {
 					requestFiles[id] = make(map[string]bool)
@@ -150,13 +186,20 @@ func prune(dir string, retain time.Duration, keep string) {
 				requestFiles[id][name] = true
 			}
 		}
-		// A file with no current record is never deleted: this build cannot tell its age,
-		// and it may be history an older build wrote in a shape this one does not read.
-		// Deleting what a reader cannot see is losing it without anyone having looked.
-		if len(records) == 0 {
+		if len(records) == 0 && legacy > 0 {
+			last = newestLegacyTs(path)
+		}
+		// A file with no dated line is never deleted: nothing says how old it is.
+		if last == 0 {
 			continue
 		}
-		if _, ok := stale[name]; ok && last < cutoffMs {
+		newest[name] = last
+		if stale[name] && last < cutoffMs {
+			candidates[name] = true
+		}
+	}
+	if overCap {
+		for _, name := range pastCap(newest, holdsAgentEvents, maxFiles, keep) {
 			candidates[name] = true
 		}
 	}
@@ -193,11 +236,68 @@ func prune(dir string, retain time.Duration, keep string) {
 		// An invocation idle past the window can still wake up and append. Re-stat so a
 		// file that grew after the fold was read survives: the decision to delete it
 		// was made about contents it no longer has.
+		listed, ok := modTimes[name]
 		info, err := os.Stat(path)
-		if err != nil || !info.ModTime().Equal(stale[name]) {
+		if !ok || err != nil || !info.ModTime().Equal(listed) {
 			continue
 		}
 		_ = os.Remove(path)
+	}
+}
+
+// pastCap names the files the count cap removes: everything past the newest maxFiles by
+// newest fact, except keep and the newest agentFileFloor files holding agent events.
+// Ties order by name so two prunes of one store agree on which file is past the line.
+func pastCap(newest map[string]int64, holdsAgentEvents map[string]bool, maxFiles int, keep string) []string {
+	ranked := make([]string, 0, len(newest))
+	for name := range newest {
+		ranked = append(ranked, name)
+	}
+	slices.SortFunc(ranked, func(a, b string) int {
+		if c := cmp.Compare(newest[b], newest[a]); c != 0 {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
+	var out []string
+	agentFiles := 0
+	for i, name := range ranked {
+		if holdsAgentEvents[name] {
+			agentFiles++
+		}
+		if i < maxFiles || name == keep || (holdsAgentEvents[name] && agentFiles <= agentFileFloor) {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// newestLegacyTs is the newest timestamp on a schema-1 file's lines, or zero when none
+// decodes. [readFile] counts those lines without keeping them, so pruning reads the file
+// again for the one field it needs to age it.
+func newestLegacyTs(path string) int64 {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = f.Close() }()
+	var newest int64
+	br := bufio.NewReader(f)
+	for {
+		line, over, err := readLine(br, maxLineBytes)
+		if !over {
+			var dated struct {
+				V  int   `json:"v"`
+				Ts int64 `json:"ts"`
+			}
+			if json.Unmarshal(bytes.TrimSpace(line), &dated) == nil && dated.V == schemaVersionSession {
+				newest = max(newest, dated.Ts)
+			}
+		}
+		if err != nil {
+			return newest
+		}
 	}
 }
 

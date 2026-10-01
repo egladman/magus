@@ -866,24 +866,6 @@ func forkOf(x string, own []magustypes.Commit) string {
 	return fork
 }
 
-// trivialRebase reports whether now is old rebased from oldBase onto newBase with
-// nothing else changed: old's whole delta since oldBase, replayed onto newBase, merges
-// without a conflict into exactly now's tree.
-func trivialRebase(ctx context.Context, v types.ReadVCS, root, oldBase, old, newBase, now string) (bool, error) {
-	if oldBase == "" || newBase == "" {
-		return false, nil
-	}
-	r, err := v.MergeTrees(ctx, root, magustypes.TreeMerge{Base: oldBase, Ours: newBase, Theirs: old})
-	if err != nil || len(r.Conflicts) > 0 {
-		return false, err
-	}
-	tree, err := v.TreeID(ctx, root, now)
-	if err != nil {
-		return false, err
-	}
-	return r.Tree == tree, nil
-}
-
 // ownCommits is the set of commits x carries that tip does not.
 func ownCommits(ctx context.Context, v types.ReadVCS, root, tip, x string) (map[string]bool, error) {
 	commits, err := v.RangeCommits(ctx, root, tip, x, nil)

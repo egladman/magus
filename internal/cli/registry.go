@@ -241,16 +241,6 @@ every project except a named few without any shell filtering. It takes the same
 project reference a positional does, and refuses a reference no project matches
 rather than skipping nothing quietly.
 
---preflight names targets to run first, as a separate pass across every
-selected project, before the invoked target starts anywhere. Each must be a
-target the invoked target already reaches through ctx.needs (the chain magus
-describe target prints); one it never reaches is refused before anything runs
-(MGS3021). If a preflight target fails, no further preflight step starts, the
-ones in flight are cancelled, nothing of the invoked target starts, and the run
-exits 3 (MGS3020) with a first line naming the target, the failing projects and
-the command that fixes them. When the pass is green the run proceeds and treats
-those targets as done, so nothing runs twice and no cache key changes.
-
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -288,12 +278,10 @@ plan renders more than once without being computed again.`,
 		{Name: "n-shards", Kind: FlagInt, Doc: "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
-		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
 	},
 	Targets: commonTargets,
 	Examples: []Example{
 		{"Build everything", "magus run build"},
-		{"Check for drift everywhere before any project runs ci", "magus run ci --preflight generate"},
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
 		{"Every project that declares generate except two", "magus run generate --skip docs --skip console"},
@@ -311,8 +299,7 @@ plan renders more than once without being computed again.`,
 	ExitStatus: []ExitCode{
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
-		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029)."},
-		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
+		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a saved plan that cannot be run as asked (MGS3029)."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -425,12 +412,9 @@ with its tier to stderr; a trivial change runs nothing and exits 0. With --plan,
 a trivial change emits an empty matrix beside a risk block.
 --no-redundancy-check runs the full gate.
 
---preflight works as it does for magus run: the named targets run first across
-the affected set, a failure stops everything with exit 3 (MGS3020), and a name
-outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
-it gates the plan itself: the pass runs across the planned projects under the
-charms the invoked target would run with, and the plan prints only when it is
-green, so a CI workflow that fans shards out from the plan starts none.`,
+--plan downstream of magus in a pipe waits for every magus stage before it to
+end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
+that way: magus affected generate --no-default-charms | magus affected ci --plan.`,
 	Usage: "magus affected <target> [flags]",
 	Flags: []Flag{
 		{Name: "impact", Kind: FlagBool, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
@@ -439,9 +423,8 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "null", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
 		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
-		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
+		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
-		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
 		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
@@ -468,16 +451,14 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{"Show dependency graph for the affected scope", "magus affected build --graph"},
 		{"Graph as DOT for piping to Graphviz", "magus affected build --graph -o dot | dot -Tsvg > graph.svg"},
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
-		{"Fail fast on drift before the affected set runs ci", "magus affected ci --preflight generate"},
-		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected ci --plan --preflight generate"},
+		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected generate --no-default-charms | magus affected ci --plan"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
 	},
 	ExitStatus: []ExitCode{
 		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
 		{1, "At least one target failed, already reported with the path to its captured log."},
-		{2, "Misuse: no target named, --step without an interactive terminal, or a --preflight target the invoked target never reaches (MGS3021)."},
-		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
+		{2, "Misuse: no target named, or --step without an interactive terminal."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -1844,7 +1825,7 @@ and every relative path resolves against it. The provider is a built-in name
 (github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
 on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.`,
-	Usage: "magus queue <describe|ls|plan|validate|gate|apply> [flags]",
+	Usage: "magus queue <describe|ls|plan|validate|gate|apply|reviews> [flags]",
 	Children: []Command{
 		{
 			Name:  "describe",
@@ -1952,6 +1933,33 @@ cache it withholds, is refused.`,
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 			}, queueFacts...), queueCheckout...),
 		},
+		{
+			Name:  "reviews",
+			Short: "Classify the change since each approval standing on a change, as the queue admits it, and dismiss the approvals it does not carry with --dismiss",
+			Long: `Read the approvals standing on one change and, for each given at an older commit
+than the one a review of its head covers, classify what changed since, path by
+path, with the classifier plan admits changes by: a rebase with its diff unchanged,
+regenerated outputs, prose, or comment-only edits carry an approval when the base's
+queue.carry_approvals allows that tier (default: all four), and code never does. A
+code owner's approval is classified like any other.
+
+--dismiss dismisses, through the provider, each approval that does not carry, telling
+its reviewer which paths changed. It reads the head again first and dismisses nothing
+when it moved, since the run on the new head decides. It needs the provider's write
+credential (github: MERGEQUEUE_TOKEN with pull-requests write); without --dismiss it
+only reads. Nothing runs the change's code: the classifier reads the base's own
+workspace and the compared commits' contents.
+
+-o json prints a mergequeue.reviews/v1 document.`,
+			Usage: "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]",
+			Flags: append(append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the change targets"},
+				{Name: "change", Kind: FlagString, Doc: "`id` of the change, as the provider names it (github: the pull request number)"},
+				{Name: "head", Kind: FlagString, Doc: "`commit` the change's head must be at; when it moved, nothing is classified or dismissed"},
+				{Name: "dismiss", Kind: FlagBool, Doc: "Dismiss each approval that does not carry, naming what changed since it"},
+			}, queueFacts...), queueCheckout...),
+		},
 	},
 	Examples: []Example{
 		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
@@ -1964,6 +1972,8 @@ cache it withholds, is refused.`,
 		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
 		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},
+		{"Say whether each approval on a pull request carries over the change since it", "magus queue reviews --provider github --base main --change 482"},
+		{"Dismiss the approvals it does not carry", "magus queue reviews --provider github --base main --change 482 --dismiss"},
 	},
 }
 
@@ -2280,16 +2290,17 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
-edit adds write paths to a live job and revokes others in one write that keeps
-its state, where a re-fork would hand a taken job out again. It previews until
---apply, and only the orchestrator widens.
+apply upserts jobs' specs from -f <file|->, the way kubectl apply reads a
+manifest: the record is the whole spec, and the job keeps its state, holder and
+registration, where a re-fork would hand a taken job out again. Only the
+orchestrator widens; a holder may apply only the release of its own paths.
 
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run|edit|rm|prune> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2317,6 +2328,23 @@ them and magus describe job prints one job's terms.`,
 			},
 		},
 		{
+			Name:  "apply",
+			Short: "Upsert jobs' specs from a file or stdin, keeping each job's state",
+			Description: "Upsert each record's spec, the way `kubectl apply -f` reads a manifest: criteria, write, deny and " +
+				"read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
+				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
+				"never written: the job keeps its state, holder and registration, and a record carrying state is refused. " +
+				"A new id creates the job. -f - reads stdin, and a stream holds one JSON job, an array, or one job per " +
+				"line; every record is checked, with fork's rules for what it adds, before any is written. A path the " +
+				"orchestrator drops from a taken job is recorded as a revoked release carrying the digest of what the job " +
+				"left. Widening is the orchestrator's; a session holding a lease may apply only a spec that releases some " +
+				"of its own paths. The global --dry-run prints the spec diff and writes nothing.",
+			Flags: []Flag{
+				{Name: "f", Kind: FlagString, Doc: "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line"},
+			},
+			Usage: "magus job apply -f <file|->",
+		},
+		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
 			Description: "Record the base this tree is on and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
@@ -2338,6 +2366,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
+				{Name: "integration", Kind: FlagBool, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
 			},
 		},
 		{
@@ -2363,22 +2392,6 @@ shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},
 		{Name: "run", Short: "Submit one of the server's own jobs and return"},
-		{
-			Name:  "edit",
-			Short: "Add write paths to a live job or revoke them, keeping its state",
-			Description: "Merge write paths into a live job in one write: --add-write-path widens it and --remove-write-path " +
-				"revokes a path it holds. The job keeps its state and its holder, where a re-fork hands it out again as " +
-				"declared. A revoked path is recorded as a release carrying the digest of what the job left, and the " +
-				"holder's next write there is refused, naming the revocation and when it happened. Widening is the " +
-				"orchestrator's; a session holding a lease may only revoke its own paths. It previews and writes " +
-				"nothing until --apply. Ending a whole job is `magus job exit`, not an edit that revokes every path.",
-			Flags: []Flag{
-				{Name: "add-write-path", Kind: FlagCustom, Doc: "A path to add to the job's write paths; repeatable or comma-separated"},
-				{Name: "remove-write-path", Kind: FlagCustom, Doc: "A path to revoke from the job's write paths; repeatable or comma-separated"},
-				{Name: "apply", Kind: FlagBool, Doc: "Write the edit; without it the edit is previewed and nothing is written"},
-			},
-			Usage: "magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]",
-		},
 		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",
@@ -2413,7 +2426,9 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
-		{"Widen a live job and write it", "magus job edit session-load/core --add-write-path internal/sessions/load.go --apply"},
+		{"Change a live job's spec, keeping its state", "magus job apply -f job.json"},
+		{"Preview that change", "magus job apply -f job.json --dry-run"},
+		{"Grade a job's checks in a merged tree", "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }
@@ -2484,8 +2499,8 @@ human-authored notes anchor a file or symbol you touched, and what the authors
 asked magus while writing it. It is the same question magus affected --impact
 answers, asked of a changeset instead of a target. It is context and never a
 verdict - nothing is gated on it and the exit code is unchanged; neither the
-flag nor the section it prints says "preflight", because run --preflight IS a
-gate and this must never read as one. Each
+flag nor the section it prints says "preflight", because that word names a gate
+and this must never read as one. Each
 section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 

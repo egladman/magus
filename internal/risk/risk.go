@@ -14,6 +14,7 @@ package risk
 
 import (
 	"context"
+	"io/fs"
 	"path"
 	"slices"
 	"strings"
@@ -214,7 +215,7 @@ func (c Classifier) classify(ctx context.Context, p, role, rev string) (Class, s
 	}
 	// Comment-only detection needs the language's comment and string syntax, and every
 	// language gets it the same way: a syntax the language's SPELL declared
-	// (mgs_getCommentSyntax), consumed by one string-aware stripper, Go and Buzz
+	// (the comments field of its mgs_getLanguage record), consumed by one string-aware stripper, Go and Buzz
 	// included, so "comment-only" means one thing. A language whose spell declared
 	// nothing classifies as code: guessing delimiters would trade one false comment-only
 	// for trust in every refusal after it.
@@ -263,6 +264,20 @@ func (c Classifier) Merge(ctx context.Context, path, base, merged string, optIn 
 		return Classified{Path: path, Class: ClassCode, Why: "matches " + quoteGlob(glob) + " (" + origin + ")"}, true
 	}
 	return v, false
+}
+
+// Edit classifies one path's edit from old to cur by the classes Classify assigns. A nil
+// side is the path absent there, so adding or deleting a file is never comment-only.
+func (c Classifier) Edit(ctx context.Context, path string, old, cur []byte) Classified {
+	read := func(content []byte) (string, error) {
+		if content == nil {
+			return "", fs.ErrNotExist
+		}
+		return string(content), nil
+	}
+	c.At = func(context.Context, string, string) (string, error) { return read(old) }
+	c.Working = func(string) (string, error) { return read(cur) }
+	return c.Classify(ctx, []string{path}, "").Paths[0]
 }
 
 // quoteGlob quotes a glob for the attribution line.

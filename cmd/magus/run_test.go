@@ -85,7 +85,7 @@ func (w *resolveWS) Affected(context.Context, string) (*types.AffectedResult, er
 func (w *resolveWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (w *resolveWS) ListCharms(context.Context) ([]types.Charm, error) {
+func (w *resolveWS) ListCharms(context.Context) ([]types.CharmEntry, error) {
 	panic("not used")
 }
 func (w *resolveWS) ListTargets(context.Context) ([]types.TargetEntry, error) {
@@ -528,68 +528,6 @@ func TestEnvDefaultReportsAValueTheFlagCannotParse(t *testing.T) {
 	assert.NoError(t, envDefault(fs, "max", "8"))
 }
 
-func TestParsePreflight(t *testing.T) {
-	for _, tc := range []struct {
-		in      string
-		want    []string
-		wantErr string
-	}{
-		{in: "", want: nil},
-		{in: "generate", want: []string{"generate"}},
-		{in: "gen, lint,generate", want: []string{"generate", "lint"}},
-		{in: "Release_Checks", want: []string{"release-checks"}},
-		{in: "generate,", wantErr: "empty target name"},
-		{in: "generate:rw", wantErr: "name the target alone"},
-	} {
-		got, err := parsePreflight(tc.in)
-		if tc.wantErr != "" {
-			assert.ErrorContainsf(t, err, tc.wantErr, "parsePreflight(%q)", tc.in)
-			continue
-		}
-		require.NoErrorf(t, err, "parsePreflight(%q)", tc.in)
-		assert.Equalf(t, tc.want, got, "parsePreflight(%q)", tc.in)
-	}
-}
-
-// The two preflight verdicts reach the process status the registry documents: 3 for a
-// failed pass, 2 for a refusal. Driven through a real magusfile so the statuses come
-// from the errors the engine actually returns.
-func TestPreflightExitStatuses(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
-	write("magusfile.buzz", "")
-	write("app/magusfile.buzz", `import "magus";
-
-export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    throw "generate: output drifted";
-}
-
-export fun other(ctx: magus\Context, args: [str]) > void {}
-
-export fun ci(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(generate);
-}
-`)
-	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
-	require.NoError(t, err, "Open")
-	t.Cleanup(func() { _ = m.Close() })
-	targets := []types.Target{{Path: "app", Name: "ci"}}
-
-	err = m.Run(ctx, targets, magus.WithPreflight("generate"))
-	require.ErrorIs(t, err, types.PreflightFailed)
-	assert.Equal(t, magus.ExitCodePreflightFailed, exitCodeOf(err))
-	assert.False(t, reportedRunErr(err), "the preflight verdict is printed, not folded into the run's own failure")
-
-	err = m.Run(ctx, targets, magus.WithPreflight("other"))
-	require.ErrorIs(t, err, types.PreflightOutsideClosure)
-	assert.Equal(t, exitUsage, exitCodeOf(err))
-}
-
 // Not parallel: the prescan binds the global flags into globalCfg.
 func TestRunReadsPlan(t *testing.T) {
 	tests := []struct {
@@ -602,7 +540,7 @@ func TestRunReadsPlan(t *testing.T) {
 		{name: "after global flags and a target", args: []string{"--dry-run", "ci:gha", "--stdin"}, want: true},
 		{name: "explicit true", args: []string{"build", "--stdin=true"}, want: true},
 		{name: "explicit false", args: []string{"build", "--stdin=false"}},
-		{name: "a value flag's value is not the flag", args: []string{"build", "--preflight", "--stdin"}},
+		{name: "a value flag's value is not the flag", args: []string{"build", "--shard", "--stdin"}},
 		{name: "forwarded args are not flags", args: []string{"build", "--", "--stdin"}},
 		{name: "a project named stdin", args: []string{"build", "stdin"}},
 		{name: "absent", args: []string{"build", "a", "--shard", "1"}},

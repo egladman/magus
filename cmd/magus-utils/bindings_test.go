@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +45,20 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 // name when the checker receives a differently named generated Buzz object.
 func TestObjectReturnContracts(t *testing.T) {
 	require.NoError(t, checkObjectDecls(hostmodules.All()))
+}
+
+func TestBuzzValueEmitterConvertsInterfaceByDynamicType(t *testing.T) {
+	e := newBuzzValueEmitter()
+	var w bytes.Buffer
+	got, err := e.value(&w, "v.Value", "Value", reflect.TypeFor[any](), "\t")
+	require.NoError(t, err)
+	assert.Equal(t, "ffi.AnyVal(v.Value)", got)
+	assert.True(t, e.usesFFI, "the emitted file must import ffi")
+
+	got, err = e.value(&w, "v.Fragment", "Fragment", reflect.TypeFor[map[string]any](), "\t")
+	require.NoError(t, err)
+	assert.Equal(t, "mappedFragment", got)
+	assert.Contains(t, w.String(), "mappedFragment.MapSet(keyFragment, ffi.AnyVal(itemFragment))")
 }
 
 func TestTitleCaseAndRegisterName(t *testing.T) {

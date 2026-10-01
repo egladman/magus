@@ -122,7 +122,7 @@ func TestIntegration_ProjectRegister(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
-magus.project(".", {
+magus\project(".", {
     "outputs": ["bin/*"],
 });
 export fun build(ctx: magus\Context, args: [str]) > void {}
@@ -260,8 +260,10 @@ func TestInstallClientWithholdsCmdAndPry(t *testing.T) {
 		_, ok = mod.MapGet(name)
 		assert.False(t, ok, "magus\\%s is on the client surface", name)
 	}
-	_, ok = mod.MapGet("describeFile")
-	assert.True(t, ok, "the typed members stay")
+	describe, ok := mod.MapGet("describe")
+	require.True(t, ok, "the typed members stay")
+	_, ok = describe.MapGet("file")
+	assert.True(t, ok, "magus\\describe.file is on the client surface")
 }
 
 // The client refuses every stdlib module it does not provide by name, so a script

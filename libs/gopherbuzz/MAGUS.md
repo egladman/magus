@@ -18,3 +18,4 @@ Query: `magus query project=libs/gopherbuzz`
 | `ci`             | The anchor `magus affected ci` keys off.                                                  |
 | `conformance`    | Runs the upstream buzz suite at the pinned commit against the allowlist.                  |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                                          |
+| `buzzbench-test` | Runs the benchmarks/comparison module's tests, which test's ./...                         |

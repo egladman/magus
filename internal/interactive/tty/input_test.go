@@ -546,3 +546,20 @@ func TestReadStillDeliversOnALiveContext(t *testing.T) {
 	assert.Equal(t, KeyRune, ev.Key)
 	assert.Equal(t, 'k', ev.Rune)
 }
+
+// BenchmarkInputDecodeMouseMotion measures per-event decode cost. Any-event
+// tracking emits one of these for every cell the pointer crosses, so this is
+// the most frequent single operation in the whole interactive path.
+func BenchmarkInputDecodeMouseMotion(b *testing.B) {
+	stream := strings.Repeat("\x1b[<35;12;20M", 1024)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i += 1024 {
+		in, _ := newTestInput(stream)
+		for range 1024 {
+			if _, err := in.decode(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

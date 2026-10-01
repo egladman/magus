@@ -70,7 +70,7 @@ func isSkillName(name string) bool {
 // skillNameFromHost reduces what a host reported to the bare skill name, or "" when
 // nothing in it can be one.
 //
-// Hosts namespace. A plugin-installed skill arrives as `some-plugin:magus-buzz-write`,
+// Hosts namespace. A plugin-installed skill arrives as `some-plugin:magus-buzz-lang`,
 // and a strict charset alone would reject it, record nothing, and leave the gate denied
 // with the reader doing exactly what the message asked. So the last segment is what gets
 // matched: it is the skill's own name in every namespaced form, and it still has to pass

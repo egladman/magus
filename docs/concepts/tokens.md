@@ -82,6 +82,12 @@ that was revoked or expired ends the stream. A share link that closes (revoked,
 superseded, expired) cancels every request on it at once and cuts any that do
 not stop within a few seconds.
 
+The server checks tokens against an in-memory copy of the operator file and the
+token store, which it reloads when either changes on disk and at least once a
+second. A mint or revoke through the server's own token service takes effect at
+once, and one made by another process (`magus config mcp connector revoke`)
+within a second.
+
 ## Classes
 
 A token's class is its prefix, so the server knows which store can hold it

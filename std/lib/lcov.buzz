@@ -8,8 +8,8 @@
 /// it is small enough to read in one sitting, which is the property that makes a
 /// stdlib module worth keeping in the workspace's own language.
 ///
-/// It came out of coverage.buzz, which mixed this with Go-specific profile
-/// handling (reading a module path out of go.mod, Go's generated-file marker).
+/// It came out of hack/magusfile/coverage.buzz, which mixed this with Go-specific
+/// profile handling (reading a module path out of go.mod, Go's generated-file marker).
 /// Only the language-neutral half moved; the Go half stays beside the go spell.
 namespace lcov;
 

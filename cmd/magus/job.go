@@ -48,7 +48,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run, edit, rm or prune)")
+		return usagef("magus job: requires a subcommand (fork, apply, exec, exit, wait, run, rm or prune)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -68,17 +68,17 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
-	case "edit":
-		return jobEdit(ctx, root, args[1:])
+	case "apply":
+		return jobApply(ctx, root, args[1:])
 	case "prune":
 		return jobPrune(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run, edit, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run|edit|rm|prune> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|apply|exec|exit|wait|run|rm|prune> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -88,12 +88,12 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  fork  declare a job, from flags or a JSON record on stdin")
+	fmt.Fprintln(os.Stderr, "  apply upsert jobs' specs from -f <file|->, keeping each job's state")
 	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on")
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
-	fmt.Fprintln(os.Stderr, "  edit  add write paths to a live job or revoke them, keeping its state; --apply writes")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
 	fmt.Fprintln(os.Stderr, "")
@@ -507,7 +507,7 @@ func clipTitle(s string, n int) string {
 func printJobTree(out io.Writer, report types.JobList) {
 	if len(report.Jobs) == 0 {
 		fmt.Fprintln(out, "No jobs. Declare one with `"+hint.JobFork.With("<job>")+"`, or with the `"+
-			hint.ToolClient.String()+"` MCP tool (magus\\job\\put), and every worktree of this repository reads it here.")
+			hint.ToolClient.String()+"` MCP tool (magus\\job.put), and every worktree of this repository reads it here.")
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -944,7 +944,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, Parent: row.Parent, DependsOn: row.DependsOn}
+	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, Parent: row.Parent, DependsOn: row.DependsOn}
 	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -1223,13 +1223,15 @@ func jobExit(ctx context.Context, root string, args []string) error {
 // different: 2 for a result magus could not read at all (fix the result), 1 for one that
 // was read and rejected (the work is not verified).
 func jobWait(ctx context.Context, root string, args []string) error {
-	var schema, stdin bool
+	var schema, stdin, integration bool
 	pos, err := cmdParse("job wait", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
+		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --stdin < result.json")
+			fmt.Fprintln(os.Stderr, "       magus job wait <job> --integration --stdin < evidence.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Verify the result a job was exited with, against the job it was handed: every")
 			fmt.Fprintln(os.Stderr, "changed path inside its write paths and outside its denied ones, a change set")
@@ -1244,6 +1246,12 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It checks what is mechanical. Whether the work is GOOD, and whether the job's")
 			fmt.Fprintln(os.Stderr, "acceptance criteria are met, stay the reading of whoever forked it.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--integration asks whether the work still passes in THIS tree, such as a branch")
+			fmt.Fprintln(os.Stderr, "it was merged into: the job's check and check goals are graded against the runs")
+			fmt.Fprintln(os.Stderr, "the result's validation.output_ref and gate_evidence name here, and the grade is")
+			fmt.Fprintln(os.Stderr, "recorded as the job's integration. Its state does not move, and an ended job is")
+			fmt.Fprintln(os.Stderr, "graded too.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -1282,6 +1290,12 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		}
 		result = &decoded
 	}
+	if integration {
+		if result == nil {
+			return usagef("magus job wait: --integration grades runs in this checkout, and only a --stdin result can name them")
+		}
+		return jobWaitIntegration(ctx, store, root, pos[0], *result)
+	}
 	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
 		return storedAttempt(ctx, root, ref)
 	}, jobObserver(root))
@@ -1306,6 +1320,45 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitFormatted(opts, status)
 	}
 	if err != nil || status.Verified {
+		return err
+	}
+	return errSilent{exitCode: 1}
+}
+
+// jobWaitIntegration is `job wait --integration`: the job's check goals graded against
+// runs recorded in this checkout, with the same exit statuses as a wait.
+func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, result types.JobResult) error {
+	if root == "" {
+		return errors.New("magus job wait: --integration grades runs recorded in a checkout, and there is no workspace here: run from inside one or pass --root <path>")
+	}
+	checkout, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	grade, err := job.WaitIntegration(ctx, store, id, result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
+		return storedAttempt(ctx, root, ref)
+	}, checkout)
+	if err != nil {
+		return usagef("magus job wait: %s", err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		err = emitNames([]string{id})
+	case outputText:
+		verdict := "fails"
+		if grade.Verified {
+			verdict = "passes"
+		}
+		fmt.Printf("integration: %s %s in %s; its state is unchanged\n", id, verdict, checkout)
+		job.RenderGates(os.Stdout, types.JobStatus{Job: id, Gates: grade.Gates})
+	default:
+		err = emitFormatted(opts, grade)
+	}
+	if err != nil || grade.Verified {
 		return err
 	}
 	return errSilent{exitCode: 1}
@@ -2056,32 +2109,29 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// jobEdit is `magus job edit`: add write paths to a live job and revoke others, in one
-// write that keeps its state. It previews by default, since a widened boundary is handed to
-// a worker already running, and writes only under --apply.
-func jobEdit(ctx context.Context, root string, args []string) error {
-	var (
-		edit  job.EditOptions
-		add   listFlag
-		drop  listFlag
-		apply bool
-	)
-	pos, err := cmdParse("job edit", args, func(fs *flag.FlagSet) {
-		fs.Var(&add, "add-write-path", "A path to add to the job's write paths; repeatable or comma-separated")
-		fs.Var(&drop, "remove-write-path", "A path to revoke from the job's write paths; repeatable or comma-separated")
-		fs.BoolVar(&apply, "apply", false, "Write the edit; without it the edit is previewed and nothing is written")
+// jobApply is `magus job apply -f <file|->`, the way `kubectl apply -f` reads a manifest:
+// each record is a job's whole spec, upserted in order, and nothing magus records about the
+// job (its state, holder, registration, results) moves. A new id creates the job.
+func jobApply(ctx context.Context, root string, args []string) error {
+	var file string
+	pos, err := cmdParse("job apply", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&file, "f", "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]")
+			fmt.Fprintln(os.Stderr, "Usage: magus job apply -f <file|->")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Add write paths to a live job and revoke others, in one write. The job keeps its")
-			fmt.Fprintln(os.Stderr, "state and its holder, where a re-fork would hand it out again as "+string(types.StateDeclared)+".")
-			fmt.Fprintln(os.Stderr, "A revoked path is recorded as a release with the digest of what the job left, and")
-			fmt.Fprintln(os.Stderr, "the holder's next write there is refused, naming the revocation.")
+			fmt.Fprintln(os.Stderr, "Upsert each record's spec: criteria, write, deny and read paths, check, goals,")
+			fmt.Fprintln(os.Stderr, "model, depends_on, parent and timeout. The record is the whole spec, so a spec")
+			fmt.Fprintln(os.Stderr, "field it leaves out is cleared; an omitted checkpoint or timeout keeps the job's.")
+			fmt.Fprintln(os.Stderr, "Status is never written: the job keeps its state, holder and registration, and a")
+			fmt.Fprintln(os.Stderr, "record carrying state is refused. A new id creates the job, as fork would.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "It previews what it would write and writes nothing until --apply.")
+			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
+			fmt.Fprintln(os.Stderr, "adds. It prints what changed per job; the global --dry-run prints it and writes")
+			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Widening is the orchestrator's: a session holding a lease may only revoke its own")
-			fmt.Fprintln(os.Stderr, "paths. Ending a whole job is `"+hint.JobExit.String()+"`, not an edit that revokes every path.")
+			fmt.Fprintln(os.Stderr, "Widening is the orchestrator's: a session holding a lease may apply only a spec")
+			fmt.Fprintln(os.Stderr, "that removes some of its own write paths, which releases them. Ending a job is")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -2090,20 +2140,39 @@ func jobEdit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) != 1 {
-		return usagef("magus job edit: requires exactly one job")
+	if len(pos) > 0 {
+		return usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
 	}
-	if len(add)+len(drop) == 0 {
-		return usagef("magus job edit: name a path with --add-write-path or --remove-write-path")
+	var in io.Reader
+	switch file {
+	case "":
+		return usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
+	case "-":
+		in = os.Stdin
+	default:
+		f, err := os.Open(file)
+		if err != nil {
+			return usagef("magus job apply: %s", err)
+		}
+		defer f.Close()
+		in = f
 	}
-	edit.AddWritePaths, edit.RemoveWritePaths, edit.DryRun = add, drop, !apply || globalCfg.DryRun
-	store, err := openJobs(resolveRootOrEmpty(root))
+	records, err := job.DecodeDeclarations(in)
+	if err != nil {
+		return usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
+	}
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(root)
 	if err != nil {
 		return err
 	}
-	edited, err := store.Edit(ctx, pos[0], edit)
+	checkpoint := func() string {
+		token, _ := checkoutBaseToken(ctx, root)
+		return token
+	}
+	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root), checkpoint, globalCfg.DryRun)
 	if err != nil {
-		return usagef("magus job edit: %s", err)
+		return usagef("magus job apply: %s", err)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -2112,40 +2181,101 @@ func jobEdit(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		return emitNames([]string{edited.ID})
+		ids := make([]string, len(applied))
+		for i, a := range applied {
+			ids[i] = a.Next.ID
+		}
+		return emitNames(ids)
 	case outputText:
-		printJobEdit(os.Stdout, edited, edit)
+		printJobApply(os.Stdout, applied, globalCfg.DryRun)
 		return nil
 	default:
-		return emitFormatted(opts, editReport{Job: edited, DryRun: edit.DryRun})
+		report := applyReport{DryRun: globalCfg.DryRun}
+		for _, a := range applied {
+			report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed})
+		}
+		return emitFormatted(opts, report)
 	}
 }
 
-// editReport is `job edit`'s structured output: the row as written, or as it would be.
-type editReport struct {
-	Job    types.Job `json:"job"     yaml:"job"`
-	DryRun bool      `json:"dry_run" yaml:"dry_run"`
+// applyReport is `job apply`'s structured output: each row as written, or as it would be.
+type applyReport struct {
+	Jobs   []applyEntry `json:"jobs"    yaml:"jobs"`
+	DryRun bool         `json:"dry_run" yaml:"dry_run"`
 }
 
-func printJobEdit(out io.Writer, row types.Job, edit job.EditOptions) {
-	var changes []string
-	if len(edit.AddWritePaths) > 0 {
-		changes = append(changes, "add "+strings.Join(edit.AddWritePaths, ", "))
+type applyEntry struct {
+	Job     types.Job `json:"job"     yaml:"job"`
+	Created bool      `json:"created" yaml:"created"`
+	Changed []string  `json:"changed" yaml:"changed"`
+}
+
+func printJobApply(out io.Writer, applied []job.Applied, dryRun bool) {
+	for _, a := range applied {
+		switch {
+		case a.Created && dryRun:
+			fmt.Fprintf(out, "would create %s with %d write path(s)\n", a.Next.ID, len(a.Next.WritePaths))
+		case a.Created:
+			fmt.Fprintf(out, "created %s, %s, with %d write path(s)\n", a.Next.ID, a.Next.State, len(a.Next.WritePaths))
+		case len(a.Changed) == 0:
+			fmt.Fprintf(out, "unchanged %s\n", a.Next.ID)
+		default:
+			verb := "updated"
+			if dryRun {
+				verb = "would update"
+			}
+			fmt.Fprintf(out, "%s %s, still %s:\n", verb, a.Next.ID, a.Next.State)
+			for _, field := range a.Changed {
+				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
+			}
+		}
 	}
-	if len(edit.RemoveWritePaths) > 0 {
-		changes = append(changes, "revoke "+strings.Join(edit.RemoveWritePaths, ", "))
-	}
-	verb, be := "edited", "are"
-	if edit.DryRun {
-		verb, be = "would edit", "would be"
-	}
-	fmt.Fprintf(out, "%s %s: %s\n", verb, row.ID, strings.Join(changes, "; "))
-	fmt.Fprintf(out, "write paths %s %s\n", be, strings.Join(row.WritePaths, ", "))
-	if edit.DryRun {
-		fmt.Fprintln(out, "dry run: nothing written; rerun with --apply to write it")
+	if dryRun {
+		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
 		return
 	}
-	printConsoleJobLine(out, row.ID)
+	if len(applied) == 1 {
+		printConsoleJobLine(out, applied[0].Next.ID)
+	}
+}
+
+// specChange renders one changed spec field: the entries a list gained and lost, or the
+// field's name for a value that changed.
+func specChange(field string, prev, next types.Job) string {
+	lists := map[string][2][]string{
+		"write_paths": {prev.WritePaths, next.WritePaths},
+		"deny_paths":  {prev.DenyPaths, next.DenyPaths},
+		"read_paths":  {prev.ReadPaths, next.ReadPaths},
+		"depends_on":  {prev.DependsOn, next.DependsOn},
+		"goals":       {goalIDs(prev.Goals), goalIDs(next.Goals)},
+	}
+	pair, ok := lists[field]
+	if !ok {
+		return field + " changed"
+	}
+	var parts []string
+	for _, p := range pair[1] {
+		if !slices.Contains(pair[0], p) {
+			parts = append(parts, "+"+p)
+		}
+	}
+	for _, p := range pair[0] {
+		if !slices.Contains(pair[1], p) {
+			parts = append(parts, "-"+p)
+		}
+	}
+	if len(parts) == 0 {
+		return field + " changed"
+	}
+	return field + " " + strings.Join(parts, " ")
+}
+
+func goalIDs(goals []types.CompletionGate) []string {
+	ids := make([]string, len(goals))
+	for i, g := range goals {
+		ids[i] = g.ID
+	}
+	return ids
 }
 
 // jobPrune is `magus job prune`: end every job nobody is working, the way `job exit`

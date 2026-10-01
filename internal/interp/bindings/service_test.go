@@ -49,9 +49,9 @@ func TestServiceLeasesThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun hold() > str !> any {
-    final early: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
-    magus\service\release(early);
-    final kept: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+    final early: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
+    magus\service.release(early);
+    final kept: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
     return "{kept.owned} {kept.brokered} {kept.idle}";
 }
 `))

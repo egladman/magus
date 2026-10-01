@@ -11,7 +11,12 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 
 export fun mgs_getTools() > {str: Tool} {
-    return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"}};
+    return {
+        "python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "scip-python": Tool{observe = Command{bin = "scip-python", args = ["--version"]}},
+    };
 }
 
 // pip's and uv's caches, and the interpreters uv installs and runs.
@@ -35,15 +40,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "python",
         extensions = [".py"],
-        comments = CommentSyntax{
-            lineComments = ["#"],
-            quotes = [
-                Quote{open = "\"\"\"", close = "\"\"\""},
-                Quote{open = "'''", close = "'''"},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["type:", "noqa"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["#"],
+                quotes = [
+                    Quote{open = "\"\"\"", close = "\"\"\""},
+                    Quote{open = "'''", close = "'''"},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["type:", "noqa"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "indent",
+                body = "raise NotImplementedError(\"\{\{&Name}} lands in \{\{&Branch}}\")",
+            },
         },
     };
 }

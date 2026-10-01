@@ -2488,14 +2488,15 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 		case token.LBrace:
 			// `Name{...}` and the upstream-qualified `ns\Name{...}` are object
 			// literals. A namespaced type parses as a MemberExpr (`config\Bind`);
-			// resolve it by the last segment, which gopherbuzz's import splat binds
-			// to the same object def upstream reaches as `ns\Name`.
-			var typeName string
+			// the literal keeps the qualifier so a module's private `Bind` cannot
+			// stand in for the one `config` exports.
+			var typeName, namespace string
 			switch n := node.(type) {
 			case *ast.IdentExpr:
 				typeName = n.Name
 			case *ast.MemberExpr:
 				typeName = n.Name
+				namespace = qualifierText(n.Object)
 			default:
 				return node, nil
 			}
@@ -2503,6 +2504,7 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if err != nil {
 				return nil, err
 			}
+			lit.Namespace = namespace
 			node = lit
 		default:
 			return node, nil
@@ -2704,7 +2706,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		}
 		// Sub-parse the interpolation expression in the same mode as the enclosing
 		// parser so strictness is consistent across the program.
-		sub, used, err := p.parseInterpPart(part.Text)
+		sub, used, err := p.parseInterpPart(part)
 		if err != nil {
 			if raw {
 				literal(part.Text)
@@ -2738,11 +2740,12 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 // parseInterpPart parses one interpolation expression and returns the tracked import
 // bindings it references. They are returned rather than marked so that a backtick brace
 // run that falls back to literal text marks nothing.
-func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
-	toks, err := (*ParseCache)(nil).tokenize(text + ";")
+func (p *parser) parseInterpPart(part token.StringPart) (*ast.Program, []string, error) {
+	toks, err := (*ParseCache)(nil).tokenize(part.Text + ";")
 	if err != nil {
 		return nil, nil, err
 	}
+	shiftTokens(toks, part.Line, part.Col)
 	sub := newParser(toks)
 	sub.strict = p.strict
 	if len(p.importUsage) > 0 {
@@ -2762,6 +2765,29 @@ func (p *parser) parseInterpPart(text string) (*ast.Program, []string, error) {
 		}
 	}
 	return prog, used, nil
+}
+
+// shiftTokens moves tokens lexed from an interpolation's own source to where
+// that source sits in the file, starting at line:col (see StringPart.Col). Like
+// upstream's expression scanner, it adds col to every token's column, including
+// one on a later line of a multi-line expression. A zero line leaves the tokens
+// where they are.
+func shiftTokens(toks []token.Token, line, col int) {
+	if line == 0 {
+		return
+	}
+	shift := func(l, c *int) {
+		*c += col - 1
+		*l += line - 1
+	}
+	for i := range toks {
+		shift(&toks[i].Line, &toks[i].Col)
+		for j := range toks[i].Parts {
+			if toks[i].Parts[j].IsExpr {
+				shift(&toks[i].Parts[j].Line, &toks[i].Parts[j].Col)
+			}
+		}
+	}
 }
 
 // parseFunExpr parses `fun(params) rettype { body }` as an expression.
@@ -3161,6 +3187,20 @@ func (p *parser) parseListLit() (*ast.ListExpr, error) {
 		return nil, err
 	}
 	return lst, nil
+}
+
+// qualifierText spells the namespace part of a qualified type name the way the
+// source wrote it (`a\b` for `a\b\Name`), or "" when n is not a plain name chain.
+func qualifierText(n ast.Node) string {
+	switch v := n.(type) {
+	case *ast.IdentExpr:
+		return v.Name
+	case *ast.MemberExpr:
+		if outer := qualifierText(v.Object); outer != "" {
+			return outer + `\` + v.Name
+		}
+	}
+	return ""
 }
 
 // parseObjectLit parses `Name{ field = val, ... }` given the already-parsed name.

@@ -380,6 +380,7 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	// the server, where the process env belongs to nobody's invocation.
 	env = withoutEnvVars(env, []string{AncestorsEnvVar})
 	env = append(env, SelfVars(ctx)...)
+	env = withSelfFirstOnPath(env, magusExe())
 	// Ahead of the overrides, so a target that sets MAKEFLAGS itself keeps its own.
 	if js := jobserverFrom(ctx); js != nil {
 		// An error here is a required policy the kernel cannot confine; Exec refuses
@@ -468,6 +469,34 @@ func withoutEnvVars(env, drop []string) []string {
 		}
 	}
 	return out
+}
+
+// withSelfFirstOnPath puts the directory of exe at the front of env's PATH, so a magusfile,
+// spell or script that runs the bare word `magus` gets the binary running it rather than
+// whatever the inherited PATH holds: in a checkout, that is the build of this tree, not an
+// installed release too old to load it. Before the caller's overrides, so a target that
+// sets PATH itself keeps its own.
+//
+// An env with no PATH is left without one: a shell given only exe's directory would lose
+// its default search path.
+func withSelfFirstOnPath(env []string, exe string) []string {
+	if exe == "" {
+		return env
+	}
+	dir := filepath.Dir(exe)
+	for i := len(env) - 1; i >= 0; i-- {
+		value, ok := strings.CutPrefix(env[i], "PATH=")
+		if !ok {
+			continue
+		}
+		if first, _, _ := strings.Cut(value, string(os.PathListSeparator)); first == dir {
+			return env
+		}
+		out := slices.Clone(env)
+		out[i] = "PATH=" + dir + string(os.PathListSeparator) + value
+		return out
+	}
+	return env
 }
 
 func hasEnvVar(env []string, name string) bool {

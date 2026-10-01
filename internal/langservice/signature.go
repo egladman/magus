@@ -45,22 +45,24 @@ scan:
 		return nil
 	}
 
-	// The callee is the identifier (or module.member) immediately before "(".
+	// The callee is the identifier (or module\member) immediately before "(". The
+	// walk spans dots too, so a method on a value (`xs.len(`) is not read as the
+	// builtin it shares a name with.
 	j := open
 	for j > 0 && isSpace(src[j-1]) {
 		j--
 	}
 	end := j
-	for j > 0 && (isIdentByte(src[j-1]) || src[j-1] == '.') {
+	for j > 0 && (isIdentByte(src[j-1]) || src[j-1] == '.' || src[j-1] == '\\') {
 		j--
 	}
 	callee := src[j:end]
-	if callee == "" {
+	if callee == "" || strings.LastIndexByte(callee, '.') > strings.LastIndexByte(callee, '\\') {
 		return nil
 	}
 
-	if dot := strings.LastIndexByte(callee, '.'); dot >= 0 {
-		base, member := callee[:dot], callee[dot+1:]
+	if sep := strings.LastIndexByte(callee, '\\'); sep >= 0 {
+		base, member := callee[:sep], callee[sep+1:]
 		if mod, ok := resolveModule(base, src); ok {
 			for _, m := range mod.Methods {
 				if m.Name == member {

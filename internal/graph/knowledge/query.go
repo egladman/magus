@@ -450,6 +450,13 @@ func (g *Graph) citedRank(id, kind string) int {
 // depends on and what depends on it. When relations is non-empty, only edges with
 // those relations are traversed. Returns a fresh Graph for deterministic output.
 func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Graph {
+	sub, _ := g.neighborhood(seeds, budget, relations)
+	return sub
+}
+
+// neighborhood is Neighborhood that also returns every node the walk visited, sorted:
+// the nodes whose content and adjacency decided the result.
+func (g *Graph) neighborhood(seeds []string, budget int, relations []string) (*Graph, []string) {
 	g.ensureAdj()
 	relSet := toSet(relations)
 	visited := map[string]bool{}
@@ -515,7 +522,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 			sub.AddEdge(e)
 		}
 	}
-	return sub
+	return sub, slices.Sorted(maps.Keys(visited))
 }
 
 // Query resolves the input to seeds and returns the ranked matches plus their
@@ -694,6 +701,23 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	slices.SortFunc(out.Refs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
 	out.FileCount = len(out.Refs)
 	return out, true
+}
+
+// SymbolsNamed returns, sorted, the ID of every symbol labeled exactly name that a file in
+// the workspace defines. More than one means the bare name does not pick a symbol.
+func (g *Graph) SymbolsNamed(name string) []string {
+	g.ensureAdj()
+	var out []string
+	for id, n := range g.nodes {
+		if n.Kind != types.KindSymbol || n.Label != name {
+			continue
+		}
+		if slices.ContainsFunc(g.in[id], func(e types.KnowledgeEdge) bool { return e.Relation == types.RelationDefines }) {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Definitions resolves ref to a symbol and lists each file that defines it, with the

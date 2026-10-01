@@ -1,0 +1,963 @@
+namespace mergejobbranches;
+
+import "flags";
+import "fs";
+import "io";
+import "magus";
+import "serialize";
+import "std";
+import "vcs";
+import "hack/magusfile/branch-stack" as stack;
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/merge-job-branches.buzz -- (--jobs <id,...> | --branches <name,...> | --stack <file|->) [--base <rev>] [--into <branch>] [-o json] [--apply] [--verify]";
+final HELP = "cost: a temporary worktree and one merge per branch; --apply also regenerates once, --verify runs every merged job's checks\n{USAGE}";
+
+final PRIMARY = "check";
+
+// JobRow is what the merge reads of a job row.
+export object JobRow {
+    id: str,
+    dependsOn: [str],
+    checkoutRoot: str = "",
+    check: str = "",
+    goals: [stack\CheckGoal],
+}
+
+// Candidate is one branch to merge, with the job it carries out when there is one.
+export object Candidate {
+    branch: str,
+    job: str = "",
+    dependsOn: [str],
+    check: str = "",
+    goals: [stack\CheckGoal],
+    paths: [str],
+}
+
+object Edge {
+    before: str,
+    why: str,
+}
+
+// Conflict is one source file a merge could not settle, with the commits on each side
+// since the two diverged.
+export object Conflict {
+    path: str,
+    ours: [str],
+    theirs: [str],
+}
+
+fun cycleOf(names: [str], after: {str: [Edge]}) > str {
+    foreach (start in names) {
+        final path = mut [start];
+        var cur = start;
+        var guard = 0;
+        while (guard < names.len() + 1) {
+            guard = guard + 1;
+            var next = "";
+            foreach (e in after[cur] ?? [<Edge>]) {
+                if (names.indexOf(e.before) != null) { next = e.before; break; }
+            }
+            if (next == "") { break; }
+            final at = path.indexOf(next);
+            if (at != null) {
+                final loop = mut [<str>];
+                for (i: int = at!; i < path.len(); i = i + 1) { loop.append(path[i]); }
+                loop.append(next);
+                return loop.reverse().join(" -> ");
+            }
+            path.append(next);
+            cur = next;
+        }
+    }
+    return names.join(", ");
+}
+
+// order puts each candidate after the candidates whose job its job depends_on and after
+// every candidate its branch contains (contains maps a branch to the others it is based
+// on). Candidates ready at the same step keep their input order. The result is a chain on
+// base, since an integration branch is one line of merges: each layer's parent is the
+// layer merged before it, and its reason says what put it there. A cycle is an error
+// naming it.
+export fun order(cands: [Candidate], contains: {str: [str]}, base: str) > stack\BranchStack !> any {
+    final byJob = mut {<str: str>};
+    final names = mut [<str>];
+    foreach (c in cands) {
+        if (names.indexOf(c.branch) != null) { throw "merge-job-branches: {c.branch} is named twice"; }
+        names.append(c.branch);
+        if (c.job != "") { byJob[c.job] = c.branch; }
+    }
+    final after = mut {<str: [Edge]>};
+    final notes = mut {<str: [str]>};
+    foreach (c in cands) {
+        final edges = mut [<Edge>];
+        final own = mut [<str>];
+        foreach (d in c.dependsOn) {
+            final b = byJob[d];
+            if (b == null) {
+                own.append("depends_on {d}, which this merge leaves out");
+            } else if (b! != c.branch) {
+                edges.append(Edge{ before = b!, why = "after {b!}: its job depends_on {d}" });
+            }
+        }
+        foreach (a in contains[c.branch] ?? [<str>]) {
+            if (a != c.branch and names.indexOf(a) != null) {
+                edges.append(Edge{ before = a, why = "after {a}: based on it" });
+            }
+        }
+        after[c.branch] = edges;
+        notes[c.branch] = own;
+    }
+    final placed = mut {<str: bool>};
+    final layers = mut [<stack\StackLayer>];
+    var parent = base;
+    while (layers.len() < cands.len()) {
+        var pick = -1;
+        foreach (i, c in cands) {
+            if (placed[c.branch] != null) { continue; }
+            var ready = true;
+            foreach (e in after[c.branch]!) {
+                if (placed[e.before] == null) { ready = false; }
+            }
+            if (ready) { pick = i; break; }
+        }
+        if (pick < 0) {
+            final left = mut [<str>];
+            foreach (c in cands) {
+                if (placed[c.branch] == null) { left.append(c.branch); }
+            }
+            throw "merge-job-branches: the branches order in a cycle: {cycleOf(left, after: after)}";
+        }
+        final c = cands[pick];
+        placed[c.branch] = true;
+        final why = mut [<str>];
+        foreach (e in after[c.branch]!) {
+            if (why.indexOf(e.why) == null) { why.append(e.why); }
+        }
+        foreach (n in notes[c.branch]!) { why.append(n); }
+        layers.append(stack\StackLayer{ branch = c.branch, parent = parent, job = c.job, paths = c.paths,
+            declarations = [<str>], check = c.check, goals = c.goals, status = "planned", reason = why.join("; ") });
+        parent = c.branch;
+    }
+    return stack\BranchStack{ base = base, layers = layers };
+}
+
+// stripType is a branch name without a conventional-commit type prefix (feat/x is x).
+fun stripType(branch: str) > str {
+    final slash = branch.indexOf("/");
+    if (slash == null) { return branch; }
+    final head = branch.sub(0, len: slash!);
+    if (["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "test"].indexOf(head) == null) {
+        return branch;
+    }
+    return branch.sub(slash! + 1);
+}
+
+fun rowNamed(rows: [JobRow], id: str) > JobRow? {
+    foreach (r in rows) {
+        if (r.id == id) { return r; }
+    }
+    return null;
+}
+
+// candidatesFromJobs is one candidate per job id, on the branch branchOf names for it. An
+// id no row holds, and a job with no branch, is an error naming it.
+export fun candidatesFromJobs(ids: [str], rows: [JobRow], branchOf: fun (row: JobRow) > str !> any) > [Candidate] !> any {
+    final acc = mut [<Candidate>];
+    foreach (id in ids) {
+        final row = rowNamed(rows, id: id);
+        if (row == null) { throw "merge-job-branches: no job {id} in the job store"; }
+        acc.append(Candidate{ branch = branchOf(row!), job = id, dependsOn = row!.dependsOn, check = row!.check,
+            goals = row!.goals, paths = [<str>] });
+    }
+    return acc;
+}
+
+// jobForBranch is the row whose id is the branch, or the branch without its type prefix,
+// or whose checkout has the branch checked out; null when none does.
+export fun jobForBranch(branch: str, rows: [JobRow], checkedOut: fun (row: JobRow) > str !> any) > JobRow? !> any {
+    foreach (id in [branch, stripType(branch)]) {
+        final row = rowNamed(rows, id: id);
+        if (row != null) { return row; }
+    }
+    foreach (r in rows) {
+        if (r.checkoutRoot != "" and checkedOut(r) == branch) { return r; }
+    }
+    return null;
+}
+
+export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: fun (row: JobRow) > str !> any) > [Candidate] !> any {
+    final acc = mut [<Candidate>];
+    foreach (b in branches) {
+        final row = jobForBranch(b, rows: rows, checkedOut: checkedOut);
+        if (row == null) {
+            acc.append(Candidate{ branch = b, dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] });
+        } else {
+            acc.append(Candidate{ branch = b, job = row!.id, dependsOn = row!.dependsOn, check = row!.check,
+                goals = row!.goals, paths = [<str>] });
+        }
+    }
+    return acc;
+}
+
+fun git(dir: str, args: [str]) > str !> any {
+    return vcs\cmd(args, opts: {"quiet": true, "dir": dir}).stdout.trim();
+}
+
+fun gitOK(dir: str, args: [str]) > bool !> any {
+    return vcs\cmd(args, opts: {"quiet": true, "dir": dir, "allow_failure": true}).code == 0;
+}
+
+fun lines(text: str) > [str] {
+    final acc = mut [<str>];
+    foreach (l in text.split("\n")) {
+        if (l.trim() != "") { acc.append(l.trim()); }
+    }
+    return acc;
+}
+
+fun requireBranch(root: str, branch: str) > void !> any {
+    if (!gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{branch}"])) {
+        throw "merge-job-branches: unknown branch {branch}";
+    }
+}
+
+// containsMap is, for each branch, the others whose tip it contains and that are not
+// already in base.
+fun containsMap(root: str, branches: [str], base: str) > {str: [str]} !> any {
+    final args = mut ["rev-parse"];
+    foreach (b in branches) { args.append(b); }
+    final tips = lines(git(root, args: args));
+    final ahead = mut {<str: [str]>};
+    foreach (b in branches) { ahead[b] = lines(git(root, args: ["rev-list", "{base}..{b}"])); }
+    final found = mut {<str: [str]>};
+    foreach (i, b in branches) {
+        final within = mut [<str>];
+        foreach (j, a in branches) {
+            if (i == j or tips[j] == tips[i] or ahead[a]!.len() == 0) { continue; }
+            if (ahead[b]!.indexOf(tips[j]) != null) { within.append(a); }
+        }
+        found[b] = within;
+    }
+    return found;
+}
+
+fun changedPaths(root: str, branch: str, base: str) > [str] !> any {
+    final mb = git(root, args: ["merge-base", base, branch]);
+    return lines(git(root, args: ["diff", "--name-only", "{mb}..{branch}"]));
+}
+
+fun checkCommand(c: LeaseCheck?) > str {
+    if (c == null) { return ""; }
+    var cmd = "magus run {c!.target} {c!.project}";
+    if (c!.args.len() > 0) { cmd = cmd + " -- " + c!.args.join(" "); }
+    return cmd;
+}
+
+// parseCheck reads a row check back from the command checkCommand renders.
+export fun parseCheck(cmd: str) > stack\CheckGoal !> any {
+    final words = mut [<str>];
+    foreach (w in cmd.split(" ")) {
+        if (w != "") { words.append(w); }
+    }
+    if (words.len() < 3 or words[0] != "magus" or words[1] != "run") {
+        throw "merge-job-branches: the check `{cmd}` is not a `magus run <target> [<project>]` command";
+    }
+    var project = ".";
+    var at = 3;
+    if (words.len() > 3 and words[3] != "--") { project = words[3]; at = 4; }
+    final args = mut [<str>];
+    if (at < words.len() and words[at] == "--") {
+        for (i: int = at + 1; i < words.len(); i = i + 1) { args.append(words[i]); }
+    }
+    return stack\CheckGoal{ id = PRIMARY, target = words[2], project = project, args = args };
+}
+
+fun storeRows() > [JobRow] !> any {
+    final acc = mut [<JobRow>];
+    foreach (j in magus\job.list().jobs) {
+        final goals = mut [<stack\CheckGoal>];
+        foreach (g in j.goals) {
+            if (g.kind == "check") {
+                goals.append(stack\CheckGoal{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
+            }
+        }
+        acc.append(JobRow{ id = j.id, dependsOn = j.dependsOn, checkoutRoot = j.checkoutRoot, check = checkCommand(j.check), goals = goals });
+    }
+    return acc;
+}
+
+fun checkedOutIn(row: JobRow) > str !> any {
+    if (row.checkoutRoot == "" or !fs\isDir(row.checkoutRoot)) { return ""; }
+    final res = vcs\cmd(["branch", "--show-current"], opts: {"quiet": true, "dir": row.checkoutRoot, "allow_failure": true});
+    if (res.code != 0) { return ""; }
+    return res.stdout.trim();
+}
+
+fun branchOfJob(root: str, row: JobRow) > str !> any {
+    final here = checkedOutIn(row);
+    if (here != "") { return here; }
+    if (gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{row.id}"])) { return row.id; }
+    throw "merge-job-branches: job {row.id} names no branch: its checkout {row.checkoutRoot} is gone or detached, and no branch is named {row.id}";
+}
+
+// shortlog is each commit in range touching path, as `<short> <subject>`.
+fun shortlog(dir: str, range: str, path: str) > [str] !> any {
+    return lines(git(dir, args: ["log", "--no-merges", "--format=%h %s", range, "--", path]));
+}
+
+// conflicts reads the files a merge in progress in dir left unsettled, each with the
+// commits on both sides since they diverged.
+fun conflicts(dir: str) > [Conflict] !> any {
+    final files = lines(git(dir, args: ["diff", "--name-only", "--diff-filter=U"]));
+    if (files.len() == 0) { return [<Conflict>]; }
+    final mb = git(dir, args: ["merge-base", "HEAD", "MERGE_HEAD"]);
+    final acc = mut [<Conflict>];
+    foreach (f in files) {
+        acc.append(Conflict{ path = f, ours = shortlog(dir, range: "{mb}..HEAD", path: f),
+            theirs = shortlog(dir, range: "{mb}..MERGE_HEAD", path: f) });
+    }
+    return acc;
+}
+
+// fromLayer annotates a commit on the integration side with the layer that brought it.
+fun fromLayer(dir: str, commit: str, merged: [str]) > str !> any {
+    final sha = commit.split(" ")[0];
+    foreach (b in merged) {
+        if (gitOK(dir, args: ["merge-base", "--is-ancestor", sha, b])) { return "{commit} (from {b})"; }
+    }
+    return commit;
+}
+
+export fun conflictReason(branch: str, into: str, found: [Conflict]) > str {
+    final parts = mut ["a source conflict merging {branch} into {into}; resolve it by hand and run again"];
+    foreach (c in found) {
+        parts.append("{c.path}: {into} has {c.ours.join(", ")}; {branch} has {c.theirs.join(", ")}");
+    }
+    return parts.join("\n");
+}
+
+fun settleWithMagus(dir: str, branch: str) > void !> any {
+    // vcs resolve raises when a conflict it does not settle is left; what is left is read
+    // from the tree either way.
+    try {
+        magus\cmd("vcs", args: ["resolve", "--against", branch], opts: {"dir": dir, "root": dir, "quiet": true});
+    } catch (e) {
+        if (!gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"])) {
+            throw "merge-job-branches: merging {branch} did not start: {e}; the tree holds {lines(git(dir, args: ["status", "--porcelain"])).join(", ")}";
+        }
+    }
+}
+
+fun regenerateWithMagus(base: str) > fun (dir: str) > void !> any {
+    return fun (dir: str) > void !> any {
+        magus\cmd("affected", args: ["generate:rw", "--vcs-base-ref", base], opts: {"dir": dir, "root": dir, "quiet": true});
+        final changed = unstaged(dir);
+        if (changed.len() == 0) { return; }
+        final undeclared = mut [<str>];
+        foreach (f in magus\describeFile(changed, opts: {"dir": dir, "root": dir}).files) {
+            if (f.role != "output" and f.role != "maintained") { undeclared.append(f.path); }
+        }
+        if (undeclared.len() > 0) {
+            throw "merge-job-branches: regenerating changed {undeclared.join(", ")}, which no target declares as its output";
+        }
+        final add = mut ["add", "--"];
+        foreach (p in changed) { add.append(p); }
+        git(dir, args: add);
+    };
+}
+
+// unstaged is every path in dir changed and not staged: modified, deleted or untracked.
+fun unstaged(dir: str) > [str] !> any {
+    final acc = mut [<str>];
+    foreach (p in lines(git(dir, args: ["diff", "--name-only"]))) { acc.append(p); }
+    foreach (p in lines(git(dir, args: ["ls-files", "--others", "--exclude-standard"]))) { acc.append(p); }
+    return acc;
+}
+
+// mergeLayers merges each layer of s, in order, into the detached tree at dir. It stops at
+// the first source conflict, aborting that merge so the tree holds only the layers before
+// it; the conflicting layer says why and every later one stays planned. It returns the
+// layers with their statuses. settle merges a branch into dir and settles what it can,
+// leaving the merge in progress with only the conflicts nothing could settle.
+export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (dir: str, branch: str) > void !> any) > stack\BranchStack !> any {
+    final acc = mut [<stack\StackLayer>];
+    final merged = mut [<str>];
+    var stopped = "";
+    foreach (l in s.layers) {
+        var status = "merged";
+        var reason = l.reason;
+        if (stopped != "") {
+            status = "planned";
+            reason = "not merged: {stopped} stopped the merge";
+        } else if (gitOK(dir, args: ["merge-base", "--is-ancestor", l.branch, "HEAD"])) {
+            reason = "already in the tree";
+        } else {
+            settle(dir, branch: l.branch);
+            final found = conflicts(dir);
+            if (found.len() > 0) {
+                final annotated = mut [<Conflict>];
+                foreach (c in found) {
+                    final ours = mut [<str>];
+                    foreach (o in c.ours) { ours.append(fromLayer(dir, commit: o, merged: merged)); }
+                    annotated.append(Conflict{ path = c.path, ours = ours, theirs = c.theirs });
+                }
+                git(dir, args: ["merge", "--abort"]);
+                status = "conflict";
+                reason = conflictReason(l.branch, into: into, found: annotated);
+                stopped = l.branch;
+            } else {
+                if (gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"])) {
+                    git(dir, args: ["commit", "--no-edit", "--no-verify"]);
+                }
+                merged.append(l.branch);
+                reason = "merged as {git(dir, args: ["rev-parse", "--short", "HEAD"])}";
+            }
+        }
+        acc.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
+            declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
+    }
+    return stack\BranchStack{ schema = s.schema, base = s.base, layers = acc };
+}
+
+fun allMerged(s: stack\BranchStack) > bool {
+    foreach (l in s.layers) {
+        if (l.status != "merged") { return false; }
+    }
+    return true;
+}
+
+// commitRegenerated regenerates the tree at dir once and commits the change, if any, on
+// its own, so the merges and the regeneration review apart. regenerate rewrites and
+// stages the output. It returns the commit, or "" when nothing changed.
+export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (dir: str) > void !> any) > str !> any {
+    regenerate(dir);
+    final left = unstaged(dir);
+    if (left.len() > 0) {
+        throw "merge-job-branches: regenerating left {left.join(", ")} unstaged";
+    }
+    if (gitOK(dir, args: ["diff", "--cached", "--quiet"])) { return ""; }
+    git(dir, args: ["commit", "--no-verify", "-m", "regenerate after merging {s.layers.len()} branches"]);
+    return git(dir, args: ["rev-parse", "HEAD"]);
+}
+
+// withTree runs body in a temporary detached worktree of root at rev, and removes the
+// worktree however body ends.
+fun withTree(root: str, rev: str, body: fun (dir: str) > void !> any) > void !> any {
+    final scratch = fs\tempDir("merge-job-branches-");
+    final dir = scratch + "/tree";
+    git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+    try {
+        body(dir);
+    } catch (e) {
+        vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});
+        fs\removeAll(scratch);
+        throw e;
+    }
+    git(root, args: ["worktree", "remove", "--force", dir]);
+    fs\removeAll(scratch);
+}
+
+fun refIn(text: str) > str {
+    final words = text.replace("\n", with: " ").split(" ");
+    for (i: int = 0; i + 1 < words.len(); i = i + 1) {
+        if ((words[i] == "ref" or words[i] == "output:") ) {
+            for (j: int = i + 1; j < words.len(); j = j + 1) {
+                if (words[j] == "") { continue; }
+                if (words[j].startsWith("out")) { return words[j]; }
+                break;
+            }
+        }
+    }
+    return "";
+}
+
+// Verdict is one merged job's checks run in the merged tree.
+export object Verdict {
+    job: str,
+    pass: bool,
+    lines: [str],
+}
+
+// runCheck runs one check through the status --wait pipe in dir, returning its output ref
+// and whether it passed.
+fun runCheck(dir: str, g: stack\CheckGoal) > [str] !> any {
+    final wait = magus\cmd("status", args: ["--wait"], opts: {"dir": dir, "root": dir, "quiet": true});
+    final args = mut [g.target, g.project, "--concurrency", "1"];
+    if (g.args.len() > 0) {
+        args.append("--");
+        foreach (a in g.args) { args.append(a); }
+    }
+    try {
+        final res = magus\run(args, opts: {"dir": dir, "root": dir, "quiet": true, "stdin": wait.stdout});
+        return ["pass", refIn(res.stdout + " " + res.stderr)];
+    } catch (e) {
+        return ["fail", refIn("{e}")];
+    }
+}
+
+// verifyLayers runs each merged job's check and check goals in dir, serially, then records
+// the grade with `magus job wait --integration`. A job passes only when every run and the
+// recorded grade pass.
+export fun verifyLayers(dir: str, s: stack\BranchStack) > [Verdict] !> any {
+    final acc = mut [<Verdict>];
+    foreach (l in s.layers) {
+        if (l.job == "" or l.status != "merged") { continue; }
+        final checks = mut [<stack\CheckGoal>];
+        if (l.check != "") { checks.append(parseCheck(l.check)); }
+        foreach (g in l.goals) { checks.append(g); }
+        if (checks.len() == 0) {
+            acc.append(Verdict{ job = l.job, pass = false, lines = ["declares no check and no check goal, so nothing here can grade it"] });
+            continue;
+        }
+        var pass = true;
+        final said = mut [<str>];
+        var primary = "";
+        final evidence = mut [<any>];
+        foreach (g in checks) {
+            final r = runCheck(dir, g: g);
+            pass = pass and r[0] == "pass";
+            said.append("{r[0]} {g.id}: magus run {g.target} {g.project} {r[1]}");
+            if (g.id == PRIMARY) { primary = r[1]; } else { evidence.append({"gate_id": g.id, "output_ref": r[1]}); }
+        }
+        final rep = serialize\jsonEncode(serialize\Boxed.init({"schema_version": 2, "job": l.job, "changed_paths": [<str>],
+            "validation": {"command": l.check, "output_ref": primary}, "gate_evidence": evidence, "unresolved_risks": [<str>]}));
+        try {
+            magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: {"dir": dir, "root": dir, "quiet": true, "stdin": rep});
+            said.append("recorded: job wait --integration passed");
+        } catch (e) {
+            pass = false;
+            said.append("recorded: job wait --integration did not pass: {e}");
+        }
+        acc.append(Verdict{ job = l.job, pass = pass, lines = said });
+    }
+    return acc;
+}
+
+fun branches(n: int) > str {
+    if (n == 1) { return "1 branch"; }
+    return "{n} branches";
+}
+
+export fun render(s: stack\BranchStack) > str {
+    final acc = mut ["{branches(s.layers.len())} onto {s.base}, in merge order:"];
+    foreach (n, l in s.layers) {
+        var job = "";
+        if (l.job != "") { job = " (job {l.job})"; }
+        acc.append("{n + 1}. {l.branch}{job}  [{l.status}]");
+        foreach (r in l.reason.split("\n")) {
+            if (r != "") { acc.append("     {r}"); }
+        }
+    }
+    return acc.join("\n");
+}
+
+export fun pushHint(into: str) > [str] {
+    return ["to publish: git push -u origin {into}",
+        "the branch name must pass the branch-name rule: short and topical, no type prefix such as feat/, no hash"];
+}
+
+fun splitList(v: str?) > [str] {
+    final acc = mut [<str>];
+    foreach (p in (v ?? "").split(",")) {
+        if (p.trim() != "") { acc.append(p.trim()); }
+    }
+    return acc;
+}
+
+fun readSource(path: str) > str !> any {
+    if (path == "-") { return io\stdin.readAll() ?? ""; }
+    return fs\readFile(path);
+}
+
+// planned resolves the source the flags name into an ordered stack, every branch checked
+// to exist.
+fun planned(root: str, values: {str: str}) > stack\BranchStack !> any {
+    final given = mut [<str>];
+    foreach (k in ["--jobs", "--branches", "--stack"]) {
+        if (values[k] != null) { given.append(k); }
+    }
+    if (given.len() != 1) {
+        throw "merge-job-branches: name the branches one way, with --jobs, --branches or --stack\n{USAGE}";
+    }
+    if (values["--stack"] != null) {
+        if (values["--base"] != null) { throw "merge-job-branches: a stack names its own base, so --base is not taken with --stack"; }
+        final s = stack\orderLayers(stack\readStack(readSource(values["--stack"]!)));
+        final rows = storeRows();
+        final layers = mut [<stack\StackLayer>];
+        foreach (l in s.layers) {
+            requireBranch(root, branch: l.branch);
+            var check = l.check;
+            var goals = l.goals;
+            if (l.job != "" and check == "" and goals.len() == 0) {
+                final row = rowNamed(rows, id: l.job);
+                if (row != null) { check = row!.check; goals = row!.goals; }
+            }
+            layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
+                declarations = l.declarations, check = check, goals = goals, status = "planned", reason = l.reason });
+        }
+        return stack\BranchStack{ schema = s.schema, base = s.base, layers = layers };
+    }
+    final base = values["--base"] ?? vcs\base();
+    final rows = storeRows();
+    var cands = [<Candidate>];
+    if (values["--jobs"] != null) {
+        cands = candidatesFromJobs(splitList(values["--jobs"]), rows: rows, branchOf: fun (row: JobRow) > str !> any => branchOfJob(root, row: row));
+    } else {
+        cands = candidatesFromBranches(splitList(values["--branches"]), rows: rows, checkedOut: checkedOutIn);
+    }
+    if (cands.len() == 0) { throw "merge-job-branches: no branches to merge\n{USAGE}"; }
+    final names = mut [<str>];
+    final withPaths = mut [<Candidate>];
+    foreach (c in cands) {
+        requireBranch(root, branch: c.branch);
+        names.append(c.branch);
+        withPaths.append(Candidate{ branch = c.branch, job = c.job, dependsOn = c.dependsOn, check = c.check,
+            goals = c.goals, paths = changedPaths(root, branch: c.branch, base: base) });
+    }
+    return order(withPaths, contains: containsMap(root, branches: names, base: base), base: base);
+}
+
+fun requireNewBranch(root: str, into: str) > void !> any {
+    git(root, args: ["check-ref-format", "--branch", into]);
+    if (gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{into}"])) {
+        throw "merge-job-branches: branch {into} already exists; delete it or pass another --into";
+    }
+}
+
+fun printVerdicts(verdicts: [Verdict]) > bool {
+    var all = true;
+    foreach (v in verdicts) {
+        var mark = "pass";
+        if (!v.pass) { mark = "fail"; all = false; }
+        std\print("{mark} {v.job}");
+        foreach (l in v.lines) { std\print("     {l}"); }
+    }
+    return all;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--verify", "--help"],
+        valued: ["--jobs", "--branches", "--stack", "--base", "--into", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "merge-job-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") { throw "merge-job-branches: -o takes text or json\n{USAGE}"; }
+    final apply = parsed.values["--apply"] != null;
+    final verify = parsed.values["--verify"] != null;
+    final into = parsed.values["--into"] ?? "";
+    if ((apply or verify) and into == "") {
+        throw "merge-job-branches: --apply and --verify name the integration branch with --into <branch>\n{USAGE}";
+    }
+    final root = vcs\root();
+    final plan = planned(root, values: parsed.values);
+
+    if (!apply and !verify) {
+        if (format == "json") { std\print(stack\writeStack(plan)); return; }
+        std\print("dry run: nothing changed; pass --apply --into <branch> to write");
+        std\print(render(plan));
+        return;
+    }
+
+    var result = plan;
+    var verdicts = [<Verdict>];
+    var regenerated = "";
+    if (apply) {
+        requireNewBranch(root, into: into);
+        withTree(root, rev: plan.base, body: fun (dir: str) > void !> any {
+            result = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
+            if (!allMerged(result)) { return; }
+            regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base));
+            git(root, args: ["branch", into, git(dir, args: ["rev-parse", "HEAD"])]);
+            if (verify) { verdicts = verifyLayers(dir, s: result); }
+        });
+    } else {
+        requireBranch(root, branch: into);
+        final layers = mut [<stack\StackLayer>];
+        foreach (l in plan.layers) {
+            var status = "planned";
+            var reason = "not in {into}";
+            if (gitOK(root, args: ["merge-base", "--is-ancestor", l.branch, into])) { status = "merged"; reason = "in {into}"; }
+            layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
+                declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
+        }
+        result = stack\BranchStack{ schema = plan.schema, base = plan.base, layers = layers };
+        withTree(root, rev: into, body: fun (dir: str) > void !> any { verdicts = verifyLayers(dir, s: result); });
+    }
+
+    final merged = allMerged(result);
+    if (format == "json") {
+        std\print(stack\writeStack(result));
+    } else {
+        if (apply and merged) {
+            std\print("merged {branches(result.layers.len())} into {into}; nothing was pushed");
+        } else if (apply) {
+            std\print("stopped at a source conflict; nothing was written and {into} was not created");
+        } else {
+            std\print("verified {into} in a temporary worktree; nothing was written");
+        }
+        std\print(render(result));
+        if (regenerated != "") { std\print("regenerated output committed apart as {regenerated.sub(0, len: 12)}"); }
+    }
+    var passed = true;
+    if (verify and verdicts.len() > 0) {
+        if (format == "text") { std\print(""); }
+        passed = printVerdicts(verdicts);
+    }
+    if (apply and merged and format == "text") {
+        std\print("");
+        foreach (h in pushHint(into)) { std\print(h); }
+    }
+    if (!merged and apply) { throw "merge-job-branches: a source conflict stopped the merge"; }
+    if (!passed) { throw "merge-job-branches: a merged job's checks did not pass, so the merge is not done"; }
+}
+
+fun fixtureRows() > [JobRow] !> any {
+    final doc = serialize\jsonDecode(fs\readFile("hack/testdata/merge-job-branches-jobs.json"));
+    final rows = mut [<JobRow>];
+    foreach (j in doc.q("jobs").listValue()) {
+        final deps = mut [<str>];
+        foreach (d in j.q("depends_on").listValue()) { deps.append(d.stringValue()); }
+        final goals = mut [<stack\CheckGoal>];
+        foreach (g in j.q("goals").listValue()) {
+            goals.append(stack\CheckGoal{ id = g.q("id").stringValue(), target = g.q("target").stringValue(),
+                project = g.q("project").stringValue() });
+        }
+        rows.append(JobRow{ id = j.q("id").stringValue(), dependsOn = deps, checkoutRoot = j.q("checkout_root").string() ?? "",
+            check = j.q("check").stringValue(), goals = goals });
+    }
+    return rows;
+}
+
+fun featBranch(row: JobRow) > str { return "feat/{row.id}"; }
+
+fun branchesOf(s: stack\BranchStack) > str {
+    final names = mut [<str>];
+    foreach (l in s.layers) { names.append(l.branch); }
+    return names.join(" ");
+}
+
+fun raisedBy(body: fun () > void !> any) > str {
+    try {
+        body();
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "jobs merge after the jobs they depend_on, and a dependency left out is named" {
+    final rows = fixtureRows();
+    final cands = candidatesFromJobs(["docs", "api", "core"], rows: rows, branchOf: featBranch);
+    final s = order(cands, contains: {<str: [str]>}, base: "main");
+    assert\equal(branchesOf(s), want: "feat/core feat/api feat/docs", message: "order");
+    assert\equal(s.layers[0].parent, want: "main", message: "the first layer goes on the base");
+    assert\equal(s.layers[2].parent, want: "feat/api", message: "each later layer goes on the one merged before it");
+    assert\equal(s.layers[2].reason, want: "after feat/api: its job depends_on api; depends_on elsewhere, which this merge leaves out", message: "reason");
+    assert\equal(s.layers[1].goals[0].id, want: "lint", message: "the row's check goals travel with the layer");
+    assert\equal(stack\orderLayers(s).layers.len(), want: 3, message: "the plan is a stack the module orders");
+}
+
+test "a branch based on another merges after it, and ready branches keep their input order" {
+    final cands = [
+        Candidate{ branch = "dep", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
+        Candidate{ branch = "gen-b", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
+        Candidate{ branch = "gen-c", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
+    ];
+    final s = order(cands, contains: {"dep": ["gen-b"]}, base: "main");
+    assert\equal(branchesOf(s), want: "gen-b dep gen-c", message: "order");
+    assert\equal(s.layers[1].reason, want: "after gen-b: based on it", message: "reason");
+}
+
+test "a cycle, an unknown job and a branch named twice are errors naming them" {
+    final rows = fixtureRows();
+    assert\equal(raisedBy(fun () > void !> any {
+        order(candidatesFromJobs(["loop-a", "loop-b"], rows: rows, branchOf: featBranch), contains: {<str: [str]>}, base: "main");
+    }), want: "merge-job-branches: the branches order in a cycle: feat/loop-a -> feat/loop-b -> feat/loop-a", message: "cycle");
+    assert\equal(raisedBy(fun () > void !> any { candidatesFromJobs(["nope"], rows: rows, branchOf: featBranch); }),
+        want: "merge-job-branches: no job nope in the job store", message: "unknown job");
+    final twice = Candidate{ branch = "x", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] };
+    assert\equal(raisedBy(fun () > void !> any { order([twice, twice], contains: {<str: [str]>}, base: "main"); }),
+        want: "merge-job-branches: x is named twice", message: "twice");
+}
+
+test "a branch finds its job by id, by id without a type prefix, or by the checkout holding it" {
+    final rows = fixtureRows();
+    fun held(row: JobRow) > str { if (row.checkoutRoot == "/checkouts/held") { return "topic"; } return ""; }
+    final cands = candidatesFromBranches(["feat/api", "topic", "loose"], rows: rows, checkedOut: held);
+    assert\equal([cands[0].job, cands[1].job, cands[2].job], want: ["api", "held", ""], message: "jobs");
+}
+
+test "a row check reads back from the command the plan carries" {
+    final g = parseCheck("magus run test api -- -run Api");
+    assert\equal([g.id, g.target, g.project], want: ["check", "test", "api"], message: "check");
+    assert\equal(g.args, want: ["-run", "Api"], message: "args");
+    assert\equal(parseCheck("magus run lint").project, want: ".", message: "the project defaults to the root");
+    assert\equal(raisedBy(fun () > void !> any { parseCheck("go test ./..."); }),
+        want: "merge-job-branches: the check `go test ./...` is not a `magus run <target> [<project>]` command", message: "not magus");
+}
+
+final FIXTURE_MAGUSFILE = `import "magus";
+import "fs";
+import "sort";
+
+magus\project({});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("src/*.txt");
+    ctx.writesFiles("gen/list.txt");
+    final names = mut [<str>];
+    foreach (n in fs\listDir("src")) { names.append(n); }
+    fs\mkdirAll("gen");
+    fs\writeFile("gen/list.txt", content: sort\strings(names).join("\n") + "\n");
+}
+`;
+
+fun put(root: str, path: str, content: str) > void !> any {
+    fs\mkdirAll(fs\dirname("{root}/{path}"));
+    fs\writeFile("{root}/{path}", content: content);
+}
+
+fun commitAll(root: str, subject: str) > void !> any {
+    git(root, args: ["add", "-A"]);
+    git(root, args: ["commit", "-q", "--no-verify", "-m", subject]);
+}
+
+fun branchFrom(root: str, name: str, start: str, files: {str: str}, subject: str) > void !> any {
+    git(root, args: ["checkout", "-q", "-b", name, start]);
+    foreach (p, c in files) { put(root, path: p, content: c); }
+    commitAll(root, subject: subject);
+}
+
+// fixtureRepo is a magus workspace whose one target lists src/ into gen/list.txt, with five
+// branches: gen-b and gen-c each add a source and regenerate the list, so the list
+// conflicts and the merge driver settles it; dep builds on gen-b and adds a source without
+// regenerating; edit-a and clash both rewrite src/a.txt.
+fun fixtureRepo() > str !> any {
+    final root = fs\tempDir("merge-job-branches-test-");
+    git(root, args: ["init", "-q", "-b", "main"]);
+    foreach (kv in [["user.email", "t@example.com"], ["user.name", "t"], ["commit.gpgsign", "false"], ["core.hooksPath", "/dev/null"]]) {
+        git(root, args: ["config", kv[0], kv[1]]);
+    }
+    put(root, path: ".gitignore", content: ".magus/\n");
+    put(root, path: "magusfile.buzz", content: FIXTURE_MAGUSFILE);
+    put(root, path: "src/a.txt", content: "a\n");
+    put(root, path: "gen/list.txt", content: "a.txt\n");
+    // Loading the workspace writes the merge driver's .gitattributes, which the base has to
+    // carry, or every merge would find the tree dirty.
+    magus\cmd("ls", args: [<str>], opts: {"dir": root, "root": root, "quiet": true});
+    commitAll(root, subject: "base");
+    branchFrom(root, name: "gen-b", start: "main", files: {"src/b.txt": "b\n", "gen/list.txt": "a.txt\nb.txt\n"}, subject: "add b");
+    branchFrom(root, name: "gen-c", start: "main", files: {"src/c.txt": "c\n", "gen/list.txt": "a.txt\nc.txt\n"}, subject: "add c");
+    branchFrom(root, name: "dep", start: "gen-b", files: {"src/d.txt": "d\n"}, subject: "add d on b");
+    branchFrom(root, name: "edit-a", start: "main", files: {"src/a.txt": "a1\n"}, subject: "edit a one way");
+    branchFrom(root, name: "clash", start: "main", files: {"src/a.txt": "a2\n"}, subject: "edit a another way");
+    git(root, args: ["checkout", "-q", "main"]);
+    return root;
+}
+
+// fixtureRegenerate is the fixture's generate target done in Buzz. Under `magus run test` a
+// nested `magus affected` against the fixture is refused MGS3007, as though it re-entered
+// the outer run's lock on its own project ".", so the tests drive the regeneration commit
+// with this and leave regenerateWithMagus to a standalone `magus buzz -t` run.
+fun fixtureRegenerate(dir: str) > void !> any {
+    final names = mut [<str>];
+    foreach (n in fs\listDir("{dir}/src")) { names.append(n); }
+    names.sort(fun (a: str, b: str) > bool => a < b);
+    put(dir, path: "gen/list.txt", content: names.join("\n") + "\n");
+    git(dir, args: ["add", "gen/list.txt"]);
+}
+
+fun planFor(root: str, names: [str]) > stack\BranchStack !> any {
+    final cands = mut [<Candidate>];
+    foreach (n in names) {
+        cands.append(Candidate{ branch = n, dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = changedPaths(root, branch: n, base: "main") });
+    }
+    return order(cands, contains: containsMap(root, branches: names, base: "main"), base: "main");
+}
+
+test "a merge orders by ancestry, lets the driver settle generated output, and stops whole at a source conflict" {
+    final root = fixtureRepo();
+    final plan = planFor(root, names: ["dep", "gen-b", "gen-c", "edit-a", "clash"]);
+    assert\equal(branchesOf(plan), want: "gen-b dep gen-c edit-a clash", message: "dep goes after the branch it is based on");
+
+    final mainBefore = git(root, args: ["rev-parse", "main"]);
+    var result = plan;
+    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+        result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
+    });
+    final statuses = mut [<str>];
+    foreach (l in result.layers) { statuses.append("{l.branch}={l.status}"); }
+    assert\equal(statuses.join(" "), want: "gen-b=merged dep=merged gen-c=merged edit-a=merged clash=conflict",
+        message: "gen-c's list conflict is settled; clash's source conflict stops: {result.layers[2].reason}");
+    final why = result.layers[4].reason;
+    foreach (want in ["a source conflict merging clash into integration", "src/a.txt",
+                      "edit a one way (from edit-a)", "edit a another way"]) {
+        assert\equal(why.indexOf(want) != null, want: true, message: "the stop names {want}: {why}");
+    }
+    assert\equal(git(root, args: ["rev-parse", "main"]), want: mainBefore, message: "the base is untouched");
+    assert\equal(lines(git(root, args: ["worktree", "list"])).len(), want: 1, message: "the temporary tree is gone");
+    assert\equal(gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/integration"]), want: false, message: "no branch is written");
+    fs\removeAll(root);
+}
+
+test "a clean merge regenerates once and commits the output apart" {
+    final root = fixtureRepo();
+    final plan = planFor(root, names: ["gen-b", "gen-c", "dep", "edit-a"]);
+    var listed = "";
+    var dirty = [<str>];
+    var subjects = [<str>];
+    var regenerated = "";
+    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+        final result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
+        assert\equal(allMerged(result), want: true, message: "every layer merges");
+        regenerated = commitRegenerated(dir, s: result, regenerate: fixtureRegenerate);
+        listed = fs\readFile("{dir}/gen/list.txt");
+        dirty = lines(git(dir, args: ["status", "--porcelain"]));
+        subjects = lines(git(dir, args: ["log", "--format=%s", "-2"]));
+    });
+    assert\equal(listed, want: "a.txt\nb.txt\nc.txt\nd.txt\n", message: "the list names every merged source");
+    assert\equal(dirty, want: [<str>], message: "regeneration leaves nothing unstaged or uncommitted");
+    assert\equal(regenerated != "", want: true, message: "dep merged a source without its output, so regeneration commits");
+    assert\equal(subjects[0], want: "regenerate after merging 4 branches", message: "the regeneration is its own commit");
+    assert\equal(subjects[1].startsWith("Merge branch 'edit-a'"), want: true, message: "below it, the last merge: {subjects[1]}");
+    fs\removeAll(root);
+}
+
+// The round trip split-into-branches and this script make: a change cut into a stack and
+// merged back is the change, byte for byte. The stack is written by hand here, as split
+// would write it, and read back through the shared module.
+test "a split stack merged back yields the original change's tree" {
+    final root = fixtureRepo();
+    branchFrom(root, name: "change", start: "main", files: {"src/x.txt": "x\n", "src/a.txt": "a3\n", "gen/list.txt": "a.txt\nx.txt\n"},
+        subject: "the whole change");
+    branchFrom(root, name: "part-1", start: "main", files: {"src/x.txt": "x\n", "gen/list.txt": "a.txt\nx.txt\n"}, subject: "part 1");
+    branchFrom(root, name: "part-2", start: "part-1", files: {"src/a.txt": "a3\n"}, subject: "part 2");
+    git(root, args: ["checkout", "-q", "main"]);
+    final written = stack\writeStack(stack\BranchStack{ base = "main", layers = [
+        stack\StackLayer{ branch = "part-2", parent = "part-1", paths = ["src/a.txt"], declarations = [<str>], goals = [<stack\CheckGoal>], status = "created" },
+        stack\StackLayer{ branch = "part-1", parent = "main", paths = ["src/x.txt", "gen/list.txt"], declarations = [<str>], goals = [<stack\CheckGoal>], status = "created" },
+    ] });
+    final plan = stack\orderLayers(stack\readStack(written));
+    var tree = "";
+    withTree(root, rev: plan.base, body: fun (dir: str) > void !> any {
+        final result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
+        assert\equal(allMerged(result), want: true, message: "every layer merges");
+        commitRegenerated(dir, s: result, regenerate: fixtureRegenerate);
+        tree =git(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
+    });
+    assert\equal(tree, want: git(root, args: ["rev-parse", "change^\{tree\}"]), message: "the merged tree is the change's");
+    fs\removeAll(root);
+}
+
+test "the push hint names the branch rule" {
+    final hint = pushHint("merged-wave");
+    assert\equal(hint[0], want: "to publish: git push -u origin merged-wave", message: "push");
+    assert\equal(hint[1].indexOf("no type prefix") != null, want: true, message: "rule");
+}

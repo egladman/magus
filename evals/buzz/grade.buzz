@@ -1,0 +1,70 @@
+import "std";
+import "fs";
+import "magus";
+import "encoding/json";
+
+// A candidate passes only when the checker accepts it AND it behaves: the exact
+// stdout for a script, or a clean test run that includes the hidden test.
+object Outcome {
+    ok: bool,
+    text: str,
+}
+
+// magus\cmd raises on a non-zero exit, and the message it raises carries the
+// child's output, so a failure is a verdict rather than an abort.
+fun buzz(args: [str]) > Outcome {
+    try {
+        final result = magus\cmd("buzz", args: args, opts: {"quiet": true});
+        return Outcome{ ok = true, text = result.stdout };
+    } catch (err: any) {
+        return Outcome{ ok = false, text = "{err}" };
+    }
+    return Outcome{ ok = false, text = "unreachable" };
+}
+
+fun gradeOne(dir: str, task: any) > str !> any {
+    final id: str = task["id"];
+    final file = fs\join(dir, name: "{id}.buzz");
+    if (!fs\exists(file)) {
+        return "missing";
+    }
+    final check = buzz(["--check", file]);
+    if (!check.ok) {
+        return "check: {check.text.trim().split("\n")[0]}";
+    }
+    if (task["mode"] == "test") {
+        final withHidden = fs\join(fs\tempDir(), name: "{id}.buzz");
+        fs\writeFile(withHidden, content: fs\readFile(file) + "\n" + task["hidden_test"]);
+        final tested = buzz(["-t", withHidden]);
+        if (!tested.ok or tested.text.indexOf("ok    test \"hidden:") == null) {
+            return "test: {tested.text.trim().split("\n").join(" | ")}";
+        }
+        return "pass";
+    }
+    final ran = buzz([file]);
+    if (!ran.ok) {
+        return "run: {ran.text.trim().split("\n")[0]}";
+    }
+    final expected: str = task["expected"];
+    if (ran.text.trim() != expected.trim()) {
+        return "output: {json\stringify(ran.text)}";
+    }
+    return "pass";
+}
+
+// magus buzz evals/buzz/grade.buzz <candidate-dir>... grades each directory of
+// <task-id>.buzz files against tasks.json and prints one line per task.
+fun main(args: [str]) > void !> any {
+    final tasks: [any] = json\parse(fs\readFile("evals/buzz/tasks.json"));
+    foreach (dir in args) {
+        var passed = 0;
+        foreach (task in tasks) {
+            final verdict = gradeOne(dir, task: task);
+            if (verdict == "pass") {
+                passed = passed + 1;
+            }
+            std\print("{dir} {task["id"]}: {verdict}");
+        }
+        std\print("{dir}: {passed}/{tasks.len()} passed");
+    }
+}

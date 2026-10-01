@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
@@ -155,6 +156,27 @@ func TestGateMatchesEachBackendsRevision(t *testing.T) {
 			assert.Equal(t, gatePassed, gateCoverageAt(runs, rev.short))
 		})
 	}
+}
+
+// The verdict reads through the store's cached gate fold, so it must still see a gate that
+// finished after an earlier push cached the fold, and the newest verdict at a commit wins.
+func TestGateVerdictSeesAGateRecordedAfterTheLastRead(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomeFail,
+	}, sessions.InvocationStart{Workspace: root}))
+	assert.Equal(t, gateFailed, gateVerdictAt(root, commit[:12]))
+
+	// Records order by millisecond; a later one puts the pass after the fail.
+	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomePass,
+	}, sessions.InvocationStart{Workspace: root}))
+	assert.Equal(t, gatePassed, gateVerdictAt(root, commit[:12]))
 }
 
 // TestGateStandsDownOnARevisionItCannotMatch pins the other half: an id that is not a

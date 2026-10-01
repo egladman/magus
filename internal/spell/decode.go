@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/scip-code/scip/bindings/go/scip"
 )
 
 // obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
@@ -220,7 +221,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if name == "" {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
-	language, langExts, comments, err := decodeLanguage(src)
+	lang, err := decodeLanguage(src)
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
@@ -254,9 +255,9 @@ func Decode(src obj) (spells.Descriptor, error) {
 		Manifests:          manifests,
 		ScriptRunners:      runners,
 		Tools:              tools,
-		Language:           language,
-		LanguageExtensions: langExts,
-		Comments:           comments,
+		Language:           lang.Name,
+		LanguageExtensions: lang.Extensions,
+		Syntax:             lang.Syntax,
 		SymbolIndexer:      indexer,
 		Sandbox:            sandbox,
 		Opaque:             src.Bool("opaque"),
@@ -665,6 +666,16 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 // Separate from decoding so the error can name the spell, and so a caller that only
 // reads a descriptor (docs, graph extraction) is not forced to handle it.
 func validateTools(m spells.Descriptor) error {
+	// A used tool with no version probe would key the index on nothing, so an upgrade
+	// that changes what the indexer reads could never stale it.
+	if m.SymbolIndexer != nil {
+		for _, tool := range m.SymbolIndexer.Uses {
+			if m.Tools[tool].Probe.Bin == "" {
+				return fmt.Errorf("spell %q: symbol indexer uses %q, which mgs_getTools does not declare with a version probe",
+					m.Name, tool)
+			}
+		}
+	}
 	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
 		// A malformed bound is knowable without running anything, and a window nobody
 		// can parse protects nobody, the same reasoning magus.yaml's required_version
@@ -704,29 +715,48 @@ func validateTools(m spells.Descriptor) error {
 
 // decodeLanguage reads mgs_getLanguage's typed answer: a Language record
 // carrying the canonical name, the extensions that are the language, and,
-// when the spell declares one, the comment syntax. Absent means the spell
-// adapts no single source language.
-func decodeLanguage(src obj) (string, []string, *spells.CommentSyntax, error) {
+// when the spell declares it, the syntax record. Absent means the spell adapts
+// no single source language.
+func decodeLanguage(src obj) (spells.Language, error) {
 	rec, ok := src.Obj("language")
 	if !ok {
-		return "", nil, nil, nil
+		return spells.Language{}, nil
 	}
 	name, _ := rec.Str("name")
 	if name == "" {
-		return "", nil, nil, fmt.Errorf("language: name is required")
+		return spells.Language{}, fmt.Errorf("language: name is required")
 	}
 	exts, err := rec.Strs("extensions")
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("language.extensions: %w", err)
+		return spells.Language{}, fmt.Errorf("language.extensions: %w", err)
 	}
-	syn, err := decodeComments(rec)
+	syn, err := decodeSyntax(rec)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("language: %w", err)
+		return spells.Language{}, fmt.Errorf("language.syntax.%w", err)
 	}
-	if syn != nil && len(exts) == 0 {
-		return "", nil, nil, fmt.Errorf("language: comments without extensions covers no files; declare the extensions that are this language")
+	if syn != nil && syn.Comments != nil && len(exts) == 0 {
+		return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files; declare the extensions that are this language")
 	}
-	return name, exts, syn, nil
+	return spells.Language{Name: name, Extensions: exts, Syntax: syn}, nil
+}
+
+// decodeSyntax reads the Syntax record inside a Language record, nil when the
+// spell declares none.
+func decodeSyntax(lang obj) (*spells.Syntax, error) {
+	rec, ok := lang.Obj("syntax")
+	if !ok {
+		//nolint:nilnil // declaring no syntax is not an error: neither the classifier nor the splitter needs one.
+		return nil, nil
+	}
+	comments, err := decodeComments(rec)
+	if err != nil {
+		return nil, err
+	}
+	stubs, err := decodeStubs(rec)
+	if err != nil {
+		return nil, err
+	}
+	return &spells.Syntax{Comments: comments, Stubs: stubs}, nil
 }
 
 // decodeSymbolIndexer reads mgs_getSymbolIndexer's typed answer: a SymbolIndexer
@@ -757,7 +787,11 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if cmd.Bin == "" {
 		return nil, fmt.Errorf("symbol indexer: command.bin is required")
 	}
-	return &spells.SymbolIndexer{Format: f, Command: cmd}, nil
+	uses, err := rec.Strs("uses")
+	if err != nil {
+		return nil, fmt.Errorf("symbol indexer: uses: %w", err)
+	}
+	return &spells.SymbolIndexer{Format: f, Command: cmd, Uses: uses}, nil
 }
 
 // decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.
@@ -832,11 +866,11 @@ func unknownKeys(where string, o obj, known ...string) error {
 	return errors.Join(errs...)
 }
 
-// decodeComments reads the comment/string syntax inside a Language record,
-// nil when the spell declares none. The covering extensions live on the
-// Language record itself; decodeLanguage requires them when a syntax is here.
-func decodeComments(lang obj) (*spells.CommentSyntax, error) {
-	rec, ok := lang.Obj("comments")
+// decodeComments reads the comment/string syntax inside a Syntax record, nil
+// when the spell declares none. The covering extensions live on the Language
+// record; decodeLanguage requires them when comments are declared.
+func decodeComments(syntax obj) (*spells.CommentSyntax, error) {
+	rec, ok := syntax.Obj("comments")
 	if !ok {
 		//nolint:nilnil // declaring no syntax is not an error, and nil is the correct empty value: the classifier treats an unclaimed extension as code.
 		return nil, nil
@@ -860,6 +894,40 @@ func decodeComments(lang obj) (*spells.CommentSyntax, error) {
 		syn.Quotes = append(syn.Quotes, spells.Quote{Open: open, Close: cl, IgnoreEscape: q.Bool("ignoreEscape")})
 	}
 	return syn, nil
+}
+
+// decodeStubs reads the stub syntax inside a Syntax record, nil when the spell
+// declares none. Every field is required once the record is present: a stub
+// record with no kinds stubs nothing, one with no body has nothing to splice,
+// and an unknown kind or body style would make the splitter skip or misplace
+// every stub with no error anywhere.
+func decodeStubs(syntax obj) (*spells.StubSyntax, error) {
+	rec, ok := syntax.Obj("stubs")
+	if !ok {
+		//nolint:nilnil // declaring no stubs is not an error: the splitter reports such a declaration as needing a stub by hand.
+		return nil, nil
+	}
+	kinds, err := rec.Strs("kinds")
+	if err != nil {
+		return nil, fmt.Errorf("stubs.kinds: %w", err)
+	}
+	if len(kinds) == 0 {
+		return nil, fmt.Errorf(`stubs.kinds is empty; name the SCIP symbol kinds a stub may replace, like "Function" and "Method"`)
+	}
+	for _, k := range kinds {
+		if v, known := scip.SymbolInformation_Kind_value[k]; !known || v == int32(scip.SymbolInformation_UnspecifiedKind) {
+			return nil, fmt.Errorf(`stubs.kinds: %q is not a SCIP symbol kind; want a SymbolInformation.Kind name like "Function" or "Method"`, k)
+		}
+	}
+	style, _ := rec.Str("bodyStyle")
+	if style != spells.StubBodyBrace && style != spells.StubBodyIndent {
+		return nil, fmt.Errorf("stubs.bodyStyle is %q; want %q or %q", style, spells.StubBodyBrace, spells.StubBodyIndent)
+	}
+	body, _ := rec.Str("body")
+	if body == "" {
+		return nil, fmt.Errorf("stubs.body is required")
+	}
+	return &spells.StubSyntax{Kinds: kinds, BodyStyle: style, Body: body}, nil
 }
 
 // decodeTools reads the per-binary declarations: what prints its version, what part of

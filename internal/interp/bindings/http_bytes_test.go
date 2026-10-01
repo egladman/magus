@@ -49,7 +49,7 @@ func TestSizeReportsByteLength(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, blob, 0o644))
 	src := `
 import "http" as xhttp
-export fun sz(p: str) > int { return xhttp.byteSize(p); }`
+export fun sz(p: str) > int { return xhttp\byteSize(p); }`
 	got := callHTTPExport(t, newHTTPBytesSession(t), src, "sz", vm.StrValue(p))
 	assert.Equal(t, int64(len(blob)), got.AsInt())
 }
@@ -79,7 +79,7 @@ func TestUploadChunkedReassembles(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun up(url: str, src: str, chunk: int) > any {
-    return xhttp.upload_chunked("PATCH", url, src, chunk, {});
+    return xhttp\upload_chunked("PATCH", url, src, chunk, {});
 }`
 	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile), vm.IntValue(4))
 	require.True(t, got.IsList(), "upload return = %v, want [status, body]", got)
@@ -117,7 +117,7 @@ func TestUploadSingleShotNoContentRange(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun up(url: str, src: str) > any {
-    return xhttp.upload_chunked("PUT", url, src, 0, {});
+    return xhttp\upload_chunked("PUT", url, src, 0, {});
 }`
 	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile))
 	assert.Equal(t, int64(200), got.ListItems()[0].AsInt(), "status")
@@ -135,7 +135,7 @@ func TestDownloadHonorsSandboxWrite(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun dl(url: str, dest: str) > int {
-    return xhttp.download(url, dest, {});
+    return xhttp\download(url, dest, {});
 }`
 	sess := newHTTPBytesSession(t)
 	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
@@ -163,7 +163,7 @@ func TestUploadChunkedHonorsSandboxRead(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun up(url: str, src: str) > any {
-    return xhttp.upload_chunked("PUT", url, src, 0, {});
+    return xhttp\upload_chunked("PUT", url, src, 0, {});
 }`
 	sess := newHTTPBytesSession(t)
 	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
@@ -183,7 +183,7 @@ func TestByteSizeHonorsSandboxRead(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, blob, 0o644))
 	src := `
 import "http" as xhttp
-export fun sz(p: str) > int { return xhttp.byteSize(p); }`
+export fun sz(p: str) > int { return xhttp\byteSize(p); }`
 	sess := newHTTPBytesSession(t)
 	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
 	fn, ok := sess.Exports()["sz"]

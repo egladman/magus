@@ -218,7 +218,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		scriptArgs = append(scriptArgs, forwarded...)
 	}
 
-	ctx, err = buzzScriptContext(ctx, root)
+	ctx, err = buzzRunContext(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -693,6 +693,18 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 		return nil, serr
 	}
 	return trail.ContextWithBase(sctx, m.CacheDir()), nil
+}
+
+// buzzRunContext is the context a script runs under: buzzScriptContext's, plus one
+// evaluation memo for the whole run, so every graph read (magus\refs, magus\dir, ...)
+// answers from one build of the graph the way a spell invocation's do. Without it each
+// magus\refs call rebuilt the symbol graph, about 12s apiece on this repository.
+func buzzRunContext(ctx context.Context, root string) (context.Context, error) {
+	ctx, err := buzzScriptContext(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return types.WithEvalMemo(ctx), nil
 }
 
 // buzzCheck parses and type-checks each named file WITHOUT running it, printing

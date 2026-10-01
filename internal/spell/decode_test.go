@@ -248,6 +248,35 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
 }
 
+// The tools an indexer runs besides its binary decode onto the indexer, and each must be a
+// tool the spell probes for a version: a used tool with no probe would key the index on
+// nothing, so the load fails naming the spell rather than leaving the index unstaleable.
+func TestDecode_SymbolIndexerUses(t *testing.T) {
+	src := func(uses []string, tools map[string]any) mapObj {
+		return mapObj{
+			"name":  "myspell",
+			"tools": tools,
+			"symbol_indexer": map[string]any{
+				"format":  "scip",
+				"command": map[string]any{"bin": "scip-go"},
+				"uses":    uses,
+			},
+		}
+	}
+	probed := map[string]any{"go": map[string]any{"probe": map[string]any{"bin": "go", "args": []string{"version"}}}}
+
+	m, err := Decode(src([]string{"go"}, probed))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"go"}, m.SymbolIndexer.Uses)
+
+	_, err = Decode(src([]string{"gopls"}, probed))
+	require.EqualError(t, err, `spell "myspell": symbol indexer uses "gopls", which mgs_getTools does not declare with a version probe`)
+
+	observed := map[string]any{"go": map[string]any{"observe": map[string]any{"bin": "go", "args": []string{"version"}}}}
+	_, err = Decode(src([]string{"go"}, observed))
+	require.Error(t, err, "an observe probe is not a version probe")
+}
+
 // TestDecode_SymbolIndexerRequiresAFormat proves the format is required rather than
 // defaulted to SCIP: the whole point of naming it is that ingestion no longer assumes.
 func TestDecode_SymbolIndexerRequiresAFormat(t *testing.T) {
@@ -896,4 +925,90 @@ func TestDecode_ToolObserve(t *testing.T) {
 	require.True(t, ok, "a tool declaring only an observe probe must not be dropped")
 	assert.True(t, feed.HasObservationProbe())
 	assert.False(t, feed.HasProbe(), "an observation is not a version")
+}
+
+func stubSpell(stubs map[string]any) mapObj {
+	return mapObj{"name": "lang", "language": map[string]any{
+		"name":       "lang",
+		"extensions": []string{".l"},
+		"syntax":     map[string]any{"stubs": stubs},
+	}}
+}
+
+func TestDecode_Stubs(t *testing.T) {
+	m, err := Decode(stubSpell(map[string]any{
+		"kinds":     []string{"Function", "Method"},
+		"bodyStyle": "brace",
+		"body":      "{ panic() }",
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, m.Syntax)
+	assert.Equal(t, &spells.StubSyntax{Kinds: []string{"Function", "Method"}, BodyStyle: "brace", Body: "{ panic() }"}, m.Syntax.Stubs)
+	assert.Nil(t, m.Syntax.Comments, "stubs alone declare no comment syntax")
+
+	m, err = Decode(mapObj{"name": "lang", "language": map[string]any{"name": "lang"}})
+	require.NoError(t, err)
+	assert.Nil(t, m.Syntax, "a language record without syntax declares none")
+}
+
+func TestDecode_StubsRefused(t *testing.T) {
+	valid := func() map[string]any {
+		return map[string]any{"kinds": []string{"Function"}, "bodyStyle": "indent", "body": "raise"}
+	}
+	tests := []struct {
+		name  string
+		field string
+		value any
+		want  string
+	}{
+		{"unknown body style", "bodyStyle", "curly", `language.syntax.stubs.bodyStyle is "curly"; want "brace" or "indent"`},
+		{"missing body style", "bodyStyle", "", `stubs.bodyStyle is ""`},
+		{"no kinds", "kinds", []string{}, "stubs.kinds is empty"},
+		{"lowercase kind", "kinds", []string{"function"}, `stubs.kinds: "function" is not a SCIP symbol kind`},
+		{"unspecified kind", "kinds", []string{"UnspecifiedKind"}, `"UnspecifiedKind" is not a SCIP symbol kind`},
+		{"no body", "body", "", "stubs.body is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := valid()
+			rec[tt.field] = tt.value
+			_, err := Decode(stubSpell(rec))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `spell "lang"`, "the error names the spell")
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+// TestBuiltinStubSyntax pins what each built-in declares: the splitter reads
+// these through magus\describe\spell, and a body that stops type-checking
+// under every signature turns every stub it writes into a build failure.
+func TestBuiltinStubSyntax(t *testing.T) {
+	m := Builtins()
+	want := map[string]spells.StubSyntax{
+		"go": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
+			Body: "{\n\tpanic(\"unimplemented: {{&Name}} lands in {{&Branch}}\")\n}",
+		},
+		"typescript": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
+			Body: "{\n\tthrow new Error(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
+		},
+		"rust": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
+			Body: "{\n    todo!(\"{{&Name}} lands in {{&Branch}}\")\n}",
+		},
+		"python": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "indent",
+			Body: "raise NotImplementedError(\"{{&Name}} lands in {{&Branch}}\")",
+		},
+	}
+	for name, w := range want {
+		require.NotNil(t, m[name].Syntax, "%s declares syntax", name)
+		require.NotNil(t, m[name].Syntax.Stubs, "%s declares stubs", name)
+		assert.Equal(t, w, *m[name].Syntax.Stubs, name)
+	}
+	assert.Nil(t, m["bash"].Syntax, "a spell that cannot declare a body honestly declares none")
+	require.NotNil(t, m["buzz"].Syntax)
+	assert.Nil(t, m["buzz"].Syntax.Stubs, "buzz declares comments only")
 }

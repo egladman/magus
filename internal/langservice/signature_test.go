@@ -9,11 +9,11 @@ import (
 )
 
 func TestSignatureAt_ModuleMethod(t *testing.T) {
-	src := "import \"fs\";\nfs.glob(\"*\")"
+	src := "import \"fs\";\nfs\\glob(\"*\")"
 	// Cursor inside the argument list.
 	off := strings.Index(src, "(") + 1
 	sig := SignatureAt(src, off)
-	require.NotNil(t, sig, "expected signature help inside fs.glob(...)")
+	require.NotNil(t, sig, "expected signature help inside fs\\glob(...)")
 	assert.Contains(t, sig.Label, "glob")
 	assert.NotEmpty(t, sig.Doc)
 }
@@ -28,12 +28,14 @@ func TestSignatureAt_LocalFunction(t *testing.T) {
 
 func TestSignatureAt_NotInCall(t *testing.T) {
 	assert.Nil(t, SignatureAt("final x = 1;", 8), "no enclosing call")
-	assert.Nil(t, SignatureAt("fs.glob(\"*\")", len("fs.glob(\"*\")")), "cursor past the closed call")
+	assert.Nil(t, SignatureAt("fs\\glob(\"*\")", len("fs\\glob(\"*\")")), "cursor past the closed call")
+	assert.Nil(t, SignatureAt("import \"fs\";\nfs.glob(", len("import \"fs\";\nfs.glob(")), "a dot reaches a value's member, not a module's")
+	assert.Nil(t, SignatureAt("final xs = [1];\nxs.len(", len("final xs = [1];\nxs.len(")), "a value's len is not the builtin")
 }
 
 func TestSignatureAt_Clamped(t *testing.T) {
 	assert.NotPanics(t, func() {
-		SignatureAt("fs.glob(", 999)
-		SignatureAt("fs.glob(", -4)
+		SignatureAt("fs\\glob(", 999)
+		SignatureAt("fs\\glob(", -4)
 	})
 }

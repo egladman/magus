@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -36,9 +37,10 @@ const (
 	// HarnessUnprobed means presence matched (the config carries the declared
 	// fragments) but VerifyHarness could not confirm the wired command actually
 	// answers: the interpreter, jq, or the magus binary the guard script would
-	// resolve is missing from this environment. Distinct from HarnessVerified,
-	// because presence was never proof the guard runs, and distinct from
-	// HarnessUncovered, because the gap is this machine's tooling, not the config.
+	// resolve is missing from this environment, or the probe could not start or
+	// finish within its deadline. Distinct from HarnessVerified, because presence
+	// was never proof the guard runs, and distinct from HarnessUncovered, because
+	// the gap is this machine's tooling or load, not the config.
 	HarnessUnprobed HarnessStatus = "unprobed"
 )
 
@@ -110,6 +112,18 @@ type HarnessPlan struct {
 	// <id> -o json` and pipes it into `magus buzz`, which merges each file with merge\json.
 	Merge   string `json:"merge,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
+	// Wired is every entry group the descriptor manages, as the host file reads once it is
+	// current, whether or not it already does. A current harness carries no Files, and this is
+	// where a reader finds what the host runs (each hook's command) without parsing the host file.
+	Wired []HarnessWired `json:"wired"`
+}
+
+// HarnessWired is one managed array in one host file: the file, the dotted key inside it,
+// and the entries the descriptor declares there, verbatim host JSON.
+type HarnessWired struct {
+	File    string           `json:"file"`
+	Key     string           `json:"key"`
+	Entries []map[string]any `json:"entries"`
 }
 
 // Current reports whether every host file already carries what the descriptor declares.
@@ -316,10 +330,11 @@ func validateHarnessEntries(group HarnessEntries) error {
 	if len(commands) == 0 {
 		return fmt.Errorf("entries must include at least one command that invokes magus")
 	}
-	for _, command := range commands {
-		if !invokesMagus(command) {
-			return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", command)
-		}
+	// One invoking command per group, not every command: an entry may prepare the
+	// environment a magus is found in, like the claude-code SessionStart entry that puts
+	// the session root on PATH, and it can only do that without running one.
+	if !slices.ContainsFunc(commands, invokesMagus) {
+		return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", commands[0])
 	}
 	return nil
 }
@@ -346,8 +361,11 @@ func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
 	if err != nil {
 		return HarnessPlan{}, err
 	}
-	plan := HarnessPlan{ID: d.ID}
+	plan := HarnessPlan{ID: d.ID, Wired: []HarnessWired{}}
 	if d.Config.Path != "" {
+		for _, group := range d.ManagedEntries {
+			plan.Wired = append(plan.Wired, HarnessWired{File: d.Config.Path, Key: strings.Join(group.Path, "."), Entries: group.Entries})
+		}
 		file, err := planHarnessConfig(root, d)
 		if err != nil {
 			return plan, err
@@ -767,14 +785,23 @@ func stringField(entry map[string]any, key string) string {
 	return v
 }
 
+// EntryCommands is the matcher a managed entry fires on (empty when it names none) and every
+// command it runs, in a stable order, for a reader who wants the wiring without the host
+// JSON around it.
+func EntryCommands(entry map[string]any) (matcher string, commands []string) {
+	collectCommands(entry, &commands)
+	return cmp.Or(stringField(entry, "matcher"), stringField(entry, "match")), commands
+}
+
 func collectCommands(v any, out *[]string) {
 	switch t := v.(type) {
 	case map[string]any:
 		if command, ok := t["command"].(string); ok && command != "" {
 			*out = append(*out, command)
 		}
-		for _, child := range t {
-			collectCommands(child, out)
+		// Sorted keys, so a rendering of the commands reads the same on every run.
+		for _, key := range slices.Sorted(maps.Keys(t)) {
+			collectCommands(t[key], out)
 		}
 	case []any:
 		for _, child := range t {

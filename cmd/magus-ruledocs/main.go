@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/types"
 )
 
 func main() {
@@ -59,7 +60,7 @@ func run(outDir string) error {
 }
 
 // renderRule is one rule's page.
-func renderRule(r guard.RuleDoc) string {
+func renderRule(r types.RuleDoc) string {
 	var b strings.Builder
 	title := r.Name + ": " + r.Catches
 	fmt.Fprintf(&b, "---\ntitle: %q\n", title)
@@ -95,7 +96,7 @@ func renderRule(r guard.RuleDoc) string {
 
 // describe is the one-sentence summary the page and its frontmatter share, so they
 // cannot disagree.
-func describe(r guard.RuleDoc) string {
+func describe(r types.RuleDoc) string {
 	if r.Decision == "deny" {
 		return "A deny rule: it refuses " + r.Catches + ", and names what to run instead."
 	}
@@ -104,7 +105,7 @@ func describe(r guard.RuleDoc) string {
 
 // renderIndex is the whole catalog as one table, denies first, matching what
 // `magus describe rules` prints.
-func renderIndex(rules []guard.RuleDoc) string {
+func renderIndex(rules []types.RuleDoc) string {
 	var b strings.Builder
 	b.WriteString("---\ntitle: \"Guard rules\"\n")
 	b.WriteString("description: \"Every rule the guard enforces: what each one catches, whether it refuses or explains, and where the reasoning lives.\"\n")
@@ -130,7 +131,7 @@ func renderIndex(rules []guard.RuleDoc) string {
 // emitting ragged pipes writes a file the formatter immediately rewrites, so `generate`
 // and `format` disagree forever and the drift gate is red on every run. Matching the
 // formatter's own output is what makes regeneration a fixed point.
-func writeTable(b *strings.Builder, heading string, rules []guard.RuleDoc) {
+func writeTable(b *strings.Builder, heading string, rules []types.RuleDoc) {
 	fmt.Fprintf(b, "## %s\n\n", heading)
 
 	const nameHead, catchHead = "Rule", "Catches"
@@ -158,7 +159,7 @@ func pad(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(s))
 }
 
-func split(rules []guard.RuleDoc) (denies, advisories []guard.RuleDoc) {
+func split(rules []types.RuleDoc) (denies, advisories []types.RuleDoc) {
 	for _, r := range rules {
 		if r.Decision == "deny" {
 			denies = append(denies, r)
@@ -190,7 +191,7 @@ func upperFirst(s string) string {
 // magus-skilldocs prunes: a generator that owns its writes but not its deletions cannot
 // rename anything, and a renamed rule would leave its old page published, linked from
 // nothing, describing a rule that can never fire.
-func prune(outDir string, shipped []guard.RuleDoc) error {
+func prune(outDir string, shipped []types.RuleDoc) error {
 	keep := make(map[string]bool, len(shipped)+1)
 	keep["index.md"] = true
 	for _, r := range shipped {

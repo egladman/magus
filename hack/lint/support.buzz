@@ -3,7 +3,6 @@
 // does not name it.
 namespace support;
 
-import "encoding/json";
 import "fs";
 import "magus";
 import "serialize";
@@ -74,35 +73,32 @@ var graphMemo: TargetGraph? = null;
 var projectsMemo: Projects? = null;
 var skipCacheMemo: {str: bool}? = null;
 
-// targets is magus\targets(): every target of every project, read statically from the
-// magusfiles.
+// targets is magus\describe.graph(): every target of every project, read statically
+// from the magusfiles.
 export fun targets() > TargetGraph !> any {
     if (graphMemo == null) {
-        graphMemo = magus\targets();
+        graphMemo = magus\describe.graph();
     }
     return graphMemo!;
 }
 
-// projects is magus\projects(): each project with its resolved source globs.
+// projects is magus\describe.project(): each project with its resolved source globs.
 export fun projects() > Projects !> any {
     if (projectsMemo == null) {
-        projectsMemo = magus\projects();
+        projectsMemo = magus\describe.project();
     }
     return projectsMemo!;
 }
 
-// skipsCache is every target that declares skip_cache, keyed `<project>:<target>`.
-// Nothing typed carries a target's cache policy yet, so this reads the evaluated
-// projects describe prints.
+// skipsCache is every target that declares skip_cache, keyed `<project>:<target>`,
+// read from each evaluated project's target policies.
 export fun skipsCache() > {str: bool} !> any {
     if (skipCacheMemo == null) {
-        final res = magus\describe(["projects", "--evaluated", "-o", "json"], opts: {"quiet": true});
         final acc = mut {<str: bool>};
-        foreach (p in serialize\Boxed.init(json\parse(res.stdout)).q(["projects"]).listValue()) {
-            final project = p.q(["path"]).stringValue();
-            foreach (target, policy in p.q(["target_policies"]).mapValue()) {
-                if (policy.q(["skip_cache"]).booleanValue()) {
-                    acc["{project}:{target}"] = true;
+        foreach (p in magus\describe.evaluatedProject()) {
+            foreach (target, policy in p.targetPolicies) {
+                if (policy.skip_cache) {
+                    acc["{p.path}:{target}"] = true;
                 }
             }
         }

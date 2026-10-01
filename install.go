@@ -230,8 +230,10 @@ func (m *Magus) probeAbsence(s *spells.Spell, probe spells.Command, dir string, 
 		return probe.Bin + " is not on PATH", true
 	}
 	// mise's shim is on PATH whether or not this directory selects a version of the tool.
+	// The cause names no directory: directories that see the same mise config share one
+	// probe key, so one recorded cause answers for all of them.
 	if strings.Contains(err.Error(), "No version is set for shim") {
-		return fmt.Sprintf("mise selects no version of %s for %s: declare one in mise.toml", probe.Bin, m.displayDir(dir)), true
+		return fmt.Sprintf("mise selects no version of %s here: declare one in mise.toml", probe.Bin), true
 	}
 	spec, _ := probeSpecFor(probe)
 	if spec.execs == "" || execPresent(spec.execs, dir) {

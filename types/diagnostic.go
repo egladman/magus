@@ -282,6 +282,18 @@ const (
 	// manifest, where the cache key and the affected set cannot see them. Which argv
 	// shapes delegate is declared by each spell's mgs_listScriptRunners.
 	ManifestScriptDelegation DiagnosticCode = "MGS1049"
+	// CarryApprovalsInvalid is a magus.yaml queue.carry_approvals entry that names no
+	// tier, or names code. The load stops: a misspelled tier read as absent would dismiss
+	// approvals the workspace meant to keep, and code carried would let the merge queue
+	// count an approval nobody gave to that code.
+	CarryApprovalsInvalid DiagnosticCode = "MGS1050"
+
+	// SpellContractViolated is a spell whose exported mgs_ functions do not match the spell
+	// contract: one declares a return type other than the contract's (`> any` included) or
+	// none, takes parameters, or is not a contract function at all. The spell does not
+	// load, because magus would otherwise read a value whose shape nothing checked, and an
+	// mgs_ function it does not know is a declaration it would silently ignore.
+	SpellContractViolated DiagnosticCode = "MGS1051"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -437,14 +449,6 @@ const (
 	// counts none of the statuses the queue posts, so every change would wait forever;
 	// apply refuses at its start instead.
 	QueueCredentialMismatch DiagnosticCode = "MGS3019"
-	// PreflightFailed is a --preflight pass that failed in at least one project, so
-	// nothing of the invoked target started. Exits 3, apart from 1, so a CI script can
-	// tell "the cheap check failed" from "the fan-out failed".
-	PreflightFailed DiagnosticCode = "MGS3020"
-	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
-	// through ctx.needs in any selected project. Running it first would add work rather
-	// than reorder it, so the invocation is refused before anything runs.
-	PreflightOutsideClosure DiagnosticCode = "MGS3021"
 	// BrokerUnavailable is a step magus did not start under `broker: required` because no
 	// broker answered: nothing could arbitrate this host's capacity. Exits 69
 	// (EX_UNAVAILABLE), apart from MGS3009's 75, so a wrapper can tell "no arbiter" from
@@ -661,6 +665,10 @@ const (
 	// ReviewHostFailed is a publish or reply the code-review host refused or could not
 	// receive, so nothing reached the reviewer. Answered 502.
 	ReviewHostFailed DiagnosticCode = "MGS9029"
+	// AuthFailuresThrottled is a caller of a guarded route that has spent its allowance of
+	// failed authentications, answered 429 with Retry-After. Only refusals are counted; a
+	// request whose token verifies is admitted regardless.
+	AuthFailuresThrottled DiagnosticCode = "MGS9030"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -689,7 +697,9 @@ const (
 // MGS3015 is retired and deliberately absent above; docs/decisions/0001 says why. The
 // number is not reused: a retired code that comes back means two different things in one
 // search of a log archive. MGS5004 is retired the same way: it refused --detach with no
-// server to hand the run to, and --detach no longer hands a run to anything.
+// server to hand the run to, and --detach no longer hands a run to anything. MGS3020 and
+// MGS3021 are retired with --preflight, whose failed pass and out-of-closure target they
+// reported: a pipe of magus stages gates what runs after a check.
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
 // in sync with the const block above; it is the enumeration source for tooling
@@ -709,7 +719,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
-	LayerDeclarationInvalid, ManifestScriptDelegation,
+	LayerDeclarationInvalid, ManifestScriptDelegation, CarryApprovalsInvalid, SpellContractViolated,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
@@ -717,7 +727,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
+	BrokerUnavailable, PipeCycle, HookHostUnnamed,
 	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
 	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed, ToolUnprobeable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
@@ -735,7 +745,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
 	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
 	RequestInvalid, ResourceNotFound, StateConflict, WorkspaceNotWired, InternalFailure,
-	StreamingUnsupported, ReviewHostFailed,
+	StreamingUnsupported, ReviewHostFailed, AuthFailuresThrottled,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

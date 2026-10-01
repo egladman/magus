@@ -76,6 +76,9 @@ export fun mgs_getTools() > {str: Tool} {
                    supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
+        // Observed for the reason govulncheck is: only the scip op drives it, so its
+        // version keys the index and no build or test.
+        "scip-go": Tool{observe = Command{bin = "scip-go", args = ["--version"]}},
     };
 }
 
@@ -141,15 +144,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "go",
         extensions = [".go"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            quotes = [
-                Quote{open = "`", close = "`", ignoreEscape = true},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                quotes = [
+                    Quote{open = "`", close = "`", ignoreEscape = true},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n\tpanic(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\")\n\}",
+            },
         },
     };
 }
@@ -300,10 +310,12 @@ fun goVulncheck(target: Target) > Command {
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
 // in the tree; scip-go writes there via --output. The runner resolves the bare
 // $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
+// scip-go loads packages through `go`, so the toolchain's version keys the index too.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{
         format = SymbolFormat.scip,
         command = Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
+        uses = ["go"],
     };
 }
 

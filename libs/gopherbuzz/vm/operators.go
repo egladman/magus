@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -259,9 +260,16 @@ func asInt(v Value) (int64, bool) {
 	}
 }
 
-// indexGet evaluates obj[idx] for lists (int) and maps (any key; see mapKeyEqual).
-// indexGet evaluates obj[idx]. When optional is set (the checked subscript form
-// obj[?idx]), an out-of-bounds list/str index yields null instead of an error.
+// errOutOfBound words a bad subscript as upstream's vm.zig does: "Out of bound list
+// access." for a list either way, but for a str "string" when the index is negative
+// and "str" when it is past the end.
+func errOutOfBound(kind string, i int64, n int) error {
+	return fmt.Errorf("buzz: Out of bound %s access (index %d, len %d)", kind, i, n)
+}
+
+// indexGet evaluates obj[idx] for lists, strs (int) and maps (any key; see
+// mapKeyEqual). When optional is set (the checked subscript form obj[?idx]), an
+// out-of-bounds list/str index yields null instead of an error.
 func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 	switch obj.tag() {
 	case tagList:
@@ -274,24 +282,27 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			if optional {
 				return Null, nil
 			}
-			return Null, fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
+			return Null, errOutOfBound("list", i, len(list.Items))
 		}
 		return list.Items[i], nil
 	case tagStr:
-		// Yields a one-character string, matching foreach-over-str. Indexed by RUNE,
-		// not byte, so s[i] lines up with the i-th element foreach would produce.
-		runes := []rune(vm.asStr(obj).V)
+		// Yields a one-BYTE string, as upstream does, so s[i] agrees with len(), sub()
+		// and foreach: a multibyte character spans several indexes.
+		s := vm.asStr(obj).V
 		i, ok := asInt(idx)
 		if !ok {
 			return Null, fmt.Errorf("buzz: str index must be an int, got %s", idx.buzzKind())
 		}
-		if i < 0 || int(i) >= len(runes) {
+		if i < 0 || int(i) >= len(s) {
 			if optional {
 				return Null, nil
 			}
-			return Null, fmt.Errorf("buzz: str index %d out of range (len %d)", i, len(runes))
+			if i < 0 {
+				return Null, errOutOfBound("string", i, len(s))
+			}
+			return Null, errOutOfBound("str", i, len(s))
 		}
-		return StrValue(string(runes[i])), nil
+		return StrValue(s[i : i+1]), nil
 	case tagMap:
 		m := vm.asMap(obj)
 		if v, ok := m.getVal(idx); ok {
@@ -322,7 +333,7 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 			return fmt.Errorf("buzz: list index must be an int, got %s", idx.buzzKind())
 		}
 		if i < 0 || int(i) >= len(list.Items) {
-			return fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
+			return errOutOfBound("list", i, len(list.Items))
 		}
 		list.Items[i] = val
 		return nil
@@ -466,6 +477,51 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 	default:
 		return Null, nil
 	}
+}
+
+// ReceiverKind names a primitive receiver whose built-in methods a static reader
+// can ask about through BuiltinMethods and HasBuiltinMethod.
+type ReceiverKind uint8
+
+const (
+	ListReceiver ReceiverKind = iota
+	MapReceiver
+	StrReceiver
+)
+
+// builtinMethodNames is every name listMethod, mapMethod and strMethod resolve,
+// sorted. TestBuiltinMethodNamesMatchDispatch reads those switches and fails when
+// a case and this table disagree in either direction.
+var builtinMethodNames = [...][]string{
+	ListReceiver: {
+		"append", "clone", "cloneImmutable", "cloneMutable", "copyImmutable", "copyMutable",
+		"fill", "filter", "forEach", "indexOf", "insert", "join", "len", "map", "pop",
+		"reduce", "remove", "reverse", "sort", "sub",
+	},
+	MapReceiver: {
+		"clone", "cloneImmutable", "cloneMutable", "copyImmutable", "copyMutable", "diff",
+		"filter", "forEach", "hasKey", "intersect", "keys", "len", "map", "reduce", "remove",
+		"size", "sort", "values",
+	},
+	StrReceiver: {
+		"bin", "byte", "decodeBase64", "encodeBase64", "endsWith", "hex", "indexOf", "len",
+		"lower", "repeat", "replace", "split", "startsWith", "sub", "trim", "upper",
+		"utf8Codepoints", "utf8Len", "utf8Valid",
+	},
+}
+
+// BuiltinMethods returns the sorted names of k's built-in methods. The slice is
+// a copy the caller may keep or modify.
+func BuiltinMethods(k ReceiverKind) []string {
+	return slices.Clone(builtinMethodNames[k])
+}
+
+// HasBuiltinMethod reports whether name is a built-in method of k. For a map it
+// answers for the builtin alone; a stored key of the same name still shadows it
+// at run time.
+func HasBuiltinMethod(k ReceiverKind, name string) bool {
+	_, found := slices.BinarySearch(builtinMethodNames[k], name)
+	return found
 }
 
 // listMethod returns the callable for the named built-in List method, or nil if
@@ -1032,7 +1088,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.indexOf: requires a str needle argument")
 			}
-			// Optional `from:` start position, in RUNES like every other index this
+			// Optional `from:` start position, in BYTES like every other index this
 			// type exposes. Without it, resuming a scan means slicing the haystack and
 			// searching the copy, which allocates the whole remainder on every step and
 			// turns any scan-for-the-next-match loop into a quadratic one. That shape
@@ -1050,13 +1106,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 				}
 			}
 
-			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
-			// index IS a byte offset, so neither the start conversion nor the result
-			// conversion below has to walk the string. A found needle near the end of a
-			// large string used to pay for the entire prefix on every call.
 			// BYTE offsets in and out, matching upstream (`std.mem.indexOf(u8, ...)`).
-			// The multibyte path used to convert a rune start in and a rune index out,
-			// walking the string twice and disagreeing with len() and sub().
 			if from >= len(str) {
 				return Null, nil
 			}

@@ -1063,6 +1063,54 @@ func TestAdoptedSandboxOnlyStrengthens(t *testing.T) {
 	require.ErrorIs(t, adoptedSandbox(floor(off, req), "", []string{"build", "-sandbox=best-effort"}), types.SandboxWeakened)
 }
 
+// TestPoolDeclinesAnotherWorkspace: a nested `magus --root <other> affected generate:rw`
+// forwarded to its parent's pool used to run against the PARENT's workspace, where the
+// parent's own lock on project . refused it MGS3007. Unrefused, it would have regenerated
+// the wrong tree. The pool declines it, so the client runs it in its own workspace.
+func TestPoolDeclinesAnotherWorkspace(t *testing.T) {
+	pool, other := t.TempDir(), t.TempDir()
+	var (
+		mu  sync.Mutex
+		ran [][]string
+	)
+	dispatched := func() [][]string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(ran)
+	}
+	srv, err := proc.New(proc.Options{
+		Handler: poolHandler(pool, func(_ context.Context, args []string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			ran = append(ran, args)
+			return nil
+		}),
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	t.Setenv(proc.SocketEnv, srv.Addr())
+	t.Setenv(proc.TokenEnv, srv.Token())
+
+	foreign := []string{"--root", other, "affected", "generate:rw"}
+	_, err = proc.Forward(context.Background(), foreign, "", other)
+	require.ErrorIs(t, err, proc.ErrNotAdoptable)
+	assert.True(t, proc.NotAdopted(err), "the client falls back to running it locally")
+	_, err = proc.Forward(context.Background(), foreign, "", "")
+	require.ErrorIs(t, err, proc.ErrNotAdoptable, "a client that found no workspace is not handed this one")
+	assert.Empty(t, dispatched(), "a foreign run never reaches this workspace's dispatch")
+
+	own := []string{"run", "build", "."}
+	code, err := proc.Forward(context.Background(), own, "", pool)
+	require.NoError(t, err)
+	assert.Zero(t, code)
+	resolved, err := filepath.EvalSymlinks(pool)
+	require.NoError(t, err)
+	_, err = proc.Forward(context.Background(), own, "", resolved)
+	require.NoError(t, err, "the same workspace spelled through a symlink is still this one")
+	assert.Equal(t, [][]string{own, own}, dispatched(), "a run from this workspace is still adopted")
+}
+
 func TestSandboxFlag(t *testing.T) {
 	for _, tc := range []struct {
 		args []string

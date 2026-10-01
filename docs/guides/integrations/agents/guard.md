@@ -310,9 +310,9 @@ config.
   through. Giving a path back cannot widen a role, and whether a particular
   shrink is legitimate is the store's judgment. Recording the base a lease
   landed on passes, because it is a procedure the write surface demands.
-  Reading is untouched: `magus\job\list` and `magus ls jobs`.
+  Reading is untouched: `magus\job.list` and `magus ls jobs`.
 
-  The guard parses a `client` script and renders each literal `magus\job\put`,
+  The guard parses a `client` script and renders each literal `magus\job.put`,
   `register`, `clear` and `wait` call as a line the lease rules read, so a
   worker's widening or forged checkpoint is refused before the store sees it.
   Only a call addressed to the magus server (`mcp__magus__<tool>`)

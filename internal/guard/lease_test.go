@@ -345,7 +345,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		assert.Contains(t, reason, "`magus run diagrams_generate docs`", "%s: the verdict names the check verbatim", tt.name)
 		assert.Contains(t, reason, "The orchestrator runs every other target serially", tt.name)
 		assert.Contains(t, reason, "\nnext:\n  ", tt.name)
-		assert.Contains(t, reason, "run diagrams_generate docs --no-default-charms\n", "%s: the next is the check's command", tt.name)
+		assert.Contains(t, reason, "run diagrams_generate docs\n", "%s: the next is the check's command", tt.name)
 		assert.True(t, strings.HasSuffix(reason, "\nsee: "+ruleDocsBase+"worker-check-only/"), tt.name)
 	}
 
@@ -388,6 +388,9 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 // quoted, and the next is a command a reader runs as printed.
 func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
+
+	c.NoDefaultCharms = true
 	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 }
 
@@ -489,14 +492,147 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 	}
 }
 
-// TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a root lease with
-// no parent, and a lease nobody declared.
+// TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a parentless lease its
+// root session holds, and a lease nobody declared.
 func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 	rootLease := narrowLease()
 	ctx, _ := fleetFixture(t, rootLease)
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "", "git commit -m done"))
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "harness/absent", "git commit -m done"))
+	root := Dependencies{caller: job.Caller{Host: "claude-code", Session: "s1"}}
+	assert.Empty(t, denyLeaseScopedVCS(ctx, root, "", "git push"))
+	assert.Empty(t, denyLeaseScopedVCS(ctx, root, rootLease.ID, "git push"), "a parentless lease the root session holds is the orchestrator's own")
+	assert.Empty(t, denyLeaseScopedVCS(ctx, root, "harness/absent", "git push"))
+}
+
+// TestDenyLeaseScopedVCSGradesWorkersByHolder pins that a parentless row is no licence: a
+// subagent holding it, or a caller that names no session, is a worker and may not push.
+func TestDenyLeaseScopedVCSGradesWorkersByHolder(t *testing.T) {
+	parentless := narrowLease()
+	ctx, _ := fleetFixture(t, parentless)
+	for holder, caller := range map[string]job.Caller{
+		"a subagent":            {Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
+		"an identity-less hook": {},
+	} {
+		reason := denyLeaseScopedVCS(ctx, Dependencies{caller: caller}, parentless.ID, "git push origin HEAD")
+		require.NotEmpty(t, reason, holder)
+		assert.Contains(t, reason, "`git push`", holder)
+	}
+}
+
+// leaseVCSRepo is a worker's checkout as `magus job exec` leaves it: a linked worktree on
+// the job's own branch, its row a child of the orchestrator's and bound to that worktree.
+func leaseVCSRepo(t *testing.T) (context.Context, worktreeRepo, types.Job, string) {
+	t.Helper()
+	r := newWorktreeRepo(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	ctx, _ := fleetFixture(t, worker)
+	return ctx, r, worker, wt
+}
+
+// TestDenyLeaseScopedVCSLetsAWorkerCommitInItsOwnCheckout pins every spelling of a commit
+// that lands in the worker's own checkout, on its own branch, as allowed: from the hook's
+// cwd, through git -C, after a cd, and by the git directory, from the environment or a flag.
+func TestDenyLeaseScopedVCSLetsAWorkerCommitInItsOwnCheckout(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	adminDir := filepath.Join(r.main, ".git", "worktrees", "lease-job")
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+	for command, deps := range map[string]Dependencies{
+		"git commit -q -m done":                                     from(wt),
+		"git add a.txt && git commit -m done":                       from(wt),
+		"git -C " + wt + " commit -m done":                          from(r.main),
+		"cd " + wt + " && git commit -m done":                       from(r.main),
+		"cd " + wt + " && git commit -m \"$msg\"":                   from(r.main),
+		"git -C " + r.main + " -C ../lease-job commit -m done":      from(t.TempDir()),
+		"GIT_DIR=" + adminDir + " git commit -m done":               from(wt),
+		"git --git-dir=" + adminDir + " commit -m done":             from(r.main),
+		"env GIT_DIR=" + adminDir + " git commit --amend --no-edit": from(wt),
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, deps, worker.ID, command), "%q", command)
+	}
+}
+
+// TestDenyLeaseScopedVCSRefusesACommitAnywhereElse pins each commit a worker may not make,
+// whichever way it is spelled, and that the refusal names where it was and where it may.
+func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	sibling := r.add("sibling")
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+	for command, deps := range map[string]Dependencies{
+		"git commit -m done":                               from(r.main),
+		"git -C " + r.main + " commit -m done":             from(wt),
+		"cd " + sibling + " && git commit -m done":         from(wt),
+		"git -C " + sibling + " commit -m done":            from(wt),
+		"GIT_DIR=" + r.main + "/.git git commit -m done":   from(wt),
+		"git --git-dir=" + r.main + "/.git commit -m done": from(wt),
+		"git --work-tree " + wt + " commit -m done":        from(wt),
+		"GIT_WORK_TREE=" + wt + " git commit -m done":      from(wt),
+		"cd \"$dir\" && git commit -m done":                from(wt),
+		"git -C \"$dir\" commit -m done":                   from(wt),
+		"if true; then git commit -m done; fi":             from(wt),
+		"git push":                                         from(wt),
+		"git commit -m done && git push":                   from(wt),
+		"git stash push -m wip":                            from(wt),
+		"git reset --hard HEAD":                            from(wt),
+		"git checkout .":                                   from(wt),
+		"git revert HEAD":                                  from(wt),
+		"git -c alias.x=commit x -m done":                  from(wt),
+	} {
+		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
+	}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
+		"It commits in "+r.main+", and the lease was taken in "+wt+".")
+}
+
+// TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own
+// checkout on the base branch, with no branch, or the primary checkout is not its own branch.
+func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git commit -m done"), "is on lease-job, the base branch")
+
+	r.git(wt, "checkout", "-q", "--detach")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"), "has no branch checked out")
+
+	primary := worker
+	primary.ID = "harness/primary"
+	primary.CheckoutRoot = r.main
+	ctx, _ = fleetFixture(t, primary)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: r.main}, primary.ID, "git commit -m done"), "primary checkout")
+}
+
+// TestVCSCmdRefusalDecidesAsTheShellRuleDoes pins vcs.cmd to the shell rule's answers: a
+// commit in the worker's own checkout runs, anything the shell rule refuses is refused,
+// on every backend.
+func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt))
+	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main))
+	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main))
+	for _, c := range []struct {
+		backend string
+		args    []string
+		dir     string
+	}{
+		{"git", []string{"commit", "-m", "done"}, r.main},
+		{"git", []string{"-C", r.main, "commit", "-m", "done"}, wt},
+		{"git", []string{"push"}, wt},
+		{"git", []string{"stash"}, wt},
+		{"git", []string{"reset", "--hard"}, wt},
+		{"hg", []string{"push"}, wt},
+		{"hg", []string{"-R", r.main, "commit", "-m", "done"}, wt},
+		{"sl", []string{"push", "--to", "main"}, wt},
+		{"jj", []string{"git", "push"}, wt},
+	} {
+		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir)
+		require.Error(t, err, "%s %v", c.backend, c.args)
+		assert.Contains(t, err.Error(), "`vcs.cmd(", "%s %v", c.backend, c.args)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
+	}
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git

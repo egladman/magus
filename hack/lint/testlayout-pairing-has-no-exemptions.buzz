@@ -1,0 +1,181 @@
+// testlayout-pairing-has-no-exemptions keeps testpair, the linter that pairs every
+// X_test.go with an X.go, without a way out. The analyzer has no options and its
+// plugin refuses a settings block, so what is left is what golangci-lint offers every
+// linter: an exclusion rule, a path exclusion, a nolint directive, leaving it off, or
+// leaving a module out of the run. This refuses each of those. A file-wide nolint is
+// out of the analyzer's reach, so this rule reads every test file, and lint-rules
+// replays from cache less often for it; that is the price of the check.
+namespace testpairing;
+
+import "assert";
+import "encoding/yaml";
+import "path";
+import "serialize";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final LINTER = "testpair";
+
+// DIRECTIVE finds a nolint directive; NAMED reads the linters one names. A directive
+// with no list silences every linter, testpair included.
+final DIRECTIVE = std\pattern(`//nolint\b`);
+final NAMED = std\pattern(`//nolint:([\w,.-]+)`);
+
+final FIX = "Pair the test file instead: move its tests into the _test.go of the file they exercise, or move the code it owns into a same-stem .go file.";
+
+export fun reads() > [str] {
+    return [".golangci.yml", "magusfile.buzz", "**/*_test.go",
+            "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
+            "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
+            "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (f.value == ".golangci.yml") {
+            configFindings(f, found: found);
+        } else if (f.value == "magusfile.buzz") {
+            runFindings(f, found: found);
+        } else if (f.value.indexOf("/testdata/") == null) {
+            directiveFindings(f, found: found);
+        }
+    }
+    return found;
+}
+
+fun named(list: serialize\Boxed, name: str) > bool {
+    foreach (v in list.listValue()) {
+        if (support\scalar(v) == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun configFindings(f: Path, found: mut [Finding]) > void !> any {
+    final src = support\read(f);
+    final doc = serialize\Boxed.init(yaml\parse(src));
+    final line = support\lineOf(src, needle: LINTER);
+    if (!named(doc.q(["linters", "enable"]), name: LINTER)) {
+        found.append(Finding{ path = f.value, line = line,
+            message = "linters.enable leaves out testpair, so no test file is held to a pair",
+            fix = "Add `- testpair` to linters.enable." });
+    }
+    if (named(doc.q(["linters", "disable"]), name: LINTER)) {
+        found.append(Finding{ path = f.value, line = line, message = "linters.disable names testpair", fix = FIX });
+    }
+    if (support\has(doc.q(["linters", "settings", "custom", LINTER]), key: "settings")) {
+        found.append(Finding{ path = f.value, line = line,
+            message = "testpair carries a settings block; it takes none, and an option is an exemption",
+            fix = "Delete the settings block under linters.settings.custom.testpair." });
+    }
+    if (doc.q(["linters", "exclusions", "paths"]).listValue().len() > 0) {
+        found.append(Finding{ path = f.value, line = support\lineOf(src, needle: "\n    paths:"),
+            message = "linters.exclusions.paths excludes every linter, testpair included, from those paths",
+            fix = "Scope the exclusion to the linters it is for with a rules entry naming them." });
+    }
+    if (support\scalar(doc.q(["run", "tests"])) == "false") {
+        found.append(Finding{ path = f.value, line = support\lineOf(src, needle: "\n  tests:"),
+            message = "run.tests is false, so no test file is analyzed and none is held to a pair",
+            fix = "Delete run.tests." });
+    }
+    var n = 0;
+    foreach (rule in doc.q(["linters", "exclusions", "rules"]).listValue()) {
+        n = n + 1;
+        if (!support\has(rule, key: "linters")) {
+            found.append(Finding{ path = f.value, line = line,
+                message = "exclusion rule {n} names no linters, so it excludes testpair along with the rest",
+                fix = "Name the linters the rule is for." });
+        } else if (named(rule.q(["linters"]), name: LINTER)) {
+            found.append(Finding{ path = f.value, line = line,
+                message = "exclusion rule {n} names testpair; it has no exemptions", fix = FIX });
+        }
+    }
+}
+
+fun runFindings(f: Path, found: mut [Finding]) > void !> any {
+    var n = 0;
+    foreach (line in support\read(f).split("\n")) {
+        n = n + 1;
+        if (line.indexOf("\"--enable-only\"") != null and line.indexOf(LINTER) == null) {
+            found.append(Finding{ path = f.value, line = n,
+                message = "a golangci-lint run with --enable-only leaves out testpair, so that module's test files go unpaired",
+                fix = "Add testpair to the --enable-only list." });
+        }
+    }
+}
+
+// quoted reports whether the text before a directive opens a string literal, the one
+// place a //nolint is data rather than a directive. An odd count of double quotes or
+// backticks is the heuristic, and a line it misjudges is one to restructure anyway.
+fun quoted(before: str) > bool {
+    return before.split("\"").len() % 2 == 0 or before.split("`").len() % 2 == 0;
+}
+
+fun directiveFindings(f: Path, found: mut [Finding]) > void !> any {
+    var n = 0;
+    foreach (line in support\read(f).split("\n")) {
+        n = n + 1;
+        // A directive opens its comment: `// see //nolint` is prose.
+        final at = line.indexOf("//nolint");
+        if (at == null or line.indexOf("//") != at or DIRECTIVE.match(line) == null or quoted(line.sub(0, len: at!))) {
+            continue;
+        }
+        final m = NAMED.match(line);
+        var covers = m == null;
+        if (m != null) {
+            foreach (name in m![1].split(",")) {
+                covers = covers or name == LINTER or name == "all";
+            }
+        }
+        if (covers) {
+            found.append(Finding{ path = f.value, line = n,
+                message = "nolint directive in a test file silences testpair; it has no exemptions",
+                fix = "Name only the linters the directive is for, never all or testpair. " + FIX });
+        }
+    }
+}
+
+final CONFIG = "version: \"2\"\nlinters:\n  enable:\n    - testlayout\n    - testpair\n  settings:\n    custom:\n      testpair:\n        type: module\n  exclusions:\n    rules:\n      - path: ^a\\.go$\n        linters: [testlayout]\n";
+
+test "a config enabling testpair with no way out passes" {
+    assert\equal(check(support\fixture({".golangci.yml": CONFIG})).len(), want: 0, message: "clean");
+}
+
+test "every config escape hatch is reported" {
+    final escaped = "version: \"2\"\nrun:\n  tests: false\nlinters:\n  enable:\n    - testlayout\n  disable:\n    - testpair\n  settings:\n    custom:\n      testpair:\n        settings:\n          allow: [x_test.go]\n  exclusions:\n    paths:\n      - conventions_test.go\n    rules:\n      - path: ^a_test\\.go$\n        linters: [testpair]\n      - path: ^b_test\\.go$\n";
+    assert\equal(support\messages(check(support\fixture({".golangci.yml": escaped}))), want: [
+        "linters.enable leaves out testpair, so no test file is held to a pair",
+        "linters.disable names testpair",
+        "testpair carries a settings block; it takes none, and an option is an exemption",
+        "linters.exclusions.paths excludes every linter, testpair included, from those paths",
+        "run.tests is false, so no test file is analyzed and none is held to a pair",
+        "exclusion rule 1 names testpair; it has no exemptions",
+        "exclusion rule 2 names no linters, so it excludes testpair along with the rest",
+    ], message: "each hatch");
+}
+
+test "a libs run that leaves testpair out is reported at its line" {
+    final mf = "proc\\exec(gcl, [\"run\", \"--enable-only\", \"filenames,testpair\"]);\nproc\\exec(gcl, [\"run\", \"--enable-only\", \"filenames\"]);\n";
+    final got = check(support\fixture({"magusfile.buzz": mf}));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].line, want: 2, message: "the run without testpair");
+}
+
+test "a nolint covering testpair is reported and one naming other linters is not" {
+    final src = "package a //nolint:testlayout // cycle\n//nolint:all // no\nvar x = 1 //nolint\nvar y = 2 //nolint:testpair,errcheck // no\nvar z = \"//nolint\"\n// the enable entry and //nolint name agree\n";
+    final got = check(support\fixture({"a/a_test.go": src, "a/testdata/b_test.go": "//nolint\n"}));
+    assert\equal(got.len(), want: 3, message: "all, bare and testpair");
+    assert\equal(got[0].line, want: 2, message: "all");
+    assert\equal(got[1].line, want: 3, message: "bare");
+    assert\equal(got[2].line, want: 4, message: "named");
+}
+
+test "reads() covers the config, the root magusfile and every module's test files" {
+    final globs = reads();
+    assert\equal(path\matchesAny(globs, path: "internal/cache/cache_test.go"), want: true, message: "root module");
+    assert\equal(path\matchesAny(globs, path: "libs/gopherbuzz/vm/marshal_test.go"), want: true, message: "a libs module");
+    assert\equal(path\matchesAny(globs, path: "internal/cache/cache.go"), want: false, message: "source file");
+}

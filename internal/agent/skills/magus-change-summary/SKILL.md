@@ -26,7 +26,7 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
    Ignore generated outputs when identifying the change{{if .Full}}; trace them to their
    declared source and generator instead{{end}}.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `{{tool "client"}}` (`{{buzz "query"}}`, `{{buzz "explain"}}`, `{{buzz "describeFile"}}`); otherwise use:
+   `{{tool "client"}}` (`{{buzz "query"}}`, `{{buzz "explain"}}`, `{{buzz "describe.file"}}`); otherwise use:
 
    ```sh
    magus query "<project or feature terms>"

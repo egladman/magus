@@ -1,6 +1,7 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -72,6 +73,10 @@ type Observed struct {
 	// GreenGate is the newest green ci gate recorded for this checkout's branch, with
 	// the tier of the change since it. The zero value means none was found or assessed.
 	GreenGate GreenGate
+	// DefaultCharms are the default_charms in effect in the job's checkout, which `magus
+	// run` stacks under the charms a target names. A check is resolved against them before
+	// it is compared with a recorded run; nil resolves every check to the charms it names.
+	DefaultCharms []string
 }
 
 // GreenGate is a passing ci gate and what changed since it.
@@ -258,11 +263,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
 	}
-	for _, p := range rep.ChangedPaths {
-		if d, ok := matching(row.DenyPaths, p); ok {
-			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
-		}
-	}
+	v.Violations = append(v.Violations, denyViolations(row, rep, seen)...)
 	var live []string
 	for _, d := range types.JobDescendants(declared, row.ID) {
 		if d.State.Live() {
@@ -433,8 +434,9 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (%d < %d), so historical output cannot close this job", attempt.TimestampMs, declaredAt))
 		}
 	}
-	if !bindsTo(gate.Check, attempt) {
-		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check is `%s`, so the evidence is from a different run", status.OutputRef, attempt, gate.Check))
+	if !bindsTo(gate.Check, attempt, seen.DefaultCharms) {
+		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",
+			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms)))
 	}
 	if attempt.Failed {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", status.OutputRef))
@@ -450,25 +452,89 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 // selected two ways, and rejecting that pair would make the rule fire on spelling rather
 // than on identity. Target and project are compared always: those are what a run IS.
 //
-// A CHARM is part of that identity, so `generate` and `generate:rw` are two checks, not
-// one spelled twice. They are different runs: charmless `generate` gates drift and fails
-// on it, while `generate:rw` writes the output and cannot fail. Treating them as one
-// identity made the drift gate satisfiable by the very run that produces the drift. The
-// store records what was invoked (cache.reproTarget renders `name:charm`), so a check
-// that means the written form says so in its target, `generate:rw`, and one that names no
-// charm means the charmless run.
+// A CHARM SET is part of that identity, so `generate` and `generate:rw` are two runs, not
+// one spelled twice: charmless `generate` gates drift and fails on it, while
+// `generate:rw` writes the output and cannot fail. The store records the charms a run
+// actually executed under (cache.reproTarget renders `name:charm`), which in a workspace
+// setting default_charms includes the defaults. So the check is resolved the way `magus
+// run` resolves it, defaults stacked under its own charms, before the sets are compared:
+// otherwise `magus run test .` records `test:rw` and can never satisfy its own check.
 //
 // The args past `--` are NOT compared: the output store records a run by spell, target and
 // project and holds no argv, so a rule keyed on them would reject every ref there is.
-func bindsTo(c types.LeaseCheck, a types.JobAttempt) bool {
-	spell, target, _ := strings.Cut(c.Target, "::")
+func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
 	if target == "" {
 		spell, target = "", spell
 	}
-	if target != a.Target || path.Clean(c.Project) != path.Clean(a.Project) {
+	if !sameRun(target, a.Target) || path.Clean(c.Project) != path.Clean(a.Project) {
 		return false
 	}
 	return spell == "" || a.Spell == "" || spell == a.Spell
+}
+
+// resolveCheck is c with the charm set `magus run` would execute it under: defaults first
+// unless the check opts out of them, the check's own charms stacked on top, duplicates
+// dropped (cmd/magus withDefaultCharms), and the write-granting charms removed from ci,
+// which RunCI never runs with (magus.CharmsForCI).
+func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
+	if c.NoDefaultCharms {
+		defaults = nil
+	}
+	spell, target, filtered := strings.Cut(c.Target, "::")
+	if !filtered {
+		spell, target = "", spell
+	}
+	name, named := splitCharms(target)
+	charms := make([]string, 0, len(defaults)+len(named))
+	for _, charm := range append(slices.Clone(defaults), named...) {
+		if charm = types.NormalizeCharm(charm); !slices.Contains(charms, charm) {
+			charms = append(charms, charm)
+		}
+	}
+	if name == types.TargetCI {
+		charms = slices.DeleteFunc(charms, func(charm string) bool {
+			return charm == types.CharmReadWrite || charm == types.CharmUpdate
+		})
+	}
+	if len(charms) > 0 {
+		name += ":" + strings.Join(charms, ",")
+	}
+	if filtered {
+		name = spell + "::" + name
+	}
+	c.Target = name
+	return c
+}
+
+// sameRun reports whether two `name[:charm,...]` targets name one target under one charm
+// set. The order of the charms is not part of the identity.
+func sameRun(a, b string) bool {
+	nameA, charmsA := splitCharms(a)
+	nameB, charmsB := splitCharms(b)
+	if nameA != nameB || len(charmsA) != len(charmsB) {
+		return false
+	}
+	for _, charm := range charmsA {
+		if !slices.Contains(charmsB, charm) {
+			return false
+		}
+	}
+	return true
+}
+
+// splitCharms is a target's normalized name and charms, read the way types.ParseTarget
+// reads them but without its validation: a recorded run was validated when it ran.
+func splitCharms(target string) (string, []string) {
+	name, list, ok := strings.Cut(target, ":")
+	if !ok || list == "" {
+		return types.Normalize(name), nil
+	}
+	charms := strings.Split(list, ",")
+	for i, charm := range charms {
+		charms[i] = types.NormalizeCharm(charm)
+	}
+	return types.Normalize(name), charms
 }
 
 // claimViolations holds a job that claims declarations (`run.go#executeStages`) to them: each
@@ -525,6 +591,72 @@ func unclaimedFootprint(writePaths []string, regions []types.RegionChange) []str
 		}
 	}
 	return out
+}
+
+// denyViolations are the changes the job's deny paths exclude. A deny naming a declaration
+// of a changed file (`run.go#A`) is graded against the footprint the way a declaration claim
+// is, so a change elsewhere in the file is not one. A footprint nobody read, or a region no
+// driver placed, cannot show the declaration untouched, and is one.
+func denyViolations(row types.Job, rep types.JobResult, seen Observed) []string {
+	var out []string
+	for _, p := range rep.ChangedPaths {
+		if d, ok := matching(WholeFileDenies(row.DenyPaths, p), p); ok {
+			out = append(out, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
+			continue
+		}
+		denied := DeniedDeclarations(row.DenyPaths, p)
+		if len(denied) == 0 {
+			continue
+		}
+		entries := make([]string, len(denied))
+		for i, d := range denied {
+			entries[i] = path.Clean(p) + "#" + d
+		}
+		if !seen.RegionsKnown {
+			reason := cmp.Or(seen.RegionsReason, "nothing observed the tree")
+			out = append(out, fmt.Sprintf("changed path %q has declarations the job is denied (%s) and its footprint is not known (%s), so the deny could not be checked",
+				p, strings.Join(entries, ", "), reason))
+			continue
+		}
+		for _, r := range seen.Regions {
+			loc := r.Location()
+			if path.Clean(loc.Path) != path.Clean(p) {
+				continue
+			}
+			if loc.Declaration != "" && !slices.ContainsFunc(denied, func(d string) bool { return types.NamesDeclaration(d, loc.Declaration) }) {
+				continue
+			}
+			v := fmt.Sprintf("the diff since %s changed %s, which the job is denied (%s)",
+				cmp.Or(seen.ChangedFrom, "the job's checkpoint"), loc.String(), strings.Join(entries, ", "))
+			if !slices.Contains(out, v) {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// WholeFileDenies are the deny paths that exclude file at the path level: every entry but
+// one naming a declaration of file itself, which excludes only that declaration. A
+// declaration of a pattern or a directory stays, since no declaration of one file can be
+// read from it.
+func WholeFileDenies(denyPaths []string, file string) []string {
+	return slices.DeleteFunc(slices.Clone(denyPaths), func(entry string) bool {
+		p, decl := types.SplitClaim(entry)
+		return decl != "" && p != "" && path.Clean(p) == path.Clean(file)
+	})
+}
+
+// DeniedDeclarations are the declarations denyPaths exclude in file, the repository-relative
+// path of one file.
+func DeniedDeclarations(denyPaths []string, file string) []string {
+	var decls []string
+	for _, entry := range denyPaths {
+		if p, decl := types.SplitClaim(entry); decl != "" && p != "" && path.Clean(p) == path.Clean(file) {
+			decls = append(decls, decl)
+		}
+	}
+	return decls
 }
 
 // ClaimedDeclarations are the declarations writePaths claim in file, the repository-relative
@@ -640,4 +772,76 @@ func verifySubjectGate(gate types.CompletionGate, seen Observed) types.GateStatu
 	}
 	status.Verified = len(status.Violations) == 0
 	return status
+}
+
+// WaitIntegration grades job id's check goals, its check included, against the runs rep's
+// evidence names in checkout, the caller's tree, and records the grade as the row's
+// Integration. It is `magus job wait --integration`: the question is whether the work
+// still passes once merged with other work, which the holder's own verdict cannot say.
+//
+// Only check goals are graded, and only against resolve, which reads the caller's tree:
+// the diff, the footprint and the paths and symbol goals belong to the holder's checkout
+// and were graded there. It leaves State alone and works on an ended row, so a pass where
+// the work was written and a failure once merged stay two readable facts. Evidence naming a
+// goal the row does not hold as a check is an error, and nothing is recorded.
+func WaitIntegration(ctx context.Context, store *Store, id string, rep types.JobResult, resolve AttemptResolver, checkout string) (types.JobIntegration, error) {
+	if resolve == nil {
+		return types.JobIntegration{}, fmt.Errorf("job: no output resolver reads %s's runs", checkout)
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.JobIntegration{}, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return types.JobIntegration{}, fmt.Errorf("job: there is no job %q", id)
+	}
+	row := rows[i]
+	if rep.Job != "" && rep.Job != id {
+		return types.JobIntegration{}, fmt.Errorf("job: the evidence is filed under job %q and this one is %q", rep.Job, id)
+	}
+	var checks []types.CompletionGate
+	for _, gate := range row.EffectiveGoals() {
+		if gate.Kind == types.GateKindCheck {
+			checks = append(checks, gate)
+		}
+	}
+	if len(checks) == 0 {
+		return types.JobIntegration{}, fmt.Errorf("job: %s declares no check and no check goal, so no run in another tree can grade it", id)
+	}
+	refs := map[string]string{}
+	if ref := strings.TrimSpace(rep.Validation.OutputRef); ref != "" {
+		refs[types.PrimaryCompletionGateID] = ref
+	}
+	for _, evidence := range rep.GateEvidence {
+		if !slices.ContainsFunc(checks, func(g types.CompletionGate) bool { return g.ID == evidence.GateID }) {
+			return types.JobIntegration{}, fmt.Errorf("job: the evidence names goal %q, and %s holds no check goal by that id", evidence.GateID, id)
+		}
+		refs[evidence.GateID] = strings.TrimSpace(evidence.OutputRef)
+	}
+	grade := types.JobIntegration{Checkout: checkout, Verified: true}
+	for _, gate := range checks {
+		ref := refs[gate.ID]
+		var attempt types.JobAttempt
+		if ref != "" {
+			if attempt, err = resolve(ctx, ref); err != nil {
+				return types.JobIntegration{}, err
+			}
+		}
+		status := verifyGate(row, gate, ref, attempt, Observed{})
+		grade.Verified = grade.Verified && status.Verified
+		grade.Gates = append(grade.Gates, status)
+	}
+	stored, err := store.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
+		if !exists {
+			return fmt.Errorf("job: there is no job %q", id)
+		}
+		grade.At = now
+		cur.Integration = &grade
+		return nil
+	})
+	if err != nil {
+		return types.JobIntegration{}, err
+	}
+	return *stored.Integration, nil
 }

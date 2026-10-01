@@ -21,7 +21,7 @@ final HELP = "cost: needs the code index\n{USAGE}";
 
 // fileLines classifies paths the way `magus describe file` does: owning project and role.
 export fun fileLines(paths: [str]) > [str] !> any {
-    final report: magus\FileReport = magus\describeFile(paths);
+    final report: magus\FileReport = magus\describe.file(paths);
     final lines = mut [<str>];
     foreach (f in report.files) {
         lines.append("{f.path}: project {f.project}, {f.role}");
@@ -52,7 +52,7 @@ export fun refsLines(symbol: str) > [str] !> any {
 
 // jobLines count the job store's rows by state, and the write paths the declared ones hold.
 export fun jobLines() > [str] !> any {
-    final list: magus\JobList = magus\job\list();
+    final list: magus\JobList = magus\job.list();
     final byState = mut {<str: int>};
     final declared = mut [<str>];
     foreach (j in list.jobs) {

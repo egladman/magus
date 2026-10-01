@@ -89,7 +89,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if rf.Rename != "" {
 		return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 	}
-	out, ok := g.Refs(pos[0])
+	symbol, err := refsSymbol(os.Stderr, g, pos[0])
+	if err != nil {
+		return err
+	}
+	out, ok := g.Refs(symbol)
 	if !ok {
 		// Nothing matched. Whether that is a fact about the workspace or a fact about
 		// what magus could see is the whole question, so answer it rather than printing
@@ -129,33 +133,22 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
 			}
 		}
-		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
-		printVerdict(os.Stderr, ans, "")
+		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
 		if ans.Text != nil {
-			fmt.Fprintf(os.Stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
-				ans.Text.Hits, ans.Text.Files, searched)
-			// One parenthetical, not a second line: a count that does not say what it
-			// declined to read, or declined to exclude, is one a reader cannot tell from
-			// a small or an unfiltered answer.
-			notes := textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
-			if len(notes) > 0 {
-				fmt.Fprintf(os.Stderr, " (%s)", strings.Join(notes, "; "))
-			}
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
+			miss.notes = textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
 		}
-		if len(ans.Gaps) > 0 {
-			fmt.Fprintf(os.Stderr, "  the server's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
+		if err := reportRefsMiss(os.Stderr, opts, miss); err != nil {
+			return err
 		}
 		emitNearest(os.Stderr, g.NearestSymbol(pos[0]))
-		return exitForVerdict(ans.Verdict)
+		return exitForVerdict(miss.answer.Verdict)
 	}
 	// A resolved symbol still carries the coverage verdict: an uncovered project could
 	// hold references this list does not show, whether or not it showed any. A stale index
 	// caveats a list that has rows and explains one that does not, so the age rides the
 	// answer as StaleIndexes either way and only downgrades the empty case.
 	coverage := symbolCoverage(ctx, root, pos[0], true)
-	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, coverage)
+	out.Answer = withIndexCause(ctx, root, knowledge.Answer(pos[0], len(out.Refs) > 0, coverage))
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
@@ -163,6 +156,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if rf.Definition || rf.Source {
 		defs, _ := g.Definitions(out.Symbol)
 		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, coverage)
+		defs.Answer.IndexCause = out.Answer.IndexCause
 		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), rf.Source)
 		return emitDefinitions(os.Stdout, opts, defs)
 	}
@@ -200,6 +194,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
+		printIndexCause(os.Stdout, out.Answer)
 		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
 			return err
 		}
@@ -219,6 +214,72 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
 	return reportIndexStaleness(os.Stdout, out.Answer)
+}
+
+// refsMiss is what refs learned about a name no symbol node matches.
+type refsMiss struct {
+	name     string
+	answer   types.KnowledgeAnswer
+	searched int      // files the text search read
+	notes    []string // what the text search skipped or excluded, from textPresenceNotes
+}
+
+// reportRefsMiss renders m. Under a structured format its record goes to stdout, so a
+// script reads the verdict and the index cause; the verdict block goes to stderr in every
+// format.
+func reportRefsMiss(stderr io.Writer, opts OutputOptions, m refsMiss) error {
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		if err := emitFormatted(opts, types.KnowledgeRefsOutput{
+			Definition:    types.KnowledgeRefsDefinition,
+			SchemaVersion: types.KnowledgeSchemaVersion,
+			Symbol:        m.name,
+			Answer:        m.answer,
+		}); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(stderr, "magus refs: no node matches %q\n", m.name)
+	printVerdict(stderr, m.answer, "")
+	if t := m.answer.Text; t != nil {
+		fmt.Fprintf(stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
+			t.Hits, t.Files, m.searched)
+		// One parenthetical, not a second line: a count that does not say what it
+		// declined to read, or declined to exclude, is one a reader cannot tell from
+		// a small or an unfiltered answer.
+		if len(m.notes) > 0 {
+			fmt.Fprintf(stderr, " (%s)", strings.Join(m.notes, "; "))
+		}
+		fmt.Fprintln(stderr)
+		fmt.Fprintln(stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
+	}
+	printIndexCause(stderr, m.answer)
+	return nil
+}
+
+// refsSymbol picks the symbol `refs` answers for. A name several workspace definitions carry
+// is refused, listing each candidate's id, rather than answered: answering for whichever
+// ranked first shows one symbol's references as though they were the name's, which is a
+// narrower answer than the text search refs stands in for, and answering for all of them
+// would merge different symbols' sites under one count, which a rename or an edit cannot
+// tell apart. The refusal costs one more call, with an exact id that also routes to that
+// symbol's shards alone. A name one definition carries picks it; a name none carries, or an
+// exact id, goes to the graph's own resolution, which also finds a dependency's symbol.
+func refsSymbol(w io.Writer, g *knowledge.Graph, ref string) (string, error) {
+	named := g.SymbolsNamed(ref)
+	switch len(named) {
+	case 0:
+		return ref, nil
+	case 1:
+		return named[0], nil
+	}
+	fmt.Fprintf(w, "magus refs: %q names %d symbols defined in this workspace; ask for one by id:\n", ref, len(named))
+	for _, id := range named {
+		// Single-quoted: a symbol id holds spaces and backticks, which a paste must not
+		// hand to the shell.
+		fmt.Fprintf(w, "  %s\n", hint.Refs.With("'"+strings.ReplaceAll(id, "'", `'\''`)+"'"))
+	}
+	return "", errSilent{exitCode: exitUsage}
 }
 
 // refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
@@ -342,6 +403,11 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 	// can still fail to decode here. So the gaps are recomposed rather than inherited, and
 	// an index this read could not open downgrades the verdict even when refs was clean.
 	out.Answer = types.ClassifyAnswer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
+	if out.Answer.IndexBehind() {
+		if out.Answer.IndexCause = refs.Answer.IndexCause; out.Answer.IndexCause == nil {
+			out.Answer = withIndexCause(ctx, root, out.Answer)
+		}
+	}
 	for _, f := range files {
 		out.OccurrenceCount += len(f.Occurrences)
 		if f.Stale {

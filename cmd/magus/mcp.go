@@ -73,8 +73,11 @@ func mcpCmd(ctx context.Context, root string, args []string) error {
 // HTTP endpoint for a client that wants one long-lived server. It names no host: each
 // client's config dialect belongs in docs/guides/integrations/mcp.md, where a change to one
 // is not a magus release.
-func mcpUsage() {
-	w := os.Stderr
+func mcpUsage() { writeMCPUsage(os.Stderr, globalCfg.MCP) }
+
+// writeMCPUsage is mcpUsage for cfg. The server's transports are named as cfg leaves them:
+// no HTTP URL is printed when the server would not serve one.
+func writeMCPUsage(w io.Writer, cfg config.MCP) {
 	fmt.Fprintln(w, "Usage: magus mcp")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Serve MCP over stdin and stdout for the agent host that launched this process,")
@@ -88,12 +91,22 @@ func mcpUsage() {
 	fmt.Fprintln(w, `  args     ["mcp"]`)
 	fmt.Fprintln(w, "magus describe harness <host> prints the registration for a known host.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "magus server start also serves MCP over Streamable HTTP, for the console and")
-	fmt.Fprintln(w, "clients with no shell. It answers from the checkout and build that started it:")
-	fmt.Fprintf(w, "  url        http://%s/mcp\n", mcpAddrString())
-	fmt.Fprintln(w, "  auth       Authorization: Bearer <token>, minted with")
-	fmt.Fprintln(w, "             magus config mcp connector create --name <client> --expires 366d")
-	fmt.Fprintln(w, "  check      magus status --probe=liveness,mcp")
+	switch {
+	case cfg.Enabled != nil && !*cfg.Enabled:
+		fmt.Fprintln(w, "magus server start serves no MCP here (mcp.enabled=false); stdio above is the")
+		fmt.Fprintln(w, "only transport.")
+	case !cfg.HTTPEnabled():
+		fmt.Fprintln(w, "MCP over HTTP is off here (mcp.http=false). Besides stdio above, magus server")
+		fmt.Fprintln(w, "start serves MCP at /mcp on its own unix socket, admitting processes that run")
+		fmt.Fprintln(w, "as you without a token. It answers from the checkout and build that started it.")
+	default:
+		fmt.Fprintln(w, "magus server start also serves MCP over Streamable HTTP, for the console and")
+		fmt.Fprintln(w, "clients with no shell. It answers from the checkout and build that started it:")
+		fmt.Fprintf(w, "  url        http://%s/mcp\n", mcpAddress(cfg))
+		fmt.Fprintln(w, "  auth       Authorization: Bearer <token>, minted with")
+		fmt.Fprintln(w, "             magus config mcp connector create --name <client> --expires 366d")
+		fmt.Fprintln(w, "  check      magus status --probe=liveness,mcp")
+	}
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Per-client configuration: docs/guides/integrations/mcp.md")
 }

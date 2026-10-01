@@ -43,7 +43,7 @@ func TestLoadLocalBuzzLibraryUsesProjectRootImports(t *testing.T) {
 	writeFile(t, root, "lib/text.buzz", `export fun value() > str { return "root-import-spell"; }`)
 	path := filepath.Join(root, "lib", "helper.buzz")
 	writeFile(t, root, "lib/helper.buzz", `import "lib/text" as text;
-export fun mgs_getName() > str { return text.value(); }`)
+export fun mgs_getName() > str { return text\value(); }`)
 
 	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
 	spec, _, err := loadBuzzSpell(ctx, path)
@@ -57,7 +57,7 @@ func TestLoadLocalBuzzLibraryIsNotExecutedAsASpell(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "lib", "helper.buzz")
 	writeFile(t, root, "lib/helper.buzz", `import "lib/does-not-exist" as missing;
-export fun helper() > str { return missing.value(); }`)
+export fun helper() > str { return missing\value(); }`)
 
 	_, _, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: root}), path)
 	assert.ErrorIs(t, err, spell.ErrNotASpell, "executing it would have failed on the missing import instead")
@@ -154,7 +154,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-magus.project(".", {"spells": [widget]});`)
+magus\project(".", {"spells": [widget]});`)
 
 	require.NoError(t, parseMagusfile(t, dir))
 
@@ -178,9 +178,9 @@ func TestBuzzSpellImport(t *testing.T) {
 import "magus/spell/go";
 import "magus/spell/docker";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    if (go.name != "go") { error("go.name mismatch: " + go.name); }
-    if (docker.name != "docker") { error("docker.name mismatch: " + docker.name); }
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (go.name != "go") { throw "go.name mismatch: " + go.name; }
+    if (docker.name != "docker") { throw "docker.name mismatch: " + docker.name; }
 }
 `)
 
@@ -198,7 +198,7 @@ func TestBuzzSpellImportNoOps(t *testing.T) {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/noops";
-magus.project(".", {"spells": [noops]});`)
+magus\project(".", {"spells": [noops]});`)
 
 	require.NoError(t, parseMagusfile(t, dir), "parse should not fail")
 	_, ok := project.DefaultSpellRegistry().Lookup("noopsbuzzspell")
@@ -224,9 +224,9 @@ export fun mgs_listTargets() > any {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final names = widget.listTargets();
-    if (names[0] != "capture") { error("listTargets mismatch"); }
+    if (names[0] != "capture") { throw "listTargets mismatch"; }
     widget.capture(ctx.withCwd("sub"), {"args": ["alpha", "beta"]});
 }`)
 
@@ -283,11 +283,11 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final r = widget.hash(ctx);
-    if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
-    if (r.code != 0) { error("code mismatch"); }
-    if (r.ok != true) { error("ok mismatch"); }
+    if (r.stdout != "abc123") { throw "stdout mismatch: " + r.stdout; }
+    if (r.code != 0) { throw "code mismatch"; }
+    if (r.ok != true) { throw "ok mismatch"; }
 }`)
 
 	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
@@ -310,10 +310,10 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final a = widget.emit(ctx);
     final b = widget.shout(ctx, {"stdin": a.stdout});
-    if (b.stdout != "ALPHA") { error("pipe mismatch: " + b.stdout); }
+    if (b.stdout != "ALPHA") { throw "pipe mismatch: " + b.stdout; }
 }`)
 
 	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
@@ -345,11 +345,11 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    final c = vcs.commit();
-    if (c.subject != "hello") { error("subject: " + c.subject); }
-    if (c.author.name != "A") { error("author: " + c.author.name); }
-    if (c.date == "") { error("date empty"); }
-    if (c.id == "") { error("id empty"); }
+    final c = vcs\commit();
+    if (c.subject != "hello") { throw "subject: " + c.subject; }
+    if (c.author.name != "A") { throw "author: " + c.author.name; }
+    if (c.date == "") { throw "date empty"; }
+    if (c.id == "") { throw "id empty"; }
 }`)
 
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
@@ -374,11 +374,11 @@ import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void {
     var raised = false;
     try {
-        vcs.commit();
+        vcs\commit();
     } catch (e) {
         raised = true;
     }
-    if (!raised) { magus.fatal("vcs.commit should raise outside a repo, not return a zero object"); }
+    if (!raised) { magus\fatal("vcs.commit should raise outside a repo, not return a zero object"); }
 }`)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, runErr, "vcs.commit raises outside a repo")
@@ -407,7 +407,7 @@ export fun mgs_listTargets() > any {
 		writeFile(t, dir, "spells/parity.buzz", src)
 		writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/parity";
-magus.project(".", {"spells": [parity]});`)
+magus\project(".", {"spells": [parity]});`)
 		require.NoError(t, parseMagusfile(t, dir), "parse")
 	}
 
@@ -480,7 +480,7 @@ func TestSpellImportSuggestionOnParse(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/javascript";
-magus.project({"spells": [javascript]});
+magus\project({"spells": [javascript]});
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
@@ -501,7 +501,7 @@ func TestSpellImportCaughtWithTopLevelControlFlow(t *testing.T) {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/javascript";
 if (1 > 0) {}
-magus.project({"spells": [javascript]});
+magus\project({"spells": [javascript]});
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
@@ -517,7 +517,7 @@ func TestSpellImportValidOnParse(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/go";
-magus.project({"spells": [go]});
+magus\project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir))
@@ -576,7 +576,7 @@ func TestSpellImportIgnoresComments(t *testing.T) {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/go";
 // for a TS project you would instead: import "magus/spell/typescript";
-magus.project({"spells": [go]});
+magus\project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
@@ -616,8 +616,8 @@ func TestSpellModuleRequireBuiltin(t *testing.T) {
 import "magus";
 import "magus/spell/docker";
 
-export fun check(ctx: magus\Context, _args: [str]) > void {
-    if (docker.name != "docker") { error("name mismatch: " + docker.name); }
+export fun check(ctx: magus\Context, _args: [str]) > void !> any {
+    if (docker.name != "docker") { throw "name mismatch: " + docker.name; }
     if (docker["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
 }
 `)
@@ -632,7 +632,7 @@ func TestSpellModuleRequireUnknownFailsToCompile(t *testing.T) {
 	writeSpellMagusfile(t, dir, `
 import "magus";
 import "magus/spell/dockr";
-magus.project(".", {"spells": [dockr]});
+magus\project(".", {"spells": [dockr]});
 `)
 	_, err := interp.RunDir(context.Background(), dir, "noop", nil)
 	assert.Error(t, err, "expected a compile error for the misspelled module")
@@ -655,10 +655,10 @@ export fun mgs_listTargets() > any {
 import "magus";
 import "spells/locreq";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    if (locreq.name != "locreq") { error("name mismatch: " + locreq.name); }
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (locreq.name != "locreq") { throw "name mismatch: " + locreq.name; }
 }
-magus.project(".", {"spells": [locreq]});
+magus\project(".", {"spells": [locreq]});
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, runErr)
@@ -672,8 +672,8 @@ func TestSpellMultipleFields(t *testing.T) {
 import "magus";
 import "magus/spell/go";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    if (go.name != "go") { error("name mismatch: " + go.name); }
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (go.name != "go") { throw "name mismatch: " + go.name; }
     if (go["go-build"] == null) { throw "go-build must be a function"; }
     if (go["go-fmt"] == null) { throw "go-fmt must be a function"; }
 }

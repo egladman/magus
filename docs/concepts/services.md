@@ -122,11 +122,11 @@ A `magus buzz` script holds a service the way a target's `magus\needs` does, thr
 same broker:
 
 ```buzz
-final lease: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
 // lease.owned is false when the machine was already running.
 ```
 
-`magus\service\release(lease)` drops it early; whatever the script still holds is
+`magus\service.release(lease)` drops it early; whatever the script still holds is
 released when it ends, however it ends.
 
 ## Guarding against foot-guns

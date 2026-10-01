@@ -295,9 +295,12 @@ func guardDependencies(ctx context.Context) guard.Dependencies {
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
+		IndexCause:       indexCauseForGuard,
 		SymbolSites:      symbolSitesForGuard,
 		Revision:         revisionForGuard,
 		GraphIDs:         graphIDsForGuard,
+		IndexedIDs:       indexedIDsForGuard,
+		TrackedFiles:     trackedFilesForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
 		VCS: types.VCSOptions{
@@ -548,6 +551,34 @@ func graphIDsForGuard(_ context.Context, kind string) ([]string, bool) {
 		return nil, false
 	}
 	return a.ids, true
+}
+
+// indexedIDsForGuard lists kind's ids from the guard index whether or not its sources have
+// moved since; the rules that call it prove their answer against the disk.
+func indexedIDsForGuard(_ context.Context, kind string) ([]string, bool) {
+	type answer struct {
+		ids   []string
+		found bool
+	}
+	a, ok := withinBudget(guardLookupBudget, func() answer {
+		idx := guardIndex()
+		if idx == nil {
+			return answer{}
+		}
+		return answer{idx.IDs(kind), true}
+	})
+	return a.ids, ok && a.found
+}
+
+// trackedFilesForGuard lists every file the checkout at root tracks, through whichever
+// version control the workspace uses; false when it cannot say before ctx ends.
+func trackedFilesForGuard(ctx context.Context, root string) ([]string, bool) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return nil, false
+	}
+	files, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
+	return files, err == nil && ctx.Err() == nil
 }
 
 // loadWorkspaceShellRules returns additive rules the root magusfile declared via

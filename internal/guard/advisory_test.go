@@ -9,32 +9,12 @@ import (
 	"github.com/egladman/magus/internal/hint"
 )
 
-// A precedent hunt is one distinctive name; an output filter is not. The second shape
-// was 26% of grep invocations in the mining, so firing on it would train the reader to
-// skip the family.
-func TestPrecedentIdentClassifier(t *testing.T) {
-	ident := func(command string) string {
-		cmds, ok := ParseCommands(command)
-		require.True(t, ok, "fixture must parse")
-		return precedentIdent(cmds)
-	}
-
-	assert.Equal(t, "HandleRequest", ident("rg HandleRequest"))
-	assert.Equal(t, "parse_config", ident("rg parse_config"))
-	assert.Equal(t, "buildStep", ident("grep -r buildStep internal/"))
-
-	assert.Empty(t, ident("go test ./... | grep FAIL"), "an output filter is not a precedent hunt")
-	assert.Empty(t, ident("rg needle"), "a lowercase run is as likely to be prose")
-	assert.Empty(t, ident("rg Foo"), "under the length floor")
-	assert.Empty(t, ident("cat internal/hint/hint.go"), "reading a known path asks nothing of the graph")
-}
-
-// TestSymbolSearchDeniesOnlyWhatRefsReplaces pins the condition the deny rests on. refs
-// replaces a grep exactly when the name is an indexed symbol AND the index can be
-// trusted; every other answer leaves the advisory in place, because a deny that routes
-// nowhere takes a capability away. Raw text is the standing case: no index holds a
-// string literal, so grep stays the only tool for it.
-func TestSymbolSearchDeniesOnlyWhatRefsReplaces(t *testing.T) {
+// TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny rests on. A
+// current index that defines the name refuses with refs. A stale one refuses too, serving
+// the rebuild first: the fail-open advice it used to give is what let every symbol search
+// through, since an index goes stale on the first edit. A current index that holds no such
+// name lets the search run, and only a workspace with no index at all is advised.
+func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	verdict := func(defined, definitive bool) ShellVerdict {
 		return Evaluate(Dependencies{
 			SymbolDefined: func(string) (bool, bool) { return defined, definitive },
@@ -42,30 +22,29 @@ func TestSymbolSearchDeniesOnlyWhatRefsReplaces(t *testing.T) {
 	}
 
 	denied := verdict(true, true)
-	assert.NotEmpty(t, denied.Deny, "an indexed symbol under a current index is the case refs replaces exactly")
 	assert.Equal(t, denyRuleSymbolSearch, denied.Rule.Name)
 	assert.Equal(t, "HandleRequest", denied.Rule.Arg, "the deny names the symbol so the trail can count it")
-	assert.Contains(t, denied.Deny, "HandleRequest", "a deny that does not carry the replacement is a lost turn")
+	assert.Contains(t, denied.Deny, "refs HandleRequest --occurrences", "a deny that does not carry the replacement is a lost turn")
+	assert.Contains(t, denied.Deny, "Classified: `HandleRequest` is a name (an identifier's shape, defined in the index)")
+	assert.NotContains(t, denied.Deny, "graph build")
 
 	stale := verdict(true, false)
-	assert.Empty(t, stale.Deny, "a stale index answers unknown, which cannot justify taking grep away")
-	assert.Equal(t, advisoryPrecedent, stale.Kind)
-	// The brief is the only part read on every call, so it owes the reader the reason this
-	// was advice and the command that makes it a deny next time. Without them a stale index
-	// degrades the rule silently, on exactly the branch that is adding the symbols.
-	assert.Contains(t, stale.Brief, "cannot vouch for HandleRequest",
-		"the brief must say the index is behind, not merely prefer refs")
-	assert.Contains(t, stale.Brief, hint.GraphBuild.String(),
-		"an advisory naming a gap owes the command that closes it")
+	assert.Equal(t, denyRuleSymbolSearch, stale.Rule.Name, "a stale index still knows the name, so the search is refused")
+	assert.Contains(t, stale.Deny, hint.GraphBuild.With("--silent")+"`, then `"+hint.Refs.With("HandleRequest", "--occurrences"))
+	assert.Contains(t, stale.Deny, "The symbol index is older than the sources it covers")
+	require.Len(t, stale.Next, 2, "the rebuild, then refs")
+	assert.Equal(t, hint.GraphBuild.With("--silent"), stale.Next[0].Run)
+	assert.Contains(t, stale.Lead, "Classified:", "the lead replaces the deny, so it carries the classification")
 
 	absent := verdict(false, true)
-	assert.Empty(t, absent.Deny, "nothing replaces a search for text no index holds")
-	assert.Equal(t, advisoryPrecedent, absent.Kind)
-	assert.NotContains(t, absent.Brief, "cannot vouch",
-		"a definitive not-a-symbol answer is not staleness; grep is simply right here")
+	assert.Empty(t, absent.Deny, "nothing replaces a search for a name the current index does not hold")
+	assert.Empty(t, absent.Context)
 
 	unwired := Evaluate(Dependencies{}, "grep -r HandleRequest internal/")
-	assert.Empty(t, unwired.Deny, "a caller that supplies no resolver keeps the advisory it had")
+	assert.Empty(t, unwired.Deny, "with no index at all a deny would route nowhere")
+	assert.Equal(t, advisoryPrecedent, unwired.Kind)
+	assert.Contains(t, unwired.Brief, "no symbol index exists yet")
+	assert.Contains(t, unwired.Brief, hint.GraphBuild.With("--silent"))
 }
 
 // The property nothing may erode: a DENY carries its whole reason on every invocation,

@@ -52,7 +52,7 @@ func queueCmd(ctx context.Context, root string, args []string) error {
 func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		queueUsage(stderr)
-		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, gate, or apply)")
+		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, gate, apply, or reviews)")
 	}
 	dir := root
 	if dir == "" {
@@ -77,11 +77,13 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 		verb = queueGate
 	case "apply":
 		verb = queueApply
+	case "reviews":
+		verb = queueReviews
 	case "-h", "--help", "help":
 		queueUsage(stdout)
 		return nil
 	default:
-		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, gate, or apply)", args[0])
+		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, gate, apply, or reviews)", args[0])
 	}
 	err = verb(ctx, e, args[1:])
 	var misuse errUsage
@@ -101,6 +103,7 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "  validate  build and gate a candidate per change, writing each verdict as it is decided (read access only)")
 	fmt.Fprintln(w, "  gate      run a command in a checkout of HEAD boxed and sandboxed as validate runs --gate")
 	fmt.Fprintln(w, "  apply     rebuild and merge the green verdicts <source> holds (holds the write credential; runs no change's code)")
+	fmt.Fprintln(w, "  reviews   say whether each approval on a change carries over the change since it; --dismiss dismisses the rest")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The checkout is the one at the global --root, and relative paths resolve against it.")
 	fmt.Fprintln(w, "Every subcommand prints JSONL events (mergequeue.event/v1) on stdout.")
@@ -223,6 +226,16 @@ func flagGiven(fs *flag.FlagSet, name string) bool {
 func (e *queueEnv) open(ctx context.Context, remote, backend string) (magustypes.VCSDriver, queue.Clone, error) {
 	drv, err := queueOpenVCS(ctx, e.dir, backend, remote)
 	return drv, queue.Clone{Root: e.dir, Remote: remote}, err
+}
+
+// carryPolicy is the checkout's own queue.carry_approvals. The user-global tier is left
+// out: a policy set on one machine would loosen review in every workspace it touches.
+func (e *queueEnv) carryPolicy() (types.CarryPolicy, error) {
+	cfg, err := config.LoadWorkspaceOnly(e.dir)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.Queue.CarryApprovals.Policy(), nil
 }
 
 func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Script, error) {
@@ -401,7 +414,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queue.WriteChanges(e.stdout, changes); err != nil {
 		return err
 	}
-	// Kept for every offline reader: ls jobs, describe job and magus\job\list.
+	// Kept for every offline reader: ls jobs, describe job and magus\job.list.
 	if err := queue.WriteSnapshot(cl.Root, queue.Snapshot{Fetched: fetch, Changes: changes}); err != nil {
 		return fmt.Errorf("keep the snapshot: %w", err)
 	}
@@ -443,6 +456,9 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
+	if planner.CarryPolicy, err = e.carryPolicy(); err != nil {
+		return err
+	}
 	planner.Depth, planner.Parallel, planner.Events = f.Depth, f.Parallel, queue.NewEvents(e.stdout)
 	pl, err := planner.Run(ctx, in)
 	if err != nil {
@@ -452,6 +468,55 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	return queue.RecordPlan(cl.Root, pl)
+}
+
+func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
+	f, _, fs, err := queueParse(e, "reviews", "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]", args, gen.BindQueueReviews)
+	if err != nil {
+		return err
+	}
+	if err := queueRequired("reviews", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}, [2]string{"change", f.Change}); err != nil {
+		return err
+	}
+	opts, err := ResolveOutput(global.output)
+	if err != nil {
+		return err
+	}
+	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
+		return usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
+	}
+	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	remote, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
+	if err != nil {
+		return err
+	}
+	policy, err := e.carryPolicy()
+	if err != nil {
+		return err
+	}
+	p, err := e.openProvider(ctx, f.Provider)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	bf, _, closeFacts, err := e.openFacts(ctx, "reviews", flagGiven(fs, gen.FlagQueueReviewsTarget), f.Facts, f.Target)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = closeFacts() }()
+	report, err := queue.Reviews(ctx, drv, bf, cl, p, queue.ReviewsQuery{
+		Base: f.Base, RemoteURL: remote, Change: f.Change, Head: f.Head, Dismiss: f.Dismiss,
+	}, policy)
+	if err != nil {
+		return err
+	}
+	if opts.Format != FormatText {
+		return queue.WriteReviews(e.stdout, report)
+	}
+	return queue.WriteReviewLines(e.stdout, report)
 }
 
 // remoteHost is the host a remote URL names, "" when it names none. It reads URL forms
@@ -767,6 +832,9 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
+	if a.CarryPolicy, err = e.carryPolicy(); err != nil {
+		return err
+	}
 	if regenerate != nil {
 		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants}, queue.NewHookLog(e.stderr))
 	}

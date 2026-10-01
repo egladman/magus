@@ -133,6 +133,50 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 	return row, row.Validate()
 }
 
+// DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
+// array of them, or one object per line. Each is held to [DecodeDeclaration]'s rules, and a
+// failure names the record by its position, so nothing is applied from a stream with one
+// bad record in it.
+func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
+	raw, err := readInput(r, "records")
+	if err != nil {
+		return nil, err
+	}
+	var parts []json.RawMessage
+	trimmed := strings.TrimSpace(string(raw))
+	switch {
+	case strings.HasPrefix(trimmed, "["):
+		if err := json.Unmarshal([]byte(trimmed), &parts); err != nil {
+			return nil, fmt.Errorf("job: the records are not a JSON array of jobs: %w", err)
+		}
+	case json.Valid([]byte(trimmed)):
+		parts = []json.RawMessage{json.RawMessage(trimmed)}
+	default:
+		for line := range strings.SplitSeq(trimmed, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				parts = append(parts, json.RawMessage(line))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return nil, errors.New("job: the records hold no job")
+	}
+	rows := make([]types.Declaration, 0, len(parts))
+	seen := map[string]int{}
+	for i, part := range parts {
+		row, err := DecodeDeclaration(strings.NewReader(string(part)))
+		if err != nil {
+			return nil, fmt.Errorf("record %d: %w", i+1, err)
+		}
+		if first, dup := seen[row.ID]; dup {
+			return nil, fmt.Errorf("record %d: job: %s is record %d too, and one stream applies each job once", i+1, row.ID, first)
+		}
+		seen[row.ID] = i + 1
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
 func readInput(r io.Reader, what string) ([]byte, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxInputBytes+1))
 	if err != nil {

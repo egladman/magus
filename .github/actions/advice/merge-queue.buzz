@@ -1,6 +1,8 @@
 // Name the command that queues an approved pull request, while it could join the merge
 // queue and has not: open, approved, targeting the queue's base, from this repository,
-// with neither auto-merge nor a queue label on it. Retracted in every other state.
+// with neither auto-merge nor a queue label on it. Retracted in every other state. It
+// also names each approval given at an older commit that still carries over the change
+// since, as `magus queue reviews` classifies it.
 //
 // A pull request queues by enabling auto-merge; the label is how a stack queues from its
 // top. The label's prefix and the merge methods come from `magus queue describe`, so the
@@ -46,6 +48,23 @@ export fun suggestion(base: str, pr: str, prefix: str, methods: [str]) > str {
     return body + "\n";
 }
 
+// carryNotes renders the approvals a `magus queue reviews -o json` report carries over
+// the change since them, one line each; the ones it does not carry the queue-apply
+// reviews job dismisses, and GitHub shows those itself.
+export fun carryNotes(report: str) > str !> any {
+    final lines = mut [<str>];
+    foreach (r in serialize\jsonDecode(report).q("reviews").listValue()) {
+        if (r.q("carry").booleanValue()) {
+            lines.append("- approval by @" + r.q("reviewer").stringValue() + " carries: " + r.q("tier").stringValue()
+                + " (" + r.q("reason").stringValue() + ")");
+        }
+    }
+    if (lines.len() == 0) {
+        return "";
+    }
+    return "Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n" + lines.join("\n") + "\n";
+}
+
 fun main() > void !> any {
     if (advice\collecting()) { return; }
     final pull = advice\pullRequest();
@@ -81,13 +100,27 @@ fun main() > void !> any {
     final methods = mut [<str>];
     foreach (m in caps.q("methods").listValue()) { methods.append(m.stringValue()); }
     var body = "";
+    var title = "Approvals carried over";
     if (queueable(p.q("state").stringValue(), review: p.q("reviewDecision").stringValue(),
         base: p.q("baseRefName").stringValue(), queueBase: queueBase, labels: labels,
         fork: p.q("isCrossRepository").booleanValue(), autoMerge: p.q("autoMergeRequest").map() != null,
         prefix: prefix, methods: methods)) {
         body = suggestion(queueBase, pr: pr, prefix: prefix, methods: methods);
+        title = "Ready for the merge queue";
     }
-    advice\publish(repo, pr: pr, name: section, title: "Ready for the merge queue", body: body);
+    // Read only: the queue-apply reviews job dismisses, on main's code and the app's token.
+    final reviewed = magus\cmd("queue", args: ["reviews", "-o", "json", "--provider", provider, "--base", queueBase, "--change", pr],
+        opts: {"quiet": true, "allow_failure": true});
+    if (reviewed.ok) {
+        final notes = carryNotes(reviewed.stdout);
+        if (notes != "" and body != "") {
+            body = body + "\n";
+        }
+        body = body + notes;
+    } else {
+        std\print("merge-queue: could not classify the approvals: {reviewed.stderr}");
+    }
+    advice\publish(repo, pr: pr, name: section, title: title, body: body);
     std\print("merge-queue: advised {body != ""}");
 }
 
@@ -121,6 +154,16 @@ test "every other state retracts" {
 test "a provider that queues nothing by label still queues by auto-merge" {
     std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["merge-queue: squash"],
         fork: false, autoMerge: false, prefix: "", methods: M), message: "no label is intent");
+}
+
+test "an approval that carries is noted with its tier, and one that does not is left to GitHub" {
+    final report = `{"schema": "mergequeue.reviews/v1", "change": "7", "head": "h", "reviews": [
+        {"reviewer": "ann", "review_id": "12", "commit": "c", "carry": true, "tier": "prose", "changed": [], "reason": "head h is c rebased; changed since the approval: a.md (prose: a prose glob)", "dismissed": false},
+        {"reviewer": "bob", "review_id": "13", "commit": "c", "carry": false, "tier": "code", "changed": [], "reason": "changed since the approval at c: a.go (code: x)", "dismissed": true}
+    ]}`;
+    std\assert(carryNotes(report) == "Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n"
+        + "- approval by @ann carries: prose (head h is c rebased; changed since the approval: a.md (prose: a prose glob))\n", message: "ann's carry, not bob's dismissal");
+    std\assert(carryNotes(`{"schema": "mergequeue.reviews/v1", "change": "7", "head": "h", "reviews": []}`) == "", message: "nothing to note");
 }
 
 test "the advice names gh pr merge --auto for each allowed method, and the label only for a stack" {

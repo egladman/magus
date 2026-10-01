@@ -181,9 +181,10 @@ Only its hash is stored, and it is never logged. A console token is refused at
 `Origin`. Loopback hosts are always accepted. For the `/api/` bridge and the
 Connect services the hosted console reaches, the accept-list also includes the
 hosted site host (`eli.gladman.cc`), so a page at `https://eli.gladman.cc` can
-talk to the local server. `/mcp` stays loopback-only: a site Origin there is
-still 403. A non-loopback `Host` that is not otherwise allow-listed is rejected
-with 403 before the bearer token is examined.
+talk to the local server. A non-loopback `Host` that is not otherwise
+allow-listed is rejected with 403 before the bearer token is examined. `/mcp`
+is not a console route and has no such guard: it answers any origin and relies
+on its bearer token alone (see [MCP](../guides/integrations/mcp.md#security-keep-this-local)).
 
 **CORS.** `Access-Control-Allow-Origin` is set only for:
 

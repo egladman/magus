@@ -41,6 +41,7 @@ import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publ
 import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
 import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
+import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
@@ -71,6 +72,7 @@ export fun rules() > [Rule] {
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
+        Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
     ];
 }

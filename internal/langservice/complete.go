@@ -41,7 +41,7 @@ var builtins = []string{
 }
 
 // CompleteAt returns the completions for the cursor at offset in src. It classifies
-// the cursor context from the raw text (inside an import path, after a `module.`
+// the cursor context from the raw text (inside an import path, after a `module\`
 // member access, or on a bare word), so it stays useful on the half-typed source a
 // live editor calls it with. offset is a byte offset; out-of-range offsets are
 // clamped. Results are sorted and each carries Replace, the length of the partial
@@ -65,13 +65,16 @@ func CompleteAt(src string, offset int) []Completion {
 		return importCompletions(partial)
 	}
 
-	// Member context: `<ident>.<partial>` where ident resolves to a module. Offer
+	// Member context: `<ident>\<partial>` where ident resolves to a module. Offer
 	// that module's methods and fields.
 	if base, partial, ok := memberContext(before); ok {
 		if mod, ok := resolveModule(base, src); ok {
 			return memberCompletions(mod, partial)
 		}
-		return nil // a `.` after a non-module: no host members to offer
+		return nil // a `\` after a non-module: no host members to offer
+	}
+	if afterDot(before) {
+		return nil // a member of a value: no host members to offer
 	}
 
 	// Word context: complete a bare identifier prefix against keywords, modules,
@@ -100,33 +103,41 @@ func importPathContext(before string) (partial string, ok bool) {
 }
 
 // memberContext returns the base identifier and partial member when before ends
-// with `<ident>.<partial>` (partial may be empty right after the dot). It rejects
-// chained access (a.b.c) and numeric/`.`-prefixed forms, which are not module
-// member accesses.
+// with `<ident>\<partial>` (partial may be empty right after the backslash). It
+// rejects chained access (a\b\c, a.b\c), which is not a module member access.
 func memberContext(before string) (base, partial string, ok bool) {
 	i := len(before)
 	for i > 0 && isIdentByte(before[i-1]) {
 		i--
 	}
 	partial = before[i:]
-	if i == 0 || before[i-1] != '.' {
+	if i == 0 || before[i-1] != '\\' {
 		return "", "", false
 	}
-	dot := i - 1
-	j := dot
+	sep := i - 1
+	j := sep
 	for j > 0 && isIdentByte(before[j-1]) {
 		j--
 	}
-	base = before[j:dot]
+	base = before[j:sep]
 	if base == "" {
 		return "", "", false
 	}
-	// Reject a longer chain (a.b.) or a member off a call result: the char before
-	// the base must not itself be an identifier byte or a dot.
-	if j > 0 && (isIdentByte(before[j-1]) || before[j-1] == '.') {
+	// Reject a longer chain (a\b\) or a member off a call result: the char before
+	// the base must not itself be an identifier byte or a separator.
+	if j > 0 && (isIdentByte(before[j-1]) || before[j-1] == '.' || before[j-1] == '\\') {
 		return "", "", false
 	}
 	return base, partial, true
+}
+
+// afterDot reports whether the identifier prefix ending before follows a dot.
+func afterDot(before string) bool {
+	i := len(before)
+	for i > 0 && isIdentByte(before[i-1]) {
+		i--
+	}
+	return i > 0 && before[i-1] == '.'
 }
 
 func importCompletions(partial string) []Completion {

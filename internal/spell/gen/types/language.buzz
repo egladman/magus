@@ -8,5 +8,5 @@
 export object Language {
     name: str = "",
     extensions: [str] = [],
-    comments: CommentSyntax? = null,
+    syntax: Syntax? = null,
 }

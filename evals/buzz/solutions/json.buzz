@@ -1,0 +1,13 @@
+import "std";
+import "encoding/json";
+
+fun main(args: [str]) > void !> any {
+    final doc = json\parse(`{"items": [{"name": "apple", "qty": 2}, {"name": "pear", "qty": 3}]}`);
+    var total = 0;
+    final names = mut [];
+    foreach (item in doc["items"]) {
+        total = total + std\toInt(item["qty"]);
+        names.append(item["name"]);
+    }
+    std\print("total={total} names={names.join(",")}");
+}

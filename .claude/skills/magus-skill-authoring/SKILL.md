@@ -133,7 +133,7 @@ describing one behaviour and nothing catches it.
 
 The body IS a template, including inside fenced code blocks, so a skill that
 documents `{{ }}` syntax must escape it as a string constant. magus-run
-documents the `-o template` flag and magus-buzz-write documents mustache; both hit
+documents the `-o template` flag and magus-buzz-lang documents mustache; both hit
 this:
 
 ```markdown

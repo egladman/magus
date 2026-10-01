@@ -541,6 +541,7 @@ type buzzValueEmitter struct {
 	usesTypes  bool
 	usesSpells bool
 	usesTime   bool
+	usesFFI    bool
 }
 
 func newBuzzValueEmitter() *buzzValueEmitter {
@@ -692,6 +693,12 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		fmt.Fprintf(w, "%s\t%s = %s\n", indent, out, elem)
 		fmt.Fprintf(w, "%s}\n", indent)
 		return out, nil
+	case reflect.Interface:
+		// The field holds a JSON-shaped value of no declared type (host config a harness
+		// merges), so it converts by its dynamic type, the way any other untyped host
+		// value does; the mirror declares it `any?`.
+		e.usesFFI = true
+		return "ffi.AnyVal(" + value + ")", nil
 	default:
 		return "", fmt.Errorf("unsupported field type %s", t)
 	}

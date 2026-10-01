@@ -6,11 +6,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// untimedProbes lifts the probe deadline: the stand-ins these tests wire answer or
+// exit at once, so the shipped 10s measures only how loaded the machine is, and go
+// test's own timeout still catches a real hang.
+func untimedProbes() context.Context {
+	return ContextWithProbeTimeout(context.Background(), time.Hour)
+}
 
 // TestProbeFixturesMatchTheSharedGuardArchive keeps the probe's embedded synthetic
 // events byte-identical to the ones cmd/magus/testdata/script/guard_templates.txtar
@@ -92,7 +100,7 @@ func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 	writeFakeMagusBinary(t, root)
 	writeProbeableHarness(t, root, "broken", probeCommand)
 
-	result, err := VerifyHarness(context.Background(), root, "broken")
+	result, err := VerifyHarness(untimedProbes(), root, "broken")
 	require.NoError(t, err)
 	assert.NotEqual(t, HarnessVerified, result.Status, "a wired command that answers nothing must never read as verified")
 	assert.Equal(t, HarnessUncovered, result.Status)
@@ -107,7 +115,7 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
 	writeProbeableHarness(t, root, "working", probeCommand)
 
-	result, err := VerifyHarness(context.Background(), root, "working")
+	result, err := VerifyHarness(untimedProbes(), root, "working")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 	assert.True(t, result.Guarded)
@@ -124,7 +132,7 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(script), 0o755))
 	writeProbeableHarness(t, root, "chatty", probeCommand)
 
-	result, err := VerifyHarness(context.Background(), root, "chatty")
+	result, err := VerifyHarness(untimedProbes(), root, "chatty")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
 }
@@ -138,7 +146,7 @@ func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 	writeStubGuardScript(t, root, "magus-command.buzz", "pass")
 	writeProbeableHarness(t, root, "wrongdecision", probeCommand)
 
-	result, err := VerifyHarness(context.Background(), root, "wrongdecision")
+	result, err := VerifyHarness(untimedProbes(), root, "wrongdecision")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Status)
 	assert.Contains(t, result.Reason, `"pass"`)
@@ -157,10 +165,26 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 	shOnlyPATH := buildMinimalPATH(t, "sh")
 	t.Setenv("PATH", shOnlyPATH)
 
-	result, err := VerifyHarness(context.Background(), root, "nomagus")
+	result, err := VerifyHarness(untimedProbes(), root, "nomagus")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUnprobed, result.Status)
 	assert.Contains(t, result.Reason, "no magus binary")
+}
+
+// TestVerifyHarnessProbeOutlastingItsDeadlineIsUnprobed pins that a probe cut
+// short says nothing about the config: under memory pressure a working guard
+// misses the deadline too, and uncovered would blame a correct config.
+func TestVerifyHarnessProbeOutlastingItsDeadlineIsUnprobed(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexec sleep 5\n"), 0o755))
+	writeProbeableHarness(t, root, "slow", probeCommand)
+
+	ctx := ContextWithProbeTimeout(context.Background(), 50*time.Millisecond)
+	result, err := VerifyHarness(ctx, root, "slow")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUnprobed, result.Status, result.Reason)
+	assert.Contains(t, result.Reason, "did not finish within 50ms")
+	assert.False(t, result.Guarded)
 }
 
 // TestVerifyHarnessProbeSkipsLifecycleScripts confirms a harness whose only
@@ -179,7 +203,7 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 			writeProbeableHarness(t, root, "lifecycle", command)
 			// No stub script written at all: if this were probed, it would fail.
 
-			result, err := VerifyHarness(context.Background(), root, "lifecycle")
+			result, err := VerifyHarness(untimedProbes(), root, "lifecycle")
 			require.NoError(t, err)
 			assert.Equal(t, HarnessVerified, result.Status)
 		})
