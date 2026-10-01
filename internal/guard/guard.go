@@ -146,6 +146,9 @@ type Dependencies struct {
 	// callDir is the directory the judged call runs in, where its relative paths resolve.
 	// Judge fills it from the envelope's cwd; empty means the hook process's own.
 	callDir string
+	// caller is who makes the judged call, which decides whether a lease acts as a worker.
+	// Judge fills it; zero is an identity-less caller.
+	caller job.Caller
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -445,6 +448,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
+	deps.caller = who.caller()
 	policyDigest := ""
 	if !req.DryRun {
 		policyDigest = recordPolicy(ctx, deps, location, false)
