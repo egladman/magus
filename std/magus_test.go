@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -111,6 +112,36 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 
 	wrong := nestedExecOptions(ctx, map[string]any{"stdin": 7}, nil)
 	assert.Empty(t, wrong.Stdin, "a non-string stdin is ignored rather than rendered")
+}
+
+// TestNestedResultHonorsAllowFailure pins magus.cmd/run/describe to proc.exec's
+// contract: a non-zero exit raises, unless opts.allow_failure returns the result.
+func TestNestedResultHonorsAllowFailure(t *testing.T) {
+	full := []string{"status"}
+	failed := run.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
+
+	_, err := nestedResult("cmd", full, failed, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus.cmd: status exited with code 3")
+
+	got, err := nestedResult("cmd", full, failed, nil, map[string]any{"allow_failure": true})
+	require.NoError(t, err)
+	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
+
+	notStarted := run.ExecResult{Code: -1}
+	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
+	require.ErrorContains(t, err, "no such file")
+	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
+	require.NoError(t, err)
+	assert.Equal(t, -1, got.Code)
+	assert.False(t, got.OK)
+
+	_, err = nestedResult("cmd", full, run.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
+
+	ok, err := nestedResult("cmd", full, run.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, ok.OK)
 }
 
 // TestMagusRaise covers the contract a magusfile author depends on: the code and url
