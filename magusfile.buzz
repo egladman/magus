@@ -1,6 +1,7 @@
 import "magus";
 import "./hack/magusfile/toolchain-policy" as policy;
 import "./hack/magusfile/drift" as drift;
+import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
 import "./hack/magusfile/commits" as commits;
@@ -139,6 +140,7 @@ magus\project({
         "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
         // No isolation flag; see docs/decisions/0001.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
+        "harness-drift": {"skip_cache": "plans with the running binary's harness planner, which no input glob can key"},
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "symbol-digest-generate": {"skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable"},
@@ -1992,11 +1994,25 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
+// Fails when a committed host config file lacks what its wired harness spell renders,
+// naming each file and the command that merges it. It only reads: magus never writes
+// host config. The reads are what `magus describe harness` plans from.
+export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("magusfile.buzz", "hack/magusfile/harness.buzz", "spells/harness/**/*.buzz",
+                   ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
+                   ".codex/rules/*.rules", "opencode.json");
+    final report = hostconfig\stale(magus\describe.harness());
+    if (report.failure != "") {
+        magus\log.info(report.merges);
+        throw report.failure;
+    }
+}
+
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, install_linter, lint_rules);
+    ctx.needs(format, install_linter, lint_rules, harness_drift);
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",

@@ -1,0 +1,67 @@
+namespace harness;
+
+import "magus";
+import "strings";
+import "assert";
+
+// Drift is what harness-drift reports. failure is empty when every host file is current;
+// otherwise it names each stale file in one line. merges holds each drifted host's
+// merge command whole, which is too long for a failure's summary line.
+export object Drift {
+    failure: str = "",
+    merges: str = "",
+}
+
+// stale reads plans as `magus describe harness` returns them. No plans at all is a
+// failure too, since the root wires every host it checks.
+export fun stale(plans: [magus\HarnessPlan]) > Drift {
+    if (plans.len() == 0) {
+        return Drift{ failure = "harness-drift: `magus describe harness` returned no harness; wire one with magus\\harness.provider(<spell>) in the root magusfile" };
+    }
+    final files = mut [<str>];
+    final merges = mut [<str>];
+    foreach (plan in plans) {
+        final paths = mut [<str>];
+        foreach (path in plan.files.keys()) { paths.append(path); }
+        if (paths.len() == 0) { continue; }
+        paths.sort(fun (a: str, b: str) > bool => strings\compare(a, b: b) < 0);
+        foreach (path in paths) { files.append("{path} ({plan.id})"); }
+        merges.append("merge {plan.id} with:\n  {plan.merge}");
+    }
+    if (files.len() == 0) { return Drift{}; }
+    return Drift{
+        failure = "harness-drift: {files.join(", ")} lacks what its harness spell renders; "
+            + "run the merge logged above and commit the result",
+        merges = merges.join("\n"),
+    };
+}
+
+test "a current plan is not drift" {
+    final got = stale([magus\HarnessPlan{ id = "cursor" }]);
+    assert\equal(got.failure, want: "", message: "no files means current");
+    assert\equal(got.merges, want: "", message: "nothing to merge");
+}
+
+test "a drifted plan names each file and its merge command" {
+    final plans = [
+        magus\HarnessPlan{ id = "cursor" },
+        magus\HarnessPlan{
+            id = "claude-code",
+            files = {
+                ".claude/settings.json": magus\HarnessFile{ exists = true },
+                ".claude/agents.md": magus\HarnessFile{ exists = false },
+            },
+            merge = "magus describe harness claude-code -o json | magus buzz -e '...'",
+        },
+    ];
+    final got = stale(plans);
+    assert\isTrue(got.failure.indexOf(".claude/agents.md (claude-code), .claude/settings.json (claude-code)") != null,
+        message: "names every drifted file, sorted");
+    assert\isTrue(got.failure.indexOf("cursor") == null, message: "a current host is not named");
+    assert\isTrue(got.merges.indexOf("magus describe harness claude-code -o json | magus buzz -e '...'") != null,
+        message: "carries the merge command whole");
+}
+
+test "no plans is a failure" {
+    assert\isTrue(stale([<magus\HarnessPlan>]).failure != "", message: "nothing wired cannot pass");
+}

@@ -109,6 +109,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
+| `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
 | `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |

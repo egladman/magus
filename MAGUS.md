@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      56 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -137,6 +137,7 @@ magus graph export -o json  # the whole graph
 | `graph-generate`         | Exports the knowledge and target graphs the browser Graph Explorer loads; with cd it also publishes the knowledge graph.                                                                                                       |
 | `advice-test`            | Runs the PR advisors' `test "..." {}` blocks under a plain `magus buzz -t`, from each script's own directory so their bare `import "advice"` resolves.                                                                         |
 | `buzz-test`              | Runs the in-file `test "..." {}` blocks in this repo's Buzz modules through magus's embedded engine, and holds their merged line coverage above a floor.                                                                       |
+| `harness-drift`          | Fails when a committed host config file lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                           |
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                      |
 
 ## Project: libs/figure
