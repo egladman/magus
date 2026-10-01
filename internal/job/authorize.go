@@ -275,22 +275,16 @@ func runsTheGate(row types.Job) bool {
 	})
 }
 
-// gateCommand renders the command whose output will SATISFY a check, which is not
-// types.LeaseCheck.String(): that renders the DECLARATION. A check naming no charm means
-// the charmless run, so in a workspace setting default_charms the declaration's bare
-// `magus run generate .` produces a `generate:rw` descriptor that the same check then
-// refuses (see bindsTo). Quoting a command guaranteed to fail its own gate is the failure
-// this avoids. Built through hint.Run so a subcommand rename is one edit; types renders
-// its own form because it imports no CLI surface.
+// gateCommand renders the command whose output will SATISFY a check. A check is resolved
+// against default_charms the way `magus run` resolves it (see bindsTo), so the command
+// is the declaration itself. Built through hint.Run so a subcommand rename is one edit;
+// types renders its own form because it imports no CLI surface.
 func gateCommand(c types.LeaseCheck) string {
 	project := c.Project
 	if project == "" {
 		project = "."
 	}
 	args := []string{c.Target, project}
-	if !c.NamesCharm() {
-		args = append(args, "--no-default-charms")
-	}
 	if len(c.Args) > 0 {
 		args = append(args, append([]string{"--"}, c.Args...)...)
 	}

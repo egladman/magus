@@ -517,13 +517,9 @@ func leaseProducers(ctx context.Context, deps Dependencies, workspace string, wr
 	}
 }
 
-// checkCommand renders a check as the command that runs it, quoted for a shell. A check
-// naming no charm is the charmless run, which --no-default-charms spells.
+// checkCommand renders a check as the command that runs it, quoted for a shell.
 func checkCommand(c types.LeaseCheck) string {
 	args := []string{c.Target, cmp.Or(c.Project, ".")}
-	if !c.NamesCharm() {
-		args = append(args, "--no-default-charms")
-	}
 	if len(c.Args) > 0 {
 		args = append(args, "--")
 		for _, a := range c.Args {

@@ -305,19 +305,18 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	} {
 		c, err := types.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
-		assert.True(t, bindsTo(c, att), line)
+		assert.True(t, bindsTo(c, att, nil), line)
 	}
 
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(c, att), "another project is another run")
+	assert.False(t, bindsTo(c, att, nil), "another project is another run")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
 // invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
 // it are two runs; accepting either for the other made a drift gate satisfiable by the
-// run that produces the drift. This workspace sets default_charms, so `test:rw` is what
-// an ordinary run records and a check meaning that form has to say so.
+// run that produces the drift.
 func TestCheckBindsOnCharm(t *testing.T) {
 	t.Parallel()
 
@@ -326,13 +325,68 @@ func TestCheckBindsOnCharm(t *testing.T) {
 
 	charmless, err := types.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(charmless, written), "a written run is not evidence of a gated one")
-	assert.True(t, bindsTo(charmless, gated))
+	assert.False(t, bindsTo(charmless, written, nil), "a written run is not evidence of a gated one")
+	assert.True(t, bindsTo(charmless, gated, nil))
 
 	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
-	assert.True(t, bindsTo(rw, written))
-	assert.False(t, bindsTo(rw, gated), "a gated run is not evidence of a written one")
+	assert.True(t, bindsTo(rw, written, nil))
+	assert.False(t, bindsTo(rw, gated, nil), "a gated run is not evidence of a written one")
+}
+
+// A check is resolved the way `magus run` resolves it, so in a workspace whose
+// default_charms is rw, running the check verbatim records `test:rw` and satisfies it. The
+// charm set is still compared after resolution: a run without the defaults, of another
+// target or in another project is another run.
+func TestCheckBindsUnderDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	defaults := []string{types.CharmReadWrite}
+	cases := []struct {
+		name  string
+		check string
+		att   types.JobAttempt
+		want  bool
+	}{
+		{"the default charm applied", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"an explicit rw", "magus run test:rw .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"its own charm stacked on the default", "magus run test:verify .", types.JobAttempt{Project: ".", Target: "test:verify,rw"}, true},
+		{"narrowing args, which the store does not record", "magus run test . -- -run X", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
+		{"a spell filter", "magus run go::go-test .", types.JobAttempt{Project: ".", Target: "go-test:rw", Spell: "go"}, true},
+		{"ci, which never runs with rw", "magus run ci .", types.JobAttempt{Project: ".", Target: "ci"}, true},
+		{"a different target", "magus run test .", types.JobAttempt{Project: ".", Target: "lint:rw"}, false},
+		{"a different project", "magus run test docs", types.JobAttempt{Project: ".", Target: "test:rw"}, false},
+		{"a run without the defaults", "magus run test .", types.JobAttempt{Project: ".", Target: "test"}, false},
+		{"an extra charm", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw,verify"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			c, err := types.ParseLeaseRunLine(tc.check)
+			require.NoError(t, err)
+			tc.att.Found = true
+			assert.Equal(t, tc.want, bindsTo(c, tc.att, defaults))
+		})
+	}
+}
+
+// A rejected run names the check as it resolved, so the reader sees which charm set the
+// evidence had to carry.
+func TestCheckGateUnderDefaultCharms(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "fix/job-store"}
+	gate := types.CompletionGate{ID: "check", Kind: types.GateKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
+	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
+
+	status := verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "test:rw"}, seen)
+	assert.True(t, status.Verified, status.Violations)
+
+	status = verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "lint:rw"}, seen)
+	assert.False(t, status.Verified)
+	require.Len(t, status.Violations, 1)
+	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.
