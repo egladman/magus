@@ -1252,6 +1252,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					}
 				}
 			default:
+				if callee.IsNull() && !hasStoredKey(vm, receiver, name) {
+					return Null, errUnknownMethod(f, receiver, name)
+				}
 				return Null, errNotCallable(callee)
 			}
 
@@ -1982,6 +1985,32 @@ func errStackOverflow() error { return fmt.Errorf("buzz: call stack overflow (li
 
 //go:noinline
 func errNotCallable(v Value) error { return fmt.Errorf("buzz: %s is not callable", v.buzzKind()) }
+
+// errUnknownMethod reports a call to a member the receiver does not have, at the
+// call's source line: the checker cannot catch it when the receiver is untyped.
+//
+//go:noinline
+func errUnknownMethod(f *frame, receiver Value, name string) error {
+	msg := fmt.Sprintf("unknown method %s on %s", name, receiver.buzzKind())
+	line := f.chunk.lineAt(f.ip - 1)
+	switch {
+	case line == 0:
+		return fmt.Errorf("buzz: %s", msg)
+	case f.chunk.SourceFile != "":
+		return fmt.Errorf("buzz: %s:%d: %s", f.chunk.SourceFile, line, msg)
+	}
+	return fmt.Errorf("buzz: line %d: %s", line, msg)
+}
+
+// hasStoredKey reports whether receiver is a map holding name, so a null found
+// there is a stored value rather than a missing method.
+func hasStoredKey(vm *VM, receiver Value, name string) bool {
+	if receiver.tag() != tagMap {
+		return false
+	}
+	_, ok := vm.asMap(receiver).get(name)
+	return ok
+}
 
 // enumFromValue implements `Suit(v)`, the reverse of `Suit.hearts.value`: it
 // returns the case whose value equals v, or null if none does. The result is
