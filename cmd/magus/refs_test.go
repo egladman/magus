@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
