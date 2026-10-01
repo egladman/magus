@@ -145,7 +145,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 			projects[i] = w.p
 		}
 		toolVersions, unprobeable := m.toolVersionsEach(ctx, projects)
-		observations := m.probeObservations(ctx, projects, nil)
+		observations := m.probeObservations(ctx, projects, symbolIndexDriven(projects))
 		for _, w := range probe {
 			if err := unprobeable[w.p.Path]; err != nil {
 				out[w.at].Freshness = types.SymbolIndexUnvouched

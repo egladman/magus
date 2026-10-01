@@ -1,13 +1,11 @@
 package magus
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -434,52 +432,9 @@ func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
 	if v, ok := m.symbolStatus.get(); ok {
 		return v
 	}
-	v := m.computeSymbolIndexStatus(ctx)
+	v := m.SymbolIndexStatusByStamp(ctx)
 	m.symbolStatus.store(v)
 	return v
-}
-
-// computeSymbolIndexStatus does the actual read-only work: an index-file existence check
-// plus a cache-freshness probe per symbol-capable project. Sorted by project.
-func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
-	capable, langs := m.symbolCapableWithLanguage()
-	if len(capable) == 0 {
-		return nil
-	}
-	cacheDir := resolveCacheDir(m.Root(), m.cfg)
-	// Probed once for the whole sweep, the way a run probes once per invocation: each
-	// tool version costs a subprocess spawn.
-	//
-	// A project with an unprobeable tool is reported unvouched rather than failing the
-	// read. A status read runs no tool and writes no entry, so it cannot mint the
-	// dishonest key MGS3035 exists to stop, and refusing every graph read in the
-	// workspace over one project's tool would hide every other project's answer too.
-	toolVersions, unprobeable := m.toolVersionsEach(ctx, capable)
-	observations := m.probeObservations(ctx, capable, symbolIndexDriven(capable))
-	c := m.freshnessCache(ctx)
-	out := make([]types.SymbolIndexStatus, 0, len(capable))
-	for _, p := range capable {
-		s := types.SymbolIndexStatus{Project: types.NewProjectRef(p.Path, p.Dir), Language: langs[p.Path], Freshness: types.SymbolIndexNotBuilt}
-		if err := unprobeable[p.Path]; err != nil {
-			s.Freshness, s.Detail = types.SymbolIndexUnvouched, err.Error()
-			out = append(out, s)
-			continue
-		}
-		if _, err := os.Stat(symbols.IndexPath(cacheDir, p.Dir)); err == nil {
-			// The index exists; it is fresh only if the scip step would replay for the
-			// current sources (a cache hit means the op would not re-run, so the index
-			// is current).
-			s.Freshness = types.SymbolIndexStale
-			if c != nil {
-				if fresh, ferr := c.IsCached(ctx, m.symbolIndexStep(p, toolVersions[p.Path], observations[p.Path])); ferr == nil && fresh {
-					s.Freshness = types.SymbolIndexFresh
-				}
-			}
-		}
-		out = append(out, s)
-	}
-	slices.SortFunc(out, func(a, b types.SymbolIndexStatus) int { return cmp.Compare(a.Project.Path, b.Project.Path) })
-	return out
 }
 
 // symbolCapableWithLanguage returns the symbol-capable projects and each one's language,

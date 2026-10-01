@@ -485,6 +485,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 			}
 		}
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+	case "query", "explain", "path", "refs":
+		// A graph read asks a running server first and opens the workspace itself only
+		// when none answers, so a preload and a per-process pool would be paid for a read
+		// that spawns no child, and a forward would only be refused: the server adopts run
+		// and affected alone.
+		return dispatchProfile{needsConfig: true}
 	default:
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	}

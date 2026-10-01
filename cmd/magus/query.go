@@ -421,9 +421,9 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 	if err != nil {
 		return err
 	}
-	data, err := trail.ReadBlob(m.CacheDir(), ref)
+	data, err := m.PayloadByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
-		msg := fmt.Sprintf("no stored payload for ref %q; the activity trail may have rotated it out, or the ref is mistyped", ref)
+		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
 		fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
 		return errSilent{exitCode: 2}
 	}
