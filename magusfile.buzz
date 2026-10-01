@@ -681,11 +681,14 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
     githooks\remove(ctx, dir: "hack/git-hooks");
 }
 
-// Regenerates everything derived from the boundary registry: the runtime boundary list
-// and the Go-to-Buzz encoders.
+// Regenerates everything derived from the boundary registry: the runtime boundary list,
+// the Go-to-Buzz encoders, the Buzz-to-Go decoders and the spell contract's signatures.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("internal/interp/bindings/gen/boundary_list.go",
-        "internal/interp/bindings/gen/boundary_objects.go");
+        "internal/interp/bindings/gen/boundary_objects.go",
+        "internal/interp/bindings/gen/decode/decode.go",
+        "internal/interp/bindings/gen/decode/inbound_list_test.go",
+        "internal/interp/bindings/gen/decode/contract.go");
     proc\exec("go", ["generate", "./cmd/magus-utils"]);
 }
 

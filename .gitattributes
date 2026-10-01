@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-345-g84fcd07d3 (commit 84fcd07d3, 2026-09-30T12:48:10-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.4.3-246-g7472f16fc (commit 7472f16fc, 2026-09-30T20:10:05-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -113,6 +113,7 @@ docs/reference/config.md merge=magus linguist-generated
 docs/reference/manpage/*.md merge=magus linguist-generated
 docs/reference/rules/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
+docs/reference/spell-contract.md merge=magus linguist-generated
 docs/src/gen/** merge=magus linguist-generated
 gen/knowledge-graph.json merge=magus linguist-generated
 gen/site/assets/buzz-coverage.svg merge=magus linguist-generated
@@ -126,6 +127,9 @@ internal/handler/mcp/gen/registry.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_objects.go merge=magus linguist-generated
+internal/interp/bindings/gen/decode/contract.go merge=magus linguist-generated
+internal/interp/bindings/gen/decode/decode.go merge=magus linguist-generated
+internal/interp/bindings/gen/decode/inbound_list_test.go merge=magus linguist-generated
 internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated

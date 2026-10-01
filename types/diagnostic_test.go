@@ -41,3 +41,7 @@ func TestAllDiagnosticCodesEnumerated(t *testing.T) {
 func TestManifestScriptDelegationRoutesToMagusfileDocs(t *testing.T) {
 	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1049/", CodeURL(ManifestScriptDelegation))
 }
+
+func TestSpellContractViolatedRoutesToMagusfileDocs(t *testing.T) {
+	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1051/", CodeURL(SpellContractViolated))
+}

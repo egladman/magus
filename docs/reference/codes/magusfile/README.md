@@ -18,3 +18,4 @@ gap is visible before CI runs.
 - [MGS1001](MGS1001.md): no `ci` target defined in the selected project(s).
 - [MGS1002](MGS1002.md): a spell import is shadowed by a same-named spell higher in the tree.
 - [MGS1049](MGS1049.md): a target runs a script a manifest defines, hiding its steps from the cache key.
+- [MGS1051](MGS1051.md): a spell's `mgs_` functions do not match the spell contract, so it does not load.

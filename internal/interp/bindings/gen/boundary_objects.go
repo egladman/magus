@@ -2657,3 +2657,60 @@ func ObjectServiceLease(v types.ServiceLease) vm.Value {
 	out.MapSet("idle", vm.StrValue(v.Idle))
 	return out
 }
+
+func ObjectCommentBlock(v spells.CommentBlock) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("open", vm.StrValue(v.Open))
+	out.MapSet("close", vm.StrValue(v.Close))
+	return out
+}
+
+func ObjectQuote(v spells.Quote) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("open", vm.StrValue(v.Open))
+	out.MapSet("close", vm.StrValue(v.Close))
+	out.MapSet("ignoreEscape", vm.BoolValue(v.IgnoreEscape))
+	return out
+}
+
+func ObjectCommentSyntax(v spells.CommentSyntax) vm.Value {
+	out := vm.NewMap()
+	itemsLineComments := make([]vm.Value, len(v.LineComments))
+	for indexLineComments := range v.LineComments {
+		itemsLineComments[indexLineComments] = vm.StrValue(v.LineComments[indexLineComments])
+	}
+	out.MapSet("lineComments", vm.ListValue(itemsLineComments))
+	itemsBlockComments := make([]vm.Value, len(v.BlockComments))
+	for indexBlockComments := range v.BlockComments {
+		itemsBlockComments[indexBlockComments] = ObjectCommentBlock(v.BlockComments[indexBlockComments])
+	}
+	out.MapSet("blockComments", vm.ListValue(itemsBlockComments))
+	out.MapSet("nested", vm.BoolValue(v.Nested))
+	itemsQuotes := make([]vm.Value, len(v.Quotes))
+	for indexQuotes := range v.Quotes {
+		itemsQuotes[indexQuotes] = ObjectQuote(v.Quotes[indexQuotes])
+	}
+	out.MapSet("quotes", vm.ListValue(itemsQuotes))
+	itemsDirectives := make([]vm.Value, len(v.Directives))
+	for indexDirectives := range v.Directives {
+		itemsDirectives[indexDirectives] = vm.StrValue(v.Directives[indexDirectives])
+	}
+	out.MapSet("directives", vm.ListValue(itemsDirectives))
+	return out
+}
+
+func ObjectLanguage(v spells.Language) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	itemsExtensions := make([]vm.Value, len(v.Extensions))
+	for indexExtensions := range v.Extensions {
+		itemsExtensions[indexExtensions] = vm.StrValue(v.Extensions[indexExtensions])
+	}
+	out.MapSet("extensions", vm.ListValue(itemsExtensions))
+	optComments := vm.Null
+	if v.Comments != nil {
+		optComments = ObjectCommentSyntax((*v.Comments))
+	}
+	out.MapSet("comments", optComments)
+	return out
+}
