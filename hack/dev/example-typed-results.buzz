@@ -5,7 +5,7 @@
 // annotated with the type magus declares for it, so a misspelled field fails the type check
 // before the script runs rather than reading as null.
 //
-//	magus buzz hack/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]
+//	magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]
 //
 // `magus describe module magus` lists every member and the type each returns.
 namespace exampletypedresults;
@@ -16,7 +16,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]";
+final USAGE = "usage: magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]";
 final HELP = "cost: needs the code index\n{USAGE}";
 
 // fileLines classifies paths the way `magus describe file` does: owning project and role.

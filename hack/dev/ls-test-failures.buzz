@@ -5,7 +5,7 @@
 // `magus session ls`. The whole log is `magus query output <ref>`; this is the part of it
 // a fix starts from.
 //
-//	magus buzz hack/ls-test-failures.buzz -- [--ref <output-ref>]
+//	magus buzz hack/dev/ls-test-failures.buzz -- [--ref <output-ref>]
 //
 // go test prints a file's base name; the package line under it supplies the directory, so
 // each path is repository-relative. A failure that names no line (a parent of failed
@@ -20,7 +20,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/ls-test-failures.buzz -- [--ref <output-ref>]";
+final USAGE = "usage: magus buzz hack/dev/ls-test-failures.buzz -- [--ref <output-ref>]";
 final HELP = "cost: none\n{USAGE}";
 
 final FAIL_TEST = std\pattern(`^\s*--- FAIL: (\S+)`);

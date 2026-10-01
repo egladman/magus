@@ -258,7 +258,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]spells.Charm{
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
 		},
@@ -476,6 +476,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
+		ScriptRunners: []spells.Command{
+			{Bin: "poe"},
+			{Bin: "hatch", Args: []string{"run"}},
+			{Bin: "pdm", Args: []string{"run"}},
+			{Bin: "pipenv", Args: []string{"run"}},
+		},
 	},
 	"rust": {
 		Name:               "rust",
@@ -559,6 +565,14 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
+			"esbuild": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "esbuild"}, Hints: goldenPackageManagerHints}},
+			"node-test": {Command: spells.Command{Bin: "node",
+				Args: []string{"--enable-source-maps", "--experimental-test-coverage",
+					"--test-reporter=spec", "--test-reporter-destination=stdout",
+					"--test-reporter=lcov", "--test"},
+				DefaultArgs: []string{"--test-reporter-destination=coverage.lcov"},
+				Hints:       goldenPackageManagerHints},
+				ModeArgs: []string{"--test"}},
 			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
 				Command: goldenDevServerCommand,
 			}},
@@ -566,6 +580,16 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
+		ScriptRunners: []spells.Command{
+			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
+			{Bin: "npm", Args: []string{"test"}}, {Bin: "npm", Args: []string{"t"}},
+			{Bin: "npm", Args: []string{"start"}},
+			{Bin: "pnpm", Args: []string{"run"}}, {Bin: "pnpm", Args: []string{"test"}},
+			{Bin: "pnpm", Args: []string{"start"}},
+			{Bin: "yarn", Args: []string{"run"}}, {Bin: "yarn", Args: []string{"test"}},
+			{Bin: "yarn", Args: []string{"start"}},
+			{Bin: "bun", Args: []string{"run"}},
+		},
 	},
 }
 

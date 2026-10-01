@@ -112,8 +112,8 @@ CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
 
 To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner, `magus buzz hack/on-actions.buzz -- <command>`, or
-in a local Podman container, `magus buzz hack/on-linux.buzz -- <command>`.
+runs it on a GitHub Actions runner, `magus buzz hack/remote/on-actions.buzz -- <command>`, or
+in a local Podman container, `magus buzz hack/remote/on-linux.buzz -- <command>`.
 
 ## Output control: silence runs, read structure
 

@@ -1,7 +1,6 @@
 package diagram
 
 import (
-	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"path"
 	"slices"
 	"strconv"
@@ -165,7 +165,7 @@ func (g graph) fingerprint() string {
 		for _, p := range parts {
 			fmt.Fprintf(h, "%d:%s", len(p), p)
 		}
-		h.Write([]byte{'\n'})
+		_, _ = h.Write([]byte{'\n'})
 	}
 	field(g.id, g.title, g.claim)
 	for _, n := range g.nodes {
@@ -190,15 +190,18 @@ const (
 // context that ended, since that result reflects one client leaving, not the graph.
 type renderCache struct {
 	mu       sync.Mutex
-	order    *list.List // front is most recently used
-	entries  map[string]*list.Element
+	entries  map[string]*renderEntry
+	clock    uint64
 	bytes    int
 	inflight map[string]*renderFlight
 }
 
+// renderEntry is a cached figure. used is the cache clock at its last hit, so the entry
+// with the smallest used is the least recently used. Eviction scans for it: the entry
+// bound keeps that scan short, and a typed map needs no list of untyped elements.
 type renderEntry struct {
-	key string
-	fig Figure
+	fig  Figure
+	used uint64
 }
 
 // renderFlight is a render in progress that concurrent requests for the same key wait on.
@@ -212,8 +215,7 @@ type renderFlight struct {
 
 func newRenderCache() *renderCache {
 	return &renderCache{
-		order:    list.New(),
-		entries:  map[string]*list.Element{},
+		entries:  map[string]*renderEntry{},
 		inflight: map[string]*renderFlight{},
 	}
 }
@@ -229,9 +231,10 @@ func renderKey(g graph, desc, anchorHref string) string {
 func (c *renderCache) get(ctx context.Context, key string, compute func(context.Context) (Figure, error)) (Figure, error) {
 	for {
 		c.mu.Lock()
-		if el, ok := c.entries[key]; ok {
-			c.order.MoveToFront(el)
-			fig := el.Value.(*renderEntry).fig
+		if e, ok := c.entries[key]; ok {
+			c.clock++
+			e.used = c.clock
+			fig := e.fig
 			c.mu.Unlock()
 			return cloneFigure(fig), nil
 		}
@@ -282,19 +285,28 @@ func (c *renderCache) store(key string, fig Figure) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if el, ok := c.entries[key]; ok {
-		c.bytes -= len(el.Value.(*renderEntry).fig.SVG)
-		c.order.Remove(el)
-	}
-	c.entries[key] = c.order.PushFront(&renderEntry{key: key, fig: cloneFigure(fig)})
-	c.bytes += size
-	for c.order.Len() > renderCacheEntries || c.bytes > renderCacheBytes {
-		oldest := c.order.Back()
-		e := oldest.Value.(*renderEntry)
-		c.order.Remove(oldest)
-		delete(c.entries, e.key)
+	if e, ok := c.entries[key]; ok {
 		c.bytes -= len(e.fig.SVG)
 	}
+	c.clock++
+	c.entries[key] = &renderEntry{fig: cloneFigure(fig), used: c.clock}
+	c.bytes += size
+	for len(c.entries) > renderCacheEntries || c.bytes > renderCacheBytes {
+		c.evictOldest()
+	}
+}
+
+// evictOldest drops the least recently used entry. Callers hold mu.
+func (c *renderCache) evictOldest() {
+	var oldest string
+	used := uint64(math.MaxUint64)
+	for k, e := range c.entries {
+		if e.used < used {
+			oldest, used = k, e.used
+		}
+	}
+	c.bytes -= len(c.entries[oldest].fig.SVG)
+	delete(c.entries, oldest)
 }
 
 // cloneFigure copies the slice a caller could otherwise share with the cache.

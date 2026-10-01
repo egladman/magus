@@ -19,6 +19,7 @@ import (
 func loadCommandRule(t *testing.T, src string) (workspace.CommandRule, error) {
 	t.Helper()
 	reg := workspace.NewWorkspaceRegistry()
+	t.Cleanup(func() { _ = reg.Close() })
 	ctx := workspace.ContextWithRegistry(t.Context(), reg)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
@@ -104,6 +105,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 });
 `
 	reg := workspace.NewWorkspaceRegistry()
+	t.Cleanup(func() { _ = reg.Close() })
 	ctx := workspace.ContextWithRegistry(t.Context(), reg)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)

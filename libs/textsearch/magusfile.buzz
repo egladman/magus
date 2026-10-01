@@ -1,15 +1,15 @@
 // No build target: each consumer's esbuild bundles src/ inline.
 
 import "magus";
-import "../../hack/drift" as drift;
-import "../../hack/index" as index;
+import "../../hack/magusfile/drift" as drift;
+import "../../hack/magusfile/index" as index;
 import "fs";
 import "os";
 
 import "proc";
 import "magus/spell/typescript";
 
-import "../../hack/toolchain-policy" as policy;
+import "../../hack/magusfile/toolchain-policy" as policy;
 
 magus\project({
     "tools": {"node": policy\node},

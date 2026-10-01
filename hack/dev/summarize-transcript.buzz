@@ -5,7 +5,7 @@
 // the command the refusal suggested, and the tokens the session spent. With --match it
 // counts, per tool, the calls whose input matches a pattern instead.
 //
-//	magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...
+//	magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...
 //
 // A retry is a refused call whose next call of the same tool is refused by the same rule.
 // A refusal suggests a command on the first indented line under its `next:`. Tokens count
@@ -19,7 +19,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...";
+final USAGE = "usage: magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <transcript.jsonl>...";
 final HELP = "cost: grows with transcript size\n{USAGE}";
 
 // RULE_URL and DENIED_AGAIN name a refusal's rule: the docs link a full refusal ends

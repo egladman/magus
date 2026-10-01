@@ -209,3 +209,11 @@ func (vm *VM) allocObject(ptr *objectInst) Value      { return heapValue(tagObje
 func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return heapValue(tagObjectDef, ptr) }
 func (vm *VM) allocIterState(ptr *iterStateObj) Value { return heapValue(tagIterState, ptr) }
 func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return heapValue(tagEnumVal, ptr) }
+
+// Ownership is a table concern (see Owner); with objects behind Go pointers the
+// collector frees what a session drops, so claiming and releasing do nothing.
+func heapClaim(*Owner, []Value)   {}
+func heapRelease(*Owner, []Value) {}
+func attach(Value, Value)         {}
+
+func alloc[T heapVal](vm *VM, tag valueTag, ptr T) Value { return heapValue(tag, ptr) }

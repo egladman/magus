@@ -24,8 +24,8 @@ import "std";
 import "magus";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
-import "./hack/commits" as conventional;
-import "./hack/changelog" as entries;
+import "./hack/magusfile/commits" as conventional;
+import "./hack/magusfile/changelog" as entries;
 
 final fixLine = "Rewrite it: a conventional title (`fix(cache): keep the key stable`), then a paragraph "
     + "that leads with the problem and the change, one bullet per change and at most one closing "

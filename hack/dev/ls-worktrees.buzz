@@ -5,7 +5,7 @@
 // Clean worktrees are listed too, since "safe to remove" is a row with zeros in it; --dirty
 // keeps only the ones holding uncommitted files.
 //
-//	magus buzz hack/ls-worktrees.buzz -- [--dirty]
+//	magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]
 //
 // Every git call is a read: status runs with --no-optional-locks, so listing a worktree
 // another session is working in never takes its index lock.
@@ -19,7 +19,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/ls-worktrees.buzz -- [--dirty]";
+final USAGE = "usage: magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]";
 final HELP = "cost: grows with the number of worktrees\n{USAGE}";
 
 export object Worktree {

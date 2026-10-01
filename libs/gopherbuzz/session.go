@@ -21,11 +21,16 @@ import (
 // Session is a single Buzz execution context.
 // Not safe for concurrent use; ensure one goroutine owns it at a time.
 type Session struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	env     *vmpackage.Env
-	targets map[string]vmpackage.Callable
-	tests   []TestEntry
+	ctx    context.Context
+	cancel context.CancelFunc
+	env    *vmpackage.Env
+	// owner holds every heap slot this session's values occupy. releaseOnClose
+	// is off when someone else releases them: a parent session (withOwner) or
+	// a caller that took the release (Keep).
+	owner          *vmpackage.Owner
+	releaseOnClose bool
+	targets        map[string]vmpackage.Callable
+	tests          []TestEntry
 	// exportedNames is every name any chunk exported, imports included. It answers
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
@@ -220,6 +225,7 @@ func (s *Session) SetNativeModule(importPath string, v vmpackage.Value) {
 		s.nativeModules = map[string]vmpackage.Value{}
 	}
 	s.nativeModules[importPath] = v
+	s.owner.Claim(v)
 }
 
 // RejectImport gives importPath a host-specific error instead of resolving it.
@@ -360,7 +366,17 @@ func (s *Session) readImportSource(path string) ([]byte, error) {
 // and the test harness — are all embedding contexts where top-level statements
 // are expected. The public NewSession resets to strict (upstream parity) and
 // re-enables leniency only via WithEmbedded.
-func newSession(ctx context.Context) *Session {
+//
+// withOwner puts the session's values under a parent's owner, so it never
+// releases them itself: what a sub-session defines ends up bound in the parent.
+func withOwner(o *vmpackage.Owner) Option {
+	return func(s *Session) {
+		s.owner = o
+		s.releaseOnClose = false
+	}
+}
+
+func newSession(ctx context.Context, opts ...Option) *Session {
 	ctx2, cancel := context.WithCancel(ctx)
 	env := vmpackage.NewEnv()
 	vmpackage.RegisterStdlib(env)
@@ -368,6 +384,8 @@ func newSession(ctx context.Context) *Session {
 		ctx:                ctx2,
 		cancel:             cancel,
 		env:                env,
+		owner:              new(vmpackage.Owner),
+		releaseOnClose:     true,
 		embedded:           true,
 		targets:            make(map[string]vmpackage.Callable),
 		exportedNames:      make(map[string]bool),
@@ -387,6 +405,10 @@ func newSession(ctx context.Context) *Session {
 	// no user identifier can spell, so `test "x" {…}` blocks register their bodies
 	// without any reserved-name collision.
 	env.Define(testRegistrarName, vmpackage.DirectValue(testRegistrarName, s.registerTest))
+	for _, opt := range opts {
+		opt(s)
+	}
+	s.owner.Claim(env.Slots()...)
 	return s
 }
 
@@ -623,7 +645,7 @@ func (s *Session) disableFFI() {
 // uses it so a run file cannot see or mutate the caller's globals — parity with
 // upstream buzz, whose runFile executes the file in its own scope, not the caller's.
 func (s *Session) NewChild() *Session {
-	c := newSession(s.ctx)
+	c := newSession(s.ctx, withOwner(s.owner))
 	c.embedded = s.embedded // inherit the parent session's parse mode
 	c.searchPaths = s.searchPaths
 	c.includeDirs = s.includeDirs
@@ -778,12 +800,14 @@ func (s *Session) execImport(ctx context.Context, code string) ([]string, error)
 	return s.exec(ctx, code)
 }
 
-// enter makes vm the session's current VM (for debugger introspection) and
-// applies any pending step hook, returning a restore func to defer. Save-and-
-// restore lets a pry() eval run a nested VM without losing the paused outer one.
+// enter makes vm the session's current VM (for debugger introspection), charges
+// its allocations to the session's owner and applies any pending step hook,
+// returning a restore func to defer. Save-and-restore lets a pry() eval run a
+// nested VM without losing the paused outer one.
 func (s *Session) enter(vm *vmpackage.VM) func() {
 	prev := s.curVM
 	s.curVM = vm
+	vm.SetOwner(s.owner)
 	if s.stepHook != nil {
 		vm.SetStepHook(s.stepMask, s.stepHook)
 	}
@@ -994,7 +1018,21 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 	if err == nil && s.lineCover != nil {
 		s.lineCover.ObserveChunk(chunk)
 	}
+	claimChunk(s.owner, chunk)
 	return chunk, err
+}
+
+// claimChunk gives o the constants of c and of every function nested in it. The
+// compiler builds them with the package-level constructors, which charge no
+// owner, so the session that compiled or decoded a chunk takes them.
+func claimChunk(o *vmpackage.Owner, c *vmpackage.Chunk) {
+	if c == nil {
+		return
+	}
+	o.Claim(c.Consts...)
+	for _, f := range c.Funs {
+		claimChunk(o, f)
+	}
 }
 
 // checkShared parses and type-checks code against the session's shared scope,
@@ -1487,6 +1525,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	if s.moduleResolver != nil {
 		if v, ok := s.moduleResolver(resolvePath); ok {
 			s.env.Define(boundName, v)
+			s.owner.Claim(v)
 			return ImportResolver, nil
 		}
 	}
@@ -2008,7 +2047,7 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 // loadImportAsAlias executes src in a sub-session that inherits the parent's
 // host globals, then binds the sub-session's new globals as a map under alias.
 func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias string) error {
-	sub := newSession(s.ctx)
+	sub := newSession(s.ctx, withOwner(s.owner))
 	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
@@ -2178,8 +2217,12 @@ func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	return err
 }
 
-// SetGlobal binds name to v in the session's global Env.
-func (s *Session) SetGlobal(name string, v vmpackage.Value) { s.env.Define(name, v) }
+// SetGlobal binds name to v in the session's global Env. v and everything it
+// reaches live as long as the session.
+func (s *Session) SetGlobal(name string, v vmpackage.Value) {
+	s.env.Define(name, v)
+	s.owner.Claim(v)
+}
 
 // GetGlobal returns the value bound to name, or Null if unbound. The signature
 // matches the cross-engine engine.Session interface (which returns a bare
@@ -2189,17 +2232,52 @@ func (s *Session) GetGlobal(name string) vmpackage.Value {
 	return v
 }
 
-// Close releases the session's resources.
+// Close cancels the session's context and releases every heap slot its values
+// occupy. Any Value obtained from the session dangles after Close, so a caller
+// that keeps one (a record every later session reads, say) keeps the session
+// open instead. Closing twice is harmless.
 func (s *Session) Close() error {
 	s.cancel()
+	if s.releaseOnClose {
+		s.release()
+	}
 	return nil
 }
 
+// Keep hands the session's values to the caller: Close then cancels the context
+// only, and the returned func releases them. For a holder of a Value that must
+// outlive the load, such as a guard rule the registry calls after the magusfile
+// that registered it has finished. Releasing twice is harmless.
+func (s *Session) Keep() (release func()) {
+	s.releaseOnClose = false
+	return s.release
+}
+
+// release frees every heap slot the session's values occupy. A host attaches
+// values to a registered module or global after the session claimed it (a
+// merged module table, an enum set on the magus namespace), and those belong to
+// whichever session reaches them: this one, unless another claimed them first.
+func (s *Session) release() {
+	globals := s.env.Slots()
+	roots := make([]vmpackage.Value, 0, len(globals)+len(s.nativeModules))
+	roots = append(roots, globals...)
+	for _, v := range s.nativeModules {
+		roots = append(roots, v)
+	}
+	s.owner.Release(roots...)
+}
+
 // CallValue invokes a Buzz function (or direct callable) Value with the given arguments.
-// Host code (e.g. magus target dispatch) uses this to call back into Buzz.
+// Host code (e.g. magus target dispatch) uses this to call back into Buzz. fn and
+// args become the session's: a host-built argument is released with the session,
+// so pass a fresh one per call rather than one kept across sessions.
 func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
+	s.owner.Claim(fn)
+	for _, arg := range args {
+		s.owner.Claim(arg)
+	}
 	if err := vm.Call(fn, args); err != nil {
 		return vmpackage.Null, err
 	}

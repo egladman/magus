@@ -1,0 +1,530 @@
+import "fs";
+import "proc";
+import "encoding/json";
+import "encoding/yaml";
+import "strings";
+import "advice";
+import "std";
+import "assert";
+
+final section = "trusted-script-moved";
+final workflows_dir = ".github/workflows";
+final default_branch_expr = `${{github.event.repository.default_branch}}`;
+final path_edge = `[^\w./~-]`;
+final regex_meta = [`\`, ".", "+", "*", "?", "(", ")", "[", "]", `{`, `}`, "|", "^", "$"];
+
+export object ChangedFile {
+    filename: str = "",
+    previousFilename: str = "",
+    status: str = "",
+}
+
+export object Step {
+    uses: str = "",
+    ref: str = "",
+    run: str = "",
+}
+
+export object Job {
+    id: str = "",
+    name: str = "",
+    steps: [Step] = [<Step>],
+}
+
+export object Workflow {
+    path: str = "",
+    name: str = "",
+    events: [str] = [<str>],
+    jobs: [Job] = [<Job>],
+}
+
+export object Repository {
+    defaultBranch: str = "",
+    workflows: [Workflow] = [<Workflow>],
+}
+
+export object Finding {
+    file: ChangedFile = ChangedFile{},
+    workflow: str = "",
+    job: str = "",
+    failsAfterMerge: bool = false,
+}
+
+fun asMap(value: any?) > {str: any} { return (value as? {str: any}) ?? {<str: any>}; }
+fun asList(value: any?) > [any] { return (value as? [any]) ?? [<any>]; }
+fun asStr(value: any?) > str { return (value as? str) ?? ""; }
+
+fun parseEvents(on: any?) > [str] {
+    final one = on as? str;
+    if (one != null) { return [one!]; }
+    final events = mut [<str>];
+    foreach (e in asList(on)) { events.append(asStr(e)); }
+    foreach (e, _ in asMap(on)) { events.append(e); }
+    return events;
+}
+
+export fun parseWorkflow(path: str, text: str) > Workflow !> any {
+    final doc = asMap(yaml\parse(text));
+    final jobs = mut [<Job>];
+    foreach (id, body in asMap(doc["jobs"])) {
+        final job = asMap(body);
+        final steps = mut [<Step>];
+        foreach (s in asList(job["steps"])) {
+            final step = asMap(s);
+            steps.append(Step{uses = asStr(step["uses"]), ref = asStr(asMap(step["with"])["ref"]), run = asStr(step["run"])});
+        }
+        jobs.append(Job{id = id, name = asStr(job["name"]), steps = steps});
+    }
+    jobs.sort(fun (a: Job, b: Job) > bool => strings\compare(a.id, b: b.id) < 0);
+    return Workflow{path = path, name = asStr(doc["name"]), events = parseEvents(doc["on"]), jobs = jobs};
+}
+
+fun isWorkflowFile(name: str) > bool { return name.endsWith(".yml") or name.endsWith(".yaml"); }
+
+export fun parseChangedFiles(payload: str) > [ChangedFile] !> any {
+    final moves = mut [<ChangedFile>];
+    foreach (entry in asList(json\parse(payload))) {
+        final f = asMap(entry);
+        final file = ChangedFile{filename = asStr(f["filename"]), previousFilename = asStr(f["previous_filename"]), status = asStr(f["status"])};
+        if (file.status == "renamed" or file.status == "removed") { moves.append(file); }
+    }
+    return moves;
+}
+
+export fun parseRepository(payload: str) > Repository !> any {
+    final repo = asMap(asMap(asMap(json\parse(payload))["data"])["repository"]);
+    final workflows = mut [<Workflow>];
+    foreach (entry in asList(asMap(repo["object"])["entries"])) {
+        final e = asMap(entry);
+        final name = asStr(e["name"]);
+        if (!isWorkflowFile(name)) { continue; }
+        final path = workflows_dir + "/" + name;
+        workflows.append(parseWorkflow(path, text: asStr(asMap(e["object"])["text"])) catch Workflow{path = path});
+    }
+    return Repository{defaultBranch = asStr(asMap(repo["defaultBranchRef"])["name"]), workflows = workflows};
+}
+
+// A job that checks out the default branch runs that branch's scripts, not the pull request's.
+fun checksOutDefault(step: Step, defaultBranch: str) > bool {
+    if (!step.uses.startsWith("actions/checkout@")) { return false; }
+    return step.ref.replace(" ", with: "") == default_branch_expr or step.ref == defaultBranch;
+}
+
+export fun trustedJobs(w: Workflow, defaultBranch: str) > [Job] {
+    final trusted = mut [<Job>];
+    foreach (job in w.jobs) {
+        foreach (step in job.steps) {
+            if (checksOutDefault(step, defaultBranch: defaultBranch)) {
+                trusted.append(job);
+                break;
+            }
+        }
+    }
+    return trusted;
+}
+
+fun literal(text: str) > str {
+    var escaped = text;
+    foreach (meta in regex_meta) { escaped = escaped.split(meta).join(`\` + meta); }
+    return escaped;
+}
+
+export fun mentions(run: str, path: str) > bool {
+    return std\pattern(`(^|` + path_edge + `)(\./)?` + literal(path) + `(` + path_edge + `|$)`).match(run) != null;
+}
+
+fun runs(job: Job, path: str) > bool {
+    foreach (step in job.steps) {
+        if (mentions(step.run, path: path)) { return true; }
+    }
+    return false;
+}
+
+fun movedFrom(file: ChangedFile) > str {
+    if (file.status == "renamed") { return file.previousFilename; }
+    return file.filename;
+}
+
+fun onPullRequests(w: Workflow) > bool {
+    foreach (e in w.events) {
+        if (e.startsWith("pull_request")) { return true; }
+    }
+    return false;
+}
+
+fun trustedJob(workflows: [Workflow], path: str, id: str, defaultBranch: str) > Job? {
+    foreach (w in workflows) {
+        if (w.path != path) { continue; }
+        foreach (job in trustedJobs(w, defaultBranch: defaultBranch)) {
+            if (job.id == id) { return job; }
+        }
+    }
+    return null;
+}
+
+fun workflowAt(workflows: [Workflow], path: str) > Workflow? {
+    foreach (w in workflows) {
+        if (w.path == path) { return w; }
+    }
+    return null;
+}
+
+export fun findings(changed: [ChangedFile], base: [Workflow], head: [Workflow], defaultBranch: str) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (file in changed) {
+        final old = movedFrom(file);
+        foreach (w in base) {
+            foreach (job in trustedJobs(w, defaultBranch: defaultBranch)) {
+                if (!runs(job, path: old)) { continue; }
+                final after = trustedJob(head, path: w.path, id: job.id, defaultBranch: defaultBranch);
+                if (after == null) { continue; }
+                final label = if (after!.name != "") after!.name else after!.id;
+                if (runs(after!, path: old)) {
+                    found.append(Finding{file = file, workflow = w.path, job = label, failsAfterMerge = true});
+                } else if (file.status == "renamed" and runs(after!, path: file.filename)
+                    and onPullRequests(workflowAt(head, path: w.path)!)) {
+                    found.append(Finding{file = file, workflow = w.path, job = label, failsAfterMerge = false});
+                }
+            }
+        }
+    }
+    return found;
+}
+
+export fun title(found: [Finding]) > str {
+    foreach (f in found) {
+        if (f.failsAfterMerge) { return "A trusted job fails after this merges"; }
+    }
+    return "A trusted job runs a script this moves";
+}
+
+export fun body(found: [Finding], defaultBranch: str) > str {
+    final paragraphs = mut [<str>];
+    foreach (f in found) {
+        final job = "the `" + f.job + "` job (`" + f.workflow + "`)";
+        final old = "`" + movedFrom(f.file) + "`";
+        final to = "`" + f.file.filename + "`";
+        final checksOut = "It checks out `" + defaultBranch + "`";
+        if (!f.failsAfterMerge) {
+            paragraphs.append("This pull request moves " + old + " to " + to + ", which " + job + " runs. "
+                + checksOut + ", which has no " + to + " yet, so it skips or fails on this pull request and passes once this merges.");
+        } else if (f.file.status == "removed") {
+            paragraphs.append("**This pull request removes " + old + ", which " + job + " runs.** "
+                + checksOut + ", so it fails after this merges unless the workflow stops running it.");
+        } else {
+            paragraphs.append("**This pull request moves " + old + " to " + to + ", but " + job + " still runs " + old + ".** "
+                + checksOut + ", so it fails after this merges unless the workflow runs " + to + ".");
+        }
+    }
+    return paragraphs.join("\n\n");
+}
+
+final base_query = `query($owner: String!, $name: String!, $expr: String!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef { name }
+    object(expression: $expr) { ... on Tree { entries { name object { ... on Blob { text } } } } }
+  }
+}`;
+
+fun gh(args: [str]) > str !> any {
+    return proc\exec("gh", args: args, dir: ".", opts: {"quiet": true}).stdout;
+}
+
+fun headWorkflows() > [Workflow] !> any {
+    final workflows = mut [<Workflow>];
+    foreach (p in fs\glob(workflows_dir + "/*")) {
+        if (!isWorkflowFile(p.value)) { continue; }
+        workflows.append(parseWorkflow(p.value, text: fs\readFile(p.value)) catch Workflow{path = p.value});
+    }
+    return workflows;
+}
+
+fun main() > void !> any {
+    if (advice\collecting()) { return; }
+    final pull = advice\pullRequest();
+    if (pull.repo == "" or pull.number == "" or pull.base == "") {
+        std\print("trusted-script-moved: no pull request to advise on");
+        return;
+    }
+    if (advice\silenced(pull.repo, pr: pull.number, name: section)) {
+        advice\publish(pull.repo, pr: pull.number, name: section, title: "", body: "");
+        std\print("trusted-script-moved: silenced by label");
+        return;
+    }
+    final moves = parseChangedFiles(gh(["api", "--paginate", "repos/" + pull.repo + "/pulls/" + pull.number + "/files"]));
+    var found = [<Finding>];
+    var defaultBranch = "";
+    if (moves.len() > 0) {
+        final owner = pull.repo.split("/");
+        final base = parseRepository(gh(["api", "graphql", "-f", "query=" + base_query, "-f", "owner=" + owner[0],
+            "-f", "name=" + owner[1], "-f", "expr=" + pull.base + ":" + workflows_dir]));
+        defaultBranch = base.defaultBranch;
+        found = findings(moves, base: base.workflows, head: headWorkflows(), defaultBranch: defaultBranch);
+    }
+    advice\publish(pull.repo, pr: pull.number, name: section, title: title(found), body: body(found, defaultBranch: defaultBranch));
+    std\print("trusted-script-moved: {found.len()} finding(s) over {moves.len()} rename(s) and removal(s)");
+}
+
+fun queueAdvice(script: str) > Workflow {
+    return Workflow{
+        path = ".github/workflows/queue-advice.yaml",
+        events = ["pull_request", "pull_request_review"],
+        jobs = [Job{id = "dashboard", name = "queue dashboard", steps = [
+            Step{uses = "actions/checkout@3d3c42e5", ref = `${{ github.event.repository.default_branch }}`},
+            Step{run = `magus buzz ` + script + ` -- dashboard --all --base "$MAIN"`},
+        ]}],
+    };
+}
+
+fun renamed(previous: str, to: str) > ChangedFile {
+    return ChangedFile{filename = to, previousFilename = previous, status = "renamed"};
+}
+
+test "PR #511: moving the queue dashboard's script passes once it merges" {
+    final found = findings([renamed("hack/pull-requests.buzz", to: "hack/ci/pull-requests.buzz")],
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/ci/pull-requests.buzz")], defaultBranch: "main");
+    assert\equal(title(found), want: "A trusted job runs a script this moves", message: "title");
+    assert\equal(body(found, defaultBranch: "main"),
+        want: "This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, which the "
+            + "`queue dashboard` job (`.github/workflows/queue-advice.yaml`) runs. It checks out `main`, which has "
+            + "no `hack/ci/pull-requests.buzz` yet, so it skips or fails on this pull request and passes once this merges.",
+        message: "body");
+}
+
+test "a rename the workflow does not follow fails after the merge" {
+    final found = findings([renamed("hack/pull-requests.buzz", to: "hack/ci/pull-requests.buzz")],
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
+    assert\equal(title(found), want: "A trusted job fails after this merges", message: "title");
+    assert\equal(body(found, defaultBranch: "main"),
+        want: "**This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, but the "
+            + "`queue dashboard` job (`.github/workflows/queue-advice.yaml`) still runs `hack/pull-requests.buzz`.** "
+            + "It checks out `main`, so it fails after this merges unless the workflow runs `hack/ci/pull-requests.buzz`.",
+        message: "body");
+}
+
+test "removing a script a trusted job still runs fails after the merge" {
+    final removed = ChangedFile{filename = "hack/pull-requests.buzz", status = "removed"};
+    final found = findings([removed], base: [queueAdvice("hack/pull-requests.buzz")],
+        head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
+    assert\equal(found.len(), want: 1, message: "one finding");
+    assert\equal(body(found, defaultBranch: "main"),
+        want: "**This pull request removes `hack/pull-requests.buzz`, which the `queue dashboard` job "
+            + "(`.github/workflows/queue-advice.yaml`) runs.** It checks out `main`, so it fails after this merges "
+            + "unless the workflow stops running it.",
+        message: "body");
+}
+
+test "an unrelated rename is silent" {
+    final found = findings([renamed("hack/labels.buzz", to: "hack/ci/labels.buzz")],
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
+    assert\equal(found.len(), want: 0, message: "silent");
+}
+
+test "a script only an untrusted job runs is silent" {
+    fun untrusted(script: str) > Workflow {
+        return Workflow{path = ".github/workflows/ci.yaml", events = ["pull_request"], jobs = [
+            Job{id = "test", steps = [Step{uses = "actions/checkout@v4"}, Step{run = "./" + script}]},
+            Job{id = "lint", steps = [Step{uses = "actions/checkout@v4", ref = "main"}, Step{run = "magus run lint"}]},
+        ]};
+    }
+    final found = findings([renamed("hack/test.sh", to: "hack/ci/test.sh")],
+        base: [untrusted("hack/test.sh")], head: [untrusted("hack/ci/test.sh")], defaultBranch: "main");
+    assert\equal(found.len(), want: 0, message: "silent");
+}
+
+test "a workflow with no default-branch checkout is silent" {
+    final pinned = Workflow{path = ".github/workflows/pr.yaml", events = ["pull_request"], jobs = [
+        Job{id = "x", steps = [
+            Step{uses = "actions/checkout@v4", ref = `${{ github.event.pull_request.head.sha }}`},
+            Step{run = "magus buzz hack/pull-requests.buzz"},
+        ]},
+    ]};
+    assert\equal(trustedJobs(pinned, defaultBranch: "main").len(), want: 0, message: "no trusted job");
+    final removed = ChangedFile{filename = "hack/pull-requests.buzz", status = "removed"};
+    assert\equal(findings([removed], base: [pinned], head: [pinned], defaultBranch: "main").len(), want: 0, message: "silent");
+}
+
+test "mentions matches whole paths only" {
+    std\assert(mentions("./hack/a.sh && x", path: "hack/a.sh"), message: "behind ./");
+    std\assert(mentions(`magus buzz hack/a.buzz -- x`, path: "hack/a.buzz"), message: "an argument");
+    std\assert(!mentions("magus buzz hack/ci/a.buzz", path: "ci/a.buzz"), message: "a suffix of a longer path");
+    std\assert(!mentions("magus buzz hack/a.buzz.bak", path: "hack/a.buzz"), message: "a prefix of a longer path");
+    std\assert(mentions("x hack/ci/a.buzz; y hack/a.buzz", path: "hack/a.buzz"), message: "a later mention");
+    std\assert(!mentions("magus buzz hack/aXbuzz", path: "hack/a.buzz"), message: "a dot is literal");
+}
+
+test "parseWorkflow decodes the queue dashboard job from YAML" {
+    final w = parseWorkflow(".github/workflows/queue-advice.yaml", text: `name: Queue advice
+on:
+  pull_request:
+    types: [opened]
+  pull_request_review:
+jobs:
+  dashboard:
+    name: queue dashboard
+    steps:
+      - uses: actions/checkout@3d3c42e5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - run: magus buzz hack/pull-requests.buzz -- dashboard
+  advice:
+    name: queue advice
+    steps:
+      - uses: actions/checkout@3d3c42e5
+`);
+    assert\equal(w.name, want: "Queue advice", message: "name");
+    std\assert(w.events.indexOf("pull_request_review") != null, message: "events");
+    final trusted = trustedJobs(w, defaultBranch: "main");
+    assert\equal(trusted.len(), want: 1, message: "one trusted job");
+    assert\equal(trusted[0].name, want: "queue dashboard", message: "the dashboard");
+    std\assert(runs(trusted[0], path: "hack/pull-requests.buzz"), message: "runs the script");
+}
+
+test "the gh payloads decode to moves and the base's workflows" {
+    final moves = parseChangedFiles(`[{"filename": "hack/ci/labels.buzz", "previous_filename": "hack/labels.buzz", "status": "renamed"},
+        {"filename": "hack/bench.sh", "previous_filename": null, "status": "removed"},
+        {"filename": "go.mod", "status": "modified"}]`);
+    assert\equal(moves.len(), want: 2, message: "renames and removals only");
+    assert\equal(movedFrom(moves[0]), want: "hack/labels.buzz", message: "a rename moves its previous name");
+    assert\equal(movedFrom(moves[1]), want: "hack/bench.sh", message: "a removal moves its name");
+    final repo = parseRepository(`{"data": {"repository": {"defaultBranchRef": {"name": "trunk"}, "object": {"entries": [
+        {"name": "README.md", "object": {"text": "x"}},
+        {"name": "ci.yml", "object": {"text": "on: workflow_dispatch\njobs:\n  a:\n    steps: []\n"}},
+        {"name": "broken.yaml", "object": {"text": "jobs: [\n"}}]}}}}`);
+    assert\equal(repo.defaultBranch, want: "trunk", message: "default branch");
+    assert\equal(repo.workflows.len(), want: 2, message: "workflow files only, a broken one kept empty");
+    assert\equal(repo.workflows[0].path, want: ".github/workflows/ci.yml", message: "path");
+    assert\equal(repo.workflows[0].events[0], want: "workflow_dispatch", message: "a bare event");
+    assert\equal(repo.workflows[1].jobs.len(), want: 0, message: "a broken workflow runs nothing");
+}
+
+test "PR #511's real payloads post one finding that passes once merged" {
+    final files = `[
+  {"sha": "8f40e436b164c544166dc862f12c86f8ccd3c05d", "filename": "hack/bench_startup.sh", "status": "removed", "additions": 0, "deletions": 58, "changes": 58},
+  {"sha": "ee68c26e122cada7d8c7f8f26393a45f102bfcad", "filename": "hack/ci/labels.buzz", "status": "renamed", "additions": 2, "deletions": 2, "changes": 4, "previous_filename": "hack/labels.buzz"},
+  {"sha": "0fcf901d3454f2c22d40d002122925ddae5acd54", "filename": "hack/ci/pull-requests.buzz", "status": "renamed", "additions": 10, "deletions": 66, "changes": 76, "previous_filename": "hack/pull-requests.buzz"}
+]`;
+    final queueAdviceAtBase = `name: Queue advice
+
+# The merge-queue advisor: names the label that queues an approved pull request, and
+# retracts it once the pull request is queued, merged or closed. Its own workflow because
+# what it reads changes on labels, reviews and auto-merge, events ci.yaml does not run on
+# and pr.yaml must not: a skipped required check on a label event would read as passing.
+# The same events rerender the pinned "Merge queue" issue (the dashboard job).
+#
+# It runs main's advisor with main's magus and executes no pull-request code.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled, closed, auto_merge_enabled, auto_merge_disabled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: queue-advice-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  advice:
+    name: queue advice
+    # A fork is never queued, so there is nothing to name or retract.
+    if: vars.MAGUS_PR_COMMENTS != 'false' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # No restore either: this job holds pull-requests: write, and a pull request run
+      # restores main's cache scope, which the queue's validation can write.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - uses: ./.github/actions/advice
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          merge-queue: 'true'
+          merge-conflicts: 'false'
+          target-outputs: 'false'
+          doctor: 'false'
+          version-floor: 'false'
+          blast-radius: 'false'
+          unclaimed: 'false'
+          skip-cache: 'false'
+          conformance: 'false'
+          missing-target: 'false'
+          api-surface: 'false'
+          first-contribution: 'false'
+
+  # queue-apply.yaml's dashboard job, run on the events that change a pull request's
+  # place in the queue (a label, a review, auto-merge), so the pinned issue shows them
+  # within a minute instead of after the next validation. Its own job, so issues: write
+  # reaches no step that runs an advisor.
+  dashboard:
+    name: queue dashboard
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: queue-dashboard
+      cancel-in-progress: true
+    permissions:
+      contents: read # check out main; read its tip
+      pull-requests: read # every open and recently merged pull request
+      checks: read # their checks, which say green
+      statuses: read # the merge-queue status, which says why one waits
+      actions: read # queue.yaml's running validation jobs
+      issues: write # the pinned issue's body
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # An unset variable arrives as an empty --issue, and the page goes to the summary alone.
+      - name: Render the merge queue into the run summary and the pinned issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          ISSUE: ${{ vars.MAGUS_QUEUE_DASHBOARD_ISSUE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: magus buzz hack/pull-requests.buzz -- dashboard --all --base "$MAIN" --out "$GITHUB_STEP_SUMMARY" --issue "$ISSUE" --run-url "$RUN_URL"
+`;
+    final base = parseRepository(json\stringify({"data": {"repository": {
+        "defaultBranchRef": {"name": "main"},
+        "object": {"entries": [{"name": "queue-advice.yaml", "object": {"text": queueAdviceAtBase}}]},
+    }}}));
+    final head = parseWorkflow(".github/workflows/queue-advice.yaml",
+        text: queueAdviceAtBase.split("hack/pull-requests.buzz").join("hack/ci/pull-requests.buzz"));
+    final found = findings(parseChangedFiles(files), base: base.workflows, head: [head], defaultBranch: base.defaultBranch);
+    assert\equal(title(found), want: "A trusted job runs a script this moves", message: "title");
+    assert\equal(body(found, defaultBranch: base.defaultBranch),
+        want: "This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, which the "
+            + "`queue dashboard` job (`.github/workflows/queue-advice.yaml`) runs. It checks out `main`, which has "
+            + "no `hack/ci/pull-requests.buzz` yet, so it skips or fails on this pull request and passes once this merges.",
+        message: "body");
+}

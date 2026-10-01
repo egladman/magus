@@ -27,7 +27,9 @@ var blob = []byte{0x00, 0x01, 0xff, 0xfe, 'h', 'i', 0x00, 0x80, 0x7f, 0xff, 'b',
 func newHTTPBytesSession(t *testing.T) *buzz.Session {
 	t.Helper()
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	sess.SetNativeModule("http", registerHTTPBytes())
+	http := vm.NewMap()
+	registerHTTPBytes(http)
+	sess.SetNativeModule("http", http)
 	return sess
 }
 

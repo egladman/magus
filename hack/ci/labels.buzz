@@ -1,7 +1,7 @@
 // This repository's label taxonomy, printed as the `gh label` commands that bring a
 // repository to it. It never runs them: labels are host state a person changes.
 //
-//	magus buzz hack/labels.buzz -- [--repo <owner/name>]
+//	magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]
 //
 // Two families, told apart by prefix and color: a person's intent (`merge-queue:
 // <method>`, `advice: silence[ <advisor>]`) and the queue's answer (`queue: <state>`).
@@ -84,7 +84,7 @@ export fun commands(repo: str) > [str] {
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: [<str>], valued: ["--repo"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "labels: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\nusage: magus buzz hack/labels.buzz -- [--repo <owner/name>]";
+        throw "labels: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\nusage: magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]";
     }
     foreach (c in commands(parsed.values["--repo"] ?? "egladman/magus")) {
         std\print(c);

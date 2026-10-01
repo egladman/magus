@@ -45,6 +45,9 @@ type WorkspaceRegistry struct {
 	commandRule CommandRule
 	// writeRule is the function a magusfile registered via magus\guard.write, or nil.
 	writeRule WriteRule
+	// kept releases what the function rules run on: the Buzz session that
+	// registered each one stays loaded until Close.
+	kept []func()
 	// harnesses are the spell names a magusfile wired as agent harnesses (via
 	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
 	// unlike cache.remote's one.
@@ -223,6 +226,28 @@ func (r *WorkspaceRegistry) CommandRule() CommandRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.commandRule
+}
+
+// Keep takes the release of what a function rule runs on, for Close to call:
+// a rule is a closure over the Buzz session that registered it, and that
+// session's values must last as long as the rule can be called.
+func (r *WorkspaceRegistry) Keep(release func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.kept = append(r.kept, release)
+}
+
+// Close releases what the function rules run on. The rules must not be called
+// afterwards.
+func (r *WorkspaceRegistry) Close() error {
+	r.mu.Lock()
+	kept := r.kept
+	r.kept = nil
+	r.mu.Unlock()
+	for _, release := range kept {
+		release()
+	}
+	return nil
 }
 
 // SetWriteRule records the magus\guard.write rule, on the terms of SetSpawnRule.

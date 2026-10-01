@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13682
-skill_short_bytes: 9336
+skill_full_bytes: 13696
+skill_short_bytes: 9350
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `104` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `a0c231272f99` |
+| `skill-content` | `aa654710e40a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -144,8 +144,8 @@ CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
 
 To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner, `magus buzz hack/on-actions.buzz -- <command>`, or
-in a local Podman container, `magus buzz hack/on-linux.buzz -- <command>`.
+runs it on a GitHub Actions runner, `magus buzz hack/remote/on-actions.buzz -- <command>`, or
+in a local Podman container, `magus buzz hack/remote/on-linux.buzz -- <command>`.
 
 ## Output control: silence runs, read structure
 
@@ -359,8 +359,8 @@ CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
 
 To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner, `magus buzz hack/on-actions.buzz -- <command>`, or
-in a local Podman container, `magus buzz hack/on-linux.buzz -- <command>`.
+runs it on a GitHub Actions runner, `magus buzz hack/remote/on-actions.buzz -- <command>`, or
+in a local Podman container, `magus buzz hack/remote/on-linux.buzz -- <command>`.
 
 ## Output control: silence runs, read structure
 

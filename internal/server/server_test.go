@@ -367,13 +367,15 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
-	// A built console holding the hosted demo's data beside the shell, as the real build does.
+	// A built console as the build leaves it: the shell, the graph surface's stub, and the
+	// hosted demo's data beside them.
 	consoleDir := t.TempDir()
 	for name, body := range map[string]string{
 		"index.html":                 "<html><head>\n</head><body>shell</body></html>",
 		"console.js":                 "js",
 		"sw.js":                      "self",
 		"manifest.webmanifest":       "{}",
+		"graph/index.html":           "<html><head>\n  <base href=\"../\"></head><body>stub</body></html>",
 		"graph/explorer.js":          "js",
 		"graph/knowledge-graph.json": `{"nodes":[{"kind":"note"}]}`,
 		"graph/target-graph.json":    `{"projects":[]}`,

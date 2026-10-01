@@ -6,7 +6,7 @@
 // arguments, then `magus run git-hooks-install .`. spells/git/hooks.buzz writes the shim
 // that runs it; a non-zero exit blocks the git operation, and `--no-verify` skips it.
 // The shim sets BUZZ_INCLUDE_PATH to the workspace root, which is how the import of
-// hack/commits below resolves.
+// hack/magusfile/commits below resolves.
 //
 // Only the base branch is checked. Pull requests are squash merged, so a branch's own
 // subjects never reach main and keep the lowercase imperative style; a commit made on the
@@ -15,7 +15,7 @@ import "fs";
 import "io";
 import "os";
 import "vcs";
-import "hack/commits" as commits;
+import "hack/magusfile/commits" as commits;
 
 // git runs commit-msg before it strips comment lines, so they are skipped here.
 fun subjectOf(message: str) > str {

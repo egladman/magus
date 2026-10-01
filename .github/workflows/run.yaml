@@ -2,7 +2,7 @@ name: Run
 
 # One magus invocation on a pushed commit, with no pull request, started by hand:
 #
-#   magus buzz hack/on-actions.buzz -- magus <argv>
+#   magus buzz hack/remote/on-actions.buzz -- magus <argv>
 #
 # It runs in the box the merge queue gates in, so green here and green in the queue are
 # one claim. Read-only, no secret beyond the job's token, and no write to any shared

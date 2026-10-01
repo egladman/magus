@@ -61,13 +61,38 @@ func requireDirect(t *testing.T, obj vm.Value, name string) vm.Value {
 // like magus.cache.remote where the return is Null and the error is what matters; a
 // DirectValue that yields a non-Null value cannot be read back this way (see
 // requireDirect) and is covered end to end instead.
+//
+// One session per test, not per call: CallValue makes fn and its arguments the
+// session's, and a test calls the same DirectValue with the same handle twice.
 func callVoidDirect(t *testing.T, fn vm.Value, args ...vm.Value) error {
 	t.Helper()
-	ctx := context.Background()
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	defer sess.Close()
-	_, err := sess.CallValue(ctx, fn, args)
+	_, err := callSession(t).CallValue(context.Background(), fn, args)
 	return err
+}
+
+var (
+	callSessionsMu sync.Mutex
+	callSessions   = map[*testing.T]*buzz.Session{}
+)
+
+// callSession returns t's session for callVoidDirect, made on first use and closed
+// when t ends.
+func callSession(t *testing.T) *buzz.Session {
+	t.Helper()
+	callSessionsMu.Lock()
+	defer callSessionsMu.Unlock()
+	if sess, ok := callSessions[t]; ok {
+		return sess
+	}
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	callSessions[t] = sess
+	t.Cleanup(func() {
+		callSessionsMu.Lock()
+		delete(callSessions, t)
+		callSessionsMu.Unlock()
+		_ = sess.Close()
+	})
+	return sess
 }
 
 func TestMatchBuzzTargets(t *testing.T) {

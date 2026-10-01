@@ -503,7 +503,7 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
 - **A `feat`, `fix` or `perf` change to shipped code adds a changelog
   fragment**, as does any title marked breaking with `!`. Every other type
   passes without one, and so do changes that touch only docs, tests, workflows,
-  repository tooling and plans; `hack/changelog.buzz` lists what does not
+  repository tooling and plans; `hack/magusfile/changelog.buzz` lists what does not
   ship. A change no user can notice is not a `feat`, `fix` or `perf`, so
   retitle it rather than add an entry. Check a branch with
   `magus run pr-changelog . -- "<title>"`.
@@ -514,7 +514,7 @@ There is no changelog file to edit: concurrent pull requests add different files
 and never touch a shared one. The docs changelog page renders the fragments and
 the release manifests (`magus run changelog-page docs`), and cutting a release
 folds the fragments into its manifest. `changes/README.md` has the format, and
-`hack/changelog.buzz` is its one parser; a malformed fragment or an unknown
+`hack/magusfile/changelog.buzz` is its one parser; a malformed fragment or an unknown
 group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase

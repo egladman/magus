@@ -178,7 +178,7 @@ func TestDecode_StartService(t *testing.T) {
 }
 
 // TestDecode_PodmanMachine pins the built-in podman spell's machine op, which
-// hack/on-linux.buzz acquires through magus\service.
+// hack/remote/on-linux.buzz acquires through magus\service.
 func TestDecode_PodmanMachine(t *testing.T) {
 	op, ok := Builtins()["podman"].Ops["machine"]
 	require.True(t, ok, "podman declares a machine op")

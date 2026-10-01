@@ -47,13 +47,20 @@ inputs:
       has to act on before they can load the workspace at all.
     required: false
     default: 'true'
+  trusted-script-moved:
+    description: >
+      Comment when the pull request renames or removes a script that a workflow job runs
+      after checking out the default branch. Such a job runs the default branch's copy, so
+      the move breaks it on the pull request or, if the workflow keeps the old path, after
+      the merge.
+    required: false
+    default: 'true'
   blast-radius:
     description: >
       Comment when a change reaches a large share of the workspace, naming the dependency
       chain that pulled each project in. Threshold is `fanout-share`, not a count: five
       projects is most of a small workspace and a rounding error in a large one. The
-      reached projects are drawn as an image uploaded through GitHub's undocumented
-      attachment endpoint; when that fails the comment says why and keeps the console link.
+      comment links the reached projects' graph in the console (`console-base`).
     required: false
     default: 'true'
   fanout-share:

@@ -18,7 +18,7 @@ import (
 // (internal/interp/bindings/hostvsbuzz_bench_test.go)), and the wrong one for
 // everything else:
 //
-//   - POLICY that should be readable by the people it governs. hack/toolchain.buzz
+//   - POLICY that should be readable by the people it governs. hack/magusfile/toolchain.buzz
 //     says so in its own header: "NOTHING HERE IS IN THE MAGUS BINARY, and that is
 //     the point ... it lives in the workspace so its trust decisions are yours to
 //     read and revise."
@@ -52,6 +52,11 @@ type SourceModule struct {
 // one so All() can report both as a single surface.
 var sourceModules = map[string]SourceModule{}
 
+// sourceMethods holds each source module's methods as parsed at registration.
+// The source never changes after init, and every describe surface (the
+// knowledge graph asks once per module) would otherwise parse it all again.
+var sourceMethods = map[string][]Method{}
+
 // RegisterSource adds a Buzz-implemented module to the registry.
 //
 // It PARSES the source and panics on a failure or on a name collision with a Go
@@ -67,10 +72,12 @@ func RegisterSource(m SourceModule) {
 	if _, exists := sourceModules[m.Name]; exists {
 		panic(fmt.Sprintf("std: duplicate source module registration: %q", m.Name))
 	}
-	if _, err := describeSource(m); err != nil {
+	methods, err := describeSource(m)
+	if err != nil {
 		panic(fmt.Sprintf("std: source module %q: %s", m.Name, err))
 	}
 	sourceModules[m.Name] = m
+	sourceMethods[m.Name] = methods
 }
 
 // AllSource returns a snapshot of every registered SourceModule.
@@ -195,14 +202,11 @@ func docSummary(doc string) string {
 // the only observable difference and matters to nothing downstream: codegen reads
 // std.All(), never this.
 func SourceModulesAsModules() []Module {
-	src := AllSource()
-	out := make([]Module, 0, len(src))
-	for _, sm := range src {
-		methods, err := describeSource(sm)
-		if err != nil {
-			methods = nil // unreachable: RegisterSource parses at init
-		}
-		out = append(out, Module{Name: sm.Name, Path: sm.Path, Doc: sm.Doc, Methods: methods})
+	mu.Lock()
+	defer mu.Unlock()
+	out := make([]Module, 0, len(sourceModules))
+	for name, sm := range sourceModules {
+		out = append(out, Module{Name: sm.Name, Path: sm.Path, Doc: sm.Doc, Methods: sourceMethods[name]})
 	}
 	return out
 }

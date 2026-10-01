@@ -28,16 +28,11 @@ type HeapStats struct {
 //
 // Safe to call from any goroutine.
 func ReadHeapStats() HeapStats {
-	s := gHeapPtr.Load()
-	live := 0
-	if s != nil {
-		live = len(*s)
-	}
 	peak := int(gHeapPeak.Load()) - int(gHeapBase.Load())
 	if peak < 0 {
 		peak = 0
 	}
-	return HeapStats{Objects: live, Peak: peak}
+	return HeapStats{Objects: int(gHeapLive.Load()), Peak: peak}
 }
 
 // ResetHeapStats rebases the peak and clears the growth attribution, so the next
@@ -56,12 +51,11 @@ func ResetHeapStats() {
 	resetHeapAttr()
 }
 
-// gHeapPeak is the heap's high-water object count, maintained by gHeapAlloc under
-// gHeapMu. gHeapBase is what ResetHeapStats subtracts so a peak describes one
-// invocation rather than the life of a daemon. Tracked separately from the
-// live length because the two agree only until something reclaims: the planned
-// compaction pass would make them diverge exactly when the peak is the number
-// worth reporting.
+// gHeapPeak is the heap's high-water live object count, maintained by
+// gHeapAlloc under gHeapMu. gHeapBase is what ResetHeapStats subtracts so a
+// peak describes one invocation rather than the life of a daemon. An owner
+// release lowers the live count and leaves the peak, which is the number worth
+// reporting once a session's objects have been reclaimed.
 var (
 	gHeapPeak atomic.Int64
 	gHeapBase atomic.Int64

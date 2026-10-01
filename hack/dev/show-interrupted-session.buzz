@@ -5,7 +5,7 @@
 // the agent said, how it ended, the checkout it worked in, and that checkout's uncommitted
 // and unpushed state. Then it prints, and never runs, the commands that carry the work here.
 //
-//	magus buzz hack/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]
+//	magus buzz hack/dev/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]
 //
 // Sessions come from `magus session ls`, which records each one's host, transcript and
 // checkout. The default is the newest one whose checkout is another worktree of this
@@ -23,7 +23,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]";
+final USAGE = "usage: magus buzz hack/dev/show-interrupted-session.buzz -- [--host claude-code|codex|cursor] [--session <id>]";
 final HELP = "cost: none\n{USAGE}";
 
 // REPLIES is how many of the agent's last messages are shown.

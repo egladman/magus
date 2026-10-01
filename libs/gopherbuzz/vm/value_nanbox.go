@@ -155,8 +155,9 @@ type heapVal interface{ heapKind() valueTag }
 // includes the store, so the load in gHeapGet always sees a slice long enough to
 // contain the index.
 //
-// Objects are never removed (pinned for the process lifetime). Acceptable for
-// short-lived sessions; M5 can add safe-point compaction.
+// A slot lives until the Owner holding it is released (see owner.go); a slot no
+// owner holds lives for the process. Released slots are reused, so the table
+// itself stops growing at the peak number of live objects.
 
 var (
 	gHeapMu  sync.Mutex
@@ -166,27 +167,191 @@ var (
 func init() {
 	s := make([]heapVal, 0, 256)
 	gHeapPtr.Store(&s)
+	gHeapOwner = make([]*Owner, 0, 256)
 }
 
-func gHeapAlloc(ptr heapVal) uint64 {
+var (
+	// gHeapFree holds released slot indices; gHeapAlloc refills them before it
+	// grows the table, so a daemon's table stops at its peak concurrent size.
+	gHeapFree []uint64
+	// gHeapOwner parallels the table: the owner of each slot, nil for none. It
+	// is what lets a claim stop at another owner's values.
+	gHeapOwner []*Owner
+	// gHeapLive is the number of slots holding an object: table length minus
+	// the free list.
+	gHeapLive atomic.Int64
+	// gHeapAllocs counts allocations monotonically. The attribution sampler
+	// reads it: the table length stops growing once slots are reused, but a
+	// line that allocates in a loop is still the line to name.
+	gHeapAllocs atomic.Int64
+	// claimStack is the claim walk's work list, reused across walks. Only
+	// touched under gHeapMu.
+	claimStack []Value
+)
+
+// gHeapAlloc stores ptr in a free slot or a fresh one and hands it to o. The
+// package-level value constructors pass nil: they have no VM to charge, so the
+// slot stays until a VM adopts it (see VM.adopt) or a session claims it.
+func gHeapAlloc(ptr heapVal, o *Owner) uint64 {
 	gHeapMu.Lock()
-	s := *gHeapPtr.Load()
-	idx := uint64(len(s))
-	s = append(s, ptr)
-	// Peak before publish: a HeapStats reader that saw the new pointer first could
-	// otherwise observe objects > peak, contradicting "high-water mark".
-	if n := int64(len(s)); n > gHeapPeak.Load() {
-		gHeapPeak.Store(n)
+	var idx uint64
+	if n := len(gHeapFree); n > 0 {
+		idx = gHeapFree[n-1]
+		gHeapFree = gHeapFree[:n-1]
+		(*gHeapPtr.Load())[idx] = ptr
+	} else {
+		s := *gHeapPtr.Load()
+		idx = uint64(len(s))
+		s = append(s, ptr)
+		gHeapOwner = append(gHeapOwner, nil)
+		gHeapPtr.Store(&s)
 	}
-	gHeapPtr.Store(&s)
+	// Peak before live: a HeapStats reader that saw the new live count first
+	// could otherwise observe objects > peak, contradicting "high-water mark".
+	live := gHeapLive.Load() + 1
+	if live > gHeapPeak.Load() {
+		gHeapPeak.Store(live)
+	}
+	gHeapLive.Store(live)
+	gHeapAllocs.Add(1)
+	if o != nil {
+		gHeapOwner[idx] = o
+		o.slots = append(o.slots, idx)
+	}
 	gHeapMu.Unlock()
 	return idx
+}
+
+// heapClaim is Owner.Claim on this representation.
+func heapClaim(o *Owner, vals []Value) {
+	gHeapMu.Lock()
+	for _, v := range vals {
+		walkLocked(o, v, nil)
+	}
+	gHeapMu.Unlock()
+}
+
+// heapRelease is Owner.Release on this representation.
+func heapRelease(o *Owner, roots []Value) {
+	gHeapMu.Lock()
+	if len(roots) > 0 {
+		seen := make(map[uint64]bool, len(o.slots))
+		for _, v := range roots {
+			walkLocked(o, v, seen)
+		}
+	}
+	s := *gHeapPtr.Load()
+	for _, idx := range o.slots {
+		s[idx] = nil
+		gHeapOwner[idx] = nil
+	}
+	// See owner_race.go: a poisoned slot panics in gHeapGet instead of being
+	// handed out again.
+	if poisonReleased {
+		for _, idx := range o.slots {
+			s[idx] = released{}
+		}
+	} else {
+		gHeapFree = append(gHeapFree, o.slots...)
+	}
+	gHeapLive.Add(-int64(len(o.slots)))
+	o.slots = nil
+	gHeapMu.Unlock()
+}
+
+// released marks a slot poisoned by heapRelease under the race detector.
+type released struct{}
+
+func (released) heapKind() valueTag { return tagNull }
+
+// walkLocked gives o every unowned slot reachable from root; a slot's owner
+// mark is also its visited mark, so a cycle terminates. With seen non-nil the
+// walk also descends through slots o already holds, once each. Callers hold
+// gHeapMu.
+func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
+	s := *gHeapPtr.Load()
+	stack := append(claimStack[:0], root)
+	for len(stack) > 0 {
+		v := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if !ownable(v) {
+			continue
+		}
+		idx := uint64(v) & idxMaskHeap
+		switch owner := gHeapOwner[idx]; {
+		case owner == nil:
+			if s[idx] == nil {
+				continue
+			}
+			if poisonReleased {
+				if _, gone := s[idx].(released); gone {
+					continue
+				}
+			}
+			gHeapOwner[idx] = o
+			o.slots = append(o.slots, idx)
+		case owner == o && seen != nil && !seen[idx]:
+			seen[idx] = true
+		default:
+			continue
+		}
+		switch obj := s[idx].(type) {
+		case *listObj:
+			stack = append(stack, obj.Items...)
+		case *mapObj:
+			stack = append(stack, obj.Vals...)
+			stack = append(stack, obj.keyVals...)
+		case *funObj:
+			stack = append(stack, obj.Upvals...)
+			stack = append(stack, obj.This)
+		case *objectInst:
+			stack = append(stack, obj.Fields...)
+		case *objectDefObj:
+			for i := range obj.StaticFields {
+				stack = append(stack, obj.StaticFields[i].Val)
+			}
+		case *enumDefObj:
+			stack = append(stack, obj.Values...)
+			stack = append(stack, obj.vals...)
+		case *enumValObj:
+			stack = append(stack, obj.Val)
+		case *cellObj:
+			stack = append(stack, obj.v)
+		}
+	}
+	claimStack = stack[:0]
+}
+
+// attach gives v to the owner of container, if one holds it and none holds v.
+// A host that stores a fresh value into a session's map hands it over here, so
+// a member the host later overwrites is not stranded unowned.
+func attach(container, v Value) {
+	if !ownable(v) || !ownable(container) {
+		return
+	}
+	gHeapMu.Lock()
+	if owner := gHeapOwner[uint64(container)&idxMaskHeap]; owner != nil {
+		walkLocked(owner, v, nil)
+	}
+	gHeapMu.Unlock()
+}
+
+// alloc interns ptr for vm's owner and returns its Value. VM code allocates
+// through it rather than heapValue so the object dies with the session.
+func alloc[T heapVal](vm *VM, tag valueTag, ptr T) Value {
+	return encodeHeap(tag, gHeapAlloc(ptr, vm.owner))
 }
 
 // gHeapGet returns the heap object at idx. Lock-free: loads an atomic snapshot
 // of the slice header and indexes it directly.
 func gHeapGet(idx uint64) heapVal {
-	return (*gHeapPtr.Load())[idx]
+	o := (*gHeapPtr.Load())[idx]
+	if poisonReleased {
+		if _, ok := o.(released); ok {
+			panic("buzz: value used after its session closed")
+		}
+	}
+	return o
 }
 
 // heapFineFits fails to COMPILE if a new heap valueTag outgrows the fine field. The
@@ -206,7 +371,7 @@ func encodeHeap(t valueTag, idx uint64) Value {
 // heapValue interns ptr into the global heap table and returns the NaN-box Value.
 // This is the shared constructor used by StrValue, ListValue, NewMap, etc.
 func heapValue[T heapVal](tag valueTag, ptr T) Value {
-	return encodeHeap(tag, gHeapAlloc(ptr))
+	return encodeHeap(tag, gHeapAlloc(ptr, nil))
 }
 
 // internedStrValue returns the string Value for an interned *strObj, caching its
@@ -219,7 +384,7 @@ func internedStrValue(o *strObj) Value {
 	if e := atomic.LoadUint64(&o.heapIdx); e != 0 {
 		return encodeHeap(tagStr, e-1)
 	}
-	idx := gHeapAlloc(o)
+	idx := gHeapAlloc(o, nil)
 	if !atomic.CompareAndSwapUint64(&o.heapIdx, 0, idx+1) {
 		idx = atomic.LoadUint64(&o.heapIdx) - 1
 	}
@@ -272,11 +437,11 @@ func (vm *VM) asPat(v Value) *patObj             { return v.asPat() }
 func (vm *VM) asCell(v Value) *cellObj           { return v.asCell() }
 func (vm *VM) asObjDecl(v Value) *ast.ObjectDecl { return v.asObjDecl() }
 
-// VM-context allocators: intern into the global heap.
-func (vm *VM) allocFun(ptr *funObj) Value             { return heapValue(tagFun, ptr) }
-func (vm *VM) allocMap(ptr *mapObj) Value             { return heapValue(tagMap, ptr) }
-func (vm *VM) allocFib(ptr *fibObj) Value             { return heapValue(tagFib, ptr) }
-func (vm *VM) allocObject(ptr *objectInst) Value      { return heapValue(tagObject, ptr) }
-func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return heapValue(tagObjectDef, ptr) }
-func (vm *VM) allocIterState(ptr *iterStateObj) Value { return heapValue(tagIterState, ptr) }
-func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return heapValue(tagEnumVal, ptr) }
+// VM-context allocators: intern into the global heap under the VM's owner.
+func (vm *VM) allocFun(ptr *funObj) Value             { return alloc(vm, tagFun, ptr) }
+func (vm *VM) allocMap(ptr *mapObj) Value             { return alloc(vm, tagMap, ptr) }
+func (vm *VM) allocFib(ptr *fibObj) Value             { return alloc(vm, tagFib, ptr) }
+func (vm *VM) allocObject(ptr *objectInst) Value      { return alloc(vm, tagObject, ptr) }
+func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return alloc(vm, tagObjectDef, ptr) }
+func (vm *VM) allocIterState(ptr *iterStateObj) Value { return alloc(vm, tagIterState, ptr) }
+func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return alloc(vm, tagEnumVal, ptr) }

@@ -8,7 +8,7 @@ namespace agentpolicy\commits;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
-import "./hack/commits" as conventional;
+import "./hack/magusfile/commits" as conventional;
 
 final plainFix = "Write one subject line, lowercase and imperative, in plain ASCII, with clauses joined "
     + "by `;` and at most 150 characters: no body, no area prefix, no trailing period and no "

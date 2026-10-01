@@ -4,7 +4,7 @@
 // `magus refs --rename`, which grades every file under the acting lease and writes all of
 // them or none. It prints the sites and writes only with --apply.
 //
-//	magus buzz hack/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]
+//	magus buzz hack/dev/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]
 //
 // A regex cannot tell a symbol from a dependency's symbol of the same name, or from the
 // same word in a comment; the index can. A stale or missing index is refused, not rebuilt:
@@ -18,7 +18,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]";
+final USAGE = "usage: magus buzz hack/dev/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]";
 final HELP = "cost: needs the code index\n{USAGE}";
 
 export object Site {

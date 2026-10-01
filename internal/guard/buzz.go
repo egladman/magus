@@ -33,7 +33,7 @@ var buzzWriteSkill = agent.MustSkill("magus-buzz-write")
 // until the reader routed around it. A read also cannot corrupt anything: every error above
 // came from writing on an assumption, not from looking.
 //
-// The extension is the whole test. Buzz lives in magusfiles, spells and hack/*.buzz, and
+// The extension is the whole test. Buzz lives in magusfiles, spells and hack/ scripts, and
 // the one thing they share is the suffix; keying on a directory would miss a workspace that
 // puts its spells somewhere else, which is exactly the shape magus-workspace-rules invites.
 func denyBuzzWriteWithoutSkill(markers hint.Gate, observesSkillLoads bool, workspace, writePath string) string {

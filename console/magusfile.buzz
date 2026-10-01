@@ -1,8 +1,8 @@
 import "magus";
 import "proc";
-import "../hack/advisories" as advisories;
-import "../hack/toolchain-policy" as policy;
-import "../hack/index" as index;
+import "../hack/magusfile/advisories" as advisories;
+import "../hack/magusfile/toolchain-policy" as policy;
+import "../hack/magusfile/index" as index;
 import "fs";
 import "os";
 import "proc";

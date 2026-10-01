@@ -63,6 +63,9 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 		registered = true
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && sess != nil {
 			r.set(reg, sess, args[0])
+			// The rule runs on this session after the load that registered it has
+			// closed, so its values are the registry's to release, not the load's.
+			reg.Keep(sess.Keep())
 		}
 		return vm.Null, nil
 	}))
@@ -142,9 +145,9 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 // callFunctionRule runs a registered rule on req and reads its answer.
 //
 // It runs after the load that registered it has finished and closed its session. That
-// holds because Session.Close only cancels the session's own context, which CallValue
-// does not use: each call runs on a fresh VM under the caller's context, over the
-// globals the load left behind.
+// holds because registration kept the session's values for the registry (see
+// registerFunctionRule), and CallValue runs each call on a fresh VM under the
+// caller's context, over the globals the load left behind.
 func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, member string, req vm.Value, facts hint.Gate) (verdict types.GuardVerdict, err error) {
 	name := `magus\guard.` + member
 	// Workspace code runs on every call the guard judges; an interpreter fault inside it

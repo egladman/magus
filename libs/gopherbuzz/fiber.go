@@ -58,7 +58,13 @@ func (s *Session) ResolveFiber(ctx context.Context, fiber vmpackage.Value) (vmpa
 // VM per invocation, same argument convention.
 //
 // Nothing runs until the first resume, so a caller can arm its finalizer before any of
-// the body has executed.
+// the body has executed. As with CallValue, fn and args become the session's.
 func (s *Session) NewFiber(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
-	return vmpackage.NewVM(ctx).NewFiber(fn, args)
+	vm := vmpackage.NewVM(ctx)
+	vm.SetOwner(s.owner)
+	s.owner.Claim(fn)
+	for _, arg := range args {
+		s.owner.Claim(arg)
+	}
+	return vm.NewFiber(fn, args)
 }

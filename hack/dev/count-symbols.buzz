@@ -4,7 +4,7 @@
 // word of their names, the census a naming or consolidation review starts from. With
 // --kind it lists the names of that kind instead, each with its file and line.
 //
-//	magus buzz hack/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]
+//	magus buzz hack/dev/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]
 //
 // The project defaults to the root one (.); --top bounds the name-prefix table (15). A
 // stale or missing index is refused rather than counted: its numbers would be last
@@ -17,7 +17,7 @@ import "std";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]";
+final USAGE = "usage: magus buzz hack/dev/count-symbols.buzz -- [--project <path>] [--kind <kind>] [--top <n>]";
 final HELP = "cost: needs the code index\n{USAGE}";
 
 export object Symbol {

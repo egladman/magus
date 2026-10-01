@@ -1,113 +1,122 @@
-// hack-scripts-start-with-a-verb refuses a script at the root of hack/ whose name does not
-// say what running it does, and a hack/README.md that leaves a script out.
+// hack-scripts-start-with-a-verb refuses a hack/ script whose name does not say what
+// running it does, a script outside the directory of whoever runs it, and a hack/README.md
+// that leaves a script or module out.
 //
-// A script a person or agent runs starts with a verb from a closed list, and the verb is
-// the contract: ls, show, count, diff, summarize and example only read; rename and split
-// write, and only with --apply. A script named on-<where> runs the command that follows
-// it somewhere else. The libraries the magusfile imports keep their nouns. hack/ci/, the
-// steps only a CI workflow runs, is not read.
+// A script a person or agent runs (hack/dev, hack/bench, hack/ci) starts with a verb from a
+// closed list, and the verb is the contract: ls, show, count, diff, summarize and example
+// only read; time runs what it names and reports how long, writing nothing in the tree;
+// rename and split write, and only with --apply. A script in hack/remote is named
+// on-<where> and runs the command that follows it there, and only there. The modules
+// magusfiles import (hack/magusfile) keep their nouns, and hack/ itself holds no script.
+// lint, policy and git-hooks run through their own entry points and are not read.
 namespace hackscriptverbs;
 
 import "assert";
-import "fs";
 import "path";
 import "magus/lint";
+import "hack/lint/support" as support;
 
-final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example"];
+final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time"];
 final WRITE_VERBS = ["rename", "split"];
 
-// NOUNS are the libraries the magusfile imports, and the scripts named before the verb
-// rule. labels, host-schemas and pull-requests are run by a person, so each is due a verb
-// name.
-final NOUNS = ["advisories", "changelog", "commits", "drift", "index", "lint", "toolchain", "toolchain-policy",
-    "labels", "host-schemas", "pull-requests"];
+// NOUNS are the scripts named before the verb rule, and the workflow steps a person never
+// runs. host-schemas keeps its noun: its fetch step writes, which no read verb allows.
+// TODO: rename hack/ci/labels to show-labels; it only prints gh commands.
+// TODO: rename hack/ci/pull-requests to show-pull-requests once apply and dashboard write
+// only behind --apply, the contract every write verb here keeps.
+final NOUNS = ["hack/ci/merge-queue", "hack/ci/labels", "hack/ci/pull-requests", "hack/dev/host-schemas"];
+
+final MODULES = "hack/magusfile/";
+final REMOTE = "hack/remote/";
 
 export fun reads() > [str] {
-    return ["hack/*.buzz", "hack/README.md"];
+    return ["hack/**/*.buzz", "hack/README.md"];
 }
 
-// nameProblem is why a script's name breaks the rule, or "".
-export fun nameProblem(name: str) > str {
-    if (name.startsWith("on-") or NOUNS.indexOf(name) != null) {
+// listed reports whether the README must name p: every script and every magusfile module.
+fun listed(p: str) > bool {
+    return support\scriptDir(p) != "" or (p.startsWith(MODULES) and p.indexOf("/", from: MODULES.len()) == null);
+}
+
+// nameProblem is why the name of the .buzz file at p breaks the rule, or "".
+export fun nameProblem(p: str) > str {
+    final dir = support\scriptDir(p);
+    if (dir == "") {
+        if (p.indexOf("/", from: 5) == null) {
+            return "{p} sits at the root of hack/, which holds no script";
+        }
+        return "";
+    }
+    final stem = p.replace(".buzz", with: "");
+    final name = stem.sub(dir.len());
+    if (dir == REMOTE) {
+        return if (name.startsWith("on-")) "" else "{p} is in hack/remote/, whose scripts are named on-<where>";
+    }
+    if (name.startsWith("on-")) {
+        return "{p} runs a command elsewhere, which is what hack/remote/ holds";
+    }
+    if (NOUNS.indexOf(stem) != null) {
         return "";
     }
     final verb = name.split("-")[0];
     if (READ_VERBS.indexOf(verb) != null or WRITE_VERBS.indexOf(verb) != null) {
         return "";
     }
-    return "hack/{name}.buzz starts with `{verb}`, which is not a verb this directory names scripts with";
-}
-
-fun read(f: Path) > str !> any {
-    return fs\readFile(if (f.base == "") f.value else f.base + "/" + f.value);
+    return "{p} starts with `{verb}`, which is not a verb hack/ names scripts with";
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
-    var readme = "";
-    foreach (f in files) {
-        if (f.value == "hack/README.md") {
-            readme = read(f);
-        }
-    }
+    final readme = support\named(files, p: "hack/README.md");
+    final listing = if (readme == null) "" else support\read(readme!);
     foreach (f in files) {
         if (!f.value.endsWith(".buzz")) {
             continue;
         }
-        final name = path\clean(f.value).sub(5).replace(".buzz", with: "");
-        final problem = nameProblem(name);
+        final p = path\clean(f.value);
+        final problem = nameProblem(p);
         if (problem != "") {
             found.append(Finding{ path = f.value, line = 1, message = problem,
-                fix = "Rename it <verb>-<object>. Read-only: {READ_VERBS.join(", ")}. Writes, only with --apply: {WRITE_VERBS.join(", ")}. Runs a command elsewhere: on-<where>." });
+                fix = "Move it to the directory of whoever runs it and name it <verb>-<object>. Read-only: {READ_VERBS.join(", ")}. "
+                    + "Writes, only with --apply: {WRITE_VERBS.join(", ")}. Runs a command elsewhere: hack/remote/on-<where>. "
+                    + "Imported by a magusfile: hack/magusfile/<noun>." });
         }
-        if (readme.indexOf(f.value) == null) {
-            found.append(Finding{ path = "hack/README.md", line = 1, message = "hack/README.md does not list {f.value}",
-                fix = "Add its row, with its effect and cost, under the section its name puts it in." });
+        if (listed(p) and listing.indexOf(p) == null) {
+            found.append(Finding{ path = "hack/README.md", line = 1, message = "hack/README.md does not list {p}",
+                fix = "Add its row, with its effect and cost, under its directory's section." });
         }
     }
     return found;
 }
 
-fun fixture(files: {str: str}) > [Path] !> any {
-    final root = fs\tempDir("hack-verbs-");
-    final paths = mut [<Path>];
-    foreach (p, body in files) {
-        fs\mkdirAll(fs\dirname(root + "/" + p));
-        fs\writeFile(root + "/" + p, content: body);
-        paths.append(Path{ value = p, base = root });
-    }
-    return paths;
-}
-
-fun messages(found: [Finding]) > [str] {
-    final acc = mut [<str>];
-    foreach (f in found) {
-        acc.append(f.message);
-    }
-    return acc;
-}
-
-test "a verb, an on- prefix or a listed noun passes" {
-    foreach (name in ["ls-worktrees", "rename-symbol", "example-typed-results", "on-linux", "changelog", "toolchain-policy"]) {
-        assert\equal(nameProblem(name), want: "", message: name);
+test "a verb in a script directory, on- in hack/remote, a module or a listed noun passes" {
+    foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/bench/time-startup.buzz",
+                   "hack/remote/on-linux.buzz", "hack/magusfile/changelog.buzz", "hack/ci/merge-queue.buzz",
+                   "hack/lint/support.buzz", "hack/policy/guard.buzz"]) {
+        assert\equal(nameProblem(p), want: "", message: p);
     }
 }
 
-test "a script named for its subject rather than its effect is refused, and so is one the README leaves out" {
-    final got = check(fixture({
-        "hack/README.md": "| `ls-worktrees` | read-only | `magus buzz hack/ls-worktrees.buzz` |\n",
-        "hack/ls-worktrees.buzz": "",
-        "hack/transcript-tally.buzz": "",
+test "a noun, a misplaced on- script and a script at the root of hack/ are refused" {
+    assert\equal(nameProblem("hack/dev/transcript-tally.buzz"),
+        want: "hack/dev/transcript-tally.buzz starts with `transcript`, which is not a verb hack/ names scripts with", message: "noun");
+    assert\equal(nameProblem("hack/remote/show-host.buzz"),
+        want: "hack/remote/show-host.buzz is in hack/remote/, whose scripts are named on-<where>", message: "remote");
+    assert\equal(nameProblem("hack/dev/on-mac.buzz"),
+        want: "hack/dev/on-mac.buzz runs a command elsewhere, which is what hack/remote/ holds", message: "on- outside remote");
+    assert\equal(nameProblem("hack/ls-things.buzz"), want: "hack/ls-things.buzz sits at the root of hack/, which holds no script", message: "root");
+}
+
+test "the README lists every script and module, and nothing under lint or policy" {
+    final got = check(support\fixture({
+        "hack/README.md": "| `magus buzz hack/dev/ls-worktrees.buzz` | read-only |\n",
+        "hack/dev/ls-worktrees.buzz": "",
+        "hack/dev/count-things.buzz": "",
+        "hack/magusfile/drift.buzz": "",
+        "hack/lint/support.buzz": "",
     }));
-    assert\equal(messages(got), want: [
-        "hack/transcript-tally.buzz starts with `transcript`, which is not a verb this directory names scripts with",
-        "hack/README.md does not list hack/transcript-tally.buzz",
+    assert\equal(support\messages(got), want: [
+        "hack/README.md does not list hack/dev/count-things.buzz",
+        "hack/README.md does not list hack/magusfile/drift.buzz",
     ], message: "findings");
-}
-
-test "reads() takes the root of hack/ and leaves hack/ci/ and the rule files alone" {
-    final globs = reads();
-    assert\equal(path\matchesAny(globs, path: "hack/rename-symbol.buzz"), want: true, message: "root script");
-    assert\equal(path\matchesAny(globs, path: "hack/ci/merge-queue.buzz"), want: false, message: "ci step");
-    assert\equal(path\matchesAny(globs, path: "hack/lint/hack-scripts-start-with-a-verb.buzz"), want: false, message: "rule file");
 }

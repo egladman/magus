@@ -1,12 +1,12 @@
 // This repository's file linter: the conventions on its non-Go files that no compiler or
 // off-the-shelf linter checks. The root lint-rules target runs it:
 //
-//	magus buzz hack/lint.buzz
+//	magus buzz hack/lint/run.buzz
 //
 // A person narrows a run to the files they touched or to one rule:
 //
-//	magus buzz hack/lint.buzz -- <path>...       the findings at these files
-//	magus buzz hack/lint.buzz -- --rule <name>   one rule over the whole tree
+//	magus buzz hack/lint/run.buzz -- <path>...       the findings at these files
+//	magus buzz hack/lint/run.buzz -- --rule <name>   one rule over the whole tree
 //
 // Each rule is a file hack/lint/<rule>.buzz exporting reads(), the globs it reads, and
 // check(files), which returns a Finding per violation. The runner walks the tree once,
@@ -30,6 +30,7 @@ import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generated
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
+import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/package-install-targets-never-replay" as installs;
@@ -68,6 +69,7 @@ export fun rules() > [Rule] {
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
+        Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
     ];
@@ -154,7 +156,7 @@ export fun run(rules: [Rule], files: [str]) > [Finding] !> any {
 export final FOOTPRINT = "lint-rules-keys-on-what-the-rules-read";
 
 // SOURCES are the linter's own files, which lint-rules keys on beside what the rules read.
-export final SOURCES = ["hack/lint.buzz", "hack/lint/*.buzz"];
+export final SOURCES = ["hack/lint/*.buzz"];
 
 // claims reports whether a readsFiles glob of the root project keys rel. It mirrors
 // types.GlobClaims: a file inside a nested project is that project's, so only a glob
@@ -253,7 +255,7 @@ fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
     }
     if (declared == null) {
         return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no lint-rules target",
-            fix = "hack/lint.buzz is what lint-rules runs; update this check if the target was renamed." }];
+            fix = "hack/lint/run.buzz is what lint-rules runs; update this check if the target was renamed." }];
     }
     final line = support\lineOf(fs\readFile("magusfile.buzz"), needle: "export fun lint_rules(");
     return footprintFindings(read, declared: declared!, nested: nested, line: line);
@@ -278,7 +280,7 @@ export fun render(f: Finding) > str {
     return s;
 }
 
-final usage = "usage: magus buzz hack/lint.buzz [-- [--rule <name>] [<path>...]]\n"
+final usage = "usage: magus buzz hack/lint/run.buzz [-- [--rule <name>] [<path>...]]\n"
     + "  bare            every rule over the whole tree\n"
     + "  <path>...       only the findings at these files, from the rules that read them\n"
     + "  --rule <name>   only that rule";

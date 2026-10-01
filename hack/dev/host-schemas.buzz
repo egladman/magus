@@ -9,8 +9,8 @@
 // Two steps, because reading upstream and WRITING from it are different acts, and only
 // one of them should be able to change the tree.
 //
-//	magus buzz hack/host-schemas.buzz -- verify   re-fetch, report drift, write nothing
-//	magus buzz hack/host-schemas.buzz -- fetch    re-fetch and write the moved files
+//	magus buzz hack/dev/host-schemas.buzz -- verify   re-fetch, report drift, write nothing
+//	magus buzz hack/dev/host-schemas.buzz -- fetch    re-fetch and write the moved files
 //
 // Neither is the default: a bare run prints the usage line and fails, like every hack/
 // script whose steps differ in what they write.
@@ -29,6 +29,7 @@ import "fs";
 import "http";
 import "crypto";
 import "archive";
+import "flags";
 
 import "assert";
 
@@ -209,27 +210,40 @@ export fun schemas(write: bool) > [Schema] !> any {
     return rows;
 }
 
-final usage = "usage: magus buzz hack/host-schemas.buzz -- <step>\n"
+final usage = "usage: magus buzz hack/dev/host-schemas.buzz -- <step>\n"
     + "  verify   re-fetch and report drift; writes nothing\n"
     + "  fetch    re-fetch and write the vendored schemas that moved";
 
-// parse returns the step args name. Neither step is a default, and neither takes a flag.
+final HELP = "cost: network; fetch also writes testdata/hosts\n{usage}";
+
+// parse returns the step args name, or "--help". Neither step is a default, and neither
+// takes a flag.
 export fun parse(args: [str]) > str !> any {
-    if (args.len() == 0) {
+    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        return "--help";
+    }
+    // flags\parse hands back undeclared words in order, so the step is the first of them.
+    final words = parsed.unknown + parsed.positionals;
+    if (words.len() == 0) {
         throw "host-schemas: no step given\n{usage}";
     }
-    final step = args[0];
+    final step = words[0];
     if (step != "verify" and step != "fetch") {
         throw "host-schemas: unknown step \"{step}\"\n{usage}";
     }
-    if (args.len() > 1) {
-        throw "host-schemas: {step} does not take {args.sub(1).join(" ")}\n{usage}";
+    if (words.len() > 1) {
+        throw "host-schemas: {step} does not take {words.sub(1).join(" ")}\n{usage}";
     }
     return step;
 }
 
 export fun main(args: [str]) > void !> any {
     final step = parse(args);
+    if (step == "--help") {
+        std\print(HELP);
+        return;
+    }
     final write = step == "fetch";
 
     var checked = 0;
@@ -304,4 +318,9 @@ test "verify and fetch are the steps, and neither takes a flag" {
     assert\equal(parse(["verify"]), want: "verify", message: "verify");
     assert\equal(parse(["fetch"]), want: "fetch", message: "fetch");
     assert\equal(refusal(["fetch", "--force"]), want: "host-schemas: fetch does not take --force\n" + usage, message: "a flag");
+}
+
+test "--help names the cost and runs no step" {
+    assert\equal(parse(["--help"]), want: "--help", message: "help");
+    assert\isTrue(HELP.startsWith("cost: "), message: "the first line is the cost");
 }

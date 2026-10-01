@@ -1,5 +1,5 @@
 // What the lint rules share: reading a handed-in file, turning a byte offset into a line,
-// and writing a fixture tree for a rule's tests. Not a rule itself, so hack/lint.buzz
+// and writing a fixture tree for a rule's tests. Not a rule itself, so hack/lint/run.buzz
 // does not name it.
 namespace support;
 
@@ -12,6 +12,21 @@ import "encoding/yaml";
 import "magus/lint";
 
 import "assert";
+
+// SCRIPT_DIRS are the hack/ directories whose files a person, an agent or a workflow runs,
+// each *.buzz directly inside one. hack/magusfile holds the modules magusfiles import, and
+// lint, policy and git-hooks are run through their own entry points.
+export final SCRIPT_DIRS = ["hack/dev/", "hack/remote/", "hack/bench/", "hack/ci/"];
+
+// scriptDir is the SCRIPT_DIRS entry p sits directly inside, or "".
+export fun scriptDir(p: str) > str {
+    foreach (dir in SCRIPT_DIRS) {
+        if (p.startsWith(dir) and p.endsWith(".buzz") and p.indexOf("/", from: dir.len()) == null) {
+            return dir;
+        }
+    }
+    return "";
+}
 
 // read returns the file f names. The runner hands workspace-relative paths with no base;
 // a test's fixture carries its temporary directory as the base.

@@ -2,8 +2,8 @@
 // through libs/testlayout/.custom-gcl.yml.
 
 import "magus";
-import "../../hack/drift" as drift;
-import "../../hack/index" as index;
+import "../../hack/magusfile/drift" as drift;
+import "../../hack/magusfile/index" as index;
 
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.

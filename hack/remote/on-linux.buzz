@@ -2,9 +2,9 @@
 // a command. It costs a local container, plus an image pull and a Go module download
 // (network) the first time.
 //
-//	magus buzz hack/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...
-//	magus buzz hack/on-linux.buzz -- --ls
-//	magus buzz hack/on-linux.buzz -- --delete <id>
+//	magus buzz hack/remote/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...
+//	magus buzz hack/remote/on-linux.buzz -- --ls
+//	magus buzz hack/remote/on-linux.buzz -- --delete <id>
 //
 // The options come first; the first word that is not one of them starts the command, which
 // runs verbatim, so `-- magus run test --keep` keeps its own --keep. A bare `--` also ends
@@ -65,7 +65,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...\n       magus buzz hack/on-linux.buzz -- --ls\n       magus buzz hack/on-linux.buzz -- --delete <id>";
+final USAGE = "usage: magus buzz hack/remote/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...\n       magus buzz hack/remote/on-linux.buzz -- --ls\n       magus buzz hack/remote/on-linux.buzz -- --delete <id>";
 
 final HELP = [
     "on-linux: run a command in a local Linux container through Podman (a local container, plus an image pull and a Go module download over the network the first time)",
@@ -523,7 +523,7 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
         log\error("on-linux: the command never started (podman exited {res.code})");
     }
     if (p.keep) {
-        log\info("on-linux: kept {p.name}; `magus buzz hack/on-linux.buzz -- --delete {p.name}` removes it");
+        log\info("on-linux: kept {p.name}; `magus buzz hack/remote/on-linux.buzz -- --delete {p.name}` removes it");
     }
     return code;
 }

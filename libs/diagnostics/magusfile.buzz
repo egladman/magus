@@ -1,6 +1,6 @@
 import "magus";
-import "../../hack/drift" as drift;
-import "../../hack/index" as index;
+import "../../hack/magusfile/drift" as drift;
+import "../../hack/magusfile/index" as index;
 
 import "magus/spell/go";
 import "../../spells/golang/gomod" as gomod;
