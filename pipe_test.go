@@ -1191,6 +1191,42 @@ func TestPipeSettleWithoutProofIsNil(t *testing.T) {
 	}
 }
 
+// TestPipeAwaitUpstreamRefusesARedUpstream is `magus affected generate | magus affected
+// ci --plan`: the plan stage takes no lock, so only the wait keeps it from printing a
+// plan behind a failed generate.
+func TestPipeAwaitUpstreamRefusesARedUpstream(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "4"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	err := s.AwaitUpstream(ctx, testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: cacheDir}})
+	wantPipeUpstreamFailed(t, err, 4, up.Process.Pid)
+	if !strings.Contains(err.Error(), "printed nothing") {
+		t.Fatalf("err = %q, want it to say this stage printed nothing", err)
+	}
+}
+
+func TestPipeAwaitUpstreamGreenLeavesNothingToSettle(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "0"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := s.AwaitUpstream(ctx, testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: cacheDir}}); err != nil {
+		t.Fatalf("AwaitUpstream after a green upstream = %v", err)
+	}
+	if left := s.pipeline.all(); len(left) != 0 {
+		t.Fatalf("pipeline still holds %d stage(s) after a green wait", len(left))
+	}
+}
+
 func TestPipeExitRecordLifecycle(t *testing.T) {
 	dir := t.TempDir()
 	proved := time.Now()

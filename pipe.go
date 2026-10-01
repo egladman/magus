@@ -136,6 +136,38 @@ func (s *ProcessStdio) SettlePipeline(ctx context.Context, root string, cfg conf
 	return s.pipeline.settle(ctx, stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
 }
 
+// AwaitUpstream holds back a stage whose output another stage acts on, such as a shard
+// plan, until every magus stage proven upstream of this process has ended. It returns
+// MGS3030 when one exited non-zero, and the caller then writes nothing: a pipeline that
+// failed upstream hands nothing on. It waits and drains stdin as SettlePipeline does, so
+// call it only once this process has read all it needs from stdin. It returns nil when
+// nothing was proven upstream.
+func (s *ProcessStdio) AwaitUpstream(ctx context.Context, root string, cfg config.Config) error {
+	if s.pipeline == nil {
+		return nil
+	}
+	stdin := s.Stdin
+	if s.readsRecords() {
+		stdin = nil
+	}
+	red, ok, err := s.pipeline.wait(ctx, stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		// Every stage ended green, so SettlePipeline has nothing left to report.
+		s.pipeline.forget()
+		return nil
+	}
+	return &pipeUpstreamError{
+		DiagnosticError: types.DiagnosticErrorf(types.PipeUpstreamFailed,
+			"pid %d (%s), upstream of this run in a pipe, %s, so this run printed nothing."+
+				" A pipeline of magus runs stops at its first failed stage: fix that stage, then run the pipeline again.",
+			red.stage.pid, red.stage.command(), red.rec.ending()),
+		status: red.rec.exitCode(),
+	}
+}
+
 // readsRecords reports whether this process reads Stdin as records. That reader drains
 // the pipe already, so a run neither spools nor drains it.
 func (s *ProcessStdio) readsRecords() bool {
@@ -926,6 +958,12 @@ func (p *pipeline) merge(ups []upstreamStage) []upstreamStage {
 	return out
 }
 
+func (p *pipeline) forget() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stages = nil
+}
+
 func (p *pipeline) all() []upstreamStage {
 	<-p.ready
 	p.mu.Lock()
@@ -973,9 +1011,24 @@ func (e *pipeUpstreamError) Unwrap() error { return e.DiagnosticError }
 
 // settle is SettlePipeline once the pipe dir is known. Notices go to out.
 func (p *pipeline) settle(ctx context.Context, stdin *os.File, dir string, out io.Writer) error {
+	red, ok, err := p.wait(ctx, stdin, dir, out)
+	if err != nil || !ok {
+		return err
+	}
+	return &pipeUpstreamError{
+		DiagnosticError: types.DiagnosticErrorf(types.PipeUpstreamFailed,
+			"pid %d (%s), upstream of this run in a pipe, %s. This run succeeded, but the pipeline failed at that stage.",
+			red.stage.pid, red.stage.command(), red.rec.ending()),
+		status: red.rec.exitCode(),
+	}
+}
+
+// wait blocks until every proven upstream stage has ended, draining stdin meanwhile, and
+// returns the first failed one; ok is false when none failed. Notices go to out.
+func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, out io.Writer) (stageOutcome, bool, error) {
 	pending := p.all()
 	if len(pending) == 0 {
-		return nil
+		return stageOutcome{}, false, nil
 	}
 	stop := p.stopReading(stdin)
 	defer stop()
@@ -1012,20 +1065,12 @@ func (p *pipeline) settle(ctx context.Context, stdin *os.File, dir string, out i
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("pipe: gave up waiting on pid %d (%s) upstream of this run: %w", pending[0].pid, pending[0].command(), ctx.Err())
+			return stageOutcome{}, false, fmt.Errorf("pipe: gave up waiting on pid %d (%s) upstream of this run: %w", pending[0].pid, pending[0].command(), ctx.Err())
 		case <-t.C:
 		}
 	}
-	red, ok := firstRed(ended)
-	if !ok {
-		return nil
-	}
-	return &pipeUpstreamError{
-		DiagnosticError: types.DiagnosticErrorf(types.PipeUpstreamFailed,
-			"pid %d (%s), upstream of this run in a pipe, %s. This run succeeded, but the pipeline failed at that stage.",
-			red.stage.pid, red.stage.command(), red.rec.ending()),
-		status: red.rec.exitCode(),
-	}
+	red, found := firstRed(ended)
+	return red, found, nil
 }
 
 // stopReading keeps stdin drained, so an upstream still writing never blocks on it, and

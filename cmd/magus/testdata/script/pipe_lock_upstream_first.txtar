@@ -1,15 +1,15 @@
 # One magus reading another's output in the same project, the CI plan step's shape:
-# `affected --plan --preflight` locks the project for its pass and prints the plan once
-# it has released it. The reader takes no lock until the writer is done with the
-# project, so neither stage is refused, whichever reaches the lock first.
+# generate locks the project, and the plan between them prints once generate has ended.
+# The reader takes no lock until generate is done with the project, so neither stage is
+# refused, whichever reaches the lock first.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
 
 # generate holds the lock until a release file appears; this watcher supplies it
 # only once magus status proves the reader has actually registered its wait, so
 # the release can never race ahead of the thing it is meant to unblock.
 exec bash -c 'for i in $(seq 400); do [ -f generate-ready ] && break; sleep 0.05; done; for i in $(seq 400); do magus status -o json 2>/dev/null | grep -q pipe_waits && break; sleep 0.05; done; touch release' &
-exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms | magus run consume .'
-stderr 'magus: waiting for pid [0-9]+ \(.*affected ci --plan --preflight generate'
+exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run consume .'
+stderr 'magus: waiting for pid [0-9]+ \(.*affected generate'
 ! stderr 'locked by another magus process'
 grep '"matrix"' consumed
 wait
@@ -21,7 +21,7 @@ exec magus status -o json
 
 # Both orders, repeatedly. Which stage reaches the lock first is a race; before the
 # deferral one of the two was refused in either order.
-exec bash -c 'set -o pipefail; for i in 1 2 3 4 5; do rm -f consumed; magus affected ci --plan --preflight generate --no-default-charms | magus run consume . || exit 1; grep -q matrix consumed || exit 1; done'
+exec bash -c 'set -o pipefail; for i in 1 2 3 4 5; do rm -f consumed; magus affected generate --no-default-charms | magus affected ci --plan | magus run consume . || exit 1; grep -q matrix consumed || exit 1; done'
 ! stderr 'locked by another magus process'
 
 -- magus.yaml --

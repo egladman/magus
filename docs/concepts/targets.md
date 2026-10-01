@@ -98,8 +98,8 @@ Two consequences:
 | `generate` | produce files that ARE committed         |
 
 There is no conventional "run this first" target. To check something cheap across
-every project before the expensive part starts, name a target `ci` already composes
-with [`--preflight`](#failing-fast-with---preflight).
+every project before the expensive part starts, run it first and
+[pipe it into the rest](#failing-fast-with-a-pipe).
 
 ### `generate` or `build`?
 
@@ -183,47 +183,23 @@ but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
 useful.
 
-## Failing fast with --preflight
+## Failing fast with a pipe
 
 A CI fan-out pays for every shard before the first one can fail. When the likeliest
-failure is also the cheapest check, such as generated output nobody regenerated, it
-should run first, everywhere, and stop the rest. `--preflight` does that without a new
-target:
+failure is also the cheapest check, such as generated output nobody regenerated, run
+it first and pipe it into the rest:
 
 ```bash
-magus affected ci --preflight generate
-magus run ci --preflight generate,lint
+magus affected generate --no-default-charms | magus affected ci
+magus affected generate --no-default-charms | magus affected ci --plan   # prints the shard plan only when generate is green
 ```
 
-The named targets run as a separate pass across every selected project before the
-invoked target starts anywhere. Then:
-
-- **A failure stops everything.** The first failing step stops admission and cancels
-  the preflight steps still in flight; nothing of `ci` starts. The command exits 3
-  ([MGS3020](../reference/codes/sandbox/MGS3020.md)), and the error's first line names
-  the target, the failing projects and the fix. For drift that is the rw form:
-  `` preflight generate failed in docs; fix with `magus run generate:rw docs` ``.
-- **A green pass is not repeated.** The main run treats the preflight targets as done,
-  so a `ctx.needs(generate)` inside `lint` returns at once. Every cache key is the one a
-  run without the flag computes, so the two share entries.
-
-A preflight must be a target the invoked target already runs: one its `ctx.needs`
-chain reaches, directly or transitively, as `magus describe target ci` shows. Anything
-else would add work rather than reorder it, so it is refused before anything runs
-([MGS3021](../reference/codes/sandbox/MGS3021.md), exit 2). A project whose `ci` does
-not reach the name runs no preflight for it.
-
-In a sharded workflow, gate the plan itself. With `--plan`, the pass runs across every
-planned project before the plan prints, and a red pass prints nothing, so no shard is
-ever started from it:
-
-```bash
-magus affected ci --plan --preflight generate   # prints the shard plan only when generate is green
-```
-
-The pass covers the planned projects only. A generator whose output depends on
-projects outside the affected set is not checked when only those change. `--dry-run`
-lists the preflight steps ahead of the rest of a run.
+A magus stage that shares projects with the one before it waits for that stage, and
+starts nothing once it has failed
+([MGS3030](../reference/codes/sandbox/MGS3030.md)). A stage that prints a shard plan
+waits for every magus stage before it, whatever their projects, and prints no plan when
+one failed, so no shard is ever started from a drifted tree. `--no-default-charms`
+keeps an `rw` in `default_charms` from rewriting the drift before the check compares it.
 
 ## Name normalization (casing & delimiters)
 

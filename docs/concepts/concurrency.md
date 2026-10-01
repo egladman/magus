@@ -257,7 +257,11 @@ disjoint and ordered where they overlap. A run starts nothing once a magus stage
 upstream of it has failed, and a run that succeeded waits for every magus stage
 upstream of it to end, then fails if one did. Both refusals are
 [MGS3030](../reference/codes/sandbox/MGS3030.md), exiting with the failed stage's own
-status. A read-only upstream like `magus ls` counts too.
+status. A read-only upstream like `magus ls` counts too. A stage that prints or reads a
+shard plan, like `magus affected ci --plan` or `magus run --stdin`, takes no lock, but
+it waits for every magus stage upstream of it to end and prints nothing if one failed,
+so `magus affected generate --no-default-charms | magus affected ci --plan` starts no
+shard from a drifted tree.
 
 The upstream is proven from the kernel, never taken on trust: the run follows its stdin
 back to the processes writing it, and counts one as a magus stage only when it runs the

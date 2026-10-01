@@ -1914,7 +1914,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // No doctor gate: the advice action reports its findings without blocking.
-// No preflight target: name one ci composes with --preflight instead.
+// No preflight target: CI pipes `magus affected generate` into its shard plan instead.
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
