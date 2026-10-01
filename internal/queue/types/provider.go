@@ -120,6 +120,11 @@ type CommitStatus struct {
 type ListQuery struct {
 	Base      string // branch the queue merges into
 	RemoteURL string // the remote's URL, for the provider to name its repository
+	// Only, set by ListChanges' callers that classify one change's approvals, scopes the
+	// listing to what that takes: every open change, still, since any may be stacked
+	// under it, but only the merged changes it carries, and no closed ones. A provider
+	// may list more.
+	Only string
 
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
 	// the base requires and who the write credential posts as. App names the app whose

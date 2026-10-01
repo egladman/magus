@@ -4,7 +4,7 @@
 // A provider script exports these functions, each taking one record and returning one:
 //
 //	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?} or {refused: {reason, url, app}}
-//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}], closed?: [{id, repo?}]}
+//	list_changes({base, remote_url, only})         > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}], closed?: [{id, repo?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
@@ -21,6 +21,7 @@
 // list_artifacts is required of a provider apply follows a validation run through,
 // without required_checks apply reads no required check, and `magus queue reviews` needs
 // reviews, and dismiss_review to dismiss. reviews lists only approving reviews.
+// list_changes' only, when not empty, is [types.ListQuery.Only].
 // dismiss_review's review is the id reviews reported. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
 // unqueued record those of [types.UnqueuedChange]. app is --app as the person gave it,
@@ -324,7 +325,7 @@ func decodeSetup(r record) (types.Setup, error) {
 
 // ListChanges calls list_changes and checks every record it returns.
 func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Changes, error) {
-	r, err := p.callRecord(ctx, opListChanges, map[string]any{"base": q.Base, "remote_url": q.RemoteURL})
+	r, err := p.callRecord(ctx, opListChanges, map[string]any{"base": q.Base, "remote_url": q.RemoteURL, "only": q.Only})
 	if err != nil {
 		return types.Changes{}, err
 	}
