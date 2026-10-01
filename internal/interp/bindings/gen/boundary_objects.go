@@ -1651,6 +1651,28 @@ func ObjectURL(v types.URL) vm.Value {
 	return out
 }
 
+func ObjectFileChange(v types.FileChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("prevPath", vm.StrValue(v.PrevPath))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	return out
+}
+
+func ObjectRegionChange(v types.RegionChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", ObjectFileChange(v.File))
+	out.MapSet("side", vm.StrValue(string(v.Side)))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("declaration", vm.StrValue(v.Declaration))
+	out.MapSet("driver", vm.StrValue(v.Driver))
+	return out
+}
+
 func ObjectStatus(v types.Status) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("clean", vm.BoolValue(v.Clean))
@@ -2227,28 +2249,6 @@ func ObjectJob(v types.Job) vm.Value {
 		optLastRun = ObjectJobRun((*v.LastRun))
 	}
 	out.MapSet("lastRun", optLastRun)
-	return out
-}
-
-func ObjectFileChange(v types.FileChange) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("path", vm.StrValue(v.Path))
-	out.MapSet("prevPath", vm.StrValue(v.PrevPath))
-	out.MapSet("status", vm.StrValue(string(v.Status)))
-	return out
-}
-
-func ObjectRegionChange(v types.RegionChange) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("file", ObjectFileChange(v.File))
-	out.MapSet("side", vm.StrValue(string(v.Side)))
-	itemsLines := make([]vm.Value, len(v.Lines))
-	for indexLines := range v.Lines {
-		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
-	}
-	out.MapSet("lines", vm.ListValue(itemsLines))
-	out.MapSet("declaration", vm.StrValue(v.Declaration))
-	out.MapSet("driver", vm.StrValue(v.Driver))
 	return out
 }
 
