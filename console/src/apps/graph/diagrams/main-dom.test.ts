@@ -377,7 +377,7 @@ describe("the Diagrams surface", () => {
     const linkHash = (doc: unknown): string =>
       "#figure=" + Buffer.from(JSON.stringify(doc), "utf8").toString("base64url");
     const DEPS = {
-      v: 1,
+      v: 2,
       kind: "deps",
       title: "How far this change reaches",
       nodes: [
@@ -423,13 +423,13 @@ describe("the Diagrams surface", () => {
     });
 
     test("that cannot be read is an inline notice naming the problem", async () => {
-      location.hash = linkHash({ ...DEPS, v: 2 });
+      location.hash = linkHash({ ...DEPS, v: 1 });
       const rt = fakeRuntime(drew(RELAID));
       const { host, q, instance } = mountSurface();
       await settle();
       const note = q(".console-diagrams__notice");
       assert.match(note.textContent ?? "", /could not be read/);
-      assert.match(note.textContent ?? "", /version 2 and this console reads version 1/);
+      assert.match(note.textContent ?? "", /version 1 and this console reads version 2/);
       assert.equal(rt.figures.length, 0);
       assert.equal(host.querySelector(".console-diagrams__frame svg"), null);
       instance.deactivate();

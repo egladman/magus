@@ -65,7 +65,8 @@ async function relay(): Promise<void> {
     assert.match(svg, /data-edge="external:app->external:lib"/);
     assert.match(svg, /href="\/code\/libs\/lib"/);
 
-    // A shared link's graph: actors only, the edited node accented and tagged.
+    // A shared link's graph: actors only, the edited node accented and tagged, an optional edge
+    // dashed and labelled while a plain one stays solid.
     const linkDrawn = relayoutOf(
       rt.drawFigure(
         figureForLink({
@@ -73,16 +74,24 @@ async function relay(): Promise<void> {
           nodes: [
             { id: "libs/lib", label: "lib", seed: true },
             { id: "app", label: "app", seed: false },
+            { id: "tool", label: "tool", seed: false },
           ],
-          edges: [["libs/lib", "app"]],
+          edges: [
+            { from: "libs/lib", to: "app", stroke: "plain", label: "" },
+            { from: "app", to: "tool", stroke: "optional", label: "after" },
+          ],
         }),
         "",
       ),
     );
     assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
     const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
-    assert.match(linkSvg, /data-edge="external:lib->external:app"/);
     assert.match(linkSvg, />EDITED</);
+    const solid = /<path data-edge="external:lib->external:app"[^>]*>/.exec(linkSvg)?.[0];
+    assert.ok(solid, "the plain edge is drawn");
+    assert.doesNotMatch(solid, /stroke-dasharray/);
+    assert.match(linkSvg, /<path data-edge="external:app->external:tool"[^>]*stroke-dasharray/);
+    assert.match(linkSvg, />after</);
 
     const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
     const imports = figureFor(
