@@ -2422,33 +2422,6 @@ var precedentIdentRe = regexp.MustCompile(`^(?:[A-Za-z0-9]*[a-z0-9][A-Z][A-Za-z0
 // was useful.
 const precedentIdentMin = 6
 
-// precedentIdent returns the identifier a line is hunting for, or empty when the line is
-// not a precedent hunt.
-//
-// hint.Classify draws the line that matters: a grep reading a pipeline's output is
-// ClassRead, and 26% of grep invocations in the mining were that shape (`go test | grep
-// FAIL`). Routing those to the graph would fire on every test run and teach the reader to
-// skip the whole family.
-func precedentIdent(cmds []hint.Invocation) string {
-	for _, c := range cmds {
-		if !hint.IsSearchTool(c.Name) {
-			continue
-		}
-		if hint.Classify(hint.Invocation{Name: c.Name, Args: c.Args}) != hint.ClassSearchSource {
-			continue
-		}
-		for _, a := range c.Args {
-			if strings.HasPrefix(a, "-") || len(a) < precedentIdentMin {
-				continue
-			}
-			if precedentIdentRe.MatchString(a) {
-				return a
-			}
-		}
-	}
-	return ""
-}
-
 // Evaluate applies the guard rules in severity order, against the facts deps supplies
 // (the spell catalog the raw-tool rule matches against, among them).
 //
@@ -2751,7 +2724,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
 	if v, ok := translateVerdict(deps, cmds); ok {
-		if v.Deny == "" {
+		// A diagnostic code's deny is symbol-search's, which weighs a stale graph itself.
+		if v.Deny == "" || v.Rule.Name == denyRuleSymbolSearch {
 			return v
 		}
 		if stale := graphMoved(deps); stale.reason != "" {

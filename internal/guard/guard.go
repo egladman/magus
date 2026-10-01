@@ -1106,6 +1106,10 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Description = envelopeString(env.ToolInput, "description")
 	case env.Command != "":
 		req.Value = env.Command
+	case nativeSearchLine(env.ToolInput) != "" && envelopeWritePath(env.ToolInput) == "":
+		// A host's own content or file search, judged as the shell line it stands for so
+		// the search rules hold on that channel too.
+		req.Value = nativeSearchLine(env.ToolInput)
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
 		// Read by shape, like the path: a whole-file write carries its content, an edit the

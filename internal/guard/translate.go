@@ -316,16 +316,27 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 	for i, c := range cmds {
 		var tr translation
 		var ok bool
-		if path.Base(c.Name) == "find" {
+		switch path.Base(c.Name) {
+		case "find":
 			tr, ok = translateFind(deps, dir, c)
-		} else {
+		case "ls":
+			tr, ok = translateLs(deps, dir, c)
+		case "git":
+			if tr, ok = translateLsFiles(deps, dir, c); !ok {
+				tr, ok = translateSearch(deps, dir, c)
+			}
+		default:
 			tr, ok = translateSearch(deps, dir, c)
 		}
 		if !ok {
 			continue
 		}
 		if tr.routes != nil {
-			return ShellVerdict{Deny: denySymbolSearch(tr.routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(tr.routes)}}, true
+			js := searchJudgment{routes: tr.routes}
+			for _, r := range tr.routes {
+				js.classified = append(js.classified, "`"+strings.TrimPrefix(r.name, types.KindDiagnostic+":")+"` is a diagnostic code with a graph node")
+			}
+			return symbolSearchVerdict(deps, dir, asSearch(c), js, pipedInto(cmds[i+1:])), true
 		}
 		return ShellVerdict{
 			Deny: denySearchTranslation(tr, pipedInto(cmds[i+1:])),
