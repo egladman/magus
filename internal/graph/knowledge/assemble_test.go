@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -663,4 +664,83 @@ func TestOutputCarriesTheRelationVocabulary(t *testing.T) {
 	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
 	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
 	assert.NotEmpty(t, out.RelationFingerprint)
+}
+
+// syntheticInputs builds a large-monorepo fixture: nProjects projects each with
+// targetsPerProject targets (an intra-project dependency chain, a spell-op use per
+// target, a charm on every fifth), a project dependency chain, plus a registry of
+// spells/modules/diagnostics. nProjects=2000, targetsPerProject=8 ~= 16k targets.
+func syntheticInputs(nProjects, targetsPerProject int) Inputs {
+	projects := make([]types.TargetGraphProject, nProjects)
+	for p := range projects {
+		path := fmt.Sprintf("pkg/p%05d", p)
+		nodes := make([]types.TargetGraphNode, targetsPerProject)
+		for tIdx := range nodes {
+			n := types.TargetGraphNode{
+				Name:   fmt.Sprintf("t%03d", tIdx),
+				Doc:    "A synthetic target for benchmarking.",
+				Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-build"}}},
+			}
+			if tIdx > 0 {
+				n.Dependencies = []string{fmt.Sprintf("t%03d", tIdx-1)}
+			}
+			if tIdx%5 == 0 {
+				n.Charms = []string{"rw"}
+			}
+			nodes[tIdx] = n
+		}
+		pr := types.TargetGraphProject{Path: path, Engine: "buzz", Nodes: nodes}
+		if p > 0 {
+			pr.DependsOn = []string{fmt.Sprintf("pkg/p%05d", p-1)}
+		}
+		projects[p] = pr
+	}
+
+	spells := make([]types.Spell, 20)
+	for s := range spells {
+		spells[s] = types.Spell{
+			Name:    fmt.Sprintf("spell%02d", s),
+			Targets: []string{"build", "test", "lint", "format"},
+		}
+	}
+	spells[0].Name = "go" // matched by every target's spell-op use
+
+	modules := make([]types.ModuleEntry, 15)
+	for m := range modules {
+		methods := make([]types.ModuleMethodEntry, 10)
+		for me := range methods {
+			methods[me] = types.ModuleMethodEntry{Name: fmt.Sprintf("m%02d", me), Doc: "method", Buzz: "sig()"}
+		}
+		modules[m] = types.ModuleEntry{Name: fmt.Sprintf("mod%02d", m), Doc: "module", Methods: methods}
+	}
+
+	return Inputs{
+		Graph:       types.TargetGraphOutput{Projects: projects},
+		Spells:      spells,
+		Modules:     modules,
+		Diagnostics: types.AllDiagnosticCodes(),
+	}
+}
+
+const (
+	benchProjects = 2000
+	benchTargets  = 8
+)
+
+func BenchmarkAssembleShards(b *testing.B) {
+	in := syntheticInputs(benchProjects, benchTargets)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = AssembleShards(in)
+	}
+}
+
+func BenchmarkMergeOutput(b *testing.B) {
+	shards := AssembleShards(syntheticInputs(benchProjects, benchTargets))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = mergeAll(shards).Output()
+	}
 }
