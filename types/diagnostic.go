@@ -282,6 +282,11 @@ const (
 	// manifest, where the cache key and the affected set cannot see them. Which argv
 	// shapes delegate is declared by each spell's mgs_listScriptRunners.
 	ManifestScriptDelegation DiagnosticCode = "MGS1049"
+	// CarryApprovalsInvalid is a magus.yaml queue.carry_approvals entry that names no
+	// tier, or names code. The load stops: a misspelled tier read as absent would dismiss
+	// approvals the workspace meant to keep, and code carried would let the merge queue
+	// count an approval nobody gave to that code.
+	CarryApprovalsInvalid DiagnosticCode = "MGS1050"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -704,7 +709,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
-	LayerDeclarationInvalid, ManifestScriptDelegation,
+	LayerDeclarationInvalid, ManifestScriptDelegation, CarryApprovalsInvalid,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,

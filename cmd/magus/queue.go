@@ -225,6 +225,16 @@ func (e *queueEnv) open(ctx context.Context, remote, backend string) (magustypes
 	return drv, queue.Clone{Root: e.dir, Remote: remote}, err
 }
 
+// carryPolicy is the checkout's own queue.carry_approvals. The user-global tier is left
+// out: a policy set on one machine would loosen review in every workspace it touches.
+func (e *queueEnv) carryPolicy() (types.CarryPolicy, error) {
+	cfg, err := config.LoadWorkspaceOnly(e.dir)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.Queue.CarryApprovals.Policy(), nil
+}
+
 func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Script, error) {
 	if !provider.IsBuiltin(spec) {
 		spec = e.path(spec)
@@ -441,6 +451,9 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 	defer func() { _ = closeFacts() }()
 	planner, err := queue.NewPlanner(drv, cl, p, bf)
 	if err != nil {
+		return err
+	}
+	if planner.CarryPolicy, err = e.carryPolicy(); err != nil {
 		return err
 	}
 	planner.Depth, planner.Parallel, planner.Events = f.Depth, f.Parallel, queue.NewEvents(e.stdout)
@@ -767,6 +780,9 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
+	if a.CarryPolicy, err = e.carryPolicy(); err != nil {
+		return err
+	}
 	if regenerate != nil {
 		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants}, queue.NewHookLog(e.stderr))
 	}
