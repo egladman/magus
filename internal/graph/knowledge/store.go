@@ -483,9 +483,10 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 }
 
 // SymbolIndexDigest identifies the @symbols shards MergeSymbolShards loads: a hex SHA-256
-// over each project's shard fingerprint in project path order, so it moves exactly when a
-// symbol-reading answer can. No store, or no symbol shard, is Indexed false with no error.
-// The caller reports gaps, since it knows the declarations.
+// over each shard's fingerprint, keyed by project (and directory, for a split project) in
+// sorted order, so it moves exactly when a symbol-reading answer can. No store, or no symbol
+// shard, is Indexed false with no error. The caller reports gaps, since it knows the
+// declarations.
 func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 	out := types.SymbolIndexDigest{Projects: []string{}}
 	man := s.readManifestOrNil()
@@ -502,17 +503,18 @@ func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 		if meta.Fingerprint == "" {
 			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint; rebuild with `magus graph build`", name)
 		}
-		project := strings.TrimSuffix(name, symbolsShardSuffix)
-		out.Projects = append(out.Projects, project)
-		fps[project] = meta.Fingerprint
+		fps[symbolsShardKey(name)] = meta.Fingerprint
+		if p := symbolsShardProject(name); !slices.Contains(out.Projects, p) {
+			out.Projects = append(out.Projects, p)
+		}
 	}
 	if len(out.Projects) == 0 {
 		return out, nil
 	}
 	slices.Sort(out.Projects)
 	h := sha256.New()
-	for _, p := range out.Projects {
-		fmt.Fprintf(h, "%s\x00%s\n", p, fps[p])
+	for _, k := range slices.Sorted(maps.Keys(fps)) {
+		fmt.Fprintf(h, "%s\x00%s\n", k, fps[k])
 	}
 	out.Digest = hex.EncodeToString(h.Sum(nil))
 	out.Indexed = true

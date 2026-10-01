@@ -769,6 +769,21 @@ func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root s
 	if strings.HasPrefix(ref, types.KindSymbol+":") {
 		return store.MergeSymbolShardsByID(ctx, g, []string{ref})
 	}
+	// A bare name routes to the shards of every symbol labeled exactly that. They hold
+	// each such symbol with every edge into it, which is what refs answers from, and every
+	// candidate refs weighs when the name is ambiguous. That holds only when one of them is
+	// defined here, since refs then picks among them by definition; otherwise refs falls
+	// back to ranking the name against every symbol, and ranking needs them all.
+	if names := store.SymbolShardsForLabel(ref); len(names) > 0 {
+		routed := knowledge.NewGraph()
+		if err := store.MergeSymbolShardsNamed(ctx, routed, names); err != nil {
+			return err
+		}
+		if len(routed.SymbolsNamed(ref)) > 0 {
+			knowledge.UnionInto(g, routed)
+			return nil
+		}
+	}
 	return store.MergeSymbolShards(ctx, g)
 }
 
@@ -819,52 +834,108 @@ type symbolDecodeError struct{ err error }
 func (e symbolDecodeError) Error() string { return e.err.Error() }
 func (e symbolDecodeError) Unwrap() error { return e.err }
 
-// parseSymbolIndexCached parses decl's index, or returns the parse cached the last time this
-// binary read this exact file. A large module's index is a hundred megabytes whose decode
-// allocates over a gigabyte, and it changes only when its scip op runs, while the symbols
-// built from it are reassembled after every source edit.
-//
+// symbolIndexCache locates the two things derived from one SCIP index and kept until the
+// index file moves: its parse (the graph's symbol records) and its occurrence file (every
+// symbol's exact sites, for `refs --occurrences`). A large module's index is a hundred
+// megabytes whose decode allocates over a gigabyte, and it changes only when its scip op
+// runs, while the symbols built from it are reassembled after every source edit and a
+// refs lookup wants one symbol's sites.
+type symbolIndexCache struct {
+	// key identifies what produced both: this binary, the project and language the parse
+	// was run for, and the index file. Empty when the binary cannot be located, and then
+	// nothing is cached.
+	key        string
+	parsedPath string
+	occPath    string
+}
+
+func symbolIndexCacheFor(in symbolIngestInputs, decl resolvedSymbolIndex) symbolIndexCache {
+	var c symbolIndexCache
+	h := knowledge.NewInputHash("symbol index caches")
+	if foldBinary(h) {
+		h.String(decl.project)
+		h.String(decl.language)
+		h.Path(decl.path)
+		c.key = h.Sum()
+	}
+	sum := sha256.Sum256([]byte(decl.path))
+	stem := filepath.Join(knowledge.StoreDir(in.cacheDir), "inputs", "scip", hex.EncodeToString(sum[:8]))
+	c.parsedPath, c.occPath = stem+".gob", stem+".occ"
+	return c
+}
+
+// decodeSymbolIndex reads and decodes decl's index once and derives both cached forms from
+// that one decode, writing them for the next reader: whichever of the parse or the
+// occurrences a process needs first, it never decodes the index a second time for the other.
+func decodeSymbolIndex(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, c symbolIndexCache) ([]types.KnowledgeSymbol, map[string]symbols.KeyOccurrences, error) {
+	data, err := os.ReadFile(decl.path)
+	if err != nil {
+		return nil, nil, err
+	}
+	idx, err := symbols.DecodeIndex(data)
+	if err != nil {
+		return nil, nil, symbolDecodeError{err}
+	}
+	syms := symbols.ParseDecoded(ctx, idx, decl.project, decl.language)
+	occ, err := symbols.IndexOccurrences(ctx, idx, decl.project)
+	if err != nil {
+		return nil, nil, err
+	}
+	if c.key != "" && !cacheImmutable(in.cfg) {
+		err := writeParsedSymbolIndex(c.parsedPath, c.key, syms)
+		if err == nil {
+			err = symbols.WriteOccurrenceFile(c.occPath, c.key, occ)
+		}
+		if err != nil {
+			in.log.DebugContext(ctx, "knowledge: caching a decoded symbol index failed", slog.String("index", decl.path), slog.String("error", err.Error()))
+		}
+	}
+	return syms, occ, nil
+}
+
+// parseSymbolIndexCached returns decl's parse, from the cache while the index is unmoved.
 // The cache holds the parse alone: FingerprintBodies reads the working tree into the
 // records afterwards, and the tree moves without the index.
 func parseSymbolIndexCached(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex) ([]types.KnowledgeSymbol, error) {
 	if _, err := os.Stat(decl.path); err != nil {
 		return nil, err
 	}
-	key := ""
-	h := knowledge.NewInputHash("parsed symbol index")
-	if foldBinary(h) {
-		h.String(decl.project)
-		h.String(decl.language)
-		h.Path(decl.path)
-		key = h.Sum()
-	}
-	sum := sha256.Sum256([]byte(decl.path))
-	cachePath := filepath.Join(knowledge.StoreDir(in.cacheDir), "inputs", "scip", hex.EncodeToString(sum[:8])+".gob")
-	if key != "" {
-		if syms, ok := readParsedSymbolIndex(cachePath, key); ok {
+	c := symbolIndexCacheFor(in, decl)
+	if c.key != "" {
+		if syms, ok := readParsedSymbolIndex(c.parsedPath, c.key); ok {
 			return syms, nil
 		}
 	}
-	data, err := os.ReadFile(decl.path)
-	if err != nil {
-		return nil, err
+	syms, _, err := decodeSymbolIndex(ctx, in, decl, c)
+	return syms, err
+}
+
+// symbolKeyOccurrences returns key's sites in decl's index, from the occurrence file while
+// the index is unmoved.
+func symbolKeyOccurrences(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, key string) (symbols.KeyOccurrences, error) {
+	if _, err := os.Stat(decl.path); err != nil {
+		return symbols.KeyOccurrences{}, err
 	}
-	syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
-	if err != nil {
-		return nil, symbolDecodeError{err}
-	}
-	if key != "" && !cacheImmutable(in.cfg) {
-		if err := writeParsedSymbolIndex(cachePath, key, syms); err != nil {
-			in.log.DebugContext(ctx, "knowledge: caching a parsed symbol index failed", slog.String("index", decl.path), slog.String("error", err.Error()))
+	c := symbolIndexCacheFor(in, decl)
+	if c.key != "" {
+		occ, err := symbols.ReadKeyOccurrences(c.occPath, c.key, key)
+		if err == nil {
+			return occ, nil
+		}
+		if !errors.Is(err, symbols.ErrOccurrenceFileStale) {
+			in.log.DebugContext(ctx, "knowledge: occurrence file unreadable, decoding the index", slog.String("index", decl.path), slog.String("error", err.Error()))
 		}
 	}
-	return syms, nil
+	_, occ, err := decodeSymbolIndex(ctx, in, decl, c)
+	if err != nil {
+		return symbols.KeyOccurrences{}, err
+	}
+	return occ[key], nil
 }
 
 // The cached parse is gob: the key first, so a stale file is rejected before its records
-// are decoded, then the records. gob rather than JSON because this is a private cache
-// read back only by the binary that wrote it (the key names that binary), and it decodes
-// the record slice several times faster.
+// are decoded, then the records. gob because this is a private cache read back only by the
+// binary that wrote it, which the key names.
 func readParsedSymbolIndex(path, key string) ([]types.KnowledgeSymbol, bool) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1030,32 +1101,35 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 			gap(decl.project, "not read: cancelled")
 			continue
 		}
-		data, err := os.ReadFile(decl.path)
-		if err != nil {
+		found, err := symbolKeyOccurrences(ctx, in, decl, key)
+		var decodeErr symbolDecodeError
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
 			// A not-yet-built index is the expected case, and SymbolGaps already reports it
 			// from its own Stat, so it stays quiet here rather than being counted twice.
-			// Any OTHER read error is a hole SymbolGaps cannot see.
-			if !errors.Is(err, fs.ErrNotExist) {
-				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
-				gap(decl.project, "unreadable")
-			}
 			continue
-		}
-		found, foundNames, err := symbols.ParseOccurrences(ctx, data, decl.project, key)
-		if err != nil {
+		case errors.As(err, &decodeErr):
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			gap(decl.project, "does not decode")
+			continue
+		case ctx.Err() != nil:
+			gap(decl.project, "not read: cancelled")
+			continue
+		case err != nil:
+			// Any OTHER read error is a hole SymbolGaps cannot see.
+			log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			gap(decl.project, "unreadable")
 			continue
 		}
 		// One index names the symbol; the others may only reference it. Union rather than
 		// first-wins, so a spelling that appears in a second project's index is still
 		// recognized at that project's occurrences.
-		for _, n := range foundNames {
+		for _, n := range found.Names {
 			if !slices.Contains(read.Names, n) {
 				read.Names = append(read.Names, n)
 			}
 		}
-		read.Files = append(read.Files, found...)
+		read.Files = append(read.Files, found.Files...)
 	}
 
 	// Each index contributes its own files, so the merged list needs re-sorting to stay

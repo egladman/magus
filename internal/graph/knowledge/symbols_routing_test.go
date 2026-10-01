@@ -107,6 +107,31 @@ func TestMergeSymbolShardsByIDFallsBackOnRoutingMiss(t *testing.T) {
 	assert.True(t, ok, "a routing miss loads all symbol shards for the fuzzy resolve")
 }
 
+// A bare name routes to the shards of the symbols carrying it, and only those.
+func TestSymbolShardsForLabelRoutesABareName(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	in.Graph.Projects = append(in.Graph.Projects, types.TargetGraphProject{Path: "."})
+	in.Symbols = map[string][]types.KnowledgeSymbol{
+		".": {
+			{Key: "x A().", Label: "Shared", Source: "a/a.go:1", Defs: []string{"a/a.go"}},
+			{Key: "x B().", Label: "Shared", Source: "b/b.go:1", Defs: []string{"b/b.go"}},
+			{Key: "x C().", Label: "Alone", Source: "c/c.go:1", Defs: []string{"c/c.go"}},
+		},
+	}
+	build(t, cacheDir, BuildOptions{}, in)
+	store := NewStore(cacheDir, false, 0, nil, nil)
+
+	assert.Equal(t, []string{".@symbols:a", ".@symbols:b"}, store.SymbolShardsForLabel("Shared"))
+	assert.Equal(t, []string{".@symbols:c"}, store.SymbolShardsForLabel("Alone"))
+	assert.Nil(t, store.SymbolShardsForLabel("Missing"), "an unknown name has nothing narrower than every shard")
+
+	g := NewGraph()
+	require.NoError(t, store.MergeSymbolShardsNamed(context.Background(), g, store.SymbolShardsForLabel("Shared")))
+	assert.Equal(t, []string{"symbol:x A().", "symbol:x B()."}, g.SymbolsNamed("Shared"))
+	_, loaded := g.node("symbol:x C().")
+	assert.False(t, loaded, "the unrelated directory's shard stays on disk")
+}
+
 // hasEdgeIn reports whether g has an edge from source to target (any relation).
 func hasEdgeIn(g *Graph, source, target string) bool {
 	for _, e := range g.Edges() {

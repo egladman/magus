@@ -181,10 +181,11 @@ func AssembleClasses(in Inputs, classes []ShardClass) []Shard {
 	return shards
 }
 
-// assembleSymbolClass builds one @symbols shard per project that declared an index, in
-// sorted project order, each carrying its own dir roll-up and I/O edges. Those come from
-// the shard's own file nodes alone, never from the domain shards, so a symbols build
-// needs nothing the domain build produced.
+// assembleSymbolClass builds the @symbols shards of every project that declared an index,
+// in sorted project order, each project carrying its own dir roll-up and I/O edges. Those
+// come from the project's own file nodes alone, never from the domain shards, so a symbols
+// build needs nothing the domain build produced. Each project's shard is then split by
+// defining directory (splitSymbolShard).
 func assembleSymbolClass(in Inputs) []Shard {
 	shards := assembleSymbolShards(in.Symbols, in.Graph.Projects)
 	if len(shards) == 0 {
@@ -208,7 +209,11 @@ func assembleSymbolClass(in Inputs) []Shard {
 			shards[i].Edges = append(shards[i].Edges, io.Edges...)
 		}
 	}
-	return shards
+	var out []Shard
+	for _, sh := range shards {
+		out = append(out, splitSymbolShard(symbolsShardProject(sh.Name), sh)...)
+	}
+	return out
 }
 
 // assembleDomain builds the domain class: the registry, one shard per project, and every

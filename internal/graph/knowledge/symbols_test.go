@@ -3,6 +3,7 @@ package knowledge
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -398,4 +399,46 @@ func TestAssembleSymbolShardsStoresTheFold(t *testing.T) {
 		g.AddNode(types.KnowledgeNode{ID: projectID(p.Path), Kind: types.KindProject, Label: p.Path, Source: p.Path})
 	}
 	assert.Empty(t, g.UndeclaredEdges())
+}
+
+// A project's symbols split by defining directory; merging every part is the unsplit shard,
+// and each symbol's part holds every edge that ends at it.
+func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "x A().", Label: "A", Source: "a/a.go:3", Defs: []string{"a/a.go"},
+			Refs: []types.KnowledgeSymbolRef{{Path: "b/b.go", Count: 1, Lines: []int{4}}}},
+		{Key: "x B().", Label: "B", Source: "b/b.go:1", Defs: []string{"b/b.go"},
+			Calls: []types.KnowledgeSymbolCall{{Key: "x A().", Count: 1}}},
+		{Key: "x Top().", Label: "Top", Source: "top.go:1", Defs: []string{"top.go"}},
+		{Key: "dep Ext().", Label: "Ext", Refs: []types.KnowledgeSymbolRef{{Path: "a/a.go", Count: 2, Lines: []int{5, 6}}}},
+	}
+	whole := assembleSymbols(".", syms, []types.TargetGraphProject{{Path: "."}})
+
+	parts := splitSymbolShard(".", whole)
+
+	var names []string
+	seen := map[string]string{}
+	for _, p := range parts {
+		names = append(names, p.Name)
+		for _, n := range p.Nodes {
+			require.NotContainsf(t, seen, n.ID, "%s is in %s and %s", n.ID, seen[n.ID], p.Name)
+			seen[n.ID] = p.Name
+		}
+	}
+	assert.Equal(t, []string{".@symbols", ".@symbols:a", ".@symbols:b"}, names)
+	assert.Equal(t, ".@symbols:a", seen["symbol:x A()."])
+	assert.Equal(t, ".@symbols", seen["symbol:x Top()."], "a top-level definition stays in the base shard")
+	assert.Equal(t, ".@symbols", seen["symbol:dep Ext()."], "a symbol defined nowhere here stays in the base shard")
+
+	a := mergeAll([]Shard{parts[1]})
+	assert.True(t, hasEdgeIn(a, "file:b/b.go", "symbol:x A()."), "the reference into A rides with A")
+	assert.True(t, hasEdgeIn(a, "symbol:x B().", "symbol:x A()."), "so does the call into A")
+
+	want, err := json.Marshal(mergeAll([]Shard{whole}).Output())
+	require.NoError(t, err)
+	got, err := json.Marshal(mergeAll(parts).Output())
+	require.NoError(t, err)
+	assert.Equal(t, string(want), string(got), "the parts merge back into the unsplit shard")
+	assert.True(t, isSymbolsShard(".@symbols:a"))
+	assert.Equal(t, ".", symbolsShardProject(".@symbols:a"))
 }

@@ -65,6 +65,7 @@ func Ensure(ctx context.Context, cacheDir string, opts BuildOptions, want []Shar
 
 	var built []Shard
 	if len(stale) > 0 {
+		store.log.DebugContext(ctx, "knowledge: reassembling shard classes", slog.Any("classes", stale))
 		in, err := gather(stale)
 		if err != nil {
 			return nil, err

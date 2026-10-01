@@ -102,7 +102,21 @@ func ParseOccurrences(ctx context.Context, data []byte, projectPath, key string)
 		}
 	}
 
-	files = make([]types.SymbolOccurrenceFile, 0, len(byFile))
+	return sortedOccurrenceFiles(byFile), spellings(ident, display), nil
+}
+
+// sortedOccurrenceFiles orders each file's sites and the files themselves (byFile iteration
+// is unordered, so the sort is what makes the output deterministic).
+//
+// It also collapses sites that share a start position. SCIP permits an index to carry two
+// Document entries for one path, and an occurrence can legitimately be recorded twice
+// (upstream ships FlattenDocuments/FlattenOccurrences for exactly this), which is harmless
+// in a count and destructive in an edit plan: a caller rewriting back-to-front applies the
+// second replacement on top of bytes it already rewrote. Measured over this repo's five
+// indexes (1399 documents) there are none today, so this is guarding the contract rather
+// than fixing an observed break.
+func sortedOccurrenceFiles(byFile map[string][]types.SymbolOccurrence) []types.SymbolOccurrenceFile {
+	files := make([]types.SymbolOccurrenceFile, 0, len(byFile))
 	for p, occs := range byFile {
 		slices.SortFunc(occs, func(a, b types.SymbolOccurrence) int {
 			if c := cmp.Compare(a.Line, b.Line); c != 0 {
@@ -110,22 +124,13 @@ func ParseOccurrences(ctx context.Context, data []byte, projectPath, key string)
 			}
 			return cmp.Compare(a.Column, b.Column)
 		})
-		// Collapse sites that share a start position. SCIP permits an index to carry two
-		// Document entries for one path, and an occurrence can legitimately be recorded
-		// twice (upstream ships FlattenDocuments/FlattenOccurrences for exactly this), which
-		// is harmless in a count and destructive in an edit plan: a caller rewriting
-		// back-to-front applies the second replacement on top of bytes it already rewrote.
-		// Measured over this repo's five indexes (1399 documents) there are none today, so
-		// this is guarding the contract rather than fixing an observed break.
 		occs = slices.CompactFunc(occs, func(a, b types.SymbolOccurrence) bool {
 			return a.Line == b.Line && a.Column == b.Column
 		})
 		files = append(files, types.SymbolOccurrenceFile{File: p, Occurrences: occs})
 	}
-	// byFile iteration is unordered; the sort is what makes the output deterministic.
 	slices.SortFunc(files, func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) })
-
-	return files, spellings(ident, display), nil
+	return files
 }
 
 // spellings collects the forms a symbol may be written in at an occurrence, shortest-and-
