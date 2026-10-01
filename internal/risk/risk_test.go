@@ -251,6 +251,32 @@ func TestClassifyWithoutReaders(t *testing.T) {
 	assert.Equal(t, ClassProse, got.Paths[2].Class)
 }
 
+// An edit classifies by the same classes; a side the path is absent from is never a
+// comment-only edit, even of a file holding nothing but comments.
+func TestEdit(t *testing.T) {
+	c := classifierWith(ProseScopes(nil))
+	for name, tc := range map[string]struct {
+		path     string
+		old, cur []byte
+		want     Classified
+	}{
+		"comment-only": {path: "x.go", old: []byte(goCode), cur: []byte(goCommentEdit),
+			want: Classified{Path: "x.go", Class: ClassCommentOnly, Why: "only comments differ from the revision compared against"}},
+		"added": {path: "x.go", cur: []byte("// x\n"),
+			want: Classified{Path: "x.go", Class: ClassCode, Why: "absent at the revision compared against"}},
+		"deleted": {path: "x.go", old: []byte("// x\n"),
+			want: Classified{Path: "x.go", Class: ClassCode, Why: "gone from the working tree"}},
+		"emptied": {path: "x.go", old: []byte("// x\n"), cur: []byte{},
+			want: Classified{Path: "x.go", Class: ClassCommentOnly, Why: "only comments differ from the revision compared against"}},
+		"added prose": {path: "docs/x.md", cur: []byte("# x\n"),
+			want: Classified{Path: "docs/x.md", Class: ClassProse, Why: `matches "**/*.md" (built-in default)`}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, c.Edit(context.Background(), tc.path, tc.old, tc.cur))
+		})
+	}
+}
+
 // A merge is allowed by the same classes, comparing the merge base with the merge, and a
 // code edit only where merge_low_risk opts it in.
 func TestMerge(t *testing.T) {

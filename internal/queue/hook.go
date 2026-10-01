@@ -701,11 +701,16 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 //	            prints {"auto_resolve": bool, "verdict": line}: whether the merge may
 //	            go without a person, and the build tool's line on the path either way;
 //	            a command that fails this query settles nothing
+//	classify_edit  stdin: {"path": path, "old": text or null, "cur": text or null},
+//	            one path's content on both sides of an edit, null where it is absent
+//	            prints {"tier": "generated"|"prose"|"comment-only"|"code", "why": text};
+//	            a command that fails this query, or answers another tier, classifies
+//	            the path as code
 //
 // A path holding a line break is never written: affected answers unbounded for it, and
 // outputs leaves it unclassified, which is source.
 //
-// A failing command is an error, auto_resolve aside, since the hook reads only the base,
+// A failing command is an error, auto_resolve and classify_edit aside, since the hook reads only the base,
 // never the change's code. Its environment is a gate's under env, less the box: facts
 // run in dir, the base's own checkout, with the queue's home and caches.
 func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts {
@@ -812,6 +817,40 @@ func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, mer
 		ans.Verdict = path + ": the auto_resolve hook gave no verdict"
 	}
 	return ans.Verdict, ans.AutoResolve, nil
+}
+
+func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []byte) (types.ClassifiedPath, error) {
+	side := func(content []byte) *string {
+		if content == nil {
+			return nil
+		}
+		s := string(content)
+		return &s
+	}
+	in, err := json.Marshal(map[string]any{"path": path, "old": side(old), "cur": side(cur)})
+	if err != nil {
+		return types.ClassifiedPath{}, err
+	}
+	var ans struct {
+		Tier types.CarryTier `json:"tier"`
+		Why  string          `json:"why"`
+	}
+	code := types.ClassifiedPath{Path: path, Tier: types.CarryCode}
+	// Code is the safe side: the path keeps an approval from carrying.
+	if err := f.ask(ctx, "classify_edit", "classify_edit", string(in), &ans); err != nil {
+		code.Why = "the facts command answered no classify_edit (" + err.Error() + ")"
+		return code, nil //nolint:nilerr // classified as code, the safe side
+	}
+	switch ans.Tier {
+	case types.CarryGenerated, types.CarryProse, types.CarryCommentOnly, types.CarryCode:
+	default:
+		code.Why = fmt.Sprintf("the classify_edit hook answered tier %q", ans.Tier)
+		return code, nil
+	}
+	if ans.Why == "" {
+		ans.Why = "the classify_edit hook gave no reason"
+	}
+	return types.ClassifiedPath{Path: path, Tier: ans.Tier, Why: ans.Why}, nil
 }
 
 func (f commandFacts) Generation(ctx context.Context, outputs, changed []string) (types.Generation, error) {

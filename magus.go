@@ -931,6 +931,13 @@ func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []
 	return v.Line(), ok
 }
 
+// ClassifyEdit is ChangeClassifier's class of one path's edit from old to cur, and why. A
+// nil side is the path absent there, so adding or deleting a file is never comment-only.
+// The merge queue carries an approval over an edit by this class.
+func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) risk.Classified {
+	return m.ChangeClassifier(nil, nil).Edit(ctx, path, old, cur)
+}
+
 // AutoResolve settles a conflicted path the way the merge queue does: MergeThreeWay settles
 // every region both sides changed, by the same rule, and AutoResolvable allows the result. It
 // returns the merge when it settles; report names the path's class and why, and each
