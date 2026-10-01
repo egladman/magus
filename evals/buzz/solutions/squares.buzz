@@ -1,0 +1,7 @@
+import "std";
+
+fun main(args: [str]) > void {
+    for (var n = 1; n <= 5; n = n + 1) {
+        std\print("{n}^2={n * n}");
+    }
+}

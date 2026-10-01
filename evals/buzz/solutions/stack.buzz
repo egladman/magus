@@ -1,0 +1,26 @@
+import "std";
+
+object Stack {
+    items: mut [int],
+
+    fun push(value: int) > void {
+        this.items.append(value);
+    }
+
+    fun pop() > int? {
+        if (this.items.len() == 0) {
+            return null;
+        }
+        return this.items.pop();
+    }
+}
+
+fun main(args: [str]) > void {
+    final stack = Stack{ items = mut [<int>] };
+    stack.push(1);
+    stack.push(2);
+    final first = stack.pop() ?? -1;
+    final second = stack.pop() ?? -1;
+    final third = stack.pop() ?? -1;
+    std\print("{first} {second} {third}");
+}

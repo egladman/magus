@@ -1,0 +1,99 @@
+[
+  {
+    "id": "squares",
+    "prompt": "Write a Buzz script that prints the squares of 1 through 5, one per line, in the form `3^2=9`.",
+    "mode": "run",
+    "expected": "1^2=1\n2^2=4\n3^2=9\n4^2=16\n5^2=25\n"
+  },
+  {
+    "id": "rect",
+    "prompt": "Write a Buzz script with an object type Rect (int fields width and height) that has a method area() returning width*height, and a top-level function scale(rect: Rect, factor: int) > Rect that returns a new Rect with both sides multiplied by factor. Build a 2x3 Rect, scale it by 3, and print exactly `base=6 scaled=54`.",
+    "mode": "run",
+    "expected": "base=6 scaled=54\n"
+  },
+  {
+    "id": "find",
+    "prompt": "Write a Buzz script with a function findIndex(names: [str], target: str) that returns the index of target in names, or null when it is absent (use an optional return type). For names [\"ada\", \"grace\", \"linus\"], look up \"linus\" and then \"ken\", printing exactly:\nlinus: found at 2\nken: missing",
+    "mode": "run",
+    "expected": "linus: found at 2\nken: missing\n"
+  },
+  {
+    "id": "wordcount",
+    "prompt": "Write a Buzz script that counts how many times each word occurs in the sentence \"the cat and the hat and the bat\" (split on single spaces) and prints one `word=count` line per distinct word, sorted alphabetically by word.",
+    "mode": "run",
+    "expected": "and=2\nbat=1\ncat=1\nhat=1\nthe=3\n"
+  },
+  {
+    "id": "ports",
+    "prompt": "Write a Buzz script with a function parsePort(text: str) that returns the port as an int, and raises (throws) the string `invalid port: <text>` when text is not an integer, or `out of range: <text>` when the number is outside 1..65535. For the inputs \"80\", \"x\" and \"70000\", in that order, print `port 80` on success or `error: <message>` when it raised. Expected output:\nport 80\nerror: invalid port: x\nerror: out of range: 70000",
+    "mode": "run",
+    "expected": "port 80\nerror: invalid port: x\nerror: out of range: 70000\n"
+  },
+  {
+    "id": "files",
+    "prompt": "Write a Buzz script that walks the list [\"main.buzz\", \"README.md\", \"spell.buzz\", \"x.buzz\"] and, for each name ending in \".buzz\", prints the name without the extension in upper case, a space, then `long` if that stem is longer than 3 characters or `short` otherwise. Expected output:\nMAIN long\nSPELL long\nX short",
+    "mode": "run",
+    "expected": "MAIN long\nSPELL long\nX short\n"
+  },
+  {
+    "id": "json",
+    "prompt": "Write a Buzz script that parses this JSON text with magus's JSON module: {\"items\": [{\"name\": \"apple\", \"qty\": 2}, {\"name\": \"pear\", \"qty\": 3}]} and prints the summed qty as an integer and the names joined by commas, exactly: `total=5 names=apple,pear`.",
+    "mode": "run",
+    "expected": "total=5 names=apple,pear\n"
+  },
+  {
+    "id": "levels",
+    "prompt": "Write a Buzz script that declares an enum Level with cases low, mid and high, a function levelOf(score: int) > Level (high for 80 and up, mid for 50 and up, low otherwise), and a function that turns a Level into the text HIGH, MID or LOW. For the scores 95, 60 and 10 print `<score> <TEXT>`, one per line:\n95 HIGH\n60 MID\n10 LOW",
+    "mode": "run",
+    "expected": "95 HIGH\n60 MID\n10 LOW\n"
+  },
+  {
+    "id": "slugify",
+    "prompt": "Write a Buzz file defining a function slugify(text: str) > str that trims surrounding whitespace, lower-cases the text and replaces every space with a hyphen, plus at least one Buzz test block that checks it. The file is run with the test runner, which also runs an extra hidden test of slugify.",
+    "mode": "test",
+    "hidden_test": "test \"hidden: slugify three words\" {\n    std\\assert(slugify(\"  Big Red Dog \") == \"big-red-dog\", message: \"hidden\");\n}\n",
+    "expected": ""
+  },
+  {
+    "id": "globfiles",
+    "prompt": "Write a Buzz script that creates a fresh temporary directory, writes the files b.txt, a.txt and c.md into it (any content), then finds the *.txt files in that directory with a glob and prints their base names sorted alphabetically on one line separated by a space: `a.txt b.txt`.",
+    "mode": "run",
+    "expected": "a.txt b.txt\n"
+  },
+  {
+    "id": "evens",
+    "prompt": "Write a Buzz script with a function sumOfEvens(numbers: [int]) > int that uses the list's filter and reduce methods (no explicit loop) to sum the even numbers. Print `sum=12` for [1, 2, 3, 4, 5, 6].",
+    "mode": "run",
+    "expected": "sum=12\n"
+  },
+  {
+    "id": "oldest",
+    "prompt": "Write a Buzz script that holds the text \"ada,36\\ngrace,85\\nlinus,54\" (three lines of name,age), finds the person with the highest age by splitting it into lines and fields and parsing the ages, and prints exactly `oldest=grace age=85`.",
+    "mode": "run",
+    "expected": "oldest=grace age=85\n"
+  },
+  {
+    "id": "stack",
+    "prompt": "Write a Buzz script with an object type Stack that keeps a list of ints and has methods push(value: int) and pop(), where pop returns the most recently pushed int, or null when the stack is empty. Push 1 then 2, pop three times, and print the three results on one line separated by spaces, writing -1 for an empty pop: `2 1 -1`.",
+    "mode": "run",
+    "expected": "2 1 -1\n"
+  },
+  {
+    "id": "fizzbuzz",
+    "prompt": "Write a Buzz script that uses a while loop to build FizzBuzz for 1 through 15 (Fizz for multiples of 3, Buzz for multiples of 5, FizzBuzz for both, the number otherwise) and prints all 15 entries on one line separated by single spaces.",
+    "mode": "run",
+    "expected": "1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz\n"
+  },
+  {
+    "id": "transpose",
+    "prompt": "Write a Buzz script with a function transpose(grid: [[int]]) > [[int]] that returns the transpose of a rectangular grid. Transpose [[1, 2, 3], [4, 5, 6]] and print each row of the result on its own line, numbers separated by spaces:\n1 4\n2 5\n3 6",
+    "mode": "run",
+    "expected": "1 4\n2 5\n3 6\n"
+  },
+  {
+    "id": "reverse",
+    "prompt": "Write a Buzz script that takes the sentence \"magus builds buzz\", prints its words in reverse order separated by spaces, then a space and `letters=` followed by the total number of letters in the words (spaces not counted): `buzz builds magus letters=15`.",
+    "mode": "run",
+    "expected": "buzz builds magus letters=15\n"
+  }
+]

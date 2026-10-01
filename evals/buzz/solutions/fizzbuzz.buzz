@@ -1,0 +1,19 @@
+import "std";
+
+fun main(args: [str]) > void {
+    final words = mut [<str>];
+    var n = 1;
+    while (n <= 15) {
+        if (n % 15 == 0) {
+            words.append("FizzBuzz");
+        } else if (n % 3 == 0) {
+            words.append("Fizz");
+        } else if (n % 5 == 0) {
+            words.append("Buzz");
+        } else {
+            words.append("{n}");
+        }
+        n = n + 1;
+    }
+    std\print(words.join(" "));
+}

@@ -1,0 +1,11 @@
+import "std";
+
+fun main(args: [str]) > void {
+    final sentence = "magus builds buzz";
+    final words = sentence.split(" ");
+    var letters = 0;
+    foreach (word in words) {
+        letters = letters + word.len();
+    }
+    std\print("{words.reverse().join(" ")} letters={letters}");
+}

@@ -1,0 +1,10 @@
+import "std";
+
+fun sumOfEvens(numbers: [int]) > int {
+    final evens = numbers.filter(fun (index: int, n: int) > bool => n % 2 == 0);
+    return evens.reduce(fun (index: int, n: int, total: int) > int => total + n, initial: 0);
+}
+
+fun main(args: [str]) > void {
+    std\print("sum={sumOfEvens([1, 2, 3, 4, 5, 6])}");
+}
