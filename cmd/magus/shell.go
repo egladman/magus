@@ -295,6 +295,7 @@ func guardDependencies(ctx context.Context) guard.Dependencies {
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
+		IndexCause:       indexCauseForGuard,
 		SymbolSites:      symbolSitesForGuard,
 		Revision:         revisionForGuard,
 		GraphIDs:         graphIDsForGuard,

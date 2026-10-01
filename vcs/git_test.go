@@ -3972,3 +3972,32 @@ func TestGitOperationInProgressNamesARevert(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.OperationRevert, op)
 }
+
+// The command read back is the one installed, from a linked worktree too, since that is
+// the checkout a not-indexed verdict asks about.
+func TestGitRefreshHookCommand(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", linked)
+
+	_, installed, err := GitRefreshHookCommand(t.Context(), linked)
+	require.NoError(t, err)
+	assert.False(t, installed, "no refresh section yet")
+
+	_, err = gitVCS{}.InstallRefreshHook(t.Context(), dir, "./magus job run sync-graph")
+	require.NoError(t, err)
+	command, installed, err := GitRefreshHookCommand(t.Context(), linked)
+	require.NoError(t, err)
+	assert.True(t, installed)
+	assert.Equal(t, "./magus job run sync-graph", command)
+}
+
+func TestGitRefreshHookCommandOutsideARepositoryIsUnsupported(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	_, installed, err := GitRefreshHookCommand(t.Context(), t.TempDir())
+	require.ErrorIs(t, err, types.ErrVCSUnsupported)
+	assert.False(t, installed)
+}

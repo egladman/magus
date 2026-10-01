@@ -24,6 +24,8 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
@@ -125,6 +127,9 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if joined, err := joinServerSync(ctx, root); joined || err != nil {
+		return err
+	}
 
 	if !skipSymbols {
 		m, err := loadMagus(ctx, root)
@@ -162,6 +167,72 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 		}
 	}
 	return nil
+}
+
+// syncPollInterval is how often a joined build asks the server whether its sync-graph is
+// still running.
+const syncPollInterval = 500 * time.Millisecond
+
+// joinServerSync waits out a sync-graph the server is already running for this workspace
+// instead of racing it, and reports whether that build stands in for this one.
+//
+// Waiting, not a second build: the server runs the job inside its own process, coalesced
+// only against other submits, and no lock covers the graph store or the SCIP shards, so a
+// build here would repeat the job's indexing, the expensive half, and both would write one
+// store. Once the job leaves the server's status the graph loads cache-first from what it
+// stored. A project it left unindexed or behind, or a server that stopped mid-job, falls
+// through to a full build here.
+func joinServerSync(ctx context.Context, root string) (bool, error) {
+	wsRoot := resolveRootOrEmpty(root)
+	addr := resolveServerAddr("")
+	if wsRoot == "" || !proc.SocketLive(ctx, addr) {
+		return false, nil
+	}
+	st, err := proc.QueryStatus(ctx, addr)
+	if err != nil {
+		return false, nil
+	}
+	s, ok := maintenance.FindSync(st, wsRoot, magus.FindRoot)
+	if !ok {
+		return false, nil
+	}
+	inv := s.Call.Inv
+	age := ""
+	if !s.Call.StartedAt.IsZero() {
+		age = fmt.Sprintf(", started %s ago", time.Since(s.Call.StartedAt).Round(time.Second))
+	}
+	fmt.Fprintf(os.Stderr, "magus graph build: the server is already building this workspace's graph (sync-graph job %s, server pid %d%s)\n", inv, s.PID, age)
+	fmt.Fprintln(os.Stderr, "  waiting for it instead of starting a second build; interrupting stops the wait, not the job")
+	err = maintenance.AwaitSync(ctx, func(ctx context.Context) (*proc.StatusReply, error) {
+		return proc.QueryStatus(ctx, addr)
+	}, inv, syncPollInterval)
+	if errors.Is(err, maintenance.ErrServerGone) {
+		fmt.Fprintf(os.Stderr, "magus graph build: %s; building here\n", err)
+		return false, nil
+	}
+	if err != nil {
+		return true, err
+	}
+	left := staleIndexProjects(ctx, root)
+	gaps, probed := symbolGaps(ctx, root)
+	if len(gaps) > 0 {
+		left = append(left, types.DescribeGaps(gaps))
+	}
+	if !probed {
+		left = append(left, "the symbol indexes (unreadable)")
+	}
+	if len(left) > 0 {
+		fmt.Fprintf(os.Stderr, "magus graph build: sync-graph job %s finished and left these without a current index: %s; building here\n",
+			inv, strings.Join(left, ", "))
+		return false, nil
+	}
+	g, err := loadKnowledgeGraph(ctx, root, false, false, false)
+	if err != nil {
+		return true, err
+	}
+	out := g.Output()
+	fmt.Fprintf(os.Stderr, "knowledge graph current, built by the server's sync-graph job %s: %d nodes, %d edges\n", inv, out.NodeCount, out.EdgeCount)
+	return true, nil
 }
 
 // ingestSessions runs the declared transcript adapters, reporting each one's own summary
