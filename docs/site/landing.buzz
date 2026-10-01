@@ -491,7 +491,7 @@ matrix:      $\{\{ fromJSON(needs.plan.outputs.matrix) \}\}</code></pre>
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             <span class="term-name" data-nolink>gitlab-matrix.buzz</span>
           </div>
-          <pre class="term-body"><code class="language-buzz">final plan = serialize&#92;jsonDecode(io.stdin.readAll());
+          <pre class="term-body"><code class="language-buzz">final plan = serialize&#92;jsonDecode(io&#92;stdin.readAll());
 var yaml = "shard:\n  parallel:\n    matrix:\n";
 foreach (row in plan.q("matrix").listValue()) \{
     yaml = yaml + "      - SHARD: \"" + row.q("shard").stringValue() + "\"\n"

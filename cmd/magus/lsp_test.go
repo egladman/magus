@@ -38,7 +38,7 @@ func readFrames(t *testing.T, out string) []map[string]any {
 }
 
 func TestLSPServerSession(t *testing.T) {
-	src := "import \"fs\";\nfs.glob(\"x\");\n"
+	src := "import \"fs\";\nfs\\glob(\"x\");\n"
 	uri := "file:///w/magusfile.buzz"
 
 	var in strings.Builder
@@ -47,7 +47,7 @@ func TestLSPServerSession(t *testing.T) {
 	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": map[string]any{
 		"textDocument": map[string]any{"uri": uri, "text": src},
 	}}))
-	// completion right after "fs." on line 1.
+	// completion right after "fs\" on line 1.
 	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "textDocument/completion", "params": map[string]any{
 		"textDocument": map[string]any{"uri": uri},
 		"position":     map[string]any{"line": 1, "character": 3},
@@ -73,10 +73,10 @@ func TestLSPServerSession(t *testing.T) {
 	assert.Equal(t, true, caps["hoverProvider"])
 	assert.NotNil(t, caps["completionProvider"])
 
-	// completion: fs.* members returned.
+	// completion: fs\* members returned.
 	comp := msgs[1]["result"].(map[string]any)
 	items := comp["items"].([]any)
-	assert.NotEmpty(t, items, "fs. yields member completions")
+	assert.NotEmpty(t, items, "fs\\ yields member completions")
 	labels := map[string]bool{}
 	for _, it := range items {
 		labels[it.(map[string]any)["label"].(string)] = true

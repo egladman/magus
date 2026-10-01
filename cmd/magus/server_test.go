@@ -314,7 +314,7 @@ func checkReviewWorkspace(t *testing.T, threads func() (any, error)) (context.Co
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	m, err := magus.Open(context.Background(), root)
 	require.NoError(t, err, "fixture workspace must open")
 

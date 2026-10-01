@@ -55,7 +55,7 @@ func TestSession_NativeModule(t *testing.T) {
 
 	require.NoError(t, s.Exec(context.Background(), `
 import "example/demo";
-var x = demo.answer;
+var x = demo\answer;
 `), "Exec")
 	v, ok := s.Globals()["x"]
 	require.True(t, ok, "global 'x' not bound; native import did not resolve")

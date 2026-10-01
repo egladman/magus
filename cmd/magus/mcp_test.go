@@ -49,7 +49,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
@@ -109,7 +109,7 @@ func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })

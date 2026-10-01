@@ -105,11 +105,8 @@ func editDistance(a, b string) int {
 // Upstream binds no value under a module's name, only qualified names, so the
 // dot form is "`std` is not defined" there; here the module is a map value, so
 // the dot form ran anyway and taught a spelling upstream refuses.
-//
-// TODO: drop the embedded exemption once magus's embedded test sources stop
-// spelling `fs.writeFile` and `magus.log.info` (job buzz-dot-migration).
 func (c *checker) checkNamespaceDot(v *ast.MemberExpr) {
-	if v.Namespaced || c.embedded {
+	if v.Namespaced {
 		return
 	}
 	id, ok := v.Object.(*ast.IdentExpr)
@@ -123,8 +120,40 @@ func (c *checker) checkNamespaceDot(v *ast.MemberExpr) {
 	if nt, isObj := e.typ.(*types.ObjectType); !e.module && !(isObj && nt.IsNamespace) {
 		return
 	}
-	// At the module name, where upstream reports "`std` is not defined".
-	c.errorf(id.Pos, "%s is a module, so its members are reached with a backslash: write %s\\%s", id.Name, id.Name, v.Name)
+	// Upstream's message at upstream's position (the module name), then the fix.
+	c.errorf(id.Pos, "`%s` is not defined; %s is a module, so its members are reached with a backslash: write %s\\%s", id.Name, id.Name, id.Name, v.Name)
+}
+
+// checkObjectBackslash reports `ns\obj\member` where ns\obj is an object, and says
+// whether it did. Only a namespace's members take a backslash; an object's take a
+// dot, so upstream resolves `ns\obj\member` as a qualified name and finds none.
+func (c *checker) checkObjectBackslash(v *ast.MemberExpr, recv types.Type) bool {
+	if !v.Namespaced {
+		return false
+	}
+	inner, ok := v.Object.(*ast.MemberExpr)
+	if !ok || !inner.Namespaced {
+		return false
+	}
+	if ot, isObj := recv.(*types.ObjectType); !isObj || ot.IsNamespace {
+		return false
+	}
+	at := v.Pos
+	at.Col++
+	prefix := qualifiedName(inner)
+	c.errorf(at, "`%s` does not exists in that namespace or namespace does not exists; %s is an object, so its members are reached with a dot: write %s.%s", v.Name, inner.Name, prefix, v.Name)
+	return true
+}
+
+// qualifiedName spells a backslash-qualified name as the source wrote it.
+func qualifiedName(n ast.Node) string {
+	switch v := n.(type) {
+	case *ast.IdentExpr:
+		return v.Name
+	case *ast.MemberExpr:
+		return qualifiedName(v.Object) + `\` + v.Name
+	}
+	return ""
 }
 
 // undefinedCallHint is the fix for calling a name Buzz spells as a method, or ""

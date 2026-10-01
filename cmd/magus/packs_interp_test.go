@@ -30,7 +30,7 @@ func TestInspect_TargetPolicyNamingUnknownTarget(t *testing.T) {
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
 
-magus.project({
+magus\project({
     "targets": {
         "bogus-target": {"skip_cache": "test policy"}
     }
@@ -52,7 +52,7 @@ func TestInspect_TargetPolicyNamingKnownTargetOK(t *testing.T) {
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
 
-magus.project({
+magus\project({
     "targets": {
         "build": {"skip_cache": "test policy"}
     }
@@ -79,7 +79,7 @@ func TestInspect_ReportsEveryFailingMagusfile(t *testing.T) {
 	}
 	write("magusfile.buzz", `import "magus";
 
-magus.project({
+magus\project({
     "targets": {
         "bogus-target": {"skip_cache": "test policy"}
     }

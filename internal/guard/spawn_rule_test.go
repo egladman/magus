@@ -1009,7 +1009,7 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
 	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec --base 77aa01c agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
 	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client",
-		"tool_input": map[string]any{"script": `import "magus"; magus\job\register("tool-job", reported_base: "77aa01c");`}})
+		"tool_input": map[string]any{"script": `import "magus"; magus\job.register("tool-job", reported_base: "77aa01c");`}})
 	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
 
 	got := map[string]string{}

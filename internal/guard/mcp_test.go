@@ -31,7 +31,7 @@ func TestClientPutRendersEveryMergedField(t *testing.T) {
 			continue
 		}
 		merged++
-		line := buildCall(hint.ToolClient.String(), clientScript(`import "magus"; magus\job\put("a/b", opts: {"`+field+`": "x"});`), "")
+		line := buildCall(hint.ToolClient.String(), clientScript(`import "magus"; magus\job.put("a/b", opts: {"`+field+`": "x"});`), "")
 		assert.Contains(t, mcpParams(strings.Fields(line)), field,
 			"job.ParseMerge applies %q, so a put carrying it has to be judged", field)
 	}
@@ -149,24 +149,26 @@ func TestBuildCall(t *testing.T) {
 		"a script that does not parse": {clientScript("fun ("), unread},
 		"a path nobody can read":       {map[string]any{"path": filepath.Join(t.TempDir(), "gone.buzz")}, unread},
 		"a job put": {
-			clientScript(imp + `magus\job\put("a/b", opts: {"parent": "a", "write_paths": ["x/**", "y/**"], "read_only": false});`),
+			clientScript(imp + `magus\job.put("a/b", opts: {"parent": "a", "write_paths": ["x/**", "y/**"], "read_only": false});`),
 			"client op=put id=a/b parent=a read_only=false write_paths=x/**,y/**",
 		},
 		"an anonymous object": {
-			clientScript(imp + `magus\job\put("a/b", .{ parent = "a", read_only = true });`),
+			clientScript(imp + `magus\job.put("a/b", .{ parent = "a", read_only = true });`),
 			"client op=put id=a/b parent=a read_only=true",
 		},
-		"an elided value":   {clientScript(imp + `magus\job\put("a/b", opts: {"criteria": "ship the thing"});`), "client op=put id=a/b criteria=..."},
-		"a computed id":     {clientScript(imp + `final id = "a/b"; magus\job\put(id);`), "client op=put id=%unread%"},
-		"a computed opts":   {clientScript(imp + `final o = {"parent": "a"}; magus\job\put("a/b", opts: o);`), "client op=put id=a/b opts=%unread%"},
-		"a computed value":  {clientScript(imp + `final p = "a"; magus\job\put("a/b", opts: {"parent": p});`), "client op=put id=a/b parent=%unread%"},
-		"a register":        {clientScript(imp + `magus\job\register("a/b", reported_base: "abc");`), "client op=register id=a/b"},
-		"a clear":           {clientScript(imp + `magus\job\clear();`), "client op=clear"},
-		"a wait":            {clientScript(imp + `magus\job\wait("a/b");`), "magus job wait a/b"},
+		"a backslash put":   {clientScript(imp + `magus\job\put("a/b", opts: {"parent": "a"});`), "client op=put id=a/b parent=a"},
+		"a flat put":        {clientScript(`import "magus" as _; job.put("a/b", opts: {"parent": "a"});`), "client op=put id=a/b parent=a"},
+		"an elided value":   {clientScript(imp + `magus\job.put("a/b", opts: {"criteria": "ship the thing"});`), "client op=put id=a/b criteria=..."},
+		"a computed id":     {clientScript(imp + `final id = "a/b"; magus\job.put(id);`), "client op=put id=%unread%"},
+		"a computed opts":   {clientScript(imp + `final o = {"parent": "a"}; magus\job.put("a/b", opts: o);`), "client op=put id=a/b opts=%unread%"},
+		"a computed value":  {clientScript(imp + `final p = "a"; magus\job.put("a/b", opts: {"parent": p});`), "client op=put id=a/b parent=%unread%"},
+		"a register":        {clientScript(imp + `magus\job.register("a/b", reported_base: "abc");`), "client op=register id=a/b"},
+		"a clear":           {clientScript(imp + `magus\job.clear();`), "client op=clear"},
+		"a wait":            {clientScript(imp + `magus\job.wait("a/b");`), "magus job wait a/b"},
 		"a nested job fork": {clientScript(imp + `magus\cmd("job", ["fork", "a/b", "--write-paths", "x/**"]);`), "magus job fork a/b --write-paths x/**"},
-		"a job read":        {clientScript(imp + `magus\job\list();`), "client"},
+		"a job read":        {clientScript(imp + `magus\job.list();`), "client"},
 		"two writes": {
-			clientScript(imp + `magus\job\clear(); magus\run(["ci"]);`),
+			clientScript(imp + `magus\job.clear(); magus\run(["ci"]);`),
 			"client op=clear\nmagus run ci",
 		},
 	} {
@@ -213,13 +215,15 @@ func TestClientJobWritesReachTheRebindRule(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	me := narrowLease().ID
 	for script, what := range map[string]string{
-		`import "magus"; magus\job\put("harness/other", opts: {"write_paths": ["**"]});`:  "write another job",
-		`import "magus"; magus\job\put("` + me + `", opts: {"write_paths": ["**"]});`:     "rewrite the job it holds",
-		`import "magus"; magus\job\clear();`:                                              "drop every job",
-		`import "magus"; magus\job\register("harness/other", reported_base: "abc");`:      "write another job",
+		`import "magus"; magus\job.put("harness/other", opts: {"write_paths": ["**"]});`:  "write another job",
+		`import "magus"; magus\job.put("` + me + `", opts: {"write_paths": ["**"]});`:     "rewrite the job it holds",
+		`import "magus"; magus\job.clear();`:                                              "drop every job",
+		`import "magus"; magus\job.register("harness/other", reported_base: "abc");`:      "write another job",
 		`import "magus"; magus\cmd("job", ["exec", "harness/other"]);`:                    "take the lease on another job",
-		`import "magus"; final j = magus\job; j\clear();`:                                 "cannot read",
-		`import "magus" as m; m\job\put("harness/other", opts: {"write_paths": ["**"]});`: "write another job",
+		`import "magus"; final j = magus\job; j.clear();`:                                 "cannot read",
+		`import "magus" as m; m\job.put("harness/other", opts: {"write_paths": ["**"]});`: "write another job",
+		`import "magus"; magus\job\put("harness/other", opts: {"write_paths": ["**"]});`:  "write another job",
+		`import "magus" as _; job.put("harness/other", opts: {"write_paths": ["**"]});`:   "write another job",
 	} {
 		line := buildCall(hint.ToolClient.String(), clientScript(script), "")
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, line), what, "%q renders %q", script, line)

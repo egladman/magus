@@ -413,7 +413,7 @@ fun reach(hostOS: str) > str !> any {
 // there is nothing to hold and the note is "".
 fun hold(hostOS: str) > str !> any {
     if (hostOS == "linux") { return ""; }
-    final lease: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+    final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
     return machineNote(lease.owned, brokered: lease.brokered, idle: lease.idle);
 }
 

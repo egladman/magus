@@ -42,18 +42,18 @@ func TestComplete_ImportPath(t *testing.T) {
 }
 
 func TestComplete_ModuleMembers(t *testing.T) {
-	src := "import \"fs\";\nfs."
+	src := "import \"fs\";\nfs\\"
 	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "expected fs members")
 	for _, c := range got {
 		assert.Contains(t, []CompletionKind{KindMethod, KindField}, c.Kind)
-		assert.Equal(t, 0, c.Replace, "no partial typed after the dot")
+		assert.Equal(t, 0, c.Replace, "no partial typed after the backslash")
 	}
 }
 
 func TestComplete_ModuleMembers_Partial(t *testing.T) {
 	// Direct module name (no import yet) still offers members, filtered by partial.
-	src := "fs.gl"
+	src := "fs\\gl"
 	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got)
 	for _, c := range got {
@@ -65,22 +65,29 @@ func TestComplete_ModuleMembers_Partial(t *testing.T) {
 	assert.NotEmpty(t, m.Detail, "method should carry a signature detail")
 }
 
+// A dot reaches a value's member, never a module's, and no host docs describe one:
+// offering fs's methods there would complete a spelling the checker rejects.
+func TestComplete_DotOffersNoHostMembers(t *testing.T) {
+	assert.Empty(t, CompleteAt("import \"fs\";\nfs.gl", len("import \"fs\";\nfs.gl")))
+	assert.Empty(t, CompleteAt("final xs = [1];\nxs.le", len("final xs = [1];\nxs.le")), "no builtin len for a value's member")
+}
+
 func TestComplete_AliasedImport(t *testing.T) {
-	src := "import \"fs\" as f;\nf."
+	src := "import \"fs\" as f;\nf\\"
 	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "aliased module members should resolve")
 	_, ok := findLabel(got, "glob")
-	assert.True(t, ok, "fs.glob should be offered under alias f")
+	assert.True(t, ok, "fs\\glob should be offered under alias f")
 }
 
 func TestComplete_BuzzSchemeImport(t *testing.T) {
 	// Upstream's `buzz:` package scheme binds the bare module name, so member
 	// completion must resolve past the scheme.
-	src := "import \"buzz:fs\";\nfs."
+	src := "import \"buzz:fs\";\nfs\\"
 	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "buzz: scheme import should resolve fs members")
 	_, ok := findLabel(got, "glob")
-	assert.True(t, ok, "fs.glob should be offered when imported via buzz:fs")
+	assert.True(t, ok, "fs\\glob should be offered when imported via buzz:fs")
 }
 
 func TestComplete_Word_KeywordsModulesSymbols(t *testing.T) {
@@ -101,8 +108,8 @@ func TestComplete_Word_EmptyPrefixIsQuiet(t *testing.T) {
 
 func TestComplete_OffsetClamped(t *testing.T) {
 	assert.NotPanics(t, func() {
-		CompleteAt("fs.", 999)
-		CompleteAt("fs.", -5)
+		CompleteAt("fs\\", 999)
+		CompleteAt("fs\\", -5)
 	})
 }
 

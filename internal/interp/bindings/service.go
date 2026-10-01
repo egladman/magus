@@ -94,7 +94,7 @@ func releaseService(ctx context.Context, args []vm.Value) error {
 		}
 	}
 	if key == "" {
-		return errors.New("magus\\service.release: expected the ServiceLease magus\\service\\acquire returned")
+		return errors.New("magus\\service.release: expected the ServiceLease magus\\service.acquire returned")
 	}
 	sc.Session(host.ServiceSession).Release(ctx, key)
 	return nil

@@ -122,7 +122,7 @@ func TestIntegration_ProjectRegister(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
-magus.project(".", {
+magus\project(".", {
     "outputs": ["bin/*"],
 });
 export fun build(ctx: magus\Context, args: [str]) > void {}

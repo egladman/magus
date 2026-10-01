@@ -414,7 +414,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queue.WriteChanges(e.stdout, changes); err != nil {
 		return err
 	}
-	// Kept for every offline reader: ls jobs, describe job and magus\job\list.
+	// Kept for every offline reader: ls jobs, describe job and magus\job.list.
 	if err := queue.WriteSnapshot(cl.Root, queue.Snapshot{Fetched: fetch, Changes: changes}); err != nil {
 		return fmt.Errorf("keep the snapshot: %w", err)
 	}

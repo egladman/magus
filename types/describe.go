@@ -637,7 +637,7 @@ type ProjectsOutput struct {
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
 const ModuleDefinition = "A module is a magus standard-library namespace a magusfile imports for " +
 	"host capabilities - filesystem, exec, vcs, crypto, http, and more. Import " +
-	"each under its bare name (import \"fs\", then fs.glob(...)); magus layers these " +
+	"each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these " +
 	"methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods " +
 	"also exist in Buzz's own stdlib."
 

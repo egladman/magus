@@ -141,7 +141,7 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         model = spawn.model;
     }
     var fork = "magus job fork {id}";
-    var tool = "magus\\job\\put(\"{id}\", .\{ ";
+    var tool = "magus\\job.put(\"{id}\", .\{ ";
     if (parent != "orchestrator") {
         fork = fork + " --parent {parent}";
         tool = tool + "parent = \"{parent}\", ";
@@ -194,7 +194,7 @@ test "a spawn with no lineage title is denied, naming the fork" {
     std\assert(v.decision == "deny", message: "no title grammar");
     std\assert(v.reason.indexOf("magus job fork <job> --model <model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
-    std\assert(v.reason.indexOf("magus\\job\\put(\"<job>\"") != null, message: "names the client tool write");
+    std\assert(v.reason.indexOf("magus\\job.put(\"<job>\"") != null, message: "names the client tool write");
     std\assert(v.reason.indexOf("magus_job") == null, message: "names no retired MCP tool");
 }
 
@@ -202,7 +202,7 @@ test "a title naming a missing row is denied with the real command" {
     final v = decideSpawn(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "missing row");
     std\assert(v.reason.indexOf("magus job fork nothing-here --parent v050-prep --model opus --read-only") != null, message: v.reason);
-    std\assert(v.reason.indexOf("magus\\job\\put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
+    std\assert(v.reason.indexOf("magus\\job.put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
     std\assert(v.reason.indexOf("read_only = true") != null, message: "names the read-only field");
     std\assert(v.reason.indexOf("`v050-prep/scout nothing-here`") != null, message: "names the retitle");
 }

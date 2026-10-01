@@ -31,7 +31,7 @@ func mergeDriverWorkspace(t *testing.T) (*magus.Magus, string) {
 	magusfile := `import "magus";
 import "fs";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
@@ -143,7 +143,7 @@ func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
 	root := t.TempDir()
 	magusfile := `import "magus";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**", "!gen/hand.txt");
@@ -171,7 +171,7 @@ func TestMergeDriverRefusesUnrebuildableOutput(t *testing.T) {
 	// gen/** is declared project-wide, and no target claims it via ctx.writesFiles.
 	magusfile := `import "magus";
 
-magus.project({
+magus\project({
     "outputs": ["gen/**"],
 })
 
@@ -195,7 +195,7 @@ func autoResolveWorkspace(t *testing.T) *magus.Magus {
 	root := t.TempDir()
 	magusfile := `import "magus";
 
-magus.project({"merge_low_risk": ["fixtures/**"]})
+magus\project({"merge_low_risk": ["fixtures/**"]})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");

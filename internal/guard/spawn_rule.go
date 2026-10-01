@@ -383,7 +383,7 @@ func resolveLease(who hookAttribution, explicit, bound string) (string, types.Le
 }
 
 // execTarget is the job a command line takes, through `magus job exec <job>` or a client
-// script's magus\job\register, or "" when it takes none.
+// script's magus\job.register, or "" when it takes none.
 func execTarget(command string) string {
 	cmds, ok := ParseCommands(command)
 	if !ok {
