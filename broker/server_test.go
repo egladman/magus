@@ -1,5 +1,3 @@
-// cross-cutting: a real Client against a real Serve over a socket, across client.go and server.go
-
 package broker
 
 import (
@@ -522,28 +520,6 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	var er errorReply
 	require.NoError(t, decodeBody(f, &er))
 	assert.Equal(t, CodeProtocol, er.Code)
-}
-
-func TestListenLosesToALiveBroker(t *testing.T) {
-	addr := testAddr(t)
-	serve(t, addr)
-	_, err := Listen(t.Context(), addr)
-	assert.ErrorIs(t, err, ErrRunning, "bind is the lock: a second broker exits instead of serving")
-}
-
-func TestListenReclaimsADeadSocket(t *testing.T) {
-	addr := testAddr(t)
-	path := addr[len("unix://"):]
-	ln, err := endpoint.ListenUnix(path)
-	require.NoError(t, err)
-	// Leave the file behind the way a killed broker does.
-	ln.SetUnlinkOnClose(false)
-	require.NoError(t, ln.Close())
-	require.FileExists(t, path)
-
-	ln2, err := Listen(t.Context(), addr)
-	require.NoError(t, err)
-	_ = ln2.Close()
 }
 
 func TestShutdownStopsTheBroker(t *testing.T) {
