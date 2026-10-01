@@ -30,7 +30,8 @@ somewhere else. The first line a
 script prints says what it did, and the first line of `--help` says what it costs.
 `hack/lint/hack-scripts-start-with-a-verb.buzz` holds every script to that and this file
 to listing each one; `hack/lint/magusfile-modules-have-no-main.buzz` keeps modules and
-scripts in their directories.
+scripts in their directories; `hack/lint/hack-scripts-parse-argv-with-flags.buzz` has every
+script read its argv with `flags\parse`.
 
 Each script's work is an exported, typed function that `main` only calls, so the
 scripts are also reference to copy: read one before reaching for python, sed or jq.

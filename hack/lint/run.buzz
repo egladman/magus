@@ -27,6 +27,7 @@ import "hack/lint/support" as support;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
@@ -70,6 +71,7 @@ export fun rules() > [Rule] {
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
+        Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },

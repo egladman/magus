@@ -1,0 +1,53 @@
+// hack-scripts-parse-argv-with-flags holds every script in a hack/ script directory to one
+// reading of its argv: flags\parse. A hand-rolled loop answers a repeated flag, a missing
+// value, an empty one and `--` its own way, and each script that grew one answered them
+// differently. A git hook reads the path git hands it as $1 and lives outside the script
+// directories, so it is not judged.
+namespace scriptflags;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/lint/magusfile-modules-have-no-main" as modules;
+
+final IMPORTS_FLAGS = std\pattern(`(?m)^import\s+"flags"\s*;`);
+
+export fun reads() > [str] {
+    return ["hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz", "hack/ci/*.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (support\scriptDir(f.value) == "") {
+            continue;
+        }
+        final src = support\read(f);
+        final line = modules\mainLine(src);
+        if (line == 0 or IMPORTS_FLAGS.match(src) != null) {
+            continue;
+        }
+        found.append(Finding{ path = f.value, line = line,
+            message = "{f.value} is run but reads its argv without the flags module",
+            fix = "import \"flags\" and read argv with flags\\parse(args, switches:, valued:, required:, repeated:, command:),\n"
+                + "the one parser every hack script shares; a subcommand is args[0] and its flags parse the rest." });
+    }
+    return found;
+}
+
+test "a script importing flags, and a module without main, pass" {
+    final got = check(support\fixture({
+        "hack/dev/ls-things.buzz": "namespace x;\n\nimport \"flags\";\n\nexport fun main(args: [str]) > void \{}\n",
+        "hack/magusfile/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
+    }));
+    assert\equal(got.len(), want: 0, message: "clean");
+}
+
+test "a run script that does not import flags is reported at its main" {
+    final got = check(support\fixture({
+        "hack/remote/on-mars.buzz": "namespace x;\n\nimport \"std\";\n\nfun main(args: [str]) > void \{}\n",
+    }));
+    assert\equal(support\messages(got), want: ["hack/remote/on-mars.buzz is run but reads its argv without the flags module"], message: "finding");
+    assert\equal(got[0].line, want: 5, message: "the line declaring main");
+}
