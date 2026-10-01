@@ -431,13 +431,16 @@ type ListExpr struct {
 }
 
 // ObjectLit: TypeName{ field = val, ... }. Mut is set for `mut TypeName{…}` (a
-// mutable instance); a plain object literal is immutable.
+// mutable instance); a plain object literal is immutable. Namespace is the `ns`
+// of a qualified `ns\TypeName{…}`, empty for a bare name; TypeName is the last
+// segment either way.
 type ObjectLit struct {
 	Pos
-	TypeName string
-	Keys     []string
-	Values   []Node
-	Mut      bool
+	TypeName  string
+	Namespace string
+	Keys      []string
+	Values    []Node
+	Mut       bool
 }
 
 // InterpExpr: "text {expr} ..." — alternating literal and expression parts.

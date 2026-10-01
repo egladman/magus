@@ -2265,6 +2265,11 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 
 func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 	resolved, ok := c.namedType(v.TypeName)
+	if v.Namespace != "" {
+		if member, _ := c.namespaceMemberType(v.Namespace, v.TypeName); member != nil {
+			resolved, ok = member, true
+		}
+	}
 	if !ok {
 		c.errorfc(v.Pos, UndefinedType, "undefined type %q", v.TypeName)
 		return types.Any

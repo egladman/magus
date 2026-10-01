@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -563,6 +564,16 @@ func (c *compiler) typeDecl(name string) (*ast.ObjectDecl, bool) {
 		}
 		root = cc
 	}
+	return root.importedType(name)
+}
+
+// importedType finds the object type an import exports as name, skipping any
+// declaration of this module's own: what a qualified `ns\name` names.
+func (c *compiler) importedType(name string) (*ast.ObjectDecl, bool) {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
 	for i := len(root.importedTypes) - 1; i >= 0; i-- {
 		if od, ok := root.importedTypes[i].(*ast.ObjectDecl); ok && od.Name == name {
 			return od, true
@@ -700,6 +711,29 @@ func (c *compiler) globalName(name string) string {
 		return c.nsPrefix + name
 	}
 	return name
+}
+
+// typeIdentity is the C operand of an OpIs or OpAs testing annot, whose runtime
+// shape is base: one past the const holding the Env key of the object or enum
+// annot names, so the VM can tell a module's private Node from the importer's.
+// A qualified name is an export, whose key is bare. Zero, for the builtin and
+// structural shapes, leaves the VM comparing names alone.
+func (c *compiler) typeIdentity(annot, base string) int32 {
+	if builtinTypeShapes[base] || strings.HasPrefix(base, "obj{") {
+		return 0
+	}
+	key := base
+	if !strings.Contains(annot, `\`) {
+		key = c.globalName(base)
+	}
+	return c.nameConst(key) + 1
+}
+
+// builtinTypeShapes are the bases vm.TypeShape reduces an annotation to that name
+// no declared type.
+var builtinTypeShapes = map[string]bool{
+	"any": true, "null": true, "bool": true, "int": true, "double": true, "str": true,
+	"list": true, "map": true, "fun": true, "rng": true, "pat": true, "ud": true,
 }
 
 // initModuleScope records the module's namespace and the set of its private
@@ -1403,7 +1437,8 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 				nul = 1
 			}
 			c.emitGetLocal(errSlot, 0)
-			c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			is := c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			c.chunk.Code[is].C = c.typeIdentity(cl.TypeName, base)
 			nextClause = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 		}
 		c.enterBlock()
@@ -1967,7 +2002,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if nullable {
 			nul = 1
 		}
-		c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+		is := c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+		c.chunk.Code[is].C = c.typeIdentity(v.TypeName, base)
 	case *ast.AsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
@@ -1982,7 +2018,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// bare-`as` path is unaffected, since every name it does not recognise as a
 		// primitive returns the value untouched either way.
 		base, _ := vmpackage.TypeShape(v.TypeName)
-		c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
+		as := c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
+		c.chunk.Code[as].C = c.typeIdentity(v.TypeName, base)
 	case *ast.MatchExpr:
 		return c.compileMatchExpr(v)
 	case *ast.CatchExpr:
@@ -2202,6 +2239,12 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 
 func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	decl, ok := c.typeDecl(v.TypeName)
+	typeKey := c.globalName(v.TypeName)
+	if v.Namespace != "" {
+		// A qualified name is an import's export, which binds under its bare name.
+		decl, ok = c.importedType(v.TypeName)
+		typeKey = v.TypeName
+	}
 	if !ok {
 		for i, key := range v.Keys {
 			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(key)), 0)
@@ -2209,7 +2252,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		}
-		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(c.globalName(v.TypeName)), int32(len(v.Keys))|mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(typeKey), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -2231,7 +2274,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(c.globalName(v.TypeName)), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
+	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(typeKey), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
 	return nil
 }
 
