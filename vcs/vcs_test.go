@@ -12,10 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain runs every backend test against a private HOME and XDG tree: jj keeps a
+// repository's config under the user's config directory, and git, hg and sl read the
+// user's config, so without it these tests read and wrote the developer's own.
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestResolveAutodetect(t *testing.T) {
 	assertAutodetect := func(t *testing.T, claim, want string) {
