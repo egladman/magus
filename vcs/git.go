@@ -2162,7 +2162,48 @@ func gitHookBody(name, command string) string {
 	if name == "post-checkout" {
 		guard = "[ \"$3\" = \"1\" ] || exit 0\n"
 	}
-	return guard + command + " >/dev/null 2>&1 || true\n"
+	return guard + command + gitHookSuffix + "\n"
+}
+
+// gitHookSuffix is what gitHookBody appends to the command, so a reader can take it off.
+const gitHookSuffix = " >/dev/null 2>&1 || true"
+
+// GitRefreshHookCommand returns the command the refresh hook installed for root's git
+// repository runs, read from post-checkout, the hook a new worktree fires. ok is false when
+// no refresh section is installed. A root outside any git repository is
+// [types.ErrVCSUnsupported]: another VCS keeps its hooks elsewhere, so "none installed"
+// would be a guess. The command is as written: a relative binary such as ./magus resolves
+// against the checkout's top level, where git runs hooks.
+func GitRefreshHookCommand(ctx context.Context, root string) (command string, ok bool, err error) {
+	paths, inRepo, err := gitRepoPathsOf(ctx, root)
+	if err != nil {
+		return "", false, err
+	}
+	if !inRepo {
+		return "", false, types.ErrVCSUnsupported
+	}
+	path := filepath.Join(paths.hooksDir, "post-checkout")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	text := string(data)
+	spans, err := managedSpans(text, refreshMarkers)
+	if err != nil {
+		return "", false, fmt.Errorf("vcs: %s: %w", path, err)
+	}
+	for _, s := range spans {
+		for line := range strings.Lines(text[s.start:s.end]) {
+			line = strings.TrimSpace(line)
+			if cmd, found := strings.CutSuffix(line, gitHookSuffix); found {
+				return cmd, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
