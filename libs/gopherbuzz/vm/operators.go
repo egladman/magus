@@ -278,20 +278,20 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 		}
 		return list.Items[i], nil
 	case tagStr:
-		// Yields a one-character string, matching foreach-over-str. Indexed by RUNE,
-		// not byte, so s[i] lines up with the i-th element foreach would produce.
-		runes := []rune(vm.asStr(obj).V)
+		// Yields a one-BYTE string, as upstream does, so s[i] agrees with len(), sub()
+		// and foreach: a multibyte character spans several indexes.
+		s := vm.asStr(obj).V
 		i, ok := asInt(idx)
 		if !ok {
 			return Null, fmt.Errorf("buzz: str index must be an int, got %s", idx.buzzKind())
 		}
-		if i < 0 || int(i) >= len(runes) {
+		if i < 0 || int(i) >= len(s) {
 			if optional {
 				return Null, nil
 			}
-			return Null, fmt.Errorf("buzz: str index %d out of range (len %d)", i, len(runes))
+			return Null, fmt.Errorf("buzz: Out of bound str access (index %d, len %d)", i, len(s))
 		}
-		return StrValue(string(runes[i])), nil
+		return StrValue(s[i : i+1]), nil
 	case tagMap:
 		m := vm.asMap(obj)
 		if v, ok := m.getVal(idx); ok {
@@ -1032,7 +1032,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.indexOf: requires a str needle argument")
 			}
-			// Optional `from:` start position, in RUNES like every other index this
+			// Optional `from:` start position, in BYTES like every other index this
 			// type exposes. Without it, resuming a scan means slicing the haystack and
 			// searching the copy, which allocates the whole remainder on every step and
 			// turns any scan-for-the-next-match loop into a quadratic one. That shape
@@ -1050,13 +1050,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 				}
 			}
 
-			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
-			// index IS a byte offset, so neither the start conversion nor the result
-			// conversion below has to walk the string. A found needle near the end of a
-			// large string used to pay for the entire prefix on every call.
 			// BYTE offsets in and out, matching upstream (`std.mem.indexOf(u8, ...)`).
-			// The multibyte path used to convert a rune start in and a rune index out,
-			// walking the string twice and disagreeing with len() and sub().
 			if from >= len(str) {
 				return Null, nil
 			}

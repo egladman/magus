@@ -345,7 +345,7 @@ func TestIndexingSemantics(t *testing.T) {
 		{"map index missing is null", `return {"a": 5}["z"];`, "null"},
 		{"map index set inserts", `var m = mut {"a": 1}; m["b"] = 2; return m.keys();`, "[a, b]"},
 		{"map index set overwrites", `var m = mut {"a": 1}; m["a"] = 9; return m["a"];`, "9"},
-		{"string index yields one-rune string", `return "héllo"[1];`, "é"},
+		{"string index yields one-byte string", `return "héllo"[1].byte(0);`, "195"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -360,6 +360,7 @@ func TestIndexingSemantics(t *testing.T) {
 	}{
 		{"list index out of range", `return [1][5];`, "out of"},
 		{"list negative index", `return [1][0 - 1];`, "out of"},
+		{"string index past the last byte", `return "aé"[3];`, "Out of bound str access"},
 		{"set on immutable list", `final l = [1]; l[0] = 2; return l;`, "immutable"},
 		{"set on immutable map", `final m = {"a": 1}; m["a"] = 2; return m;`, "immutable"},
 		{"index a non-indexable", `final n = 5; return n[0];`, "index"},
