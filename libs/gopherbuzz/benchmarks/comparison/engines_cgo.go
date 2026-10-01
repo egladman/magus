@@ -1,17 +1,15 @@
 //go:build cgo_engines
 
-// cross-cutting: the cgo_engines half of the tag-split engine list for comparison_test.go
-
 // Adds the opt-in extended tier - LuaJIT and Umka (both cgo) - to the
-// comparison. This file holds no cgo itself (forbidden in _test.go); it drives
-// the primitives in luajit_cgo.go / umka_cgo.go. Compiled only under the
-// cgo_engines tag:
+// comparison. This file holds no cgo itself; it drives the primitives in
+// luajit_cgo.go / umka_cgo.go. Compiled only under the cgo_engines tag:
 //
 //	GOWORK=off CGO_ENABLED=1 go test -tags cgo_engines -bench=. .
 //
 // Memory caveat: Go's -benchmem counts only Go-heap allocation. LuaJIT and Umka
 // allocate on the C heap, invisible to the Go allocator, so their B/op reads ~0
 // and is NOT comparable - read their times only.
+
 package comparison
 
 import "testing"
