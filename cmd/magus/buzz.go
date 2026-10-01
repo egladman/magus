@@ -803,7 +803,9 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 }
 
 // buzzCheckFile checks one path, returning its diagnostics with File set so each
-// one renders as <file>:L:C, the position shape an editor can jump to.
+// one renders as <file>:L:C, the position shape an editor can jump to. A diagnostic
+// inside an imported file names that file, relative to the working directory when
+// it sits beneath it.
 func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diagnostic, error) {
 	resolved := buzzResolveFile(path)
 	data, err := os.ReadFile(resolved)
@@ -827,8 +829,18 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
 
 	diags := sess.Diagnostics(string(data))
+	wd, _ := os.Getwd()
 	for i := range diags {
-		diags[i].File = resolved
+		switch f := diags[i].File; {
+		case f == "":
+			diags[i].File = resolved
+		case !filepath.IsAbs(f):
+			diags[i].File = filepath.Clean(f)
+		default:
+			if rel, err := filepath.Rel(wd, f); err == nil && !strings.HasPrefix(rel, "..") {
+				diags[i].File = rel
+			}
+		}
 	}
 	return diags, nil
 }

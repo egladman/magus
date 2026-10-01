@@ -516,6 +516,38 @@ export fun language() > str {
 	assert.Contains(t, trace, "buzz.register_namespace")
 }
 
+// The entry's `import "magus"` puts the magus types in the session, and a module it
+// imports still names them only through an import of its own. A failure there is
+// reported in the module's file.
+func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
+	for _, tc := range []struct {
+		name, lib string
+		wantErr   bool
+	}{
+		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
+		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			lib := filepath.Join(dir, "lib.buzz")
+			require.NoError(t, os.WriteFile(lib, []byte(tc.lib), 0o644))
+			script := filepath.Join(dir, "main.buzz")
+			require.NoError(t, os.WriteFile(script, []byte("import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n"), 0o644))
+
+			diags, err := buzzCheckFile(t.Context(), script, false)
+			require.NoError(t, err)
+			if !tc.wantErr {
+				assert.Empty(t, diags)
+				return
+			}
+			require.Len(t, diags, 1)
+			assert.Equal(t, lib, diags[0].File)
+			assert.Equal(t, 1, diags[0].Line)
+			assert.Contains(t, diags[0].Msg, "no import binds magus")
+		})
+	}
+}
+
 func TestBuzzReachesMagus(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, src string) {

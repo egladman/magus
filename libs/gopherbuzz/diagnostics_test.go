@@ -351,3 +351,29 @@ func TestDiagnostic_String_NamesTheFileWhenSet(t *testing.T) {
 
 	assert.Equal(t, "buzz: docs/lib/conventions.buzz:37:66: warning: something", d.String())
 }
+
+// A module that fails to check is reported in its own file at its own position, not
+// at that line of whichever file imported it.
+func TestSession_Diagnostics_ImportedFileErrorNamesItsFile(t *testing.T) {
+	for _, tc := range []struct{ name, entry string }{
+		{name: "flat", entry: `import "bad";`},
+		{name: "aliased", entry: `import "bad" as b;`},
+		{name: "through another module", entry: `import "mid";`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.buzz"), []byte("export fun f() > void {\n    var x: int = \"s\";\n}\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "mid.buzz"), []byte("import \"bad\";\nexport fun g() > void {}\n"), 0o644))
+			s := NewSession(context.Background(), WithEmbedded())
+			s.SetIncludeDirs([]string{dir})
+
+			got := s.Diagnostics(tc.entry)
+
+			require.Len(t, got, 1)
+			assert.Equal(t, filepath.Join(dir, "bad.buzz"), got[0].File)
+			assert.Equal(t, 2, got[0].Line)
+			assert.Equal(t, 5, got[0].Col)
+			assert.Equal(t, TypeMismatch, got[0].Code)
+		})
+	}
+}

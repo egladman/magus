@@ -1278,6 +1278,39 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	return prog, errs, warnings, nil
 }
 
+// moduleError is an imported file failing to load: err is the failure, and its
+// position is in file, not in the importer.
+type moduleError struct {
+	file string
+	err  error
+}
+
+func (e *moduleError) Error() string { return e.err.Error() }
+func (e *moduleError) Unwrap() error { return e.err }
+
+// importFailed reports the module file that importPath resolved to failing with err.
+func importFailed(importPath, file string, err error) error {
+	return bzz.Wrapf(UnresolvedImport, &moduleError{file: file, err: err}, "buzz: import %q: %v", importPath, err)
+}
+
+// parseDiagnostic locates err, a failure before type-checking, in the file it
+// happened in: the innermost module whose import failed, else the checked source.
+func parseDiagnostic(err error) Diagnostic {
+	var me *moduleError
+	var inner *moduleError
+	for e := err; errors.As(e, &me); e = me.err {
+		inner = me
+	}
+	if inner != nil {
+		if d, ok := DiagnosticOf(inner.err); ok {
+			d.File = inner.file
+			return d
+		}
+	}
+	line, col, msg := splitBuzzPos(err.Error())
+	return Diagnostic{Line: line, Col: col, Msg: msg}
+}
+
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
 // 1-based; a zero Line means no position was recoverable (Col is only meaningful
 // beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped; the
@@ -1286,15 +1319,16 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 // every diagnostic before this field existed (a parse error has no Severity set either,
 // so it reads as an error, correctly). Msg/Line/Col/Code/Severity mirror the unexported
 // checker typeError; keep the two shapes in sync if either gains a field. File does not:
-// a Session is handed source text, never a path, so only a caller can fill it in.
+// a Session is handed source text, never its path, so File is set only on a
+// diagnostic inside an imported file and the caller fills in the rest.
 type Diagnostic struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
 	Severity  Severity
-	// File is the path this diagnostic is reported against. A caller that knows one
-	// should set it: a warning naming only "line 37:66" sends its reader grepping the
-	// tree for which file aired it.
+	// File is the path this diagnostic is reported against. A caller that knows the
+	// checked source's path should set it where it is empty: a warning naming only
+	// "line 37:66" sends its reader grepping the tree for which file aired it.
 	File string
 }
 
@@ -1356,8 +1390,7 @@ func (s *Session) Diagnostics(code string) []Diagnostic {
 	// against the session's own lifetime like the rest of the no-ctx surface.
 	_, errs, warnings, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
-		line, col, msg := splitBuzzPos(parseErr.Error())
-		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
+		return []Diagnostic{parseDiagnostic(parseErr)}
 	}
 	out := make([]Diagnostic, 0, len(errs)+len(warnings))
 	for _, e := range errs {
@@ -1799,7 +1832,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		// from the same collection (see CompileOptions.ImportedTypes).
 		s.collectImportedModule(imp.Alias, string(data))
 		if err = s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
-			return ImportFile, err
+			return ImportFile, importFailed(imp.Path, path, err)
 		}
 		if len(s.importFrames) > 0 {
 			noted.files = append(noted.files, isolatedClosure(s.lastClosure)...)
@@ -1815,7 +1848,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	s.collectImportedModule(boundName, string(data))
 	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
-		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
+		return ImportFile, importFailed(imp.Path, path, err)
 	}
 	if len(s.importFrames) > 0 {
 		noted.files = append(noted.files, nestedClosure(s.lastClosure, moduleDir)...)
@@ -2310,7 +2343,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 
 	// Execute the imported file.
 	if err := sub.Exec(ctx, src); err != nil {
-		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
+		return err
 	}
 	if s.bytecodeStore != nil {
 		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)
