@@ -9,11 +9,11 @@ import (
 )
 
 func TestHover_ModuleMethod(t *testing.T) {
-	src := "import \"fs\";\nfs.glob(\"*\");"
+	src := "import \"fs\";\nfs\\glob(\"*\");"
 	// Point at the "glob" identifier.
 	off := strings.Index(src, "glob") + 1
 	h := HoverAt(src, off)
-	require.NotNil(t, h, "expected hover on fs.glob")
+	require.NotNil(t, h, "expected hover on fs\\glob")
 	assert.Contains(t, h.Title, "glob", "title should name the method: %q", h.Title)
 	assert.NotEmpty(t, h.Doc, "method hover should carry docs")
 }
@@ -39,11 +39,13 @@ func TestHover_LocalFunction(t *testing.T) {
 func TestHover_Nothing(t *testing.T) {
 	assert.Nil(t, HoverAt("   +  ", 3), "no symbol under cursor")
 	assert.Nil(t, HoverAt("xyzzy", 2), "unknown identifier has no hover")
+	assert.Nil(t, HoverAt("import \"fs\";\nfs.glob", len("import \"fs\";\nfs.gl")), "a dot reaches a value's member, not a module's")
+	assert.Nil(t, HoverAt("final xs = [1];\nxs.len", len("final xs = [1];\nxs.le")), "a value's len is not the builtin")
 }
 
 func TestHover_OffsetClamped(t *testing.T) {
 	assert.NotPanics(t, func() {
-		HoverAt("fs.glob", 999)
-		HoverAt("fs.glob", -3)
+		HoverAt("fs\\glob", 999)
+		HoverAt("fs\\glob", -3)
 	})
 }
