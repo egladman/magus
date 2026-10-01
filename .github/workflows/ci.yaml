@@ -625,7 +625,8 @@ jobs:
   # the next.
   #
   # Every figure draws its edges from this tree's index, so a Go change that moves an import
-  # between two packages a figure draws fails here, and the target names the fix.
+  # between two packages a figure draws, or adds a package inside a figure's scope, fails
+  # here, and the target names the fix.
   figures:
     name: docs figures
     needs: [plan]
@@ -662,8 +663,10 @@ jobs:
       - name: Build the symbol index
         run: magus graph build --no-sessions
 
+      # --no-default-charms drops the workspace's rw, which would rewrite the figures
+      # instead of failing on them.
       - name: Lay out every figure from the symbol index
-        run: magus run diagrams-generate docs
+        run: magus run diagrams-generate docs --no-default-charms
 
   # One stable check name a branch rule can require, standing for the whole run.
   #
