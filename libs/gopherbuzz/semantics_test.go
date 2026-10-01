@@ -358,9 +358,11 @@ func TestIndexingSemantics(t *testing.T) {
 		src     string
 		wantSub string
 	}{
-		{"list index out of range", `return [1][5];`, "out of"},
-		{"list negative index", `return [1][0 - 1];`, "out of"},
+		{"list index out of range", `return [1][5];`, "Out of bound list access"},
+		{"list negative index", `return [1][0 - 1];`, "Out of bound list access"},
+		{"list set out of range", `var l = mut [1]; l[5] = 2; return l;`, "Out of bound list access"},
 		{"string index past the last byte", `return "aé"[3];`, "Out of bound str access"},
+		{"string negative index", `return "ab"[0 - 1];`, "Out of bound string access"},
 		{"set on immutable list", `final l = [1]; l[0] = 2; return l;`, "immutable"},
 		{"set on immutable map", `final m = {"a": 1}; m["a"] = 2; return m;`, "immutable"},
 		{"index a non-indexable", `final n = 5; return n[0];`, "index"},

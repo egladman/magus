@@ -1,0 +1,5 @@
+// @error: Out of bound list access
+// Upstream buzz at 294d8f9 rejects [1][5] with "Out of bound list access."
+// (OP_GET_LIST_SUBSCRIPT in src/vm.zig).
+final l = [1];
+final __r = l[5];

@@ -259,9 +259,16 @@ func asInt(v Value) (int64, bool) {
 	}
 }
 
-// indexGet evaluates obj[idx] for lists (int) and maps (any key; see mapKeyEqual).
-// indexGet evaluates obj[idx]. When optional is set (the checked subscript form
-// obj[?idx]), an out-of-bounds list/str index yields null instead of an error.
+// errOutOfBound words a bad subscript as upstream's vm.zig does: "Out of bound list
+// access." for a list either way, but for a str "string" when the index is negative
+// and "str" when it is past the end.
+func errOutOfBound(kind string, i int64, n int) error {
+	return fmt.Errorf("buzz: Out of bound %s access (index %d, len %d)", kind, i, n)
+}
+
+// indexGet evaluates obj[idx] for lists, strs (int) and maps (any key; see
+// mapKeyEqual). When optional is set (the checked subscript form obj[?idx]), an
+// out-of-bounds list/str index yields null instead of an error.
 func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 	switch obj.tag() {
 	case tagList:
@@ -274,7 +281,7 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			if optional {
 				return Null, nil
 			}
-			return Null, fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
+			return Null, errOutOfBound("list", i, len(list.Items))
 		}
 		return list.Items[i], nil
 	case tagStr:
@@ -289,7 +296,10 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			if optional {
 				return Null, nil
 			}
-			return Null, fmt.Errorf("buzz: Out of bound str access (index %d, len %d)", i, len(s))
+			if i < 0 {
+				return Null, errOutOfBound("string", i, len(s))
+			}
+			return Null, errOutOfBound("str", i, len(s))
 		}
 		return StrValue(s[i : i+1]), nil
 	case tagMap:
@@ -322,7 +332,7 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 			return fmt.Errorf("buzz: list index must be an int, got %s", idx.buzzKind())
 		}
 		if i < 0 || int(i) >= len(list.Items) {
-			return fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
+			return errOutOfBound("list", i, len(list.Items))
 		}
 		list.Items[i] = val
 		return nil
