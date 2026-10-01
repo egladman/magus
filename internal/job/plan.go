@@ -41,7 +41,8 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // doors that fork by merge (magus\job\put, from the client tool or a magusfile). A merge that creates
 // the row is held to the jobs limits and to unambiguous symbol gates, and takes
 // default_timeout when it named no timeout. A merge onto a row that already exists is an
-// update of that job, held only to [RefuseAddedWritePaths] for the write paths it adds.
+// update of that job, held only to [RefuseAddedWritePaths] for the write paths it adds and
+// to [RefuseUngradableClaims] for the deny paths it adds.
 // read may be nil where no graph is at hand, which skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
 	rows, err := store.List()
@@ -54,6 +55,10 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		merge(&merged)
 		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool { return slices.Contains(rows[i].WritePaths, p) })
 		if err := RefuseAddedWritePaths(ctx, store, id, added); err != nil {
+			return types.Job{}, err
+		}
+		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(rows[i].DenyPaths, p) })
+		if err := RefuseUngradableClaims(ctx, store, id, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
 			return types.Job{}, err
 		}
 	} else {
