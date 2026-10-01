@@ -20,6 +20,11 @@
 //	                                                            start a validation run on the base for
 //	                                                            what became ready at <time>, unless an
 //	                                                            unfinished run covers it
+//	magus buzz hack/ci/merge-queue.buzz -- reviews --head <sha> --base <branch> [--pr <n>]
+//	                                    [--head-owner <owner> --head-branch <branch>]
+//	                                                            dismiss each approval on pull request <n>,
+//	                                                            or the one from owner:branch at <sha>, the
+//	                                                            change since it does not carry
 //
 // The `--` hands the rest to the script; without it magus would parse the flags itself.
 // What the runner provides (GITHUB_REPOSITORY, RUNNER_TEMP, GITHUB_OUTPUT, the token) is
@@ -405,6 +410,57 @@ fun apply(run: str, base: str, app: str, committer: str) > void !> any {
     proc\exec("magus", args: args, opts: {});
 }
 
+// reviewsArgs classifies with main's own workspace, as plan does, so the approvals a
+// reviewer sees dismissed are exactly the ones the queue would not count. --head pins the
+// push this run answers: a later push has its own run.
+export fun reviewsArgs(pr: str, head: str, base: str) > [str] {
+    return ["queue", "reviews", "--provider", "github", "--base", base, "--change", pr, "--head", head, "--dismiss"];
+}
+
+// REVIEWS_FLAGS are reviews' required flags: without the head it would dismiss on a push
+// it was never asked about. REVIEWS_FORK_FLAGS find the pull request when the run names
+// none, as GitHub's workflow_run names none for a fork's: its head repository's owner
+// and branch.
+final REVIEWS_FLAGS = ["--head", "--base"];
+final REVIEWS_FORK_FLAGS = ["--pr", "--head-owner", "--head-branch"];
+
+// pullsAt reads `gh api repos/<repo>/pulls?head=<owner>:<branch>`: the open pull
+// requests whose head is still head. A listing without a list is an error, never none.
+export fun pullsAt(listing: str, head: str) > [str] !> any {
+    final list = serialize\jsonDecode(listing).list();
+    if (list == null) {
+        throw "queue: reviews: the pull request listing is not a list: {listing}";
+    }
+    final found = mut [<str>];
+    foreach (p in list!) {
+        if (p.q("head").q("sha").stringValue() == head) {
+            found.append("{p.q("number").integerValue()}");
+        }
+    }
+    return found;
+}
+
+// reviews classifies the approvals on pr, or, when the run named none, on each open pull
+// request from owner:branch at head. That lookup is one read of the API; nothing of the
+// fork's is run.
+fun reviews(pr: str, head: str, base: str, owner: str, branch: str) > void !> any {
+    var prs = [pr];
+    if (pr == "") {
+        if (owner == "" or branch == "") {
+            throw "queue: reviews needs --pr, or --head-owner and --head-branch to find it\n{usage}";
+        }
+        prs = pullsAt(capture("gh", args: ["api", "--method", "GET", "repos/{need("GITHUB_REPOSITORY")}/pulls",
+            "-f", "state=open", "-f", "head={owner}:{branch}", "-f", "per_page=100"]), head: head);
+        if (prs.len() == 0) {
+            std\print("::notice title=queue-reviews-no-pull-request::no open pull request from {owner}:{branch} is at {head}");
+            return;
+        }
+    }
+    foreach (n in prs) {
+        proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: {});
+    }
+}
+
 final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  plan --depth <n>\n"
     + "  validate --change <id>\n"
@@ -412,7 +468,8 @@ final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
-    + "  start --base <branch> --intent-at <time>";
+    + "  start --base <branch> --intent-at <time>\n"
+    + "  reviews --head <sha> --base <branch> [--pr <n> | --head-owner <owner> --head-branch <branch>]";
 
 // options parses one step's flags, all valued. Each name in required must be given a
 // value; optional ones may be empty. Anything the step does not declare is refused.
@@ -456,6 +513,9 @@ export fun main(args: [str]) > void !> any {
     } else if (step == "start") {
         final o = options(step, argv: argv, required: START_FLAGS, optional: [<str>]);
         start(o["--base"]!, intentAt: o["--intent-at"]!);
+    } else if (step == "reviews") {
+        final o = options(step, argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
+        reviews(o["--pr"] ?? "", head: o["--head"]!, base: o["--base"]!, owner: o["--head-owner"] ?? "", branch: o["--head-branch"] ?? "");
     } else {
         throw "queue: unknown step \"{step}\"\n{usage}";
     }
@@ -714,6 +774,36 @@ test "CI finishing on a queued head starts a run only when no unfinished run pla
     assert\equal(verdict([after]), want: [false, "queue-dispatch-covered"], message: "the running run planned after CI finished");
     assert\equal(verdict([before, queued]), want: [false, "queue-dispatch-pending"], message: "running and pending");
     assert\equal(verdict([failed]), want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
+}
+
+test "reviews dismisses through the queue's own classifier, pinned to the push it answers" {
+    assert\equal(reviewsArgs("482", head: "abc", base: "main"), want: ["queue", "reviews", "--provider", "github", "--base", "main",
+        "--change", "482", "--head", "abc", "--dismiss"], message: "argv");
+    foreach (argv in [["--pr", "482", "--base", "main"], ["--pr", "482", "--head", "", "--base", "main"], ["--pr", "482", "--head", "abc"]]) {
+        var refused = false;
+        try {
+            options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: argv.join(" "));
+    }
+    final fork = options("reviews", argv: ["--head", "abc", "--base", "main", "--head-owner", "alice", "--head-branch", "fix"],
+        required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
+    assert\equal([fork["--pr"] ?? "", fork["--head-owner"] ?? "", fork["--head-branch"] ?? ""], want: ["", "alice", "fix"], message: "a fork's run names its head instead of a pull request");
+}
+
+test "a fork's pull request is the open one from its branch still at the head the run saw" {
+    final listing = `[{"number": 7, "head": {"sha": "abc"}}, {"number": 9, "head": {"sha": "old"}}]`;
+    assert\equal(pullsAt(listing, head: "abc"), want: ["7"], message: "the one at the head");
+    assert\equal(pullsAt(listing, head: "new").len(), want: 0, message: "pushed again since");
+    var failed = false;
+    try {
+        pullsAt(`{"message": "Bad credentials"}`, head: "abc");
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "an API error is no empty listing");
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {

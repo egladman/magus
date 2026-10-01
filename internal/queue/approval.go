@@ -47,7 +47,7 @@ func approval(ctx context.Context, prov types.Provider, v types.ReadVCS, f types
 	if !types.IsObjectID(a.ApprovedCommit) {
 		return approvalResult{}, fmt.Errorf("approval of %s: provider reported approvals at %q, not a commit id", c.Label(), a.ApprovedCommit)
 	}
-	verdict, err := carryApproval(ctx, v, f, cl, tip, a.ApprovedCommit, reviewed, c.StackBase, refs, policy)
+	verdict, err := carryApproval(ctx, v, f, cl, tip, a.ApprovedCommit, reviewed, c.StackBase, refsBesides(refs, c.ID), policy)
 	if err != nil {
 		return approvalResult{}, fmt.Errorf("compare %s with its approved %s: %w", c.Label(), short(a.ApprovedCommit), err)
 	}
@@ -61,6 +61,13 @@ func approval(ctx context.Context, prov types.Provider, v types.ReadVCS, f types
 		res.Reason += "; " + verdict.Reason
 	}
 	return res, nil
+}
+
+// refsBesides is refs without change id's own: where a review covers a commit beneath
+// the change's head, that head carries the approved commit and would read as another
+// change sharing its commits.
+func refsBesides(refs []stackRef, id string) []stackRef {
+	return slices.DeleteFunc(slices.Clone(refs), func(r stackRef) bool { return r.id == id })
 }
 
 // admission is the wait or kick planning decides from c's approval, or nil when c may
@@ -185,10 +192,13 @@ func readSide(ctx context.Context, v types.ReadVCS, root, rev, path string) []by
 }
 
 // replayBases returns where old's own delta starts and where now's does, reading what
-// [carryBase] decides over. why says, when non-empty, why old's delta cannot be replayed.
+// [carryBase] decides over. why says, when non-empty, why old's delta cannot be replayed:
+// among others, old is no longer reachable, as after a force-push once the remote
+// collected it. The base was just fetched from the same remote, so a failed fetch of old
+// is old's absence rather than the network's.
 func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, stackBase string, refs []stackRef) (oldBase, newBase, why string, err error) {
 	if err := v.FetchCommit(ctx, cl.Root, cl.Remote, old); err != nil {
-		return "", "", "", err
+		return "", "", "the approved commit " + short(old) + " is no longer reachable", nil //nolint:nilerr // an unreachable approved commit is a verdict: the approval does not carry
 	}
 	f := carryFacts{old: old}
 	if f.commits, err = v.RangeCommits(ctx, cl.Root, tip, old, nil); err != nil {

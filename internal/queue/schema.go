@@ -98,6 +98,15 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 	return json.NewEncoder(w).Encode(doc)
 }
 
+// WriteReviews encodes r on one line, stamping its schema.
+func WriteReviews(w io.Writer, r types.ReviewReport) error {
+	r.Schema = types.SchemaReviews
+	if r.Reviews == nil {
+		r.Reviews = []types.ReviewVerdict{}
+	}
+	return json.NewEncoder(w).Encode(r)
+}
+
 // WritePlan checks p and encodes it, stamping its schema.
 func WritePlan(w io.Writer, p types.Plan) error {
 	if err := p.Check(); err != nil {

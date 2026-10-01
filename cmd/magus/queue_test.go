@@ -167,6 +167,9 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"validate without a gate":  {"validate", "--stdin", "--verdicts", "v"},
 		"validate without --stdin": {"validate", "--gate", "true", "--verdicts", "v"},
 		"-o where nothing renders": {"ls", "--provider", "github", "--base", "main", "-o", "json"},
+		"reviews without a change": {"reviews", "--provider", "github", "--base", "main"},
+		"reviews without a base":   {"reviews", "--provider", "github", "--change", "7"},
+		"reviews with an operand":  {"reviews", "--provider", "github", "--base", "main", "--change", "7", "extra"},
 	} {
 		_, err := f.run(t, "", args...)
 		var misuse errUsage
@@ -243,7 +246,7 @@ func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	out, err := f.run(t, "", "--help")
 	require.NoError(t, err)
-	for _, verb := range []string{"describe", "ls", "plan", "validate", "apply"} {
+	for _, verb := range []string{"describe", "ls", "plan", "validate", "apply", "reviews"} {
 		assert.Contains(t, string(out), "  "+verb+" ")
 	}
 	var stderr bytes.Buffer
