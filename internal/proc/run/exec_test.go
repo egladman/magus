@@ -201,6 +201,50 @@ func TestChildEnvUnderAPolicyNeverInheritsTheHost(t *testing.T) {
 	assert.Contains(t, env, "MAGUS_TEST_HOST_SECRET=s3cret", "with the sandbox off the child inherits the host")
 }
 
+// A magusfile or spell that runs the bare word `magus` must get the binary running it.
+// Without this a checkout's build handed its children whatever magus the inherited PATH
+// held, an installed release too old to load the tree.
+func TestChildEnvPutsTheRunningBinaryFirstOnPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin"+string(os.PathListSeparator)+"/bin")
+	env, _ := childEnv(t.Context(), nil, nil)
+	assert.Equal(t, []string{"PATH=" + filepath.Dir(magusExe()) + string(os.PathListSeparator) + "/usr/bin" + string(os.PathListSeparator) + "/bin"},
+		envValues(env, "PATH"), "one PATH, the running binary's directory first")
+
+	env, _ = childEnv(t.Context(), nil, []string{"PATH=/opt/target/bin"})
+	assert.Equal(t, "PATH=/opt/target/bin", envValues(env, "PATH")[len(envValues(env, "PATH"))-1],
+		"a target that sets PATH itself keeps its own, which exec resolves as the last entry")
+}
+
+func TestWithSelfFirstOnPathResolvesAChildMagusToIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("resolves through sh")
+	}
+	self := filepath.Join(t.TempDir(), "magus")
+	stale := filepath.Join(t.TempDir(), "magus")
+	for _, bin := range []string{self, stale} {
+		require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+	}
+	env := withSelfFirstOnPath([]string{"PATH=" + filepath.Dir(stale) + ":/usr/bin:/bin"}, self)
+	out, err := (&exec.Cmd{Path: "/bin/sh", Args: []string{"sh", "-c", "command -v magus"}, Env: env}).Output()
+	require.NoError(t, err)
+	assert.Equal(t, self, strings.TrimSpace(string(out)), "the spawning binary, not the one the inherited PATH held")
+
+	assert.Equal(t, env, withSelfFirstOnPath(env, self), "already first: not prepended twice")
+	assert.Equal(t, []string{"HOME=/h"}, withSelfFirstOnPath([]string{"HOME=/h"}, self),
+		"no PATH stays none, or a shell would lose its default search path")
+	assert.Equal(t, env, withSelfFirstOnPath(env, ""), "an unknown executable changes nothing")
+}
+
+func envValues(env []string, name string) []string {
+	var out []string
+	for _, kv := range env {
+		if strings.HasPrefix(kv, name+"=") {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
 // TestMain lets the test binary serve as the sandbox launcher: a confined Exec
 // re-executes the running binary, which under go test is this one.
 func TestMain(m *testing.M) {

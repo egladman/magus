@@ -1798,7 +1798,8 @@ func (r *runner) checkSpellContract() types.Check {
 }
 
 // checkGuardBinary reports which magus binary an agent-host guard hook would
-// actually execute, and whether it predates the working tree's Go sources.
+// actually execute, and whether it predates the working tree's Go sources or is a
+// different build from the one running doctor.
 //
 // A stale guard is worse than an absent one: an absent guard is noticed within a
 // command or two, a stale one is trusted indefinitely. A whole session once ran its
@@ -1832,6 +1833,9 @@ func (r *runner) checkGuardBinary() types.Check {
 			}
 		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
+			if skew, ok := interpreterSkew(r.runCtx(), name, found, r.ownVersion()); ok {
+				return skew
+			}
 			return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
 		}
 		return types.Check{
@@ -1859,7 +1863,18 @@ func (r *runner) checkGuardBinary() types.Check {
 			},
 		}
 	}
+	if skew, ok := interpreterSkew(r.runCtx(), name, bin, r.ownVersion()); ok {
+		return skew
+	}
 	return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run ./magus, newer than every tracked Go source"}
+}
+
+// ownVersion is this binary's version string, or "" when the caller did not supply one.
+func (r *runner) ownVersion() string {
+	if r.opts.serverInfo == nil {
+		return ""
+	}
+	return r.opts.serverInfo.ClientVersion
 }
 
 // checkObserverRecording answers the question checkGuardBinary and checkGuardWiring cannot:
