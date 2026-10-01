@@ -2,6 +2,7 @@ namespace buzzEngine;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 import "site/diagrams/buzz-stages" as _;
 
 export fun buzzEngineFigure() > figure\Figure !> any {
@@ -19,7 +20,6 @@ export fun buzzEngineFigure() > figure\Figure !> any {
     final hostModules = magus\dir("std");
     final buzzStdlib = magus\dir("libs/gopherbuzz/std");
     final dry = magus\dir("internal/dry");
-    final goOnly = magus\DirsOptions{ language = "go" };
     final playground = figure\external("Browser playground", sub: "js/wasm editor", tag: "client", look: figure\Look.plain);
     return figure\of("buzz-engine",
             title: "One pipeline, and the modules each host registers",
@@ -51,9 +51,9 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .flowIn(playground, dst: dry, label: "runs")
         .legend(figure\Look.focal, label: "the browser's subset")
         .scope(gopherbuzzPackages())
-        .scope(figure\setOf(magus\dirs("internal/interp/**", opts: goOnly)))
-        .scope(figure\setOf(magus\dirs("internal/dry/**", opts: goOnly)))
-        .scope(figure\setOf(magus\dirs("std/**", opts: goOnly)))
+        .scope(goPackages("internal/interp/**"))
+        .scope(goPackages("internal/dry/**"))
+        .scope(goPackages("std/**"))
         .except(figure\setOf([buzzStdlib, magus\dir("libs/gopherbuzz/internal/codec")]),
             why: "the Buzz stdlib and its JSON codec: both hosts install them the same way, so they tell the two apart in nothing")
         .except(gopherbuzzAround(), why: AROUND_WHY)

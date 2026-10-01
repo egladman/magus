@@ -1,12 +1,8 @@
-// site/diagrams/diagram-pipeline.buzz: how a figure on this site gets drawn, this one included.
-// Every figure goes through magus/figure, which takes the accent, and the Go that touches it
-// embeds the same source the figures import.
-//
-// The figure sources, committed files and site render are not packages, so they are actors.
 namespace diagramPipeline;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun diagramPipelineFigure() > figure\Figure !> any {
     final module = magus\dir("libs/figure");
@@ -43,5 +39,46 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "the one layout")
         .legend(figure\Look.input, label: "reads the knowledge graph")
         .legend(figure\Look.store, label: "committed output")
-        .scope(figure\setOf([module, server]));
+        .scope(goPackages("libs/*"))
+        .scope(goPackages("libs/figure/**"))
+        .scope(goPackages("std/**"))
+        .scope(figure\layerSet(magus\layer("handler")))
+        .except(figure\setOf([magus\dir("libs/gopherbuzz")]),
+            why: "the Buzz runtime every module runs on, figures included; drawn in buzz-engine")
+        .except(figure\setOf([magus\dir("libs/coldread"), magus\dir("libs/testlayout")]),
+            why: "Go analyzers for comments and test layout; no figure passes through them")
+        .except(figure\setOf([magus\dir("libs/diagnostics")]),
+            why: "the diagnostic-code framework; a figure's findings are plain strings")
+        .except(figure\setOf([magus\dir("libs/testkit")]), why: "fixtures for magus's Go tests")
+        .except(figure\setOf([
+            magus\dir("std/encoding"),
+            magus\dir("std/encoding/base64"),
+            magus\dir("std/encoding/csv"),
+            magus\dir("std/encoding/hex"),
+            magus\dir("std/encoding/ini"),
+            magus\dir("std/encoding/json"),
+            magus\dir("std/encoding/toml"),
+            magus\dir("std/encoding/url"),
+            magus\dir("std/encoding/xml"),
+            magus\dir("std/encoding/yaml"),
+        ]),
+            why: "the encoding host modules; a figure source reads the graph through the magus module alone")
+        .except(figure\setOf([
+            magus\dir("internal/handler/activity"),
+            magus\dir("internal/handler/attention"),
+            magus\dir("internal/handler/diff"),
+            magus\dir("internal/handler/graph"),
+            magus\dir("internal/handler/insight"),
+            magus\dir("internal/handler/job"),
+            magus\dir("internal/handler/mcp"),
+            magus\dir("internal/handler/metrics"),
+            magus\dir("internal/handler/notes"),
+            magus\dir("internal/handler/plan"),
+            magus\dir("internal/handler/status"),
+            magus\dir("internal/handler/token"),
+            magus\dir("internal/handler/tool"),
+            magus\dir("internal/handler/trailrpc"),
+            magus\dir("internal/handler/viewer"),
+        ]),
+            why: "the console's other services; none embeds magus/figure");
 }

@@ -1,19 +1,8 @@
-// site/diagrams/lease-loop.buzz: how work is split across several agents and put back
-// together. The checkpoint taken at the start is the one diffed against at the end, so a
-// lease is verified against what it CLAIMED, not the tree as it looks later.
-//
-// The doctrine box is not a step: magus records and answers, never prevents. No connector
-// reaches it because it constrains every box.
-//
-// The release connector is the one accent. Releasing a path early, so write_paths shrinks
-// while the lease is still held, is the move that makes the plan usable by a reader, and
-// it is the half people skip.
-//
-// The job store and the diff are packages; the rest are actors.
 namespace leaseLoop;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun leaseLoopFigure() > figure\Figure !> any {
     final decl = magus\dir("internal/job");
@@ -24,6 +13,7 @@ export fun leaseLoopFigure() > figure\Figure !> any {
     final integrate = figure\external("Integrate", sub: "magus affected ci", look: figure\Look.plain);
     final plan = figure\external("Plan surface", sub: "/console/plan/, overlaps, stale", look: figure\Look.plain);
     final human = figure\external("The human", sub: "watches and decides");
+    // Not a step: no connector reaches it because it constrains every box.
     final doctrine = figure\external("magus records and answers", sub: "it enforces none of it", look: figure\Look.focal);
     return figure\of("lease-loop",
             title: "A declared plan, released early, verified by diff",
@@ -53,6 +43,7 @@ export fun leaseLoopFigure() > figure\Figure !> any {
         .flowIn(work, dst: verify, label: "reports done")
         .flowOut(verify, dst: integrate)
         .flowAcross(integrate, dst: cp)
+        // The accent: releasing a path while the lease is still held is the half people skip.
         .flowIn(work, dst: decl, label: "release", stroke: figure\Stroke.focal)
         .flowOut(decl, dst: plan, label: "job rows")
         .flowAcross(human, dst: plan, label: "watches")
@@ -60,5 +51,6 @@ export fun leaseLoopFigure() > figure\Figure !> any {
         .zone("what a person watches", actors: [plan, human])
         .legend(figure\Look.focal, label: "the whole guarantee")
         .legend(figure\Look.external, label: "agents and people")
-        .scope(figure\setOf([decl, verify]));
+        .scope(goPackages("internal/job/**"))
+        .scope(goPackages("internal/changeset/**"));
 }

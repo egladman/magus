@@ -1,13 +1,8 @@
-// site/diagrams/ci-providers.buzz: how magus annotates a CI log without knowing which CI it is
-// running under. The two zones carry the whole argument: everything vendor-specific lives
-// in a Buzz spell, and the binary side names no CI system anywhere.
-//
-// The provider ops and the prefixes they declare are Buzz, so they are actors; neither Go
-// box imports the other, and the run reaches the contract through a spell call.
 namespace ciProviders;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun ciProvidersFigure() > figure\Figure !> any {
     final contract = magus\dir("internal/ci/annotate");
@@ -37,7 +32,7 @@ export fun ciProvidersFigure() > figure\Figure !> any {
         .zone("magus binary, names no ci system", dirs: figure\setOf([contract, quote]), actors: [run])
         .zone("provider spell, in buzz", actors: [ops, prefixes])
         .legend(figure\Look.external, label: "outside magus")
-        .scope(figure\setOf(magus\dirs("internal/ci/**", opts: magus\DirsOptions{ language = "go" })))
+        .scope(goPackages("internal/ci/**"))
         .except(figure\setOf([magus\dir("internal/ci/forecast"), magus\dir("internal/ci/volatility")]),
             why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
 }

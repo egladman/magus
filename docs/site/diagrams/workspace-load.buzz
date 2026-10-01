@@ -1,14 +1,8 @@
-// site/diagrams/workspace-load.buzz: how magus reads a workspace in before any target runs. A
-// target exists only because a magusfile exported it, and the project model built from those
-// magusfiles, which takes the accent, is what the cache, describe and a command's directory
-// context read.
-//
-// Every edge is an import into types, where the model lives. The root package's edges to each
-// step are hidden; drawn, every box would hang off it.
 namespace workspaceLoad;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun workspaceLoadFigure() > figure\Figure !> any {
     final discover = magus\dir("project");
@@ -51,5 +45,28 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .zone("written by hand", actors: [rootMf, nestedMf])
         .legend(figure\Look.focal, label: "what every reader reads")
         .legend(figure\Look.input, label: "the only declarations")
-        .scope(figure\setOf([discover, interp, extract]));
+        .scope(goPackages("project/**"))
+        .scope(goPackages("internal/interp/**"))
+        .scope(goPackages("internal/describe/**"))
+        .scope(goPackages("types/**"))
+        .scope(goPackages("internal/cache/**"))
+        .except(figure\setOf([magus\dir("project/impact")]),
+            why: "the blast radius of a changeset, which affected reads after the load")
+        .except(figure\setOf([
+            magus\dir("internal/interp/bindings"),
+            magus\dir("internal/interp/bindings/ffi"),
+            magus\dir("internal/interp/bindings/gen"),
+            magus\dir("internal/interp/bindings/gen/decode"),
+            magus\dir("internal/interp/engine"),
+            magus\dir("internal/interp/engine/buzz"),
+            magus\dir("internal/interp/mcpclient"),
+            magus\dir("internal/interp/transform"),
+        ]),
+            why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
+        .except(figure\setOf([magus\dir("types/enum")]),
+            why: "the closed string sets every package checks values against; no part of the project model")
+        .except(figure\setOf([magus\dir("internal/cache/reflink"), magus\dir("internal/cache/remotetest")]),
+            why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
+        .except(figure\setOf([magus\dir("project/impact/gen/mocks"), magus\dir("types/gen/mocks")]),
+            why: "generated test mocks");
 }

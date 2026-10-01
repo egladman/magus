@@ -1,0 +1,29 @@
+namespace packages;
+
+import "magus";
+import "magus/figure";
+
+// goPackages is every Go package glob matches. Findings name the set dirs("<glob>") rather
+// than listing each path.
+export fun goPackages(glob: str) > figure\DirSet !> any {
+    final dirs: [magus\Dir] = magus\dirs(glob, opts: magus\DirsOptions{ language = "go" });
+    return figure\setOf(dirs, named: "dirs(\"{glob}\")");
+}
+
+// cmdTools is every command under cmd/ except the magus binary itself: docs generators,
+// codegen and the browser playground, each built by its own target.
+export fun cmdTools() > figure\DirSet !> any {
+    return figure\setOf([
+        magus\dir("cmd/buzz-playground"),
+        magus\dir("cmd/langservice-manifest"),
+        magus\dir("cmd/magus-configdocs"),
+        magus\dir("cmd/magus-docs"),
+        magus\dir("cmd/magus-examples"),
+        magus\dir("cmd/magus-manpage"),
+        magus\dir("cmd/magus-protodocs"),
+        magus\dir("cmd/magus-skilldocs"),
+        magus\dir("cmd/magus-spelldocs"),
+        magus\dir("cmd/magus-termcast"),
+        magus\dir("cmd/magus-utils"),
+    ]);
+}
