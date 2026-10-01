@@ -1,0 +1,68 @@
+namespace buzzCompile;
+
+import "magus";
+import "magus/figure";
+import "site/diagrams/buzz-stages" as _;
+
+export fun buzzCompileFigure() > figure\Figure !> any {
+    final session = magus\dir("libs/gopherbuzz");
+    final lexer = magus\dir("libs/gopherbuzz/token");
+    final tree = magus\dir("libs/gopherbuzz/ast");
+    final typeSystem = magus\dir("libs/gopherbuzz/types");
+    final vm = magus\dir("libs/gopherbuzz/vm");
+    final parseCache = codeStage(session, symbol: "ParseCache#tokenize().", name: "Parse cache",
+        sub: "tokens keyed by source", look: figure\Look.store);
+    final parser = codeStage(session, symbol: "parseModedTracked().", name: "Parser",
+        sub: "recursive descent, *ast.Program");
+    final imports = codeStage(session, symbol: "Session#loadFileImports().", name: "Import resolution",
+        sub: "runs each module first", look: figure\Look.focal);
+    final checker = codeStage(session, symbol: "checkWithPrelude().", name: "Checker",
+        sub: "types.Type, BZZ codes");
+    final compiler = codeStage(session, symbol: "CompileWith().", name: "Compiler",
+        sub: "AST to *vm.Chunk");
+    final store = codeStage(session, symbol: "Session#loadCachedChunk().", name: "Bytecode store",
+        sub: ".bo plus its import closure", look: figure\Look.store);
+    return figure\of("buzz-compile",
+            title: "From Buzz source to a chunk",
+            eyebrow: "gopherbuzz",
+            desc: "Session.Exec compiles source in six steps, all in the gopherbuzz root package "
+                + "except the first and the last. The lexer, token.Tokenize, turns the source into "
+                + "tokens; a session given a parse cache keeps them by source text, so a module "
+                + "many sessions import is lexed once. The parser builds an ast.Program. Before "
+                + "the checker sees it, import resolution runs every imported file through this "
+                + "same pipeline and the VM, so their exports are bound when the checker looks "
+                + "names up. The checker reports types.Type mismatches as BZZ diagnostics, and the "
+                + "compiler emits a vm.Chunk, one per function. In the vm package, FoldConsts folds "
+                + "constants and FusePeephole fuses the common local, constant and branch "
+                + "sequences into superinstructions. A session with a bytecode store saves the "
+                + "chunk with every file it was compiled against and, on a later run where all of "
+                + "them still hold the same bytes, hands the saved chunk to the VM without parsing "
+                + "anything.",
+            direction: figure\Direction.down)
+        .box(lexer, label: "Lexer", sub: "token.Tokenize", symbol: magus\refs("token`/Tokenize()."))
+        .actor(parseCache)
+        .actor(parser)
+        .actor(imports)
+        .actor(checker)
+        .actor(compiler)
+        .actor(store)
+        .box(vm, label: "Chunk", sub: "FoldConsts, FusePeephole", symbol: magus\refs("FusePeephole()."))
+        .edgesFromGraph()
+        .flowOut(lexer, dst: parseCache, label: "on a miss")
+        .flowAcross(parseCache, dst: parser, label: "[]Token")
+        .flowAcross(parser, dst: imports, label: "*ast.Program")
+        .flowAcross(imports, dst: checker, label: "exports bound")
+        .flowAcross(checker, dst: compiler, label: "no errors")
+        .flowIn(compiler, dst: vm, label: "emits")
+        .flowIn(store, dst: vm, label: "fresh hit")
+        .rank(dirs: figure\setOf([lexer]), actors: [parseCache, parser, imports])
+        .rank(actors: [checker, compiler])
+        .rank(dirs: figure\setOf([vm]), actors: [store])
+        .legend(figure\Look.focal, label: "where an import runs")
+        .legend(figure\Look.store, label: "optional, set by the host")
+        .scope(figure\setOf([session, lexer, tree, typeSystem, vm]))
+        .except(figure\setOf([session]),
+            why: "its steps are drawn one by one, each checked against the symbol that implements it")
+        .except(figure\setOf([tree, typeSystem]),
+            why: "data packages: their types label the connectors");
+}

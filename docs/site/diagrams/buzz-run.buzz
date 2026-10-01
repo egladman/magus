@@ -1,0 +1,53 @@
+namespace buzzRun;
+
+import "magus";
+import "magus/figure";
+import "site/diagrams/buzz-stages" as _;
+
+export fun buzzRunFigure() > figure\Figure !> any {
+    final session = magus\dir("libs/gopherbuzz");
+    final vm = magus\dir("libs/gopherbuzz/vm");
+    final compile = codeStage(vm, symbol: "VM#jitRun().", name: "Baseline JIT",
+        sub: "depths, then golang-asm");
+    final native = codeStage(vm, symbol: "jitEntry().", name: "Native code",
+        sub: "int and float fast paths", look: figure\Look.focal);
+    final interpreter = codeStage(vm, symbol: "VM#Exec().", name: "Interpreter",
+        sub: "VM.Exec, one dispatch switch");
+    final heap = codeStage(vm, symbol: "vm`/Owner#", name: "Heap table",
+        sub: "NaN-box handles, freed on Close", look: figure\Look.store);
+    return figure\of("buzz-run",
+            title: "Interpreter first, native code when the chunk allows it",
+            eyebrow: "gopherbuzz",
+            desc: "Session.runChunk makes a VM and calls VM.Run with the chunk and the session's "
+                + "environment. Run reserves the top-level register window and asks jitRun first. "
+                + "With the JIT on, the baseline JIT judges the chunk once and caches the verdict: "
+                + "depths() admits only the numeric subset, locals, constants, arithmetic, "
+                + "comparisons and jumps, and validates every operand, and compileJIT emits amd64 "
+                + "or arm64 code through golang-asm into executable pages. Only the chunk Run was "
+                + "handed can go native; a function it calls runs on the interpreter. There is one "
+                + "native tier and no hotness counter. A value the native code cannot handle "
+                + "deopts to the interpreter at the instruction it stopped on, with the stack depth "
+                + "checked; a chunk the JIT declines, or one with no slot locals, runs on the "
+                + "interpreter from the start. The interpreter's values are NaN-boxed 64-bit "
+                + "words, and heap objects are handles into one table the session releases when "
+                + "it closes.",
+            direction: figure\Direction.down)
+        .box(session, label: "Session", sub: "runChunk", symbol: magus\refs("Session#runChunk()."))
+        .box(vm, label: "VM.Run", sub: "register window, inline caches", symbol: magus\refs("VM#Run()."))
+        .actor(compile)
+        .actor(native)
+        .actor(interpreter)
+        .actor(heap)
+        .edgesFromGraph()
+        .markEdge(session, dst: vm, label: "*Chunk, *Env")
+        .flowOut(vm, dst: compile, label: "JIT on")
+        .flowOut(vm, dst: interpreter, label: "JIT off")
+        .flowAcross(compile, dst: native, label: "compiled")
+        .flowAcross(compile, dst: interpreter, label: "declined")
+        .flowAcross(native, dst: interpreter, label: "deopt at ip", stroke: figure\Stroke.focal)
+        .flowAcross(interpreter, dst: heap, label: "allocates")
+        .rank(actors: [native, interpreter])
+        .zone("package vm", dirs: figure\setOf([vm]), actors: [compile, native, interpreter, heap])
+        .legend(figure\Look.focal, label: "the native tier")
+        .scope(figure\setOf([session, vm]));
+}

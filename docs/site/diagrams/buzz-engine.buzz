@@ -1,56 +1,54 @@
-// site/diagrams/buzz-engine.buzz: how a Buzz program runs and what it can reach. Every host
-// runs the same gopherbuzz pipeline and differs only in the modules it registers; the
-// playground's WASM-safe subset takes the accent.
-//
-// The playground is a js/wasm build the symbol index does not read, so it is an actor. The
-// hidden connectors carry value types, not a stage.
 namespace buzzEngine;
 
 import "magus";
 import "magus/figure";
 
 export fun buzzEngineFigure() > figure\Figure !> any {
+    final session = magus\dir("libs/gopherbuzz");
+    final pipeline = figure\setOf([
+        session,
+        magus\dir("libs/gopherbuzz/token"),
+        magus\dir("libs/gopherbuzz/ast"),
+        magus\dir("libs/gopherbuzz/types"),
+        magus\dir("libs/gopherbuzz/vm"),
+    ]);
     final engine = magus\dir("internal/interp");
     final bindings = magus\dir("internal/interp/bindings");
-    final sets = magus\dir("internal/interp/bindings/gen");
+    final trampolines = magus\dir("internal/interp/bindings/gen");
     final hostModules = magus\dir("std");
-    final pipeline = magus\dir("libs/gopherbuzz");
-    final vm = magus\dir("libs/gopherbuzz/vm");
-    final playground = figure\external("Browser playground", sub: "js/wasm editor, REPL", tag: "client", look: figure\Look.plain);
-    final valueTypes = "every binding and module passes vm and gopherbuzz values; the program reaches them through the pipeline";
+    final buzzStdlib = magus\dir("libs/gopherbuzz/std");
+    final dry = magus\dir("internal/dry");
+    final playground = figure\external("Browser playground", sub: "js/wasm editor", tag: "client", look: figure\Look.plain);
     return figure\of("buzz-engine",
             title: "One pipeline, and the modules each host registers",
             eyebrow: "buzz",
-            desc: "gopherbuzz parses Buzz source, type-checks it, compiles it to bytecode and "
-                + "runs it on its VM, the same way for a magusfile, a spell, a magus buzz "
-                + "script and the browser playground. The host bindings register magus's host "
-                + "modules at init, through the trampolines generated from each module's "
-                + "descriptor. The playground's wasm build installs only the modules marked "
-                + "WASM: pure compute, with no filesystem, process or network access.")
-        .box(engine, label: "Magusfile engine", sub: "load, cache, run targets")
+            desc: "Every Buzz program magus touches goes through the same gopherbuzz pipeline: lex, "
+                + "parse, check, compile, run. Hosts differ only in the modules they register first. "
+                + "The host bindings attach to the magusfile engine at init and provide every magus "
+                + "host module, each through the trampoline generated from its descriptor. The "
+                + "browser playground runs the dry evaluator, which installs only the trampolines "
+                + "marked WASM, pure compute with no filesystem, process or network access, and "
+                + "records host calls instead of running them. Both also install the Buzz stdlib.")
         .box(bindings, label: "Host bindings", sub: "magus namespace, init()")
+        .box(engine, label: "Magusfile engine", sub: "load magusfiles, run targets")
+        .group(pipeline, label: "gopherbuzz", sub: "lex, parse, check, compile, run")
+        .box(trampolines, label: "Trampolines", sub: "every module, plus a WASM set")
         .box(hostModules, label: "Host modules", sub: "fs, vcs, proc, http, json")
-        .box(pipeline, label: "Parse, check, compile", sub: "tokens to flat bytecode")
-        .box(vm, label: "VM", sub: "register window, JIT")
         .actor(playground)
-        .box(sets, label: "Module sets", sub: "WASM: pure compute only", focal: true)
+        .box(dry, label: "Dry evaluator", sub: "records host calls", focal: true)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([bindings, sets, hostModules]), dst: figure\setOf([vm, pipeline]),
-            why: valueTypes)
-        .hideEdges(figure\setOf([engine]), dst: figure\setOf([vm]),
-            why: "the engine reads vm.Value results and heap stats; programs reach the VM through the pipeline")
-        .hideEdges(figure\setOf([engine]), dst: figure\setOf([hostModules]),
-            why: "one call, std.WithCwd, pins a target's working directory; the modules arrive through the bindings")
-        .markEdge(engine, dst: pipeline, label: "magusfile")
+        .hideEdges(figure\setOf([bindings, trampolines, hostModules]), dst: pipeline,
+            why: "modules and bindings pass vm and gopherbuzz values; a program reaches the pipeline through the engine or the dry evaluator")
+        .hideEdges(figure\setOf([engine, bindings, dry]), dst: figure\setOf([hostModules]),
+            why: "they read module descriptors and std.WithCwd; every module is wired through its trampoline")
+        .markEdge(engine, dst: session, label: "magusfile")
         .markEdge(bindings, dst: engine, label: "init()")
-        .markEdge(bindings, dst: hostModules, label: "every module")
-        .markEdge(sets, dst: hostModules, label: "WASM-safe only", stroke: figure\Stroke.focal)
-        .markEdge(pipeline, dst: vm, label: "bytecode")
-        .flowIn(playground, dst: pipeline, label: "editor source")
-        .flowIn(playground, dst: sets, label: "installs")
-        .zone("gopherbuzz", dirs: figure\setOf([pipeline, vm]))
-        .zone("magus as host", dirs: figure\setOf([engine, bindings, hostModules]))
-        .boundary("the browser, js/wasm", dirs: figure\setOf([sets]), actors: [playground])
+        .markEdge(bindings, dst: trampolines, label: "every module")
+        .markEdge(dry, dst: trampolines, label: "WASM set", stroke: figure\Stroke.focal)
+        .markEdge(dry, dst: session, label: "editor source")
+        .flowIn(playground, dst: dry, label: "runs")
         .legend(figure\Look.focal, label: "the browser's subset")
-        .scope(figure\setOf([pipeline, vm, engine, bindings, hostModules]));
+        .scope(figure\setOf([engine, bindings, trampolines, hostModules, buzzStdlib, dry]))
+        .except(figure\setOf([buzzStdlib]),
+            why: "both hosts install it the same way, so it tells the two apart in nothing");
 }

@@ -1,0 +1,11 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 6,
+    "imports": 1
+  },
+  "figure": "buzz-run",
+  "findings": [],
+  "stamp": "sha256:33645aa468155eb895afb8ab8ae3af5cc830a6668db5cfda876cd02d5f5aa5e3",
+  "symbolIndex": "fde0ae812ad5138cf1896c83fdd8b5876c3bc8c4ee0aa5859cdf451fbb9658bb"
+}
