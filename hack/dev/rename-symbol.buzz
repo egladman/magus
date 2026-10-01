@@ -61,14 +61,23 @@ export fun render(p: Plan) > [str] {
     return lines;
 }
 
-// indexRefusal is why the index cannot answer for the symbol, or "" when it can. A
-// rename against a stale index misses the sites written since it was built.
-export fun indexRefusal(verdict: str, reason: str, stale: [str]) > str {
+// checkIndex raises unless the index can answer for the symbol. A rename against a stale
+// index misses the sites written since it was built.
+export fun checkIndex(verdict: str, reason: str, stale: [str]) > void !> str {
     if (verdict == "unknown") {
-        return "the code index cannot answer: {reason}";
+        throw "the code index cannot answer: {reason}";
     }
     if (stale.len() > 0) {
-        return "the code index is older than the tree in {stale.join(", ")}";
+        throw "the code index is older than the tree in {stale.join(", ")}";
+    }
+}
+
+// indexRaised is what checkIndex raised, or "" when the index can answer.
+fun indexRaised(verdict: str, reason: str, stale: [str]) > str {
+    try {
+        checkIndex(verdict, reason: reason, stale: stale);
+    } catch (e: str) {
+        return e;
     }
     return "";
 }
@@ -97,9 +106,10 @@ export fun main(args: [str]) > void !> any {
 // each file's reason when `refs --rename` refuses.
 export fun rename(symbol: str, newName: str, apply: bool) > Plan !> any {
     final r: magus\RefsResult = magus\refs(symbol);
-    final refusal = indexRefusal(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes);
-    if (refusal != "") {
-        throw "rename-symbol: {refusal}; rebuild it with `magus graph build`, then run this again";
+    try {
+        checkIndex(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes);
+    } catch (e: str) {
+        throw "rename-symbol: {e}; rebuild it with `magus graph build`, then run this again";
     }
     if (r.defs.len() == 0) {
         throw "rename-symbol: nothing in this workspace defines {symbol}";
@@ -169,17 +179,17 @@ test "a refusal keeps its reasons and drops the nested run's warnings" {
 }
 
 test "an index that cannot answer is refused, not rebuilt" {
-    assert\equal(indexRefusal("unknown", reason: "project . has no symbol index", stale: [<str>]),
+    assert\equal(indexRaised("unknown", reason: "project . has no symbol index", stale: [<str>]),
         want: "the code index cannot answer: project . has no symbol index", message: "unknown");
-    assert\equal(indexRefusal("found", reason: "", stale: ["."]), want: "the code index is older than the tree in .", message: "stale");
-    assert\equal(indexRefusal("found", reason: "", stale: [<str>]), want: "", message: "fresh");
+    assert\equal(indexRaised("found", reason: "", stale: ["."]), want: "the code index is older than the tree in .", message: "stale");
+    assert\equal(indexRaised("found", reason: "", stale: [<str>]), want: "", message: "fresh");
 }
 
 // Read-only, and meaningful only where the index is current: a CI checkout with no index
 // has nothing to resolve against.
 test "this repository's index resolves a known symbol to its definition" {
     final r: magus\RefsResult = magus\refs("FlagsParse");
-    if (indexRefusal(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes) != "") {
+    if (indexRaised(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes) != "") {
         return;
     }
     assert\equal(r.defs[0].file, want: "std/flags.go", message: "FlagsParse is defined in std/flags.go");

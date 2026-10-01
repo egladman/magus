@@ -77,16 +77,22 @@ export fun buildInputs(described: str) > [str] !> any {
     return inputs;
 }
 
-// reuseProblems is every reason a binary with build is not the one a build in this
-// worktree would produce, empty when it is. rootRev and sourceRev are the HEADs of this
-// worktree and of the checkout holding the binary; the inputs are the declared build
-// inputs that differ from build.commit in each.
-export fun reuseProblems(build: BuildFacts, rootRev: str, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > [str] {
-    final found = mut [<str>];
-    if (build.commit == "") {
-        found.append("it reports no commit, so nothing ties it to a tree");
-        return found;
+// raiseAll raises every reason as one error, one per line, and returns when there are none.
+fun raiseAll(reasons: [str]) > void !> str {
+    if (reasons.len() > 0) {
+        throw reasons.join("\n  ");
     }
+}
+
+// checkReusable raises with every reason a binary with build is not the one a build in this
+// worktree would produce. rootRev and sourceRev are the HEADs of this worktree and of the
+// checkout holding the binary; the inputs are the declared build inputs that differ from
+// build.commit in each.
+export fun checkReusable(build: BuildFacts, rootRev: str, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > void !> str {
+    if (build.commit == "") {
+        throw "it reports no commit, so nothing ties it to a tree";
+    }
+    final found = mut [<str>];
     if (!rootRev.startsWith(build.commit)) {
         found.append("it was built at {build.commit} and this worktree is at {rootRev}");
     }
@@ -99,7 +105,7 @@ export fun reuseProblems(build: BuildFacts, rootRev: str, sourceRev: str, source
     if (rootInputs.len() > 0) {
         found.append("this worktree changes {rootInputs.len()} build input(s) from {rootRev}, first {rootInputs[0]}");
     }
-    return found;
+    raiseAll(found);
 }
 
 // mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
@@ -113,12 +119,12 @@ export fun mainWorktree(porcelain: str) > str {
     return "";
 }
 
-// problems is every way the taken lease is unfit for a worker in root, empty when it is fit.
-// A row with no checkpoint cannot be checked for its base, which render reports rather than
-// refuses: there is nothing to compare against. trackedClean is whether root's tracked files
-// match its HEAD: job exec digests a tree holding only untracked files as a dirty patch of
-// nothing, revision-match, which is the checkpoint's tree all the same.
-export fun problems(row: Row, root: str, main: str, trackedClean: bool) > [str] {
+// checkFit raises with every way the taken lease is unfit for a worker in root. A row with no
+// checkpoint cannot be checked for its base, which render reports rather than refuses: there
+// is nothing to compare against. trackedClean is whether root's tracked files match its HEAD:
+// job exec digests a tree holding only untracked files as a dirty patch of nothing,
+// revision-match, which is the checkpoint's tree all the same.
+export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > void !> str {
     final found = mut [<str>];
     if (path\clean(row.checkoutRoot) != path\clean(root)) {
         final where = if (row.checkoutRoot == "") "no checkout" else row.checkoutRoot;
@@ -134,7 +140,7 @@ export fun problems(row: Row, root: str, main: str, trackedClean: bool) > [str] 
     if (["declared", "running"].indexOf(row.state) == null) {
         found.append("job {row.id} is {row.state}, so nobody may work it; ask whoever declared it");
     }
-    return found;
+    raiseAll(found);
 }
 
 // checkRepository refuses anything but a secondary worktree of this repository.
@@ -181,9 +187,9 @@ fun changedInputs(bin: str, root: str, rev: str) > [str] !> any {
     return buildInputs(magusAt(bin, root: root, args: args));
 }
 
-// reuseVerdict reads what the binary in source says about its build and what each tree
-// changed, and returns the binary's path with every reason it is not root's own build.
-fun reuseVerdict(root: str, source: str) > obj{ bin: str, build: BuildFacts, problems: [str] } !> any {
+// reusable returns the binary in source and its build when it is provably root's own build,
+// and raises with every reason it is not.
+fun reusable(root: str, source: str) > obj{ bin: str, build: BuildFacts } !> any {
     final bin = "{source}/magus";
     if (!fs\isFile(bin)) {
         throw "bootstrap-worktree: {source} holds no ./magus to reuse";
@@ -192,7 +198,12 @@ fun reuseVerdict(root: str, source: str) > obj{ bin: str, build: BuildFacts, pro
     final rootRev = headOf(root);
     final sourceInputs = if (build.dirty) changedInputs(bin, root: source, rev: build.commit) else [<str>];
     final rootInputs = changedInputs(bin, root: root, rev: rootRev);
-    return .{ bin = bin, build = build, problems = reuseProblems(build, rootRev: rootRev, sourceRev: headOf(source), sourceInputs: sourceInputs, rootInputs: rootInputs) };
+    try {
+        checkReusable(build, rootRev: rootRev, sourceRev: headOf(source), sourceInputs: sourceInputs, rootInputs: rootInputs);
+    } catch (e: str) {
+        throw "{bin} is not this worktree's build:\n  {e}";
+    }
+    return .{ bin = bin, build = build };
 }
 
 // bootstrap places ./magus in root, builds the graph, takes job, and returns the row as the
@@ -203,9 +214,11 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     final main = checkRepository(root);
     final local = "{root}/magus";
     if (source != "") {
-        final v = reuseVerdict(root, source: source);
-        if (v.problems.len() > 0) {
-            throw "bootstrap-worktree: REFUSED to reuse {v.bin}, it is not this worktree's build:\n  " + v.problems.join("\n  ");
+        var v = .{ bin = "", build = BuildFacts{ commit = "", dirty = false } };
+        try {
+            v = reusable(root, source: source);
+        } catch (e: str) {
+            throw "bootstrap-worktree: REFUSED to reuse {e}";
         }
         fs\copyFile(v.bin, dst: local);
         fs\chmod(local, mode: 493);
@@ -232,9 +245,10 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     }
     final row = parseRow(magusAt(local, root: root, args: ["describe", "job", job, "-o", "json"]));
     final trackedClean = (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0;
-    final wrong = problems(row, root: root, main: main, trackedClean: trackedClean);
-    if (wrong.len() > 0) {
-        throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  " + wrong.join("\n  ");
+    try {
+        checkFit(row, root: root, main: main, trackedClean: trackedClean);
+    } catch (e: str) {
+        throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
     }
     return row;
 }
@@ -269,9 +283,11 @@ export fun main(args: [str]) > void !> any {
         if (source == "") {
             throw "bootstrap-worktree: --check needs --from, the checkout whose ./magus to judge\n{USAGE}";
         }
-        final v = reuseVerdict(root, source: source);
-        if (v.problems.len() > 0) {
-            std\print("not reusable: {v.bin} is not this worktree's build:\n  " + v.problems.join("\n  "));
+        var v = .{ bin = "", build = BuildFacts{ commit = "", dirty = false } };
+        try {
+            v = reusable(root, source: source);
+        } catch (e: str) {
+            std\print("not reusable: {e}");
             return;
         }
         std\print("reusable: {v.bin} was built at {v.build.commit}, which {root} is at, with no build input changed on either side");
@@ -293,57 +309,77 @@ fun fixture(name: str) > Row !> any {
     return parseRow(fs\readFile("hack/testdata/{name}"));
 }
 
+// fitReasons is each reason checkFit raised, empty when the row is fit.
+fun fitReasons(row: Row, root: str, main: str, trackedClean: bool) > [str] {
+    try {
+        checkFit(row, root: root, main: main, trackedClean: trackedClean);
+    } catch (e: str) {
+        return e.split("\n  ");
+    }
+    return [<str>];
+}
+
+// reuseReasons is each reason checkReusable raised, empty when the binary is reusable.
+fun reuseReasons(build: BuildFacts, rootRev: str, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > [str] {
+    try {
+        checkReusable(build, rootRev: rootRev, sourceRev: sourceRev, sourceInputs: sourceInputs, rootInputs: rootInputs);
+    } catch (e: str) {
+        return e.split("\n  ");
+    }
+    return [<str>];
+}
+
 test "a row taken here at its checkpoint is fit" {
     final row = fixture("bootstrap-match.json");
-    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
+    assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base 7472f16fc709ab3827cd38ff281fecc0a217ca88 matches the row's checkpoint", message: "base line");
 }
 
 test "a row bound to the main checkout is refused, naming it" {
-    assert\equal(problems(fixture("bootstrap-main.json"), root: WT, main: MAIN, trackedClean: true), want: [
+    assert\equal(fitReasons(fixture("bootstrap-main.json"), root: WT, main: MAIN, trackedClean: true), want: [
         "job agent-scripts names /work/magus as its checkout, not /work/magus/.claude/worktrees/w1 (the main checkout: every write the worker makes here is graded against the wrong tree); rerun `./magus job exec agent-scripts` from /work/magus/.claude/worktrees/w1",
     ], message: "main");
 }
 
 test "a diverged base is refused with the checkpoint to switch to" {
-    assert\equal(problems(fixture("bootstrap-diverged.json"), root: WT, main: MAIN, trackedClean: true), want: [
+    assert\equal(fitReasons(fixture("bootstrap-diverged.json"), root: WT, main: MAIN, trackedClean: true), want: [
         "job agent-scripts recorded base 1111111111111111111111111111111111111111, verdict diverged, but its checkpoint is 7472f16fc709ab3827cd38ff281fecc0a217ca88; `git switch --detach 7472f16fc709ab3827cd38ff281fecc0a217ca88` (or the row's branch at it), then bootstrap again",
     ], message: "diverged");
 }
 
 test "a row with no checkpoint passes and says nothing verified its base" {
     final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
-    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
+    assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
 }
 
 test "an ended job is refused" {
     final row = Row{ id = "j", state = "pass", checkpoint = "", reportedBase = "", baseVerdict = "", checkoutRoot = WT };
-    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: ["job j is pass, so nobody may work it; ask whoever declared it"], message: "ended");
+    assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: ["job j is pass, so nobody may work it; ask whoever declared it"], message: "ended");
 }
 
 test "revision-match passes only while the tracked files are the checkpoint's" {
     final row = Row{ id = "j", state = "declared", checkpoint = "abc", reportedBase = "abc+e3b0", baseVerdict = "revision-match", checkoutRoot = WT };
-    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "untracked only");
+    assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "untracked only");
     assert\equal(render(row, root: WT)[1], want: "base abc is the row's checkpoint; the tree adds only untracked files, which job exec reads as a patch", message: "note");
-    assert\equal(problems(row, root: WT, main: MAIN, trackedClean: false).len(), want: 1, message: "tracked edits");
+    assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: false).len(), want: 1, message: "tracked edits");
 }
 
 test "a binary is this worktree's build only at its HEAD with no build input changed" {
     final clean = BuildFacts{ commit = "166d3dabd", dirty = false };
-    assert\equal(reuseProblems(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]), want: [<str>], message: "clean at HEAD");
-    assert\equal(reuseProblems(clean, rootRev: "1111111", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]),
+    assert\equal(reuseReasons(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]), want: [<str>], message: "clean at HEAD");
+    assert\equal(reuseReasons(clean, rootRev: "1111111", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]),
         want: ["it was built at 166d3dabd and this worktree is at 1111111"], message: "another commit");
-    assert\equal(reuseProblems(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: ["run.go"]),
+    assert\equal(reuseReasons(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: ["run.go"]),
         want: ["this worktree changes 1 build input(s) from 166d3dabd7d7, first run.go"], message: "worktree edits");
     final dirty = BuildFacts{ commit = "166d3dabd", dirty = true };
-    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: [<str>], rootInputs: [<str>]),
+    assert\equal(reuseReasons(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: [<str>], rootInputs: [<str>]),
         want: [<str>], message: "dirty only outside the build inputs");
-    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: ["symbol.go"], rootInputs: [<str>]),
+    assert\equal(reuseReasons(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: ["symbol.go"], rootInputs: [<str>]),
         want: ["it was built with 1 build input(s) changed from 166d3dabd, first symbol.go"], message: "dirty inputs");
-    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "2222222", sourceInputs: [<str>], rootInputs: [<str>]).len(),
+    assert\equal(reuseReasons(dirty, rootRev: "166d3dabd7d7", sourceRev: "2222222", sourceInputs: [<str>], rootInputs: [<str>]).len(),
         want: 1, message: "a dirty build whose checkout moved on is unknown");
-    assert\equal(reuseProblems(BuildFacts{ commit = "", dirty = false }, rootRev: "x", sourceRev: "x", sourceInputs: [<str>], rootInputs: [<str>]),
+    assert\equal(reuseReasons(BuildFacts{ commit = "", dirty = false }, rootRev: "x", sourceRev: "x", sourceInputs: [<str>], rootInputs: [<str>]),
         want: ["it reports no commit, so nothing ties it to a tree"], message: "no commit");
 }
 

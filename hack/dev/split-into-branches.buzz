@@ -1349,18 +1349,18 @@ export fun kebab(name: str) > str {
     return parts.join("-");
 }
 
-// branchProblem says why name breaks the branch-name rule, or "": lowercase words joined by
+// checkBranchName raises when name breaks the branch-name rule: lowercase words joined by
 // hyphens, no conventional type prefix, no commit hash.
-export fun branchProblem(name: str) > str {
-    if (name == "" or name.len() > 80) { return "{name} is empty or longer than 80 bytes"; }
+export fun checkBranchName(name: str) > void !> str {
+    if (name == "" or name.len() > 80) { throw "{name} is empty or longer than 80 bytes"; }
     for (i: int = 0; i < name.len(); i = i + 1) {
         final b = name.sub(i, len: 1);
         if (!((b >= "a" and b <= "z") or (b >= "0" and b <= "9") or b == "-")) {
-            return "{name} holds {b}; a branch name is lowercase words joined by hyphens";
+            throw "{name} holds {b}; a branch name is lowercase words joined by hyphens";
         }
     }
     foreach (t in TYPE_PREFIXES) {
-        if (name.startsWith("{t}-")) { return "{name} opens with the commit type {t}"; }
+        if (name.startsWith("{t}-")) { throw "{name} opens with the commit type {t}"; }
     }
     foreach (word in name.split("-")) {
         var hex = word.len() >= 7;
@@ -1370,7 +1370,16 @@ export fun branchProblem(name: str) > str {
             if (b >= "0" and b <= "9") { digit = true; }
             if (!((b >= "0" and b <= "9") or (b >= "a" and b <= "f"))) { hex = false; }
         }
-        if (hex and digit) { return "{name} carries {word}, which reads as a commit hash"; }
+        if (hex and digit) { throw "{name} carries {word}, which reads as a commit hash"; }
+    }
+}
+
+// branchRaised is what checkBranchName raised, or "" for a good name.
+fun branchRaised(name: str) > str {
+    try {
+        checkBranchName(name);
+    } catch (e: str) {
+        return e;
     }
     return "";
 }
@@ -2078,9 +2087,10 @@ export fun main(args: [str]) > void !> any {
     }
 
     final stem = stemOfBranch(prefix);
-    final problem = branchProblem("{stem}-1-x");
-    if (problem != "") {
-        throw "split-into-branches: --prefix {prefix} cannot name the stack: {problem}\n{USAGE}";
+    try {
+        checkBranchName("{stem}-1-x");
+    } catch (e: str) {
+        throw "split-into-branches: --prefix {prefix} cannot name the stack: {e}\n{USAGE}";
     }
     final failures = mut [<Failure>];
     foreach (spec in (parsed.values["--failed"] ?? "").split(",")) {
@@ -2102,8 +2112,11 @@ export fun main(args: [str]) > void !> any {
     final change = collectSymbols(base, mergeBase: mergeBase, root: root, files: changes);
     final p = planSymbols(change, budget: budget!, stem: stem, base: prBase(base), failures: failures, pulls: pulls);
     foreach (l in p.layers) {
-        final bad = branchProblem(l.branch);
-        if (bad != "") { throw "split-into-branches: layer {l.branch}: {bad}"; }
+        try {
+            checkBranchName(l.branch);
+        } catch (e: str) {
+            throw "split-into-branches: layer {l.branch}: {e}";
+        }
     }
     var stack = symbolStack(p, base: prBase(base));
     if (apply) {
@@ -2476,8 +2489,8 @@ test "settleRegions gives a doc comment and the blank line above it to the decla
 test "branch names carry no type prefix and no hash" {
     assert\equal(stemOfBranch("feat/split-by-symbols"), want: "split-by-symbols", message: "type prefix dropped");
     assert\equal(stemOfBranch("refactor/testPairing"), want: "test-pairing", message: "kebab");
-    assert\equal(branchProblem("split-1-guard-search"), want: "", message: "a good name");
-    assert\equal(branchProblem("feat-1-x"), want: "feat-1-x opens with the commit type feat", message: "type prefix");
-    assert\equal(branchProblem("x-1-a1b2c3d"), want: "x-1-a1b2c3d carries a1b2c3d, which reads as a commit hash", message: "hash");
+    assert\equal(branchRaised("split-1-guard-search"), want: "", message: "a good name");
+    assert\equal(branchRaised("feat-1-x"), want: "feat-1-x opens with the commit type feat", message: "type prefix");
+    assert\equal(branchRaised("x-1-a1b2c3d"), want: "x-1-a1b2c3d carries a1b2c3d, which reads as a commit hash", message: "hash");
     assert\equal(declName("func (m *Magus) run(ctx context.Context) error \{"), want: "run", message: "a method's name");
 }

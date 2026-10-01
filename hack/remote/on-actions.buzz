@@ -138,24 +138,23 @@ export fun isScratch(branch: str) > bool {
         and hex(branch.sub(SCRATCH_PREFIX.len()));
 }
 
-// argvProblem says why argv cannot travel as the workflow's argv input, or null. The
-// runner word-splits that input unquoted, so a word carrying whitespace would arrive as
-// two and a glob character would be expanded there.
-export fun argvProblem(argv: [str]) > str? {
+// checkArgv raises unless argv can travel as the workflow's argv input. The runner
+// word-splits that input unquoted, so a word carrying whitespace would arrive as two and a
+// glob character would be expanded there.
+export fun checkArgv(argv: [str]) > void !> str {
     if (argv.len() == 0) {
-        return "no magus argv after `magus`";
+        throw "no magus argv after `magus`";
     }
     foreach (word in argv) {
         if (word == "") {
-            return "an empty word cannot survive the runner's word split";
+            throw "an empty word cannot survive the runner's word split";
         }
         foreach (c in [" ", "\t", "\n", "*", "?", "["]) {
             if (word.indexOf(c) != null) {
-                return "\"{word}\" would not reach magus as one word: the runner word-splits and globs the argv";
+                throw "\"{word}\" would not reach magus as one word: the runner word-splits and globs the argv";
             }
         }
     }
-    return null;
 }
 
 // Options is one invocation's parsed options; argv is the command after `magus`.
@@ -235,9 +234,10 @@ export fun parse(args: [str]) > Options !> any {
         }
         throw "on-actions: the command starts with magus, not \"{command[0]}\": run.yaml runs one magus invocation\n{usage}";
     }
-    final problem = argvProblem(o.argv);
-    if (problem != null) {
-        throw "on-actions: {problem!}\n{usage}";
+    try {
+        checkArgv(o.argv);
+    } catch (e: str) {
+        throw "on-actions: {e}\n{usage}";
     }
     if (o.keep and o.detach) {
         throw "on-actions: --keep does nothing with --detach: a detached run stays until {SCRIPT} --delete <run>";
@@ -744,10 +744,18 @@ test "parse refuses what it cannot run" {
 }
 
 test "an argv word the runner would split or glob is refused" {
-    assert\equal(argvProblem(["run", "test", "."]), want: null, message: "plain words");
-    assert\equal(argvProblem(["run", "test", "./internal/..."]), want: null, message: "a Go package pattern is no glob");
+    final raises = fun (argv: [str]) > bool {
+        try {
+            checkArgv(argv);
+        } catch (e: str) {
+            return true;
+        }
+        return false;
+    };
+    assert\equal(raises(["run", "test", "."]), want: false, message: "plain words");
+    assert\equal(raises(["run", "test", "./internal/..."]), want: false, message: "a Go package pattern is no glob");
     foreach (argv in [[<str>], ["run", ""], ["run", "a b"], ["run", "*"], ["run", "a?"], ["run", "[x]"]]) {
-        assert\equal(argvProblem(argv) != null, want: true, message: argv.join("|"));
+        assert\equal(raises(argv), want: true, message: argv.join("|"));
     }
 }
 
