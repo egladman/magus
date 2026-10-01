@@ -443,6 +443,24 @@ const (
 	FlagQueuePlanTarget = "target"
 	// queue plan: --vcs
 	FlagQueuePlanVCS = "vcs"
+	// queue reviews: --base
+	FlagQueueReviewsBase = "base"
+	// queue reviews: --change
+	FlagQueueReviewsChange = "change"
+	// queue reviews: --dismiss
+	FlagQueueReviewsDismiss = "dismiss"
+	// queue reviews: --facts
+	FlagQueueReviewsFacts = "facts"
+	// queue reviews: --head
+	FlagQueueReviewsHead = "head"
+	// queue reviews: --provider
+	FlagQueueReviewsProvider = "provider"
+	// queue reviews: --remote
+	FlagQueueReviewsRemote = "remote"
+	// queue reviews: --target
+	FlagQueueReviewsTarget = "target"
+	// queue reviews: --vcs
+	FlagQueueReviewsVCS = "vcs"
 	// queue validate: --facts
 	FlagQueueValidateFacts = "facts"
 	// queue validate: --gate
@@ -1417,6 +1435,34 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueApplyVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueReviewsFlags are the flags declared for `magus queue reviews`.
+type QueueReviewsFlags struct {
+	Provider string // --provider
+	Base     string // --base
+	Change   string // --change
+	Head     string // --head
+	Dismiss  bool   // --dismiss
+	Facts    string // --facts
+	Target   string // --target
+	Remote   string // --remote
+	VCS      string // --vcs
+}
+
+// BindQueueReviews registers `magus queue reviews`'s flags on fs and returns the destination.
+func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
+	var f QueueReviewsFlags
+	fs.StringVar(&f.Provider, FlagQueueReviewsProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueReviewsBase, "", "`branch` the change targets")
+	fs.StringVar(&f.Change, FlagQueueReviewsChange, "", "`id` of the change, as the provider names it (github: the pull request number)")
+	fs.StringVar(&f.Head, FlagQueueReviewsHead, "", "`commit` the change's head must be at; when it moved, nothing is classified or dismissed")
+	fs.BoolVar(&f.Dismiss, FlagQueueReviewsDismiss, false, "Dismiss each approval that does not carry, naming what changed since it")
+	fs.StringVar(&f.Facts, FlagQueueReviewsFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
+	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueReviewsVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
 }
 
