@@ -559,6 +559,7 @@ func TestBuzzReachesMagus(t *testing.T) {
 	write("lib/deep.buzz", `import "magus/spell";`)
 	write("lib/mid.buzz", `import "deep" as deep;`)
 	write("cycle.buzz", `import "cycle";`)
+	write("commented.buzz", "// import \"magus\";\nimport \"std\";")
 
 	sess := buzz.NewSession(t.Context())
 	t.Cleanup(func() { _ = sess.Close() })
@@ -576,6 +577,10 @@ func TestBuzzReachesMagus(t *testing.T) {
 		`import "lib/mid" as mid;`:                    true,
 		`import "spells/hello";`:                      true,
 		"import \"std\";\nimport \"magus/figure\";\n": true,
+		"// import \"magus\";\nimport \"std\";":       false,
+		"import \"std\"; // import \"magus\";":        false,
+		"final s = \"import \\\"magus\\\";\";":        false,
+		`import "commented";`:                         false,
 	} {
 		assert.Equal(t, want, buzzReachesMagus(sess, code), code)
 	}

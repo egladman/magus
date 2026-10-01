@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -498,12 +498,10 @@ func addProfileObserver(ctx context.Context, sess *buzz.Session) {
 	}
 }
 
-var buzzImportPattern = regexp.MustCompile(`\bimport\s+(?:[\w\s,]+?\s+from\s+)?"([^"]+)"`)
-
 // buzzReachesMagus reports whether code, or any file or source module it imports
 // transitively, imports the magus namespace, a magus/* module or a spell. An import
-// found nowhere counts as not reaching magus. An import named in a comment also
-// matches, which only costs the eager load.
+// found nowhere counts as not reaching magus, and so does one inside a comment or a
+// string: the lexer, not a pattern, finds them.
 func buzzReachesMagus(sess *buzz.Session, code string) bool {
 	sources := map[string]string{}
 	for _, m := range std.AllSource() {
@@ -512,8 +510,8 @@ func buzzReachesMagus(sess *buzz.Session, code string) bool {
 	seen := map[string]bool{}
 	var reaches func(code, dir string) bool
 	reaches = func(code, dir string) bool {
-		for _, m := range buzzImportPattern.FindAllStringSubmatch(code, -1) {
-			p := strings.TrimPrefix(m[1], "buzz:")
+		for _, path := range buzzImportPaths(code) {
+			p := strings.TrimPrefix(path, "buzz:")
 			if p == "magus" || strings.HasPrefix(p, "magus/") || strings.HasPrefix(p, "spells/") {
 				return true
 			}
@@ -542,6 +540,31 @@ func buzzReachesMagus(sess *buzz.Session, code string) bool {
 		return false
 	}
 	return reaches(code, "")
+}
+
+// buzzImportPaths lists the paths code's import statements name, or none when code
+// does not lex; the session reports that error itself.
+func buzzImportPaths(code string) []string {
+	toks, err := token.Tokenize(code)
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for i, t := range toks {
+		if t.Kind != token.Import {
+			continue
+		}
+		for _, next := range toks[i+1:] {
+			if next.Kind == token.String {
+				paths = append(paths, next.Val)
+				break
+			}
+			if next.Kind != token.Ident && next.Kind != token.Comma {
+				break
+			}
+		}
+	}
+	return paths
 }
 
 // buzzFindImport resolves p the way the session does for a file import: beside the
