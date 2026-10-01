@@ -59,6 +59,24 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 	assert.Equal(t, FactsKey("claude-code", "8f2c6a1e"), probe.gates[0].Session())
 }
 
+// A subagent magus never saw spawned, holding no lease, shares the main session's id and
+// has no Parent; only the payload's agent id tells the policy it is not the main session.
+func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &commandRuleProbe{}
+	unseen := `{"session_id":"8f2c6a1e","agent_id":"a534fcfe","hook_event_name":"PreToolUse","tool_name":"Bash",` +
+		`"tool_input":{"command":"git push origin HEAD:x"}}`
+	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: unseen, Host: "claude-code"})
+	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
+	require.Len(t, probe.asked, 2)
+	sub, main := probe.asked[0], probe.asked[1]
+	assert.Equal(t, "a534fcfe", sub.Agent)
+	assert.Equal(t, main.Session, sub.Session, "the subagent reports the main session's id")
+	assert.Empty(t, sub.Parent, "magus never saw it spawned")
+	assert.Nil(t, sub.Lease)
+	assert.Empty(t, main.Agent, "the main agent carries no subagent id")
+}
+
 // A bare command string, the form a host with no envelope sends, reaches the rule too.
 func TestCommandRuleSeesABareCommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)

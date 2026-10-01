@@ -57,8 +57,8 @@ export object Tag {
     id: str = "",
 }
 
-export extern fun base() > str;
-export extern fun changedFiles(base: str = "") > [Path] !> any;
+export extern fun base(dir: str = "") > str !> any;
+export extern fun changedFiles(base: str = "", dir: str = "") > [Path] !> any;
 export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun commit(rev: str = "") > Commit !> any;
 export extern fun describe() > str !> any;
@@ -66,7 +66,7 @@ export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
 export extern fun history(limit: int = 10, paths: [str] = [<str>], first_parent: bool = false) > [Commit] !> any;
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;
 export extern fun name() > str;
-export extern fun ref() > str? !> any;
+export extern fun ref(dir: str = "") > str? !> any;
 export extern fun root() > str !> any;
 export extern fun status(paths: [str] = [<str>]) > Status !> any;
 export extern fun tags(pattern: str = "") > [Tag] !> any;

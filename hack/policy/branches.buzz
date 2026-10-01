@@ -613,10 +613,12 @@ fun rename(p: Push, name: str, current: str) > str {
 }
 
 // Remote is what the checkout knows of where a push lands: its base (`origin/main`) and the
-// remotes' branches, each `<remote>/<branch>`.
+// remotes' branches, each `<remote>/<branch>`. unreadable says why the base could not be
+// resolved, which leaves the base branch indistinguishable from a topic.
 export object Remote {
     base: str,
     branches: [str],
+    unreadable: str = "",
 }
 
 // A version (`v0.5.0`), which names a release branch or a tag, not a topic.
@@ -629,6 +631,10 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
     final pushes = pushesOf(programs, current: current);
     if (pushes.len() == 0) {
         return magus\guard.allow();
+    }
+    if (remote.unreadable != "") {
+        return magus\guard.deny("branch-name: {remote.unreadable}, so a push to the base branch cannot be told "
+            + "from a topic branch. Fix the checkout's version control, then push again.");
     }
     final baseParts = remote.base.split("/");
     final baseName = baseParts[baseParts.len() - 1];
@@ -862,6 +868,17 @@ test "a good name, the base branch and a version pass" {
         final v = decideNames(helpers\vcsRequest([argv]), current: "x", remote: remote([<str>]), topic: practical, once: helpers\counter());
         std\assert(v.decision == "allow", message: "{argv.join(" ")}: {v.reason}");
     }
+}
+
+test "a push whose base cannot be resolved is denied, naming why" {
+    final broken = Remote{ base = "", branches = [<str>], unreadable = "the base ref of the checkout at `/gone` cannot be resolved" };
+    final push = helpers\vcsRequest([["git", "push", "origin", "main"]]);
+    final v = decideNames(push, current: "main", remote: broken, topic: practical, once: helpers\counter());
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.reason.indexOf("`/gone`") != null, message: v.reason);
+    final commit = helpers\vcsRequest([["git", "commit", "-m", "x"]]);
+    std\assert(decideNames(commit, current: "main", remote: broken, topic: practical, once: helpers\counter()).decision == "allow",
+        message: "a line that pushes nothing is not judged");
 }
 
 test "a topic miss alone advises once" {

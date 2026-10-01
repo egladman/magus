@@ -59,6 +59,7 @@
 // already binds (github, changelog) shadows the one here, so these avoid them.
 namespace agentpolicy;
 
+import "std";
 import "magus";
 import "fs";
 import "vcs";
@@ -77,14 +78,7 @@ import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
-    final programs = mut [<helpers\Program>];
-    foreach (c in req.commands) {
-        var call: helpers\VcsCall? = null;
-        if (c.vcs != null) {
-            call = helpers\VcsCall{ tool = c.vcs!.tool, subcommand = c.vcs!.subcommand, args = c.vcs!.args };
-        }
-        programs.append(helpers\Program{ name = c.program, args = c.args, repeats = c.repeats, path = c.path, vcs = call });
-    }
+    final programs = programsOf(req);
     final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk());
     if (denial != "") {
         return magus\guard.deny(denial);
@@ -107,22 +101,42 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final once = fun (key: str) > bool {
         return magus\guard.once(key);
     };
-    var lease = "";
-    if (req.lease != null) {
-        lease = req.lease!.id;
-    }
-    // TODO: pass the hook payload's subagent id as agent once CommandRequest carries it.
-    // Until then a subagent magus never saw spawned, under no lease, reads as the main session.
-    final pusher = branches\Pusher{ role = req.role, title = req.parent, session = req.session, lease = lease };
+    final pusher = pusherOf(req);
+    final topic = fun () > branches\Topic {
+        return branchTopic(req.dir);
+    };
     final texts = withHeredocs(programs, line: req.command);
     final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\branchDiff(req.workspace), once: once,
-        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = remoteOf(req), topic = branchTopic });
+        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = remoteOf(req), topic = topic });
     if (verdict.decision != "allow" or stale\rebuilds(programs)) {
         return verdict;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
+}
+
+fun programsOf(req: CommandRequest) > [helpers\Program] {
+    final programs = mut [<helpers\Program>];
+    foreach (c in req.commands) {
+        var call: helpers\VcsCall? = null;
+        if (c.vcs != null) {
+            call = helpers\VcsCall{ tool = c.vcs!.tool, subcommand = c.vcs!.subcommand, args = c.vcs!.args };
+        }
+        programs.append(helpers\Program{ name = c.program, args = c.args, repeats = c.repeats, path = c.path, vcs = call });
+    }
+    return programs;
+}
+
+// pusherOf is the caller as the guard recorded it. agent is the host's subagent id, which
+// marks a subagent magus never saw spawned and that holds no lease: its session is the
+// main session's, so nothing else tells the two apart.
+fun pusherOf(req: CommandRequest) > branches\Pusher {
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    return branches\Pusher{ role = req.role, title = req.parent, session = req.session, lease = lease, agent = req.agent };
 }
 
 // Publishing is what the publishing rules read about a line: who runs it, the branch or
@@ -135,28 +149,32 @@ export object Publishing {
     topic: fun () > branches\Topic,
 }
 
-// currentBranch is the branch or bookmark the guard read for a push, else the one vcs\ref
-// reads, "" when neither names one.
+// currentBranch is the branch or bookmark the guard read for a push, else the one the
+// caller's checkout is on, "" when neither names one.
 fun currentBranch(req: CommandRequest) > str {
     if (req.checkout != null) {
         return req.checkout!.branch;
     }
-    return (vcs\ref() catch null) ?? "";
+    return (vcs\ref(dir: req.dir) catch null) ?? "";
 }
 
 fun remoteOf(req: CommandRequest) > branches\Remote {
     if (req.checkout != null) {
         return branches\Remote{ base = req.checkout!.base, branches = req.checkout!.remoteBranches };
     }
-    return branches\Remote{ base = vcs\base(), branches = [<str>] };
+    final base = vcs\base(dir: req.dir) catch null;
+    if (base == null) {
+        return branches\Remote{ base = "", branches = [<str>], unreadable = "the base ref of the checkout at `{req.dir}` cannot be resolved" };
+    }
+    return branches\Remote{ base = base!, branches = [<str>] };
 }
 
-// branchTopic is the topic of the branch's changes against the base, through vcs, which reads
-// the repository holding the rule's working directory. A diff it cannot read is no topic.
-fun branchTopic() > branches\Topic {
+// branchTopic is the topic of the branch's changes against the base in the checkout holding
+// dir, the caller's rather than the hook process's. A diff it cannot read is no topic.
+fun branchTopic(dir: str) > branches\Topic {
     final paths = mut [<str>];
     try {
-        foreach (p in vcs\changedFiles()) {
+        foreach (p in vcs\changedFiles(dir: dir)) {
             paths.append(p.value);
         }
     } catch (e) {
@@ -319,3 +337,28 @@ fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {
 
 // go-build links buildStamp into ./magus from the root magusfile.
 export stale\buildStamp as buildStamp;
+
+test "the remote's base is read from the caller's checkout, and one that cannot be read says why" {
+    final here = remoteOf(CommandRequest{ dir = "." });
+    std\assert(here.unreadable == "" and here.base == (vcs\base() catch "?"), message: "the caller's own checkout: {here.unreadable}");
+    final missing = (fs\tempDir("remote-of") catch "") + "/gone";
+    final gone = remoteOf(CommandRequest{ dir = missing });
+    std\assert(gone.unreadable.indexOf(missing) != null, message: gone.unreadable);
+}
+
+test "a push is refused to a subagent the host names, under no lease and unseen spawning" {
+    final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],
+        vcs = VCSInvocation{ tool = "git", subcommand = "push", args = ["origin", "HEAD:x"] } };
+    final main = CommandRequest{ session = "s1", role = "root", commands = [push] };
+    std\assert(branches\decideAuthority(programsOf(main), caller: pusherOf(main)).decision == "allow", message: "the main session");
+
+    final unseen = CommandRequest{ session = "s1", role = "root", agent = "a534fcfe", commands = [push] };
+    final refused = branches\decideAuthority(programsOf(unseen), caller: pusherOf(unseen));
+    std\assert(refused.decision == "deny", message: "a subagent magus never saw spawned");
+    std\assert(refused.reason.indexOf("subagent `a534fcfe`") != null, message: refused.reason);
+
+    final worker = CommandRequest{ session = "s1", role = "worker", lease = Job{ id = "guard-caller-identity" }, commands = [push] };
+    final leased = branches\decideAuthority(programsOf(worker), caller: pusherOf(worker));
+    std\assert(leased.decision == "deny", message: "a leased worker");
+    std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
+}

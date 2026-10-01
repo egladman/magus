@@ -50,6 +50,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	req := types.WriteRequest{
 		Host:      who.Host,
 		Session:   who.Session,
+		Agent:     who.Agent,
 		Parent:    spawnedAs(facts, who.Agent),
 		Role:      role,
 		Lease:     row,

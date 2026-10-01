@@ -431,6 +431,24 @@ func TestSpawnRuleSeesTheCallersParent(t *testing.T) {
 	assert.Empty(t, probe.asked[3].Parent, "a host with no subagent identity reports none")
 }
 
+// The spawn request names the calling subagent by the payload's id whether or not magus saw
+// it spawned, so a rule can tell it from the main agent of the same session.
+func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &spawnRuleProbe{}
+	deps := Dependencies{SpawnRule: probe.rule()}
+
+	unseen := `{"session_id":"8f2c6a1e","agent_id":"never-seen","hook_event_name":"PreToolUse",` +
+		`"tool_name":"Agent","tool_input":{"prompt":"x"}}`
+	Judge(ctx, deps, Request{Input: unseen, Host: "claude-code"})
+	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	require.Len(t, probe.asked, 2)
+	assert.Equal(t, "never-seen", probe.asked[0].Agent)
+	assert.Empty(t, probe.asked[0].Parent)
+	assert.Equal(t, probe.asked[1].Session, probe.asked[0].Session, "the subagent reports the main session's id")
+	assert.Empty(t, probe.asked[1].Agent, "the main agent carries no subagent id")
+}
+
 // trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
 // lineage assertion reads left-to-right as it happened.
 func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {
