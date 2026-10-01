@@ -2,6 +2,7 @@ package dependency
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -156,4 +157,38 @@ func keysOf(m map[string]int) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// BenchmarkGraph measures the cost of building the dependency DAG from
+// a Workspace. Edges are added so that the last project depends on the first,
+// forming a wide fan (no cycle).
+func BenchmarkGraph(b *testing.B) {
+	for _, n := range []int{10, 50, 100} {
+		n := n
+		b.Run(fmt.Sprintf("projects=%d", n), func(b *testing.B) {
+			// Build workspace manually to avoid filesystem cost per iteration.
+			ws := &types.Workspace{
+				Root:     b.TempDir(),
+				Projects: make(map[string]*types.Project, n),
+			}
+			paths := make([]string, n)
+			for i := range n {
+				p := fmt.Sprintf("svc%02d", i)
+				paths[i] = p
+				ws.Projects[p] = &types.Project{Path: p}
+			}
+			// Make a linear chain: svc01 → svc00, svc02 → svc01, …
+			for i := 1; i < n; i++ {
+				ws.Projects[paths[i]].DependsOn = []string{paths[i-1]}
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := Build(ws)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
