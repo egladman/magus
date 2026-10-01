@@ -6,23 +6,30 @@
     "gen/top.txt": "top v1\n"
   },
   "head": {
-    "calc/calc.go": "package calc\n\nimport \"strings\"\n\nfunc Shout(s string) string {\n\treturn strings.ToUpper(s)\n}\n\nfunc Keep() int {\n\treturn len(Base())\n}\n",
+    "calc/calc.go": "package calc\n\nimport \"strings\"\n\nfunc Shout(s string) string {\n\treturn strings.ToUpper(s)\n}\n\n// Helper calls back into Mid, so the two reference each other.\nfunc Helper(n int) string {\n\tif n > 0 {\n\t\treturn Mid() // \"}\" in a comment is not a brace\n\t}\n\treturn \"{h}\"\n}\n\nfunc Keep() int {\n\treturn len(Base())\n}\n",
     "cmd/main.go": "package main\n\nimport \"example.com/m/calc\"\n\nfunc main() {\n\tprintln(calc.Shout(\"x\"))\n}\n",
     "calc/base.go": "package calc\n\nfunc Base() string {\n\treturn \"base\"\n}\n",
-    "calc/mid.go": "package calc\n\nfunc Mid() string {\n\treturn Base() + \"mid\"\n}\n",
+    "calc/mid.go": "package calc\n\nfunc Mid() string {\n\treturn Base() + Helper(0)\n}\n",
     "calc/top.go": "package calc\n\nfunc Top() string {\n\treturn Mid() + \"top\"\n}\n",
     "calc/top_test.go": "package calc\n\nimport \"testing\"\n\nfunc TestTop(t *testing.T) {\n\tif Top() == \"\" {\n\t\tt.Fatal(\"empty\")\n\t}\n}\n",
     "gen/top.txt": "top v2\n"
   },
   "symbols": [
     {"id": "m/calc/Shout().", "label": "Shout", "path": "calc/calc.go", "change": "added", "line": 5, "refs": [{"path": "cmd/main.go", "line": 6}]},
-    {"id": "m/calc/Keep().", "label": "Keep", "path": "calc/calc.go", "change": "body", "line": 9, "refs": []},
-    {"id": "m/calc/Base().", "label": "Base", "path": "calc/base.go", "change": "added", "line": 3, "refs": [{"path": "calc/mid.go", "line": 4}, {"path": "calc/calc.go", "line": 10}]},
-    {"id": "m/calc/Mid().", "label": "Mid", "path": "calc/mid.go", "change": "added", "line": 3, "refs": [{"path": "calc/top.go", "line": 4}]},
+    {"id": "m/calc/Keep().", "label": "Keep", "path": "calc/calc.go", "change": "body", "line": 17, "refs": []},
+    {"id": "m/calc/Base().", "label": "Base", "path": "calc/base.go", "change": "added", "line": 3, "refs": [{"path": "calc/mid.go", "line": 4}, {"path": "calc/calc.go", "line": 18}]},
+    {"id": "m/calc/Mid().", "label": "Mid", "path": "calc/mid.go", "change": "added", "line": 3, "refs": [{"path": "calc/top.go", "line": 4}, {"path": "calc/calc.go", "line": 12}]},
+    {"id": "m/calc/Helper().", "label": "Helper", "path": "calc/calc.go", "change": "added", "line": 10, "refs": [{"path": "calc/mid.go", "line": 4}]},
     {"id": "m/calc/Top().", "label": "Top", "path": "calc/top.go", "change": "added", "line": 3, "refs": [{"path": "calc/top_test.go", "line": 6}]},
     {"id": "m/calc/TestTop().", "label": "TestTop", "path": "calc/top_test.go", "change": "added", "line": 5, "refs": []},
     {"id": "m/cmd/main().", "label": "main", "path": "cmd/main.go", "change": "body", "line": 5, "refs": []}
   ],
+  "languages": {
+    "golang": {
+      "stubs": {"kinds": ["Function", "Method"], "bodyStyle": "brace", "body": "{\n\tpanic(\"unimplemented: {{Name}} lands in {{Branch}}\")\n}"},
+      "comments": {"quotes": ["\"", "'", "`"], "line": ["//"], "blocks": [["/*", "*/"]]}
+    }
+  },
   "files": [
     {"path": "calc/base.go", "project": ".", "role": "source", "claims": [{"project": ".", "role": "source", "glob": "**/*.go"}]},
     {"path": "calc/calc.go", "project": ".", "role": "source", "claims": [{"project": ".", "role": "source", "glob": "**/*.go"}]},

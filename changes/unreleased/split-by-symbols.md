@@ -7,7 +7,13 @@
   layer lands after every changed declaration it references; a rename or signature change
   rides with its callers, a test with its code, generated output with its source. Layers pack
   up to `--budget` changed lines (400 by default) and each carries the command that proves it
-  builds and passes its affected tests. A failed proof given back with `--failed` marks the
-  layer `needs-stub`, naming the missing symbol and the layer introducing it; `--pull` moves
-  that symbol down instead. `-o json` from either mode is the branch stack merge-job-branches
-  reads.
+  builds and passes its affected tests. A function needed a layer early is pulled down when it
+  fits, or stubbed from its spell's stub body with its header kept byte for byte; a symbol
+  neither can supply marks the layer `needs-stub`. `-o json` from either mode is the branch
+  stack merge-job-branches reads.
+
+### Changed
+
+- **A `magus buzz` script builds the knowledge graph once.** Graph reads such as
+  `magus\refs` share one build per script run, as a spell's already did, instead of
+  rebuilding the symbol graph on every call.

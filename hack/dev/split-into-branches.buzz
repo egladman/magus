@@ -16,10 +16,13 @@
 // tree nor the real index is touched. It never pushes: it prints the push and pull request
 // commands for a person to run.
 //
-// --by symbols never invents code. Each layer carries the command that proves it builds and
-// passes its affected tests on its own; a failed proof's output ref, given back with
-// --failed, marks the layer needs-stub with the missing symbol and the layer introducing it,
-// unless --pull names that symbol, which moves it at or below the layer that needs it.
+// Each layer carries the command that proves it builds and passes its affected tests on its
+// own. A function a layer needs before its own layer is pulled down when that fits the
+// budget; when it does not, and the language's spell declares a stub body, the layer holds
+// a stub: the function's header byte for byte from the final tree with that body, the only
+// code --by symbols ever writes. A failed proof's output ref, given back with --failed, is
+// handled the same way, and a symbol neither can supply marks the layer needs-stub, naming
+// it and the layer introducing it; --pull forces the pull.
 //
 // Branches are named <prefix>-<n>-<name>, not <prefix>/<n>-<name>: git stores a branch as a
 // file under refs/heads, so a branch named <prefix> leaves no room for a directory of the
@@ -34,6 +37,7 @@ import "os";
 import "serialize";
 import "sort";
 import "std";
+import "template";
 import "vcs";
 
 import "assert";
@@ -549,13 +553,51 @@ export object Sym {
     refs: [Site],
 }
 
+// StubSyntax is how a spell says a function of its language is stubbed: which symbol kinds
+// may be (Function, Method), how a body is found (brace: the last top-level `{...}` of the
+// declaration; indent: everything after the header's last top-level `:`), and the body put
+// in its place, a template\render template over Name, Qualified, Kind and Branch.
+export object StubSyntax {
+    kinds: [str],
+    bodyStyle: str,
+    body: str,
+}
+
+// CommentSyntax is what the body scan skips: a language's string quotes, line comment
+// openers and block comment pairs.
+export object CommentSyntax {
+    quotes: [str],
+    line: [str],
+    blocks: [[str]],
+}
+
+// Lang is one diff driver's language as its spell declares it. A language with no stubs
+// is never stubbed: a symbol it needs early is pulled, or the layer needs a stub by hand.
+export object Lang {
+    stubs: StubSyntax?,
+    comments: CommentSyntax,
+}
+
 // SymbolChange is everything --by symbols plans from. indexed are the paths the symbol index
 // covers: a reference from or to any other path is invisible, so those paths split by file.
+// texts are the changed files on both sides, languages each diff driver's spell data.
 export object SymbolChange {
     regions: [Region],
     symbols: [Sym],
     files: [Change],
     indexed: [str],
+    texts: {str: FileText},
+    languages: {str: Lang},
+}
+
+// Stub is a function a layer needs before the layer that writes it: its header from the
+// final tree with the spell's stub body, in lines, until lands.
+export object Stub {
+    key: str,
+    id: str,
+    path: str,
+    lands: str,
+    lines: [str],
 }
 
 // Unit is one changed declaration, or a whole file where declarations cannot be told apart.
@@ -570,6 +612,8 @@ export object Unit {
     change: str,
     lines: int,
     output: bool = false,
+    line: int = 0,
+    driver: str = "",
 }
 
 // Failure is a symbol a layer's proof found missing: a compiler's `undefined: <name>` at path.
@@ -589,6 +633,7 @@ export object SymLayer {
     check: str,
     status: str,
     reason: str,
+    stubs: [Stub],
 }
 
 export object SymPlan {
@@ -782,6 +827,125 @@ export fun stemOf(path: str) > str {
     return "";
 }
 
+// topBraces walks lines lo..hi outside strings and comments and returns each top-level brace
+// pair as [openLine, openByte, closeLine, closeByte].
+fun topBraces(lines: [str], lo: int, hi: int, comments: CommentSyntax) > [[int]] {
+    final pairs = mut [<[int]>];
+    var depth = 0;
+    var openLine = 0;
+    var openByte = 0;
+    var quote = "";
+    var closing = "";
+    for (n: int = lo; n <= hi and n <= lines.len(); n = n + 1) {
+        final line = lines[n - 1];
+        var i = 0;
+        while (i < line.len()) {
+            final rest = line.sub(i);
+            if (closing != "") {
+                if (rest.startsWith(closing)) { i = i + closing.len(); closing = ""; } else { i = i + 1; }
+                continue;
+            }
+            if (quote != "") {
+                if (rest.startsWith("\\")) { i = i + 2; continue; }
+                if (rest.startsWith(quote)) { i = i + quote.len(); quote = ""; } else { i = i + 1; }
+                continue;
+            }
+            var skip = 0;
+            foreach (lc in comments.line) {
+                if (skip == 0 and rest.startsWith(lc)) { skip = line.len() - i; }
+            }
+            foreach (b in comments.blocks) {
+                if (skip == 0 and rest.startsWith(b[0])) { closing = b[1]; skip = b[0].len(); }
+            }
+            foreach (q in comments.quotes) {
+                if (skip == 0 and rest.startsWith(q)) { quote = q; skip = q.len(); }
+            }
+            if (skip > 0) { i = i + skip; continue; }
+            final c = line.sub(i, len: 1);
+            if (c == "\{") {
+                if (depth == 0) { openLine = n; openByte = i; }
+                depth = depth + 1;
+            }
+            if (c == "\}") {
+                depth = depth - 1;
+                if (depth == 0) { pairs.append([openLine, openByte, n, i]); }
+            }
+            i = i + 1;
+        }
+        // A one-byte quote other than a backtick ends with its line; a raw string does not.
+        if (quote.len() == 1 and quote != "`") { quote = ""; }
+    }
+    return pairs;
+}
+
+fun stubKind(symbol: str) > str {
+    if (!symbol.endsWith(").")) { return ""; }
+    final tail = symbol.split("/")[symbol.split("/").len() - 1];
+    if (tail.indexOf("#") != null) { return "Method"; }
+    return "Function";
+}
+
+fun qualifiedName(symbol: str, label: str) > str {
+    final tail = symbol.split("/")[symbol.split("/").len() - 1].replace("().", with: "");
+    if (tail.indexOf("#") != null) { return tail.replace("#", with: "."); }
+    return label;
+}
+
+// stubLines is a function's region of the final file with its body swapped for the spell's
+// stub body: every byte of the header and of the doc comment above it verbatim, nothing
+// after the body changed. null when the language declares no stub for this kind, or the
+// body cannot be found.
+export fun stubLines(lines: [str], region: Region, un: Unit, lang: Lang?, lands: str) > [str]? {
+    if (lang == null or lang!.stubs == null) { return null; }
+    final syntax = lang!.stubs!;
+    final kind = stubKind(un.symbol);
+    if (kind == "" or syntax.kinds.indexOf(kind) == null or un.line < region.lo or un.line > region.hi) { return null; }
+    var body = "";
+    try {
+        body = template\render(syntax.body, data: {"Name": un.label, "Qualified": qualifiedName(un.symbol, label: un.label),
+            "Kind": kind, "Branch": lands});
+    } catch {
+        return null;
+    }
+    final rendered = body.split("\n");
+    final result = mut [<str>];
+    if (syntax.bodyStyle == "brace") {
+        final pairs = topBraces(lines, lo: un.line, hi: region.hi, comments: lang!.comments);
+        if (pairs.len() == 0) { return null; }
+        final p = pairs[pairs.len() - 1];
+        foreach (l in slice(lines, lo: region.lo, hi: p[0] - 1)) { result.append(l); }
+        final head = lines[p[0] - 1].sub(0, len: p[1]);
+        final tail = lines[p[2] - 1].sub(p[3] + 1);
+        foreach (n, r in rendered) {
+            var l = r;
+            if (n == 0) { l = head + l; }
+            if (n == rendered.len() - 1) { l = l + tail; }
+            result.append(l);
+        }
+        foreach (l in slice(lines, lo: p[2] + 1, hi: region.hi)) { result.append(l); }
+        return result;
+    }
+    if (syntax.bodyStyle == "indent") {
+        var headerEnd = 0;
+        var depth = 0;
+        for (n: int = un.line; n <= region.hi and headerEnd == 0; n = n + 1) {
+            final l = lines[n - 1];
+            depth = depth + l.split("(").len() + l.split("[").len() - l.split(")").len() - l.split("]").len();
+            if (depth == 0 and l.trim().endsWith(":")) { headerEnd = n; }
+        }
+        if (headerEnd == 0) { return null; }
+        final header = lines[un.line - 1];
+        final indent = header.sub(0, len: header.len() - header.trim().len());
+        var last = region.hi;
+        while (last > headerEnd and lines[last - 1].trim() == "") { last = last - 1; }
+        foreach (l in slice(lines, lo: region.lo, hi: headerEnd)) { result.append(l); }
+        foreach (r in rendered) { result.append("{indent}    {r}"); }
+        foreach (l in slice(lines, lo: last + 1, hi: region.hi)) { result.append(l); }
+        return result;
+    }
+    return null;
+}
+
 object Units {
     units: {str: Unit},
     regionKey: [str],
@@ -807,7 +971,7 @@ fun unitsOf(change: SymbolChange) > Units {
         if (c.role == "output") { outputs[c.path] = true; }
     }
     final regioned = mut {<str: bool>};
-    fun add(key: str, path: str, label: str, sym: Sym?, change: str, lines: int) > void {
+    fun add(key: str, path: str, label: str, sym: Sym?, change: str, lines: int, driver: str) > void {
         final had = units[key];
         if (had != null) {
             had!.lines = had!.lines + lines;
@@ -817,19 +981,20 @@ fun unitsOf(change: SymbolChange) > Units {
         var id = path;
         if (label != path) { id = "{path}#{label}"; }
         units[key] = mut Unit{ key = key, id = id, path = path, label = label, symbol = sym?.id ?? "",
-            kind = symbolKind(sym?.id ?? ""), change = change, lines = lines, output = outputs[path] ?? false };
+            kind = symbolKind(sym?.id ?? ""), change = change, lines = lines, output = outputs[path] ?? false,
+            line = sym?.line ?? 0, driver = driver };
     }
     foreach (r in change.regions) {
         regioned[r.path] = true;
         if (r.driver == "" or change.indexed.indexOf(r.path) == null) {
             regionKey.append(r.path);
-            add(r.path, path: r.path, label: r.path, sym: null, change: "file", lines: span(r));
+            add(r.path, path: r.path, label: r.path, sym: null, change: "file", lines: span(r), driver: r.driver);
             continue;
         }
         if (r.declaration == "") {
             final key = "{r.path}#(preamble)";
             regionKey.append(key);
-            add(key, path: r.path, label: "(preamble)", sym: null, change: "body", lines: span(r));
+            add(key, path: r.path, label: "(preamble)", sym: null, change: "body", lines: span(r), driver: r.driver);
             continue;
         }
         var best: Sym? = null;
@@ -842,18 +1007,18 @@ fun unitsOf(change: SymbolChange) > Units {
         }
         if (best != null) {
             regionKey.append(best!.id);
-            add(best!.id, path: r.path, label: best!.label, sym: best, change: best!.change, lines: span(r));
+            add(best!.id, path: r.path, label: best!.label, sym: best, change: best!.change, lines: span(r), driver: r.driver);
             continue;
         }
         final key = "{r.path}#{r.declaration}";
         regionKey.append(key);
         var how = "body";
         if (r.side == "old") { how = "removed"; }
-        add(key, path: r.path, label: declName(r.declaration), sym: null, change: how, lines: span(r));
+        add(key, path: r.path, label: declName(r.declaration), sym: null, change: how, lines: span(r), driver: r.driver);
     }
     foreach (c in change.files) {
         if (regioned[c.path] == null) {
-            add(c.path, path: c.path, label: c.path, sym: null, change: "file", lines: 0);
+            add(c.path, path: c.path, label: c.path, sym: null, change: "file", lines: 0, driver: "");
         }
     }
 
@@ -884,10 +1049,13 @@ fun unitsOf(change: SymbolChange) > Units {
     return Units{ units = units, regionKey = regionKey, deps = deps };
 }
 
-// Groups is a union-find over unit keys, each union recording why.
+// Groups is a union-find over unit keys, each union recording why. cut are the `user\tdep`
+// edges a stub stands in for; stubbable maps each unit that may be stubbed to its region.
 object Groups {
     parent: mut {str: str},
     why: mut {str: [str]},
+    cut: mut [str],
+    stubbable: mut {str: Region},
 }
 
 fun findIn(g: Groups, k: str) > str {
@@ -973,8 +1141,8 @@ fun ids(keys: [str], units: {str: Unit}) > str {
 // its reason: a hunk that cannot be cut, a file whose imports changed, a test with its code,
 // a rename or a signature or type change with every changed declaration referencing it, and
 // a cycle of references.
-fun groupUnits(u: Units, change: SymbolChange) > Groups {
-    final g = Groups{ parent = mut {<str: str>}, why = mut {<str: [str]>} };
+fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
+    final g = Groups{ parent = mut {<str: str>}, why = mut {<str: [str]>}, cut = mut [<str>], stubbable = mut {<str: Region>} };
     foreach (k in u.units.keys()) { g.parent[k] = k; }
     final units = u.units;
 
@@ -988,14 +1156,25 @@ fun groupUnits(u: Units, change: SymbolChange) > Groups {
         keyOf["{r.path}:{r.side}:{r.lo}"] = u.regionKey[n];
     }
     final renamed = mut [<str>];
+    final inserted = mut {<str: [Region]>};
+    final placedElse = mut {<str: bool>};
     foreach (path in sort\strings(byPath.keys())) {
         foreach (h in hunksOf(path, regions: byPath[path]!)) {
             final keys = mut [<str>];
             var even = true;
+            final insertion = h.oldHi < h.oldLo;
             foreach (r in h.regions) {
                 final k = keyOf["{r.path}:{r.side}:{r.lo}"]!;
                 if (keys.indexOf(k) == null) { keys.append(k); }
                 if (!r.even) { even = false; }
+                if (insertion and r.side == "new") {
+                    final acc = mut [<Region>];
+                    foreach (x in inserted[k] ?? [<Region>]) { acc.append(x); }
+                    acc.append(r);
+                    inserted[k] = acc;
+                } else {
+                    placedElse[k] = true;
+                }
             }
             if (keys.len() < 2) { continue; }
             foreach (gone in keys) {
@@ -1062,13 +1241,53 @@ fun groupUnits(u: Units, change: SymbolChange) > Groups {
         }
     }
 
-    final edges = groupEdges(g, u: u);
+    // A function added whole in a file the merge base already has can be stubbed: its one
+    // region sits alone in an insertion, so a layer can hold its header with a stub body.
+    foreach (k in sort\strings(inserted.keys())) {
+        final un = units[k]!;
+        final t = change.texts[un.path];
+        if (placedElse[k] != null or inserted[k]!.len() != 1 or un.kind != "func" or un.change != "added" or t == null or t!.oldAbsent) { continue; }
+        if (stubLines(linesOf(t!.new), region: inserted[k]![0], un: un, lang: change.languages[un.driver], lands: "x") != null) {
+            g.stubbable[k] = inserted[k]![0];
+        }
+    }
+
+    // A cycle over budget is cut at a stubbable function its members only call: the callers
+    // land first against its stub, and its body lands after them.
     final nodes = mut [<str>];
     foreach (k in units.keys()) {
         final r = findIn(g, k: k);
         if (nodes.indexOf(r) == null) { nodes.append(r); }
     }
-    foreach (comp in strongComponents(nodes, edges: edges)) {
+    var cutting = true;
+    while (cutting) {
+        cutting = false;
+        foreach (comp in strongComponents(nodes, edges: groupEdges(g, u: u))) {
+            if (comp.len() < 2 or cutting) { continue; }
+            final members = mut [<str>];
+            foreach (k in units.keys()) {
+                if (comp.indexOf(findIn(g, k: k)) != null) { members.append(k); }
+            }
+            if (groupLines(members, units: units) <= budget) { continue; }
+            members.sort(fun (a: str, b: str) > bool => units[a]!.id < units[b]!.id);
+            foreach (b in members) {
+                if (cutting or g.stubbable[b] == null) { continue; }
+                final callers = mut [<str>];
+                var callsOnly = true;
+                foreach (user in users[b] ?? [<str>]) {
+                    if (comp.indexOf(findIn(g, k: user)) == null or findIn(g, k: user) == findIn(g, k: b)) { continue; }
+                    if (g.cut.indexOf("{user}\t{b}") != null) { continue; }
+                    if (units[user]!.kind != "func") { callsOnly = false; }
+                    callers.append(user);
+                }
+                if (callers.len() == 0 or !callsOnly) { continue; }
+                foreach (user in callers) { g.cut.append("{user}\t{b}"); }
+                cutting = true;
+            }
+        }
+    }
+
+    foreach (comp in strongComponents(nodes, edges: groupEdges(g, u: u))) {
         if (comp.len() < 2) { continue; }
         final members = mut [<str>];
         foreach (k in units.keys()) {
@@ -1081,13 +1300,14 @@ fun groupUnits(u: Units, change: SymbolChange) > Groups {
     return g;
 }
 
+// groupEdges is the dependency graph between groups, without the edges a stub cuts.
 fun groupEdges(g: Groups, u: Units) > {str: [str]} {
     final edges = mut {<str: [str]>};
     foreach (user in u.deps.keys()) {
         final rf = findIn(g, k: user);
         foreach (to in u.deps[user]!) {
             final rt = findIn(g, k: to);
-            if (rf == rt) { continue; }
+            if (rf == rt or g.cut.indexOf("{user}\t{to}") != null) { continue; }
             final acc = mut [<str>];
             foreach (x in edges[rf] ?? [<str>]) { acc.append(x); }
             if (acc.indexOf(rt) == null) { acc.append(rt); }
@@ -1196,9 +1416,11 @@ fun groupLines(members: [str], units: {str: Unit}) > int {
 // ordered so every group lands at or after everything it references (workspace configuration
 // first, pure deletions last, a package's groups kept together where the order allows), then
 // packed into layers up to budget changed lines. A generated output lands in the layer of
-// its generator's last changed source. failures are missing symbols a proof found: one named
-// in pulls becomes an edge, so the symbol lands at or below the layer that needs it; any
-// other marks that layer needs-stub.
+// its generator's last changed source. A cycle over budget is cut at a function that can be
+// stubbed, and every layer below that function's own holds its stub. failures are missing
+// symbols a proof found: one named in pulls, or whose pull keeps the layer within budget,
+// becomes an edge, so the symbol lands at or below the layer that needs it; one that would
+// overflow is stubbed where it can be; any other marks the layer needs-stub.
 export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, failures: [Failure], pulls: [str]) > SymPlan {
     final found = unitsOf(change);
     final units = found.units;
@@ -1233,7 +1455,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
     }
 
     final u = Units{ units = units, regionKey = found.regionKey, deps = deps };
-    final g = groupUnits(u, change: change);
+    final g = groupUnits(u, change: change, budget: budget);
     final members = mut {<str: [str]>};
     foreach (k in sort\strings(units.keys())) {
         final r = findIn(g, k: k);
@@ -1390,45 +1612,104 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         layerNotes[at] = notesAt;
     }
 
-    final layers = mut [<mut SymLayer>];
-    var parent = base;
+    final branches = mut [<str>];
+    final layerUnits = mut [<[Unit]>];
     foreach (n, groups in layerGroups) {
         final lu = mut [<Unit>];
         foreach (r in groups) {
             foreach (k in members[r]!) { lu.append(units[k]!); }
         }
         lu.sort(fun (a: Unit, b: Unit) > bool => a.id < b.id);
-        final paths = mut [<str>];
+        layerUnits.append(lu);
+        branches.append("{stem}-{n + 1}-{layerTitle(lu)}");
+    }
+    fun layerLines(n: int) > int {
         var lines = 0;
-        foreach (un in lu) {
-            if (paths.indexOf(un.path) == null) { paths.append(un.path); }
-            lines = lines + un.lines;
-        }
-        final branch = "{stem}-{n + 1}-{layerTitle(lu)}";
-        layers.append(mut SymLayer{ branch = branch, parent = parent, units = lu, paths = sort\strings(paths), lines = lines,
-            notes = layerNotes[n], check = proofCommand(branch, base: base), status = "planned", reason = "" });
-        parent = branch;
+        foreach (un in layerUnits[n]) { lines = lines + un.lines; }
+        return lines;
     }
 
+    // stubbed[n] are the units layer n holds as stubs: a function a layer at or below n calls
+    // across a cut, or a proof found missing, that lands above n.
+    final stubbed = mut [<[str]>];
+    foreach (_ in layerGroups) { stubbed.append(mut [<str>]); }
+    fun stubBetween(k: str, low: int, high: int) > void {
+        for (n: int = low; n < high; n = n + 1) {
+            final acc = mut [<str>];
+            foreach (x in stubbed[n]) { acc.append(x); }
+            if (acc.indexOf(k) == null) { acc.append(k); }
+            stubbed[n] = acc;
+        }
+    }
+    foreach (edge in g.cut) {
+        final pair = edge.split("\t");
+        stubBetween(pair[1], low: layerOf[findIn(g, k: pair[0])] ?? 0, high: layerOf[findIn(g, k: pair[1])] ?? 0);
+    }
+
+    // A proof's missing symbol is pulled down when that keeps the layer within budget,
+    // stubbed when it does not and the symbol may be, and otherwise needs a stub by hand.
     final missing = mut {<int: [str]>};
+    final autoPulls = mut [<str>];
     foreach (f in failures) {
         if (pulled.indexOf(f.name) != null) { continue; }
-        var at = -1;
-        foreach (n, l in layers) { if (l.branch == f.branch) { at = n; } }
+        final at = branches.indexOf(f.branch) ?? -1;
         if (at < 0) {
             notes.append("ignored a proof failure from {f.branch}, which this plan has no layer named");
             continue;
         }
-        var where = "which this change does not introduce";
-        foreach (n, l in layers) {
-            foreach (un in l.units) {
-                if (un.label == f.name) { where = "introduced in layer {n + 1} ({l.branch}) by {un.id}"; }
-            }
+        var need = "";
+        foreach (k in sort\strings(units.keys())) {
+            if (units[k]!.label == f.name and need == "") { need = k; }
         }
         final acc = mut [<str>];
         foreach (x in missing[at] ?? [<str>]) { acc.append(x); }
-        acc.append("{f.path} needs {f.name}, {where}; write a stub there or rerun with --pull {f.name}");
+        if (need == "") {
+            acc.append("{f.path} needs {f.name}, which this change does not introduce");
+            missing[at] = acc;
+            continue;
+        }
+        final lands = layerOf[findIn(g, k: need)] ?? 0;
+        final size = groupLines(members[findIn(g, k: need)]!, units: units);
+        if (lands <= at) { continue; }
+        if (layerLines(at) + size <= budget) {
+            if (autoPulls.indexOf(f.name) == null) { autoPulls.append(f.name); }
+            continue;
+        }
+        if (g.stubbable[need] != null) {
+            stubBetween(need, low: at, high: lands);
+            continue;
+        }
+        acc.append("{f.path} needs {f.name}, introduced in layer {lands + 1} ({branches[lands]}) by {units[need]!.id}, which no stub can stand in for and which would take this layer past --budget {budget}; write a stub there or rerun with --pull {f.name}");
         missing[at] = acc;
+    }
+    if (autoPulls.len() > 0) {
+        final more = mut [<str>];
+        foreach (p in pulls) { more.append(p); }
+        foreach (p in autoPulls) { more.append(p); }
+        return planSymbols(change, budget: budget, stem: stem, base: base, failures: failures, pulls: more);
+    }
+
+    final layers = mut [<mut SymLayer>];
+    var parent = base;
+    foreach (n, lu in layerUnits) {
+        final paths = mut [<str>];
+        foreach (un in lu) {
+            if (paths.indexOf(un.path) == null) { paths.append(un.path); }
+        }
+        final stubs = mut [<Stub>];
+        final said = mut [<str>];
+        foreach (k in sort\strings(stubbed[n])) {
+            final un = units[k]!;
+            final lands = branches[layerOf[findIn(g, k: k)] ?? 0];
+            final text = stubLines(linesOf(change.texts[un.path]!.new), region: g.stubbable[k]!, un: un,
+                lang: change.languages[un.driver], lands: lands);
+            stubs.append(Stub{ key = k, id = un.id, path = un.path, lands = lands, lines = text! });
+            said.append("stubs {un.id} until {lands}");
+        }
+        layers.append(mut SymLayer{ branch = branches[n], parent = parent, units = lu, paths = sort\strings(paths),
+            lines = layerLines(n), notes = layerNotes[n], check = proofCommand(branches[n], base: base),
+            status = "planned", reason = said.join("; "), stubs = stubs });
+        parent = branches[n];
     }
     foreach (at in missing.keys()) {
         layers[at].status = "needs-stub";
@@ -1497,14 +1778,14 @@ fun linesOf(text: str) > [str] {
 }
 
 // contentAt is path at a layer: the merge base's lines with the hunks of the selected units
-// applied. A hunk cut between units writes each unit's own lines; a hunk that groupUnits
-// kept whole is either applied or not.
-export fun contentAt(oldText: str, newText: str, regions: [Region], keys: [str], selected: {str: bool}) > str {
+// applied. A hunk cut between units writes each unit's own lines, and a stubbed unit's stub
+// in place of its own; a hunk that groupUnits kept whole is either applied or not.
+export fun contentAt(oldText: str, newText: str, regions: [Region], keys: [str], selected: {str: bool}, stubs: {str: [str]}) > str {
     final oldLines = linesOf(oldText);
     final newLines = linesOf(newText);
     final keyOf = mut {<str: str>};
     foreach (n, r in regions) { keyOf["{r.side}:{r.lo}"] = keys[n]; }
-    final result =mut [<str>];
+    final result = mut [<str>];
     var cursor = 1;
     final path = regions[0].path;
     foreach (h in hunksOf(path, regions: regions)) {
@@ -1518,6 +1799,7 @@ export fun contentAt(oldText: str, newText: str, regions: [Region], keys: [str],
         var none = true;
         foreach (k in hk) {
             if (selected[k] ?? false) { none = false; } else { all = false; }
+            if (stubs[k] != null) { none = false; }
         }
         if (all) {
             foreach (l in slice(newLines, lo: h.newLo, hi: h.newHi)) { result.append(l); }
@@ -1525,9 +1807,13 @@ export fun contentAt(oldText: str, newText: str, regions: [Region], keys: [str],
             foreach (l in slice(oldLines, lo: h.oldLo, hi: h.oldHi)) { result.append(l); }
         } else {
             foreach (r in h.regions) {
-                final on = selected[keyOf["{r.side}:{r.lo}"]!] ?? false;
+                final k = keyOf["{r.side}:{r.lo}"]!;
+                final on = selected[k] ?? false;
                 if (r.side == "new" and on) {
                     foreach (l in slice(newLines, lo: r.lo, hi: r.hi)) { result.append(l); }
+                }
+                if (r.side == "new" and !on and stubs[k] != null) {
+                    foreach (l in stubs[k]!) { result.append(l); }
                 }
                 if (r.side == "old" and !on) {
                     foreach (l in slice(oldLines, lo: r.lo, hi: r.hi)) { result.append(l); }
@@ -1553,9 +1839,9 @@ export object FileText {
 }
 
 // layerWrites is what each layer of p commits: a path every unit of which is in this layer
-// or below is written whole from the working tree; any other path this layer touches is
-// written as contentAt builds it.
-export fun layerWrites(p: SymPlan, change: SymbolChange, texts: {str: FileText}, stem: str) > [LayerWrite] {
+// or below, and that holds no stub, is written whole from the working tree; any other path
+// this layer touches or stubs in is written as contentAt builds it.
+export fun layerWrites(p: SymPlan, change: SymbolChange, stem: str) > [LayerWrite] {
     final u = unitsOf(change);
     final byPath = mut {<str: [Region]>};
     final keysByPath = mut {<str: [str]>};
@@ -1573,19 +1859,27 @@ export fun layerWrites(p: SymPlan, change: SymbolChange, texts: {str: FileText},
     final writes = mut [<LayerWrite>];
     foreach (n, l in p.layers) {
         foreach (un in l.units) { selected[un.key] = true; }
+        final stubs = mut {<str: [str]>};
+        final touched = mut [<str>];
+        foreach (path in l.paths) { touched.append(path); }
+        foreach (s in l.stubs) {
+            stubs[s.key] = s.lines;
+            if (touched.indexOf(s.path) == null) { touched.append(s.path); }
+        }
         final whole = mut [<str>];
         final partial = mut {<str: str>};
-        foreach (path in l.paths) {
+        foreach (path in touched) {
             var complete = true;
             foreach (k in keysByPath[path] ?? [<str>]) {
-                if (!(selected[k] ?? false)) { complete = false; }
+                if (!(selected[k] ?? false) or stubs[k] != null) { complete = false; }
             }
             if (complete or byPath[path] == null) {
                 whole.append(path);
                 continue;
             }
-            final t = texts[path]!;
-            partial[path] = contentAt(t.old, newText: t.new, regions: byPath[path]!, keys: keysByPath[path]!, selected: selected);
+            final t = change.texts[path]!;
+            partial[path] = contentAt(t.old, newText: t.new, regions: byPath[path]!, keys: keysByPath[path]!,
+                selected: selected, stubs: stubs);
         }
         writes.append(LayerWrite{ branch = l.branch, subject = "{l.branch}: part {n + 1} of {p.layers.len()} split from {stem}",
             whole = whole, partial = partial });
@@ -1687,7 +1981,48 @@ fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > Symb
     final texts = readTexts(root, mergeBase: mergeBase, paths: paths);
     final regions = settledRegions(base, texts: texts);
     final syms = changedSymbols(base);
-    return SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexedPaths(regions, syms: syms, files: files) };
+    return SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexedPaths(regions, syms: syms, files: files),
+        texts = texts, languages = languagesOf(regions) };
+}
+
+// The spell each diff driver's language belongs to.
+final DRIVER_SPELLS = {"golang": "go", "typescript": "typescript", "python": "python", "rust": "rust", "buzz": "buzz"};
+
+fun stringsOf(b: serialize\Boxed?) > [str] {
+    final result = mut [<str>];
+    foreach (x in b?.list() ?? [<serialize\Boxed>]) {
+        if (x.string() != null) { result.append(x.string()!); }
+    }
+    return result;
+}
+
+// languageOf decodes the stub and comment syntax a spell's description declares. A spell
+// that declares no stubs comes back with none, so nothing in its language is stubbed.
+export fun languageOf(spell: serialize\Boxed) > Lang {
+    final c = spell.q(["comments"]);
+    final blocks = mut [<[str]>];
+    foreach (pair in c.q(["blocks"]).list() ?? [<serialize\Boxed>]) {
+        final ends = stringsOf(pair);
+        if (ends.len() == 2) { blocks.append(ends); }
+    }
+    final comments = CommentSyntax{ quotes = stringsOf(c.q(["quotes"])), line = stringsOf(c.q(["line"])), blocks = blocks };
+    final s = spell.q(["stubs"]);
+    if (s.map() == null or s.q(["body"]).string() == null) { return Lang{ stubs = null, comments = comments }; }
+    return Lang{ stubs = StubSyntax{ kinds = stringsOf(s.q(["kinds"])), bodyStyle = s.q(["bodyStyle"]).string() ?? "",
+        body = s.q(["body"]).string()! }, comments = comments };
+}
+
+fun languagesOf(regions: [Region]) > {str: Lang} !> any {
+    final langs = mut {<str: Lang>};
+    foreach (r in regions) {
+        final spell = DRIVER_SPELLS[r.driver];
+        if (spell == null or langs[r.driver] != null) { continue; }
+        final described = magus\describe(["spell", spell!, "-o", "json"], opts: {"quiet": true});
+        foreach (sp in serialize\jsonDecode(described.stdout).q(["spells"]).list() ?? [<serialize\Boxed>]) {
+            langs[r.driver] = languageOf(sp);
+        }
+    }
+    return langs;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -1779,8 +2114,7 @@ export fun main(args: [str]) > void !> any {
     }
     var stack = symbolStack(p, base: prBase(base));
     if (apply) {
-        final texts = readTexts(root, mergeBase: mergeBase, paths: changed);
-        writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, texts: texts, stem: stem), changed: changed);
+        writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, stem: stem), changed: changed);
         final created = mut [<branchstack\StackLayer>];
         foreach (l in stack.layers) {
             var status = l.status;
@@ -1987,8 +2321,10 @@ fun symbolRepo() > Repo !> any {
     }
     final indexed = mut [<str>];
     foreach (p in paths) { if (p.endsWith(".go")) { indexed.append(p); } }
-    return Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed },
-        texts = texts, paths = paths };
+    final languages = mut {<str: Lang>};
+    foreach (driver, spell in doc.q("languages").mapValue()) { languages[driver] = languageOf(spell); }
+    return Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed,
+        texts = texts, languages = languages }, texts = texts, paths = paths };
 }
 
 fun layerIds(p: SymPlan) > [str] {
@@ -2008,19 +2344,39 @@ test "--by symbols layers declarations after what they reference, keeps atomic g
     assert\equal(layerIds(p), want: [
         "topic-1-calc-base<-main: calc/base.go#(preamble) calc/base.go#Base calc/calc.go#Keep",
         "topic-2-calc-mid<-topic-1-calc-base: calc/calc.go#Old calc/calc.go#Shout calc/mid.go#(preamble) calc/mid.go#Mid cmd/main.go#main",
-        "topic-3-calc-top<-topic-2-calc-mid: calc/top.go#(preamble) calc/top.go#Top calc/top_test.go#(preamble) calc/top_test.go#TestTop gen/top.txt",
+        "topic-3-calc-helper<-topic-2-calc-mid: calc/calc.go#Helper",
+        "topic-4-calc-top<-topic-3-calc-helper: calc/top.go#(preamble) calc/top.go#Top calc/top_test.go#(preamble) calc/top_test.go#TestTop gen/top.txt",
     ], message: "Base below Mid below Top; the rename with its caller; the test with its code; the output with its generator's source");
     assert\equal(p.layers[0].notes[1], want: "ends here: calc/calc.go#Old, calc/calc.go#Shout, cmd/main.go#main (4 lines) would take it to 11, past --budget 10",
         message: "the boundary says why it is there");
     assert\equal(p.layers[1].notes.indexOf("together: cmd/main.go#main would not compile without the new name of calc/calc.go#Shout") != null,
         want: true, message: "the rename's caller rides with it: {p.layers[1].notes}");
-    assert\equal(p.layers[2].notes[0], want: "over --budget 10 at 14 lines: calc/top.go#(preamble), calc/top_test.go#(preamble), calc/top_test.go#TestTop, calc/top.go#Top cannot be split",
+    assert\equal(p.layers[3].notes[0], want: "over --budget 10 at 14 lines: calc/top.go#(preamble), calc/top_test.go#(preamble), calc/top_test.go#TestTop, calc/top.go#Top cannot be split",
         message: "an atomic group over budget stands alone and says so");
+    final roomy = planSymbols(repo.change, budget: 15, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
+    assert\equal(layerIds(roomy)[1], want: "topic-2-calc-helper<-topic-1-calc-base: calc/calc.go#Helper calc/calc.go#Keep calc/mid.go#(preamble) calc/mid.go#Mid",
+        message: "a cycle within budget is one group, and nothing is stubbed");
+    foreach (l in roomy.layers) { assert\equal(l.stubs.len(), want: 0, message: "no stub in {l.branch}"); }
     final one = planSymbols(repo.change, budget: 400, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
     assert\equal(one.layers.len(), want: 1, message: "the whole change fits one layer of the default budget");
 }
 
-test "a proof's undefined symbol marks its layer needs-stub, and --pull moves the symbol below it" {
+test "a cycle over budget is cut at a function that can be stubbed, its header kept byte for byte" {
+    final repo = symbolRepo();
+    final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
+    fs\removeAll(repo.root);
+    assert\equal(p.layers[1].reason, want: "stubs calc/calc.go#Helper until topic-3-calc-helper", message: "Mid's layer stubs Helper");
+    assert\equal(p.layers[1].stubs[0].lines, want: [
+        "// Helper calls back into Mid, so the two reference each other.",
+        "func Helper(n int) string \{",
+        "\tpanic(\"unimplemented: Helper lands in topic-3-calc-helper\")",
+        "\}",
+        "",
+    ], message: "the doc comment and header verbatim, the spell's body, and a brace in a comment or a string is not the body's");
+    assert\equal(p.layers[2].stubs.len(), want: 0, message: "Helper's own layer writes the real one");
+}
+
+test "a proof's undefined symbol is pulled when it fits, stubbed when it can be, else marks the layer needs-stub" {
     final repo = symbolRepo();
     final output = "# example.com/m/cmd\ncmd/main.go:6:10: undefined: calc.Top\ncmd/main.go:6:10: undefined: calc.Top\n";
     final failures = parseFailures(output, branch: "topic-2-calc-mid");
@@ -2028,23 +2384,31 @@ test "a proof's undefined symbol marks its layer needs-stub, and --pull moves th
     final marked = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: failures, pulls: [<str>]);
     assert\equal(marked.layers[1].status, want: "needs-stub", message: "status");
     assert\equal(marked.layers[1].reason,
-        want: "cmd/main.go needs Top, introduced in layer 3 (topic-3-calc-top) by calc/top.go#Top; write a stub there or rerun with --pull Top",
+        want: "cmd/main.go needs Top, introduced in layer 4 (topic-4-calc-top) by calc/top.go#Top, which no stub can stand in for and which would take this layer past --budget 10; write a stub there or rerun with --pull Top",
         message: "the reason names the symbol and where it lands");
-    final pulled = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: failures, pulls: ["Top"]);
+    final forced = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: failures, pulls: ["Top"]);
+    assert\equal(layerIds(forced)[4], want: "topic-5-calc-shout<-topic-4-calc-top: calc/calc.go#Old calc/calc.go#Shout cmd/main.go#main",
+        message: "--pull puts the caller above Top");
+    foreach (l in forced.layers) { assert\equal(l.status, want: "planned", message: "a pulled symbol leaves nothing to stub"); }
+
+    final stubbed = planSymbols(repo.change, budget: 10, stem: "topic", base: "main",
+        failures: [Failure{ branch = "topic-1-calc-base", path = "calc/base.go", name = "Helper" }], pulls: [<str>]);
+    assert\equal(stubbed.layers[0].reason, want: "stubs calc/calc.go#Helper until topic-3-calc-helper",
+        message: "Helper would overflow layer 1, so layer 1 stubs it");
+
+    final fitted = planSymbols(repo.change, budget: 15, stem: "topic", base: "main",
+        failures: [Failure{ branch = "topic-1-calc-base", path = "calc/base.go", name = "Shout" }], pulls: [<str>]);
     fs\removeAll(repo.root);
-    assert\equal(layerIds(pulled), want: [
-        "topic-1-calc-base<-main: calc/base.go#(preamble) calc/base.go#Base calc/calc.go#Keep",
-        "topic-2-calc-mid<-topic-1-calc-base: calc/mid.go#(preamble) calc/mid.go#Mid",
-        "topic-3-calc-top<-topic-2-calc-mid: calc/top.go#(preamble) calc/top.go#Top calc/top_test.go#(preamble) calc/top_test.go#TestTop gen/top.txt",
-        "topic-4-calc-shout<-topic-3-calc-top: calc/calc.go#Old calc/calc.go#Shout cmd/main.go#main",
-    ], message: "the caller now lands above Top");
-    foreach (l in pulled.layers) { assert\equal(l.status, want: "planned", message: "a pulled symbol leaves nothing to stub"); }
+    assert\equal(fitted.notes, want: ["pulled calc/calc.go#Shout below calc/base.go, which topic-1-calc-base's proof found it missing from"],
+        message: "Shout fits beside Base, so it is pulled without asking");
+    assert\equal(layerIds(fitted)[0], want: "topic-1-calc-base<-main: calc/base.go#(preamble) calc/base.go#Base calc/calc.go#Old calc/calc.go#Shout cmd/main.go#main",
+        message: "Shout's group lands with Base");
 }
 
 test "--apply writes each layer's part of a file through a temporary index, and the top layer is the whole change" {
     final repo = symbolRepo();
     final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
-    final writes = layerWrites(p, change: repo.change, texts: repo.texts, stem: "topic");
+    final writes = layerWrites(p, change: repo.change, stem: "topic");
     assert\equal(writes[0].partial.keys(), want: ["calc/calc.go"], message: "calc.go is split across layers 1 and 2");
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
         writeLayers(repo.root, mergeBase: gitIn(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
@@ -2054,7 +2418,12 @@ test "--apply writes each layer's part of a file through a temporary index, and 
         message: "layer 1 has Keep's new body and still the old name");
     final listed = gitIn(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
     assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt"], message: "layer 1's tree");
-    final top = readTexts(repo.root, mergeBase: "topic-3-calc-top", paths: repo.paths);
+    final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
+    assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
+        message: "layer 2 builds against Helper's stub: {stubbedIn}");
+    assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: linesOf(repo.texts["calc/calc.go"]!.new).join("\n"),
+        message: "layer 3 writes the real Helper over the stub");
+    final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths);
     foreach (path in repo.paths) {
         assert\equal(top[path]!.old, want: top[path]!.new, message: "the top layer holds the working tree's {path}");
     }
