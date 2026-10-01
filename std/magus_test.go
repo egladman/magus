@@ -28,18 +28,23 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 	cases := []struct {
 		name     string
 		sub      string
+		args     []string
 		wantWarn bool
 	}{
-		{"describe warns", "describe", true},
-		{"run warns", "run", true},
-		{"insight does not warn", "insight", false},
-		{"doctor warns", "doctor", true},
-		{"status does not warn", "status", false},
-		{"affected does not warn", "affected", false},
-		{"no subcommand does not warn", "", false},
+		{"describe of a typed noun warns", "describe", []string{"spell", "go"}, true},
+		{"describe of a plural spelling warns", "describe", []string{"mcp-tools"}, true},
+		{"describe of an untyped noun does not warn", "describe", []string{"job", "x"}, false},
+		{"describe asked for its bytes does not warn", "describe", []string{"graph", "-o", "json"}, false},
+		{"bare describe does not warn", "describe", nil, false},
+		{"run warns", "run", nil, true},
+		{"insight does not warn", "insight", nil, false},
+		{"doctor warns", "doctor", nil, true},
+		{"status does not warn", "status", nil, false},
+		{"affected does not warn", "affected", nil, false},
+		{"no subcommand does not warn", "", nil, false},
 		// The subcommand is its own argument now, so a value that merely CONTAINS a
 		// typed name is not one: only an exact match is the escape hatch being misused.
-		{"a longer name that starts with one does not warn", "runner", false},
+		{"a longer name that starts with one does not warn", "runner", nil, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -51,7 +56,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 
 			// Test the pure decision half directly — calling MagusCmd would exec the
 			// test binary (a fork-bomb risk), and the warning is what we care about.
-			warnIfTypedSubcommand(context.Background(), tc.sub)
+			warnIfTypedSubcommand(context.Background(), tc.sub, tc.args)
 
 			got := strings.Contains(buf.String(), "subcommand with a dedicated method")
 			assert.Equal(t, tc.wantWarn, got, "warn mismatch (log=%q)", buf.String())
@@ -279,7 +284,7 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
 
-// fakeToolReporter is a workspace that reports its tools, so magus\tools() can be shown
+// fakeToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
 // to answer in-process rather than forking a nested magus.
 type fakeToolReporter struct {
 	types.WorkspaceRepository
@@ -299,7 +304,7 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
 		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
 	}
-	got, err := MagusTools(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
+	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
@@ -819,5 +824,18 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 	for sub := range typedMagusSubcommands {
 		assert.True(t, members[sub], "magus.cmd(%q) points at magus.%s, which does not exist", sub, sub)
+	}
+
+	describe := map[string]bool{}
+	for _, ns := range Magus.Namespaces {
+		if ns.Name != "describe" {
+			continue
+		}
+		for _, m := range ns.Methods {
+			describe[CamelCase(m.Name)] = true
+		}
+	}
+	for noun, method := range typedDescribeNouns {
+		assert.True(t, describe[method], "magus.cmd(\"describe\", [%q]) points at magus\\describe.%s, which does not exist", noun, method)
 	}
 }

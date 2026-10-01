@@ -235,23 +235,23 @@ func (_c *MockInspector_EvaluateTarget_Call) RunAndReturn(run func(ctx context.C
 }
 
 // ListCharms provides a mock function for the type MockInspector
-func (_mock *MockInspector) ListCharms(ctx context.Context) ([]types.Charm, error) {
+func (_mock *MockInspector) ListCharms(ctx context.Context) ([]types.CharmEntry, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListCharms")
 	}
 
-	var r0 []types.Charm
+	var r0 []types.CharmEntry
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]types.Charm, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]types.CharmEntry, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []types.Charm); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []types.CharmEntry); ok {
 		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.Charm)
+			r0 = ret.Get(0).([]types.CharmEntry)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -286,12 +286,12 @@ func (_c *MockInspector_ListCharms_Call) Run(run func(ctx context.Context)) *Moc
 	return _c
 }
 
-func (_c *MockInspector_ListCharms_Call) Return(charms []types.Charm, err error) *MockInspector_ListCharms_Call {
-	_c.Call.Return(charms, err)
+func (_c *MockInspector_ListCharms_Call) Return(charmEntrys []types.CharmEntry, err error) *MockInspector_ListCharms_Call {
+	_c.Call.Return(charmEntrys, err)
 	return _c
 }
 
-func (_c *MockInspector_ListCharms_Call) RunAndReturn(run func(ctx context.Context) ([]types.Charm, error)) *MockInspector_ListCharms_Call {
+func (_c *MockInspector_ListCharms_Call) RunAndReturn(run func(ctx context.Context) ([]types.CharmEntry, error)) *MockInspector_ListCharms_Call {
 	_c.Call.Return(run)
 	return _c
 }

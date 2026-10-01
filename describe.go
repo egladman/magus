@@ -77,6 +77,8 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 			Targets:      p.Targets(),
 			Opaque:       p.Opaque(),
 			Language:     p.Language(),
+			Extensions:   p.LanguageExtensions(),
+			Syntax:       p.Syntax(),
 			VersionProbe: p.HasVersionProbe(),
 			SymbolFormat: symbolFormat(p),
 			TargetDocs:   docs,
@@ -133,18 +135,18 @@ func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {
 //
 // ctx bounds the walk: this is the most expensive Inspector method (ExplainCommand per
 // charm, per target, per spell, across every project).
-func (m *Magus) ListCharms(ctx context.Context) ([]types.Charm, error) {
+func (m *Magus) ListCharms(ctx context.Context) ([]types.CharmEntry, error) {
 	defaultSet := map[string]struct{}{}
 	for _, c := range m.cfg.DefaultCharms {
 		defaultSet[types.Normalize(c)] = struct{}{}
 	}
 
-	byName := map[string]*types.Charm{}
-	ensure := func(name string) *types.Charm {
+	byName := map[string]*types.CharmEntry{}
+	ensure := func(name string) *types.CharmEntry {
 		e, ok := byName[name]
 		if !ok {
 			_, isDefault := defaultSet[name]
-			e = &types.Charm{
+			e = &types.CharmEntry{
 				Name:    name,
 				Builtin: types.IsReservedCharm(name),
 				Default: isDefault,
@@ -188,7 +190,7 @@ func (m *Magus) ListCharms(ctx context.Context) ([]types.Charm, error) {
 		}
 	}
 
-	entries := make([]types.Charm, 0, len(byName))
+	entries := make([]types.CharmEntry, 0, len(byName))
 	for _, e := range byName {
 		slices.SortFunc(e.Declarations, func(a, b types.CharmDeclaration) int {
 			if c := cmp.Compare(a.Project, b.Project); c != 0 {
@@ -201,7 +203,7 @@ func (m *Magus) ListCharms(ctx context.Context) ([]types.Charm, error) {
 		})
 		entries = append(entries, *e)
 	}
-	slices.SortFunc(entries, func(a, b types.Charm) int {
+	slices.SortFunc(entries, func(a, b types.CharmEntry) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries, nil

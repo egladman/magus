@@ -68,8 +68,8 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		if len(spec.LanguageExtensions) > 0 {
 			opts = append(opts, spells.WithLanguageExtensions(spec.LanguageExtensions))
 		}
-		if spec.Comments != nil {
-			opts = append(opts, spells.WithComments(spec.Comments))
+		if spec.Syntax != nil {
+			opts = append(opts, spells.WithSyntax(spec.Syntax))
 		}
 		if spec.SymbolIndexer != nil {
 			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
@@ -683,8 +683,8 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if len(m.LanguageExtensions) > 0 {
 		opts = append(opts, spells.WithLanguageExtensions(m.LanguageExtensions))
 	}
-	if m.Comments != nil {
-		opts = append(opts, spells.WithComments(m.Comments))
+	if m.Syntax != nil {
+		opts = append(opts, spells.WithSyntax(m.Syntax))
 	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))

@@ -144,15 +144,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "go",
         extensions = [".go"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            quotes = [
-                Quote{open = "`", close = "`", ignoreEscape = true},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                quotes = [
+                    Quote{open = "`", close = "`", ignoreEscape = true},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n\tpanic(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\")\n\}",
+            },
         },
     };
 }

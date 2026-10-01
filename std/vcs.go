@@ -72,20 +72,6 @@ var Vcs = Module{
 			Args: []Arg{
 				{Name: "dir", Type: TypeString, Optional: true},
 			},
-=======
-			Name: "regions",
-			Doc:  "The declarations the change against base (defaults to vcs.base) lands in: one {file, side, lines, declaration, driver} per declaration each hunk touches, ordered by path, then side, then line, for the same files vcs.changedFiles lists. side is `old` for lines only the merge base's version has (a deletion) and `new` for the working tree's; lines is the first and last line on that side, 1-based and inclusive; declaration is the enclosing declaration's line as the file's diff driver matched it (`func (m *Magus) run(ctx context.Context) error {`), empty above a file's first declaration; driver is that diff driver (`golang`, `markdown`, `buzz`), empty for a file with none, whose regions then say only which lines changed. It is the footprint `magus job wait` prints. Empty when no VCS is resolved; raises when the backend cannot place regions (only git can) or the diff cannot be computed, since an empty footprint reads as a change that touched nothing.",
-			Args: []Arg{
-				{Name: "base", Type: TypeString, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAny, Object: "[RegionChange]"}},
-			Raises:  true,
-			Impl:    VcsRegions,
-		},
-		{
-			Name:    "ref",
-			Doc:     "The movable name pointing at the current revision, or null when none names it: a detached git HEAD, or jj's working copy, which is usually an anonymous change, so null is an ordinary answer there, not a failure. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
->>>>>>> feat/split-by-symbols
 			Returns: []Ret{{Type: TypeString, Nullable: true}},
 			Raises:  true,
 			Impl:    VcsRef,

@@ -123,9 +123,9 @@ var SandboxCacheSource string
 var SandboxSource string
 
 // CommentBlockSource / QuoteSource / CommentSyntaxSource are the generated mirrors of
-// the comment/string syntax a spell declares via mgs_getCommentSyntax. The two leaves
-// must PRECEDE CommentSyntaxSource in the bundle (its fields are [CommentBlock] and
-// [Quote]); nothing else references them.
+// the comment/string syntax a spell declares in mgs_getLanguage's syntax.comments. The
+// two leaves must PRECEDE CommentSyntaxSource in the bundle (its fields are
+// [CommentBlock] and [Quote]); nothing else references them.
 //
 //go:embed gen/types/commentblock.buzz
 var CommentBlockSource string
@@ -135,6 +135,19 @@ var QuoteSource string
 
 //go:embed gen/types/commentsyntax.buzz
 var CommentSyntaxSource string
+
+// StubSyntaxSource and SyntaxSource are the generated mirrors of
+// spells.StubSyntax and spells.Syntax. Syntax carries a CommentSyntax and a
+// StubSyntax and Language carries a Syntax, so the bundle orders them
+// CommentSyntax, StubSyntax, Syntax, Language.
+//
+//go:generate go run ../../cmd/magus-utils types -type StubSyntax -out gen/types/stubsyntax.buzz
+//go:embed gen/types/stubsyntax.buzz
+var StubSyntaxSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Syntax -out gen/types/syntax.buzz
+//go:embed gen/types/syntax.buzz
+var SyntaxSource string
 
 //go:embed gen/types/language.buzz
 var LanguageSource string
@@ -203,4 +216,4 @@ var CharmModuleSource string
 // Service and SymbolIndexer, each referencing the prior; Target and Project have no
 // cross-references so their position is free). Shared by the runtime registration
 // (modules.go) and the built-in loader (builtins.go), so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource}, "\n")

@@ -33,7 +33,7 @@
 //
 // A tag carries no end-of-life date either. Those come from the workspace's lifecycle
 // provider (magus\lifecycle.provider, spells/endoflife-date here), read through
-// magus\tools(), the same answer `magus describe tools` prints.
+// magus\describe.tool(), the same answer `magus describe tools` prints.
 
 import "magus";
 import "std";
@@ -203,7 +203,7 @@ fun observe(name: str, bin: str, args: [str]) > void {
 // the reason observe gives.
 fun support() > void {
     try {
-        final tools = magus\tools();
+        final tools = magus\describe.tool();
         final seen = mut {<str: bool>};
         foreach (row in tools.tools) {
             final key = row.bin + " " + row.installedVersion;

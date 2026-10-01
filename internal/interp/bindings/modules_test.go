@@ -179,7 +179,7 @@ func TestScriptWorkspaceReadersRaiseCoded(t *testing.T) {
 	err := sess.Exec(context.Background(), `
 import "magus";
 
-fun main() > void { magus\projects(); }
+fun main() > void { magus\describe.project(); }
 main();
 `)
 	require.Error(t, err)
@@ -266,7 +266,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 }
 
 // TestMagusModulesSharesDescribeCore is the parity lock for the native query
-// methods: magus.describeModule() (host) and `magus describe module` (CLI) are two thin
+// methods: magus\describe.module() (host) and `magus describe module` (CLI) are two thin
 // adapters over the one typed core, host.ModulesOutput. This asserts the objects
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
@@ -298,11 +298,11 @@ func TestMagusModulesEndToEnd(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    final mods = magus\describeModule();
-    if (mods.len() == 0) { magus\fatal("describeModule() returned nothing"); }
+    final mods = magus\describe.module();
+    if (mods.len() == 0) { magus\fatal("describe.module() returned nothing"); }
 
-    final fs = magus\describeModule("fs")[0];
-    if (fs.name != "fs") { magus\fatal("describeModule(fs).name was not fs"); }
+    final fs = magus\describe.module("fs")[0];
+    if (fs.name != "fs") { magus\fatal("describe.module(fs).name was not fs"); }
     if (fs.methods.len() == 0) { magus\fatal("fs module has no methods"); }
     if (fs.methods[0].buzz == "") { magus\fatal("fs method missing its Buzz signature"); }
 }`)

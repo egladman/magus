@@ -208,7 +208,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("assets/**"), workspace\file("releases/*.yaml"));
     ctx.writesFiles("gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\projectGraph(),
+        magus\describe.graph(), magus\projectGraph(),
         ctx.hasCharm("rw"));
 }
 
@@ -394,5 +394,5 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // Uncommitted, so a fresh checkout lacks it.
     ctx.needs(changelog_page);
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\projectGraph());
+        magus\describe.graph(), magus\projectGraph());
 }

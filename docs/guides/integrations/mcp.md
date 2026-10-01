@@ -181,7 +181,7 @@ connection; an agent should not start a server merely to unlock a tool.
 
 `client` is the magus module. Define `main(args: [str])`, `import "magus"`, and
 return a JSON-encodable value. The return is under `json`; `std.print` text is
-under `stdout`. Call `magus\describeModule("magus")` for the signatures. Also
+under `stdout`. Call `magus\describe.module("magus")` for the signatures. Also
 importable: `std`, `math`, `crypto`, `serialize`, `buffer`, and the WASM host
 modules except `env`. File imports, native FFI, and `fs`, `proc`, `http`, `os`,
 `net`, `vcs`, and `env` are refused with

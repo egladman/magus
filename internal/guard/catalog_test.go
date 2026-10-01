@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 	declared := denyRuleNamesFromSource(t)
 	require.NotEmpty(t, declared, "parsed no denyRuleName constants; the block moved and this gate stopped looking")
 
-	catalogued := map[string]RuleDoc{}
+	catalogued := map[string]types.RuleDoc{}
 	for _, r := range Rules() {
 		catalogued[r.Name] = r
 	}

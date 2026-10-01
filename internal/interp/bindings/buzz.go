@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
@@ -136,8 +135,7 @@ const (
 // RegisterMagusNamespace installs the magus.* namespace into a standalone Buzz
 // session, so `import "magus"` resolves in a `magus buzz` script the way it does in
 // a magusfile and the members that need no magusfile (magus\describe, magus\cmd,
-// magus\run, magus\insight, magus\doctor, the log levels, magus\module[s]) work
-// there.
+// magus\run, magus\insight, magus\doctor, the log levels) work there.
 //
 // It is a SEPARATE call from RegisterModuleSurface rather than part of it, because
 // the magusfile engine installs its own richer namespace (registerAllBuzz) and must
@@ -156,9 +154,9 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 }
 
 // assembleMagus is buildMagus without the withheld top-level members, which are
-// also dropped from what magus\describeModule lists.
+// also dropped from what magus\describe.module lists.
 func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface, withheld ...string) vm.Value {
-	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
+	// The host-declarable subset (magus.cmd/run/insight/doctor,
 	// magus.bust_cache) is generated from the std.Magus descriptor like every other
 	// module, so the two can't drift and a declared method can't be silently left
 	// unbound. The hand-built members below are the VM-infra ones (project/cache/
@@ -185,30 +183,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("harness", harness)
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
-	// magus.modules() / magus.module(name): typed, native introspection of the host
-	// module registry: the same host.ModulesOutput core `magus describe module[s]`
-	// formats, marshaled straight to Buzz objects instead of scraping a subprocess's
-	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
-	// module(name) returns one with fields + per-method Buzz signatures, and raises on
-	// an unknown name. Hand-written (not declarative) because the core uses host,
-	// which std can't import. hostmodules.Describe, not std.DescribeModules: std's
-	// own registry no longer covers std/encoding's nine modules by itself; see
-	// hostmodules's doc.
-	// magus.describeModule([name]): the host module surface, as `magus describe
-	// module [<name>]` prints it. One member rather than a modules()/module(name)
-	// pair: the CLI noun takes an optional name and returns a collection either
-	// way, and hostmodules.Describe already has that shape.
-	magus.MapSet("describeModule", directVal(obs, "magus.describeModule", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		name := ""
-		if len(args) > 0 && args[0].IsStr() {
-			name = args[0].AsString()
-		}
-		out := dropMagusMethods(hostmodules.Describe(name), withheld)
-		if name != "" && len(out) == 0 {
-			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
-		}
-		return ffi.ObjectSlice(out, bindinggen.ObjectModuleEntry), nil
-	}))
+	magus.MapSet("describe", buildDescribe(obs, withheld))
 
 	// magus.normalize(name): the canonical form of any magus entity name (a target, a
 	// charm, or a spell op). Exposed because the rule is only knowable by running it:
@@ -292,7 +267,7 @@ func dropMembers(mod vm.Value, names []string) vm.Value {
 	return out
 }
 
-// dropMagusMethods removes the named methods from a describeModule("magus")
+// dropMagusMethods removes the named methods from a describe.module("magus")
 // listing. The registry still declares them; a surface that withholds them does
 // not offer them.
 func dropMagusMethods(entries []types.ModuleEntry, names []string) []types.ModuleEntry {

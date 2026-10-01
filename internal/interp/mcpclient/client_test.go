@@ -87,7 +87,7 @@ func TestRunDescribeModuleOmitsWithheldMembers(t *testing.T) {
 		Script: `import "magus";
 fun main(args: [str]) > [str] !> str {
   final found: mut [str] = mut [];
-  foreach (entry in magus\describeModule("magus")) {
+  foreach (entry in magus\describe.module("magus")) {
     foreach (method in entry.methods) {
       if (method.name == "cmd" or method.name == "pry") { found.append(method.name); }
     }

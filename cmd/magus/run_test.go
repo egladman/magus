@@ -85,7 +85,7 @@ func (w *resolveWS) Affected(context.Context, string) (*types.AffectedResult, er
 func (w *resolveWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (w *resolveWS) ListCharms(context.Context) ([]types.Charm, error) {
+func (w *resolveWS) ListCharms(context.Context) ([]types.CharmEntry, error) {
 	panic("not used")
 }
 func (w *resolveWS) ListTargets(context.Context) ([]types.TargetEntry, error) {

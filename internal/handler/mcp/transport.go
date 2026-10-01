@@ -117,7 +117,7 @@ func toolLine(t hint.ToolName, desc string) string {
 // descriptor names; member renders them as Buzz spells them.
 // TestServerInstructionsNameRealMembers holds each to a declared member.
 var clientMembers = []string{
-	"projects", "targets", "query", "explain", "path", "refs", "stats", "describe_file", "where",
+	"describe", "query", "explain", "path", "refs", "stats", "where",
 	"affected", "impact", "run", "clean", "output", "insight", "doctor", "job", "vcs",
 }
 
@@ -141,7 +141,7 @@ var serverInstructions = strings.Join([]string{
 	"magus is a build orchestrator for multi-language monorepos.",
 	"",
 	"The workspace is the " + hint.ToolClient.String() + " tool: a Buzz program that imports \"magus\" and calls its members (" + members(clientMembers...) + "). " +
-		"Call magus\\describeModule(\"magus\") for the signatures. The tools below are the operations that module does not cover.",
+		"Call magus\\describe.module(\"magus\") for the signatures. The tools below are the operations that module does not cover.",
 	"",
 	toolLine(hint.ToolClient, "run Buzz against the magus client and return its value"),
 	toolLine(hint.ToolBuzz, "transform JSON with Buzz; no workspace access"),
@@ -151,7 +151,7 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
 	"",
 	"Typical flow:",
-	"  Discover through " + hint.ToolClient.String() + " with the typed members (" + members("projects", "targets", "query", "describe_file") + "); they return records, not CLI text.",
+	"  Discover through " + hint.ToolClient.String() + " with the typed members (" + member("describe") + ".project, .graph and .file, " + member("query") + "); they return records, not CLI text.",
 	"  Run through " + hint.ToolClient.String() + " (" + members("affected", "run") + "); " + member("output") + " fetches a captured log by its ref.",
 	"  Health: " + hint.ToolClient.String() + " (" + member("doctor") + "), " + hint.ToolStatus.String() + ", " + hint.ToolConfig.String() + ".",
 	"",

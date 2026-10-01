@@ -1,16 +1,16 @@
 package spells
 
 // Language is what mgs_getLanguage declares: the canonical language name and,
-// when the spell can declare it honestly, the language's comment and string
-// syntax. One method, one typed answer: the syntax is not a separate
-// declaration a spell can forget beside the name.
+// when the spell can declare it honestly, the language's syntax. One method,
+// one typed answer: the syntax is not a separate declaration a spell can
+// forget beside the name.
 type Language struct {
 	Name string `json:"name,omitempty"`
 	// Extensions are the file extensions (lowercase, with dot) that ARE this
 	// language. Explicit rather than derived from the spell's glob claims:
 	// go's spell also claims .s, .c, .h and .txtar, none of which are Go.
-	Extensions []string       `json:"extensions,omitempty"`
-	Comments   *CommentSyntax `json:"comments,omitempty"`
+	Extensions []string `json:"extensions,omitempty"`
+	Syntax     *Syntax  `json:"syntax,omitempty"`
 }
 
 // CommentSyntax declares one language's comment and string lexical facts, the
@@ -63,10 +63,10 @@ type Quote struct {
 func CommentSyntaxIndex(list []*Spell) map[string]CommentSyntax {
 	out := map[string]CommentSyntax{}
 	for _, s := range list {
-		syn := s.Comments()
-		if syn == nil {
+		if s.Syntax() == nil || s.Syntax().Comments == nil {
 			continue
 		}
+		syn := s.Syntax().Comments
 		for _, ext := range s.LanguageExtensions() {
 			if _, taken := out[ext]; !taken {
 				out[ext] = *syn

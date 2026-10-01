@@ -29,7 +29,7 @@ import (
 const wantServerInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\projects, magus\targets, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\describeFile, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\insight, magus\doctor, magus\job, magus\vcs). Call magus\describeModule("magus") for the signatures. The tools below are the operations that module does not cover.
+The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\insight, magus\doctor, magus\job, magus\vcs). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
 
   client                  - run Buzz against the magus client and return its value
   buzz                    - transform JSON with Buzz; no workspace access
@@ -39,7 +39,7 @@ The workspace is the client tool: a Buzz program that imports "magus" and calls 
   console                 - return a local console link when a person asks to see it
 
 Typical flow:
-  Discover through client with the typed members (magus\projects, magus\targets, magus\query, magus\describeFile); they return records, not CLI text.
+  Discover through client with the typed members (magus\describe.project, .graph and .file, magus\query); they return records, not CLI text.
   Run through client (magus\affected, magus\run); magus\output fetches a captured log by its ref.
   Health: client (magus\doctor), status, config.
 
@@ -288,7 +288,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	hdr, _ := post("", "", initializeFrame)
 	session := hdr.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
-	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\job\\put(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
+	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\job.put(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
 
 	for name, tc := range map[string]struct {
 		baggage, want string

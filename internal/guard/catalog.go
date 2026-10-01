@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // The rule catalog: what this workspace enforces, as data a reader can list.
@@ -25,32 +26,9 @@ import (
 // one caller what to run instead; this tells a reader what the rule is FOR, so a list of
 // thirty-eight reads as a set of conventions rather than a wall of remediation.
 
-// RuleDoc is one catalogued rule: its stable name, which tier it lands on, and what it
-// fires on.
-// The json tags are the -o json and -o template field names, so they follow the
-// lowercase convention every other magus output uses rather than the Go spelling.
-type RuleDoc struct {
-	// Name is the slug a verdict reports and a reader looks up.
-	Name string `json:"name"`
-	// Decision is the tier: "deny" or "advise". A rule never moves between them without
-	// the move being the point of the change, so it is recorded rather than derived.
-	Decision string `json:"decision"`
-	// Catches says what the rule fires on, in one line, in the reader's terms.
-	Catches string `json:"catches"`
-	// Why is the reasoning behind the rule, for a reader who wants to disagree with it
-	// or to understand why the replacement is better rather than merely different.
-	//
-	// It is where the rationale the three-line verdict budget displaced lives. Those
-	// paragraphs were true and load-bearing and cost more than they returned at the
-	// moment of refusal, when the reader is interrupted and wants the command; here they
-	// are read by someone who came looking. Empty for a rule whose one line says all of
-	// it, which is most of them: a Why that restates Catches is worse than none.
-	Why string `json:"why,omitempty"`
-}
-
 // denyRuleDocs documents every rule that REFUSES. Ordered by name here only for review;
 // Rules sorts what it returns.
-var denyRuleDocs = []RuleDoc{
+var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleBacktickSubstitution), Decision: "deny",
 		Catches: "a backtick command substitution, which inside double quotes runs a command",
 		Why: "Inside double quotes a backtick starts a command substitution, so a pattern or a message carrying a literal backtick runs code: the backtick pairs with the next one anywhere on the line, and everything between them becomes one command. " +
@@ -310,7 +288,7 @@ var denyRuleDocs = []RuleDoc{
 // agent-shaped by construction (a lease, a focus boundary, host wiring): they are
 // catalogued anyway, because a reader asking what this workspace enforces is owed the
 // whole set rather than the half that happens to apply to them today.
-var advisoryDocs = []RuleDoc{
+var advisoryDocs = []types.RuleDoc{
 	{Name: string(advisoryCaptureFilter), Decision: "advise",
 		Catches: "a filter over a run capture or log, which cuts the failure block apart",
 		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
@@ -393,11 +371,11 @@ var advisoryDocs = []RuleDoc{
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
 // reader scans, with the tier that blocks them at the top.
-func Rules() []RuleDoc {
-	out := make([]RuleDoc, 0, len(denyRuleDocs)+len(advisoryDocs))
+func Rules() []types.RuleDoc {
+	out := make([]types.RuleDoc, 0, len(denyRuleDocs)+len(advisoryDocs))
 	out = append(out, denyRuleDocs...)
 	out = append(out, advisoryDocs...)
-	slices.SortFunc(out, func(a, b RuleDoc) int {
+	slices.SortFunc(out, func(a, b types.RuleDoc) int {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
@@ -414,14 +392,14 @@ func Rules() []RuleDoc {
 // Rule looks one rule up by name, reporting false for a name nobody declares. The
 // comparison is exact: a near-miss that resolved would report a different rule's terms
 // as this one's.
-func Rule(name string) (RuleDoc, bool) {
+func Rule(name string) (types.RuleDoc, bool) {
 	name = strings.TrimSpace(name)
 	for _, r := range Rules() {
 		if r.Name == name {
 			return r, true
 		}
 	}
-	return RuleDoc{}, false
+	return types.RuleDoc{}, false
 }
 
 // advisoryKinds is every enrolled kind, for the test that pairs the catalog against the

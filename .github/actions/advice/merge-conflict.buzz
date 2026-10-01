@@ -78,7 +78,7 @@ fun conflictPaths(text: str) > [str] {
 fun generated(paths: [str]) > [str] !> any {
     final found = mut [<str>];
     if (paths.len() == 0) { return found; }
-    foreach (f in magus\describeFile(paths).files) {
+    foreach (f in magus\describe.file(paths).files) {
         if (f.role == "output") { found.append(f.path); }
     }
     return found;

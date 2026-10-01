@@ -40,15 +40,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "python",
         extensions = [".py"],
-        comments = CommentSyntax{
-            lineComments = ["#"],
-            quotes = [
-                Quote{open = "\"\"\"", close = "\"\"\""},
-                Quote{open = "'''", close = "'''"},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["type:", "noqa"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["#"],
+                quotes = [
+                    Quote{open = "\"\"\"", close = "\"\"\""},
+                    Quote{open = "'''", close = "'''"},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["type:", "noqa"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "indent",
+                body = "raise NotImplementedError(\"\{\{&Name}} lands in \{\{&Branch}}\")",
+            },
         },
     };
 }

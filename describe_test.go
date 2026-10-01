@@ -2,8 +2,10 @@ package magus
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -115,6 +117,36 @@ func TestListSpells_ShapeAndOrder(t *testing.T) {
 	require.NotEmpty(t, out)
 	assert.Equal(t, name, out[len(out)-1].Name,
 		"ListSpells: expected test spell as last entry (zzz-prefix sorts last)")
+}
+
+func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
+	// Not parallel: mutates global spell registry.
+	const name = "zzz-describe-language-test"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithLanguage("demo"),
+		spells.WithLanguageExtensions([]string{".demo"}),
+		spells.WithSyntax(&spells.Syntax{
+			Comments: &spells.CommentSyntax{LineComments: []string{"//"}},
+			Stubs:    &spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: spells.StubBodyBrace, Body: "{ todo }"},
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+
+	inventory, err := ListSpells(context.Background())
+	require.NoError(t, err)
+	idx := slices.IndexFunc(inventory, func(s types.Spell) bool { return s.Name == name })
+	require.GreaterOrEqual(t, idx, 0, "registered spell missing from inventory")
+
+	raw, err := json.Marshal(inventory[idx])
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"name": "`+name+`", "buzz_import": "magus/spell/`+name+`", "built_in": false,
+		"language": "demo", "extensions": [".demo"],
+		"syntax": {
+			"comments": {"lineComments": ["//"]},
+			"stubs": {"kinds": ["Function"], "bodyStyle": "brace", "body": "{ todo }"}
+		}
+	}`, string(raw))
 }
 
 func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
@@ -257,7 +289,7 @@ func TestListCharms_InverseIndex(t *testing.T) {
 	charms, err := ws.ListCharms(context.Background())
 	require.NoError(t, err, "ListCharms")
 
-	byName := make(map[string]types.Charm, len(charms))
+	byName := make(map[string]types.CharmEntry, len(charms))
 	for _, c := range charms {
 		byName[c.Name] = c
 	}
@@ -867,7 +899,7 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	spellWs := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	hasCharm := func(entries []types.Charm, name string) bool {
+	hasCharm := func(entries []types.CharmEntry, name string) bool {
 		for _, e := range entries {
 			if e.Name == name {
 				return true

@@ -1345,7 +1345,7 @@ fun generatedOf(paths: [str]) > [str] !> any {
     if (paths.len() == 0) {
         return acc;
     }
-    final report = serialize\Boxed.init(magus\describeFile(paths));
+    final report = serialize\Boxed.init(magus\describe.file(paths));
     foreach (f in report.q("files").listValue()) {
         final role = f.q("role").stringValue();
         if (role == "output" or role == "maintained") {

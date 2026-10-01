@@ -61,7 +61,7 @@ type Inspector interface {
 	// workspace declares, plus the reserved built-ins and the workspace's own
 	// default_charms set (read from the receiver's config), and for each the
 	// project/target/spell declarations that give it a patch.
-	ListCharms(ctx context.Context) ([]Charm, error)
+	ListCharms(ctx context.Context) ([]CharmEntry, error)
 	ListTargets(ctx context.Context) ([]TargetEntry, error)
 	ListProjects(ctx context.Context) (ProjectsOutput, error)
 	// EvaluateProjects returns the fully-resolved project inventory: every

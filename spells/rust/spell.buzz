@@ -44,15 +44,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "rust",
         extensions = [".rs"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            nested = true,
-            quotes = [
-                Quote{open = "r#\"", close = "\"#", ignoreEscape = true},
-                Quote{open = "r\"", close = "\"", ignoreEscape = true},
-                Quote{open = "\"", close = "\""},
-            ],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                nested = true,
+                quotes = [
+                    Quote{open = "r#\"", close = "\"#", ignoreEscape = true},
+                    Quote{open = "r\"", close = "\"", ignoreEscape = true},
+                    Quote{open = "\"", close = "\""},
+                ],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n    todo!(\"\{\{&Name}} lands in \{\{&Branch}}\")\n\}",
+            },
         },
     };
 }

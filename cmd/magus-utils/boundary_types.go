@@ -17,7 +17,8 @@ import (
 // new mirror cannot silently describe a shape the runtime fails to produce.
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
-	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
+	// RuntimeObject because magus\describe.evaluatedTarget hands one back as a policy.
+	{Name: "Target", Type: reflect.TypeFor[types.Target](), RuntimeObject: true},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
 	// RuntimeObject on both: a resolved spell is handed back to Buzz as a handle, and the
@@ -45,11 +46,14 @@ var boundaryTypes = []boundaryType{
 	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
 	{Name: "SandboxCache", Type: reflect.TypeFor[spells.SandboxCache](), RuntimeObject: true},
 	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
-	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
-	// Language carries a CommentSyntax.
-	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock]()},
-	{Name: "Quote", Type: reflect.TypeFor[spells.Quote]()},
-	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax]()},
+	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], Syntax
+	// carries a CommentSyntax and a StubSyntax, and Language carries a Syntax.
+	// RuntimeObject because magus\describe.spell hands them back inside a Spell.
+	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock](), RuntimeObject: true},
+	{Name: "Quote", Type: reflect.TypeFor[spells.Quote](), RuntimeObject: true},
+	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax](), RuntimeObject: true},
+	{Name: "StubSyntax", Type: reflect.TypeFor[spells.StubSyntax](), RuntimeObject: true},
+	{Name: "Syntax", Type: reflect.TypeFor[spells.Syntax](), RuntimeObject: true},
 	{Name: "Language", Type: reflect.TypeFor[spells.Language]()},
 	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
 	// and returns it, so it needs the mirror but no Go-to-Buzz encoder.
@@ -95,7 +99,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Module", Type: reflect.TypeFor[types.ModuleEntry](), RuntimeObject: true},
 	{Name: "ProjectEntry", Type: reflect.TypeFor[types.ProjectEntry](), RuntimeObject: true},
 	{Name: "Projects", Type: reflect.TypeFor[types.ProjectsOutput](), RuntimeObject: true},
-	// magus\tools()'s report, leaves first.
+	// magus\describe.tool()'s report, leaves first.
 	{Name: "ToolRow", Type: reflect.TypeFor[types.ToolRow](), RuntimeObject: true},
 	{Name: "LifecycleStatus", Type: reflect.TypeFor[types.LifecycleStatus](), RuntimeObject: true},
 	{Name: "ToolReport", Type: reflect.TypeFor[types.ToolReport](), RuntimeObject: true},
@@ -112,6 +116,28 @@ var boundaryTypes = []boundaryType{
 	{Name: "FileClaim", Type: reflect.TypeFor[types.FileClaim](), RuntimeObject: true},
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	// The magus\describe namespace's records, each after the records it carries.
+	{Name: "SpellVersion", Type: reflect.TypeFor[types.SpellVersion](), RuntimeObject: true},
+	{Name: "SpellToolchain", Type: reflect.TypeFor[types.SpellToolchain](), RuntimeObject: true},
+	{Name: "Spell", Type: reflect.TypeFor[types.Spell](), RuntimeObject: true},
+	{Name: "CharmDeclaration", Type: reflect.TypeFor[types.CharmDeclaration](), RuntimeObject: true},
+	{Name: "CharmEntry", Type: reflect.TypeFor[types.CharmEntry](), RuntimeObject: true},
+	{Name: "TargetEntry", Type: reflect.TypeFor[types.TargetEntry](), RuntimeObject: true},
+	{Name: "TargetRef", Type: reflect.TypeFor[types.TargetRef](), RuntimeObject: true},
+	{Name: "CharmTraceStep", Type: reflect.TypeFor[spells.CharmTraceStep](), RuntimeObject: true},
+	{Name: "CharmConflict", Type: reflect.TypeFor[spells.CharmConflict](), RuntimeObject: true},
+	{Name: "ServiceView", Type: reflect.TypeFor[spells.ServiceView](), RuntimeObject: true},
+	{Name: "EvaluatedSpell", Type: reflect.TypeFor[types.EvaluatedSpell](), RuntimeObject: true},
+	{Name: "EvaluatedTarget", Type: reflect.TypeFor[types.EvaluatedTarget](), RuntimeObject: true},
+	{Name: "EvaluatedProject", Type: reflect.TypeFor[types.EvaluatedProject](), RuntimeObject: true},
+	{Name: "WorkspaceEntry", Type: reflect.TypeFor[types.WorkspaceEntry](), RuntimeObject: true},
+	{Name: "Rule", Type: reflect.TypeFor[types.RuleDoc](), RuntimeObject: true},
+	{Name: "HarnessWired", Type: reflect.TypeFor[types.HarnessWired](), RuntimeObject: true},
+	{Name: "HarnessChange", Type: reflect.TypeFor[types.HarnessChange](), RuntimeObject: true},
+	{Name: "HarnessFile", Type: reflect.TypeFor[types.HarnessFile](), RuntimeObject: true},
+	{Name: "HarnessPlan", Type: reflect.TypeFor[types.HarnessPlan](), RuntimeObject: true},
+	{Name: "MCPToolParam", Type: reflect.TypeFor[types.MCPToolParam](), RuntimeObject: true},
+	{Name: "MCPTool", Type: reflect.TypeFor[types.MCPTool](), RuntimeObject: true},
 	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
 	// compile-checked field access on the same shape the console and the CLI read, which is
 	// what keeps one definition of review order serving all three.
