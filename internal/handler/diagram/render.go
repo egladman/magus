@@ -437,8 +437,7 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, io.Discard)
-	// figure names magus\Dir and its kin, which only the magus mirrors declare.
-	bindings.DeclareMagusTypes(sess)
+	bindings.RegisterMagusRecordTypes(sess)
 	sess.SetModuleDecls("magus/figure", figure.Source)
 
 	svg, err := figure.Draw(ctx, sess, figureOf(g, desc, anchorHref), anchorHref)
