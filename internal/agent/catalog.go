@@ -270,7 +270,9 @@ import (
 // `<parent>/<role> <job>`; its description asks to be loaded before the first subagent
 // spawn, and rules the guard enforces are cut to one line. magus-buzz-lang calls magus
 // through the typed magus\describe.<noun> methods.
-const SkillVersion = 107
+// 108: magus-multi-agent asks a plan's claims to cite the output ref of a run;
+// magus-buzz-lang points at its built-in methods table in prose rather than an anchor.
+const SkillVersion = 108
 
 const skillLicense = "GPL-3.0-or-later"
 

@@ -70,6 +70,9 @@ Four rules, in the order they bite:
 
 ## Run the graph-engineering loop
 
+Prove it before you plan it: a claim a plan or brief rests on cites the output ref
+of a run that settled it, not a sentence, and a guess nobody ran stays out of the plan.
+
 {{if .Full}}Graph engineering is a natural evolution of loop engineering. The
 human supplies a goal and constraints; the root agent turns them into explicit
 acceptance criteria, uses the knowledge graph to partition the work, hands out

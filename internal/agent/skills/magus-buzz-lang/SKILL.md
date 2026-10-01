@@ -24,7 +24,7 @@ check, fix the first error, run.
    into a map declared without `mut`. Those fail only when run, with no line
    number. So run the script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
-   does not exist. Look it up in [Built-in methods](#built-in-methods).
+   does not exist. Look it up in the Built-in methods table below.
 
 ## One script with every common shape
 
