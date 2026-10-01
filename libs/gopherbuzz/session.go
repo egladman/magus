@@ -134,6 +134,9 @@ type Session struct {
 	// on demand (e.g. a magus spell handle for `import "spells/hello"`). A false
 	// return falls through to the file search. Set via SetModuleResolver.
 	moduleResolver func(importPath string) (vmpackage.Value, bool)
+	// resolverBound holds the names moduleResolver bound. Its values are spell
+	// handles read with a dot, so the checker must not treat them as modules.
+	resolverBound map[string]bool
 	// sourceReader, if set, reads an imported .buzz file in place of os.ReadFile.
 	// The file search still decides WHICH path an import names; this decides only
 	// what bytes that path holds. Set via SetSourceReader.
@@ -1116,7 +1119,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(prog, globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
+	errs, checkWarnings := checkWithPrelude(prog, globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -1526,6 +1529,10 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		if v, ok := s.moduleResolver(resolvePath); ok {
 			s.env.Define(boundName, v)
 			s.owner.Claim(v)
+			if s.resolverBound == nil {
+				s.resolverBound = map[string]bool{}
+			}
+			s.resolverBound[boundName] = true
 			return ImportResolver, nil
 		}
 	}
