@@ -20,6 +20,9 @@
 //	                                                            start a validation run on the base for
 //	                                                            what became ready at <time>, unless an
 //	                                                            unfinished run covers it
+//	magus buzz hack/ci/merge-queue.buzz -- reviews --pr <n> --head <sha> --base <branch>
+//	                                                            dismiss each approval on pull request <n>
+//	                                                            the change since it does not carry
 //
 // The `--` hands the rest to the script; without it magus would parse the flags itself.
 // What the runner provides (GITHUB_REPOSITORY, RUNNER_TEMP, GITHUB_OUTPUT, the token) is
@@ -405,6 +408,21 @@ fun apply(run: str, base: str, app: str, committer: str) > void !> any {
     proc\exec("magus", args: args, opts: {});
 }
 
+// reviewsArgs classifies with main's own workspace, as plan does, so the approvals a
+// reviewer sees dismissed are exactly the ones the queue would not count. --head pins the
+// push this run answers: a later push has its own run.
+export fun reviewsArgs(pr: str, head: str, base: str) > [str] {
+    return ["queue", "reviews", "--provider", "github", "--base", base, "--change", pr, "--head", head, "--dismiss"];
+}
+
+// REVIEWS_FLAGS are reviews' flags, all required: without the head it would dismiss on
+// a push it was never asked about.
+final REVIEWS_FLAGS = ["--pr", "--head", "--base"];
+
+fun reviews(pr: str, head: str, base: str) > void !> any {
+    proc\exec("magus", args: reviewsArgs(pr, head: head, base: base), opts: {});
+}
+
 final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  plan --depth <n>\n"
     + "  validate --change <id>\n"
@@ -412,7 +430,8 @@ final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
-    + "  start --base <branch> --intent-at <time>";
+    + "  start --base <branch> --intent-at <time>\n"
+    + "  reviews --pr <n> --head <sha> --base <branch>";
 
 // options parses one step's flags, all valued. Each name in required must be given a
 // value; optional ones may be empty. Anything the step does not declare is refused.
@@ -456,6 +475,9 @@ export fun main(args: [str]) > void !> any {
     } else if (step == "start") {
         final o = options(step, argv: argv, required: START_FLAGS, optional: [<str>]);
         start(o["--base"]!, intentAt: o["--intent-at"]!);
+    } else if (step == "reviews") {
+        final o = options(step, argv: argv, required: REVIEWS_FLAGS, optional: [<str>]);
+        reviews(o["--pr"]!, head: o["--head"]!, base: o["--base"]!);
     } else {
         throw "queue: unknown step \"{step}\"\n{usage}";
     }
@@ -714,6 +736,20 @@ test "CI finishing on a queued head starts a run only when no unfinished run pla
     assert\equal(verdict([after]), want: [false, "queue-dispatch-covered"], message: "the running run planned after CI finished");
     assert\equal(verdict([before, queued]), want: [false, "queue-dispatch-pending"], message: "running and pending");
     assert\equal(verdict([failed]), want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
+}
+
+test "reviews dismisses through the queue's own classifier, pinned to the push it answers" {
+    assert\equal(reviewsArgs("482", head: "abc", base: "main"), want: ["queue", "reviews", "--provider", "github", "--base", "main",
+        "--change", "482", "--head", "abc", "--dismiss"], message: "argv");
+    foreach (argv in [["--pr", "482", "--base", "main"], ["--pr", "482", "--head", "", "--base", "main"], ["--head", "abc", "--base", "main"]]) {
+        var refused = false;
+        try {
+            options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: [<str>]);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: argv.join(" "));
+    }
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {

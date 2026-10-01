@@ -50,7 +50,7 @@ name: Queue apply
 # run is evaluated against its merge ref, so no pull request's workflow can read it. A
 # repository without the environment gets it created empty on the first run.
 
-# Queue's `requested` drives dispatch, planned and apply; CI's `completed` drives
+# Queue's `requested` drives dispatch, reviews, planned and apply; CI's `completed` drives
 # ci-completed. The trigger takes both actions of both workflows, so every job names the
 # one it answers, and the other two combinations run nothing.
 on:
@@ -191,6 +191,70 @@ jobs:
           MAIN: ${{ github.event.repository.default_branch }}
           INTENT_AT: ${{ github.event.workflow_run.updated_at }}
         run: magus buzz hack/ci/merge-queue.buzz -- start --base "$MAIN" --intent-at "$INTENT_AT"
+
+  # Runs for a same-repository pull request's Queue run: a push to it, or a review on it.
+  # magus owns dismissing stale approvals, so the repository turns GitHub's "Dismiss stale
+  # pull request approvals when new commits are pushed" off: this classifies the change
+  # since each approval with the classifier the queue admits changes by, and dismisses
+  # the approvals it does not carry, naming the files. A carry is left standing; the
+  # advice comment says why. It is not queue-advice.yaml's job, since a pull_request
+  # event runs the pull request's own copy of a workflow, which could drop the step.
+  # This one is main's file and main's code, and reads the pull request only through the
+  # API and git; it runs none of its code. GitHub lists no pull request for a fork's run,
+  # so a fork's approvals are never dismissed; the queue rechecks every approval anyway.
+  reviews:
+    name: queue reviews
+    if: >-
+      github.event.action == 'requested' &&
+      github.event.workflow_run.path == '.github/workflows/queue.yaml' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review') &&
+      github.event.workflow_run.pull_requests[0] != null
+    runs-on: ubuntu-latest
+    # For the queue app's key: a dismissal on the Actions token fires no
+    # pull_request_review event, so the advice comment would never say what changed.
+    environment: magus-queue
+    timeout-minutes: 20
+    # The newest push decides; one still classifying an older head has nothing to add.
+    concurrency:
+      group: queue-reviews-${{ github.event.workflow_run.pull_requests[0].number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read # check out main; fetch the compared commits
+    steps:
+      # The whole history, without blobs until a comparison reads one: the classifier walks
+      # from the approved commit and the head back to where they left main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # Scoped to reading and dismissing reviews.
+      - id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Dismiss each approval the change since it does not carry
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          MERGEQUEUE_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD: ${{ github.event.workflow_run.head_sha }}
+          MAIN: ${{ github.event.repository.default_branch }}
+        run: magus buzz hack/ci/merge-queue.buzz -- reviews --pr "$PR" --head "$HEAD" --base "$MAIN"
 
   # Follows only a run main's own queue.yaml made: a push or a dispatch, on main, of this
   # repository. Queue's plan job is skipped on a run cancelled before it started, and
