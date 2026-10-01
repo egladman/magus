@@ -15,6 +15,7 @@
 // the clock stubbed.
 namespace onactions;
 
+import "flags";
 import "fs";
 import "io";
 import "os";
@@ -184,36 +185,12 @@ final usage = "usage: {SCRIPT} [options] magus <argv>\n"
 // parse reads options up to the first word that is not one, sudo-style: that word and
 // everything after it is the command, untouched.
 export fun parse(args: [str]) > Options !> any {
-    final seen = mut {<str: str>};
-    var i = 0;
-    while (i < args.len()) {
-        var name = args[i];
-        var value: str? = null;
-        final eq = name.indexOf("=");
-        if (name.startsWith("--") and eq != null) {
-            value = name.sub(eq! + 1);
-            name = name.sub(0, len: eq!);
-        }
-        if (SWITCHES.indexOf(name) == null and VALUED.indexOf(name) == null) {
-            break;
-        }
-        if (SWITCHES.indexOf(name) != null and value != null) {
-            throw "on-actions: {name} takes no value\n{usage}";
-        }
-        if (VALUED.indexOf(name) != null and value == null) {
-            if (i + 1 >= args.len()) {
-                throw "on-actions: {name} needs a value\n{usage}";
-            }
-            i = i + 1;
-            value = args[i];
-        }
-        if (seen[name] != null) {
-            throw "on-actions: {name} is given twice";
-        }
-        seen[name] = value ?? "";
-        i = i + 1;
+    final parsed = flags\parse(args, switches: SWITCHES, valued: VALUED, command: true);
+    if (parsed.unknown.len() > 0) {
+        throw "on-actions: {parsed.unknown[0]} is not an option of this script, and the command starts with magus\n{usage}";
     }
-    final command = args.sub(i);
+    final seen = parsed.values;
+    final command = parsed.positionals;
     final o = Options{
         keep = seen["--keep"] != null,
         detach = seen["--detach"] != null,
@@ -739,18 +716,18 @@ test "options end at the first word that is not one, and the command passes thro
     assert\equal(parse(["--result", "42"]).result, want: "42", message: "--result");
     assert\equal(parse(["--delete", "run-0123456789ab"]).delete, want: "run-0123456789ab", message: "--delete a pushed branch");
     assert\equal(parse(["--ls"]).ls, want: true, message: "--ls");
+    assert\equal(parse(["--keep", "--", "magus", "run", "test"]).argv, want: ["run", "test"], message: "-- ends the options, as everywhere");
+    assert\equal(parse(["--ref", "a", "--ref", "b", "magus", "run", "test"]).ref, want: "b", message: "the nearer flag is the override, as flags\\parse reads every script");
 }
 
 test "parse refuses what it cannot run" {
     foreach (argv in [
         [<str>],
         ["--kep", "magus", "run", "test"],
-        ["--", "magus", "run", "test"],
         ["go", "test", "./..."],
         ["magus"],
         ["magus", "run", "a b"],
         ["--ref"],
-        ["--ref", "a", "--ref", "b", "magus", "run"],
         ["--keep=yes", "magus", "run"],
         ["--sandbox", "off", "magus", "run"],
         ["--detach", "--keep", "magus", "run"],

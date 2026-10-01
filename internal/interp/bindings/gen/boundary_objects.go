@@ -75,6 +75,15 @@ func ObjectFlagParse(v types.FlagParse) vm.Value {
 		mappedValues.MapSet(keyValues, vm.StrValue(itemValues))
 	}
 	out.MapSet("values", mappedValues)
+	mappedLists := vm.NewMap()
+	for keyLists, itemLists := range v.Lists {
+		itemsListsValue := make([]vm.Value, len(itemLists))
+		for indexListsValue := range itemLists {
+			itemsListsValue[indexListsValue] = vm.StrValue(itemLists[indexListsValue])
+		}
+		mappedLists.MapSet(keyLists, vm.ListValue(itemsListsValue))
+	}
+	out.MapSet("lists", mappedLists)
 	itemsPositionals := make([]vm.Value, len(v.Positionals))
 	for indexPositionals := range v.Positionals {
 		itemsPositionals[indexPositionals] = vm.StrValue(v.Positionals[indexPositionals])

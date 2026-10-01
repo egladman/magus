@@ -22,7 +22,9 @@ func RegisterFlags(ctx context.Context, sess *buzz.Session) vm.Value {
 		switches := ffi.StrSlice(bzArgs, 1)
 		valued := ffi.StrSlice(bzArgs, 2)
 		required := ffi.StrSlice(bzArgs, 3)
-		ret0, err := std.FlagsParse(ctx, argv, switches, valued, required)
+		repeated := ffi.StrSlice(bzArgs, 4)
+		command := ffi.Bool(bzArgs, 5, false)
+		ret0, err := std.FlagsParse(ctx, argv, switches, valued, required, repeated, command)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
