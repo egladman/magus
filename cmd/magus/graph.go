@@ -105,9 +105,9 @@ func graphUsage() {
 // way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
-func graphBuild(ctx context.Context, root string, args []string) error {
+func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
-	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
+	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
 		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
 		fs.Usage = func() {
@@ -127,8 +127,15 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if joined, err := joinServerSync(ctx, root); joined || err != nil {
+	lock, waitedOn, err := acquireGraphBuild(ctx, root)
+	if err != nil {
 		return err
+	}
+	defer func() { err = errors.Join(err, lock.Release()) }()
+	if waitedOn != nil {
+		if current, err := loadBuiltGraph(ctx, root, *waitedOn); current || err != nil {
+			return err
+		}
 	}
 
 	if !skipSymbols {
@@ -169,50 +176,33 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// syncPollInterval is how often a joined build asks the server whether its sync-graph is
-// still running.
-const syncPollInterval = 500 * time.Millisecond
+// graphBuildPoll is how often a waiting graph build retries the build lock.
+const graphBuildPoll = 250 * time.Millisecond
 
-// joinServerSync waits out a sync-graph the server is already running for this workspace
-// instead of racing it, and reports whether that build stands in for this one.
-//
-// Waiting, not a second build: the server runs the job inside its own process, coalesced
-// only against other submits, and no lock covers the graph store or the SCIP shards, so a
-// build here would repeat the job's indexing, the expensive half, and both would write one
-// store. Once the job leaves the server's status the graph loads cache-first from what it
-// stored. A project it left unindexed or behind, or a server that stopped mid-job, falls
-// through to a full build here.
-func joinServerSync(ctx context.Context, root string) (bool, error) {
+// acquireGraphBuild takes the build lock on the workspace's knowledge store, waiting for
+// the build that holds it, manual or the server's sync-graph job. The holder it returns
+// names that build, nil when the lock was free.
+func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
 	wsRoot := resolveRootOrEmpty(root)
-	addr := resolveServerAddr("")
-	if wsRoot == "" || !proc.SocketLive(ctx, addr) {
-		return false, nil
+	if wsRoot == "" {
+		return nil, nil, errors.New("magus graph build: no workspace root here, so no knowledge store to build")
 	}
-	st, err := proc.QueryStatus(ctx, addr)
+	dir, err := knowledgeStoreDir(wsRoot)
 	if err != nil {
-		return false, nil
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	s, ok := maintenance.FindSync(st, wsRoot, magus.FindRoot)
-	if !ok {
-		return false, nil
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}
+	if proc.IsJob(ctx) {
+		me.By = "the server's sync-graph job"
 	}
-	inv := s.Call.Inv
-	age := ""
-	if !s.Call.StartedAt.IsZero() {
-		age = fmt.Sprintf(", started %s ago", time.Since(s.Call.StartedAt).Round(time.Second))
-	}
-	fmt.Fprintf(os.Stderr, "magus graph build: the server is already building this workspace's graph (sync-graph job %s, server pid %d%s)\n", inv, s.PID, age)
-	fmt.Fprintln(os.Stderr, "  waiting for it instead of starting a second build; interrupting stops the wait, not the job")
-	err = maintenance.AwaitSync(ctx, func(ctx context.Context) (*proc.StatusReply, error) {
-		return proc.QueryStatus(ctx, addr)
-	}, inv, syncPollInterval)
-	if errors.Is(err, maintenance.ErrServerGone) {
-		fmt.Fprintf(os.Stderr, "magus graph build: %s; building here\n", err)
-		return false, nil
-	}
-	if err != nil {
-		return true, err
-	}
+	return maintenance.AcquireGraphBuild(ctx, dir, me, os.Stderr, graphBuildPoll)
+}
+
+// loadBuiltGraph reports whether the build this one waited on left the graph current,
+// and if so loads it cache-first instead of repeating its indexing, the expensive half. A
+// project it left unindexed or behind, or a holder that died mid-build, returns false so
+// the caller builds.
+func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildHolder) (bool, error) {
 	left := staleIndexProjects(ctx, root)
 	gaps, probed := symbolGaps(ctx, root)
 	if len(gaps) > 0 {
@@ -222,8 +212,8 @@ func joinServerSync(ctx context.Context, root string) (bool, error) {
 		left = append(left, "the symbol indexes (unreadable)")
 	}
 	if len(left) > 0 {
-		fmt.Fprintf(os.Stderr, "magus graph build: sync-graph job %s finished and left these without a current index: %s; building here\n",
-			inv, strings.Join(left, ", "))
+		fmt.Fprintf(os.Stderr, "magus graph build: %s finished and left these without a current index: %s; building here\n",
+			by, strings.Join(left, ", "))
 		return false, nil
 	}
 	g, err := loadKnowledgeGraph(ctx, root, false, false, false)
@@ -231,7 +221,7 @@ func joinServerSync(ctx context.Context, root string) (bool, error) {
 		return true, err
 	}
 	out := g.Output()
-	fmt.Fprintf(os.Stderr, "knowledge graph current, built by the server's sync-graph job %s: %d nodes, %d edges\n", inv, out.NodeCount, out.EdgeCount)
+	fmt.Fprintf(os.Stderr, "knowledge graph current, built by %s: %d nodes, %d edges\n", by, out.NodeCount, out.EdgeCount)
 	return true, nil
 }
 

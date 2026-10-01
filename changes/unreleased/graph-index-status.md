@@ -1,9 +1,11 @@
 ### Changed
 
-- **`magus graph build` waits for the server's sync-graph instead of racing it.** When the
-  server is already rebuilding this workspace's graph, the build names that job, its id and
-  the server's pid, waits for it, and reads the graph it stored. A project the job left
-  without a current index, or a server that stops mid-job, still gets a build.
+- **Graph builds no longer race on the knowledge store.** Every graph build, a manual
+  `magus graph build` or the server's sync-graph job, takes one lock on the workspace's
+  knowledge store. The second names the build it waits on, with its pid and start time,
+  and then reads the graph that build stored. A project it left without a current index,
+  or a build killed mid-way, still gets a build; a lock a killed build left behind is taken
+  over with a notice.
 - **A missing or stale symbol index says why.** `magus refs` and the guard's stale-graph
   advice name the cause they can observe, with its remedy: no server running, so the VCS
   refresh hook's sync did nothing; a refresh hook whose binary (such as `./magus`) does not

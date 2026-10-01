@@ -175,10 +175,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "DirsOptions", Type: reflect.TypeFor[types.DirsOptions]()},
 	{Name: "NeighborhoodOptions", Type: reflect.TypeFor[types.KnowledgeNeighborhoodOptions]()},
 	{Name: "PathOptions", Type: reflect.TypeFor[types.KnowledgePathOptions]()},
-	// Registered because KnowledgeAnswer carries it: a struct field on a registered Buzz
+	// Registered because KnowledgeAnswer carries them: a struct field on a registered Buzz
 	// object must itself be registered, or the generated encoder calls one the field's
 	// type does not have.
 	{Name: "KnowledgeTextPresence", Type: reflect.TypeFor[types.KnowledgeTextPresence](), RuntimeObject: true},
+	{Name: "KnowledgeIndexCause", Type: reflect.TypeFor[types.KnowledgeIndexCause](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},
 	{Name: "UnreferencedEntry", Type: reflect.TypeFor[types.UnreferencedEntry](), RuntimeObject: true},
 	{Name: "Unreferenced", Type: reflect.TypeFor[types.UnreferencedOutput](), RuntimeObject: true},

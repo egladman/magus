@@ -31,16 +31,24 @@ stderr 'verdict: absent \(magus searched everything it could reach, so this is n
 ! exec magus refs
 stderr 'magus refs: requires a symbol ID or name'
 
-# The verdict is decided before format dispatch, so every -o value hits the
-# same plain-text stderr message rather than a JSON/YAML-shaped error.
+# Every -o value prints the same plain-text verdict block on stderr. A structured
+# format also prints the record on stdout, so a script reads the verdict, and the
+# index cause when an index is missing or behind, without parsing stderr. An absent
+# verdict has no index behind it, so the record carries no index_cause.
 ! exec magus refs Foo -o json
 stderr 'verdict: absent'
+stdout '"symbol": ?"Foo"'
+stdout '"verdict": ?"absent"'
+! stdout 'index_cause'
 ! exec magus refs Foo -o yaml
 stderr 'verdict: absent'
+stdout 'symbol: Foo'
+stdout 'verdict: absent'
 ! exec magus refs Foo -o name
 stderr 'verdict: absent'
+! stdout .
 
-# Nothing is printed to stdout on this path - the whole finding is on stderr.
+# Text output prints nothing on stdout on this path; the whole finding is on stderr.
 ! exec magus refs Foo
 ! stdout .
 

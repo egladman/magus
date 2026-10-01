@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -188,9 +187,9 @@ func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)
 }
 
-// syncRequestDir is where `job run sync-graph` records its last request for the checkout
-// at root, beside the guard index it is compared against.
-func syncRequestDir(root string) (string, error) {
+// knowledgeStoreDir is the checkout at root's knowledge store: where graph builds take
+// their lock and `job run sync-graph` records its last request, beside the guard index.
+func knowledgeStoreDir(root string) (string, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return "", err
@@ -198,26 +197,26 @@ func syncRequestDir(root string) (string, error) {
 	return knowledge.StoreDir(cacheDir), nil
 }
 
-// observeSync gathers what this process can see of the server's sync-graph for the
-// checkout at root. Every probe is local: a socket dial, one status round trip when a
-// server answers, a git rev-parse for the hook, and two file reads.
+// observeSync gathers what this process can see of why the checkout at root's index is
+// current or not. Every probe is local: a socket dial, one status round trip when a server
+// answers, two git rev-parses for the hook, and three file reads.
 func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
-	o := maintenance.SyncObservation{Now: time.Now(), Version: version}
+	o := maintenance.SyncObservation{Version: version}
 	if addr := resolveServerAddr(""); proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil {
 			o.ServerLive, o.ServerVersion, o.ServerPID = true, st.Version, st.ParentPID
-			if s, ok := maintenance.FindSync(st, root, magus.FindRoot); ok {
-				o.InFlight = &s
-			}
 		}
 	}
-	command, installed, err := vcs.GitRefreshHookCommand(ctx, root)
+	hook, installed, err := vcs.ReadGitRefreshHook(ctx, root)
 	o.HookChecked = err == nil
 	if installed {
-		o.HookCommand = command
-		o.HookBinary, o.HookRunnable = maintenance.HookBinary(root, command)
+		o.HookCommand = hook.Command
+		o.HookBinary, o.HookRunnable = maintenance.HookBinary(hook.Top, hook.Command)
 	}
-	if dir, err := syncRequestDir(root); err == nil {
+	if dir, err := knowledgeStoreDir(root); err == nil {
+		if h, ok := maintenance.RunningGraphBuild(dir); ok {
+			o.Building = &h
+		}
 		if r, ok, err := maintenance.ReadSyncRequest(dir); err == nil && ok {
 			o.LastRequest = &r
 		}
@@ -228,9 +227,19 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 	return o
 }
 
+// withIndexCause returns ans carrying indexCause when it was drawn from an index that is
+// missing or behind, and unchanged otherwise.
+func withIndexCause(ctx context.Context, root string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
+	if ans.IndexBehind() {
+		c := indexCause(ctx, root)
+		ans.IndexCause = &c
+	}
+	return ans
+}
+
 // indexCause is the observed reason the checkout at root has an index missing or behind,
 // with its remedy.
-func indexCause(ctx context.Context, root string) maintenance.SyncCause {
+func indexCause(ctx context.Context, root string) types.KnowledgeIndexCause {
 	return maintenance.DiagnoseSync(observeSync(ctx, resolveRootOrEmpty(root)), maintenance.Commands{
 		GraphBuild:  hint.GraphBuild.String(),
 		ServerStart: hint.ServerStart.String(),
@@ -239,10 +248,12 @@ func indexCause(ctx context.Context, root string) maintenance.SyncCause {
 	})
 }
 
-// printIndexCause writes indexCause under a verdict block, in its indentation.
-func printIndexCause(ctx context.Context, w io.Writer, root string) {
-	c := indexCause(ctx, root)
-	fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Cause, c.Remedy)
+// printIndexCause writes the answer's index cause under its verdict block, in its
+// indentation, and nothing when it carries none.
+func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
+	if c := ans.IndexCause; c != nil {
+		fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+	}
 }
 
 // indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
@@ -252,11 +263,11 @@ func indexCauseForGuard() string {
 	if err != nil {
 		return ""
 	}
-	c, ok := withinBudget(guardLookupBudget, func() maintenance.SyncCause {
+	c, ok := withinBudget(guardLookupBudget, func() types.KnowledgeIndexCause {
 		return indexCause(context.Background(), root)
 	})
 	if !ok {
 		return ""
 	}
-	return "Why: " + c.Cause + ". Fix: " + c.Remedy + "."
+	return "Why: " + c.Why + ". Fix: " + c.Fix + "."
 }
