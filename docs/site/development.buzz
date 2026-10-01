@@ -3,6 +3,7 @@
 // or renderDevelopmentPageRaw (pre-rendered HTML).
 namespace development;
 
+import "magus";
 import "markdown";
 import "fs";
 import "io";
@@ -141,7 +142,7 @@ final UP = "../";
 // IS a valid build order, sorted by nobody here), each node's direct dependencies, and
 // its blast radius - the count of projects a change can transitively affect, which is
 // the number that tells a contributor whether an edit is contained or workspace-wide.
-fun workspaceDependencies(graph: Graph) > str {
+fun workspaceDependencies(graph: magus\Graph) > str {
     final nodes = graph.nodes;
     if (nodes.len() == 0) { return ""; }
 
@@ -185,7 +186,7 @@ fun workspaceDependencies(graph: Graph) > str {
 //
 // An inline SVG figure draws the run order from each node's declared dependencies, so the
 // arrows are the real ctx.needs edges and not a hand-maintained picture.
-fun projectCatalog(proj: TargetGraphProject) > str {
+fun projectCatalog(proj: magus\TargetGraphProject) > str {
     // No `?? []` guards below: TargetGraphOutput.BuzzObject normalizes every optional list to
     // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
     // rather than null. That is what makes the annotation worth having - the field names

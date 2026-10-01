@@ -294,9 +294,18 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.
-// --embedded so render's markdown and encoding imports resolve.
+// --embedded so render's markdown and encoding imports resolve. Each module is then
+// checked alone: once render's import closure reaches magus, every module in it sees the
+// magus types, so one that names a magus type without importing magus passes only here.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
+    final modules = mut ["--check", "--embedded"];
+    foreach (dir in ["lib", "engine", "site"]) {
+        foreach (mod in fs\glob(dir + "/*.buzz")) {
+            modules.append(mod.value);
+        }
+    }
+    magus\cmd("buzz", args: modules);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
