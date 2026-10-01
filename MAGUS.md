@@ -51,7 +51,7 @@ magus graph export -o json  # the whole graph
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                             |
-| module     | built in | `magus query kind=module`     |                                                                                                                  |
+| module     | built in | `magus query kind=module`     | `archive`, `base64`, `charm`                                                                                     |
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
 | doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |

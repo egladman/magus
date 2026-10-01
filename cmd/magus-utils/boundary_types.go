@@ -248,6 +248,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
+	// magus/feedback's records, leaf first: FeedbackTrail holds lists of the two before it.
+	{Name: "FeedbackObservation", Type: reflect.TypeFor[types.FeedbackObservation](), RuntimeObject: true},
+	{Name: "FeedbackSpawn", Type: reflect.TypeFor[types.FeedbackSpawn](), RuntimeObject: true},
+	{Name: "FeedbackTrail", Type: reflect.TypeFor[types.FeedbackTrail](), RuntimeObject: true},
+	{Name: "FeedbackMark", Type: reflect.TypeFor[types.FeedbackMark](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

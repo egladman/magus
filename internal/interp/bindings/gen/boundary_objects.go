@@ -67,6 +67,78 @@ func ObjectCharm(v spells.Charm) vm.Value {
 	return out
 }
 
+func ObjectFeedbackObservation(v types.FeedbackObservation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("agent", vm.StrValue(v.Agent))
+	out.MapSet("lease", vm.StrValue(v.Lease))
+	out.MapSet("tool", vm.StrValue(v.Tool))
+	out.MapSet("command", vm.StrValue(v.Command))
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("decision", vm.StrValue(v.Decision))
+	out.MapSet("rule", vm.StrValue(v.Rule))
+	itemsNexts := make([]vm.Value, len(v.Nexts))
+	for indexNexts := range v.Nexts {
+		itemsNexts[indexNexts] = vm.StrValue(v.Nexts[indexNexts])
+	}
+	out.MapSet("nexts", vm.ListValue(itemsNexts))
+	out.MapSet("preauthorizedBy", vm.StrValue(v.PreauthorizedBy))
+	out.MapSet("shape", vm.StrValue(v.Shape))
+	return out
+}
+
+func ObjectFeedbackSpawn(v types.FeedbackSpawn) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("agent", vm.StrValue(v.Agent))
+	out.MapSet("child", vm.StrValue(v.Child))
+	out.MapSet("lease", vm.StrValue(v.Lease))
+	out.MapSet("model", vm.StrValue(v.Model))
+	return out
+}
+
+func ObjectFeedbackTrail(v types.FeedbackTrail) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("start", vm.IntValue(int64(v.Start)))
+	out.MapSet("end", vm.IntValue(int64(v.End)))
+	itemsCheckouts := make([]vm.Value, len(v.Checkouts))
+	for indexCheckouts := range v.Checkouts {
+		itemsCheckouts[indexCheckouts] = vm.StrValue(v.Checkouts[indexCheckouts])
+	}
+	out.MapSet("checkouts", vm.ListValue(itemsCheckouts))
+	itemsObservations := make([]vm.Value, len(v.Observations))
+	for indexObservations := range v.Observations {
+		itemsObservations[indexObservations] = ObjectFeedbackObservation(v.Observations[indexObservations])
+	}
+	out.MapSet("observations", vm.ListValue(itemsObservations))
+	itemsSpawns := make([]vm.Value, len(v.Spawns))
+	for indexSpawns := range v.Spawns {
+		itemsSpawns[indexSpawns] = ObjectFeedbackSpawn(v.Spawns[indexSpawns])
+	}
+	out.MapSet("spawns", vm.ListValue(itemsSpawns))
+	return out
+}
+
+func ObjectFeedbackMark(v types.FeedbackMark) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("section", vm.StrValue(string(v.Section)))
+	out.MapSet("key", vm.StrValue(v.Key))
+	out.MapSet("rule", vm.StrValue(v.Rule))
+	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
+	out.MapSet("note", vm.StrValue(v.Note))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	itemsExamples := make([]vm.Value, len(v.Examples))
+	for indexExamples := range v.Examples {
+		itemsExamples[indexExamples] = vm.StrValue(v.Examples[indexExamples])
+	}
+	out.MapSet("examples", vm.ListValue(itemsExamples))
+	return out
+}
+
 func ObjectFlagParse(v types.FlagParse) vm.Value {
 	out := vm.NewMap()
 	mappedValues := vm.NewMap()
