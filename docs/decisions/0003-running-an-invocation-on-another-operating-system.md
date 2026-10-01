@@ -14,8 +14,8 @@ tags: [adr, decision, platform, linux, macos, containers, podman, docker, sandbo
 
 ## Amendment, 2026-09-29: B' revived while E is on hold
 
-E is on hold indefinitely, and B' is revived as `hack/on-linux.buzz`:
-`magus buzz hack/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
+E is on hold indefinitely, and B' is revived as `hack/remote/on-linux.buzz`:
+`magus buzz hack/remote/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
 Linux container through Podman. The need that opened this page, seeing a Linux-only failure
 before CI does, has not gone away, and E is a large engine delivery whose measurements
 (decision 4) have not been made. A script costs the engine nothing, so nothing is lost if E
