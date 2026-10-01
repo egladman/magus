@@ -10,11 +10,15 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id>";
-final HELP = "cost: a Go build of ./magus and a graph build, about two minutes cold\n{USAGE}\n\n"
+final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] | --check --from <checkout>)";
+final HELP = "cost: a Go build of ./magus and a graph build, about two minutes cold; with --from an eligible binary is copied instead, in seconds\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: builds ./magus with the magus on\n"
     + "PATH, builds the graph, takes the job's lease, then refuses unless the row names this worktree as its checkout\n"
-    + "and the base it recorded matches the row's checkpoint. Writes ./magus, the graph and the job row.";
+    + "and the base it recorded matches the row's checkpoint. Writes ./magus, the graph and the job row.\n\n"
+    + "--from <checkout> reuses that checkout's ./magus instead of building, only when it is provably the binary this\n"
+    + "worktree would build: built at this worktree's HEAD, and no path the workspace declares a source of project .\n"
+    + "differs from that commit, neither in the uncommitted changes it was built from nor in this worktree. Anything\n"
+    + "else refuses with the reason. --check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
 
 // Row is what bootstrap reads back from `./magus describe job <id> -o json`.
@@ -37,6 +41,65 @@ export fun parseRow(described: str) > Row !> any {
         baseVerdict = j["base_verdict"] ?? "",
         checkoutRoot = j["checkout_root"] ?? "",
     };
+}
+
+// BuildFacts is what `magus version -o json` says about how a binary was built: the commit,
+// and whether uncommitted changes went into it.
+export object BuildFacts {
+    commit: str,
+    dirty: bool,
+}
+
+export fun parseBuild(versionJSON: str) > BuildFacts !> any {
+    final j = json\parse(versionJSON);
+    final version: str = j["version"] ?? "";
+    return BuildFacts{ commit = j["commit"] ?? "", dirty = version.endsWith("-dirty") };
+}
+
+// buildInputs is the paths in a `magus describe file -o json` report that the workspace
+// declares as sources of project ".", the project go-build compiles. A change to one is a
+// change to the binary, so a binary built without it is not this tree's.
+export fun buildInputs(described: str) > [str] !> any {
+    final inputs = mut [<str>];
+    final files: [any] = json\parse(described)["files"] ?? [<any>];
+    foreach (f in files) {
+        final claims: [any] = f["claims"] ?? [<any>];
+        var input = false;
+        foreach (c in claims) {
+            if (c["project"] == "." and c["target"] == null and c["role"] == "source") {
+                input = true;
+            }
+        }
+        if (input) {
+            inputs.append(f["path"] ?? "");
+        }
+    }
+    return inputs;
+}
+
+// reuseProblems is every reason a binary with build is not the one a build in this
+// worktree would produce, empty when it is. rootRev and sourceRev are the HEADs of this
+// worktree and of the checkout holding the binary; the inputs are the declared build
+// inputs that differ from build.commit in each.
+export fun reuseProblems(build: BuildFacts, rootRev: str, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > [str] {
+    final found = mut [<str>];
+    if (build.commit == "") {
+        found.append("it reports no commit, so nothing ties it to a tree");
+        return found;
+    }
+    if (!rootRev.startsWith(build.commit)) {
+        found.append("it was built at {build.commit} and this worktree is at {rootRev}");
+    }
+    if (build.dirty and !sourceRev.startsWith(build.commit)) {
+        found.append("it was built from uncommitted changes at {build.commit}, and its checkout has since moved to {sourceRev}, so what went into it is unknown");
+    }
+    if (build.dirty and sourceInputs.len() > 0) {
+        found.append("it was built with {sourceInputs.len()} build input(s) changed from {build.commit}, first {sourceInputs[0]}");
+    }
+    if (rootInputs.len() > 0) {
+        found.append("this worktree changes {rootInputs.len()} build input(s) from {rootRev}, first {rootInputs[0]}");
+    }
+    return found;
 }
 
 // mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
@@ -100,22 +163,65 @@ fun magusAt(bin: str, root: str, args: [str]) > str !> any {
     return r.stdout;
 }
 
-// bootstrap builds ./magus and the graph in root, takes job, and returns the row as the
-// fresh binary reads it back. Raises on any step that fails and on a row unfit for a worker
-// here, so a caller never starts work on a wrong binding.
-export fun bootstrap(root: str, job: str) > Row !> any {
+fun headOf(dir: str) > str !> any {
+    return vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+}
+
+// changedInputs is the declared build inputs in root that differ from rev, read with bin.
+fun changedInputs(bin: str, root: str, rev: str) > [str] !> any {
+    final args = mut ["describe", "file"];
+    foreach (p in vcs\changedFiles(rev, dir: root)) {
+        args.append(p.value);
+    }
+    if (args.len() == 2) {
+        return [<str>];
+    }
+    args.append("-o");
+    args.append("json");
+    return buildInputs(magusAt(bin, root: root, args: args));
+}
+
+// reuseVerdict reads what the binary in source says about its build and what each tree
+// changed, and returns the binary's path with every reason it is not root's own build.
+fun reuseVerdict(root: str, source: str) > obj{ bin: str, build: BuildFacts, problems: [str] } !> any {
+    final bin = "{source}/magus";
+    if (!fs\isFile(bin)) {
+        throw "bootstrap-worktree: {source} holds no ./magus to reuse";
+    }
+    final build = parseBuild(magusAt(bin, root: source, args: ["version", "-o", "json"]));
+    final rootRev = headOf(root);
+    final sourceInputs = if (build.dirty) changedInputs(bin, root: source, rev: build.commit) else [<str>];
+    final rootInputs = changedInputs(bin, root: root, rev: rootRev);
+    return .{ bin = bin, build = build, problems = reuseProblems(build, rootRev: rootRev, sourceRev: headOf(source), sourceInputs: sourceInputs, rootInputs: rootInputs) };
+}
+
+// bootstrap places ./magus in root, builds the graph, takes job, and returns the row as the
+// fresh binary reads it back. ./magus is reused from source when that binary is provably
+// root's own build, and built with the magus on PATH otherwise. Raises on any step that fails
+// and on a row unfit for a worker here, so a caller never starts work on a wrong binding.
+export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     final main = checkRepository(root);
-    final onPath = proc\which("magus") catch "";
-    if (onPath == "") {
-        throw "bootstrap-worktree: no magus on PATH to build ./magus with, and the hooks run that same name: with none "
-            + "they exit 127 and the guard is off. Install magus, then bootstrap again";
-    }
-    magusAt(onPath, root: root, args: ["run", "go-build", "."]);
     final local = "{root}/magus";
-    if (!fs\isFile(local)) {
-        throw "bootstrap-worktree: `magus run go-build .` passed and left no {local}";
+    if (source != "") {
+        final v = reuseVerdict(root, source: source);
+        if (v.problems.len() > 0) {
+            throw "bootstrap-worktree: REFUSED to reuse {v.bin}, it is not this worktree's build:\n  " + v.problems.join("\n  ");
+        }
+        fs\copyFile(v.bin, dst: local);
+        fs\chmod(local, mode: 493);
+        std\print("reused {v.bin}: built at {v.build.commit}, which {root} is at, with no build input changed on either side");
+    } else {
+        final onPath = proc\which("magus") catch "";
+        if (onPath == "") {
+            throw "bootstrap-worktree: no magus on PATH to build ./magus with, and the hooks run that same name: with none "
+                + "they exit 127 and the guard is off. Install magus, then bootstrap again";
+        }
+        magusAt(onPath, root: root, args: ["run", "go-build", "."]);
+        if (!fs\isFile(local)) {
+            throw "bootstrap-worktree: `magus run go-build .` passed and left no {local}";
+        }
+        std\print("built {local} with {onPath}");
     }
-    std\print("built {local} with {onPath}");
     magusAt(local, root: root, args: ["graph", "build", "--silent"]);
     std\print("built the graph");
     final took = magusAt(local, root: root, args: ["job", "exec", job]);
@@ -149,7 +255,7 @@ export fun render(row: Row, root: str) > [str] {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help"], valued: ["--job"]);
+    final parsed = flags\parse(args, switches: ["--help", "--check"], valued: ["--job", "--from"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -157,12 +263,25 @@ export fun main(args: [str]) > void !> any {
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
+    final root = vcs\root();
+    final source = parsed.values["--from"] ?? "";
+    if (parsed.values["--check"] != null) {
+        if (source == "") {
+            throw "bootstrap-worktree: --check needs --from, the checkout whose ./magus to judge\n{USAGE}";
+        }
+        final v = reuseVerdict(root, source: source);
+        if (v.problems.len() > 0) {
+            std\print("not reusable: {v.bin} is not this worktree's build:\n  " + v.problems.join("\n  "));
+            return;
+        }
+        std\print("reusable: {v.bin} was built at {v.build.commit}, which {root} is at, with no build input changed on either side");
+        return;
+    }
     final job = parsed.values["--job"] ?? "";
     if (job == "") {
         throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
     }
-    final root = vcs\root();
-    foreach (line in render(bootstrap(root, job: job), root: root)) {
+    foreach (line in render(bootstrap(root, job: job, source: source), root: root)) {
         std\print(line);
     }
 }
@@ -208,6 +327,32 @@ test "revision-match passes only while the tracked files are the checkpoint's" {
     assert\equal(problems(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "untracked only");
     assert\equal(render(row, root: WT)[1], want: "base abc is the row's checkpoint; the tree adds only untracked files, which job exec reads as a patch", message: "note");
     assert\equal(problems(row, root: WT, main: MAIN, trackedClean: false).len(), want: 1, message: "tracked edits");
+}
+
+test "a binary is this worktree's build only at its HEAD with no build input changed" {
+    final clean = BuildFacts{ commit = "166d3dabd", dirty = false };
+    assert\equal(reuseProblems(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]), want: [<str>], message: "clean at HEAD");
+    assert\equal(reuseProblems(clean, rootRev: "1111111", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: [<str>]),
+        want: ["it was built at 166d3dabd and this worktree is at 1111111"], message: "another commit");
+    assert\equal(reuseProblems(clean, rootRev: "166d3dabd7d7", sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: ["run.go"]),
+        want: ["this worktree changes 1 build input(s) from 166d3dabd7d7, first run.go"], message: "worktree edits");
+    final dirty = BuildFacts{ commit = "166d3dabd", dirty = true };
+    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: [<str>], rootInputs: [<str>]),
+        want: [<str>], message: "dirty only outside the build inputs");
+    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "166d3dabd7d7", sourceInputs: ["symbol.go"], rootInputs: [<str>]),
+        want: ["it was built with 1 build input(s) changed from 166d3dabd, first symbol.go"], message: "dirty inputs");
+    assert\equal(reuseProblems(dirty, rootRev: "166d3dabd7d7", sourceRev: "2222222", sourceInputs: [<str>], rootInputs: [<str>]).len(),
+        want: 1, message: "a dirty build whose checkout moved on is unknown");
+    assert\equal(reuseProblems(BuildFacts{ commit = "", dirty = false }, rootRev: "x", sourceRev: "x", sourceInputs: [<str>], rootInputs: [<str>]),
+        want: ["it reports no commit, so nothing ties it to a tree"], message: "no commit");
+}
+
+test "a build input is a declared source of project ." {
+    final described = "\{\"files\":[\{\"path\":\"run.go\",\"claims\":[\{\"project\":\".\",\"target\":null,\"role\":\"source\"}]},"
+        + "\{\"path\":\".gitattributes\",\"claims\":[]},"
+        + "\{\"path\":\"docs/guides/jobs.md\",\"claims\":[\{\"project\":\"docs\",\"target\":null,\"role\":\"source\"},\{\"project\":\".\",\"target\":\"lint\",\"role\":\"source\"}]}]}";
+    assert\equal(buildInputs(described), want: ["run.go"], message: "only project . sources");
+    assert\equal(parseBuild("\{\"version\":\"v0.4.3-485-g166d3dabd-dirty\",\"commit\":\"166d3dabd\"}"), want: BuildFacts{ commit = "166d3dabd", dirty = true }, message: "dirty build");
 }
 
 test "the main worktree is the porcelain's first stanza" {
