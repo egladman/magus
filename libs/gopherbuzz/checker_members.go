@@ -41,11 +41,17 @@ func (c *checker) checkBuiltinMethod(v *ast.MemberExpr, kind vm.ReceiverKind, re
 		return
 	}
 	noun := receiverNouns[kind]
+	// Upstream points at the member name, not at the dot before it.
+	at := v.Pos
+	at.Col++
+	if v.OptionalRecv {
+		at.Col++
+	}
 	if s := suggestBuiltinMethod(kind, v.Name); s != "" {
-		c.errorf(v.Pos, "unknown method %s on %s; %s have %s", v.Name, recv.TypeName(), noun, s)
+		c.errorf(at, "unknown method %s on %s; %s have %s", v.Name, recv.TypeName(), noun, s)
 		return
 	}
-	c.errorf(v.Pos, "unknown method %s on %s; %s have %s", v.Name, recv.TypeName(), noun, strings.Join(vm.BuiltinMethods(kind), ", "))
+	c.errorf(at, "unknown method %s on %s; %s have %s", v.Name, recv.TypeName(), noun, strings.Join(vm.BuiltinMethods(kind), ", "))
 }
 
 func (c *checker) noteBuiltinRecv(v *ast.MemberExpr, recv types.Type) {
@@ -117,7 +123,8 @@ func (c *checker) checkNamespaceDot(v *ast.MemberExpr) {
 	if nt, isObj := e.typ.(*types.ObjectType); !e.module && !(isObj && nt.IsNamespace) {
 		return
 	}
-	c.errorf(v.Pos, "%s is a module, so its members are reached with a backslash: write %s\\%s", id.Name, id.Name, v.Name)
+	// At the module name, where upstream reports "`std` is not defined".
+	c.errorf(id.Pos, "%s is a module, so its members are reached with a backslash: write %s\\%s", id.Name, id.Name, v.Name)
 }
 
 // undefinedCallHint is the fix for calling a name Buzz spells as a method, or ""

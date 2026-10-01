@@ -2766,17 +2766,16 @@ func (p *parser) parseInterpPart(part token.StringPart) (*ast.Program, []string,
 }
 
 // shiftTokens moves tokens lexed from an interpolation's own source to where
-// that source sits in the file, starting at line:col. A token past the first
-// line keeps its column, which is already counted from its own line start. A
-// zero line leaves the tokens where they are.
+// that source sits in the file, starting at line:col (see StringPart.Col). Like
+// upstream's expression scanner, it adds col to every token's column, including
+// one on a later line of a multi-line expression. A zero line leaves the tokens
+// where they are.
 func shiftTokens(toks []token.Token, line, col int) {
 	if line == 0 {
 		return
 	}
 	shift := func(l, c *int) {
-		if *l == 1 {
-			*c += col - 1
-		}
+		*c += col - 1
 		*l += line - 1
 	}
 	for i := range toks {

@@ -1467,17 +1467,18 @@ func TestTypeErrorWithNoCodeIsNotADiagnostic(t *testing.T) {
 
 // TestCheck_ErrorInsideInterpolationPointsIntoTheString: an interpolated
 // expression was parsed as its own one-line source, so every diagnostic in it
-// reported 1:1 wherever the string sat.
+// reported 1:1 wherever the string sat. Columns follow upstream's convention;
+// see token.StringPart.Col.
 func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
 	cases := []struct {
 		name, src string
 		line, col int
 	}{
-		{"undefined call", "final xs = [1, 2];\nfinal s = \"n={len(xs)}\";\n", 2, 15},
+		{"undefined call", "final xs = [1, 2];\nfinal s = \"n={len(xs)}\";\n", 2, 14},
 		{"unknown method", "final xs = [1, 2];\nfinal s = \"{xs.zzz()}\";\n", 2, 15},
-		{"second expression", "final xs = [1, 2];\nfinal s = \"{xs.len()} {nope}\";\n", 2, 24},
-		{"raw string, second line", "final xs = [1, 2];\nfinal s = `a\n  {nope}`;\n", 3, 4},
-		{"nested string", "final xs = [1, 2];\nfinal s = \"{\"in {nope}\"}\";\n", 2, 18},
+		{"second expression", "final xs = [1, 2];\nfinal s = \"{xs.len()} {nope}\";\n", 2, 15},
+		{"raw string, second line", "final xs = [1, 2];\nfinal s = `a\n  {nope}`;\n", 3, 3},
+		{"nested string", "final xs = [1, 2];\nfinal s = \"{\"in {nope}\"}\";\n", 2, 16},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1485,6 +1486,47 @@ func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
 			require.NotEmpty(t, errs)
 			assert.Equal(t, tc.line, errs[0].Line, fmtErrors(errs))
 			assert.Equal(t, tc.col, errs[0].Col, fmtErrors(errs))
+		})
+	}
+}
+
+// TestCheck_PositionsMatchUpstream runs the probes the upstream binary was run
+// on, at the pin 294d8f9 (`buzz <file>`, BUZZ_PATH unset), and expects the
+// line:col it printed. Inside an interpolation upstream counts from the `{` and
+// skips the text of earlier expressions on the line, so its column is not the
+// token's own; matching it keeps an editor jump identical on both.
+func TestCheck_PositionsMatchUpstream(t *testing.T) {
+	cases := []struct {
+		name, src string
+		upstream  string // what upstream printed, verbatim
+		line, col int
+	}{
+		{"p1", "import \"buzz:std\";\n\nfun main() > void {\n    std.print(\"hi\");\n}\n",
+			"p1.buzz:4:5: [E75] Syntax error: `std` is not defined", 4, 5},
+		{"p2a", "import \"buzz:std\";\n\nfun main() > void {\n    final xs = mut [1, 2];\n    xs.push(3);\n    std\\print(\"{xs.len()}\");\n}\n",
+			"p2a.buzz:5:8: [E57] Syntax error: List property doesn't exist.", 5, 8},
+		{"p2b", "import \"buzz:std\";\n\nfun main() > void {\n    final s = \"abc\";\n    std\\print(s.toUpperCase());\n}\n",
+			"p2b.buzz:5:17: [E57] Syntax error: String property doesn't exist.", 5, 17},
+		{"p3", "import \"buzz:std\";\n\nfun main() > void {\n    final xs = [1, 2];\n    std\\print(\"{len(xs)}\");\n}\n",
+			"p3.buzz:5:16: [E75] Syntax error: `len` is not defined", 5, 16},
+		{"p4", "import \"buzz:std\";\n\nfun f() > int {\n    return null;\n}\n\nfun main() > void {\n    std\\print(\"{f()}\");\n}\n",
+			"p4.buzz:4:12: [E66] Compile error: Return value: got type `void`, expected `int`", 4, 12},
+		{"i1", "import \"buzz:std\";\n\nfun main() > void {\n    std\\print(\"ab{  nope}\");\n}\n",
+			"i1.buzz:4:20: [E75] Syntax error: `nope` is not defined", 4, 20},
+		{"i2", "import \"buzz:std\";\n\nfun main() > void {\n    final xs = [1];\n    std\\print(\"{xs.zzz()}\");\n}\n",
+			"i2.buzz:5:19: [E57] Syntax error: List property doesn't exist.", 5, 19},
+		{"i3", "import \"buzz:std\";\n\nfun main() > void {\n    std\\print(\"{1} {nope}\");\n}\n",
+			"i3.buzz:4:19: [E75] Syntax error: `nope` is not defined", 4, 19},
+		{"i4", "import \"buzz:std\";\n\nfun main() > void {\n    final s = `a\n  {nope}`;\n    std\\print(s);\n}\n",
+			"i4.buzz:5:3: [E75] Syntax error: `nope` is not defined", 5, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prog, err := Parse(tc.src)
+			require.NoError(t, err)
+			errs, _ := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil, false)
+			require.NotEmpty(t, errs, "upstream: %s", tc.upstream)
+			assert.Equal(t, [2]int{tc.line, tc.col}, [2]int{errs[0].Line, errs[0].Col}, "upstream: %s\ngot: %s", tc.upstream, fmtErrors(errs))
 		})
 	}
 }

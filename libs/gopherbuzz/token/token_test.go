@@ -254,12 +254,12 @@ func TestTokenize_Positions(t *testing.T) {
 			{Kind: EOF, Line: 1, Col: 12},
 		}},
 		{"newline inside an interpolation starts its line at col 1", "\"{a\n}\" x", []Token{
-			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "a\n", Line: 1, Col: 3}}, Line: 1, Col: 1},
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "a\n", Line: 1, Col: 2}}, Line: 1, Col: 1},
 			{Kind: Ident, Val: "x", Line: 2, Col: 4},
 			{Kind: EOF, Line: 2, Col: 5},
 		}},
 		{"escaped newline in a string inside an interpolation counts a line", "\"{\"a\\\nb\"}\"\nx", []Token{
-			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "\"a\\\nb\"", Line: 1, Col: 3}}, Line: 1, Col: 1},
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: "\"a\\\nb\"", Line: 1, Col: 2}}, Line: 1, Col: 1},
 			{Kind: Ident, Val: "x", Line: 3, Col: 1},
 			{Kind: EOF, Line: 3, Col: 2},
 		}},
@@ -283,7 +283,7 @@ func TestTokenize_Positions(t *testing.T) {
 			{Kind: EOF, Line: 2, Col: 4},
 		}},
 		{"quote inside a nested string's interpolation", `"{"x{"}"}"}" y`, []Token{
-			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: `"x{"}"}"`, Line: 1, Col: 3}}, Line: 1, Col: 1},
+			{Kind: InterpStr, Parts: []StringPart{{IsExpr: true, Text: `"x{"}"}"`, Line: 1, Col: 2}}, Line: 1, Col: 1},
 			{Kind: Ident, Val: "y", Line: 1, Col: 14},
 			{Kind: EOF, Line: 1, Col: 15},
 		}},
@@ -714,8 +714,11 @@ func TestTokenizeInterpolationParts(t *testing.T) {
 	}
 }
 
-// TestTokenizeInterpolationPartPositions pins where each expression's source
-// starts: just inside its `{`, counted in bytes like every other column.
+// TestTokenizeInterpolationPartPositions pins each expression's position in
+// upstream's convention (see StringPart.Col), counted in bytes. The indented
+// case is the upstream probe `std\print("{len(xs)}")`, reported at column 16
+// with the `{` at 16; checker_test.go's TestCheck_PositionsMatchUpstream holds
+// the probe outputs.
 func TestTokenizeInterpolationPartPositions(t *testing.T) {
 	type pos struct{ line, col int }
 	cases := []struct {
@@ -723,22 +726,24 @@ func TestTokenizeInterpolationPartPositions(t *testing.T) {
 		src  string
 		want []pos
 	}{
-		{"first expression", `"{x}"`, []pos{{1, 3}}},
-		{"adjacent expressions", `"{a}{b}"`, []pos{{1, 3}, {1, 6}}},
-		{"after an escape", `"\t{x}"`, []pos{{1, 5}}},
-		{"after a multi-byte run", `"é{x}"`, []pos{{1, 5}}},
-		{"indented", "    \"v={len(xs)}\"", []pos{{1, 9}}},
-		{"raw string on its second line", "`a\n{x}`", []pos{{2, 2}}},
-		{"after a newline in an earlier expression", "\"{a +\nb}{c}\"", []pos{{1, 3}, {2, 4}}},
+		{"first expression", `"{x}"`, []pos{{1, 2}}},
+		{"adjacent expressions", `"{a}{b}"`, []pos{{1, 2}, {1, 4}}},
+		{"earlier expression text is skipped", `"{abc} {d}"`, []pos{{1, 2}, {1, 5}}},
+		{"after an escape", `"\t{x}"`, []pos{{1, 4}}},
+		{"after a multi-byte run", `"é{x}"`, []pos{{1, 4}}},
+		{"indented", "    std\\print(\"{len(xs)}\")", []pos{{1, 16}}},
+		{"raw string on its second line", "`a\n  {x}`", []pos{{2, 3}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			toks, err := Tokenize(c.src)
 			require.NoError(t, err)
 			var got []pos
-			for _, p := range toks[0].Parts {
-				if p.IsExpr {
-					got = append(got, pos{p.Line, p.Col})
+			for _, tok := range toks {
+				for _, p := range tok.Parts {
+					if p.IsExpr {
+						got = append(got, pos{p.Line, p.Col})
+					}
 				}
 			}
 			assert.Equal(t, c.want, got)
