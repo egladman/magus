@@ -287,6 +287,13 @@ const (
 	// approvals the workspace meant to keep, and code carried would let the merge queue
 	// count an approval nobody gave to that code.
 	CarryApprovalsInvalid DiagnosticCode = "MGS1050"
+
+	// SpellContractViolated is a spell whose exported mgs_ functions do not match the spell
+	// contract: one declares a return type other than the contract's (`> any` included) or
+	// none, takes parameters, or is not a contract function at all. The spell does not
+	// load, because magus would otherwise read a value whose shape nothing checked, and an
+	// mgs_ function it does not know is a declaration it would silently ignore.
+	SpellContractViolated DiagnosticCode = "MGS1051"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -707,7 +714,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar, SpellImportEscapesWorkspace,
-	LayerDeclarationInvalid, ManifestScriptDelegation, CarryApprovalsInvalid,
+	LayerDeclarationInvalid, ManifestScriptDelegation, CarryApprovalsInvalid, SpellContractViolated,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxWeakened, SecretTooShortToMask, SandboxRequired,

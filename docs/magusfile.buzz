@@ -91,11 +91,12 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
         workspace\file("cmd/magus-ruledocs/**/*.go"), workspace\file("internal/guard/**/*.go"),
+        workspace\file("cmd/magus-utils/**/*.go"),
         // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
         workspace\file("proto/gen/descriptor.binpb"),
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
     // Hand-written pages with a generated region between markers; as outputs, clean would delete them.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
         "concepts/review.md",
@@ -103,6 +104,8 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         "reference/config *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "contract", "-src", "../internal/spell/contract.go",
+        "-docs", "./reference/spell-contract.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
